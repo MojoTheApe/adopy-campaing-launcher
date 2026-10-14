@@ -35023,7 +35023,51 @@
         "session": "r1778g-20261015",
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-14T21:41:52+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 778,
+          "pr": 780,
+          "branch": "codex/acl-1778-header-linear-toolbar",
+          "head_sha": "0ef06b4c0a637b7c98f0936ab3499ca5e706ce67",
+          "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+          "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "scope": "f7ba65b41d297f82e266165d04c49a67f5adc1f0c97c8f32a399bd77edc687ae",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-R1778G",
+            "implementer": "Worker-RG1778",
+            "review_session": "r1778g-20261015",
+            "execution_lane": "2a2cae0777ea471b983e9eec3f7611d0",
+            "head_sha": "0ef06b4c0a637b7c98f0936ab3499ca5e706ce67",
+            "base_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+            "tree_sha": "ea4767630829b27a2fa21f59b27c8bb2f0a0d4bc",
+            "report": "Re-review of ACL-1778 / PR 780 at head 0ef06b4c against current main 73136acc (main is an ancestor of the head). Reviewer-R1778G implemented none of it. Earlier approval: Reviewer-R1778F at 74128d1a (evidence evidence778-r1778f.json, lane 386271487d114214a21ee8322e167847).\n\nThe only change since 74128d1a is the clean merge of main 73136acc. Verified: git patch-id --stable of diff 74128d1a..0ef06b4c equals that of diff d9118413..73136acc (b89ac820b7a42a3176c9ec49771122a1f8513a2c for both), so the delta is exactly what main brought and nothing else (no conflict edits).\n\nVerification:\n- CI on head 0ef06b4c: all checks green (tracker-link failed on handoff timing and passed on rerun; build jobs skipped as expected).\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k \"not browser\" tests/test_header.py tests/test_stage_badge.py tests/test_report_loading_stages.py tests/test_acl_test_platform.py: 135 passed.\n- The prior review's scope and mutation result (amapApply bare remove fails test_the_picker_closes_through_one_path) stand, because the PR's own diff vs main is unchanged by the merge.\n- No live calls.\n\nFindings: no blocking issues.",
+            "main_sha": "73136accc2fdd98d53ee293f9eb38f4b6e330e23",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "issues": [
+              778
+            ],
+            "recorded_at": "2026-10-14T21:57:59+00:00",
+            "issue_scopes": {
+              "778": "f7ba65b41d297f82e266165d04c49a67f5adc1f0c97c8f32a399bd77edc687ae"
+            }
+          },
+          "lane": {
+            "id": "2a2cae0777ea471b983e9eec3f7611d0",
+            "pr": 780,
+            "issues": [
+              778
+            ],
+            "actor": "Reviewer-R1778G",
+            "session": "r1778g-20261015",
+            "coordinator": "Coordinator-C0930A",
+            "started_at": "2026-10-14T21:41:52+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-14T21:58:21+00:00"
+        }
       },
       "796": {
         "id": "075f9847329d457b94d1e71f112256a4",
