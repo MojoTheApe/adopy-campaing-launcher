@@ -8161,9 +8161,11 @@
         "worktree": "C:\\wkf-1769",
         "id": "6d83218a309a4b5dbcc5fdd99f3a8062",
         "issue": 769,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-14T10:00:37+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 796,
+        "report": "# Handoff ACL-1769 (PR #796)\nScope: returned-review fixes. Merged fixed parent codex/acl-1761-api-create (which already contains current main) into codex/acl-1769-two-column-builder; no conflicts. Head 5a4df795.\nChecks: local test_acl_test_platform, test_acl_test_shard, test_acl1756_fb_api, test_acl1769_* all pass; GitHub CI green except tracker-link, which needs Review status (this handoff).\nRemaining: descendants #802/#813 merge this branch next."
       }
     },
     "tasks": {
