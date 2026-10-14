@@ -808,7 +808,8 @@ class FakeLauncher:
         self.started.append(profile_id)
         from src.meta_campaign_agent.multilogin_launcher import StartedProfile
 
-        return StartedProfile(profile_id, folder_id or "F", port=self.start_port)
+        return StartedProfile(profile_id, folder_id or "F", port=self.start_port,
+                              newly_started=True)
 
     def stop_profile(self, profile_id, folder_id=None):
         self.stopped.append(profile_id)
