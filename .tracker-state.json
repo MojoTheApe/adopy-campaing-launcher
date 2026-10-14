@@ -8599,6 +8599,18 @@
         "state": "implementing",
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
+      },
+      "778": {
+        "actor": "Worker-RG1778",
+        "session": "wrg1778-20261014",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1778-header-linear-toolbar",
+        "worktree": "C:\\wk-rg1778",
+        "id": "6823e6524b984b8481cbf00b53f2064e",
+        "issue": 778,
+        "state": "implementing",
+        "started_at": "2026-10-14T17:10:01+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -11972,10 +11984,14 @@
           {
             "actor": "Worker-S1778E",
             "session": "ws1778e-20261014"
+          },
+          {
+            "actor": "Worker-RG1778",
+            "session": "wrg1778-20261014"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-S1778E",
+        "state": "implementing",
+        "worker": "Worker-RG1778",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
           "actor": "Worker-S1778E",
@@ -11994,14 +12010,7 @@
         "pr": 780,
         "queued_at": "2026-10-14T16:09:24+00:00",
         "review_report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return.",
-        "reviewer": "Reviewer-R1778F",
         "return_operation": {
-          "id": "1b69298ec1ec4bdda08dbb9317e6dc75",
-          "actor": "Coordinator-C0930A",
-          "session": "coord_c0930a_1009",
-          "report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
-        },
-        "return": {
           "id": "1b69298ec1ec4bdda08dbb9317e6dc75",
           "actor": "Coordinator-C0930A",
           "session": "coord_c0930a_1009",
@@ -15035,6 +15044,10 @@
       },
       "Worker-RG1799": {
         "session": "wrg1799-20261014",
+        "role": "Worker"
+      },
+      "Worker-RG1778": {
+        "session": "wrg1778-20261014",
         "role": "Worker"
       }
     },
@@ -32330,6 +32343,13 @@
         "issue": 799,
         "pr": 803,
         "actor": "Worker-RG1799"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-14T17:10:01+00:00",
+        "issue": 778,
+        "claim": "6823e6524b984b8481cbf00b53f2064e",
+        "actor": "Worker-RG1778"
       }
     ],
     "policy": {
