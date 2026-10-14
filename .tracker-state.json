@@ -12032,7 +12032,7 @@
             "session": "wrf1769-20261014"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-RF1769",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12051,7 +12051,7 @@
         },
         "pr": 796,
         "queued_at": "2026-10-14T17:04:00+00:00",
-        "review_report": "# Return for a dependency refresh\n\nACL-1761 reached main (batch 65c0be2f, PR 913 -> 914); main also has ACL-1760 with its review fixes. This branch carries an older copy of the 1760/1761 commits. Required: merge current main into the branch (merge, no rebase), keep main's 1760/1761 behaviour, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return.",
+        "review_report": "# ACL-1769 / PR 796 (head da368fcf) - returned by Reviewer-R1769F\n\n## Blocking\n1. The owner correction of 2026-10-13 (issue 769, \"stacked ad cards\") is not implemented. The Ad editor still has the Ad/Ad 2 object dropdown (`#cbd-ed-ad` / `.cbd-ed-ad`, `headHtml` in src/web/templates/report.html ~line 5979, its change handler ~6057, and `adNames`; tests/test_builder_second_primary_text.py:193 and tests/builder_tree_harness.cjs:401 still drive it). The issue says this supersedes the ad-object-switcher part and that implementation waits for this source to return to its author. Required: remove the dropdown (keep the Campaign / Ad set / Ad tabs); show every ad card of the selected ad set in one vertical list with editable fields; add/duplicate inserts a visible card; keep each ad's values, order, numbering, removal, draft restore (localStorage migration) and submission payload (camp_N_ad_M_* names unchanged); no publishing change. Add tests: add, duplicate, delete, restore of several ads, docked and expanded, narrow width.\n\n## Checked, no defects\n- Diff vs main (11 files, report.html + tests): create/publish preview/cbPublishAll, drafts and acl.builder.* keys (try/catch), copy/Duplicate, existing camp_N_* names unchanged; camp_N_name_override has no name attribute any more.\n- English UI, disabled future controls carry tooltip + ACL-17xx tag, no name so cannot submit; labels via aclEscHtml/textContent; tokens scoped to .cbd-root; Primary text 1 / Primary text 2 naming present.\n- Merge da368fcf of main is clean; ACL-1760/1761 untouched.\n- CI on head: all green (tracker-link failed on handoff timing, rerun passed; Linux 1-3, Windows, installer, descriptor, process, ACL verification pass).\n- Tests in detached worktree: 100 passed (-k \"not browser\"): two_column_layout, duplicate_buttons, second_primary_text, the_builder_drawer, the_builder_tree, acl1761_parity, acl1761_plan_check. Browser tests not run (free RAM 5.3 GB < 6 GB).\n- Mutation: renamed \"Primary text 1\" label in report.html: survives the non-browser tests (35 passed); it is asserted only by the browser test test_builder_second_primary_text.py:217, so CI browser run is the guard. Suggest also asserting the label in the non-browser layout test.\n\n## Re-review\nAfter the stacked-cards change: re-run the same test files plus browser tests for multi-ad add/duplicate/delete/restore.",
         "reviewer": "Reviewer-R1769F"
       },
       "783": {
@@ -32372,6 +32372,24 @@
         "pr": 796,
         "lane": "cc8556322e5f427399e4870078423477",
         "actor": "Reviewer-R1769F"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-14T21:25:57+00:00",
+        "review": {
+          "id": "cc8556322e5f427399e4870078423477",
+          "pr": 796,
+          "issues": [
+            769
+          ],
+          "actor": "Reviewer-R1769F",
+          "session": "r1769f-20261014",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-14T21:23:56+00:00",
+          "state": "returning",
+          "report": "# ACL-1769 / PR 796 (head da368fcf) - returned by Reviewer-R1769F\n\n## Blocking\n1. The owner correction of 2026-10-13 (issue 769, \"stacked ad cards\") is not implemented. The Ad editor still has the Ad/Ad 2 object dropdown (`#cbd-ed-ad` / `.cbd-ed-ad`, `headHtml` in src/web/templates/report.html ~line 5979, its change handler ~6057, and `adNames`; tests/test_builder_second_primary_text.py:193 and tests/builder_tree_harness.cjs:401 still drive it). The issue says this supersedes the ad-object-switcher part and that implementation waits for this source to return to its author. Required: remove the dropdown (keep the Campaign / Ad set / Ad tabs); show every ad card of the selected ad set in one vertical list with editable fields; add/duplicate inserts a visible card; keep each ad's values, order, numbering, removal, draft restore (localStorage migration) and submission payload (camp_N_ad_M_* names unchanged); no publishing change. Add tests: add, duplicate, delete, restore of several ads, docked and expanded, narrow width.\n\n## Checked, no defects\n- Diff vs main (11 files, report.html + tests): create/publish preview/cbPublishAll, drafts and acl.builder.* keys (try/catch), copy/Duplicate, existing camp_N_* names unchanged; camp_N_name_override has no name attribute any more.\n- English UI, disabled future controls carry tooltip + ACL-17xx tag, no name so cannot submit; labels via aclEscHtml/textContent; tokens scoped to .cbd-root; Primary text 1 / Primary text 2 naming present.\n- Merge da368fcf of main is clean; ACL-1760/1761 untouched.\n- CI on head: all green (tracker-link failed on handoff timing, rerun passed; Linux 1-3, Windows, installer, descriptor, process, ACL verification pass).\n- Tests in detached worktree: 100 passed (-k \"not browser\"): two_column_layout, duplicate_buttons, second_primary_text, the_builder_drawer, the_builder_tree, acl1761_parity, acl1761_plan_check. Browser tests not run (free RAM 5.3 GB < 6 GB).\n- Mutation: renamed \"Primary text 1\" label in report.html: survives the non-browser tests (35 passed); it is asserted only by the browser test test_builder_second_primary_text.py:217, so CI browser run is the guard. Suggest also asserting the label in the non-browser layout test.\n\n## Re-review\nAfter the stacked-cards change: re-run the same test files plus browser tests for multi-ad add/duplicate/delete/restore.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -34414,20 +34432,6 @@
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-14T17:10:37+00:00",
         "state": "reviewing"
-      },
-      "796": {
-        "id": "cc8556322e5f427399e4870078423477",
-        "pr": 796,
-        "issues": [
-          769
-        ],
-        "actor": "Reviewer-R1769F",
-        "session": "r1769f-20261014",
-        "coordinator": "Coordinator-C0930A",
-        "started_at": "2026-10-14T21:23:56+00:00",
-        "state": "returning",
-        "report": "# ACL-1769 / PR 796 (head da368fcf) - returned by Reviewer-R1769F\n\n## Blocking\n1. The owner correction of 2026-10-13 (issue 769, \"stacked ad cards\") is not implemented. The Ad editor still has the Ad/Ad 2 object dropdown (`#cbd-ed-ad` / `.cbd-ed-ad`, `headHtml` in src/web/templates/report.html ~line 5979, its change handler ~6057, and `adNames`; tests/test_builder_second_primary_text.py:193 and tests/builder_tree_harness.cjs:401 still drive it). The issue says this supersedes the ad-object-switcher part and that implementation waits for this source to return to its author. Required: remove the dropdown (keep the Campaign / Ad set / Ad tabs); show every ad card of the selected ad set in one vertical list with editable fields; add/duplicate inserts a visible card; keep each ad's values, order, numbering, removal, draft restore (localStorage migration) and submission payload (camp_N_ad_M_* names unchanged); no publishing change. Add tests: add, duplicate, delete, restore of several ads, docked and expanded, narrow width.\n\n## Checked, no defects\n- Diff vs main (11 files, report.html + tests): create/publish preview/cbPublishAll, drafts and acl.builder.* keys (try/catch), copy/Duplicate, existing camp_N_* names unchanged; camp_N_name_override has no name attribute any more.\n- English UI, disabled future controls carry tooltip + ACL-17xx tag, no name so cannot submit; labels via aclEscHtml/textContent; tokens scoped to .cbd-root; Primary text 1 / Primary text 2 naming present.\n- Merge da368fcf of main is clean; ACL-1760/1761 untouched.\n- CI on head: all green (tracker-link failed on handoff timing, rerun passed; Linux 1-3, Windows, installer, descriptor, process, ACL verification pass).\n- Tests in detached worktree: 100 passed (-k \"not browser\"): two_column_layout, duplicate_buttons, second_primary_text, the_builder_drawer, the_builder_tree, acl1761_parity, acl1761_plan_check. Browser tests not run (free RAM 5.3 GB < 6 GB).\n- Mutation: renamed \"Primary text 1\" label in report.html: survives the non-browser tests (35 passed); it is asserted only by the browser test test_builder_second_primary_text.py:217, so CI browser run is the guard. Suggest also asserting the label in the non-browser layout test.\n\n## Re-review\nAfter the stacked-cards change: re-run the same test files plus browser tests for multi-ad add/duplicate/delete/restore.",
-        "keep_lane": false
       }
     }
   }
