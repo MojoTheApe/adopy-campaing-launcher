@@ -11616,7 +11616,7 @@
             "session": "c18fd7986a28447daada00e6d2b99f57"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-M1783B",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -11634,7 +11634,8 @@
           "report": "Scope: default Graph/Marketing API version v22.0 -> v26.0 in src/meta_campaign_agent/meta_client.py (one constant DEFAULT_GRAPH_VERSION, META_GRAPH_API_VERSION override kept); src/fb_api uses the Ads Manager page's own version, unchanged. v24-v26 breaking changes reviewed (listed in the Issue); none touch our payloads. Checks: tests/test_meta_campaign_agent.py + tests/test_acl1756_fb_api.py: 112 passed, 2 skipped. PR 790, branch work/acl-1783-graph-api-version, base main. Risks: no live verification (needs owner approval; proposal in the Issue). Claim re-registered 2026-10-11 under Coordinator-M1011A / Worker-M1783B after the first claim used a non-conforming feature/ branch."
         },
         "pr": 790,
-        "queued_at": "2026-10-11T18:24:50+00:00"
+        "queued_at": "2026-10-11T18:24:50+00:00",
+        "reviewer": "Reviewer-R783X"
       },
       "782": {
         "implementers": [
@@ -14291,6 +14292,10 @@
       "Reviewer-R1786X": {
         "session": "claude-subagent-a17b179a06c97c3af",
         "role": "Reviewer"
+      },
+      "Reviewer-R783X": {
+        "session": "claude-subagent-a020ec1d6f47f8d61",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -16786,7 +16791,6 @@
       526,
       642,
       739,
-      783,
       766,
       782,
       781,
@@ -29127,6 +29131,13 @@
         "pr": 804,
         "lane": "3e865c82d6434e5a8abf3e30c83090d7",
         "actor": "Reviewer-R1786X"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-14T11:07:31+00:00",
+        "pr": 790,
+        "lane": "40426c3a9ee54a2cb92ebfc2d91f0da9",
+        "actor": "Reviewer-R783X"
       }
     ],
     "policy": {
@@ -30386,6 +30397,18 @@
         "session": "claude-subagent-a17b179a06c97c3af",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-14T11:04:33+00:00",
+        "state": "reviewing"
+      },
+      "790": {
+        "id": "40426c3a9ee54a2cb92ebfc2d91f0da9",
+        "pr": 790,
+        "issues": [
+          783
+        ],
+        "actor": "Reviewer-R783X",
+        "session": "claude-subagent-a020ec1d6f47f8d61",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-14T11:07:31+00:00",
         "state": "reviewing"
       }
     }
