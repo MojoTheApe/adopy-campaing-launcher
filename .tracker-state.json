@@ -11730,7 +11730,7 @@
             "session": "a9f3467038d4400d80d0727275ae2ff4"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-M1781B",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -11748,7 +11748,8 @@
           "report": "Scope: config/meta_rules/{meta.json,rules.json}, src/campaign_bridge/meta_rules.py (load_rules, check_job, objective_code), preflight hook in src/web/publish_preflight.py and src/web/publish_jobs.py::_run_rpa, tests/test_acl1781_meta_rules.py. PR 795, branch work/acl-1781-meta-rules-registry, base main. PR 791 (old feature/ branch) is obsolete.\nRules: ODAX objectives (legacy = deprecated), enums for optimization_goal/billing_event/bid_strategy/destination_type/CTA, optimization_goal_by_objective (Objective Mapping table), billing_event_by_goal (billing-events opt_bids), bid_amount required for bid cap, special_ad_categories required. Each rule has source_url and checked_date 2026-10-11. No text-length blocking: Meta only recommends lengths.\nLimitations: the RPA draft carries only the objective, so goal/billing/CTA are not checked on that path. OUTCOME_SALES has no mapping rows. Unknown labels fail open. Mappings were read through summarized fetches; a human spot-check against the live docs is advised.\nReviews: Opus review returned CHANGES REQUIRED, all items fixed; Sonnet re-review APPROVE. Tests: 121 passed (test_acl1781_meta_rules, test_acl1604_preflight, test_a_job_exception_reaches_sentry_tagged, test_publish_release, test_rpa_publisher_gates). Full suite in CI.\nFollow-up: ACL-1761 creator.py should call check_job after both merge; also wire into the new builder (ACL-1769)."
         },
         "pr": 795,
-        "queued_at": "2026-10-11T18:46:57+00:00"
+        "queued_at": "2026-10-11T18:46:57+00:00",
+        "reviewer": "Reviewer-R781X"
       },
       "766": {
         "implementers": [
@@ -14351,6 +14352,10 @@
       "Reviewer-R782X": {
         "session": "claude-subagent-ad5af5387f60319c6",
         "role": "Reviewer"
+      },
+      "Reviewer-R781X": {
+        "session": "claude-subagent-a8efac19b017fde9c",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -16847,7 +16852,6 @@
       642,
       739,
       766,
-      781,
       798,
       799,
       806,
@@ -29199,6 +29203,13 @@
         "pr": 793,
         "lane": "3cd6a5616f104408930e8a7a1edf3bda",
         "actor": "Reviewer-R782X"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-14T11:09:57+00:00",
+        "pr": 795,
+        "lane": "84f35dd6fc8e417490049f79c44601f5",
+        "actor": "Reviewer-R781X"
       }
     ],
     "policy": {
@@ -30482,6 +30493,18 @@
         "session": "claude-subagent-ad5af5387f60319c6",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-14T11:08:45+00:00",
+        "state": "reviewing"
+      },
+      "795": {
+        "id": "84f35dd6fc8e417490049f79c44601f5",
+        "pr": 795,
+        "issues": [
+          781
+        ],
+        "actor": "Reviewer-R781X",
+        "session": "claude-subagent-a8efac19b017fde9c",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-14T11:09:57+00:00",
         "state": "reviewing"
       }
     }
