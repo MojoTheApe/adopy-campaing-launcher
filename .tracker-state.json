@@ -8958,9 +8958,11 @@
         "worktree": "C:\\wk-rl1775",
         "id": "acf0a97488964dcf8d94c43502a72e32",
         "issue": 775,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-15T04:24:26+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 809,
+        "report": "# ACL-1775 refresh handoff\nMerged origin/main (0850aa39) into codex/acl-1775-instant-forms; head c5623811.\nConflicts and resolution:\n- src/fb_api/token_capture.py (JS helper): kept main's 1800 object-update branch AND 1775's lead_gen_form_id (on_ad) walk in the creation branch (withoutLeadForm -> statusOk(walked), want/files assigned as in main). Python write(): object_updates -> check_object_update, else check(..., on_ad=on_ad). Both layers in parity.\n- src/web/templates/report.html: 1797 tokens (var(--adopy-text-sm)) applied; 1775's allForms pixel hiding and ad set destination label kept.\n- docs/system/CHANGELOG.md: kept both entries.\nTests (-k \"not browser\"): test_acl1775_builder_forms, test_acl1775_instant_forms (incl. golden website plan), test_acl1797_design_system, test_acl1800_campaign_commands, test_acl1800_home_wiring, test_acl1761_*: 564 passed."
       },
       "815": {
         "actor": "Worker-RM1815",
