@@ -94,7 +94,7 @@ def test_the_old_list_is_kept_for_rpa_and_switched_off_under_api():
     paint = REPORT[REPORT.index("function amapPaintTree("):]
     head = paint[: paint.index("var wasOpen")]
     assert "if (window.AMAP_CAMPAIGN_TABLE) return;" in head                     # под api прежний список не рисуется
-    mount = REPORT[REPORT.index("if (typeof document !== 'undefined' && window.AMAP_CAMPAIGN_TABLE) {"):]
+    mount = REPORT[REPORT.index("if (typeof window !== 'undefined' && typeof document !== 'undefined' && window.AMAP_CAMPAIGN_TABLE) {"):]
     assert "amapCampaignMountVisible" in mount[:400]                              # а таблица страны монтируется только под api
 
 

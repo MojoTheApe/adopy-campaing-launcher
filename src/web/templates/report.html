@@ -9356,7 +9356,7 @@ function amapCampaignMountVisible() {
     else if (host._hc.syncTop) host._hc.syncTop();
   });
 }
-if (typeof document !== 'undefined' && window.AMAP_CAMPAIGN_TABLE) {
+if (typeof window !== 'undefined' && typeof document !== 'undefined' && window.AMAP_CAMPAIGN_TABLE) {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', amapCampaignMountVisible);
   else amapCampaignMountVisible();
   /* `toggle` не всплывает — слушаем на погружении (так же, как раньше слушали ширины дерева). */
