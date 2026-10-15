@@ -12610,7 +12610,7 @@
             "session": "ws1799k-20261015"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-S1799K",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12629,7 +12629,7 @@
         },
         "pr": 803,
         "queued_at": "2026-10-15T03:40:08+00:00",
-        "review_report": "Independent re-review of ACL-1799 / PR 803 at head 253bcac8e676b9bcaee2ac7c5cfeeb0f537c2369 against main a4e38b7c. Verdict: RETURNED, one blocking defect, red CI.\n\nWhat is fine: the merge commit d0ca3389 equals an independent merge-tree of origin/main and the old approved head d3c4cb0a (no extra hunks, no markers). The 1778 header, 1769 stacked cards, 1766 page/pixel labels are all intact. The fix commit's change to applyCreative (pick the card by index) is correct in itself. Local non-browser tests: 216 passed; cw_harness ok.\n\nBLOCKING: the 1769 change removed the `adIdx` variable (the Ad dropdown state) from the builder-drawer script, but Country Workbench still reads it in `active()` of the drawer's public API, src/web/templates/report.html line 6720: `adIndex: adIdx`. `adIdx` is no longer defined anywhere in that scope, so every call to `window.<drawer>.active()` throws `ReferenceError: adIdx is not defined`. That function is how the workbench \"Use\" finds the selected draft, so the whole \"Use\" flow is broken on this head. The fix commit patched the consumer (applyCreative) but not this producer.\n\nCI proves it: run 38652391782, linux shard 3, 4 failed + 4 errors, all tests/test_acl1799_workbench_browser.py (test_use_target_goes_to_the_selected_draft_and_not_to_the_last_one, test_selecting_the_other_draft_moves_the_destination, test_landing_is_noted_not_written_into_a_field_that_does_not_exist, test_an_asset_mismatch_is_confirmed_before_use): \"ReferenceError: adIdx is not defined\" / pageerror. Windows and the other shards pass; ACL verification fails as a consequence. The non-browser tests do not cover this path, so the worker's 181-passed run could not see it.\n\nTo fix: stop reading adIdx in active(). With stacked cards there is no selected ad; return adIndex: 0 (or drop the field and let applyCreative default to the first card, or put the ad index in the call that targets a specific card). Keep applyCreative's rows[a.adIndex || 0]. Then run tests/test_acl1799_workbench_browser.py locally (browser) and confirm CI on the new head: all green incl. Linux shard 3.\n\ntracker-link on this PR also failed only because the task was in the returned state; it will pass after the task is back in Review (rerun then).",
+        "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e76699ef (ACL-1800 campaign commands, ACL-1797 design system; PR 917 -> 918). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
         "return_operation": {
           "id": "13ca577b927a4e838fb75ff8e53a4b1b",
           "actor": "Coordinator-C0930A",
@@ -36149,6 +36149,18 @@
           "report": "# Return for a dependency refresh\n\nMain now also contains batch e76699ef (ACL-1800 campaign commands, ACL-1797 design system; PR 917 -> 918). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
         },
         "batch_id": null
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-15T04:21:45+00:00",
+        "issue": 799,
+        "operation": {
+          "id": "13ca577b927a4e838fb75ff8e53a4b1b",
+          "actor": "Coordinator-C0930A",
+          "session": "coord_c0930a_1009",
+          "report": "# Return for a dependency refresh\n\nMain now also contains batch e76699ef (ACL-1800 campaign commands, ACL-1797 design system; PR 917 -> 918). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -37197,50 +37209,6 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-14T23:50:40+00:00"
-      },
-      "799": {
-        "issue": 799,
-        "pr": 803,
-        "branch": "codex/acl-1799-country-workbench",
-        "head_sha": "3c9521c3dbea616f77c5e09ea2b77d3c15d47d65",
-        "base_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
-        "main_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
-        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-        "scope": "0b2f9e9baae64d82925ec94ddc2a28bcd01ffc31eadb8ce886535456b06792e3",
-        "review": {
-          "kind": "independent-review",
-          "verdict": "approved",
-          "reviewer": "Reviewer-R1799L",
-          "implementer": "Worker-S1799K",
-          "review_session": "r1799l-20261015",
-          "execution_lane": "b8efe268899f4703950473f96933f289",
-          "head_sha": "3c9521c3dbea616f77c5e09ea2b77d3c15d47d65",
-          "base_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
-          "tree_sha": "e10dac971c558c0099f4a4d7594b1144b919579d",
-          "report": "Independent re-review of ACL-1799 / PR 803 at head 3c9521c3 against main a4e38b7c. Reviewer-R1799L implemented none of it. Previous review R1799J found one blocker: active() returned the removed adIdx, breaking the Workbench Use flow. Delta 253bcac8..3c9521c3 is exactly one line in src/web/templates/report.html: adIndex: adIdx -> adIndex: 0 in the drawer active() return; applyCreative already falls back to the first card. Verification: tests/test_acl1799_country_workbench.py 22 passed; node tests/cw_harness.cjs ok. CI on head: Linux 1-3 (shard 3 with the 1799 browser tests), Windows tests, installer, descriptor, process instructions all pass; tracker-link failed only because the task was not in Review and passed after review-acquire rerun. No live calls. Findings: no blocking issues.",
-          "main_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "issues": [
-            799
-          ],
-          "recorded_at": "2026-10-15T04:10:27+00:00",
-          "issue_scopes": {
-            "799": "0b2f9e9baae64d82925ec94ddc2a28bcd01ffc31eadb8ce886535456b06792e3"
-          }
-        },
-        "lane": {
-          "id": "b8efe268899f4703950473f96933f289",
-          "pr": 803,
-          "issues": [
-            799
-          ],
-          "actor": "Reviewer-R1799L",
-          "session": "r1799l-20261015",
-          "coordinator": "Coordinator-C0930A",
-          "started_at": "2026-10-15T04:08:22+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-15T04:10:46+00:00"
       }
     },
     "batches": {
