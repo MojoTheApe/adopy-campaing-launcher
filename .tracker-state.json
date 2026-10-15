@@ -9012,6 +9012,18 @@
         "state": "implementing",
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
+      },
+      "920": {
+        "actor": "Worker-S1920A",
+        "session": "s1920a-20261015",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1920-search-refused",
+        "worktree": "C:\\wk-1920",
+        "id": "cbf30124fe7a45f0b1c36b1072014078",
+        "issue": 920,
+        "state": "implementing",
+        "started_at": "2026-10-15T05:51:11+00:00",
+        "from_status": "status:idea"
       }
     },
     "tasks": {
@@ -14251,6 +14263,17 @@
         },
         "pr": 909,
         "queued_at": "2026-10-14T14:05:21+00:00"
+      },
+      "920": {
+        "implementers": [
+          {
+            "actor": "Worker-S1920A",
+            "session": "s1920a-20261015"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1920A",
+        "coordinator": "Coordinator-M1011A"
       }
     },
     "actors": {
@@ -15773,6 +15796,10 @@
       "Reviewer-R1814N": {
         "session": "r1814n-20261015",
         "role": "Reviewer"
+      },
+      "Worker-S1920A": {
+        "session": "s1920a-20261015",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -37261,6 +37288,13 @@
         "pr": 817,
         "lane": "c37514f11523475888831479a1aecf43",
         "actor": "Reviewer-R1814N"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-15T05:51:11+00:00",
+        "issue": 920,
+        "claim": "cbf30124fe7a45f0b1c36b1072014078",
+        "actor": "Worker-S1920A"
       }
     ],
     "policy": {
