@@ -14531,6 +14531,10 @@
         "state": "implementing",
         "worker": "Worker-B71E",
         "coordinator": "Coordinator-DLV15"
+      },
+      "45": {
+        "implementers": [],
+        "state": "archiving"
       }
     },
     "actors": {
