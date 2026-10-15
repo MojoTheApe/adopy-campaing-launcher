@@ -9143,20 +9143,6 @@
         "state": "implementing",
         "started_at": "2026-10-15T07:18:32+00:00",
         "from_status": "status:idea"
-      },
-      "819": {
-        "actor": "Worker-S1819P",
-        "session": "ws1819p-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1819-preflight-audit",
-        "worktree": "C:\\wk-1819p",
-        "id": "560cb9234762481d9a2500cdb4de9e38",
-        "issue": 819,
-        "state": "handoff",
-        "started_at": "2026-10-15T07:19:05+00:00",
-        "from_status": "status:todo",
-        "pr": 821,
-        "report": "# Fix of the two CI failures on ACL-1819 (PR 821), head 7cde3c4c\n- tests/test_acl1819_preflight.py:582: the backslash path is test data for the name function (it must take the basename of Windows paths), so the line now carries `# linux-ok: ...`. test_no_unmarked_test_file_uses_windows_only_apis passes.\n- src/web/templates/report.html:5704 (cbPreflight.creativeNumber): the Cyrillic x in the size regex is now the escape `[x\\u0445\\xd7]`, same behaviour; Python AdDraft parity regex keeps the same set. test_no_russian_text_reaches_the_screen passes.\n- Tests run locally: the two guard tests plus tests/test_acl1819_preflight.py: 80 passed.\n\n## Merge notes from the previous refresh (head a957986b)\n- Merged origin/main (080df2d8) into the branch. Conflicts: (1) src/fb_api/creator.py resolve_pixel: main (final 1775/1769 form) wins. (2) report.html pfAsk: kept 1819's cbPreflightWarnHtml lines plus main's `if (mine)` line. preflight_rules.json needed no regeneration.\n- cbPublishAll fix: the 1819 wrapper took only (onProgress, picked), so 1826's Retry call cbPublishAll(showQueue, picked, keys) lost its onlyKeys and would retry every form. The wrapper now accepts onlyKeys, skips other forms when building gate items and passes onlyKeys to the original, so Retry goes through the same pre-flight gate. The 1819 source-text test was updated to the new call text.\n- Aligned 1766 wording: test_page_not_on_the_account now expects main's message \"... is not among the pages this ad account can advertise from (N found)\" instead of \"cannot advertise\".\n- Earlier tests (not browser): test_acl1819_preflight, test_acl1775_*, test_acl1761_*, test_acl1826_*, test_acl1604_preflight: 460 passed. Node preflight_gate_harness: ok."
       }
     },
     "tasks": {
@@ -13163,25 +13149,25 @@
             "session": "ws1819p-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1819P",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-RN1819",
-          "session": "wrn1819-20261015",
+          "actor": "Worker-S1819P",
+          "session": "ws1819p-20261015",
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1819-preflight-audit",
-          "worktree": "C:\\wk-rn1819",
-          "id": "3f7660e12413401584f621636e056793",
+          "worktree": "C:\\wk-1819p",
+          "id": "560cb9234762481d9a2500cdb4de9e38",
           "issue": 819,
           "state": "handoff",
-          "started_at": "2026-10-15T06:36:01+00:00",
+          "started_at": "2026-10-15T07:19:05+00:00",
           "from_status": "status:todo",
           "pr": 821,
-          "report": "# Refresh ACL-1819 (PR 821)\n- Merged origin/main (080df2d8) into codex/acl-1819-preflight-audit (was 0f2406eb); head a957986b.\n- Conflicts: (1) src/fb_api/creator.py resolve_pixel: main (final 1775/1769 form) wins. (2) report.html pfAsk: kept 1819's cbPreflightWarnHtml lines plus main's `if (mine)` line (font-size token from main). preflight_rules.json needed no regeneration (only 1819 added rules; the module tests agree).\n- Gate fix found in the merge: the 1819 cbPublishAll wrapper took only (onProgress, picked), so 1826's Retry call cbPublishAll(showQueue, picked, keys) lost its onlyKeys and would have retried every form. The wrapper now accepts onlyKeys, skips other forms when building gate items and passes onlyKeys to the original. Retry therefore goes through the same pre-flight gate. The 1819 source-text test was updated to the new call text.\n- Stale expectation: test_page_not_on_the_account expected \"cannot advertise\"; main's 1766 message is \"... is not among the pages this ad account can advertise from (N found)\", so the expectation was aligned to that text.\n- Tests (not browser): test_acl1819_preflight, test_acl1775_*, test_acl1761_*, test_acl1826_*, test_acl1604_preflight: 460 passed. Node preflight_gate_harness: ok."
+          "report": "# Fix of the two CI failures on ACL-1819 (PR 821), head 7cde3c4c\n- tests/test_acl1819_preflight.py:582: the backslash path is test data for the name function (it must take the basename of Windows paths), so the line now carries `# linux-ok: ...`. test_no_unmarked_test_file_uses_windows_only_apis passes.\n- src/web/templates/report.html:5704 (cbPreflight.creativeNumber): the Cyrillic x in the size regex is now the escape `[x\\u0445\\xd7]`, same behaviour; Python AdDraft parity regex keeps the same set. test_no_russian_text_reaches_the_screen passes.\n- Tests run locally: the two guard tests plus tests/test_acl1819_preflight.py: 80 passed.\n\n## Merge notes from the previous refresh (head a957986b)\n- Merged origin/main (080df2d8) into the branch. Conflicts: (1) src/fb_api/creator.py resolve_pixel: main (final 1775/1769 form) wins. (2) report.html pfAsk: kept 1819's cbPreflightWarnHtml lines plus main's `if (mine)` line. preflight_rules.json needed no regeneration.\n- cbPublishAll fix: the 1819 wrapper took only (onProgress, picked), so 1826's Retry call cbPublishAll(showQueue, picked, keys) lost its onlyKeys and would retry every form. The wrapper now accepts onlyKeys, skips other forms when building gate items and passes onlyKeys to the original, so Retry goes through the same pre-flight gate. The 1819 source-text test was updated to the new call text.\n- Aligned 1766 wording: test_page_not_on_the_account now expects main's message \"... is not among the pages this ad account can advertise from (N found)\" instead of \"cannot advertise\".\n- Earlier tests (not browser): test_acl1819_preflight, test_acl1775_*, test_acl1761_*, test_acl1826_*, test_acl1604_preflight: 460 passed. Node preflight_gate_harness: ok."
         },
         "pr": 821,
-        "queued_at": "2026-10-15T06:43:49+00:00",
+        "queued_at": "2026-10-15T07:27:30+00:00",
         "review_report": "# Review of PR 821 / ACL-1819 at a957986b: returned, two blocking CI failures in this PR's own files\n\nContent review is clean (details below). Head contains current main (080df2d8). The PR cannot be approved because required CI is red on two guard tests that fail only because of lines this PR added.\n\n## Blocking\n1. tests/test_acl1819_preflight.py:582 - tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis fails (windows tests, linux shard 2, tooling job). The line `(r\"C:\\files\\2403_square.JPG\", \"Text E\")` is flagged [backslash-path]. Fix: add a `# linux-ok: <why, it is only data for the name function>` comment on that line (or mark the file windows_only, but the first is right: the case is data).\n2. src/web/templates/report.html:5704 (in cbPreflight.creativeNumber) - tests/test_screens_are_in_english.py::test_no_russian_text_reaches_the_screen fails (linux shard 1). The regex `/\\d{3,4}\\s*[x\u0445\u00d7]\\s*\\d{3,4}/gi` contains a Cyrillic \"\u0445\" (U+0445) and the guard rejects any Cyrillic in the template outside its ALLOWED patterns. Fix: write the character as an escape (`[x\\u0445\\xd7]`) so the source has no Cyrillic; the behaviour (Cyrillic x as a size separator, as in the server's AdDraft.ad_name) stays the same. Check the Python side keeps the same character set so JS/Python parity holds.\nOther red checks (Process instructions, ACL verification) are aggregates of these two. tracker-link failed at 06:43 because the issue was not yet in Review at that moment (label status:review is on #819 now); it should re-run green. Re-run all after the fix.\n\n## Checked and fine\n- Scope vs Issue #819: shared rule table (preflight_rules.py plus exported JSON, drift test passes), card with error/warning/ok/unknown, \"errors: N\" badge in the tree, click focuses the field, all listed client and server checks present, gate on Publish and Publish all, warnings in the confirm, RPA shows client checks only and the RPA publish path is untouched.\n- No Meta writes: audit runs only inside plan_only (client without write right), server_verdicts makes reads only; Graph stop kinds skip the audit; audit failure is logged and does not break the plan. Server checks are not run on keystroke or timer, only on Check and right before Publish; stale verdicts are shown as \"Edited since the last check\". Gate fails closed (missing tree, rules or state, failed fetch all block). Retry (ACL-1826 onlyKeys) goes through the same gate; CB_PF_RUNNING is reset before done().\n- creator.py refactor (resolve_page / resolve_pixel / resolve_page_pixel wrapper) keeps behaviour of main's final 1775/1769 form. Unknown currency gives \"unknown\" (non blocking), not an invented minimum; stated in PR and CHANGELOG. CHANGELOG entry present, user-facing text English, no secrets or ids in the diff, `Tracker issues: ACL-1819` in the PR body.\n\n## Tests run (affected only, local, Windows)\n- tests/test_acl1819_preflight.py, test_acl1761_parity.py, test_web_drill.py: 131 passed.\n- test_acl1819_preflight_browser.py, test_acl1775_builder_forms.py, test_acl1775_instant_forms.py, test_acl1826_mlx_session_lost.py, test_acl1604_preflight.py, test_the_builder_tree.py, test_acl1761_plan_check.py, test_acl1761_existing_check.py, test_builder_publish_selected_browser.py: 205 passed.\n- The two guard tests above were NOT in my set and are what CI caught."
       },
       "816": {
@@ -18823,7 +18809,8 @@
       903,
       907,
       891,
-      872
+      872,
+      819
     ],
     "review": null,
     "history": [
@@ -38324,6 +38311,13 @@
         "at": "2026-10-15T07:27:01+00:00",
         "issue": 147,
         "reason": "Closed in the Playwright backlog cleanup 2026-10-15: we are moving campaign creation and account reads to the Meta API (ACL-1760/1761/1883), so this Ads Manager UI/Playwright-only work is no longer relevant. Restore if the UI path comes back."
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-15T07:27:30+00:00",
+        "issue": 819,
+        "pr": 821,
+        "actor": "Worker-S1819P"
       }
     ],
     "policy": {
