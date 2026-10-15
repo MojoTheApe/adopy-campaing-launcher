@@ -9128,9 +9128,11 @@
         "worktree": "C:\\acl-1902-name-suffix",
         "id": "26d38e9133ba4cb1aed9caf095aca831",
         "issue": 902,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-15T08:03:12+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 904,
+        "report": "# ACL-1902 handoff (PR #904)\n\n## What the task does\nWhen a different campaign with the requested name already exists, the robot now picks a free name NAME_2, NAME_3, ... instead of stopping. The Check plan / preflight shows the same result (preflight rule in src/fb_api/preflight_rules.json/.py updated; tests/test_acl1819_preflight.py, tests/test_acl1902_name_suffix.py).\n\n## New head\n519d6e5ee0842a4520936ad376465939e8adb996 (merge of work/acl-1899-video-upload-progress at 263b267f into 13643e16). 263b267f and 080df2d8 are ancestors of HEAD.\n\n## Conflicts\nNone. The merge was clean (1819 commit 7cde3c4c is kept). CHANGELOG/PROJECT records of both sides are kept as merged.\n\n## Tests (affected only, -k \"not browser\")\n834 passed, 2 deselected, 0 failed: test_acl1902_name_suffix, test_acl1819_preflight, test_acl1761_existing_check, test_acl1899_upload_progress, test_acl1776_create_forms, test_acl1761_api_create, test_acl1761_parity, test_acl1756_fb_api, test_acl1800_campaign_commands, test_acl_test_platform, test_screens_are_in_english.\n\n## Stacking\nStacked on ACL-1899 -> ACL-1776 -> ACL-1819 -> main 080df2d8.\n\n## Known interaction with ACL-1907 (PR #908, not in main)\nWith 1902, a different-language campaign re-run publishes as NAME_2 instead of stopping with existing_differs; 1907's two re-run tests must be adapted when 1907 is refreshed on top of 1902."
       }
     },
     "tasks": {
