@@ -96,7 +96,9 @@ def run(browser, monkeypatch, tmp_path):
                 self.clicks = self.clicks + got
                 for c in got:
                     if c["sw"] and mode != "reverted":
-                        states[c["row"]] = "false" if states.get(c["row"], "true") == "true" else "true"
+                        # A labelled row keeps the state key of the name it was renamed from.
+                        row = sp._page_clean_name(c["row"]) if mode.startswith("labelled") else c["row"]
+                        states[row] = "false" if states.get(row, "true") == "true" else "true"
 
             def goto(self, url, **kwargs):
                 if self.visits:
@@ -123,6 +125,10 @@ def run(browser, monkeypatch, tmp_path):
                 pg.evaluate(SET_STATE, states)
                 if mode == "duplicate":
                     pg.evaluate(RENAME, ["Campaign 2", "Campaign 1"])
+                if mode in ("labelled", "labelled-twin"):
+                    pg.evaluate(RENAME, ["Campaign 1", "Campaign 1 Unpublished edits"])
+                if mode == "labelled-twin":
+                    pg.evaluate(RENAME, ["Campaign 2", "Campaign 1 Draft"])
                 if mode in ("covered-by-dialog", "covered-by-name"):
                     pg.evaluate("m => { window.__hit = m; }", mode.split("-")[-1])
                 if mode == "disabled":
@@ -197,6 +203,7 @@ def test_whitespace_in_the_requested_name_is_normalised(run):
 
 @pytest.mark.parametrize("name,mode,words", [
     ("Campaign 1", "duplicate", "2 campaigns in the table have this exact name"),
+    ("Campaign 1", "labelled-twin", "2 campaigns in the table have this exact name"),
     ("Campaign 9", "", "no campaign with this exact name"),
     ("campaign 1", "", "no campaign with this exact name"),  # exact, not case-folded
     ("Campaign 1", "partial", "only 5 of 7 campaigns are on screen"),
@@ -223,6 +230,14 @@ def test_an_off_switch_is_reported_and_never_pressed(run, name, mode):
     result, page = run(name, mode)
     assert result.state == "already_off", result
     assert page.clicks == []
+
+
+def test_a_meta_label_after_the_name_is_matched_as_the_reader_cleans_it(run):
+    # ACL-1395: the reader and the dashboard drop "Unpublished edits" & co.,
+    # so the clean name must find the labelled row — and only that row.
+    result, page = run("Campaign 1", "labelled")
+    assert result.state == "off", result
+    assert page.clicks == [{"row": "Campaign 1 Unpublished edits", "sw": True}]
 
 
 def test_a_click_that_meta_did_not_keep_is_not_success(run):
@@ -299,6 +314,25 @@ def test_a_confirmed_turn_off_by_name_marks_only_that_saved_row(store, monkeypat
     saved = sp._load_all()["FacebookDoc19|2026-09-01|2026-09-01"]["objects"]
     assert [o["switch"] for o in saved] == ["off", "on", "on"]
     assert saved[0]["delivery"] == "Processing"
+
+
+def test_a_saved_name_with_a_meta_label_is_marked_by_its_clean_name(store):
+    # Readings saved before ACL-1395 still carry the label.
+    objects = [{"level": "campaign", "id": "", "name": "Campaign 1 Unpublished edits", "switch": "on"},
+               {"level": "campaign", "id": "", "name": "Campaign 2", "switch": "on"}]
+    sp._save_all({"FacebookDoc19|2026-09-01|2026-09-01": {"objects": objects}})
+    assert sp._mark_object_off_by_name("FacebookDoc19", "campaign", "Campaign 1") == 1
+    assert [o["switch"] for o in sp._load_all()["FacebookDoc19|2026-09-01|2026-09-01"]["objects"]] == ["off", "on"]
+
+
+@pytest.mark.parametrize("raw,clean", [
+    ("Campaign 1 Unpublished edits", "Campaign 1"),
+    ("Campaign 1  In review  Draft ", "Campaign 1"),
+    ("Draft", "Draft"),
+    ("2002 - Draft 5 promo", "2002 - Draft 5 promo"),
+])
+def test_the_clean_name_matches_the_readers(raw, clean):
+    assert sp._page_clean_name(raw) == clean == sp.clean_object_name(raw)
 
 
 def test_a_shared_saved_name_is_not_marked(store):

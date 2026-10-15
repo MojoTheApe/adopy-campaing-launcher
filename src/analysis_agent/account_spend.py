@@ -3221,14 +3221,14 @@ def _mark_object_off_by_name(account: str, level: str, name: str, delivery: str 
     по имени. Имя, которое в чтении встретилось дважды, не трогаем вовсе:
     выключили одну из них, и какую — по сохранённому чтению не сказать.
     """
-    want = _page_name(name)
+    want = _page_clean_name(name)
     if not want:
         return 0
 
     def _fix(objects: list) -> int:
         same = [o for o in (objects or []) if isinstance(o, dict)
                 and o.get("level") == level and not str(o.get("id") or "")
-                and _page_name(o.get("name")) == want]
+                and _page_clean_name(o.get("name")) == want]
         if len(same) != 1:
             return 0
         same[0]["switch"] = "off"
@@ -3441,6 +3441,24 @@ def _page_name(name: Any) -> str:
     return _PAGE_SPACE_RUN.sub(" ", str(name or "")).strip(" ")
 
 
+def _page_clean_name(name: Any) -> str:
+    """`_page_name` без надписей Meta в конце — как `cleanName` страницы.
+
+    Чтение с ACL-1395 отдаёт имена уже без «Unpublished edits» и соседей, и
+    дешборд присылает чистое имя. Поиск по имени чистит строки таблицы так же,
+    иначе кампанию с надписью не выключить. Две кампании, чьи имена совпали
+    после чистки («X» и «X Draft»), — два совпадения, то есть отказ.
+    """
+    text = _page_name(name)
+    while True:
+        for label in META_NAME_LABELS:
+            if text.endswith(" " + label):
+                text = text[: -len(label) - 1].strip(" ")
+                break
+        else:
+            return text
+
+
 def _unsafe_name_chars(name: str) -> list[str]:
     """Управляющие и форматные символы (Cc/Cf) вне набора пробелов страницы.
 
@@ -3482,7 +3500,9 @@ _FIND_BY_NAME_JS = r"""
   const hasBox = e => e.getClientRects().length > 0 || (getComputedStyle(e).display === 'contents' && [...e.children].some(hasBox));
   const visible = e => hasBox(e) && !e.closest('[hidden],[aria-hidden="true"],[inert]') && getComputedStyle(e).visibility !== 'hidden';
   const fail = (why, extra) => Object.assign({found: false, why}, extra || {});
-  const want = norm(args.name);
+  /*ACL_CLEAN_NAME*/
+  // Имена без надписей Meta в конце, как у чтения (ACL-1395).
+  const want = cleanName(args.name);
   if (!want) return fail('no campaign name was given');
   // Метки прошлого поиска: при нажатии сверяем именно их.
   const markedRow = args.click ? document.querySelector('[data-acl-row="1"]') : null;
@@ -3526,7 +3546,7 @@ _FIND_BY_NAME_JS = r"""
     const row = n.closest('[role="presentation"]');
     if (!row || !t.contains(row) || nameEls.filter(e => row.contains(e)).length !== 1)
       return fail('a row could not be told apart from its neighbours');
-    rows.push({row, el: n, name: norm(n.getAttribute('data-tooltip-content'))});
+    rows.push({row, el: n, name: cleanName(n.getAttribute('data-tooltip-content'))});
   }
 
   // Полнота: таблица сама пишет, сколько в ней кампаний. Строкой кампании
@@ -3609,7 +3629,7 @@ _FIND_BY_NAME_JS = r"""
   sw.setAttribute('data-acl-switch', '1');
   return result;
 }
-"""
+""".replace("/*ACL_CLEAN_NAME*/", _CLEAN_NAME_JS)
 
 # Период сверяется в той же задаче браузера, что и нажатие, — как у `_SWITCH_ACTION_JS`.
 _BY_NAME_ACTION_JS = """args => {
@@ -3964,7 +3984,7 @@ def _turn_off_by_name(out: "TurnOffResult", account: str, expected_name: str, *,
                      + ", ".join(odd) + "); turn it off in Ads Manager — nothing was touched")
         return out
     # Одна нормализация на обе стороны — та же, что у страницы.
-    name = _page_name(expected_name)
+    name = _page_clean_name(expected_name)
     out.name = name
     if not name:
         out.error = "row name is required — read the account again"
@@ -4029,7 +4049,7 @@ def _turn_off_by_name(out: "TurnOffResult", account: str, expected_name: str, *,
         # id, таблица могла показать не всё — не нажимаем.
         # Ключи там чищены `_name_key`; сравниваем той же нормализацией, что
         # у страницы, и любое второе совпадение — отказ.
-        same = [v for k, v in _campaigns_from_page_data(page).items() if _page_name(k) == name]
+        same = [v for k, v in _campaigns_from_page_data(page).items() if _page_clean_name(k) == name]
         if len(same) > 1 or any(not v.get("id") for v in same):
             out.error = ("more than one campaign has this exact name; without ids they "
                          "cannot be told apart — nothing was touched")
