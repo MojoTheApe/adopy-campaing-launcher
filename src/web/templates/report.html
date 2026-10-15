@@ -9208,7 +9208,9 @@ function amapFillAttribution(box, objects, data) {
         /* ACL-1377: у Meta числа есть, а в книге строк нет (прогревочные
            MaxWarmup на Doc19). Прочерки тогда — не поломка, и это сказано
            тихой пометкой у уровня строки. */
-        nowb = !!(String(o.spend || '').trim() || String(o.results || '').trim());
+        /* «$0.00» и «0» — не числа Meta: такой черновик ничем не отличается
+           от пустого, и пометка ему не нужна. */
+        nowb = /[1-9]/.test(String(o.spend || '') + String(o.results || ''));
       }
     }
     line.querySelectorAll('.amap-tree-num.attr').forEach(function (cell) {

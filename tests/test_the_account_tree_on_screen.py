@@ -1017,9 +1017,10 @@ def test_a_meta_only_campaign_says_it_is_not_in_the_workbook(page):
     без строк в книге. Прочерки там — не поломка, и это сказано пометкой."""
     warm = dict(ADSET, id="999", name="MaxWarmup Engagement")
     draft = dict(ADSET, id="998", name="Draft", spend="", results="", cost_per_result="")
-    _paint(page, [ADSET, warm, draft])
-    _fill(page, [ADSET, warm, draft], ATTR)
-    assert _nowb(page) == ["", "· not in workbook", ""], (
+    zero = dict(ADSET, id="997", name="Zero", spend="$0.00", results="0", cost_per_result="")
+    _paint(page, [ADSET, warm, draft, zero])
+    _fill(page, [ADSET, warm, draft, zero], ATTR)
+    assert _nowb(page) == ["", "· not in workbook", "", ""], (
         "пометка — только у кампании с числами Meta и без строк книги")
     assert set(_attr(page, 1).values()) == {"—"}, "прочерки в колонках книги остаются"
     assert "not an error" in page.evaluate("() => document.querySelector('.amap-tree-nowb').title")
