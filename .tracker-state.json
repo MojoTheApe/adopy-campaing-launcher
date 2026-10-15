@@ -42407,7 +42407,51 @@
         "session": "rv1015d-817",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-15T06:59:41+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 814,
+          "pr": 817,
+          "branch": "codex/acl-1814-rules-store",
+          "head_sha": "1dfb66b0aa4340ad944e23a6cb9505ad548a54fe",
+          "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+          "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "scope": "ddf654cfd53e9c3cee7a9f3b3e7909f8802691e132619aa679643291c868c722",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-RV1015D",
+            "review_session": "rv1015d-817",
+            "execution_lane": "bc56f6fbb4054a23a0166c43623aff41",
+            "implementer": "Worker-RN1814",
+            "head_sha": "1dfb66b0aa4340ad944e23a6cb9505ad548a54fe",
+            "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+            "tree_sha": "5c168dd1a7045dd8605720ee5be7964932fef25f",
+            "report": "Scope matches issue 814 (T1 backend only: rules/model.py, rules/store.py, optional per-asset goals in web/goals.py; no UI, no Meta calls). Read the full diff: versioned immutable rule versions, grant hashes revoked on strategy/scope/target/evidence/conditions/action/caps edits, duplicate is Disabled with no grant, set_mode cannot grant Automatic, target resolution override > asset goal > country goal > 'No target', atomic JSON with .bak, fsynced JSONL with torn-tail repair, cross-process lock via config.paths.machine_file_lock, schema_version guard, Automatic hard-locked off. Ran tests/test_rules_store.py + tests/test_goals.py: 103 passed. PR head contains current main 080df2d8; CI green (linux x3, windows, tracker-link after rerun). Non-blocking notes: _read_json_src treats a transient OSError on read as corrupt and renames the file aside (unlikely race on Windows); last_action_for keys on rec['id'] while other journals use object_id (settle in T5). No live checks claimed.",
+            "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "issues": [
+              814
+            ],
+            "recorded_at": "2026-10-15T08:14:46+00:00",
+            "issue_scopes": {
+              "814": "ddf654cfd53e9c3cee7a9f3b3e7909f8802691e132619aa679643291c868c722"
+            }
+          },
+          "lane": {
+            "id": "bc56f6fbb4054a23a0166c43623aff41",
+            "pr": 817,
+            "issues": [
+              814
+            ],
+            "actor": "Reviewer-RV1015D",
+            "session": "rv1015d-817",
+            "coordinator": "Coordinator-M1011A",
+            "started_at": "2026-10-15T06:59:41+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-15T08:15:58+00:00"
+        }
       },
       "821": {
         "id": "dae6f1124fc7418faff9c2cbf6ac3bd3",
