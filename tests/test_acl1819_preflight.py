@@ -327,7 +327,7 @@ def test_page_not_on_the_account(tmp_path):
     d = _draft(tmp_path, ads=1)
     d.page_id = "999"
     out = _audit(AuditMeta(), d)
-    assert _by(out)["page_ok"]["status"] == "error" and "cannot advertise" in _by(out)["page_ok"]["detail"]
+    assert _by(out)["page_ok"]["status"] == "error" and "is not among the pages this ad account can advertise from" in _by(out)["page_ok"]["detail"]
     assert _by(out)["pixel_ok"]["status"] == "ok", "остальные проверки независимы"
 
 
@@ -579,7 +579,7 @@ def test_mutating_the_gate_makes_its_test_fail(tmp_path, old, new, label):
 def test_the_publish_buttons_are_wrapped_by_the_gate_and_the_originals_are_untouched():
     page = TPL.read_text(encoding="utf-8")
     assert "window.cbPreflightGate([{ form: form, slots: slots }], function () { origOne(form); });" in page
-    assert "window.cbPreflightGate(items, function () { origAll(onProgress, picked); });" in page
+    assert "window.cbPreflightGate(items, function () { origAll(onProgress, picked, onlyKeys); });" in page
     assert "origAll = window.cbPublishAll, origOne = window.cbPublish" in page
     assert page.index("window.cbPublish = function(form) {") < page.index("origAll = window.cbPublishAll")
     # серверные проверки идут только по кнопке и перед Publish: ни таймера, ни события ввода
