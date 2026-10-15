@@ -605,8 +605,8 @@ def _run_job_inner(
             _jobs[job_id].pop("queue", None)
             _jobs[job_id]["slot_wait_s"] = grant["waited_s"]
             # ACL-1642: пропущено вперёд головы очереди, ждавшей память.
-            if grant["decision"].get("started_ahead"):
-                _jobs[job_id]["started_ahead"] = True
+            # Ставим каждый раз: повторная выдача места (ACL-1614) может быть уже не «вперёд».
+            _jobs[job_id]["started_ahead"] = bool(grant["decision"].get("started_ahead"))
         # Сколько задание ждало места и почему его пустили — в телеметрию.
         if _rt is not None:
             try:
