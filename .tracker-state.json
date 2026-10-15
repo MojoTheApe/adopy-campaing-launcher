@@ -9131,20 +9131,6 @@
         "state": "implementing",
         "started_at": "2026-10-15T06:24:37+00:00",
         "from_status": "status:todo"
-      },
-      "814": {
-        "actor": "Worker-RN1814",
-        "session": "wrn1814-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1814-rules-store",
-        "worktree": "C:\\wk-rn1814",
-        "id": "6ff69cfad4854e84a43a1b0c9a78f161",
-        "issue": 814,
-        "state": "handoff",
-        "started_at": "2026-10-15T06:33:31+00:00",
-        "from_status": "status:todo",
-        "pr": 817,
-        "report": "# Refresh ACL-1814 (PR 817)\n- Merged origin/main (080df2d8) into codex/acl-1814-rules-store (was bed6d3f7); head 1dfb66b0. No conflicts (clean merge, not even CHANGELOG).\n- Tests: test_rules_store.py + test_goals.py + test_shared_file_locks.py: 115 passed. scripts/acl_scan_secrets.py: clean."
       }
     },
     "tasks": {
@@ -13073,25 +13059,25 @@
             "session": "wrn1814-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RN1814",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-S1814P",
-          "session": "ws1814p-20261015",
+          "actor": "Worker-RN1814",
+          "session": "wrn1814-20261015",
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1814-rules-store",
-          "worktree": "C:\\wk-1814p",
-          "id": "b1010a9265e146c7a5c89e44c472b3ad",
+          "worktree": "C:\\wk-rn1814",
+          "id": "6ff69cfad4854e84a43a1b0c9a78f161",
           "issue": 814,
           "state": "handoff",
-          "started_at": "2026-10-15T05:52:36+00:00",
+          "started_at": "2026-10-15T06:33:31+00:00",
           "from_status": "status:todo",
           "pr": 817,
-          "report": "# ACL-1814 PR 817 r1 fixes - Worker-S1814P\n\n1. `_load` fast path: rule_problem is checked before r.get(\"mode\"), so non-object entries ({\"x\":\"junk\",\"y\":null}) are quarantined. Test: test_non_object_rule_entries_are_quarantined.\n2. `update_settings` refuses automatic_enabled=True while automatic_available() is False (\"Automatic mode is not available yet.\"), nothing written to disk. Test: test_update_settings_refuses_automatic_true_while_gate_closed.\n\nTests: test_rules_store + test_goals + test_shared_file_locks: 115 passed.\nMutations: reverted fix 1 -> its test fails; reverted fix 2 -> its test fails; both reverted -> both fail."
+          "report": "# Refresh ACL-1814 (PR 817)\n- Merged origin/main (080df2d8) into codex/acl-1814-rules-store (was bed6d3f7); head 1dfb66b0. No conflicts (clean merge, not even CHANGELOG).\n- Tests: test_rules_store.py + test_goals.py + test_shared_file_locks.py: 115 passed. scripts/acl_scan_secrets.py: clean."
         },
         "pr": 817,
-        "queued_at": "2026-10-15T05:58:11+00:00",
+        "queued_at": "2026-10-15T06:35:38+00:00",
         "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e677f638 (ACL-1812 warm sessions, ACL-1826, ACL-1775 Instant Forms, ACL-1815 rules evidence; PR 919 -> 922). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
       },
       "815": {
@@ -18673,7 +18659,8 @@
       907,
       891,
       902,
-      799
+      799,
+      814
     ],
     "review": null,
     "history": [
@@ -37899,6 +37886,13 @@
         "at": "2026-10-15T06:33:31+00:00",
         "issue": 814,
         "claim": "6ff69cfad4854e84a43a1b0c9a78f161",
+        "actor": "Worker-RN1814"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-15T06:35:38+00:00",
+        "issue": 814,
+        "pr": 817,
         "actor": "Worker-RN1814"
       }
     ],
