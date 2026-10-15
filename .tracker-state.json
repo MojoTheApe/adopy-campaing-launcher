@@ -13125,7 +13125,7 @@
             "session": "run_s1819a_1012"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-S1819A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -13144,7 +13144,8 @@
         },
         "pr": 821,
         "queued_at": "2026-10-12T08:26:53+00:00",
-        "reviewer": "Reviewer-RRN819"
+        "reviewer": "Reviewer-RRN819",
+        "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e677f638 (ACL-1812 warm sessions, ACL-1826, ACL-1775 Instant Forms, ACL-1815 rules evidence; PR 919 -> 922). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
       },
       "816": {
         "implementers": [
@@ -37837,6 +37838,24 @@
         "pr": 821,
         "lane": "56cb6b61ae434e58ad5f28d78aa1c9c7",
         "actor": "Reviewer-RRN819"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-15T06:29:48+00:00",
+        "review": {
+          "id": "56cb6b61ae434e58ad5f28d78aa1c9c7",
+          "pr": 821,
+          "issues": [
+            819
+          ],
+          "actor": "Reviewer-RRN819",
+          "session": "rrn819-20261015",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-15T06:29:29+00:00",
+          "state": "returning",
+          "report": "# Return for a dependency refresh\n\nMain now also contains batch e677f638 (ACL-1812 warm sessions, ACL-1826, ACL-1775 Instant Forms, ACL-1815 rules evidence; PR 919 -> 922). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -41469,21 +41488,6 @@
       "started_at": "2026-10-15T05:43:00+00:00",
       "ineligible": {}
     },
-    "source_reviews": {
-      "821": {
-        "id": "56cb6b61ae434e58ad5f28d78aa1c9c7",
-        "pr": 821,
-        "issues": [
-          819
-        ],
-        "actor": "Reviewer-RRN819",
-        "session": "rrn819-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "started_at": "2026-10-15T06:29:29+00:00",
-        "state": "returning",
-        "report": "# Return for a dependency refresh\n\nMain now also contains batch e677f638 (ACL-1812 warm sessions, ACL-1826, ACL-1775 Instant Forms, ACL-1815 rules evidence; PR 919 -> 922). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
-        "keep_lane": false
-      }
-    }
+    "source_reviews": {}
   }
 }
