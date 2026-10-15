@@ -36522,6 +36522,11 @@
         "issue": 815,
         "pr": 818,
         "actor": "Worker-RM1815"
+      },
+      {
+        "event": "included-sources-closed",
+        "at": "2026-10-15T04:34:42+00:00",
+        "batch_id": "e76699eff67645bd910712ebbcde5107"
       }
     ],
     "policy": {
@@ -39736,7 +39741,8 @@
           918
         ],
         "finished_at": "2026-10-15T04:29:09+00:00",
-        "closing_sources": true
+        "closing_sources": false,
+        "sources_closed": true
       }
     },
     "integration": null,
