@@ -17433,7 +17433,7 @@
             "session": "acl_delivery"
           }
         ],
-        "state": "reviewing",
+        "state": "merged",
         "worker": "Worker-B71E",
         "coordinator": "Coordinator-DLV15",
         "handoff": {
@@ -22178,6 +22178,19 @@
         "coordinator": "Coordinator-DLV15",
         "state": "reviewing",
         "started_at": "2026-10-15T11:52:41+00:00"
+      },
+      "941": {
+        "id": "55c7cfe569ec42e3882475a0bb4b9275",
+        "pr": 941,
+        "issues": [
+          923
+        ],
+        "actor": "Reviewer-N61D",
+        "session": "review_acl",
+        "coordinator": "Coordinator-DLV15",
+        "started_at": "2026-10-15T22:51:49+00:00",
+        "state": "reviewing",
+        "route": "process"
       }
     },
     "review_queue": [
@@ -45811,6 +45824,26 @@
         "pr": 941,
         "lane": "55c7cfe569ec42e3882475a0bb4b9275",
         "actor": "Reviewer-N61D"
+      },
+      {
+        "event": "integrated",
+        "at": "2026-10-15T22:59:49+00:00",
+        "review": {
+          "id": "55c7cfe569ec42e3882475a0bb4b9275",
+          "pr": 941,
+          "issues": [
+            923
+          ],
+          "actor": "Reviewer-N61D",
+          "session": "review_acl",
+          "coordinator": "Coordinator-DLV15",
+          "started_at": "2026-10-15T22:51:49+00:00",
+          "state": "reviewing",
+          "route": "process"
+        },
+        "prs": [
+          941
+        ]
       }
     ],
     "policy": {
@@ -50199,21 +50232,7 @@
       "started_at": "2026-10-15T11:47:02+00:00",
       "ineligible": {}
     },
-    "source_reviews": {
-      "941": {
-        "id": "55c7cfe569ec42e3882475a0bb4b9275",
-        "pr": 941,
-        "issues": [
-          923
-        ],
-        "actor": "Reviewer-N61D",
-        "session": "review_acl",
-        "coordinator": "Coordinator-DLV15",
-        "started_at": "2026-10-15T22:51:49+00:00",
-        "state": "reviewing",
-        "route": "process"
-      }
-    },
+    "source_reviews": {},
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
   },
   "maintenance_history": [
