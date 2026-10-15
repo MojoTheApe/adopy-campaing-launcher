@@ -8958,9 +8958,11 @@
         "worktree": "C:\\wk-rl1812",
         "id": "e8e492b769644e9f90a657c763fb6a57",
         "issue": 812,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-15T04:35:42+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 813,
+        "report": "# ACL-1812 refresh handoff\nMerged origin/main (0850aa39) into codex/acl-1812-warm-sessions; head 55338399. The merge was clean: no textual conflicts. The stacked 1769/1798/1800 parts now equal main's final form (main wins); the branch diff against main contains only 1812 code (warm.py, warm_api.py, warm_sessions.js, stop_log.py, account_spend changes, cdp/profile/token_capture hooks, tests): open profiles kept warm, reusable robot tab, 3-minute restart cooldown on every start path, hand-opened profiles never auto-closed or restarted.\nTests (-k \"not browser\"): test_acl1812_warm_sessions, test_account_spend, test_september_review, test_reads_*, test_a_hand_opened_window_is_reopened_at_once, test_attach_short_path, test_connect_without_act, test_acl1798_campaign_inventory, test_acl1800_* (campaign_commands, account_scoped_table, home_wiring), test_acl1797_design_system, test_acl1761_*: 766 passed."
       }
     },
     "tasks": {
