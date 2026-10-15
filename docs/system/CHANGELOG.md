@@ -1,5 +1,13 @@
 # System history
 
+## Check plan: "A or B" terms are split again when Meta refuses the work lookups - ACL-1933
+
+- Fixes an ACL-1920 regression. When Meta refused the work positions / work employers lookups, a
+  term like "Alpari Group or Plus500" was reported as "could not be checked there" and blocked
+  Publish, even though both parts are ordinary interests. Such a term is now split into its parts
+  as before: if every part resolves, the split is offered for one-time confirmation; if a part could
+  only be found through a refused lookup, the term stays unknown with that part's reason.
+
 ## Check plan: optional targeting lookups that Meta refuses are skipped and named - ACL-1920
 
 - On the API backend, a "Permission Denied" answer (Graph code 10, also 200 and 294) to an optional
