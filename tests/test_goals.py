@@ -214,3 +214,9 @@ def test_a_lead_editing_someone_else_does_not_give_them_this_machines_map(monkey
     dan_report = {"my_cm": "Dan", "countries": [{"country": "Peru", "my_totals": {"spend": 1.0}}]}
     assert web._my_goal_countries(dan_report, "Dan") == ["Peru"]
     assert web._my_goal_countries(lead_report) == ["Chile", "Kuwait"]
+
+def test_asset_goals_survive_a_save():
+    got = goals.save("Dan", [{"country": "Peru", "cpa": 55, "assets": {"1121": {"cpa": "30"}, "": {"cpa": 1}, "x": {}}}])
+    assert got[0]["assets"] == {"1121": {"cpa": 30.0, "cr": None}}
+    assert goals.for_cm("Dan")[0]["assets"] == {"1121": {"cpa": 30.0, "cr": None}}
+    assert "assets" not in goals.save("Dan", [{"country": "Peru", "cpa": 55}])[0]
