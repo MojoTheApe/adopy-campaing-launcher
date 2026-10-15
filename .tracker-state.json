@@ -11348,7 +11348,7 @@
             "session": "run_s1642a_1006"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-S1642A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -11367,7 +11367,8 @@
         },
         "pr": 644,
         "queued_at": "2026-10-06T16:07:53+00:00",
-        "reviewer": "Reviewer-RV1015H"
+        "reviewer": "Reviewer-RV1015H",
+        "review_report": "Not reviewable as is: PR #644 targets the old stage branch (v1 flow) and is 333 commits behind main; src/web/profile_slots.py changed heavily on main. The owner-requested feature (an already-open Multilogin profile needs no new memory) is still missing on main. Needs a port onto current main as a new PR with base main, then hand off again."
       },
       "628": {
         "implementers": [
@@ -38143,6 +38144,24 @@
         "at": "2026-10-15T07:11:32+00:00",
         "issue": 359,
         "reason": "Closed in the Playwright backlog cleanup 2026-10-15: we are moving campaign creation and account reads to the Meta API (ACL-1760/1761/1883), so this Ads Manager UI/Playwright-only work is no longer relevant. Restore if the UI path comes back."
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-15T07:12:12+00:00",
+        "review": {
+          "id": "e1ef95d344774ceeb738de0cdf0ac785",
+          "pr": 644,
+          "issues": [
+            642
+          ],
+          "actor": "Reviewer-RV1015H",
+          "session": "rv1015h-644",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-15T07:10:33+00:00",
+          "state": "returning",
+          "report": "Not reviewable as is: PR #644 targets the old stage branch (v1 flow) and is 333 commits behind main; src/web/profile_slots.py changed heavily on main. The owner-requested feature (an already-open Multilogin profile needs no new memory) is still missing on main. Needs a port onto current main as a new PR with base main, then hand off again.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -41799,20 +41818,6 @@
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-15T06:59:41+00:00",
         "state": "reviewing"
-      },
-      "644": {
-        "id": "e1ef95d344774ceeb738de0cdf0ac785",
-        "pr": 644,
-        "issues": [
-          642
-        ],
-        "actor": "Reviewer-RV1015H",
-        "session": "rv1015h-644",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-15T07:10:33+00:00",
-        "state": "returning",
-        "report": "Not reviewable as is: PR #644 targets the old stage branch (v1 flow) and is 333 commits behind main; src/web/profile_slots.py changed heavily on main. The owner-requested feature (an already-open Multilogin profile needs no new memory) is still missing on main. Needs a port onto current main as a new PR with base main, then hand off again.",
-        "keep_lane": false
       }
     }
   }
