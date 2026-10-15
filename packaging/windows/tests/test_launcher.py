@@ -50,27 +50,6 @@ class LauncherTests(unittest.TestCase):
             self.assertEqual(result, Path(tmp) / "ACL" / "workspace")
             self.assertTrue(result.is_dir())
 
-    def test_existing_healthy_acl_is_opened_without_starting_process(self):
-        with mock.patch.object(launcher, "_is_acl_healthy", return_value=True):
-            with mock.patch.object(launcher.webbrowser, "open") as browser_open:
-                with mock.patch.object(launcher.subprocess, "Popen") as popen:
-                    result = launcher._launch_normal()
-
-        self.assertEqual(result, 0)
-        browser_open.assert_called_once_with("http://127.0.0.1:9090/")
-        popen.assert_not_called()
-
-    def test_unrelated_port_owner_is_not_stopped(self):
-        with mock.patch.object(launcher, "_is_acl_healthy", return_value=False):
-            with mock.patch.object(launcher, "_port_is_in_use", return_value=True):
-                with mock.patch.object(launcher, "_show_message") as show_message:
-                    with mock.patch.object(launcher.subprocess, "Popen") as popen:
-                        result = launcher._launch_normal()
-
-        self.assertEqual(result, 2)
-        self.assertTrue(show_message.call_args.kwargs["error"])
-        popen.assert_not_called()
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -5,7 +5,6 @@ import json
 import os
 import platform
 import shutil
-import socket
 import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -132,7 +131,7 @@ def build_manual_setup(*, campaign_manager_name: str, stats_workbook: str) -> Ma
     )
 
 
-def system_readiness(config_directory: str | Path, *, port: int = 9090) -> list[ReadinessCheck]:
+def system_readiness(config_directory: str | Path) -> list[ReadinessCheck]:
     config_dir = Path(config_directory)
     checks: list[ReadinessCheck] = []
     windows_x64 = platform.system() == "Windows" and platform.machine().casefold() in {
@@ -161,14 +160,21 @@ def system_readiness(config_directory: str | Path, *, port: int = 9090) -> list[
             f"{free_bytes // (1024 * 1024)} MB available",
         )
     )
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.settimeout(0.5)
-        port_free = sock.connect_ex(("127.0.0.1", port)) != 0
+    # Занятый 9090 — не повод останавливать установку: там может работать
+    # дешборд соседа по машине или посторонняя программа, и лаунчер встанет
+    # рядом. Раньше здесь горел красный крестик, и второй человек на общей
+    # машине упирался в него на втором шаге (ACL-1309).
+    import local_dashboard
+
+    # Тот же порт, что займёт лаунчер, — но ничего не закрепляем: это проверка.
+    port = local_dashboard.choose_port(config_dir, remember=False)
+    first, last = local_dashboard.PORTS[0], local_dashboard.PORTS[-1]
     checks.append(
         ReadinessCheck(
             "Local dashboard port",
-            port_free,
-            f"port {port} is {'available' if port_free else 'already in use'}",
+            port is not None,
+            f"port {port} is available" if port is not None
+            else f"ports {first}-{last} are all used by other applications",
         )
     )
     return checks

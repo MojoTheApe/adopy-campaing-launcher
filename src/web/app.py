@@ -1362,6 +1362,33 @@ templates.env.filters["fmt_summary_amount"] = fmt_summary_amount
 # ACL-1652: шесть метрик одним кодом. Макросы `_metrics.html` берут отсюда и
 # заголовки, и ячейки — таблицы не могут разойтись друг с другом.
 templates.env.globals["metric_values"] = metric_columns.metric_values
+
+
+def _page_identity() -> dict:
+    """Вызов и ответ, которые страница несёт в себе (ACL-1931).
+
+    После обновления страница ждёт, когда /health снова ответит, и
+    перезагружается. Без этой пары её перехватил бы любой ACL, вставший на
+    порт, — например, соседский. Вызов случайный на процесс, а ответ на него
+    зависит только от секрета каталога настроек, поэтому новый процесс того
+    же человека отвечает так же, а чужой — нет.
+
+    Это защита от честного соседа — чужого ACL, вставшего на порт, — а не
+    от злонамеренной программы: любой процесс на машине может открыть мою
+    страницу и прочитать пару. Против этого нужна была бы защита самой
+    страницы, которой у локального дешборда нет.
+    """
+    import secrets
+
+    from config.paths import config_proof
+
+    if not _PAGE_NONCE:
+        _PAGE_NONCE.append(secrets.token_hex(16))
+    return {"nonce": _PAGE_NONCE[0], "proof": config_proof(_PAGE_NONCE[0])}
+
+
+_PAGE_NONCE: list[str] = []
+templates.env.globals["page_identity"] = _page_identity
 # Owner, 2026-10-07: the "Copy for group" button and its hint under a red account
 # status are hidden for now. True brings them back (template: _account_map_country.html).
 SHOW_COPY_FOR_GROUP = False
@@ -1660,10 +1687,15 @@ def mlx_instance_labels() -> dict[str, str]:
 
 
 @app.get("/health", include_in_schema=False)
-async def health() -> JSONResponse:
+async def health(nonce: str | None = None) -> JSONResponse:
     """Fast identity check for the Windows launcher; never loads workbooks.
 
     `version` lets the update helper tell the new release from the old one.
+    `config` says whose dashboard this is: the launcher attaches only to its
+    own, and anything else on the port means it takes another (ACL-1309).
+    `config` is public, so a neighbour could repeat it: with `?nonce=` the
+    answer also carries `proof`, which only this config dir's secret can
+    produce (ACL-1931).
     """
     # ACL-1399: первый вопрос о версии — это git (~3 с на загруженной
     # машине). /health — то, чем лаунчер проверяет, жив ли сервер: версию
@@ -1674,7 +1706,13 @@ async def health() -> JSONResponse:
         await asyncio.to_thread(known.wait, 0.3)
     # Прочитана — повторный вызов берёт её из кэша acl_update мгновенно.
     release = _installed_release() if known.is_set() else {"tag": ""}
-    return JSONResponse({"app": "ACL", "ok": True, "version": (release or {}).get("tag", "")})
+    from config.paths import config_identity, config_proof
+
+    answer = {"app": "ACL", "ok": True, "version": (release or {}).get("tag", ""),
+              "config": config_identity()}
+    if nonce and len(nonce) <= 128:
+        answer["proof"] = config_proof(nonce)
+    return JSONResponse(answer)
 
 
 _INSTALLED: dict = {"event": None}
