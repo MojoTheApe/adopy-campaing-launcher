@@ -13117,7 +13117,7 @@
             "session": "wrn1819-20261015"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-RN1819",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -13136,7 +13136,8 @@
         },
         "pr": 821,
         "queued_at": "2026-10-15T06:43:49+00:00",
-        "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e677f638 (ACL-1812 warm sessions, ACL-1826, ACL-1775 Instant Forms, ACL-1815 rules evidence; PR 919 -> 922). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
+        "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e677f638 (ACL-1812 warm sessions, ACL-1826, ACL-1775 Instant Forms, ACL-1815 rules evidence; PR 919 -> 922). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
+        "reviewer": "Reviewer-RV1015C"
       },
       "816": {
         "implementers": [
@@ -15972,6 +15973,10 @@
       "Reviewer-RT1015A": {
         "session": "rt1015a-20261015",
         "role": "Reviewer"
+      },
+      "Reviewer-RV1015C": {
+        "session": "rv1015c-821",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -18661,7 +18666,6 @@
       902,
       799,
       814,
-      819,
       872
     ],
     "review": null,
@@ -37942,6 +37946,13 @@
           "report": "# Return for a dependency refresh\n\nACL-1776 is stacked on ACL-1819 (PR 821). 1819 was refreshed on current main 080df2d8 (head a957986b). Required: merge codex/acl-1819-preflight-audit (a957986b) into this branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-15T06:51:17+00:00",
+        "pr": 821,
+        "lane": "3b8af54b0b9d401a800330dd6047b97b",
+        "actor": "Reviewer-RV1015C"
       }
     ],
     "policy": {
@@ -41574,6 +41585,19 @@
       "started_at": "2026-10-15T05:43:00+00:00",
       "ineligible": {}
     },
-    "source_reviews": {}
+    "source_reviews": {
+      "821": {
+        "id": "3b8af54b0b9d401a800330dd6047b97b",
+        "pr": 821,
+        "issues": [
+          819
+        ],
+        "actor": "Reviewer-RV1015C",
+        "session": "rv1015c-821",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-15T06:51:17+00:00",
+        "state": "reviewing"
+      }
+    }
   }
 }
