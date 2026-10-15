@@ -5788,7 +5788,7 @@ window.cbPreflight = (function () {
   function creativeNumber(file) {
     var stem = String(file || '').split(/[\\/]/).pop();
     if (stem.indexOf('.') !== -1) stem = stem.slice(0, stem.lastIndexOf('.'));
-    stem = stem.replace(/\d{3,4}\s*[xх×]\s*\d{3,4}/gi, ' ');
+    stem = stem.replace(/\d{3,4}\s*[x\u0445\xd7]\s*\d{3,4}/gi, ' ');
     var m = /(?<!\d)(\d{4})(?!\d)/.exec(stem);
     return m ? m[1] : '';
   }
