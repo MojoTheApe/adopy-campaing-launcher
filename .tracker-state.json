@@ -13245,7 +13245,7 @@
             "session": "run_s1776b_1012"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1776B",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -13263,7 +13263,8 @@
           "report": "ACL-1776 implemented: PR #831, head 0f4e926 (stacked on #821).\nAffected tests: 591 passed (new file tests/test_acl1776_create_forms.py: 84). Mutation checks on both policy layers and on idempotency: all killed.\nBrowser tests were not run locally (machine load). Live check needs the owner's yes on a test Page; open question: whether the captured token can create forms (pages_manage_ads)."
         },
         "pr": 831,
-        "queued_at": "2026-10-12T13:46:44+00:00"
+        "queued_at": "2026-10-12T13:46:44+00:00",
+        "reviewer": "Reviewer-RT1015A"
       },
       "826": {
         "implementers": [
@@ -15966,6 +15967,10 @@
       "Worker-RN1819": {
         "session": "wrn1819-20261015",
         "role": "Worker"
+      },
+      "Reviewer-RT1015A": {
+        "session": "rt1015a-20261015",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -18643,7 +18648,6 @@
       822,
       827,
       767,
-      776,
       771,
       768,
       839,
@@ -37912,6 +37916,13 @@
         "issue": 872,
         "pr": 873,
         "actor": "Worker-T1872A"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-15T06:50:17+00:00",
+        "pr": 831,
+        "lane": "a8ce8a0a8a8e4dafb827810896a40195",
+        "actor": "Reviewer-RT1015A"
       }
     ],
     "policy": {
@@ -41544,6 +41555,19 @@
       "started_at": "2026-10-15T05:43:00+00:00",
       "ineligible": {}
     },
-    "source_reviews": {}
+    "source_reviews": {
+      "831": {
+        "id": "a8ce8a0a8a8e4dafb827810896a40195",
+        "pr": 831,
+        "issues": [
+          776
+        ],
+        "actor": "Reviewer-RT1015A",
+        "session": "rt1015a-20261015",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-15T06:50:17+00:00",
+        "state": "reviewing"
+      }
+    }
   }
 }
