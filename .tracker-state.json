@@ -41480,7 +41480,9 @@
         "session": "rrn819-20261015",
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-15T06:29:29+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "# Return for a dependency refresh\n\nMain now also contains batch e677f638 (ACL-1812 warm sessions, ACL-1826, ACL-1775 Instant Forms, ACL-1815 rules evidence; PR 919 -> 922). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
+        "keep_lane": false
       }
     }
   }
