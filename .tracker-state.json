@@ -12561,7 +12561,7 @@
             "session": "ws1799k-20261015"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1799K",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12586,7 +12586,8 @@
           "actor": "Coordinator-C0930A",
           "session": "coord_c0930a_1009",
           "report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
-        }
+        },
+        "reviewer": "Reviewer-R1799L"
       },
       "786": {
         "implementers": [
@@ -15500,6 +15501,10 @@
       "Reviewer-R917B": {
         "session": "r917b-20261015",
         "role": "Reviewer"
+      },
+      "Reviewer-R1799L": {
+        "session": "r1799l-20261015",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -18130,7 +18135,6 @@
       907,
       891,
       814,
-      799,
       826
     ],
     "review": {
@@ -35974,6 +35978,13 @@
           "state": "reviewing",
           "started_at": "2026-10-15T04:07:27+00:00"
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-15T04:08:22+00:00",
+        "pr": 803,
+        "lane": "b8efe268899f4703950473f96933f289",
+        "actor": "Reviewer-R1799L"
       }
     ],
     "policy": {
@@ -39233,6 +39244,19 @@
       "started_at": "2026-10-15T03:44:03+00:00",
       "ineligible": {}
     },
-    "source_reviews": {}
+    "source_reviews": {
+      "803": {
+        "id": "b8efe268899f4703950473f96933f289",
+        "pr": 803,
+        "issues": [
+          799
+        ],
+        "actor": "Reviewer-R1799L",
+        "session": "r1799l-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-15T04:08:22+00:00",
+        "state": "reviewing"
+      }
+    }
   }
 }
