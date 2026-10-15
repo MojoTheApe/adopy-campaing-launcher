@@ -3731,6 +3731,27 @@
         "issue_scopes": {
           "814": "ddf654cfd53e9c3cee7a9f3b3e7909f8802691e132619aa679643291c868c722"
         }
+      },
+      "821": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1819Q",
+        "implementer": "Worker-S1819P",
+        "review_session": "r1819q-20261015",
+        "execution_lane": "dae6f1124fc7418faff9c2cbf6ac3bd3",
+        "head_sha": "7cde3c4c124627802275f3e18dd5e6a8eb43a3c4",
+        "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+        "tree_sha": "8159e6d665f412b899c113518c19cbc3ee0effb7",
+        "report": "Independent review of ACL-1819 / PR 821 at head 7cde3c4c (main 080df2d8). Reviewer-R1819Q implemented none of it. Verified: one rule table with Python/JS parity tests and in-sync JSON; server verdicts read-only; errors block Publish, warnings only in the confirm; Publish all, publish selected, single Publish and 1826 Retry (onlyKeys) and queue resend all go through cbPreflightGate, fail-closed; English escaped UI; aligned 1766 wording matches main creator.py. Tests in a detached worktree: 1819+1826 115 passed, 1775 96 passed, preflight_gate_harness ok (not browser). Mutations: gate bypass in the wrapper caught (1 failed); dropping onlyKeys from the original call caught by a source-text test; dropping the wrapper form filter not caught but only widens the gate. CI all green incl. tracker-link. Non-blocking: wrapper Retry covered by source-text assertion rather than the 1826 behavioural harness. No live calls. No blocking issues.",
+        "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          819
+        ],
+        "recorded_at": "2026-10-15T08:19:20+00:00",
+        "issue_scopes": {
+          "819": "427543ed85c18a99f5702966cfbabaa5ac03e03fc15edfa01bd94026edfe89ee"
+        }
       }
     },
     "stage": {
