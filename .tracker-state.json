@@ -12927,7 +12927,7 @@
             "session": "ws1814m-20261015"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1814M",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12946,7 +12946,8 @@
         },
         "pr": 817,
         "queued_at": "2026-10-15T05:27:10+00:00",
-        "review_report": "Windows CI (run 38681684978) fails: tests/test_shared_file_locks.py::test_no_inline_os_file_locks_remain_in_src. src/analysis_agent/rules/store.py lines 130-142 use inline msvcrt.locking/LK_NBLCK and fcntl.flock/LOCK_EX; must use config.paths.machine_file_lock. Returned for fix."
+        "review_report": "Windows CI (run 38681684978) fails: tests/test_shared_file_locks.py::test_no_inline_os_file_locks_remain_in_src. src/analysis_agent/rules/store.py lines 130-142 use inline msvcrt.locking/LK_NBLCK and fcntl.flock/LOCK_EX; must use config.paths.machine_file_lock. Returned for fix.",
+        "reviewer": "Reviewer-R1814N"
       },
       "815": {
         "implementers": [
@@ -15768,6 +15769,10 @@
       "Reviewer-R1812P": {
         "session": "r1812p-20261015",
         "role": "Reviewer"
+      },
+      "Reviewer-R1814N": {
+        "session": "r1814n-20261015",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -18423,8 +18428,7 @@
       841,
       903,
       907,
-      891,
-      814
+      891
     ],
     "review": null,
     "history": [
@@ -37250,6 +37254,13 @@
           "entered_stage": false,
           "history": []
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-15T05:50:51+00:00",
+        "pr": 817,
+        "lane": "c37514f11523475888831479a1aecf43",
+        "actor": "Reviewer-R1814N"
       }
     ],
     "policy": {
@@ -40906,6 +40917,19 @@
       "started_at": "2026-10-15T05:43:00+00:00",
       "ineligible": {}
     },
-    "source_reviews": {}
+    "source_reviews": {
+      "817": {
+        "id": "c37514f11523475888831479a1aecf43",
+        "pr": 817,
+        "issues": [
+          814
+        ],
+        "actor": "Reviewer-R1814N",
+        "session": "r1814n-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-15T05:50:51+00:00",
+        "state": "reviewing"
+      }
+    }
   }
 }
