@@ -1,5 +1,13 @@
 # System history
 
+## Videos over 200 MB upload in chunks through the Graph API - ACL-1891
+
+A video up to 1536 MB can now be published PAUSED through the API path. Files over 200 MB use Meta's resumable upload (start, transfer in chunks of at most 8 MB, finish); the server reads only chunk-sized slices from disk, so memory stays flat. A failed chunk resumes from the offset Meta reports; an unknown result is reconciled by readback on the title tag and never uploads the video twice, and a re-run reuses the finished video. Chunk calls are counted in the call estimate, and a plan that cannot fit the 250-call ceiling is refused up front. The closed write policy gained exactly the three upload phases in both layers (Python and page helper), strictly validated. The `Media within Meta limits` rule now allows video up to 1536 MB. Details and the live-check list: `docs/system/PROJECT.md`, ACL-1891 ([issue](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/891)).
+
+## Language groups equal their expansion in readback and re-runs - ACL-1907
+
+Doc120 live finding: the API publish succeeded, but readback called the ad set languages a mismatch (expected 1002 "Spanish (All)", Meta returned 7 and 23), and a re-run stopped with "Existing ad set ... differs from the builder: languages". A locale group now equals the locales Meta expands it into, in readback and in the existing-object comparison. The members come from the same `adlocale` search result the resolver already reads (no hard-coded ids); a different language is still reported. If the search did not list the members, the comparison stays strict and the message says so. Read-only; no new writes.
+
 ## Instagram identity for Instagram placements - ACL-1896
 
 Check plan now refuses a plan with Instagram placements when the chosen Facebook Page has no Instagram account (Doc120 live finding: Meta 100/1772103 after the campaign, ad set and creative were already written). New server rule `instagram_identity`; at most two read-only Graph calls per Page, cached for the run and counted in the call estimate; a failed read is a refusal, not a pass. When an account exists it is sent as `object_story_spec.instagram_user_id` and read back. The write policy allows that one numeric field in both layers (Python and page helper), refuses `instagram_actor_id`, and creates no Page-backed account. Details and the live-check list: `docs/system/PROJECT.md`, ACL-1896 ([issue](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/896)).

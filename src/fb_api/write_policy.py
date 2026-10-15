@@ -51,6 +51,25 @@ FORBIDDEN_ANYWHERE = frozenset({"effective_status", "configured_status", "execut
                                 "suppress_http_code", "lead_gen_form_id", "tos_accepted",
                                 "instagram_actor_id"})
 PAUSED = "PAUSED"
+
+#: Загрузка большого видео кусками (ACL-1891): `POST /act_X/advideos` с `upload_phase`.
+#: Справочник Graph «Ad Account / Advideos» (POST, chunked upload): `upload_phase` = start | transfer |
+#: finish (| cancel - не даём), `file_size`, `upload_session_id`, `start_offset`, `video_file_chunk`.
+#: Ровно три фазы с ЗАКРЫТЫМ набором ключей на фазу; всё прочее - отказ.
+UPLOAD_PHASES = ("start", "transfer", "finish")
+UPLOAD_KEYS = {
+    "start": frozenset({"upload_phase", "file_size"}),
+    "transfer": frozenset({"upload_phase", "upload_session_id", "start_offset"}),
+    "finish": frozenset({"upload_phase", "upload_session_id", "title", "name"}),
+}
+#: Файл фазы transfer (multipart); у start и finish файла нет.
+UPLOAD_CHUNK_FIELD = "video_file_chunk"
+#: Потолок одного куска, который мы отправляем (память профиля и одного запроса).
+UPLOAD_CHUNK_MAX = 8 * 1024 * 1024
+#: Потолок файла на пути кусками: безопасный для профиля и для бюджета вызовов (Meta сама - 4 ГБ).
+UPLOAD_FILE_MAX = 1536 * 1024 * 1024
+UPLOAD_ID_RE = re.compile(r"^[0-9]{5,25}$")
+UPLOAD_NUMBER_RE = re.compile(r"^[0-9]{1,13}$")
 #: Ключ существующей формы лидов: разрешён только в `_without_lead_form` (ACL-1775).
 LEAD_FORM_KEY = "lead_gen_form_id"
 #: Форматы креатива, в `call_to_action.value` которых форма может стоять.
@@ -147,6 +166,10 @@ def policy_for_page(act: str, page: str = "") -> dict:
         "edges": {k: sorted(v) for k, v in EDGE_KEYS.items()},
         "paused_required": sorted(PAUSED_REQUIRED),
         "files": dict(FILE_FIELDS),
+        "upload": {"phases": list(UPLOAD_PHASES), "keys": {k: sorted(v) for k, v in UPLOAD_KEYS.items()},
+                   "chunk_field": UPLOAD_CHUNK_FIELD, "chunk_max": UPLOAD_CHUNK_MAX,
+                   "file_max": UPLOAD_FILE_MAX, "id_re": UPLOAD_ID_RE.pattern,
+                   "number_re": UPLOAD_NUMBER_RE.pattern},
         "forbidden": sorted(FORBIDDEN_ANYWHERE),
         "json_keys": sorted(JSON_KEYS),
         "opt_out_keys": sorted(OPT_OUT_KEYS),
@@ -439,6 +462,51 @@ def _without_lead_form(edge: str, checked: dict, on_ad: bool) -> dict:
     return checked
 
 
+def _digits(value: Any) -> int | None:
+    """Целое из int или строки цифр (не bool, не float); иначе None."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value >= 0 else None
+    if isinstance(value, str) and UPLOAD_NUMBER_RE.fullmatch(value):
+        return int(value)
+    return None
+
+
+def _check_upload(params: dict, files: dict) -> None:
+    """Фазы загрузки видео кусками (ACL-1891): имя фазы, числа, id сессии, размер куска."""
+    phase = params.get("upload_phase")
+    if not (isinstance(phase, str) and phase in UPLOAD_PHASES):
+        raise WriteRefused("write refused: upload_phase must be start, transfer or finish")
+    extra = sorted(set(params) - UPLOAD_KEYS[phase])
+    if extra:
+        raise WriteRefused(f"write refused: key {extra[0]!r} is not allowed in upload phase {phase}")
+    if phase == "start":
+        size = _digits(params.get("file_size"))
+        if not size or size > UPLOAD_FILE_MAX:
+            raise WriteRefused("write refused: file_size must be a positive size within the video limit")
+    else:
+        sid = params.get("upload_session_id")
+        if not (isinstance(sid, str) and UPLOAD_ID_RE.fullmatch(sid)):
+            raise WriteRefused("write refused: upload_session_id must be the numeric id Meta returned")
+    if phase == "transfer":
+        off = _digits(params.get("start_offset"))
+        if off is None or off >= UPLOAD_FILE_MAX:
+            raise WriteRefused("write refused: start_offset must be a number inside the video limit")
+    if phase == "finish":
+        for key in ("title", "name"):
+            if key in params and not (isinstance(params[key], str) and 0 < len(params[key]) <= 200):
+                raise WriteRefused(f"write refused: {key} must be a short text")
+    if phase == "transfer":
+        if set(files) != {UPLOAD_CHUNK_FIELD}:
+            raise WriteRefused(f"write refused: transfer needs exactly the file field {UPLOAD_CHUNK_FIELD!r}")
+        chunk = files[UPLOAD_CHUNK_FIELD]
+        if not isinstance(chunk, (bytes, bytearray)) or not 0 < len(chunk) <= UPLOAD_CHUNK_MAX:
+            raise WriteRefused(f"write refused: a chunk must be 1..{UPLOAD_CHUNK_MAX} bytes")
+    elif files:
+        raise WriteRefused(f"write refused: upload phase {phase} takes no file")
+
+
 def check(act: str, method: str, path: str, params: dict | None,
           files: dict | None = None, *, on_ad: bool = False) -> str:
     """Проверить запись. Возвращает ребро; иначе `WriteRefused`.
@@ -457,6 +525,9 @@ def check(act: str, method: str, path: str, params: dict | None,
     if edge not in EDGE_KEYS:
         raise WriteRefused(f"write refused: edge {edge!r} is not on the allowlist")
     params = dict(params or {})
+    if edge == "advideos" and "upload_phase" in params:
+        _check_upload(params, dict(files or {}))
+        return edge
     extra = sorted(set(params) - EDGE_KEYS[edge])
     if extra:
         raise WriteRefused(f"write refused: key {extra[0]!r} is not allowed on {edge}")

@@ -106,7 +106,13 @@ ZERO_DECIMAL = frozenset({"CLP", "COP", "CRC", "HUF", "ISK", "IDR", "JPY", "KRW"
 IMAGE_EXT = frozenset({".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp"})
 VIDEO_EXT = frozenset({".mp4", ".mov", ".m4v", ".avi", ".wmv", ".mkv", ".webm"})
 IMAGE_MAX_BYTES = 30 * 1024 * 1024
-VIDEO_MAX_BYTES = 200 * 1024 * 1024
+#: Видео до этого размера уходит одним запросом (как раньше); больше - кусками (ACL-1891).
+VIDEO_SINGLE_MAX_BYTES = 200 * 1024 * 1024
+#: Потолок видео на пути кусками: в памяти только кусок. Meta сама принимает до 4 ГБ.
+VIDEO_MAX_BYTES = _wpol.UPLOAD_FILE_MAX
+VIDEO_CHUNK_MAX = _wpol.UPLOAD_CHUNK_MAX
+#: Вызовов на загрузку кусками сверх самих кусков: start, finish, запас на сверку.
+CALLS_UPLOAD_FIXED = 3
 
 #: Ожидание обработки видео — с потолком по времени и по числу вызовов.
 VIDEO_WAIT_S = 300.0
@@ -125,8 +131,23 @@ CALLS_INSTANT_FORM = 10
 CALLS_PER_VERTICAL = 3           # ACL-1774: вертикальный файл Stories/Reels - ещё одна загрузка (+ сверка и запас) на объявление
 
 
-def estimate_create_calls(plan: "CampaignPlan") -> int:
+def _disk_size(path: str) -> int:
+    try:
+        return Path(path).stat().st_size
+    except (OSError, ValueError):
+        return 0
+
+
+def upload_calls(size: int) -> int:
+    """Вызовов на загрузку видео кусками (ACL-1891); 0 - файл уходит одним запросом."""
+    if size <= VIDEO_SINGLE_MAX_BYTES:
+        return 0
+    return -(-size // VIDEO_CHUNK_MAX) + CALLS_UPLOAD_FIXED
+
+
+def estimate_create_calls(plan: "CampaignPlan", size_of: Callable[[str], int] | None = None) -> int:
     """Сколько вызовов Graph нужно на кампанию целиком (первый запуск, с запасом)."""
+    size_of = size_of or _disk_size
     total = CALLS_BASE + CALLS_PER_AD_SET * len(plan.ad_sets)
     for ad_set in plan.ad_sets:
         total += CALLS_PER_AD * len(ad_set.ads)
@@ -134,6 +155,10 @@ def estimate_create_calls(plan: "CampaignPlan") -> int:
         # ACL-1774: вертикальный файл - отдельная загрузка (и опросы обработки, если это видео).
         total += CALLS_PER_VERTICAL * sum(1 for a in ad_set.ads if a.vertical_path)
         total += CALLS_PER_VIDEO_POLLS * sum(1 for a in ad_set.ads if a.vertical_path and a.vertical_kind == "video")
+        # ACL-1891: большое видео - куски (по 8 МБ) и start/finish.
+        total += sum(upload_calls(size_of(a.path)) for a in ad_set.ads if a.kind == "video")
+        total += sum(upload_calls(size_of(a.vertical_path)) for a in ad_set.ads
+                     if a.vertical_path and a.vertical_kind == "video")
     if any(x.instant for x in plan.ad_sets):
         total += CALLS_INSTANT_FORM
     total += _ig.READS_PER_PAGE      # ACL-1896: чтение Instagram-идентичности Страницы (CALLS_BASE уменьшен на те же 2)
@@ -740,6 +765,9 @@ class TargetingResolver:
         self._locale: dict[str, int] = {}
         #: Имя, под которым Meta нашла язык («Spanish (All)»): показываем в Check plan.
         self.locale_names: dict[str, str] = {}
+        #: ACL-1907: группа «X (All)» -> локали, на которые её раскрывает Meta (из того же поиска
+        #: adlocale, без зашитых id). Пусто = состав неизвестен, сверка остаётся строгой.
+        self.locale_groups: dict[int, dict[int, str]] = {}
         #: Детальный таргетинг (ACL-1771): свой поиск, кэш подтверждённых и бюджет вызовов.
         self.terms = _tr.TermResolver(client, store)
 
@@ -789,6 +817,15 @@ class TargetingResolver:
             raise PlanError(f"Audience language {lang!r} was not found by Meta targeting search")
         self._locale[lang] = int(pick["key"])
         self.locale_names[lang] = str(pick.get("name") or lang)
+        pick_name = str(pick.get("name") or "")
+        if pick_name.casefold().endswith(" (all)"):
+            base = pick_name[:-len(" (All)")].strip().casefold()
+            self.locale_groups[self._locale[lang]] = {
+                int(r["key"]): str(r.get("name") or "") for r in rows
+                if r.get("key") is not None and r is not pick
+                and str(r.get("name") or "").strip().casefold() != pick_name.casefold()
+                and (str(r.get("name") or "").strip().casefold() == base
+                     or str(r.get("name") or "").strip().casefold().startswith(base + " ("))}
         return self._locale[lang]
 
     def interests(self, groups: list[list[str]]) -> list[dict]:
@@ -903,7 +940,72 @@ def _labels(row: dict) -> set[str]:
     return {str(x.get("name") or "") for x in (raw or []) if isinstance(x, dict)}
 
 
-def _md5(data: bytes) -> str:
+class LargeFile:
+    """Большое видео на диске (ACL-1891): в памяти не держится, читаются только куски.
+
+    Ведёт себя как bytes ровно настолько, насколько нужно предпроверке: длина, индекс и срез
+    (заголовки mp4 читаются малыми срезами). Срез больше потолка куска - отказ, чтобы случайный
+    `data[:]` не втянул файл в память.
+    """
+
+    HASH_BLOCK = 1024 * 1024
+
+    def __init__(self, path: str, size: int,
+                 read_range: Callable[[str, int, int], bytes] | None = None):
+        self.path = path
+        self.size = int(size)
+        self._read = read_range or self._read_disk
+        self._md5: str | None = None
+        #: Самый большой единичный кусок, прочитанный с диска (для проверки памяти).
+        self.max_read = 0
+
+    @staticmethod
+    def _read_disk(path: str, offset: int, n: int) -> bytes:
+        with open(path, "rb") as fh:
+            fh.seek(offset)
+            return fh.read(n)
+
+    def __len__(self) -> int:
+        return self.size
+
+    def __bool__(self) -> bool:
+        return self.size > 0
+
+    def read_range(self, offset: int, n: int) -> bytes:
+        if n < 0 or n > max(VIDEO_CHUNK_MAX, self.HASH_BLOCK) or offset < 0:
+            raise ValueError("read is larger than one chunk")
+        out = self._read(self.path, offset, n) if n else b""
+        self.max_read = max(self.max_read, len(out))
+        return out
+
+    def __getitem__(self, key):
+        if isinstance(key, slice):
+            start, stop, step = key.indices(self.size)
+            if step != 1:
+                raise ValueError("only plain slices")
+            return self.read_range(start, max(0, stop - start))
+        index = key + self.size if key < 0 else key
+        if not 0 <= index < self.size:
+            raise IndexError(key)
+        return self.read_range(index, 1)[0]
+
+    def md5(self) -> str:
+        if self._md5 is None:
+            h = hashlib.md5()  # noqa: S324 - только имя/поиск, не защита
+            offset = 0
+            while offset < self.size:
+                block = self.read_range(offset, min(self.HASH_BLOCK, self.size - offset))
+                if not block:
+                    raise OSError("file ended while hashing")
+                h.update(block)
+                offset += len(block)
+            self._md5 = h.hexdigest()
+        return self._md5
+
+
+def _md5(data: "bytes | LargeFile") -> str:
+    if isinstance(data, LargeFile):
+        return data.md5()
     return hashlib.md5(data).hexdigest()  # noqa: S324 — только имя/поиск, не защита
 
 
@@ -952,6 +1054,8 @@ class CampaignCreator:
     def __init__(self, client: GraphClient, facts: AccountFacts, resolver: TargetingResolver, *,
                  cancelled: Callable[[], bool] = lambda: False,
                  read_file: Callable[[str], bytes] | None = None,
+                 size_of: Callable[[str], int] | None = None,
+                 read_range: Callable[[str, int, int], bytes] | None = None,
                  sleep: Callable[[float], None] = time.sleep,
                  clock: Callable[[], float] = time.monotonic,
                  video_wait_s: float = VIDEO_WAIT_S, video_poll_s: float = VIDEO_POLL_S,
@@ -965,6 +1069,9 @@ class CampaignCreator:
         self.resolver = resolver
         self.cancelled = cancelled
         self.read_file = read_file or (lambda p: Path(p).read_bytes())
+        #: ACL-1891: размер файла на диске (None - неизвестен, читаем целиком как раньше) и чтение куска.
+        self.size_of = size_of or (lambda p: _disk_size(p) or None)
+        self.read_range = read_range
         self.sleep = sleep
         self.clock = clock
         self.video_wait_s = video_wait_s
@@ -1242,6 +1349,10 @@ class CampaignCreator:
         vid = find()
         if vid:
             self._step(out, f"{who}: video already in the ad account")
+        elif isinstance(data, LargeFile):
+            vid = self._video_chunked(out, plan, data, title, find, who)
+            out.created.setdefault("videos", []).append(vid)
+            self._step(out, f"{who}: video uploaded")
         else:
             vid = self._write(out, f"{who}: video upload", f"/{plan.act}/advideos",
                               {"name": title, "title": title}, find, files={"source": data},
@@ -1249,6 +1360,98 @@ class CampaignCreator:
             out.created.setdefault("videos", []).append(vid)
             self._step(out, f"{who}: video uploaded")
         return vid, self._wait_video(out, ad, vid, who=who)
+
+    # -- загрузка большого видео кусками (ACL-1891)
+    @staticmethod
+    def _offsets(body: dict, size: int, floor: int, what: str) -> tuple[int, int]:
+        """Смещения из ответа Meta: цифры, не назад, не за концом файла. Иначе - стоп."""
+        s_raw, e_raw = str(body.get("start_offset", "")), str(body.get("end_offset", ""))
+        if not (s_raw.isdigit() and e_raw.isdigit() and len(s_raw) <= 13 and len(e_raw) <= 13):
+            raise CreationStopped(f"{what}: Meta returned no usable upload offsets", kind="video_error")
+        start, end = int(s_raw), int(e_raw)
+        if start < floor or start > size or end < start or end > size:
+            raise CreationStopped(f"{what}: Meta reported an upload offset outside the file "
+                                  f"({start}-{end} of {size}); stopped before sending more",
+                                  kind="video_error")
+        return start, end
+
+    def _upload_call(self, out: Outcome, what: str, path: str, params: dict, files: dict | None,
+                     *, find: Callable[[], str | None] | None = None) -> dict:
+        """Один вызов фазы загрузки. Неизвестный результат - стоп (кусок повторяет сам цикл)."""
+        self._check_cancel(out)
+        try:
+            return self.client.post(path, params, files=files, filename="chunk" if files else "")
+        except WriteUnknown as exc:
+            self._step(out, f"{what}: result unknown")
+            raise CreationStopped(
+                f"{what}: the write result is unknown ({exc}). Publish again later: a finished video "
+                "is found by its tag and is not uploaded twice.", created=out.created, kind="unknown") from exc
+
+    def _video_chunked(self, out: Outcome, plan: CampaignPlan, big: "LargeFile", title: str,
+                       find: Callable[[], str | None], who: str) -> str:
+        """start -> transfer (куски от смещения Meta) -> finish. В памяти один кусок."""
+        path = f"/{plan.act}/advideos"
+        size = len(big)
+        what = f"{who}: video upload"
+        started = self._upload_call(out, what, path, {"upload_phase": "start", "file_size": str(size)}, None)
+        sid, vid = str(started.get("upload_session_id") or ""), str(started.get("video_id") or "")
+        if not (sid.isdigit() and vid.isdigit()):
+            raise CreationStopped(f"{what}: Meta returned no upload session", created=out.created,
+                                  kind="video_error")
+        offset, end = self._offsets(started, size, 0, what)
+        self._step(out, f"{who}: chunked upload started ({size // (1024 * 1024)} MB)")
+        # Предохранитель от бесконечного цикла: не больше вдвое сверх числа кусков.
+        guard = 2 * (-(-size // VIDEO_CHUNK_MAX)) + 4
+        failures = 0
+        while offset < size:
+            guard -= 1
+            if guard < 0:
+                raise CreationStopped(f"{what}: upload does not progress", created=out.created, kind="video_error")
+            n = min(max(end - offset, 1), VIDEO_CHUNK_MAX, size - offset)
+            chunk = big.read_range(offset, n)
+            if len(chunk) != n:
+                raise CreationStopped(f"{what}: the file changed while uploading", created=out.created,
+                                      kind="video_error")
+            params = {"upload_phase": "transfer", "upload_session_id": sid, "start_offset": str(offset)}
+            try:
+                body = self._upload_call(out, what, path, params, {_wpol.UPLOAD_CHUNK_FIELD: chunk})
+            except CreationStopped as exc:
+                if exc.kind != "unknown" or failures >= 2:
+                    raise
+                # Неизвестно, дошёл ли кусок: тот же кусок с тем же смещением - запрос смещения у Meta.
+                failures += 1
+                self.client.reconciled(path)
+                continue
+            except GraphError as exc:
+                # Meta отказала: назвала нужное смещение - продолжаем с него (не с нуля), иначе стоп.
+                d = exc.details or {}
+                if failures >= 2 or not str(d.get("start_offset", "")).isdigit():
+                    raise
+                failures += 1
+                offset, end = self._offsets(d, size, offset, what)
+                self._step(out, f"{who}: resuming the upload from offset {offset}")
+                continue
+            failures = 0
+            offset, end = self._offsets(body, size, offset, what)
+        try:
+            done = self._upload_call(out, what, path, {"upload_phase": "finish", "upload_session_id": sid,
+                                                        "title": title, "name": title}, None)
+        except CreationStopped as exc:
+            if exc.kind != "unknown":
+                raise
+            # Результат finish неизвестен: сверка чтением по метке названия, второй раз не грузим.
+            if self.reconcile_wait_s > 0:
+                self.sleep(self.reconcile_wait_s)
+            found = find()
+            if not found:
+                raise
+            self.client.reconciled(path)
+            self._step(out, f"{what}: reconciled - found by readback")
+            return str(found)
+        if done.get("success") is False:
+            raise CreationStopped(f"{what}: Meta did not finish the upload", created=out.created,
+                                  kind="video_error")
+        return vid
 
     def _wait_video(self, out: Outcome, ad: AdPlan, vid: str, *, who: str = "") -> str:
         """Ждать обработку видео — не дольше `video_wait_s` и `video_max_polls` вызовов."""
@@ -1411,9 +1614,38 @@ class CampaignCreator:
 
     # -- общие проверки кампании и группы (сверка после записи и предпроверка найденных)
     @staticmethod
-    def _mk_check(checks: list[dict], obj: str, fld: str, expected: Any, actual: Any) -> None:
-        checks.append({"object": obj, "field": fld, "expected": expected, "actual": actual,
-                       "ok": _same(expected, actual), "not_read": _not_read(expected, actual)})
+    def _mk_check(checks: list[dict], obj: str, fld: str, expected: Any, actual: Any,
+                  note: str = "") -> None:
+        row = {"object": obj, "field": fld, "expected": expected, "actual": actual,
+               "ok": _same(expected, actual), "not_read": _not_read(expected, actual)}
+        if note:
+            row["note"] = note
+        checks.append(row)
+
+    def _language_check(self, checks: list[dict], obj: str, want: list, got: Any) -> None:
+        """ACL-1907: группа «Spanish (All)» равна набору локалей, на который её раскрыла Meta."""
+        self._mk_check(checks, obj, "languages", want, got)
+        groups = getattr(self.resolver, "locale_groups", None) or {}
+        if not isinstance(got, list) or checks[-1]["ok"] or not any(g in groups for g in want):
+            return
+        norm: list = []
+        unknown: list = []
+        for loc in want:
+            members = groups.get(loc) or {}
+            if loc in groups and loc not in got:
+                hit = [a for a in got if a in members]
+                if hit:
+                    norm += hit
+                    continue
+                if not members:
+                    unknown.append(loc)
+            norm.append(loc)
+        if _same(sorted(set(norm)), sorted(set(got))):
+            checks[-1]["ok"] = True
+            checks[-1]["expanded"] = True
+        elif unknown:
+            checks[-1]["note"] = ("language group " + ", ".join(map(str, unknown)) + " compared strictly: "
+                                  "Meta's search did not list the locales it expands into")
 
     def _campaign_checks(self, plan: CampaignPlan, camp: dict) -> list[dict]:
         checks: list[dict] = []
@@ -1465,8 +1697,8 @@ class CampaignCreator:
         # Локали: если Meta поле не вернула, это «Not read», а не «пусто».
         # None («Not read») только если локали ждали, а Meta их не вернула; иначе как раньше.
         want_locales = targeting.get("locales") or []
-        check("languages", want_locales,
-              None if want_locales and "locales" not in t else t.get("locales") or [])
+        self._language_check(checks, obj, want_locales,
+                             None if want_locales and "locales" not in t else t.get("locales") or [])
         check("detailed_targeting", _flex_ids(targeting.get("flexible_spec")), _flex_ids(t.get("flexible_spec")))
         check("os", targeting.get("user_os") or [], t.get("user_os") or [])
         if targeting.get("genders") or t.get("genders"):
@@ -1528,6 +1760,14 @@ class CampaignCreator:
             out.error, out.stop_kind = f"Write result unknown: {exc}", "unknown"
         return out
 
+    def load_media(self, path: str, kind: str) -> "bytes | LargeFile":
+        """Файл объявления: видео больше 200 МБ - `LargeFile` (куски с диска), остальное - bytes."""
+        if kind == "video":
+            size = self.size_of(path)
+            if size and size > VIDEO_SINGLE_MAX_BYTES:
+                return LargeFile(path, size, self.read_range)
+        return self.read_file(path)
+
     def _prepare(self, plan: CampaignPlan, out: Outcome) -> tuple[list[dict], dict[str, bytes]]:
         """Всё, что проверяется до записи: страница, пиксель, таргетинг, файлы."""
         out.warnings += resolve_page_pixel(plan, self.facts)
@@ -1548,7 +1788,7 @@ class CampaignCreator:
         for s in plan.ad_sets:
             for ad in s.ads:
                 try:
-                    data = self.read_file(ad.path)
+                    data = self.load_media(ad.path, ad.kind)
                 except OSError as exc:
                     raise PlanError(f"ad {ad.index}: creative file cannot be read ({exc})") from exc
                 limit = VIDEO_MAX_BYTES if ad.kind == "video" else IMAGE_MAX_BYTES
@@ -1558,7 +1798,7 @@ class CampaignCreator:
                 files[ad.path] = data
                 if ad.vertical_path:
                     try:
-                        vdata = self.read_file(ad.vertical_path)
+                        vdata = self.load_media(ad.vertical_path, ad.vertical_kind)
                     except OSError as exc:
                         raise PlanError(f"ad {ad.index}: Stories / Reels file cannot be read ({exc})") from exc
                     vlimit = VIDEO_MAX_BYTES if ad.vertical_kind == "video" else IMAGE_MAX_BYTES
@@ -1570,6 +1810,14 @@ class CampaignCreator:
                         raise PlanError("; ".join(bad))
                     files[ad.vertical_path] = vdata
         self._step(out, "preflight: creatives read")
+        # ACL-1891: план с большими видео должен влезть в бюджет вызовов - иначе отказ до записи.
+        budget = getattr(self.client, "max_calls", None)
+        if isinstance(budget, int) and any(isinstance(v, LargeFile) for v in files.values()):
+            need = estimate_create_calls(plan, lambda p: len(files[p]) if p in files else 0)
+            if need > budget:
+                raise PlanError(f"This campaign needs about {need} Meta calls (large videos are uploaded in "
+                                f"chunks), more than one run allows ({budget}). Use a smaller video or "
+                                "split the campaign. Nothing was created.")
         self._check_planned(plan, targetings)
         return targetings, files
 
@@ -2286,7 +2534,8 @@ def _describe_diffs(checks: list[dict]) -> list[str]:
         if c["field"] in _PLACEMENT_FIELDS:
             continue
         out.append(f"{_FIELD_TITLES.get(c['field'], c['field'])} "
-                   f"(builder: {_show(c['expected'])}, Meta: {_show(c['actual'])})")
+                   f"(builder: {_show(c['expected'])}, Meta: {_show(c['actual'])})"
+                   + (f" - {c['note']}" if c.get("note") else ""))
     return out
 
 
