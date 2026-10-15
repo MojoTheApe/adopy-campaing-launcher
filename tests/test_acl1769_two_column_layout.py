@@ -107,7 +107,8 @@ def test_the_campaign_name_has_an_optional_override_field():
 
 def test_every_control_without_a_backend_is_disabled_and_names_its_task():
     out = json.loads(_run("--future"))
-    assert set(out) >= {"adsets", "copyAdset", "forms", "texts", "placements", "gender", "languages", "cta", "copyTo"}
+    assert set(out) >= {"adsets", "copyAdset", "texts", "placements", "gender", "languages", "cta", "copyTo"}
+    assert "forms" not in out, "ACL-1775: Instant Forms - настоящий выбор, а не заглушка"
     for key, v in out.items():
         for kind in ("button", "select"):
             assert " disabled " in v[kind] and " name=" not in v[kind], key
@@ -116,7 +117,7 @@ def test_every_control_without_a_backend_is_disabled_and_names_its_task():
     page = _page()
     used = set(re.findall(r"\b(?:future|futureHtml)\('([A-Za-z]+)'", page))
     assert used <= set(out), f"страница ссылается на ключи вне таблицы: {used - set(out)}"
-    assert used >= {"adsets", "copyAdset", "forms", "texts", "placements", "media", "gender", "languages", "cta", "copyTo"}
+    assert used >= {"adsets", "copyAdset", "texts", "placements", "media", "gender", "languages", "cta", "copyTo"}
 
 
 def test_old_drafts_load_without_the_new_field():
@@ -191,7 +192,9 @@ def test_the_ui_shows_only_what_the_creator_sends():
 
     page = _page()
     assert cr.CTA_TYPE == "LEARN_MORE" and "'cta', 'select', 'Learn more'" in page
-    assert cr.DESTINATION == "WEBSITE" and "'forms', 'select', 'Website'" in page
+    # ACL-1775: выбор Website / Instant Form - настоящий, значения те, что шлёт создатель
+    assert cr.DESTINATION == "WEBSITE" and cr.DEST_WEBSITE == "website" and cr.DEST_FORM == "instant_form"
+    assert 'value="website" selected>Website<' in page and 'value="instant_form">Instant Form<' in page
     assert cr.PAUSED == "PAUSED" and "PAUSED campaigns" in page
     assert cr.SUPPORTED_OBJECTIVES == frozenset({"leads"})
     assert cr.OBJECTIVE == "OUTCOME_LEADS"

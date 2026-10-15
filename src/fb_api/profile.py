@@ -302,7 +302,27 @@ def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
             )
         return OpenedProfile(profile_id, folder_id, instance, port, None, False, launcher)
 
-    started = launcher.start_profile(folder_id or None, profile_id, headless=False)
+    # ACL-1812 (ревью #813, B1): запуск ВСЕГДА проходит через общий журнал остановок.
+    # Закрыли и сразу подняли заново — вероятная причина двух разлогинов (ACL-1811).
+    from src.fb_api import stop_log as _stop_log
+
+    why = _stop_log.refusal(profile_id)
+    if why:
+        raise ProfileError(why, code="restart_cooldown")
+
+    # ACL-1826: пачка уже знает, что общая сессия слота потеряна, — не стучимся в MLX зря.
+    from src.fb_api import mlx_session as _mlx
+
+    skip = _mlx.refusal(_mlx.current_batch(), instance, _mlx.current_account())
+    if skip:
+        raise ProfileError(skip["message"], code=skip["code"])
+    try:
+        started = launcher.start_profile(folder_id or None, profile_id, headless=False)
+    except Exception as exc:  # noqa: BLE001 — MLX/сеть: узнаём 403 потери сессии и вход в прокси
+        text, code = _mlx.humanize(exc, instance, _mlx.current_account())
+        if code:
+            raise ProfileError(text, code=code) from exc
+        raise
     if not started.port:
         raise ProfileError("Multilogin did not return a debug port; nothing was stopped.")
     return OpenedProfile(

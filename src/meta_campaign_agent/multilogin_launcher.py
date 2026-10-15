@@ -12,7 +12,13 @@ log = logging.getLogger(__name__)
 
 
 class MultiloginLauncherError(RuntimeError):
-    pass
+    """Отказ лаунчера. `status` / `error_code` — для классификации (ACL-1826):
+    403 FORBIDDEN_REQUEST на слоте B значит потерю общей сессии Multilogin."""
+
+    def __init__(self, message: str = "", *, status: int | None = None, error_code: str = ""):
+        super().__init__(message)
+        self.status = status
+        self.error_code = error_code
 
 
 @dataclass
@@ -123,7 +129,8 @@ class MultiloginLauncher:
                         folder_id=resolved_folder or "",
                         port=running_port,
                     )
-            raise MultiloginLauncherError(f"Start profile failed HTTP {r.status_code}: {msg}")
+            raise MultiloginLauncherError(f"Start profile failed HTTP {r.status_code}: {msg}",
+                                          status=r.status_code, error_code=error_code)
 
         data = body.get("data") if isinstance(body.get("data"), dict) else {}
         port = data.get("port")

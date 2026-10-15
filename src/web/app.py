@@ -2213,6 +2213,8 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
         asset_val = _abbrev_asset((form.get(f"camp_{idx}_asset") or "").strip())
         budget    = (form.get(f"camp_{idx}_budget") or "").strip()
         name      = (form.get(f"camp_{idx}_name") or "").strip()
+        # ACL-1775: место конверсии набора; нет поля (RPA, старая страница) - сайт.
+        destination = (form.get(f"camp_{idx}_destination") or "website").strip().lower()
 
         try:
             ad_count = int(form.get(f"camp_{idx}_ad_count") or 1)
@@ -2261,6 +2263,15 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
             # (и записанные из них задания) остаются прежними.
             if copy2:
                 slot["copy2"] = copy2
+            # ACL-1775: Instant Form. Ключи есть только у слотов с формой; значения
+            # другого назначения (сайта) не уходят вовсе, а у сайтовых слотов
+            # лишних ключей нет - прежние черновики не меняются ни байтом.
+            if destination != "website":
+                # Незнакомое назначение не превращается в сайт молча: уходит как есть,
+                # и план откажет вслух ("Unknown conversion location").
+                slot["destination"] = destination
+            if destination == "instant_form":
+                slot["lead_form_id"] = (form.get(f"camp_{idx}_ad_{a_idx}_form_id") or "").strip()
             slots.append(slot)
     # Return the ISO code, not the raw form value ("Costa Rica"). Confirmed
     # live 2026-07-30: the full name leaked into draft.country, where both
@@ -3693,6 +3704,24 @@ def _split_plan(account: str, date_from: str, date_to: str, *,
     return {"needed": bool(why), "why": why}
 
 
+def _mlx_batch_refusal(form, account: str) -> JSONResponse | None:
+    """ACL-1826: пачка уже потеряла общую сессию Multilogin слота — этот старт пропускаем.
+
+    Страница шлёт `batch` (один id на нажатие Read all / Publish all). Без него
+    поведение прежнее: одиночные нажатия не пропускаются.
+    """
+    batch = str(form.get("batch") or "").strip()
+    if not batch:
+        return None
+    from src.fb_api import mlx_session
+
+    skip = mlx_session.refusal(batch, mlx_session.instance_of(account), account)
+    if not skip:
+        return None
+    return JSONResponse({"ok": False, "error": skip["message"], "code": skip["code"], "skipped": True},
+                        status_code=409)
+
+
 @app.post("/account-spend/read")
 async def account_spend_read(request: Request) -> JSONResponse:
     """Прочитать спенд с аккаунта. Только по нажатию человека.
@@ -3706,6 +3735,9 @@ async def account_spend_read(request: Request) -> JSONResponse:
     account = (form.get("account") or "").strip()
     if not account:
         return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    skipped = _mlx_batch_refusal(form, account)
+    if skipped is not None:
+        return skipped
     # Период приходит с экрана: число, снятое не за тот отрезок, который
     # показан рядом, выглядело бы расхождением источников, а было бы ответом
     # на другой вопрос.
@@ -3774,6 +3806,9 @@ async def account_spend_read_countries(request: Request) -> JSONResponse:
     account = (form.get("account") or "").strip()
     if not account:
         return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    skipped = _mlx_batch_refusal(form, account)
+    if skipped is not None:
+        return skipped
     try:
         date_from, date_to = _spend_period(
             str(form.get("date_from") or ""), str(form.get("date_to") or ""),
@@ -4253,6 +4288,9 @@ async def campaign_inventory_read(request: Request) -> JSONResponse:
     account = (form.get("account") or "").strip()
     if not account:
         return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    skipped = _mlx_batch_refusal(form, account)
+    if skipped is not None:
+        return skipped
     try:
         date_from, date_to = _spend_period(str(form.get("date_from") or ""), str(form.get("date_to") or ""),
                                            str(form.get("span") or ""))
@@ -5139,11 +5177,47 @@ async def rpa_website_lab_disconnect() -> JSONResponse:
     return JSONResponse(result)
 
 
+INSTANT_FORM_RPA_ERROR = ("Instant Forms are available only with the Graph API backend "
+                          "(ACL_FB_BACKEND=api). Switch the ad set back to Website or use the API backend.")
+
+
+def _instant_form_refusal(slots: list[dict]) -> JSONResponse | None:
+    """ACL-1775: слот с Instant Form при RPA-бэкенде - отказ вслух, а не молча сайтом."""
+    from src.web import publish_api
+
+    if publish_api.api_enabled():
+        return None
+    if any(s.get("destination", "website") != "website" for s in slots):
+        return JSONResponse({"error": INSTANT_FORM_RPA_ERROR}, status_code=409)
+    return None
+
+
+@app.post("/api/page-forms")
+async def api_page_forms(request: Request) -> JSONResponse:
+    """ACL-1775: формы Страницы аккаунта для выбора в билдере. Только по нажатию человека.
+
+    Чтение без права записи; ни опроса, ни расписания. Только при `ACL_FB_BACKEND=api`.
+    """
+    from src.web import page_forms, publish_api
+
+    form = await request.form()
+    account = (form.get("account_label") or form.get("account") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    if not publish_api.api_enabled():
+        return JSONResponse({"ok": False, "error": "Instant Forms need the Graph API backend (ACL_FB_BACKEND=api)."},
+                            status_code=409)
+    return JSONResponse(await asyncio.to_thread(page_forms.read_forms, account))
+
+
 @app.post("/preview-publish")
 async def preview_publish(request: Request) -> JSONResponse:
     """Dry-run: convert form slots → PublishJob plan, return JSON (no Meta API calls)."""
     form = await request.form()
     country, account_label, slots = _parse_build_upload_form(form)
+    refused = _instant_form_refusal(slots)
+    if refused is not None:
+        return refused
     if not country:
         return JSONResponse({"error": "Country not set — check form."}, status_code=400)
     if not account_label:
@@ -5179,6 +5253,9 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
     """
     form = await request.form()
     country, account_label, slots = _parse_build_upload_form(form)
+    refused = _instant_form_refusal(slots)
+    if refused is not None:
+        return refused
     via_ml = (form.get("via_multilogin") or "1").strip() not in ("0", "false", "no")
     activate = (form.get("activate") or "0").strip() in ("1", "true", "yes")
     dry_run = (form.get("dry_run") or "0").strip() in ("1", "true", "yes")
@@ -5196,6 +5273,10 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
         )
     if not country or not account_label or not slots:
         return JSONResponse({"error": "Missing country, account or slots."}, status_code=400)
+    skipped = _mlx_batch_refusal(form, account_label)
+    if skipped is not None:
+        body = json.loads(skipped.body)
+        return JSONResponse({"error": body["error"], "code": body["code"], "skipped": True}, status_code=409)
 
     def launch() -> tuple[str, int]:
         # Черновики собираются из библиотек и книги — не в цикле событий:
@@ -5306,6 +5387,43 @@ async def _campaign_commands_body(request: Request) -> dict:
     except Exception:
         body = {}
     return body if isinstance(body, dict) else {}
+
+
+# ACL-1812: тёплые сессии. Состояние строк — только реестр и процессы на машине
+# (ни одного вызова к Meta); запуск и закрытие профилей — по клику человека.
+@app.get("/warm/state")
+async def warm_state(request: Request) -> JSONResponse:
+    from src.web import warm_api
+
+    labels = request.query_params.getlist("account")
+    return JSONResponse(await asyncio.to_thread(warm_api.state, labels))
+
+
+@app.post("/warm/open")
+async def warm_open(request: Request) -> JSONResponse:
+    from src.web import warm_api
+
+    body = await _campaign_commands_body(request)
+    data, code = await asyncio.to_thread(warm_api.start_open, body.get("accounts"))
+    return JSONResponse(data, status_code=code)
+
+
+@app.get("/warm/job/{job_id}")
+async def warm_job(job_id: str) -> JSONResponse:
+    from src.web import warm_api
+
+    data, code = warm_api.job_status(job_id)
+    return JSONResponse(data, status_code=code)
+
+
+@app.post("/warm/close")
+async def warm_close(request: Request) -> JSONResponse:
+    from src.web import warm_api
+
+    body = await _campaign_commands_body(request)
+    data, code = await asyncio.to_thread(warm_api.close_profiles, body.get("accounts"),
+                                         body.get("confirm") is True)
+    return JSONResponse(data, status_code=code)
 
 
 @app.get("/publish-jobs/slots")
@@ -5437,6 +5555,13 @@ async def build_upload(request: Request) -> Response:
     """Build Upload FB xlsx from campaign builder slots for one account."""
     form = await request.form()
     country, account_label, slots = _parse_build_upload_form(form)
+    if any(s.get("destination") == "instant_form" for s in slots):
+        # ACL-1775: таблица Upload FB формы не умеет - не собирать сайтовую молча.
+        return await _in_report_pool(
+            _render_report, request,
+            upload_errors={(form.get("country") or "").strip() or country:
+                           {account_label: ["Instant Forms cannot be exported to Upload FB; use Publish with the API backend."]}},
+        )
 
     # The parser returns the country CODE ("MX"), which the RPA needs — without
     # it the audience Language step was silently skipped. But the template looks
