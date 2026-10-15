@@ -12141,7 +12141,7 @@
             "session": "w1739f_1008"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1739F",
         "coordinator": "Coordinator-T1004Q",
         "handoff": {
@@ -12159,7 +12159,8 @@
           "report": "# ACL-1739 handoff\nPR #740, head 681100a3. Cause: profile window covered by 4-7 windows; 5 s probe missed on alive-but-slow tab (stall_evidence responsive=true, heap ~500MB, 6.3k nodes), each miss counted toward the 1702 budget. Not video-specific. Fix: _tab_frozen confirms with the 10 s probe before counting. Tests: new unit file + 11 affected files pass (fakes only)."
         },
         "pr": 740,
-        "queued_at": "2026-10-08T08:34:10+00:00"
+        "queued_at": "2026-10-08T08:34:10+00:00",
+        "reviewer": "Reviewer-RV1015G"
       },
       "743": {
         "implementers": [
@@ -16218,6 +16219,10 @@
       "Reviewer-RV1015K": {
         "session": "rv1015k-831",
         "role": "Reviewer"
+      },
+      "Reviewer-RV1015G": {
+        "session": "rv1015g-740",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -18889,7 +18894,6 @@
       406,
       433,
       526,
-      739,
       816,
       822,
       827,
@@ -38649,6 +38653,13 @@
         "at": "2026-10-15T08:11:12+00:00",
         "issue": 302,
         "reason": "Closed in the Playwright backlog cleanup 2026-10-15: we are moving campaign creation and account reads to the Meta API (ACL-1760/1761/1883), so this Ads Manager UI/Playwright-only work is no longer relevant. Restore if the UI path comes back."
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-15T08:12:34+00:00",
+        "pr": 740,
+        "lane": "42a40e0469e34392b025583ad95fa71c",
+        "actor": "Reviewer-RV1015G"
       }
     ],
     "policy": {
@@ -42360,6 +42371,18 @@
         "session": "rv1015k-831",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-15T08:09:56+00:00",
+        "state": "reviewing"
+      },
+      "740": {
+        "id": "42a40e0469e34392b025583ad95fa71c",
+        "pr": 740,
+        "issues": [
+          739
+        ],
+        "actor": "Reviewer-RV1015G",
+        "session": "rv1015g-740",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-15T08:12:34+00:00",
         "state": "reviewing"
       }
     }
