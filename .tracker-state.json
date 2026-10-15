@@ -41566,7 +41566,9 @@
         "session": "rt1015a-20261015",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-15T06:50:17+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "# Return for a dependency refresh\n\nACL-1776 is stacked on ACL-1819 (PR 821). 1819 was refreshed on current main 080df2d8 (head a957986b). Required: merge codex/acl-1819-preflight-audit (a957986b) into this branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
+        "keep_lane": false
       }
     }
   }
