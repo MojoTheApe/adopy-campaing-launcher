@@ -9377,6 +9377,67 @@
           "report": "Actual retained independent Reviewer-PTDLV13 attests all six exact original ACL-1879 unchecked criteria against genuine source review and my full combined review, actual complete combined CI and authenticated exact-tree Windows installer/update/recovery evidence, applied exact-stage verification and unchanged admitted main PR885. Original criterion text/order/line numbers and strict source scopes are preserved. Source historical hold was superseded by later human shipping authorization; source882 is actually merged, and its old unmerged state is not asserted. This is bounded private post-main acceptance, not a task body edit, parent/sibling completion, live Meta pilot, stable release or employee rollout. Own prior local pytest attempt failed before collection due missing pytest and is not a pass. Approved merged TT105 engine6e4e47c/d7aa9c is used explicitly with unchanged original consumer config/pins; no unreviewed engine invoked."
         },
         "recorded_at": "2026-10-13T21:32:32+00:00"
+      },
+      "3bc5972db83a4bbeaf5f66bc508adadd": {
+        "evidence": {
+          "batch_id": "3bc5972db83a4bbeaf5f66bc508adadd",
+          "pr": 940,
+          "merge_sha": "7d1ad46c14ddd2e08e507e33248af50af42df026",
+          "head_sha": "0d9201cf199ca52aeb3b9ce691a87b3ba0c10745",
+          "tree_sha": "da457106740ac89e01ab07052825f8a5cd0b3a97",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "issues": [
+            924
+          ],
+          "source_heads": [
+            "dd68f66c00b282ea38de0ac529230660c8f6399c"
+          ],
+          "issue_scopes": {
+            "924": "2acaba4989b48e6ea0bc48ef413906389861ffc4af049327f27ceed55ebbdcf5"
+          },
+          "reviewer": "Reviewer-N61D",
+          "review_session": "review_acl",
+          "execution_lane": "bf904f6643af45fd90156ca6bb154420",
+          "coordinator": "Coordinator-DLV15",
+          "coordinator_session": "delivery_flow_root",
+          "kind": "post-main-acceptance",
+          "report": "# ACL-1924 independent post-main source acceptance\n\nActual retained independent Reviewer: `Reviewer-N61D`, session `review_acl`; integration lane `bf904f6643af45fd90156ca6bb154420`. Source implementation was by Worker-B71E; integration was by Coordinator-DLV15/session delivery_flow_root. Reviewer made no source or Issue/checklist edits and did not publish/install the stable release or activate live no-Stage policy.\n\nThe canonical clean pinned e775 `acceptance.context` derived the identity from actual admitted main promotion PR940, not from assumed local values: batch `3bc5972db83a4bbeaf5f66bc508adadd`; only Issue924/source PR925 head `dd68f66c00b282ea38de0ac529230660c8f6399c`; Stage head `0d9201cf199ca52aeb3b9ce691a87b3ba0c10745`; actual main merge `7d1ad46c14ddd2e08e507e33248af50af42df026` at `2026-10-15T21:54:25Z`; tree `da457106740ac89e01ab07052825f8a5cd0b3a97`; original Stage policy `302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21`; frozen full Issue924 scope `2acaba4989b48e6ea0bc48ef413906389861ffc4af049327f27ceed55ebbdcf5`.\n\nRead the complete current frozen Issue924, source/combined review, actual Stage report and durable Stage verification. The five exact unchecked source criteria at lines 14\u201318 are covered individually in the matching canonical evidence JSON. Original checkboxes and scope remain unchanged. Parent ACL-1923 retains separately evidenced live idle migration, fresh board and actual published installer/channel delivery; this source acceptance does not complete those outcomes.\n\n1. **Supported no-Stage source and approval-only ordinary PRs \u2014 passed.** Exact reviewed merged source retains descriptor/config mirrored no-Stage selection, Approved and 5/5/5 limits, reserved frozen batch direction and ordinary source admission refusal. Canonical exported policy/assembly helpers match actual reviewed e775; Mastera3f561/Trackere775 pins agree. Full source/combined review verified those branches and meaningful tests. Source itself actually followed old-policy PR925 approval \u2192 frozen PR931/Stage \u2192 unchanged PR940/main; the selection did not activate its own shortcut.\n2. **Exact authorized native continuation and refusal of missing/failed proof \u2014 passed as implemented source behavior.** Actual frozen batch durably owns only Issue924 and target `ACL stable Windows installer and update channel`, with configured native workflow `.github/workflows/complete-delivery.yml` and job `Verify published Windows package`. Reviewed resolver/recorder bind exact main/request/tasks/target and official successful native job/log before CAS. Maintained source tests cover absent authorization, wrong scope/producer/revision, failed/missing logs, superseding verifier, partial cloned retries and uncertain identical receipt retry. Independently checked real native clone/log transport and canonical helper bytes. No actual published delivery is asserted here.\n3. **Implemented published-package acceptance and meaningful isolated checks \u2014 passed as source scope.** Reviewed `published_update.py`, `test_update_cycle.py`, `acl_delivery_evidence.py`, release manifest and workflow implement actual signed-channel previous/current package selection/download, trust/hash/size, isolated hosted-Windows installation/update/restart/recovery/preservation, and native evidence only on success. Failed-tag baseline and partial-rerun defects were fixed and independently re-reviewed with meaningful regressions. Actual Stage installer run38810617339 passed freshly on real Stage0d; its original five-check report is passed, exact source/tree/run match, raw SHA-256 `07f2d018603d725303bb0a785918c92581915aafec68eb2abd01b0503e567bfb`. This actual report exercises two candidate package versions and is not relabeled as published-channel proof. Published execution/final delivery remain parent923 acceptance.\n4. **Checks, exact independent review and actual original Stage/main admission \u2014 passed.** Fresh source CI38723215516 and installer38723215186 passed, then full combined content/composition was independently recorded against candidate2ce8/Stage-base5300/main-baseline3ee7 in the genuine retained lane. Combined product CI38730386330 passed; the initial installer cancellation was retained as failure history and only the failed native job/dependent aggregate reran. Actual admitted Stage PR931 merged as0d; actual Stage product38810617254 passed with supported exact-tree coverage and fresh Stage installer38810617339 passed all native jobs. Supported exact-stage verification was recorded at21:49:28. Actual admitted unchanged main PR940 merged as7d, preserving tree da4571. New official push/main CI38813359345 has now completed successfully for exact7d, including tooling, process and ACL verification; exact-main installer38813359387 and descriptor38813359334 also independently confirmed successful. Skipped matrix/build jobs retain proven exact-tree coverage and are not claimed as newly executed. No required gate was waived.\n5. **Separate source/activation/delivery documentation and Stage restoration \u2014 passed.** Reviewed merged `POST_MAIN_DELIVERY.md`, `DELIVERY_CONTINUATION.md`, repository workflow/history, runtime delivery and system description distinguish initial old-policy source integration, later supported idle policy migration/fresh-board proof and actual authorized package delivery. They retain permanent Stage/history, original source/combined gates, data/trust controls, pending/failed completion and explicit supported return-to-Stage procedure. Actual execution evidence here follows that separation.\n\nPrimary actual evidence: [Stage verification](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/924#issuecomment-6202996163), [Stage product CI](https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38810617254), [fresh Stage installer](https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38810617339), [admitted main promotion](https://github.com/MojoTheApe/adopy-campaing-launcher/pull/940), [successful exact-main CI](https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38813359345). Official native run metadata and real Stage report digest were independently read. Existing exact reviews and successful unchanged checks were reused within their supported scope; no source/test reruns or parent acceptance claims were fabricated.\n\nVerdict: all five frozen **source** criteria passed for this exact admitted batch/merge/tree under the retained actual independent Reviewer. Record through supported `record-acceptance` before Coordinator Merged journaling releases integration ownership. Package completion, parent923 and live policy activation remain separately unfinished until their actual evidence passes.\n",
+          "criteria": {
+            "924": [
+              {
+                "line": 14,
+                "criterion": "- [ ] Reviewed source provides the supported no-stage frozen batch route and preserves ordinary source approval-only behavior.",
+                "result": "passed",
+                "evidence": "Exact reviewed merged source implements mirrored descriptor/config no-Stage selection, preserved Approved/5-5-5 and ordinary-source merge refusal, reserved frozen batch route. Canonical helpers byte-match reviewed Tracker e775 and aligned Mastera3f561. Meaningful source/route regressions and independent full source/combined review passed. Actual initial integration used old-policy Stage PR931 then main PR940; no live no-Stage activation is claimed."
+              },
+              {
+                "line": 15,
+                "criterion": "- [ ] Authorized `batch begin --deliver` continuation is bound to exact main revision, task set and delivery target; successful native publication/verification can record delivery automatically, while missing/failed evidence cannot.",
+                "result": "passed",
+                "evidence": "Genuine batch3bc5972db83a4bbeaf5f66bc508adadd retains exact requested authorization only for Issue924, target ACL stable Windows installer and update channel, complete-delivery.yml / Verify published Windows package. Reviewed portable resolver/recorder/workflow bind official main SHA/tasks/target/job/log/CAS; meaningful missing/failed/wrong producer/scope, cloned retry and uncertain receipt cases pass. Real native clone/log transport independently exercised. Implemented-source behavior is passed; actual published package acceptance remains parent923."
+              },
+              {
+                "line": 16,
+                "criterion": "- [ ] The published installer channel/download/update/restart/recovery harness is implemented with isolated hosted-Windows guards and meaningful source checks; actual published execution and final delivery remain parent ACL-1923 acceptance, separately evidenced after activation.",
+                "result": "passed",
+                "evidence": "Published_update.py/test_update_cycle.py/acl_delivery_evidence.py and native workflow implement actual signed previous/current channel download, exact release/task/hash/size trust and isolated hosted-Windows update/restart/recovery/data guards. Baseline and partial retry findings fixed/reviewed with meaningful regressions. Actual fresh Stage installer38810617339 report1271 passed all5 real checks on Stage0d/tree da457106; raw SHA25607f2d018603d725303bb0a785918c92581915aafec68eb2abd01b0503e567bfb. This is same-candidate mechanism proof; published execution/final delivery explicitly remain parent923."
+              },
+              {
+                "line": 17,
+                "criterion": "- [ ] Focused local checks and required hosted checks pass, independent review matches final head, and source is admitted via the old stage/main policy.",
+                "result": "passed",
+                "evidence": "Author affected89 tests/scanner/smoke/links/draftvalidation and fresh source native CI38723215516/installer38723215186 passed. Genuine full source and combined exact-head/base/scope reviews recorded. Canonical old-policy admission plus actual Stage0d verification: product38810617254 success with exact-tree coverage; fresh native installer38810617339 all jobs success, verify-stage applied21:49:28. Actual unchanged main PR940 merge7d1ad46c at21:54:25 retains tree da457106. Official exact-main CI38813359345, installer38813359387 and descriptor38813359334 independently confirmed completed/success. Reused/skipped jobs are kept explicit, no waiver."
+              },
+              {
+                "line": 18,
+                "criterion": "- [ ] Source, live activation and actual delivery are documented separately with stage re-enable procedure.",
+                "result": "passed",
+                "evidence": "Exact merged POST_MAIN_DELIVERY.md, DELIVERY_CONTINUATION.md, repository workflow/history, runtime delivery and system descriptions explicitly separate old-policy source admission, supported idle policy migration/fresh board, and actual stable delivery. Stage return procedure preserves permanent stage/history, queue/owner checks, required review/CI and separate runtime evidence. Parent923 retains live/published outcomes; no checkbox or scope edits made."
+              }
+            ]
+          }
+        },
+        "recorded_at": "2026-10-15T21:57:49+00:00"
       }
     }
   },
@@ -41158,6 +41219,12 @@
           "state": "reviewing",
           "started_at": "2026-10-15T11:52:41+00:00"
         }
+      },
+      {
+        "event": "post-main-acceptance-recorded",
+        "at": "2026-10-15T21:57:49+00:00",
+        "batch_id": "3bc5972db83a4bbeaf5f66bc508adadd",
+        "pr": 940
       }
     ],
     "policy": {
