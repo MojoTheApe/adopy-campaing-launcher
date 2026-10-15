@@ -1939,8 +1939,16 @@ def _render_report(
             "goals": _build_goals_view(report, goal_seed),
             # ACL-1761: кнопка «Check plan (no writes)» в билдере — только при api.
             "fb_backend": _fb_backend(),
+            # ACL-1819: общая таблица правил pre-flight audit (та же, что у сервера).
+            "preflight_rules_json": _preflight_rules(),
         },
     )
+
+
+def _preflight_rules() -> dict:
+    from src.fb_api import preflight_rules
+
+    return preflight_rules.export_rules()
 
 
 def _fb_backend() -> str:
