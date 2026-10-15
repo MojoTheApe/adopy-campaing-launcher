@@ -12861,7 +12861,7 @@
             "session": "wrl1812-20261015"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-RL1812",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12880,7 +12880,8 @@
         },
         "pr": 813,
         "queued_at": "2026-10-15T04:38:51+00:00",
-        "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e76699ef (ACL-1800 campaign commands, ACL-1797 design system; PR 917 -> 918). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
+        "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e76699ef (ACL-1800 campaign commands, ACL-1797 design system; PR 917 -> 918). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
+        "reviewer": "Reviewer-R1812P"
       },
       "814": {
         "implementers": [
@@ -15742,6 +15743,10 @@
       "Reviewer-R1815M": {
         "session": "r1815m-20261015",
         "role": "Reviewer"
+      },
+      "Reviewer-R1812P": {
+        "session": "r1812p-20261015",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -18398,7 +18403,6 @@
       903,
       907,
       891,
-      812,
       814
     ],
     "review": null,
@@ -36930,6 +36934,13 @@
             "approved_at": "2026-10-15T05:36:37+00:00"
           }
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-15T05:39:35+00:00",
+        "pr": 813,
+        "lane": "acf86f7aacc04ada948afc1bb84a090c",
+        "actor": "Reviewer-R1812P"
       }
     ],
     "policy": {
@@ -40341,6 +40352,19 @@
       "started_at": "2026-10-15T03:44:03+00:00",
       "ineligible": {}
     },
-    "source_reviews": {}
+    "source_reviews": {
+      "813": {
+        "id": "acf86f7aacc04ada948afc1bb84a090c",
+        "pr": 813,
+        "issues": [
+          812
+        ],
+        "actor": "Reviewer-R1812P",
+        "session": "r1812p-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-15T05:39:35+00:00",
+        "state": "reviewing"
+      }
+    }
   }
 }
