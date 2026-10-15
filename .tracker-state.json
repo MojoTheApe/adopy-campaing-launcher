@@ -9131,20 +9131,6 @@
         "state": "implementing",
         "started_at": "2026-10-15T06:24:37+00:00",
         "from_status": "status:todo"
-      },
-      "799": {
-        "actor": "Worker-RN1799",
-        "session": "wrn1799-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1799-country-workbench",
-        "worktree": "C:\\wk-rn1799",
-        "id": "f534b8b04e314798bd66e1bc27c3c69c",
-        "issue": 799,
-        "state": "handoff",
-        "started_at": "2026-10-15T06:30:48+00:00",
-        "from_status": "status:todo",
-        "pr": 803,
-        "report": "# Refresh ACL-1799 (PR 803)\n- Merged origin/main (080df2d8) into codex/acl-1799-country-workbench; head df6317d9.\n- Conflict: only src/web/templates/report.html at the end of the file. Kept both sides: 1799 cw-script block and 1812 warm_sessions.js include. cw-styles and the active() fix (adIndex: 0) are intact.\n- Tests: tests/test_acl1799_country_workbench.py (not browser) 22 passed; node tests/cw_harness.cjs src/web/templates/report.html: ok."
       }
     },
     "tasks": {
@@ -12871,25 +12857,25 @@
             "session": "wrn1799-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RN1799",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-RM1799",
-          "session": "wrm1799-20261015",
+          "actor": "Worker-RN1799",
+          "session": "wrn1799-20261015",
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1799-country-workbench",
-          "worktree": "C:\\wk-rm1799",
-          "id": "66e4099a33fe4b1e941f206f1cfb9af7",
+          "worktree": "C:\\wk-rn1799",
+          "id": "f534b8b04e314798bd66e1bc27c3c69c",
           "issue": 799,
           "state": "handoff",
-          "started_at": "2026-10-15T04:23:56+00:00",
+          "started_at": "2026-10-15T06:30:48+00:00",
           "from_status": "status:todo",
           "pr": 803,
-          "report": "# ACL-1799 refresh (merge origin/main 0850aa39)\n\nMerged origin/main into codex/acl-1799-country-workbench (approved head 3c9521c3, merge commit 9259d774). One conflict, src/web/templates/report.html, in the style block: kept both the ACL-1797 shell/primitives plus adopy-tokens style and the ACL-1799 cw-styles block. active() adIndex: 0 fix preserved.\n\nTests: tests/test_acl1799_country_workbench.py, test_acl1797_design_system.py, test_acl1761_country_resolve.py (not browser): 43 passed. scripts/acl_scan_secrets.py: clean."
+          "report": "# Refresh ACL-1799 (PR 803)\n- Merged origin/main (080df2d8) into codex/acl-1799-country-workbench; head df6317d9.\n- Conflict: only src/web/templates/report.html at the end of the file. Kept both sides: 1799 cw-script block and 1812 warm_sessions.js include. cw-styles and the active() fix (adIndex: 0) are intact.\n- Tests: tests/test_acl1799_country_workbench.py (not browser) 22 passed; node tests/cw_harness.cjs src/web/templates/report.html: ok."
         },
         "pr": 803,
-        "queued_at": "2026-10-15T04:26:35+00:00",
+        "queued_at": "2026-10-15T06:33:02+00:00",
         "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e677f638 (ACL-1812 warm sessions, ACL-1826, ACL-1775 Instant Forms, ACL-1815 rules evidence; PR 919 -> 922). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
         "return_operation": {
           "id": "1c8396f8dfeb464c93c786677e36dd67",
@@ -18665,7 +18651,8 @@
       903,
       907,
       891,
-      902
+      902,
+      799
     ],
     "review": null,
     "history": [
@@ -37877,6 +37864,13 @@
         "at": "2026-10-15T06:30:48+00:00",
         "issue": 799,
         "claim": "f534b8b04e314798bd66e1bc27c3c69c",
+        "actor": "Worker-RN1799"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-15T06:33:02+00:00",
+        "issue": 799,
+        "pr": 803,
         "actor": "Worker-RN1799"
       }
     ],
