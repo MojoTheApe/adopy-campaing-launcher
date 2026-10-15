@@ -9119,20 +9119,6 @@
         "state": "implementing",
         "started_at": "2026-10-15T05:51:11+00:00",
         "from_status": "status:idea"
-      },
-      "872": {
-        "actor": "Worker-T1872A",
-        "session": "t1872a-20261015",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1872-isolated-meta-setup",
-        "worktree": "C:\\acl-1872",
-        "id": "4356be6a85ae44d781e577d3badf0e7e",
-        "issue": 872,
-        "state": "handoff",
-        "started_at": "2026-10-15T06:24:37+00:00",
-        "from_status": "status:todo",
-        "pr": 873,
-        "report": "# ACL-1872 takeover handoff \u2014 current main merged\n\nActual Worker-T1872A / t1872a-20261015; Coordinator-M1011A.\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/873\nBranch/worktree: work/acl-1872-isolated-meta-setup / C:\\acl-1872.\nHead: 28a285f8 (normal merge of current main 080df2d8 into 7c6907f8).\n\n## Why the takeover\n\nPrevious Worker-IS1013 / isolated_app_sol_20261013 (Codex, Coordinator-CR1012)\nstopped: its Codex account hit the usage limit at 2026-10-13T21:43Z (credits 0,\nnext reset 2026-10-20). There has been no Codex session activity since\n2026-10-14T01:00Z. Its worktree was clean at PR head 7c6907f8. Ownership was\ntransferred with `execution takeover --stopped`; nothing was hand-edited.\n\n## What the previous worker left\n\n- Original scope and every acceptance criterion are unchanged (see issue body and\n  the 2026-10-13 author handoff comment).\n- The independent review-return fix (1b5459a0, \"Validate retirement metadata\n  before cleanup\") was committed, then current main of that time (7cee2857) was\n  merged (7c6907f8). Hosted product CI and installer CI on 7c6907f8 were green;\n  only tracker-link failed, as expected before handoff.\n\n## What I did\n\n- Merged current main 080df2d8 normally. No conflicts and no product-code changes.\n- Affected local tests (Windows, Python 3.13): 104 passed \u2014\n  test_meta_connections, test_meta_connections_ui, test_meta_connections_windows,\n  test_config_locations, test_accounts_tab_connects_the_same_way,\n  test_connect_account_in_empty_country, test_multilogin_is_connected_in_the_dashboard.\n- Hosted CI on 28a285f8: all product (Linux 3.11/3.13 shards, Windows 3.13, ACL verification), process, descriptor and installer (build/install/repair/uninstall, installer verification) checks PASS; only tracker-link failed, as expected before this handoff.\n\nNo live Meta / Multilogin call, credential or installer was used. The author\ndoes not self-approve, merge or integrate. An independent current-head review of\nthe full scope is still required; the earlier review-return points (retirement\nmetadata validation) should be re-verified on this head."
       }
     },
     "tasks": {
@@ -14041,25 +14027,25 @@
             "session": "t1872a-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-T1872A",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-IS1013",
-          "session": "isolated_app_sol_20261013",
-          "coordinator": "Coordinator-CR1012",
+          "actor": "Worker-T1872A",
+          "session": "t1872a-20261015",
+          "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1872-isolated-meta-setup",
-          "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\Adopy Campaign Manager\\ACM-Audit-2026-10-12\\worktrees\\acl-1872",
-          "id": "7faee26bb461415eb35da863d3bfe0d9",
+          "worktree": "C:\\acl-1872",
+          "id": "4356be6a85ae44d781e577d3badf0e7e",
           "issue": 872,
           "state": "handoff",
-          "started_at": "2026-10-13T18:56:37+00:00",
+          "started_at": "2026-10-15T06:24:37+00:00",
           "from_status": "status:todo",
           "pr": 873,
-          "report": "# ACL-1872 narrow retirement repair \u2014 local commit, waiting for new main\n\nActual Worker-IS1013 / isolated_app_sol_20261013; Coordinator-CR1012.\nFresh genuine claim7faee26bb461415eb35da863d3bfe0d9 remains HELD, implementing.\nOriginal branch/worktree: work/acl-1872-isolated-meta-setup / Audit/worktrees/acl-1872.\nLocal head1b5459a02ef24408f2d497b0af0487ffb5e4b7bf;\ntree9335195716d2c1c19768ae7c995def2947140dac;\ncurrent base/main777663bf539308c0898cc177f872a8e0f63b597e, freshly verified.\nNOT pushed: remote PR873 still850b28aa. No new hosted CI or handoff requested.\nWorktree clean after the local commit.\n\nThe independent review-return and public proof were read before a fresh supported\nclaim. The full original issue/scope remains preserved. The pre-agreed seam is\nactual public ASGI requests plus observable registry/blob/map byte preservation,\nwith explicit fake OS encryption and an injected temporary deletion failure only.\n\nMinimal production repair: validate retired_phase at registry load before any\nreconciliation/cleanup/write. A present retirement phase must be disconnected or\nbinding_changed. cleanup_pending requires a retirement phase, pending cleanup,\nno active credential and compatible binding-valid flag. Active/saved records may\nretain legitimate retirement history and records without history still load.\nNo cleanup/CAS/ownership/map/UI/transport refactor or sibling source import.\n\nTest-first evidence:\n\n- Original production850b28aa: one public invalid-phase reproduction FAILS because\n  registry bytes change after sanitized503. Failure file\n  output/test-failures/2026-10-13_21-59-14_715997_439912404fb244788001abcc568ca92b.md.\n- The first narrow domain check closes that case. The missing-phase variant then\n  FAILS with200 instead of503; four contradictory pending-state variants likewise\n  FAIL with200. Failure files ending30e2c8bf0b0d44158106b5a48699df86.md and\n  e71658eec7fe47568c04c7292f04cac7.md record the next red slices.\n- Final16 focused public cases PASS:13 corruption variants preserve EXACT registry,\n  all ciphertext and map bytes with zero deletion calls; both valid retirement\n  types recover normally and preserve another saved connection; existing durable\n  pending-cleanup regression remains passing. No live requests.\n\nCurrent local Windows/Python3.14 checks:\n\n- 235 affected tests PASS in129.26s, including public routes/state, actual isolated\n  Chromium, real CurrentUser DPAPI/fresh process, map/security/Connect compatibility\n  and platform/shard guards.\n- All46 packaging unit tests PASS in31.004s; no local installer execution.\n- Staged tracked-file scanner, isolated import smoke and diff whitespace PASS.\n- Only five repair files changed: registry validation, public regressions, its\n  existing system behavior/recovery descriptions and its existing CHANGELOG block.\n  Composition-compatible documentation positions and other entries are preserved.\n\nCoordinator directs waiting for the genuine foreign batch884 main before push and\nhosted CI, to reconcile once against the actual new base. Foreign intake/batch,\nApproved sources849/882 and their source/approval ownership are untouched. Root\nmonitors that external delivery. No duplicate integration or new permission flow.\nAfter root resumes: fetch actual main, normal reconcile without rewrite, run only\nchecks justified by its actual delta, push samePR873 and obtain fresh complete\nproduct/installer CI BEFORE supported handoff per the preserved issue criterion.\nOld850b28aa greenCI/review is historical only; no repaired-head approval claimed.\nNo live Meta/MLX, credential/profile, TEST, runtime or installation action occurred.\n\n\n## Author handoff submission after current-head success\n\nThe earlier local wait is historical. The repaired head was normally pushed to same\nready/open PR873 after bounded-wait publication authorization. Current actual main\nand PR base remain777663bf539308c0898cc177f872a8e0f63b597e. Source/worktree are clean\nand frozen at1b5459a02ef24408f2d497b0af0487ffb5e4b7bf,\ntree9335195716d2c1c19768ae7c995def2947140dac.\n\nFull live Issue872 was read again and preserved. All original local preparation\nscope, acceptance criteria, parent dependencies and historical evidence remain.\nThe previously obsolete owner pause is resolved; no change to full outcomes is made.\nForeign884 integration/member879 and all other ownership remain untouched.\n\nIndependently reread exact-head product CI38455307156 completed SUCCESS: all six\nLinux3.11/3.13 shards, Windows3.13, tooling, process checks and ACL verification.\nActual installer38455307278 completed SUCCESS: classifier, build inputs, real\nbuild/install/repair/uninstall and Installer verification. Descriptor38455307343\nSUCCESS. Current run receipts saved in Audit/acl1872-run-38455307156-1b5459a0.json\nand acl1872-run-38455307278-1b5459a0.json. No skipped actual build is called executed.\n235 local affected tests +46 packaging units, scanner/smoke and whitespace PASS\nremain unchanged evidence; no redundant local test run or source edit in this turn.\n\nThe specific Issue872 requirement for current product/applicable installer success\nBEFORE handoff is now met. Normal handoff is submitted under genuine clean Tracker\npin46283b8a6fe444065838e136c89ef4ed64bd1528 with held author claim\n7faee26bb461415eb35da863d3bfe0d9, actual Worker-IS1013/session\nisolated_app_sol_20261013 and Coordinator-CR1012. This report is source-author\nevidence, not independent approval or integration/delivery completion.\n\nLatest ready linkage38455371265 failed before handoff because issue872 was still\nimplementing rather than Review; its exact log was read. After durable Review only\nthat linkage will be rerun and fresh check-pr recorded separately. No successful\nproduct/installer run is repeated. No author selfapproval, merge, install, runtime,\nTEST, live Meta/Multilogin, real credential/profile or remote advertising action.\nIndependent complete current-head/base/full-scope source review remains necessary.\n\nHosted update/recovery report independently read: result passed, synthetic PR merge\nsource5021882b8b96961a0f17fe8dba9235d784bdec5e, exact source tree93351957.\nReal install -> update -> restart -> deliberate version mismatch rollback -> restart\nand synthetic data byte-identical. Evidence:evidence/acl1872-update-recovery-38455307278/report.json.\nThis is hosted isolated same-candidate package evidence, not live employee/channel proof."
+          "report": "# ACL-1872 takeover handoff \u2014 current main merged\n\nActual Worker-T1872A / t1872a-20261015; Coordinator-M1011A.\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/873\nBranch/worktree: work/acl-1872-isolated-meta-setup / C:\\acl-1872.\nHead: 28a285f8 (normal merge of current main 080df2d8 into 7c6907f8).\n\n## Why the takeover\n\nPrevious Worker-IS1013 / isolated_app_sol_20261013 (Codex, Coordinator-CR1012)\nstopped: its Codex account hit the usage limit at 2026-10-13T21:43Z (credits 0,\nnext reset 2026-10-20). There has been no Codex session activity since\n2026-10-14T01:00Z. Its worktree was clean at PR head 7c6907f8. Ownership was\ntransferred with `execution takeover --stopped`; nothing was hand-edited.\n\n## What the previous worker left\n\n- Original scope and every acceptance criterion are unchanged (see issue body and\n  the 2026-10-13 author handoff comment).\n- The independent review-return fix (1b5459a0, \"Validate retirement metadata\n  before cleanup\") was committed, then current main of that time (7cee2857) was\n  merged (7c6907f8). Hosted product CI and installer CI on 7c6907f8 were green;\n  only tracker-link failed, as expected before handoff.\n\n## What I did\n\n- Merged current main 080df2d8 normally. No conflicts and no product-code changes.\n- Affected local tests (Windows, Python 3.13): 104 passed \u2014\n  test_meta_connections, test_meta_connections_ui, test_meta_connections_windows,\n  test_config_locations, test_accounts_tab_connects_the_same_way,\n  test_connect_account_in_empty_country, test_multilogin_is_connected_in_the_dashboard.\n- Hosted CI on 28a285f8: all product (Linux 3.11/3.13 shards, Windows 3.13, ACL verification), process, descriptor and installer (build/install/repair/uninstall, installer verification) checks PASS; only tracker-link failed, as expected before this handoff.\n\nNo live Meta / Multilogin call, credential or installer was used. The author\ndoes not self-approve, merge or integrate. An independent current-head review of\nthe full scope is still required; the earlier review-return points (retirement\nmetadata validation) should be re-verified on this head."
         },
         "pr": 873,
-        "queued_at": "2026-10-13T19:58:41+00:00",
+        "queued_at": "2026-10-15T06:48:24+00:00",
         "return_operation": {
           "id": "91201340047f423fa6a6747b1c5dc404",
           "actor": "Coordinator-FLOW513",
@@ -18670,7 +18656,8 @@
       902,
       799,
       814,
-      819
+      819,
+      872
     ],
     "review": null,
     "history": [
@@ -37918,6 +37905,13 @@
         "issue": 819,
         "pr": 821,
         "actor": "Worker-RN1819"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-15T06:48:24+00:00",
+        "issue": 872,
+        "pr": 873,
+        "actor": "Worker-T1872A"
       }
     ],
     "policy": {
