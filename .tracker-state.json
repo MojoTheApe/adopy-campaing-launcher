@@ -3611,6 +3611,27 @@
           "800": "c6a03d6f7d7359787e935af84597ca655ffb095293c7145fe32eb1f57394c2f5",
           "797": "5c2d21567457ef4bf48283b34060170cecabad9ab74630b2363e00dfd9390453"
         }
+      },
+      "828": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1826P",
+        "implementer": "Worker-RL1826",
+        "review_session": "r1826p-20261015",
+        "execution_lane": "83e30a41e3544b5489cf989c9486a08d",
+        "head_sha": "285aca312bfaa186a6a50cf9effd017f41f62606",
+        "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+        "tree_sha": "78fd44dc664bb1558723900a07a428d9cbef4167",
+        "report": "Independent re-review of ACL-1826 / PR 828 at head 285aca31 (merge of main 0850aa39 into the branch) by Reviewer-R1826P, who implemented none of it. Earlier review R1826N found the code correct; this pass checks the refresh. _campaign_table.html differs from main only by the 1826 additions: data-hc=banner inside body above main's 1800 toolbar (one banner element; banner(null) clears all instances at batch start and only the first stopped instance shows it, so it appears once), BATCH_STOPS stop capture, batch id and Retry; main's toolbar, loadWarm() and the single hc-head2 stay intact. Retry re-sends only the stopped forms (queueRun over stopped jobs, cbPublishAll onlyKeys, amapRunJobs on stopped) and is covered by tests/test_acl1826_mlx_session_lost.py including the node retry harness (37 passed, none skipped). The window guard in report.html is untouched versus main. CHANGELOG equals main. Tests on the head: 707 passed, 1 skipped (1826, 1800, 1761, review_ui_regressions, 1812, account_spend). scripts/acl_scan_secrets.py clean. Note for the batch: the branch stacks the ACL-1812 warm-session code (PR 813), so 826 carries 1812 into main. No live calls. Findings: no blocking issues.",
+        "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          826
+        ],
+        "recorded_at": "2026-10-15T05:29:42+00:00",
+        "issue_scopes": {
+          "826": "a457f56dba1a2e4c45a91494b784d84346237bf0581f5065ea371183cac92e1c"
+        }
       }
     },
     "stage": {
