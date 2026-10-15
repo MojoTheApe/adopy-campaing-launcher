@@ -1134,7 +1134,9 @@ def test_tree_numbers_stand_under_the_account_columns(page):
 
 def _tree_css():
     src = REPORT.read_text(encoding="utf-8")
-    return src[src.index("    .amap-tree > td {"): src.index("    .amap-tree-err {")]
+    # ACL-1797: размеры шрифта — токены; без файла токенов вырезка рисуется крупнее.
+    tokens = (TPL / "adopy-tokens.css").read_text(encoding="utf-8")
+    return tokens + src[src.index("    .amap-tree > td {"): src.index("    .amap-tree-err {")]
 
 
 def _colgroup_shares():

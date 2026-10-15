@@ -12,6 +12,7 @@ form fields and violated the product's manual-final-publish boundary.
 from __future__ import annotations
 
 import contextlib
+import logging
 import os
 import threading
 import time
@@ -725,7 +726,21 @@ def _append_result(job_id: str, res: dict[str, Any]) -> None:
         _jobs[job_id]["done_count"] += 1
 
 
+def _mlx_text(job_id: str, msg: str) -> str:
+    """ACL-1826: потеря общей сессии Multilogin / вход в прокси — одной понятной фразой."""
+    try:
+        from src.fb_api import mlx_session
+
+        with _jobs_lock:
+            account = (_jobs.get(job_id) or {}).get("account_label", "")
+        text, _code = mlx_session.humanize(msg, "", account)
+        return text or msg
+    except Exception:
+        return msg
+
+
 def _fatal(job_id: str, msg: str) -> None:
+    msg = _mlx_text(job_id, msg)
     with _jobs_lock:
         if _abandoned(job_id):
             return
@@ -912,6 +927,22 @@ def _run_rpa(
             _active_publishers.pop(job_id, None)
         return
 
+    # ACL-1781: кампания, которую Meta отклонит по своим правилам, не идёт в
+    # Ads Manager — причина (English) показывается в карточке кампании.
+    try:
+        from src.web import publish_preflight as _pf
+
+        meta_errors = _pf.meta_rules_errors(slots, account_label=account_label, country=country, drafts=drafts)
+    except Exception:
+        # Проверка правил Meta не должна ронять публикацию, но и молчать о
+        # своём сбое нельзя: причина остаётся в логе.
+        logging.getLogger(__name__).exception("Meta rules check could not run; campaigns are not blocked by it")
+        meta_errors = {}
+    for draft in drafts:
+        for msg in meta_errors.get(getattr(draft, "name", ""), []):
+            if msg not in draft.errors:
+                draft.errors.append(msg)
+
     ready: list[Any] = []
     for draft in drafts:
         if _is_cancelled(job_id):
@@ -1085,6 +1116,7 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
 
 def _add_error(job_id: str, msg: str) -> None:
     """Ошибка в задание; брошенное по сроку Stop молчит (ACL-1614)."""
+    msg = _mlx_text(job_id, msg)
     with _jobs_lock:
         if not _abandoned(job_id):
             _jobs[job_id]["errors"].append(msg)
@@ -1361,6 +1393,12 @@ def close_profile(job_id: str) -> dict[str, Any]:
                                                 account_label, scrub(str(exc))[:200])
             return {"ok": False, "code": "failed",
                     "error": "Multilogin could not close the profile. Close its window in Multilogin."}
+        finally:
+            # ACL-1812 (ревью #813, B1-ter): остановка записана при любой попытке — следующий
+            # запуск ждёт паузу (ACL-1811). Кнопка есть на обоих бэкендах.
+            from src.fb_api import stop_log as _stop_log
+
+            _stop_log.record_stop(profile)
     finally:
         lease.release()
     with _jobs_lock:

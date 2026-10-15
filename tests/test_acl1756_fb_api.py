@@ -40,17 +40,17 @@ LONG_ID_RE = re.compile(r"[0-9]{8,}")
 
 
 @pytest.fixture(autouse=True)
-def _no_leaked_log_filters():
-    """`fb_api_pilot.main()` вешает `ScrubFilter` на обработчики корневого логгера,
-    а среди них — общий обработчик pytest (caplog). Оставшийся фильтр прятал бы
-    id профиля в чужих тестах файлов, идущих после этого (ACL-1760)."""
-    handlers = list(logging.getLogger().handlers)
-    before = {h: list(h.filters) for h in handlers}
-    yield
-    for h in list(logging.getLogger().handlers):
-        for f in list(h.filters):
-            if h not in before or f not in before[h]:
-                h.removeFilter(f)
+def _restore_log_handler_filters(caplog):
+    """Pilot CLI tests must not leave redaction on pytest's shared handlers."""
+    handlers = set(logging.getLogger().handlers) | {caplog.handler}
+    before = {handler: list(handler.filters) for handler in handlers}
+    try:
+        yield
+    finally:
+        # Restore the existing filters and their order, including on handlers
+        # detached during a test. Production pilot redaction stays unchanged.
+        for handler, filters in before.items():
+            handler.filters[:] = filters
 
 
 # ───────────────────────── поддельный браузер ─────────────────────────
@@ -740,8 +740,6 @@ def test_scrub_filter_cleans_log_records(caplog):
         log.info("token %s act %s", TOKEN, ACT)
         assert TOKEN not in caplog.text and ACT not in caplog.text
     finally:
-        # Обработчик caplog общий для файлов сессии: фильтр, оставшийся на нём,
-        # прятал бы id профиля в чужих тестах (test_the_api_stop_is_asked_first).
         caplog.handler.removeFilter(scrub)
 
 
@@ -808,7 +806,8 @@ class FakeLauncher:
         self.started.append(profile_id)
         from src.meta_campaign_agent.multilogin_launcher import StartedProfile
 
-        return StartedProfile(profile_id, folder_id or "F", port=self.start_port)
+        return StartedProfile(profile_id, folder_id or "F", port=self.start_port,
+                              newly_started=True)
 
     def stop_profile(self, profile_id, folder_id=None):
         self.stopped.append(profile_id)

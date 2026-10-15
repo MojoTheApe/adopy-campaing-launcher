@@ -323,17 +323,42 @@ _HELPER_JS = r"""
       if (why) return refused(why);
       return post(path, spec.params || {}, undefined, null, spec, {}, null);
     }
+    // ACL-1800: правка существующего объекта — отдельная узкая политика. Помощник
+    // создателя (без `object_update`) пути объекта не принимает; помощник правок
+    // (без рёбер) пути создания не принимает.
+    const objMatch = /^\/[1-9][0-9]{4,}$/.exec(path);
+    if (objMatch && !WRITE.object_update) return refused('path');
+    if (!objMatch && WRITE.object_update) return refused('path');
+    const params = spec.params || {};
+    let want = null;
+    let files = {};
+    let checked = null;
+    if (objMatch) {
+      const ou = WRITE.object_update;
+      if (spec.files && Object.keys(spec.files).length) return refused('file');
+      const pk = Object.keys(params);
+      if (pk.length !== 1) return refused('key');
+      const k = pk[0];
+      if (!KEY_RE.test(k) || ou.fields.indexOf(k) < 0 || WRITE.forbidden.indexOf(k.toLowerCase()) >= 0) return refused('key');
+      const v = params[k];
+      if (k === 'status') {
+        if (typeof v !== 'string' || ou.statuses.indexOf(v) < 0) return refused('status');
+      } else {
+        const okNum = typeof v === 'number' && Number.isSafeInteger(v) && v > 0 && v < 1e15;
+        const okStr = typeof v === 'string' && /^[1-9][0-9]{0,14}$/.test(v);
+        if (!okNum && !okStr) return refused('amount');
+      }
+    } else {
     const m = /^\/(act_[0-9]{5,})\/([a-z]+)$/.exec(path);
     if (!m || m[1] !== WRITE.act) return refused('path');
     const edge = m[2];
     const keys = WRITE.edges[edge];
     if (!keys) return refused('edge');
-    const params = spec.params || {};
     for (const k of Object.keys(params)) {
       if (!KEY_RE.test(String(k)) || keys.indexOf(String(k)) < 0) return refused('key');
     }
     if (WRITE.paused_required.indexOf(edge) >= 0 && params.status !== 'PAUSED') return refused('status');
-    const checked = Object.assign({}, params);
+    checked = Object.assign({}, params);
     for (const k of WRITE.json_keys) {
       if (!(k in params)) continue;
       let v = params[k];
@@ -368,11 +393,12 @@ _HELPER_JS = r"""
     const walked = withoutLeadForm(edge, checked, spec.on_ad === true);
     if (walked === null) return refused('lead_form');
     if (!statusOk(walked)) return refused('status');
-    const want = WRITE.files[edge];
-    const files = spec.files || {};
+    want = WRITE.files[edge] || null;
+    files = spec.files || {};
     const fk = Object.keys(files);
     if (want) { if (fk.length !== 1 || fk[0] !== want) return refused('file'); }
     else if (fk.length) return refused('file');
+    }
     let blob = null;
     if (want) {
       const parts = staged[String(files[want])];
@@ -390,7 +416,7 @@ _HELPER_JS = r"""
     return post(path, params, want, blob, spec, files, job || null);
   }
 
-  // ACL-1899: отправка файла с прогрессом. Без собственного таймаута: ждём ответ,
+  // ACL-1899: отправка файла (XHR: abort и проверка перенаправления). Без собственного таймаута: ждём ответ,
   // сетевую ошибку или `abort()` (Stop у покупателя).
   function sendXhr(url, body, cred, job) {
     return new Promise((resolve, reject) => {
@@ -398,11 +424,11 @@ _HELPER_JS = r"""
       job.xhr = xhr;
       xhr.open('POST', url, true);
       xhr.withCredentials = (cred === 'include');
-      if (xhr.upload) {
-        xhr.upload.onprogress = (ev) => {
-          if (ev && ev.lengthComputable) { job.sent = ev.loaded; job.total = ev.total; }
-        };
-      }
+      // ВАЖНО: на `xhr.upload` НЕ вешаем ни одного слушателя (ни onprogress, ни addEventListener).
+      // Любой слушатель загрузки по спецификации включает CORS-preflight; Graph отвечает на
+      // OPTIONS с `Access-Control-Allow-Origin: *` без `Allow-Credentials`, и запрос с
+      // куками (`withCredentials`) браузер режет: тело не уходит, приходит `network`.
+      // Поэтому байтового прогресса нет - Python показывает прошедшее время.
       // Остаточный риск: XHR сам идёт по 307/308 и мог УЖЕ переотправить тело (с токеном)
       // по новому адресу до этой проверки. Рвём запрос, как только заголовки пришли не с
       // нашего адреса, и считаем результат НЕИЗВЕСТНЫМ. Graph-хосты не перенаправляют.
@@ -437,7 +463,7 @@ _HELPER_JS = r"""
     }
     for (const k of Object.keys(jobs)) if (jobs[k].state === 'running') return { error: 'bad_option' };
     const id = 'j' + (++jobSeq);
-    const job = { state: 'running', sent: 0, total: 0, xhr: null, aborted: false, result: null };
+    const job = { state: 'running', xhr: null, aborted: false, result: null };
     jobs[id] = job;
     write(spec, job).then(
       (r) => { job.result = r; job.state = (r && r.error) ? 'error' : 'done'; },
@@ -447,8 +473,8 @@ _HELPER_JS = r"""
   function poll(id) {
     const j = jobs[String(id)];
     if (!j) return { state: 'error', result: { error: 'no_job' } };
-    if (j.state === 'running') return { state: 'running', sent: j.sent, total: j.total };
-    return { state: j.state, sent: j.sent, total: j.total, result: j.result };
+    if (j.state === 'running') return { state: 'running' };
+    return { state: j.state, result: j.result };
   }
   function abort(id) {
     const j = jobs[String(id)];
@@ -609,10 +635,16 @@ class InPageGraph:
                  graph_host: str = "captured", credentials: str = "captured",
                  allow_writes: bool = False, write_act: str | None = None,
                  write_page: str | None = None,
+                 allow_object_updates: bool = False,
                  sleep: Callable[[float], None] = time.sleep,
                  clock: Callable[[], float] = time.monotonic):
         # ACL-1761: запись — только явно и только в один проверенный кабинет.
-        self.allow_writes = bool(allow_writes)
+        # ACL-1800: `allow_object_updates` — другой режим записи: только правка
+        # существующих объектов (статус/бюджет/ставка), создание невозможно.
+        if allow_writes and allow_object_updates:
+            raise ValueError("creation writes and object updates are separate modes")
+        self.object_updates = bool(allow_object_updates)
+        self.allow_writes = bool(allow_writes) or self.object_updates
         self.write_act = None
         self.write_page: str | None = None
         self._write_policy: dict | None = None
@@ -626,7 +658,8 @@ class InPageGraph:
             if write_page and not re.fullmatch(r"[0-9]{1,25}", str(write_page)):
                 raise ValueError("write_page must be the numeric Page id of the plan")
             self.write_page = str(write_page) if write_page else None
-            self._write_policy = _wp.policy_for_page(self.write_act, self.write_page or "")
+            self._write_policy = (_wp.policy_for_commands(self.write_act) if self.object_updates
+                                  else _wp.policy_for_page(self.write_act, self.write_page or ""))
         if graph_host not in GRAPH_HOST_MODES:
             raise ValueError(f"graph_host must be one of {sorted(GRAPH_HOST_MODES)}")
         if credentials not in CREDENTIAL_MODES:
@@ -801,6 +834,20 @@ class InPageGraph:
             got = None
         return got if isinstance(got, dict) else {"kind": "other", "has_token": False}
 
+    def live_state(self, *, timeout: float = 10.0) -> dict:
+        """Дешёвая проверка прогретой вкладки перед действием (ACL-1812).
+
+        Один `.state()` помощника; токена в нём нет, а вкладка на Ads Manager —
+        один полный `.probe()` (Resource Timing мог переполниться за часы, токен
+        остаётся в HTML). К Meta ничего не уходит. Зависшая вкладка поднимает
+        `GraphStop` (вход, checkpoint, не отвечает), мёртвая — `CdpError`: решает
+        вызывающий (заменить вкладку один раз).
+        """
+        got = self._eval_helper(".state()", timeout=timeout)
+        if isinstance(got, dict) and got.get("kind") == "ads_manager" and not got.get("has_token"):
+            got = self._eval_helper(".probe()", timeout=timeout)
+        return got if isinstance(got, dict) else {"kind": "unknown", "has_token": False}
+
     def state(self) -> dict:
         try:
             got = self._eval_helper(".state()", timeout=10.0)
@@ -865,7 +912,7 @@ class InPageGraph:
         раз): кусок не переотправляется в пустой новый мир под старым id.
         Итоговое число байт сверяется с `len(data)`. Возвращает (мир, id).
         """
-        if not self.allow_writes:
+        if not self.allow_writes or self.object_updates:
             raise ValueError("read-only: staging a file needs allow_writes")
         for attempt in (0, 1):
             self._ready_for_call()
@@ -880,7 +927,7 @@ class InPageGraph:
 
     def write(self, path: str, params: dict | None = None, *, files: dict | None = None,
               filename: str = "", timeout: float = 120.0, on_ad: bool = False,
-              form_page: str = "", progress: Callable[[int, int], None] | None = None,
+              form_page: str = "", progress: Callable[[float], None] | None = None,
               cancelled: Callable[[], bool] | None = None) -> dict:
         """POST в разрешённое ребро. РОВНО один раз; сбой после отправки — `call_unknown`.
 
@@ -891,8 +938,9 @@ class InPageGraph:
 
         ACL-1899: запись С ФАЙЛОМ не имеет общего срока (`timeout` к ней не
         относится): задание стартует в помощнике, а Python раз в `UPLOAD_POLL_S`
-        спрашивает прогресс (только локальный CDP, к Meta не ходит) и отдаёт
-        `(отправлено, всего)` в `progress`. Кончается ответом, ошибкой сети или
+        спрашивает состояние (только локальный CDP, к Meta не ходит) и отдаёт
+        прошедшие секунды в `progress` (байтового прогресса нет: слушатель
+        `xhr.upload` включил бы CORS-preflight, который Graph не пропускает). Кончается ответом, ошибкой сети или
         пропажей страницы (`call_unknown`); на `cancelled()` рвём отправку.
         Запись без файла — прежний короткий `timeout`.
         """
@@ -905,6 +953,8 @@ class InPageGraph:
         if form_page:
             # ACL-1776: цепочка форм - Страница плана; цепочка act_X для такого пути не годится.
             _wp.check_form_create(form_page, "POST", path, params, files, self.write_page or "")
+        elif self.object_updates:
+            _wp.check_object_update("POST", path, params, files)
         else:
             _wp.check(self.write_act, "POST", path, params, files, on_ad=on_ad)
         spec: dict[str, Any] = {"method": "POST", "path": path, "params": params or {}, "files": {},
@@ -964,6 +1014,7 @@ class InPageGraph:
         if not isinstance(job, str) or not re.fullmatch(r"j[0-9]{1,6}", job):
             return {"error": "call_unknown"}
         poll_timeouts = 0
+        began = self._clock()
         while True:
             if cancelled is not None and cancelled():
                 try:
@@ -990,7 +1041,7 @@ class InPageGraph:
             if state == "running":
                 if progress is not None:
                     try:
-                        progress(int(got.get("sent") or 0), int(got.get("total") or 0))
+                        progress(max(0.0, self._clock() - began))
                     except Exception:                    # noqa: BLE001 — показ не должен ронять запись
                         pass
                 self._sleep(self.UPLOAD_POLL_S)
