@@ -9273,6 +9273,18 @@
         "state": "implementing",
         "started_at": "2026-10-15T09:28:57+00:00",
         "from_status": "status:backlog"
+      },
+      "855": {
+        "actor": "Worker-W1855A",
+        "session": "821e4a97-45d7-466a-b9ea-56309769a6f1",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1855-durable-intent",
+        "worktree": "C:\\acl-1855-durable-intent",
+        "id": "0a9330cdff9e414aa31394dd4bc3440e",
+        "issue": 855,
+        "state": "implementing",
+        "started_at": "2026-10-15T09:31:15+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -14885,6 +14897,17 @@
       "648": {
         "implementers": [],
         "state": "archived"
+      },
+      "855": {
+        "implementers": [
+          {
+            "actor": "Worker-W1855A",
+            "session": "821e4a97-45d7-466a-b9ea-56309769a6f1"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W1855A",
+        "coordinator": "Coordinator-M1011A"
       }
     },
     "actors": {
@@ -16522,6 +16545,10 @@
       },
       "Worker-T1853A": {
         "session": "t1853a-20261015",
+        "role": "Worker"
+      },
+      "Worker-W1855A": {
+        "session": "821e4a97-45d7-466a-b9ea-56309769a6f1",
         "role": "Worker"
       }
     },
@@ -39826,6 +39853,13 @@
         "issue": 853,
         "claim": "30d0677551c44417870a375fc36e63b4",
         "actor": "Worker-T1853A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-15T09:31:15+00:00",
+        "issue": 855,
+        "claim": "0a9330cdff9e414aa31394dd4bc3440e",
+        "actor": "Worker-W1855A"
       }
     ],
     "policy": {
