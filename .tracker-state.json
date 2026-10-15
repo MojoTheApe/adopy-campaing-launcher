@@ -39802,7 +39802,9 @@
         "session": "rrm814-20261015",
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-15T05:24:14+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "Windows CI (run 38681684978) fails: tests/test_shared_file_locks.py::test_no_inline_os_file_locks_remain_in_src. src/analysis_agent/rules/store.py lines 130-142 use inline msvcrt.locking/LK_NBLCK and fcntl.flock/LOCK_EX; must use config.paths.machine_file_lock. Returned for fix.",
+        "keep_lane": false
       }
     }
   }
