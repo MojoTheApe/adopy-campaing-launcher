@@ -1,5 +1,37 @@
 # Repository process history
 
+## ACL-1892 — Adopt common efficient verification — 2026-10-14
+
+Select reviewed merged Master `eca8a857d9f7f81160bf248f9f9e3109a21ade49`
+([MR-26 / PR27](https://github.com/MojoTheApe/master-repo/pull/27)) and compatible
+Tracker `0d1fad44f5fdbef64b061324e9a1292fb77fb725`
+([TT-107 / PR108](https://github.com/MojoTheApe/task-tracker/pull/108)). The maintained
+three-way upgrade reproduces the actual 38-file old pristine template and retains
+the actual 41-file new pristine baseline, separate from explicit ACL resolutions.
+Keep the guarded client, relocated checker, configuration bytes, aliases/IDs,
+six modules, historical completion and all current ownership/delivery policies.
+
+Add the pinned verification/coordinated-upgrade reading map and optional direct
+CI producer export. Preserve ACL's bounded collector and full applicable
+Linux/Windows/installer checks; common native V1 cannot cover those environments,
+and no CI evidence policy is enabled. The descriptor Action keeps the local draft
+flag and compatibility-master trigger, adds PR-only cancellation with unique push
+identities and a bounded five-minute setup job. Product CI and its matrices remain
+unchanged. Extend existing CI concurrency regressions to the descriptor workflow.
+
+Current repository instructions now describe the actually active schema-3 5/5/5
+policy and completed ACL-1874/1875 cutover; dated migration and recovery evidence
+remain intact. Compatible service publication already exists at
+`bcb59dfb0e4c5066d891207b49f690f29d9f9ef4`; this upgrade reserves no maintenance
+interval, changes no capacity and performs no state migration. Source review,
+batch integration and exact-tree isolated stage acceptance still use the genuine
+current old-policy handoff before unchanged main promotion. Adoption remains draft.
+
+No system/runtime behavior, product code/skills, employee data, installer/updater,
+credentials, release/pilot authorization or production operation changes, so those
+project-owned files are preserved. Required stable-package delivery remains
+separate and pending until genuine publication and installation evidence exists.
+
 ## ACL-1879 — Preserve Linux browser-file balance when diagnostic tests join CI
 
 Adding the official-token diagnostic test file deterministically changed the

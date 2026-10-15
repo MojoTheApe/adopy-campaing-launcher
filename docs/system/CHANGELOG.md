@@ -1,5 +1,81 @@
 # System history
 
+## Builder: Instant Forms - use an existing form of the Page (API backend) - ACL-1775
+
+- The ad set has a real "Conversion location": Website (the default, unchanged) or Instant Form.
+  With Instant Form every ad gets a form picker filled from the Page's forms (archived, deleted and
+  draft forms are hidden) and a "Refresh forms" button. The forms are read only when a person
+  presses that button (one read per press, no polling). With `ACL_FB_BACKEND=rpa` the control is
+  disabled with the reason "API backend only"; a stored Instant Form choice is never dropped
+  silently, the server refuses it out loud. Website values stay in the draft while Instant Form is
+  chosen (and the other way round), but only the chosen destination's values are sent.
+- Reading: `GET /{page_id}/leadgen_forms` (id, name, status, locale, created_time), read-only,
+  through the same client and session. A pure capability probe (`fb_api/forms.py`) turns the answer
+  into a clear text: "This Page's forms can't be read with the current session", or "This Page has
+  not accepted the Lead Ads terms" (the robot never accepts terms and never creates forms - that is
+  ACL-1776). Whether the token captured in the profile can read the forms is NOT confirmed yet: it
+  is checked on the 9095 test accounts.
+- Creating: ad set `destination_type=ON_AD`, `optimization_goal=LEAD_GENERATION`,
+  `promoted_object={page_id}` (no pixel); the creative's `call_to_action.value` carries
+  `lead_gen_form_id`. Everything stays PAUSED. Before any write the form of every ad must be a
+  usable form of the plan's Page; another Page's form, an archived form or unreadable forms stop
+  the campaign with 0 writes.
+- Write policy, narrow change in both layers (Python `write_policy` and the page helper in
+  `token_capture`): `lead_gen_form_id` is allowed ONLY in `adcreatives` ->
+  `object_story_spec.{link_data|video_data}.call_to_action.value`, as the only key of that value,
+  a numeric id, and only when the caller says the ad set of the same plan is ON_AD (`on_ad`). It
+  stays forbidden everywhere else; creating forms (`/{page}/leadgen_forms`) and terms remain
+  outside the allowlist.
+- Readback adds the creative's form id, "the form is listed under the Page", and for the ad set
+  the destination, goal and promoted Page. "Check plan" shows the form name and id.
+
+## Campaign commands: human-confirmed on/off, budget and bid with readback - ACL-1800
+
+Campaigns are created published and PAUSED through the API; a person switches them on or off and
+adjusts budget or bid from the dashboard. Server side and a confirm-dialog helper only; the Home
+table that calls them is ACL-1798. Only with `ACL_FB_BACKEND=api`; under `rpa` every endpoint answers
+a clear refusal.
+
+- `POST /campaign-commands/preview` returns an immutable diff with a revision id: affected objects,
+  before -> after, currency, skipped objects with the reason (for example "Automatic · no manual
+  bid", "Budget is set on the campaign") and parent constraints ("On · Campaign paused").
+- `POST /campaign-commands/execute` takes the revision id and an idempotency key, re-reads every
+  object first and writes nothing if any value changed since the preview. One write per object,
+  never retried, then a readback. `GET /campaign-commands/{op_id}`: Preview, Running, Verifying,
+  Succeeded, Failed or Outcome unknown. A timeout is reconciled by readback only.
+- Enabling a child never enables its parents. The robot adds no rules and activates nothing.
+- Separate narrow write policy (`write_policy.check_object_update`) and a matching page-helper
+  policy: POST to the id of an existing object, exactly one of `status` (ACTIVE or PAUSED),
+  `daily_budget`, `bid_amount` (positive whole minor units). No edges, no creation, no DELETE.
+- History of operations (actor label, time, object, before, requested, saved, result) is kept in
+  `campaign_command_history.jsonl` in the local config dir. The page helper is `acm_commands.js`
+  (`acmCommands.preview/execute/poll/confirm`).
+- Home campaign table (ACL-1798) is wired to the commands: the on/off switch, budget editor (only on
+  objects that own a budget), bid -/+ editor (only on bid cap and cost cap; automatic bidding shows
+  "Automatic · no manual bid") and a batch bar for the selected rows (one account, capped by the
+  call limit). Each goes preview, confirm dialog, execute, poll; the row changes only from the
+  confirmed readback, and a failed or unknown outcome keeps the previous state. Duplicate and Copy
+  stay disabled (ACL-1773). With the rpa backend or a non-loopback bind the controls stay disabled
+  with the reason (`GET /campaign-commands/availability`).
+- Under `ACL_FB_BACKEND=api` accounts and campaigns are one tree inside each country block. The account row of
+  the country's accounts list is the parent: clicking the row (anywhere except its own buttons, inputs and the
+  note), the chevron, or Enter/Space on the focused row expands that account's campaigns, then ad sets and ads,
+  in place (`aria-expanded`). Expanding only shows what is saved and never reads Meta. There is no separate
+  campaign table and no account bands any more: the account row carries "Read campaigns", the snapshot age, one
+  status/error line and, when the warm-sessions API is present, the profile chip with "Open profile". Search,
+  delivery filter, column-group jumps, Expand/Collapse all, columns and the batch bar sit in one compact toolbar
+  above the accounts list; "Read campaigns in <Country>" reads the accounts one at a time. Horizontal scroll and
+  the pinned name width are shared by all open accounts. Columns follow the design prototype (Delivery,
+  Duplicate, Bid control, Budget, Optimization hint, Alerts, Goal CPA, Benchmark CPA, BI, Meta, Tracking); Goal
+  CPA comes from My Goals and Benchmark CPA from `config/benchmarks`, hints and alerts are advisory text computed
+  from the numbers on screen, and a missing input is a dash with the reason. Results of commands and read
+  failures are one compact line with Details; common causes (Multilogin not running, profile opened by hand,
+  closing, cooldown, logged out, checkpoint, permission, stale preview) have short friendly messages in one
+  place, `acmCommands.friendly`, and a row failure with the same cause as its account shows only "Profile
+  problem - see account above". `GET /campaign-commands/history?account=` backs "What was changed here".
+- Backend switch: the country table and "Read campaigns in <Country>" render only with `ACL_FB_BACKEND=api`. Under `rpa` (the default) the previous per-account list from Read spend, with its Off/On chips, "Turn off?" flow, log and coverage note, is unchanged; the two are never shown for the same country.
+- The first live check runs on the 9095 test dashboard with test accounts, after the owner agrees.
+
 ## Explicit official-token application inspection — ACL-1879
 
 - A narrow verifier and standalone CLI inspect an explicitly supplied subject token
