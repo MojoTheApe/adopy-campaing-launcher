@@ -1,5 +1,30 @@
 # Repository process history
 
+## ACL-1924 / ACL-1923 — Temporary no-stage and authorized completion — 2026-10-15
+
+Select actual reviewed merged Master `a3f56106f52d0ae19986920519b2fa46a380798b`
+([MR-28 / PR29](https://github.com/MojoTheApe/master-repo/pull/29)) and Tracker
+`e775c624e0323e69ed891926691c3dee6587081a`
+([TT-127 / PR128](https://github.com/MojoTheApe/task-tracker/pull/128)).
+The maintained upgrade reproduces all 41 original pristine template files,
+retains the actual 44-file new pristine baseline, and explicitly preserves ACL
+repository guides and descriptor CI controls at the three reported merge conflicts.
+Guarded client, six modules, aliases, all 74 audited histories and runtime/system
+files are preserved; only the historical manifest policy binding follows the
+supported staging-only reconciliation.
+
+Prepare direct-main frozen approved batches with the same 5/5/5 ownership,
+independent composition review and complete applicable CI. Add the durable
+`batch begin --deliver` native release continuation and exact verified-delivery
+receipt. Persist producer artifact outputs and native artifact bindings across
+partial GitHub retries; choose the actual prior stable signed publication rather
+than orphan source tags. The standing owner integration approval includes delivery
+unless explicitly source-only. Retain permanent stage/history and the supported return procedure.
+Source integration itself uses the old stage/main rules. Parent ACL-1923 owns
+compatible-service publication, idle history/queue-preserving policy migration,
+fresh board and actual end-to-end release evidence; no activation is asserted by
+this source entry. Matching shared changes: MR-28 and TT-127.
+
 ## ACL-1892 — Adopt common efficient verification — 2026-10-14
 
 Select reviewed merged Master `eca8a857d9f7f81160bf248f9f9e3109a21ade49`
