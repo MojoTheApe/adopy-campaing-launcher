@@ -338,6 +338,16 @@ def _build_goals_view(report: dict, seed_countries: list[str] | None = None) -> 
     }
 
 
+def _workbench_goals(goals_view: dict) -> dict:
+    """{страна (casefold): {ftd, cpa, cr}} — цели из My Goals; пустое поле = цели нет."""
+    out: dict[str, dict] = {}
+    for row in (goals_view or {}).get("rows", []):
+        name = (row.get("country") or "").strip().casefold()
+        if name:
+            out[name] = {"ftd": row.get("ftd") or None, "cpa": row.get("cpa"), "cr": row.get("cr")}
+    return out
+
+
 def _workbook_dates(df) -> list[str]:
     """Every date the workbook actually has, as ISO strings.
 
@@ -1916,6 +1926,7 @@ def _render_report(
                 alias_map[alias] = label
         account_alias_map[cid] = alias_map
 
+    goals_view = _build_goals_view(report, goal_seed)
     return templates.TemplateResponse(
         "report.html",
         {
@@ -1936,7 +1947,10 @@ def _render_report(
             "account_map": _account_map_view,
             "sidebar_countries": _sidebar_countries(report, _account_map_view),
             "period": {"date_from": date_from, "date_to": date_to, "span": span},
-            "goals": _build_goals_view(report, goal_seed),
+            "goals": goals_view,
+            # ACL-1799: цель страны (My Goals) для Country Workbench — отдельным
+            # числом, не смешанным с порогом из benchmarks и результатом пиров.
+            "cw_goals": _workbench_goals(goals_view),
             # ACL-1761: кнопка «Check plan (no writes)» в билдере — только при api.
             "fb_backend": _fb_backend(),
             # ACL-1819: общая таблица правил pre-flight audit (та же, что у сервера).
