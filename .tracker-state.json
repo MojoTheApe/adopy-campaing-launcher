@@ -11348,7 +11348,7 @@
             "session": "run_s1642a_1006"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1642A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -11366,7 +11366,8 @@
           "report": "# ACL-1642 handoff\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/644 (into stage)\nBranch: codex/acl-1642-open-profile, commit 481ad345. Claim id 68af845c8be24bd3801201057f735f91.\n\n## What changed\n- `src/web/profile_slots.py`\n  - `find_open_profiles` is a read-only process-list check. It reuses the memory-measure matching, now extracted as `_root_profile`.\n  - `OpenProfileProbe` runs the check in a background thread and caches the result for 5 s. An answer older than 15 s counts as unknown, and a failed or hung check also counts as unknown. Unknown means \"closed\", which is the old behaviour. `read` never waits, so it is safe under `_cond`. A finished check wakes the waiting jobs.\n  - `decide(profile_open=...)` skips `memory_low` and `below_reserve` for an open profile. The ceiling and override checks come first. Memory-unknown keeps its fallback limit.\n  - `_may_start_ahead`: a later job whose profile is open starts ahead only when the head is blocked on memory (`memory_low` or `below_reserve`). It does not start ahead of a head blocked by the ceiling. The earliest open-profile job goes first. Same-profile jobs are still serialized by `_busy_profiles`.\n  - Kept windows: the existing `_count_running` / `_reuse_kept` logic is reused, so there is no double count. A job that started on an open profile is not counted as \"warming\", because its memory is already used.\n- `src/web/publish_jobs.py`\n  - The `slot_queue` telemetry gets `profile_open` and `started_ahead`.\n  - The queue view carries `profile_open`.\n  - The job gets `started_ahead`.\n- `src/web/templates/report.html`\n  - The memory wait text reads \"a new profile needs X GB ... Close a Multilogin profile you don't need, or press Release on a finished one.\"\n  - A running job that started ahead shows \"Started ahead: its profile was already open\".\n- `tests/test_campaign_build_dot_browser.py`: the expected tooltip text was updated. It is a browser test and was NOT run locally, so CI should check it.\n\n## Safety\n- The probe only reads `proc.info` (name, exe, cmdline). A test fails if anything else on the process is touched.\n- No open, close, stop, attach or CDP call anywhere in the new code. A test also greps the module for kill/terminate/close.\n\n## Tests (foreground, one file at a time)\n- test_acl1642_open_profile_needs_no_memory.py: 15 passed\n- test_acl1603_stable_slots.py: 43 passed\n- test_publish_profile_slots.py: 31 passed\n- test_publishing_everything_at_once.py: 5 passed (no browser)\n- test_acl_test_platform.py: 100 passed\n- Full suite and browser tests: CI only.\n\n## Known limits\n- A profile counts as open only if its Mimic root process carries `--client-session-id=<profile id>` or a user-data-dir whose last part equals the profile id (the same rule as the memory measure). An unresolved account label never matches, so it behaves as closed.\n- The first read for a profile returns unknown (closed) until the background check finishes (milliseconds to about a second). The waiting job is woken when it does.\n- The tracker `start` call failed once with \"GitHub GET failed\" and succeeded on the retry."
         },
         "pr": 644,
-        "queued_at": "2026-10-06T16:07:53+00:00"
+        "queued_at": "2026-10-06T16:07:53+00:00",
+        "reviewer": "Reviewer-RV1015H"
       },
       "628": {
         "implementers": [
@@ -16033,6 +16034,10 @@
       "Reviewer-RV1015D": {
         "session": "rv1015d-817",
         "role": "Reviewer"
+      },
+      "Reviewer-RV1015H": {
+        "session": "rv1015h-644",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -18704,7 +18709,6 @@
       406,
       433,
       526,
-      642,
       739,
       816,
       822,
@@ -38118,6 +38122,13 @@
         "at": "2026-10-15T07:09:28+00:00",
         "issue": 348,
         "reason": "Closed in the Playwright backlog cleanup 2026-10-15: we are moving campaign creation and account reads to the Meta API (ACL-1760/1761/1883), so this Ads Manager UI/Playwright-only work is no longer relevant. Restore if the UI path comes back."
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-15T07:10:33+00:00",
+        "pr": 644,
+        "lane": "e1ef95d344774ceeb738de0cdf0ac785",
+        "actor": "Reviewer-RV1015H"
       }
     ],
     "policy": {
@@ -41773,6 +41784,18 @@
         "session": "rv1015d-817",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-15T06:59:41+00:00",
+        "state": "reviewing"
+      },
+      "644": {
+        "id": "e1ef95d344774ceeb738de0cdf0ac785",
+        "pr": 644,
+        "issues": [
+          642
+        ],
+        "actor": "Reviewer-RV1015H",
+        "session": "rv1015h-644",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-15T07:10:33+00:00",
         "state": "reviewing"
       }
     }
