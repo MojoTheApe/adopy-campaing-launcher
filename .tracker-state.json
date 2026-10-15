@@ -8854,9 +8854,11 @@
         "worktree": "C:\\wk-1826m",
         "id": "b52403ba5b3349539a19f7865a6de291",
         "issue": 826,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-15T03:46:05+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 828,
+        "report": "# Return 826 r1826l\n\nHead: b5d66a63 (on top of 4e2812a3), pushed to codex/acl-1826-mlx-session-lost.\n\nDefect: CI shard 1, test_poll_resumes_and_updates_all_copies_and_status: ReferenceError window is not defined (report.html slice evaluated in Node without window). Unguarded top-level mount `if (typeof document !== 'undefined' && window.AMAP_CAMPAIGN_TABLE)`.\n\nFix (same as ACL-1800 7efcc856): added `typeof window !== 'undefined'` to that condition in src/web/templates/report.html (browser behaviour unchanged); the poll test ctx stubs `window:{addEventListener(){}}`; test_acl1800_account_scoped_table.py anchor string updated to the new condition.\n\nTests: before fix test_review_ui_regressions.py failed (1 failed, 6 passed). After: test_review_ui_regressions + test_acl1800_account_scoped_table + test_acl1826_mlx_session_lost: 90 passed. scripts/acl_scan_secrets.py: clean. CI not awaited."
       }
     },
     "tasks": {
