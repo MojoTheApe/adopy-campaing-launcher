@@ -12857,7 +12857,7 @@
             "session": "wrn1799-20261015"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-RN1799",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12882,7 +12882,8 @@
           "actor": "Coordinator-C0930A",
           "session": "coord_c0930a_1009",
           "report": "# Return for a dependency refresh\n\nMain now also contains batch e677f638 (ACL-1812 warm sessions, ACL-1826, ACL-1775 Instant Forms, ACL-1815 rules evidence; PR 919 -> 922). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
-        }
+        },
+        "reviewer": "Reviewer-RV1015E"
       },
       "786": {
         "implementers": [
@@ -16003,6 +16004,10 @@
       "Worker-RF1776": {
         "session": "wrf1776-20261015",
         "role": "Worker"
+      },
+      "Reviewer-RV1015E": {
+        "session": "rv1015e-803",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -18688,7 +18693,6 @@
       903,
       907,
       891,
-      799,
       814,
       872
     ],
@@ -38016,6 +38020,13 @@
         "issue": 776,
         "claim": "6abbc7d2636d4830813a63a0cd9c0317",
         "actor": "Worker-RF1776"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-15T06:58:33+00:00",
+        "pr": 803,
+        "lane": "f79f080df19d47879b418a7a0687c25d",
+        "actor": "Reviewer-RV1015E"
       }
     ],
     "policy": {
@@ -41671,6 +41682,18 @@
         "session": "rv1015f-843",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-15T06:54:54+00:00",
+        "state": "reviewing"
+      },
+      "803": {
+        "id": "f79f080df19d47879b418a7a0687c25d",
+        "pr": 803,
+        "issues": [
+          799
+        ],
+        "actor": "Reviewer-RV1015E",
+        "session": "rv1015e-803",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-15T06:58:33+00:00",
         "state": "reviewing"
       }
     }
