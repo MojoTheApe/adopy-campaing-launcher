@@ -109,32 +109,38 @@ def _identity_key(directory: str | os.PathLike | None) -> bytes:
         return cached
     secret_path = folder / IDENTITY_SECRET_FILE
     secret = _read_identity_secret(secret_path)
-    if secret is None:
+    for replace in (False, True):
+        if secret is not None:
+            break
+        # Второй заход — файл есть, но испорчен (обрезан антивирусом или
+        # синхронизацией): готовые секреты ставятся на место атомарно, так
+        # что короткий файл — не «ещё дописывается», а сломан. Заменяем.
+        if replace and not secret_path.exists():
+            break
         try:
-            _create_identity_secret(secret_path)
+            _create_identity_secret(secret_path, replace=replace)
         except OSError:
             pass
         secret = _read_identity_secret(secret_path)
     if secret is None:
-        return cache_key.encode("utf-8")
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "ACL identity secret unavailable in %s; falling back to a path-based identity", folder)
+        secret = cache_key.encode("utf-8")
     _IDENTITY_SECRETS[cache_key] = secret
     return secret
 
 
 def _read_identity_secret(path: Path) -> bytes | None:
-    # Чужой процесс мог создать файл и ещё не дописать — короткий повтор.
-    for _ in range(5):
-        try:
-            data = path.read_bytes().strip()
-        except OSError:
-            return None
-        if len(data) >= 32:
-            return data
-        time.sleep(0.05)
-    return None
+    try:
+        data = path.read_bytes().strip()
+    except OSError:
+        return None
+    return data if len(data) >= 32 else None
 
 
-def _create_identity_secret(path: Path) -> None:
+def _create_identity_secret(path: Path, *, replace: bool = False) -> None:
     import secrets
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -144,6 +150,9 @@ def _create_identity_secret(path: Path) -> None:
         os.close(descriptor)
         _restrict_to_owner(temporary)
         temporary.write_bytes(secrets.token_hex(32).encode("ascii"))
+        if replace:
+            os.replace(temporary, path)
+            return
         try:
             os.link(temporary, path)
         except FileExistsError:

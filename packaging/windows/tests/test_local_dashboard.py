@@ -359,6 +359,23 @@ class IdentityTests(unittest.TestCase):
             else:
                 self.assertEqual(secret.stat().st_mode & 0o777, 0o600)
 
+    def test_a_damaged_secret_is_replaced_not_traded_for_the_path(self):
+        """Ревью ACL-1931: обрезанный файл секрета (антивирус, синхронизация)
+        навсегда возвращал отпечаток от пути — тот самый предсказуемый."""
+        import hashlib
+        import hmac
+
+        from config import paths
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp) / "anna" / "ACL"
+            folder.mkdir(parents=True)
+            (folder / paths.IDENTITY_SECRET_FILE).write_bytes(b"short")
+            value = config_identity(folder)
+            key = os.path.normcase(os.path.realpath(str(folder))).encode("utf-8")
+            self.assertNotEqual(value, hmac.new(key, b"acl-identity", hashlib.sha256).hexdigest()[:16])
+            self.assertGreaterEqual(len((folder / paths.IDENTITY_SECRET_FILE).read_bytes().strip()), 32)
+
     def test_the_identity_does_not_give_away_the_path(self):
         """/health слышит любой процесс на машине. Путь выдал бы имя чужой
         учётной записи Windows."""
@@ -679,6 +696,27 @@ class StaleMarkTests(_SharedMachine):
         self.assertIsNotNone(local_dashboard.find_own(self.dan))
         self._age_by(self.ports[0], 120)
         self.assertEqual(local_dashboard.claim_owner(self.ports[0]), config_identity(self.dan))
+
+    def test_two_newcomers_do_not_share_a_port_whose_mark_cannot_be_removed(self):
+        """Ревью ACL-1931: просроченную отметку ушедшего Дана удалить нельзя
+        (чужой файл в %ProgramData%). Анна встаёт на его порт — и Карл,
+        пришедший следом, не должен запомнить тот же порт."""
+        carl = Path(self.tmp.name) / "carl" / "ACL"
+        carl.mkdir(parents=True)
+        local_dashboard.choose_port(self.dan)
+        self._age(self.ports[0], local_dashboard.MARK_TTL_S + 3600)
+        real_unlink = Path.unlink
+
+        def protected(path, *args, **kwargs):
+            if path.name == f"{self.ports[0]}.json":
+                raise PermissionError("someone else's file")
+            return real_unlink(path, *args, **kwargs)
+
+        with mock.patch.object(Path, "unlink", protected):
+            self.assertEqual(local_dashboard.choose_port(self.anna), self.ports[0])
+            self.assertEqual(local_dashboard.claim_owner(self.ports[0]), config_identity(self.anna))
+            self.assertEqual(local_dashboard.choose_port(carl), self.ports[1])
+            self.assertEqual(local_dashboard.choose_port(self.anna), self.ports[0])
 
     def _age_by(self, port: int, seconds: float) -> None:
         mark = Path(os.environ["ACL_PORT_REGISTRY_DIR"]) / f"{port}.json"

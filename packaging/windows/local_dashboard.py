@@ -216,6 +216,19 @@ def _mark_path(port: int) -> Path | None:
     return folder / f"{port}.json" if folder is not None else None
 
 
+def _marks(port: int) -> list[Path]:
+    """Отметки порта: основная `{port}.json` и запасные `{port}+{отпечаток}.json`.
+
+    Запасная появляется, когда основная просрочена, а удалить её нельзя
+    (чужой файл в %ProgramData%). Без неё двое, пришедшие на место
+    ушедшего, оба запомнили бы порт только у себя — снова ACL-1309.
+    """
+    main = _mark_path(port)
+    if main is None:
+        return []
+    return [main] + sorted(main.parent.glob(f"{port}+*.json"))
+
+
 def _mark_is_stale(path: Path) -> bool:
     try:
         return time.time() - path.stat().st_mtime > MARK_TTL_S
@@ -223,48 +236,73 @@ def _mark_is_stale(path: Path) -> bool:
         return False
 
 
-def claim_owner(port: int) -> str | None:
-    """Чей это порт по общему реестру: отпечаток хозяина, либо None.
-
-    Просроченная отметка — ничья.
-    """
-    path = _mark_path(port)
-    if path is None or _mark_is_stale(path):
-        return None
+def _mark_owner(path: Path) -> str | None:
     owner = (_read_json(path) or {}).get("config")
     return owner if isinstance(owner, str) and owner else None
 
 
-def _refresh_mark(port: int, mine: str) -> None:
-    """Подтвердить свою отметку: хозяин здесь, порт по-прежнему его.
+def claim_owner(port: int) -> str | None:
+    """Чей это порт по общему реестру: отпечаток хозяина, либо None.
 
-    Чужую не трогаем. Просроченную свою тоже подтверждаем: хозяин вернулся
+    Просроченная отметка — ничья. Живая основная главнее запасных; из
+    запасных — та, что поставлена раньше (`since`, а не время изменения:
+    его каждый хозяин обновляет сам).
+    """
+    marks = _marks(port)
+    if not marks:
+        return None
+    main, spares = marks[0], marks[1:]
+    if main.exists() and not _mark_is_stale(main):
+        return _mark_owner(main)
+    alive = [m for m in spares if not _mark_is_stale(m) and _mark_owner(m)]
+    if not alive:
+        return None
+
+    def since(mark: Path) -> float:
+        try:
+            return float((_read_json(mark) or {}).get("since"))
+        except (TypeError, ValueError):
+            return float("inf")
+
+    return _mark_owner(min(alive, key=lambda m: (since(m), m.name)))
+
+
+def _refresh_mark(port: int, mine: str) -> None:
+    """Подтвердить свои отметки: хозяин здесь, порт по-прежнему его.
+
+    Чужие не трогаем. Просроченную свою тоже подтверждаем: хозяин вернулся
     и забирает порт назад, а сосед, который тем временем на нём стоял,
     увидит чужую отметку и в следующий раз встанет на свободный.
     """
-    path = _mark_path(port)
-    if path is None:
-        return
-    owner = (_read_json(path) or {}).get("config")
-    if owner == mine:
-        try:
-            os.utime(path)
-        except OSError:
-            pass
+    for mark in _marks(port):
+        if _mark_owner(mark) == mine:
+            try:
+                os.utime(mark)
+            except OSError:
+                pass
 
 
 def _reclaim_stale_mark(port: int) -> None:
-    """Убрать просроченную чужую отметку, если система позволит.
+    """Убрать просроченные отметки, если система позволит.
 
     В %ProgramData% удалять чужие файлы обычно нельзя — тогда отметка
     просто остаётся, а `claim_owner` её не слушает.
     """
-    path = _mark_path(port)
-    if path is not None and _mark_is_stale(path):
-        try:
-            path.unlink()
-        except OSError:
-            pass
+    for mark in _marks(port):
+        if _mark_is_stale(mark):
+            try:
+                mark.unlink()
+            except OSError:
+                pass
+
+
+def _place_mark(path: Path, mine: str) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "x", encoding="utf-8") as handle:
+            json.dump({"config": mine, "since": time.time()}, handle)
+    except OSError:
+        pass  # сосед успел первым, либо реестр недоступен — решит проверка после
 
 
 def remembered_port(config_directory: str | os.PathLike) -> int | None:
@@ -300,12 +338,10 @@ def _remember(config_directory: str | os.PathLike, port: int) -> None:
     _reclaim_stale_mark(port)
     _refresh_mark(port, mine)
     if folder is not None and claim_owner(port) is None:
-        try:
-            folder.mkdir(parents=True, exist_ok=True)
-            with open(folder / f"{port}.json", "x", encoding="utf-8") as handle:
-                json.dump({"config": mine}, handle)
-        except OSError:
-            pass  # сосед успел первым, либо реестр недоступен — решит проверка ниже
+        _place_mark(folder / f"{port}.json", mine)
+        if claim_owner(port) is None:
+            # Основная просрочена, но удалить её нельзя — ставим запасную.
+            _place_mark(folder / f"{port}+{mine}.json", mine)
     if folder is not None and claim_owner(port) not in (None, mine):
         return
     memory = Path(config_directory) / MEMORY_FILE
