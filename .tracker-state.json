@@ -8906,6 +8906,18 @@
         "state": "implementing",
         "started_at": "2026-10-15T04:24:26+00:00",
         "from_status": "status:todo"
+      },
+      "814": {
+        "actor": "Worker-RM1814",
+        "session": "wrm1814-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1814-rules-store",
+        "worktree": "C:\\wk-rm1814",
+        "id": "1b0e30d7170b484db48c6ea93dbdc92c",
+        "issue": 814,
+        "state": "implementing",
+        "started_at": "2026-10-15T04:27:12+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -12803,10 +12815,14 @@
           {
             "actor": "Worker-S1814K",
             "session": "ws1814k-20261015"
+          },
+          {
+            "actor": "Worker-RM1814",
+            "session": "wrm1814-20261015"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-S1814K",
+        "state": "implementing",
+        "worker": "Worker-RM1814",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
           "actor": "Worker-S1814K",
@@ -12824,8 +12840,7 @@
         },
         "pr": 817,
         "queued_at": "2026-10-14T23:45:48+00:00",
-        "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e76699ef (ACL-1800 campaign commands, ACL-1797 design system; PR 917 -> 918). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
-        "reviewer": "Reviewer-RRK814"
+        "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e76699ef (ACL-1800 campaign commands, ACL-1797 design system; PR 917 -> 918). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
       },
       "815": {
         "implementers": [
@@ -15594,6 +15609,10 @@
       },
       "Worker-RL1775": {
         "session": "wrl1775-20261015",
+        "role": "Worker"
+      },
+      "Worker-RM1814": {
+        "session": "wrm1814-20261015",
         "role": "Worker"
       }
     },
@@ -36255,6 +36274,13 @@
         "issue": 799,
         "pr": 803,
         "actor": "Worker-RM1799"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-15T04:27:12+00:00",
+        "issue": 814,
+        "claim": "1b0e30d7170b484db48c6ea93dbdc92c",
+        "actor": "Worker-RM1814"
       }
     ],
     "policy": {
