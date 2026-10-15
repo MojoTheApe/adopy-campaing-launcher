@@ -97,8 +97,8 @@ def cancels(name, earlier, later):
     return concurrency(name, earlier)[0] == concurrency(name, later)[0]
 
 
-ALL = ["ci.yml", "windows-installer.yml", "tracker-link.yml"]
-PUSHED = ["ci.yml", "windows-installer.yml"]
+ALL = ["ci.yml", "windows-installer.yml", "tracker-link.yml", "delivery-check.yml"]
+PUSHED = ["ci.yml", "windows-installer.yml", "delivery-check.yml"]
 
 
 @pytest.mark.parametrize("name", ALL)

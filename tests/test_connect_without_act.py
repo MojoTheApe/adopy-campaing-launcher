@@ -137,7 +137,7 @@ def test_a_profile_opened_by_hand_is_still_refused(browser, monkeypatch, tmp_pat
     monkeypatch.setattr("src.fb_ads_rpa.browser.MultiloginDirectCDPProvider", _Running)
     ok, message = sp.open_profile_for_automation("550e8400-e29b-41d4-a716-446655440000", label="DQ438")
     assert not ok
-    assert "opened manually" in message
+    assert message == sp.HAND_OPEN_MESSAGE
     assert browser.opened_with is None, "профиль, открытый руками, всё-таки трогали"
 
 

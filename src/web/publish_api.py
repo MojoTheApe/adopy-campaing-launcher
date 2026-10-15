@@ -1,0 +1,555 @@
+"""«Publish selected» через Graph API в профиле — кампании на паузе (ACL-1761).
+
+Включается `ACL_FB_BACKEND=api` в `.env` машины (по умолчанию `rpa`). Тогда
+задание публикации (`publish_jobs._run_job_inner`) вместо робота Ads Manager
+зовёт `ApiPublisher`: тот же черновик билдера (`slots_to_campaign_drafts` →
+`enrich_campaign_drafts`), та же очередь мест по памяти и замок профиля (их
+берёт `_run_job_inner` до вызова), тот же вид итогов задания.
+
+Решение владельца: всё создаётся в статусе PAUSED; включает только человек.
+
+Жизнь профиля — как у чтений ACL-1760 и у робота (ACL-1444):
+* работающий профиль цепляем по его локальному порту отладки, окно руками —
+  отказ `open_by_hand`, ничего не останавливаем;
+* закрытый поднимаем через MLX (место по памяти уже держит задание);
+* в конце закрываем мягко ТОЛЬКО профиль, который подняло это задание, и
+  только если всё чисто и на профиль не ждёт другое задание; иначе окно
+  остаётся (место держится до «Close profile», как у робота).
+
+Токен сессии остаётся во вкладке; сюда приходят только JSON-ответы.
+"""
+from __future__ import annotations
+
+import logging
+import os
+import threading
+import time
+from datetime import datetime, timezone
+from typing import Any, Callable
+
+from src.fb_api import telemetry as _tm
+from src.fb_api.creator import (
+    AccountFacts,
+    CampaignCreator,
+    Outcome,
+    PlanError,
+    TargetingResolver,
+    plan_from_draft,
+    preflight_account,
+)
+from src.fb_api.graph import CallBudget, GraphClient, GraphError, GraphStop, normalize_act
+
+log = logging.getLogger(__name__)
+
+BACKEND_ENV = "ACL_FB_BACKEND"
+CREATE_MAX_CALLS_ENV = "ACL_FB_API_CREATE_MAX_CALLS"
+MIN_INTERVAL_ENV = "ACL_FB_API_MIN_INTERVAL_S"
+#: Потолок вызовов Graph на одну кампанию: предпроверка, поиск, медиа,
+#: ожидание видео, запись, проверка меток, сверка — с запасом на 4 объявления
+#: с видео (4 × (20 опросов + ~10) + ~20). Instant Form (ACL-1775) добавляет
+#: до 4 чтений форм Страницы (до 2 в предпроверке и до 2 при сверке: список и
+#: условия), поэтому запас на них +10. Свой потолок кончает только эту
+#: кампанию, следующие идут со своим (ревью, minor 5).
+DEFAULT_CREATE_MAX_CALLS = 150
+#: Потолок на предпроверку кабинета (один раз на задание).
+PREFLIGHT_MAX_CALLS = 12
+READY_TIMEOUT_S = 90.0
+PROFILE_CLOSED_NOTICE = "Closed the profile — all campaigns are created and paused"
+
+
+def backend() -> str:
+    """`api` или `rpa` (по умолчанию). Незнакомое значение — `rpa`."""
+    return "api" if (os.environ.get(BACKEND_ENV) or "").strip().lower() == "api" else "rpa"
+
+
+def api_enabled() -> bool:
+    return backend() == "api"
+
+
+def _env_number(name: str, default: float, lo: float, hi: float) -> float:
+    try:
+        value = float(os.environ.get(name, "") or default)
+    except ValueError:
+        value = default
+    return max(lo, min(hi, value))
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+# Точки подмены в тестах.
+def _resolve_entry(account_label: str):
+    from config.paths import get_ad_account_map_path
+    from src.meta_campaign_agent.ad_account_map import load_ad_account_map, resolve_account_entry
+
+    return resolve_account_entry(load_ad_account_map(get_ad_account_map_path()), account_label)
+
+
+def _open_profile(profile_id: str, folder_id: str, instance: str):
+    from src.fb_api import profile as _fb_profile
+
+    return _fb_profile.open_profile(profile_id, folder_id, instance)
+
+
+def _open_tab(cdp_url: str):
+    from src.fb_api.cdp import PageTab
+
+    return PageTab.open(cdp_url)
+
+
+def _make_graph(tab, act: str, *, writes: bool = True):
+    from src.fb_api.token_capture import InPageGraph
+
+    if not writes:
+        # Пробный запуск: помощник без политики записи — POST невозможен вовсе.
+        return InPageGraph(tab)
+    return InPageGraph(tab, allow_writes=True, write_act=act)
+
+
+def _stop_profile(entry, account_label: str) -> None:
+    from src.fb_ads_rpa import browser as rpa_browser
+
+    rpa_browser.stop_profile_on_request(entry, account_label)
+
+
+def _keep_profiles_open() -> bool:
+    try:
+        from src.fb_ads_rpa.rpa_publisher import keep_profiles_open
+
+        return keep_profiles_open()
+    except Exception:
+        return True
+
+
+def _cooldown(account_label: str) -> tuple[float, str]:
+    """Общее с чтениями охлаждение профиля после лимита/checkpoint (ACL-1760)."""
+    try:
+        from src.analysis_agent import account_spend as _as
+        from src.analysis_agent import account_spend_api as _api
+
+        return _api._cooldown_state(_as._profile_key(account_label))
+    except Exception:
+        return 0.0, ""
+
+
+def _start_cooldown(account_label: str, stop: GraphStop) -> None:
+    try:
+        from src.analysis_agent import account_spend as _as
+        from src.analysis_agent import account_spend_api as _api
+
+        _api._start_cooldown(_as._profile_key(account_label), stop)
+    except Exception:
+        pass
+
+
+def _record(step: str, ok: bool | None, campaign: str = "", diag: dict | None = None,
+            duration_s: float | None = None) -> None:
+    try:
+        from src.fb_ads_rpa import run_telemetry as _rt
+
+        _rt.record(step, ok, campaign=campaign, duration_s=duration_s,
+                   diag={"source": "api", **_tm.scrub_value(diag or {})})
+    except Exception:
+        pass
+
+
+def build_drafts(slots: list[dict[str, Any]], *, account_label: str, country: str) -> list[Any]:
+    """Тот же черновик, что у RPA (`RpaPublisher.build_drafts` без браузера)."""
+    from src.fb_ads_rpa.build_draft import slots_to_campaign_drafts
+    from src.fb_ads_rpa.enrich_draft import enrich_campaign_drafts
+
+    drafts = slots_to_campaign_drafts(slots, account_label=account_label, country=country, activate=False)
+    return enrich_campaign_drafts(drafts, account_label=account_label, preview_mode=False)
+
+
+class ApiPublishError(RuntimeError):
+    """Отказ всего задания (профиль, страница, кабинет) с текстом человеку."""
+
+    def __init__(self, message: str, code: str = ""):
+        super().__init__(_tm.scrub(message))
+        self.code = code
+
+
+def dry_run_result(outcome: Outcome) -> dict[str, Any]:
+    """Итог пробного запуска: план и предпроверка, ничего не создано (ревью M3)."""
+    ok = not outcome.error
+    return {
+        "campaign_name": outcome.campaign_name, "backend": "api", "dry_run": True, "status": "",
+        "success": ok, "publishable": False,
+        "warnings": list(outcome.warnings) + (["Dry run: nothing was created"] if ok else []),
+        "blocking_failures": [], "problems": [], "run_id": None, "campaign_id": None,
+        "adset_id": None, "creative_id": None, "ad_id": None, "ad_ids": [],
+        "error": outcome.error or None, "steps_completed": list(outcome.steps), "screenshots": [],
+        "readback": {}, "plan": outcome.plan, "created": {}, "reused": {}, "ts": _now_iso(),
+    }
+
+
+def result_dict(outcome: Outcome, *, error: str = "") -> dict[str, Any]:
+    """Итог кампании в виде, который рисует панель задания (как `to_job_dict`)."""
+    created = bool(outcome.campaign_id)
+    error = error or outcome.error
+    mismatches = outcome.mismatches
+    blocking = [f"readback mismatch: {m['object']} {m['field']} — expected {m['expected']!r}, "
+                f"got {'Not read' if m.get('not_read') else repr(m['actual'])}" for m in mismatches]
+    if created and error:
+        blocking.append("not finished: " + error)
+    readback_ok = bool(outcome.readback) and outcome.readback.get("ok") is True
+    success = created and not error
+    return {
+        "campaign_name": outcome.campaign_name,
+        "backend": "api",
+        "status": "PAUSED" if created else "",
+        "success": success,
+        "publishable": success and readback_ok and not blocking,
+        "warnings": list(outcome.warnings),
+        "blocking_failures": blocking,
+        # Текстовая отрисовка панели (список проблем RPA здесь не нужен).
+        "problems": [],
+        "run_id": None,
+        "campaign_id": outcome.campaign_id or None,
+        "adset_id": outcome.adset_ids[0] if outcome.adset_ids else None,
+        "creative_id": None,
+        "ad_id": outcome.ad_ids[0] if outcome.ad_ids else None,
+        "ad_ids": list(outcome.ad_ids),
+        "error": error or None,
+        "steps_completed": list(outcome.steps),
+        "screenshots": [],
+        "readback": outcome.readback,
+        "created": {k: (len(v) if isinstance(v, list) else 1) for k, v in outcome.created.items()},
+        "reused": {k: (len(v) if isinstance(v, list) else 1) for k, v in outcome.reused.items()},
+        "ts": _now_iso(),
+    }
+
+
+class ApiPublisher:
+    """Создатель кампаний задания: профиль → своя вкладка → Graph с записью."""
+
+    def __init__(self, *, progress: Callable[[str], None] = lambda _s: None, dry_run: bool = False):
+        #: Пробный запуск: клиент и помощник без права записи, только план.
+        self.dry_run = bool(dry_run)
+        #: Результат прошлой записи неизвестен и не сверен — дальше не пишем (M4).
+        self.blocked = ""
+        #: Точка подмены в тестах (паузы опроса видео и сверки).
+        self.sleep: Callable[[float], None] = time.sleep
+        self.cancel_event = threading.Event()
+        self.progress = progress
+        self._tab = None
+        #: ACL-1812: аренда тёплой вкладки профиля (вместо своей вкладки).
+        self._lease: Any = None
+        self._client: GraphClient | None = None
+        self._facts: AccountFacts | None = None
+        self._resolver: TargetingResolver | None = None
+        self._entry = None
+        self._opened = None
+        self.account_label = ""
+        self.act = ""
+        self.stop: GraphStop | None = None
+
+    # -- совместимость с `publish_jobs` (как у RpaPublisher)
+    def cancel(self) -> None:
+        self.cancel_event.set()
+
+    def cancelled(self) -> bool:
+        return self.cancel_event.is_set()
+
+    def build_drafts(self, slots, *, account_label: str, country: str, **_ignored) -> list[Any]:
+        return build_drafts(slots, account_label=account_label, country=country)
+
+    # -- открыть
+    def open(self, account_label: str) -> None:
+        """Профиль, вкладка, токен, предпроверка кабинета. Ни одной записи."""
+        self.account_label = account_label
+        entry = _resolve_entry(account_label)
+        if entry is None:
+            raise ApiPublishError(f"{account_label} is not in the account map")
+        try:
+            self.act = normalize_act(str(getattr(entry, "ad_account_id", "") or ""))
+        except ValueError as exc:
+            raise ApiPublishError(f"{account_label}: {exc}") from exc
+        profile_id = (getattr(entry, "profile_id", "") or "").strip()
+        if not profile_id:
+            raise ApiPublishError(f"{account_label} has no profile_id in the account map")
+        left, why = _cooldown(account_label)
+        if left > 0 and why == "page_unresponsive":
+            raise ApiPublishError(
+                f"{account_label}: the Ads Manager tab stopped answering on the last run; waiting about "
+                f"{int(left // 60) + 1} min before opening it again. Nothing was created.",
+                code="page_unresponsive")
+        if left > 0:
+            raise ApiPublishError(
+                f"{account_label}: Meta stopped the last API call ({why}); waiting about "
+                f"{int(left // 60) + 1} min before calling again. Nothing was created.")
+        self._entry = entry
+        from src.fb_api import profile as _fb_profile
+
+        if self._open_warm(account_label, profile_id):
+            return
+        from src.fb_api import mlx_session as _mlx
+
+        try:
+            with _mlx.scope(account=account_label):
+                self._opened = _open_profile(profile_id, (getattr(entry, "folder_id", "") or "").strip(),
+                                             (getattr(entry, "multilogin_instance", "") or "A").strip() or "A")
+        except _fb_profile.ProfileError as exc:
+            raise ApiPublishError(str(exc), code=getattr(exc, "code", "")) from exc
+        except Exception as exc:  # noqa: BLE001
+            raise ApiPublishError(f"{account_label}: the profile could not be opened with automation: "
+                                  f"{_tm.scrub(str(exc))}") from exc
+        self.progress("profile attached")
+        self._tab = _open_tab(self._opened.cdp_url)
+        graph = _make_graph(self._tab, self.act, writes=not self.dry_run)
+        from src.fb_api.graph import Checkpoint, LoggedOut
+
+        try:
+            graph.install()
+            graph.navigate(self.act, timeout=60.0)
+            state = graph.wait_ready(timeout=READY_TIMEOUT_S)
+        except GraphStop as exc:
+            # Вкладка не ответила, браузер сказал почему (логин/checkpoint/молчит): стоп, без повторов.
+            self._halt(exc)
+
+        if state.get("kind") == "checkpoint":
+            self._halt(Checkpoint("the profile is on a Facebook checkpoint"))
+        if state.get("kind") == "login":
+            self._halt(LoggedOut("the profile is logged out of Facebook"))
+        if not state.get("has_token"):
+            raise ApiPublishError(f"{account_label}: Ads Manager did not finish loading "
+                                  "(no Graph session in the page); nothing was created")
+        self._finish_open(account_label, graph)
+
+    def _finish_open(self, account_label: str, graph: Any) -> None:
+        """Клиент Graph на готовой вкладке и предпроверка кабинета (общее для обоих путей)."""
+        self._client = GraphClient(
+            graph, allow_writes=not self.dry_run,
+            min_interval_s=_env_number(MIN_INTERVAL_ENV, 1.0, 0.5, 10.0),
+            max_calls=PREFLIGHT_MAX_CALLS)
+        self.progress("Ads Manager session ready")
+        try:
+            self._facts = preflight_account(self._client, self.act)
+        except PlanError as exc:
+            raise ApiPublishError(f"{account_label}: {exc}") from exc
+        except GraphStop as exc:
+            self._halt(exc)
+        except GraphError as exc:
+            raise ApiPublishError(f"{account_label}: Graph API error in the account check: {exc}") from exc
+        self._resolver = TargetingResolver(self._client)
+        self.progress("ad account verified")
+
+    def _open_warm(self, account_label: str, profile_id: str) -> bool:
+        """ACL-1812: профиль «на сегодня» — берём его вкладку робота, без перезагрузки.
+
+        True — вкладка взята, клиент и предпроверка кабинета сделаны. Профиль не
+        поднимаем и не останавливаем; вкладку по концу задания отпускаем, не закрывая.
+        """
+        from src.fb_api import warm as _warm
+
+        reg = _warm.registry()
+        if not reg.is_warm(profile_id):
+            return False
+        act, dry = self.act, self.dry_run
+        mode = "read" if dry else f"create:{act}"
+
+        def make(tab):
+            return _make_graph(tab, act, writes=not dry)
+
+        try:
+            self._lease = reg.checkout(profile_id, account=account_label, act=act, mode=mode,
+                                       make_graph=make, ready_timeout=READY_TIMEOUT_S)
+        except _warm.WarmError as exc:
+            raise ApiPublishError(str(exc), code=exc.code) from exc
+        except GraphStop as exc:
+            self._halt(exc)
+        self.progress("profile attached (warm)")
+        self._finish_open(account_label, self._lease.graph)
+        return True
+
+    def _halt(self, stop: GraphStop) -> None:
+        self.stop = stop
+        _start_cooldown(self.account_label, stop)
+        _tm.report_stop(stop.kind, str(stop), {"source": "publish", "code": stop.code})
+        raise ApiPublishError(f"{self.account_label}: Graph API stopped ({stop.kind}): {stop}",
+                              code=stop.kind)
+
+    # -- одна кампания
+    def publish_draft(self, draft: Any) -> dict[str, Any]:
+        began = time.monotonic()
+        name = str(getattr(draft, "name", "") or "")
+        if self.stop is not None:
+            return result_dict(Outcome(campaign_name=name),
+                               error=f"Not started: Graph API stopped earlier ({self.stop.kind})")
+        if self.blocked or (self._client is not None and self._client.unreconciled is not None):
+            # Ревью M4: пока прошлая неизвестная запись не сверена, новых нет.
+            return result_dict(Outcome(campaign_name=name), error=(
+                "Not started: an earlier write in this run has an unknown result "
+                f"({self.blocked or 'not reconciled'}). Check Ads Manager, then publish again "
+                "(a re-run does not duplicate)."))
+        try:
+            plan = plan_from_draft(draft)
+        except PlanError as exc:
+            return result_dict(Outcome(campaign_name=name), error=f"{exc}. Nothing was created.")
+        if plan.act != self.act:
+            return result_dict(Outcome(campaign_name=name),
+                               error="The draft's ad account differs from the verified one. Nothing was created.")
+        assert self._client is not None and self._facts is not None and self._resolver is not None
+        self._client.reset_budget(int(_env_number(CREATE_MAX_CALLS_ENV, DEFAULT_CREATE_MAX_CALLS, 20, 250)))
+
+        def step(text: str) -> None:
+            self.progress(f"{name}: {text}")
+            _record("api_create_step", True, campaign=name, diag={"step": text})
+
+        creator = CampaignCreator(self._client, self._facts, self._resolver,
+                                  cancelled=self.cancelled, progress=step, sleep=self.sleep)
+        if self.dry_run:
+            outcome = creator.plan_only(plan)
+            if self._client.writes:
+                raise AssertionError("dry run must not write")  # структурно невозможно
+            res = dry_run_result(outcome)
+            _record("api_create_dry_run", not outcome.error, campaign=name,
+                    duration_s=round(time.monotonic() - began, 1),
+                    diag={"calls": self._client.calls, "stop": outcome.stop_kind})
+            return res
+        try:
+            outcome = creator.run(plan)
+        except Exception as exc:
+            # F2: строка пилота пишется и когда создатель упал исключением.
+            kind = exc.kind if isinstance(exc, GraphStop) else (
+                "cdp_timeout" if isinstance(exc, TimeoutError) else type(exc).__name__)
+            _record("api_create_campaign", False, campaign=name,
+                    duration_s=round(time.monotonic() - began, 1),
+                    diag={"calls": self._client.calls, "writes": self._client.writes, "stop": kind})
+            _tm.record({"event": "fb_api_create", "source": "api", "ok": False,
+                        "took_s": round(time.monotonic() - began, 1), "calls": self._client.calls,
+                        "writes": self._client.writes, "stop": kind, "raised": type(exc).__name__})
+            if isinstance(exc, GraphStop):
+                self.stop = exc
+                _start_cooldown(self.account_label, exc)
+            raise
+        if outcome.stop_kind == "unknown" or self._client.unreconciled is not None:
+            self.blocked = outcome.campaign_name
+        if self._client.stopped is not None and not isinstance(self._client.stopped, CallBudget):
+            self.stop = self._client.stopped
+            _start_cooldown(self.account_label, self.stop)
+            _tm.report_stop(self.stop.kind, str(self.stop), {"source": "publish", "code": self.stop.code})
+        res = result_dict(outcome)
+        _record("api_create_campaign", res["publishable"], campaign=name,
+                duration_s=round(time.monotonic() - began, 1),
+                diag={"calls": self._client.calls, "writes": self._client.writes,
+                      "created": res["created"], "reused": res["reused"],
+                      "mismatches": len(outcome.mismatches), "stop": outcome.stop_kind})
+        _tm.record({"event": "fb_api_create", "source": "api", "ok": res["publishable"],
+                    "took_s": round(time.monotonic() - began, 1), "calls": self._client.calls,
+                    "created": res["created"], "reused": res["reused"],
+                    "mismatches": len(outcome.mismatches), "stop": outcome.stop_kind})
+        return res
+
+    # -- конец
+    def close(self, *, force: bool = False) -> None:
+        """Закрыть свою вкладку. Профиль не трогаем."""
+        _ = force
+        lease, self._lease = self._lease, None
+        if lease is not None:
+            # Тёплая вкладка остаётся открытой для следующего действия.
+            stop = self.stop if isinstance(self.stop, GraphStop) else None
+            try:
+                lease.release(stop)
+            except Exception:
+                log.exception("Could not release the warm tab for %s", self.account_label)
+        tab, self._tab = self._tab, None
+        if tab is not None:
+            try:
+                tab.close()
+            except Exception:
+                log.exception("Could not close our tab for %s", self.account_label)
+
+    def finish_job(self, account_label: str, *, clean: bool, other_job_waits: bool = False) -> str:
+        """Вкладку закрыть; профиль — только если его подняли мы и всё чисто."""
+        self.close()
+        if self.dry_run:
+            clean = False   # после пробного запуска окно остаётся: настоящий запуск следом
+        opened = self._opened
+        if not (opened is not None and getattr(opened, "started_now", False)):
+            _record("profile_closed_after_job", None, diag={"note": "not_started_by_job"})
+            return ""
+        if not clean or other_job_waits or self.cancelled() or _keep_profiles_open():
+            _record("profile_closed_after_job", None, diag={"note": "kept"})
+            return ""
+        from src.fb_api import stop_log as _stop_log
+
+        try:
+            _stop_profile(self._entry, account_label)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("%s: could not close the profile the job started (%s)", account_label, exc)
+            _record("profile_closed_after_job", False, diag={"error": type(exc).__name__})
+            return ""
+        finally:
+            # ACL-1812 (ревью #813, B2): остановка записана при любой попытке.
+            _stop_log.record_stop((getattr(self._entry, "profile_id", "") or "").strip())
+        _record("profile_closed_after_job", True)
+        return "closed"
+
+
+# ───────────────────────── «Check plan (no writes)» в билдере ─────────────────────────
+#
+# Кнопка рядом с «Publish selected» (только при ACL_FB_BACKEND=api): те же
+# черновики, предпроверка и план — НИ ОДНОЙ записи. Идёт не через задание
+# публикации, а путём чтения ACL-1760 (`account_spend_api._session`): тот же
+# замок профиля для чтений, место по памяти только если профиль закрыт,
+# закрывается только поднятое этим чтением, вкладка и клиент — без права
+# записи (помощник с WRITE=null, `GraphClient(allow_writes=False)`).
+
+#: Потолок вызовов на предпроверку кабинета внутри «Check plan».
+PLAN_PREFLIGHT_MAX_CALLS = 12
+
+
+def _plan_in_read_session(account_label: str, drafts: list[Any]) -> list[dict[str, Any]]:
+    from src.analysis_agent import account_spend_api as _api
+
+    results: list[dict[str, Any]] = []
+    with _api._session(account_label) as sess:
+        client = sess.client
+        if client.allow_writes:
+            raise AssertionError("the read session must not be able to write")
+        client.reset_budget(PLAN_PREFLIGHT_MAX_CALLS)
+        pub = ApiPublisher(dry_run=True)
+        pub.act, pub.account_label, pub._client = sess.act, account_label, client
+        try:
+            pub._facts = preflight_account(client, sess.act)
+        except PlanError as exc:
+            raise ApiPublishError(f"{account_label}: {exc}") from exc
+        pub._resolver = TargetingResolver(client)
+        for draft in drafts:
+            if draft.errors:
+                out = Outcome(campaign_name=str(draft.name), warnings=list(draft.warnings or []))
+                out.error, out.stop_kind = "; ".join(draft.errors), "plan"
+                results.append(dry_run_result(out))
+                continue
+            results.append(pub.publish_draft(draft))
+        if client.writes:
+            raise AssertionError("Check plan must not write")
+    return results
+
+
+def check_plan(slots: list[dict[str, Any]], *, account_label: str, country: str) -> dict[str, Any]:
+    """Черновики билдера → план каждой кампании. Ничего не создаёт."""
+    from src.analysis_agent import account_spend as _as
+    from src.analysis_agent import account_spend_api as _api
+
+    started = time.monotonic()
+    try:
+        drafts = build_drafts(slots, account_label=account_label, country=country)
+    except Exception as exc:  # noqa: BLE001
+        return {"account": account_label, "results": [], "dry_run": True,
+                "error": f"Failed to build campaign drafts: {_tm.scrub(str(exc))}"}
+    if not drafts:
+        return {"account": account_label, "results": [], "dry_run": True, "error": "No campaigns to check."}
+    run = _as.serialized_browser(key=_as._profile_key, reading=True)(_plan_in_read_session)
+    try:
+        results = run(account_label, drafts)
+        error = ""
+    except Exception as exc:  # noqa: BLE001 — отказ профиля/страницы: текстом
+        results = []
+        error = str(exc) if isinstance(exc, ApiPublishError) else _api._failure(account_label, exc)[0]
+    _record("api_plan_check", not error, diag={"campaigns": len(drafts), "results": len(results)},
+            duration_s=round(time.monotonic() - started, 1))
+    return {"account": account_label, "results": results, "dry_run": True, "error": error}

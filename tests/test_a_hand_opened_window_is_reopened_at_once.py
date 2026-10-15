@@ -261,54 +261,6 @@ def reads(world, monkeypatch, tmp_path):
     return world
 
 
-def test_read_spend_reopens_at_once_and_shows_the_row_notice(reads, monkeypatch):
-    visited = []
-
-    class Page:
-        def goto(self, url, **kw):
-            visited.append(url)
-            raise RuntimeError("stop here")  # дальше — обычное чтение
-
-        def close(self):
-            pass
-
-    monkeypatch.setattr(reads.prov, "_connect_started",
-                        lambda started, pid: reads.ev.append(("connect", pid)) or SimpleNamespace(
-                            page=Page(), close=lambda **kw: None))
-    with pytest.raises(RuntimeError, match="stop here"):
-        sp.read_via_rpa(ACCOUNT, "2026-10-04", "2026-10-04")
-    _reopened_only(reads)
-    _no_wait(reads)
-    assert visited and "act=123" in visited[0]
-    # Строка на строке аккаунта — пока закрывали окно; после — её нет.
-    assert reads.row_notes == [NOTICE]
-    assert sp.hand_wait_note(ACCOUNT) == ""
-
-
-def test_read_all_reopens_each_hand_opened_profile_and_touches_only_it(reads):
-    with sp.profile_lock(PROFILE), sp.reopening_by_hand():
-        assert sp._attach_only(sp._entry_for(ACCOUNT), ACCOUNT).page == "reopened-page"
-    assert reads.ev == [("stop", PROFILE), ("start", PROFILE), ("connect", PROFILE)]
-    assert reads.running[OTHER_PROFILE], "первое чтение тронуло второй профиль"
-    with sp.profile_lock(OTHER_PROFILE), sp.reopening_by_hand():
-        assert sp._attach_only(sp._entry_for(OTHER), OTHER).page == "reopened-page"
-    assert reads.ev[3:] == [("stop", OTHER_PROFILE), ("start", OTHER_PROFILE), ("connect", OTHER_PROFILE)]
-    assert "kill" not in reads.ev
-    _no_wait(reads)
-    notes = [r[2]["note"] for r in reads.rows if r[0] == "profile_hand_window"]
-    assert notes == ["reopened", "reopened"]
-
-
-def test_a_failed_graceful_stop_on_a_read_gives_a_clear_message(reads):
-    reads.stop_fails = True
-    out = sp.read_via_rpa(ACCOUNT, "2026-10-04", "2026-10-04")
-    assert out.state == "failed" and out.error_code == sp.HAND_OPEN_CODE
-    assert out.error == sp.HAND_OPEN_MESSAGE
-    assert "Multilogin did not close" in out.error
-    assert reads.ev == [("stop", PROFILE)] and "kill" not in reads.ev
-    assert sp.hand_wait_note(ACCOUNT) == ""
-
-
 def _post(path, data):
     import httpx
 
@@ -322,31 +274,13 @@ def _post(path, data):
     return asyncio.run(go())
 
 
-def test_open_profile_reopens_a_fresh_foreground_window_at_once(reads):
-    r = _post("/account-spend/open-profile", {"account": ACCOUNT})
-    assert r.status_code == 200, r.text
-    assert r.json()["ok"] is True
-    _reopened_only(reads)
-    _no_wait(reads)
-    assert reads.row_notes == [NOTICE]
-
-
-# ── Тексты: ни условий, ни ожидания ───────────────────────────────────────
-
 def test_the_wait_and_the_conditions_are_gone():
     for name in ("wait_until_safe", "watch_cancel", "MIN_AGE_S", "MIN_IDLE_S", "IDLE_WAIT_S"):
         assert not hasattr(hw, name), name
     assert not hasattr(br, "HAND_WINDOW_WAIT_NOTICE")
     page = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
     assert "once the computer has been idle" not in page
-    assert "idle" not in sp.HAND_OPEN_MESSAGE and "idle" not in sp.hand_note(ACCOUNT)
-
-
-def test_the_notice_texts_are_english_and_name_the_account():
-    assert br.HAND_WINDOW_NOTICE.format(account=ACCOUNT) == NOTICE
-    assert sp.hand_note(ACCOUNT) == NOTICE
-    for text in (NOTICE, sp.HAND_OPEN_MESSAGE):
-        assert not any("\u0400" <= ch <= "\u04ff" for ch in text), text
+    assert "idle" not in sp.HAND_OPEN_MESSAGE
 
 
 # ── Stop задания — не сбой кампании (перенесено из ACL-1427) ──────────────
@@ -437,16 +371,6 @@ def test_stop_pressed_during_the_reopen_does_not_start_the_campaign(world, monke
 
 
 # ── Ревью PR #563 (F3): текст отказа говорит правду о причине ─────────────
-
-def test_a_read_with_reopening_switched_off_does_not_blame_multilogin(reads, monkeypatch):
-    monkeypatch.setenv(hw.ENV_ENABLED, "0")
-    out = sp.read_via_rpa(ACCOUNT, "2026-10-04", "2026-10-04")
-    assert out.state == "failed" and out.error_code == sp.HAND_OPEN_CODE
-    assert out.error == sp.HAND_OFF_MESSAGE
-    assert "Multilogin did not close" not in out.error
-    assert "switched off" in out.error
-    assert reads.ev == [], "при выключенном переоткрытии окно тронули"
-
 
 def test_the_publish_failure_texts_name_both_causes():
     """Publish кончается «открыт руками» и при отказе мягкой остановки, и при

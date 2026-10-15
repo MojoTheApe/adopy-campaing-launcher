@@ -37,9 +37,12 @@ import json
 import re
 import secrets
 import time
+import urllib.parse
+from contextlib import contextmanager
 from typing import Any, Callable
 
-from src.fb_api.cdp import CdpError, CdpTimeout, PageError, StaleContextError
+from src.fb_api.cdp import CdpError, CdpTimeout, PageError, StaleContextError, host_and_path
+from src.fb_api.graph import Checkpoint, GraphStop, LoggedOut, PageUnresponsive
 from src.fb_api.telemetry import strip_tokens
 
 ADS_MANAGER_URL = "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act={act}"
@@ -65,6 +68,9 @@ CREDENTIAL_MODES = frozenset({"captured", "include", "omit"})
 _HELPER_JS = r"""
 (() => {
   const NAME = __NAME__;
+  // ACL-1761: политика записи (null — только чтение). Вшита при установке,
+  // страница её не видит и не меняет.
+  const WRITE = __WRITE__;
   const g = (typeof globalThis !== 'undefined') ? globalThis : self;
   if (g[NAME]) return;
 
@@ -161,8 +167,218 @@ _HELPER_JS = r"""
     return 'include';  // адрес не говорит о куки; Graph и Ads Manager — один сайт
   }
 
+  // ── ACL-1761: запись (только при вшитой политике) ──
+  // Файл копится здесь кусками (без сети, можно повторять), потом уходит ОДНИМ
+  // POST. Ни токен, ни файл наружу не возвращаются.
+  const staged = {};
+  const STAGE_MAX = 200 * 1024 * 1024;
+  function stagedBytes() {
+    let n = 0;
+    for (const k of Object.keys(staged)) for (const c of staged[k]) n += c.length;
+    return n;
+  }
+  function stage(id, b64) {
+    if (!WRITE || retired) return { error: 'read_only' };
+    if (!/^[a-z0-9_]{1,40}$/.test(String(id))) return { error: 'bad_stage' };
+    let bin;
+    try { bin = atob(String(b64)); } catch (e) { return { error: 'bad_stage' }; }
+    if (stagedBytes() + bin.length > STAGE_MAX) return { error: 'too_large' };
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    (staged[id] = staged[id] || []).push(arr);
+    let total = 0;
+    for (const c of staged[id]) total += c.length;
+    return { ok: true, bytes: total };
+  }
+  function unstage(id) { delete staged[String(id)]; return true; }
+
+  // Вложенные строки — обычный текст (ревью R2-B1): разбираются только
+  // JSON-ключи верхнего уровня, в `write()` до проверок.
+  function statusOk(value, depth) {
+    depth = depth || 0;
+    if (Array.isArray(value)) { for (const v of value) if (!statusOk(v, depth + 1)) return false; return true; }
+    if (value && typeof value === 'object') {
+      for (const k of Object.keys(value)) {
+        const low = String(k).toLowerCase();
+        if (WRITE.forbidden.indexOf(low) >= 0) return false;
+        // Ревью R6: degrees_of_freedom_spec — только на верхнем уровне креатива.
+        if (low === 'degrees_of_freedom_spec' && depth > 0) return false;
+        if (WRITE.opt_out_keys.indexOf(low) >= 0) { if (value[k] !== 'OPT_OUT') return false; }
+        else if (low.indexOf('status') >= 0 && value[k] !== 'PAUSED') return false;
+        if (!statusOk(value[k], depth + 1)) return false;
+      }
+    }
+    return true;
+  }
+
+  // ACL-1775: единственное место, где разрешён lead_gen_form_id (зеркало
+  // write_policy._without_lead_form). Возвращает копию без ключа, null — отказ,
+  // исходный объект — формы нет. Ключ в другом месте остаётся и ловится statusOk.
+  function withoutLeadForm(edge, checked, onAd) {
+    const LF = WRITE.lead_form;
+    if (!LF || edge !== LF.edge) return checked;
+    const spec = checked.object_story_spec;
+    if (!spec || typeof spec !== 'object' || Array.isArray(spec)) return checked;
+    for (const fmt of LF.formats) {
+      const data = spec[fmt];
+      const cta = data && typeof data === 'object' ? data.call_to_action : null;
+      const value = cta && typeof cta === 'object' ? cta.value : null;
+      if (!value || typeof value !== 'object' || Array.isArray(value) || !(LF.key in value)) continue;
+      if (!onAd) return null;
+      const form = value[LF.key];
+      if (typeof form !== 'string' || !new RegExp(LF.id_re).test(form)) return null;
+      if (Object.keys(value).length !== 1) return null;
+      const copy = JSON.parse(JSON.stringify(checked));
+      delete copy.object_story_spec[fmt].call_to_action.value[LF.key];
+      return copy;
+    }
+    return checked;
+  }
+
+  async function write(spec) {
+    const refused = (why) => ({ error: 'write_refused', why: why });
+    if (!WRITE) return { error: 'read_only' };
+    if (spec.method !== 'POST') return { error: 'read_only' };
+    const path = String(spec.path || '');
+    // ACL-1800: правка существующего объекта — отдельная узкая политика. Помощник
+    // создателя (без `object_update`) пути объекта не принимает; помощник правок
+    // (без рёбер) пути создания не принимает.
+    const objMatch = /^\/[1-9][0-9]{4,}$/.exec(path);
+    if (objMatch && !WRITE.object_update) return refused('path');
+    if (!objMatch && WRITE.object_update) return refused('path');
+    const params = spec.params || {};
+    let want = null;
+    let files = {};
+    let checked = null;
+    if (objMatch) {
+      const ou = WRITE.object_update;
+      if (spec.files && Object.keys(spec.files).length) return refused('file');
+      const pk = Object.keys(params);
+      if (pk.length !== 1) return refused('key');
+      const k = pk[0];
+      if (!KEY_RE.test(k) || ou.fields.indexOf(k) < 0 || WRITE.forbidden.indexOf(k.toLowerCase()) >= 0) return refused('key');
+      const v = params[k];
+      if (k === 'status') {
+        if (typeof v !== 'string' || ou.statuses.indexOf(v) < 0) return refused('status');
+      } else {
+        const okNum = typeof v === 'number' && Number.isSafeInteger(v) && v > 0 && v < 1e15;
+        const okStr = typeof v === 'string' && /^[1-9][0-9]{0,14}$/.test(v);
+        if (!okNum && !okStr) return refused('amount');
+      }
+    } else {
+    const m = /^\/(act_[0-9]{5,})\/([a-z]+)$/.exec(path);
+    if (!m || m[1] !== WRITE.act) return refused('path');
+    const edge = m[2];
+    const keys = WRITE.edges[edge];
+    if (!keys) return refused('edge');
+    for (const k of Object.keys(params)) {
+      if (!KEY_RE.test(String(k)) || keys.indexOf(String(k)) < 0) return refused('key');
+    }
+    if (WRITE.paused_required.indexOf(edge) >= 0 && params.status !== 'PAUSED') return refused('status');
+    checked = Object.assign({}, params);
+    for (const k of WRITE.json_keys) {
+      if (!(k in params)) continue;
+      let v = params[k];
+      if (typeof v === 'string') { try { v = JSON.parse(v); } catch (e) { return refused('json'); } }
+      if (v === null || typeof v !== 'object') return refused('json');
+      checked[k] = v;
+    }
+    // Ревью R5-M1: degrees_of_freedom_spec — только выключение функций из списка.
+    if ('degrees_of_freedom_spec' in checked) {
+      const d = checked.degrees_of_freedom_spec;
+      if (!d || typeof d !== 'object' || Array.isArray(d)) return refused('dof');
+      const dk = Object.keys(d);
+      if (dk.length !== 1 || dk[0] !== 'creative_features_spec') return refused('dof');
+      const spec = d.creative_features_spec;
+      if (!spec || typeof spec !== 'object' || Array.isArray(spec) || !Object.keys(spec).length) return refused('dof');
+      for (const f of Object.keys(spec)) {
+        if (WRITE.dof_features.indexOf(f) < 0) return refused('dof');
+        const it = spec[f];
+        if (!it || typeof it !== 'object' || Array.isArray(it)) return refused('dof');
+        const ik = Object.keys(it);
+        if (ik.length !== 1 || ik[0] !== 'enroll_status' || it.enroll_status !== 'OPT_OUT') return refused('dof');
+      }
+    }
+    // Объявление — только ссылка на готовый креатив.
+    if (edge === 'ads' && 'creative' in checked) {
+      const c = checked.creative;
+      if (!c || typeof c !== 'object' || Array.isArray(c)) return refused('creative');
+      const ck = Object.keys(c);
+      if (ck.length !== 1 || ck[0] !== 'creative_id'
+          || (typeof c.creative_id !== 'string' && typeof c.creative_id !== 'number')) return refused('creative');
+    }
+    const walked = withoutLeadForm(edge, checked, spec.on_ad === true);
+    if (walked === null) return refused('lead_form');
+    if (!statusOk(walked)) return refused('status');
+    want = WRITE.files[edge] || null;
+    files = spec.files || {};
+    const fk = Object.keys(files);
+    if (want) { if (fk.length !== 1 || fk[0] !== want) return refused('file'); }
+    else if (fk.length) return refused('file');
+    }
+    let blob = null;
+    if (want) {
+      const parts = staged[String(files[want])];
+      if (!parts || !parts.length) return { error: 'no_file' };
+      blob = new Blob(parts);
+      // Ревью M1: ушло бы не то, что положил Python — отказ ДО отправки.
+      const expect = spec.expect || {};
+      if (typeof expect.bytes !== 'number' || blob.size !== expect.bytes) return refused('file_size');
+      try {
+        const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
+        const hex = Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+        if (hex !== String(expect.sha256 || '')) return refused('file_hash');
+      } catch (e) { return refused('file_hash'); }
+    }
+    scanFast(); scanHtml();
+    if (!token) return { error: 'no_token', state: state() };
+    if (typeof fetch !== 'function') return { error: 'no_fetch' };
+    const hostMode = spec.host === undefined ? 'captured' : spec.host;
+    const credMode = spec.credentials === undefined ? 'captured' : spec.credentials;
+    if (['captured', 'public'].indexOf(hostMode) < 0) return { error: 'bad_option' };
+    if (['captured', 'include', 'omit'].indexOf(credMode) < 0) return { error: 'bad_option' };
+    const useHost = hostMode === 'public' ? 'graph.facebook.com' : host;
+    const cred = credentialsFor(credMode);
+    let body;
+    if (blob) {
+      body = new FormData();
+      for (const k of Object.keys(params)) {
+        const v = params[k];
+        body.append(k, typeof v === 'string' ? v : JSON.stringify(v));
+      }
+      body.append('access_token', token);
+      body.append(want, blob, String(spec.filename || 'upload').replace(/[^A-Za-z0-9_.\-]/g, '_').slice(0, 80));
+    } else {
+      body = new URLSearchParams();
+      for (const k of Object.keys(params)) {
+        const v = params[k];
+        body.set(k, typeof v === 'string' ? v : JSON.stringify(v));
+      }
+      body.set('access_token', token);
+    }
+    // Токен — в теле, не в адресе. Один запрос, без повтора и перенаправлений.
+    const url = 'https://' + useHost + (version ? '/' + version : '') + path;
+    const endpoint = { host: useHost, version: version, credentials: cred };
+    let resp = null;
+    try {
+      resp = await fetch(url, { method: 'POST', body: body, credentials: cred, mode: 'cors',
+                                cache: 'no-store', redirect: 'error' });
+    } catch (e) {
+      if (want) unstage(files[want]);
+      return { error: 'network', state: state(), endpoint: endpoint };
+    }
+    if (want) unstage(files[want]);
+    let text = '';
+    try { text = await resp.text(); } catch (e) { return { error: 'network', status: resp.status }; }
+    text = clean(text);
+    let parsed;
+    try { parsed = JSON.parse(text); } catch (e) { parsed = { non_json: text.slice(0, 300) }; }
+    return { status: resp.status, body: parsed, headers: {}, endpoint: endpoint };
+  }
+
   async function call(spec) {
     if (retired) return { error: 'retired' };
+    if (spec && spec.method === 'POST') return write(spec);
     if (!spec || spec.method !== 'GET') return { error: 'read_only' };
     const path = String(spec.path || '');
     if (!/^\/[A-Za-z0-9_\/.\-]*$/.test(path) || path.indexOf('..') >= 0) return { error: 'bad_path' };
@@ -213,13 +429,16 @@ _HELPER_JS = r"""
   function probe() { scanFast(); scanHtml(); return state(); }
   function retire() { retired = true; token = null; return true; }
 
-  g[NAME] = Object.freeze({ call: call, state: state, probe: probe, retire: retire });
+  g[NAME] = Object.freeze({ call: call, state: state, probe: probe, retire: retire,
+                          stage: stage, unstage: unstage });
 })();
 """
 
 
-def helper_source(name: str) -> str:
-    return _HELPER_JS.replace("__NAME__", json.dumps(name))
+def helper_source(name: str, write_policy: dict | None = None) -> str:
+    """Исходник помощника. `write_policy` — только у создателя кампаний (ACL-1761)."""
+    return (_HELPER_JS.replace("__NAME__", json.dumps(name))
+            .replace("__WRITE__", json.dumps(write_policy) if write_policy else "null"))
 
 
 def ads_manager_url(act_id: str) -> str:
@@ -240,8 +459,28 @@ class InPageGraph:
 
     def __init__(self, tab: Any, *, name: str | None = None,
                  graph_host: str = "captured", credentials: str = "captured",
+                 allow_writes: bool = False, write_act: str | None = None,
+                 allow_object_updates: bool = False,
                  sleep: Callable[[float], None] = time.sleep,
                  clock: Callable[[], float] = time.monotonic):
+        # ACL-1761: запись — только явно и только в один проверенный кабинет.
+        # ACL-1800: `allow_object_updates` — другой режим записи: только правка
+        # существующих объектов (статус/бюджет/ставка), создание невозможно.
+        if allow_writes and allow_object_updates:
+            raise ValueError("creation writes and object updates are separate modes")
+        self.object_updates = bool(allow_object_updates)
+        self.allow_writes = bool(allow_writes) or self.object_updates
+        self.write_act = None
+        self._write_policy: dict | None = None
+        if self.allow_writes:
+            from src.fb_api import write_policy as _wp
+
+            m = re.fullmatch(r"act_\d{5,}", str(write_act or ""))
+            if not m:
+                raise ValueError("allow_writes needs the verified act_<id>")
+            self.write_act = str(write_act)
+            self._write_policy = (_wp.policy_for_commands(self.write_act) if self.object_updates
+                                  else _wp.policy_for_page(self.write_act))
         if graph_host not in GRAPH_HOST_MODES:
             raise ValueError(f"graph_host must be one of {sorted(GRAPH_HOST_MODES)}")
         if credentials not in CREDENTIAL_MODES:
@@ -256,20 +495,59 @@ class InPageGraph:
         self._ctx: int | None = None
         self._injected = False
 
+    # -- таймаут вкладки: что на самом деле с ней (F1, ACL-1761)
+    def _timeout_stop(self, exc: BaseException) -> GraphStop | None:
+        """Вкладка не ответила в срок: спросить у БРАУЗЕРА, где она сейчас.
+
+        Логин → `LoggedOut`, checkpoint → `Checkpoint`, иначе `PageUnresponsive`.
+        Браузер тоже молчит (или у вкладки нет такого метода) — `None`, и
+        вызывающий поднимает исходный `CdpTimeout`. Повторов нет.
+        """
+        ask = getattr(self.tab, "browser_url", None)
+        if not callable(ask):
+            return None
+        try:
+            url = str(ask() or "")
+        except Exception:
+            return None
+        if not url:
+            return None
+        path = urllib.parse.urlsplit(url).path.lower()
+        where = host_and_path(url) or "an unknown page"
+        if path.startswith(("/login", "/recover")):
+            return LoggedOut("the profile was logged out while the job ran; log in inside "
+                             "Multilogin, then retry. Nothing more was sent.")
+        if "/checkpoint" in path or "two_step" in path:
+            return Checkpoint("the profile is on a Facebook checkpoint")
+        return PageUnresponsive(f"the Ads Manager tab stopped answering (now at {where}); "
+                                "nothing more was sent")
+
+    @contextmanager
+    def _timeouts_as_stops(self):
+        """`CdpTimeout` вкладки → осмысленный стоп; не удалось выяснить — как был."""
+        try:
+            yield
+        except CdpTimeout as exc:
+            stop = self._timeout_stop(exc)
+            if stop is None:
+                raise
+            raise stop from exc
+
     # -- отдельный мир и помощник
     def _reset_world(self) -> None:
         self._ctx = None
         self._injected = False
 
     def _ensure(self) -> int:
-        if self._ctx is None:
-            self._ctx = self.tab.create_isolated_world(self.world_name)
-            self._injected = False
-        if not self._injected:
-            # Повторный вызов безвреден: помощник сам выходит, если уже стоит.
-            self.tab.evaluate_in(self._ctx, helper_source(self.name), timeout=10.0)
-            self._injected = True
-        return self._ctx
+        with self._timeouts_as_stops():
+            if self._ctx is None:
+                self._ctx = self.tab.create_isolated_world(self.world_name)
+                self._injected = False
+            if not self._injected:
+                # Повторный вызов безвреден: помощник сам выходит, если уже стоит.
+                self.tab.evaluate_in(self._ctx, helper_source(self.name, self._write_policy), timeout=10.0)
+                self._injected = True
+            return self._ctx
 
     def _eval_helper(self, tail: str, *, timeout: float = 60.0) -> Any:
         """Не-Meta вызов помощника (`state`/`probe`/`retire`): можно повторить.
@@ -283,7 +561,8 @@ class InPageGraph:
         for attempt in (0, 1):
             ctx = self._ensure()
             try:
-                return strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout))
+                with self._timeouts_as_stops():
+                    return strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout))
             except StaleContextError:
                 self._reset_world()
                 if attempt:
@@ -305,7 +584,8 @@ class InPageGraph:
 
     def navigate(self, act_id: str, *, timeout: float = 60.0) -> None:
         """Открыть Ads Manager кабинета в своей вкладке. Одна загрузка, ни одного клика."""
-        self.tab.navigate(ads_manager_url(act_id), timeout=timeout)
+        with self._timeouts_as_stops():
+            self.tab.navigate(ads_manager_url(act_id), timeout=timeout)
         self._reset_world()
 
     def start(self, act_id: str, *, timeout: float = 90.0) -> dict:
@@ -351,6 +631,20 @@ class InPageGraph:
             got = None
         return got if isinstance(got, dict) else {"kind": "other", "has_token": False}
 
+    def live_state(self, *, timeout: float = 10.0) -> dict:
+        """Дешёвая проверка прогретой вкладки перед действием (ACL-1812).
+
+        Один `.state()` помощника; токена в нём нет, а вкладка на Ads Manager —
+        один полный `.probe()` (Resource Timing мог переполниться за часы, токен
+        остаётся в HTML). К Meta ничего не уходит. Зависшая вкладка поднимает
+        `GraphStop` (вход, checkpoint, не отвечает), мёртвая — `CdpError`: решает
+        вызывающий (заменить вкладку один раз).
+        """
+        got = self._eval_helper(".state()", timeout=timeout)
+        if isinstance(got, dict) and got.get("kind") == "ads_manager" and not got.get("has_token"):
+            got = self._eval_helper(".probe()", timeout=timeout)
+        return got if isinstance(got, dict) else {"kind": "unknown", "has_token": False}
+
     def state(self) -> dict:
         try:
             got = self._eval_helper(".state()", timeout=10.0)
@@ -375,12 +669,105 @@ class InPageGraph:
         # …потом Graph-вызов РОВНО ОДИН раз. Любая ошибка после отправки —
         # результат неизвестен и НЕ повторяется (ревью r9-1): это стоп.
         try:
-            got = strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout))
+            with self._timeouts_as_stops():
+                got = strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout))
+        except GraphStop:
+            raise
         except CdpTimeout:
             raise
         except (StaleContextError, PageError, CdpError):
             return {"error": "call_unknown"}
         return got if isinstance(got, dict) else {"error": "bad_reply"}
+
+    # -- запись (ACL-1761)
+    #: Размер куска файла, который кладётся в помощник за один вызов CDP.
+    STAGE_CHUNK = 768 * 1024
+
+    def _stage_once(self, ctx: int, data: bytes, timeout: float) -> str:
+        """Один проход складывания файла в помощник. Устаревший мир — исключение."""
+        import base64
+
+        stage_id = "f" + secrets.token_hex(8)
+        total = 0
+        for start in range(0, max(1, len(data)), self.STAGE_CHUNK):
+            chunk = base64.b64encode(data[start:start + self.STAGE_CHUNK]).decode("ascii")
+            expr = (f"globalThis[{json.dumps(self.name)}].stage("
+                    f"{json.dumps(stage_id)}, {json.dumps(chunk)})")
+            got = self.tab.evaluate_in(ctx, expr, timeout=timeout)
+            if not isinstance(got, dict) or not got.get("ok"):
+                err = got.get("error") if isinstance(got, dict) else "bad_reply"
+                raise PageError(f"could not stage the file in the page ({err})")
+            total = int(got.get("bytes") or 0)
+        if total != len(data):
+            raise PageError(f"staged {total} bytes instead of {len(data)}")
+        return stage_id
+
+    def stage_file(self, data: bytes, *, timeout: float = 30.0) -> tuple[int, str]:
+        """Положить файл в помощник кусками. К Meta ничего не уходит (ревью M1).
+
+        Мир исчез посреди складывания — начинаем С НУЛЯ в новом мире (один
+        раз): кусок не переотправляется в пустой новый мир под старым id.
+        Итоговое число байт сверяется с `len(data)`. Возвращает (мир, id).
+        """
+        if not self.allow_writes or self.object_updates:
+            raise ValueError("read-only: staging a file needs allow_writes")
+        for attempt in (0, 1):
+            self._ready_for_call()
+            ctx = self._ensure()
+            try:
+                return ctx, self._stage_once(ctx, data, timeout)
+            except StaleContextError:
+                self._reset_world()
+                if attempt:
+                    raise
+        raise CdpError("staging failed")  # недостижимо
+
+    def write(self, path: str, params: dict | None = None, *, files: dict | None = None,
+              filename: str = "", timeout: float = 120.0, on_ad: bool = False) -> dict:
+        """POST в разрешённое ребро. РОВНО один раз; сбой после отправки — `call_unknown`.
+
+        `files` — {поле: bytes}. Файл складывается в помощник прямо перед
+        вызовом, в том же мире; помощник сверяет размер и SHA-256 перед
+        отправкой. Политика проверяется здесь (`write_policy.check`) и ещё раз
+        в помощнике.
+        """
+        if not self.allow_writes:
+            raise ValueError("read-only: writes are not enabled for this page")
+        import hashlib
+
+        from src.fb_api import write_policy as _wp
+
+        if self.object_updates:
+            _wp.check_object_update("POST", path, params, files)
+        else:
+            _wp.check(self.write_act, "POST", path, params, files, on_ad=on_ad)
+        spec: dict[str, Any] = {"method": "POST", "path": path, "params": params or {}, "files": {},
+                                "filename": filename, "host": self.graph_host,
+                                "credentials": self.credentials}
+        if on_ad:
+            # ACL-1775: набор плана ON_AD — вторая линия политики пропустит форму в креативе.
+            spec["on_ad"] = True
+        if files:
+            (field_name, data), = files.items()
+            if not isinstance(data, (bytes, bytearray)):
+                raise ValueError("file content must be bytes")
+            try:
+                ctx, stage_id = self.stage_file(bytes(data))
+            except (PageError, CdpError) as exc:
+                # Ничего не отправлено: отказ страницы до записи.
+                return {"error": "no_file", "why": str(exc)[:120]}
+            spec["files"] = {field_name: stage_id}
+            spec["expect"] = {"bytes": len(data), "sha256": hashlib.sha256(bytes(data)).hexdigest()}
+        else:
+            self._ready_for_call()
+            ctx = self._ensure()
+        expr = f"globalThis[{json.dumps(self.name)}].call({json.dumps(spec)})"
+        try:
+            got = strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout))
+        except (CdpTimeout, StaleContextError, PageError, CdpError, TimeoutError):
+            # Запрос мог уйти: результат неизвестен, повтора нет — сверка чтением.
+            return {"error": "call_unknown"}
+        return got if isinstance(got, dict) else {"error": "call_unknown"}
 
     def reacquire(self, *, timeout: float = 90.0) -> dict:
         """Переснять токен: гасим помощника, перезагружаем вкладку, новый мир."""

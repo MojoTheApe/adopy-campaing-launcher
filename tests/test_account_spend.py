@@ -258,24 +258,14 @@ class _Provider:
 
 
 def test_a_hand_opened_profile_is_reopened_gently_like_publish(monkeypatch):
-    """ACL-1234: вручную открытый профиль (Doc19) мягко перезапускается через API."""
+    """ACL-1812/ACL-1811: вручную открытый профиль автоматически НЕ перезапускается (разлогин 5414)."""
     _fake_browser(monkeypatch, attach=None, running=True)
-    marker = object()
-    provider = _Provider(result=marker)
-    monkeypatch.setattr(rpa_browser, "get_browser_provider", lambda name: provider)
-    assert _owned_attach(_Entry(), "Acc") is marker
-    assert provider.calls == [{"allow_restart": True, "allow_kill": False}], provider.calls
-
-
-def test_a_failed_gentle_restart_is_a_readable_refusal(monkeypatch):
-    """API не смог остановить окно — отказ словами, окно не трогаем."""
-    _fake_browser(monkeypatch, attach=None, running=True)
-    provider = _Provider(error=RuntimeError("Nothing was closed."))
+    provider = _Provider(result=object())
     monkeypatch.setattr(rpa_browser, "get_browser_provider", lambda name: provider)
     with pytest.raises(sp.ProfileNotAttachable) as exc:
-        _owned_attach(_Entry(), "Acc")
-    assert "could not be reopened" in str(exc.value)
-    assert provider.calls[0]["allow_kill"] is False
+        sp._attach_only(_Entry(), "Acc")
+    assert str(exc.value) == sp.HAND_OPEN_MESSAGE and exc.value.code == sp.HAND_OPEN_CODE
+    assert provider.calls == [], provider.calls
 
 
 def test_an_already_attached_profile_is_never_restarted(monkeypatch):

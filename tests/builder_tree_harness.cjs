@@ -21,6 +21,11 @@ const tail = '\n})();';
 const code = html.slice(start, html.indexOf(tail, start) + tail.length);
 assert(code.includes('cbd-country') && code.includes('realTree'), 'срез захватил не то');
 
+// ACL-1769: раскладка — чистые функции, которыми дерево пользуется.
+const lstart = html.indexOf('window.cbLayout = (function () {');
+assert(lstart > 0, 'window.cbLayout не найден в шаблоне');
+const layoutCode = html.slice(lstart, html.indexOf(tail, lstart) + tail.length);
+
 // ── поддельный DOM ────────────────────────────────────────────────────
 // Селекторы поддерживаются ровно те, что дерево использует; встретив
 // незнакомый, стуб ругается, а не возвращает молча null.
@@ -116,8 +121,11 @@ function boot(spec, opts = {}) {
   const bodyNode = sink('cbd-body');
   const footNode = sink('cbd-foot');
   const panelNode = el('div', { classes: ['cbd-panel'] });
+  const editorNode = el('div', { classes: ['cbd-col-edit'] });
   const root = el('div', { children: p.panels.concat(p.sideBtns, p.maps) });
-  const ids = { 'cbd-body': bodyNode, 'cbd-foot': footNode, 'cbd-panel': panelNode };
+  const ids = { 'cbd-body': bodyNode, 'cbd-foot': footNode, 'cbd-panel': panelNode, 'cbd-editor': editorNode };
+  const stored = Object.assign({}, opts.stored || {});
+  if (opts.open) stored['acl.builder.open-campaign'] = opts.open;
 
   const timers = [];
   const counts = [];
@@ -137,7 +145,7 @@ function boot(spec, opts = {}) {
 
   const sandbox = {
     document,
-    localStorage: { getItem: () => opts.open || null, setItem() {} },
+    localStorage: { getItem: (k) => (k in stored ? stored[k] : null), setItem: (k, v) => { stored[k] = String(v); } },
     aclEscHtml: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) =>
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
     setTimeout: (fn) => { timers.push(fn); return timers.length; },
@@ -160,9 +168,9 @@ function boot(spec, opts = {}) {
     Array, Object, String, JSON, Math, clearTimeout() {},
   };
   sandbox.window.window = sandbox.window;
-  vm.runInNewContext(code, sandbox);
-  return { api: sandbox.window.cbTree, body: bodyNode, foot: footNode, panel: panelNode,
-           p, counts, confirms, alerts, sent, timers, sandbox, document };
+  vm.runInNewContext(layoutCode + ';\n' + code, sandbox);
+  return { api: sandbox.window.cbTree, body: bodyNode, foot: footNode, panel: panelNode, editor: editorNode,
+           stored, p, counts, confirms, alerts, sent, timers, sandbox, document };
 }
 
 const SPEC = [
@@ -236,8 +244,11 @@ t = boot(SPEC);
 let id = /data-camp="([^"]+)"/.exec(t.body.innerHTML)[1];
 t.api.open(id);
 const card = t.body.querySelector('.cbd-camp[data-camp="' + id + '"]');
-const host = card.children[0];
-assert.ok(host, 'в раскрытой карточке нет места под форму');
+assert.ok(card, 'выбранной карточки нет в дереве');
+// ACL-1769: форма живёт в правой колонке, а не в карточке дерева.
+const host = t.editor.children.find((c) => c.matches('.cbd-host'));
+assert.ok(host, 'в правой колонке нет места под форму');
+assert.equal(card.children.length, 0, 'форма осталась в карточке дерева');
 assert.equal(host.querySelector('form.open-account-form'), t.p.forms[0], 'в ящик приехала не та форма');
 assert.equal(t.p.forms[0].parentNode, host, 'форма осталась на странице');
 
@@ -324,3 +335,112 @@ clickAct(t, 'add-country');
 assert.equal(t.sent.length, 0, 'пустое имя ушло на сервер');
 
 console.log('ok (connect)');
+
+// ── ACL-1769: две колонки ─────────────────────────────────────────────
+// Слева дерево из имён, справа редактор выбранного с переключателем
+// Campaign / Ad set / Ad. Форма одна: редактор лишь показывает её раздел.
+t = boot(SPEC);
+let h = t.body.innerHTML;
+assert.ok(/data-act="names-only"[^>]*aria-pressed="false"/.test(h), 'нет переключателя «Names only»');
+assert.equal((h.match(/class="cbd-acc-add"/g) || []).length, 2, '«+» не у каждого аккаунта');
+assert.ok(/class="cbd-acc-add" data-act="add-here" data-country="sa" data-account="DQ438"/.test(h), '«+» не знает своего аккаунта');
+clickAct(t, 'names-only');
+assert.equal(t.stored['acl.builder.names-only'], '1', '«Names only» не запомнен');
+assert.equal(t.body.dataset.namesOnly, '1');
+assert.equal(t.panel.dataset.namesOnly, '1', '«Names only» не свернул редакторы (атрибут панели)');
+assert.ok(/aria-pressed="true"/.test(t.body.innerHTML));
+// …и переживает перезагрузку страницы
+assert.equal(boot(SPEC, { stored: t.stored }).body.dataset.namesOnly, '1', '«Names only» забыт после F5');
+
+// Аккаунт сворачивается до одной строки, и это помнится.
+clickAct(t, 'acc-toggle', { key: 'sa|DQ438' });
+assert.deepEqual(JSON.parse(t.stored['acl.builder.folded-accounts']), ['sa|DQ438']);
+assert.ok(/data-acc="sa\|DQ438" data-collapsed="1"/.test(t.body.innerHTML), 'аккаунт не свёрнут');
+assert.ok(/data-acc="kw\|KW_W72" data-collapsed="0"/.test(t.body.innerHTML), 'свернулся чужой аккаунт');
+clickAct(t, 'acc-toggle', { key: 'sa|DQ438' });
+assert.deepEqual(JSON.parse(t.stored['acl.builder.folded-accounts']), [], 'аккаунт не раскрылся');
+
+// Статус аккаунта — из того, что страница знает сегодня.
+t = boot(SPEC);
+t.sandbox.window.ACCOUNT_PREFLIGHT = {
+  DQ438: { link_status: 'tracking', missing_map_fields: [] },
+  KW_W72: { link_status: 'jira', missing_map_fields: ['profile_id'] },
+};
+t.api.paint();
+h = t.body.innerHTML;
+assert.ok(/cbd-ind cbd-acc-state cbd-acc-st-ok" title="Account is configured"/.test(h), 'настроенный аккаунт не отмечен');
+assert.ok(/cbd-acc-st-warn" title="Needs setup: tracking link, profile_id"/.test(h), 'чего не хватает аккаунту — не сказано');
+
+// Справа пусто, пока ничего не выбрано.
+assert.equal(t.editor.children.filter((c) => c.matches('.cbd-host')).length, 0, 'форма в редакторе без выбора');
+
+// Выбранная кампания: переключатель уровней и один раздел формы.
+t = boot(SPEC);
+id = /data-camp="([^"]+)"/.exec(t.body.innerHTML)[1];
+t.api.open(id);
+const hostEl = t.editor.children.find((c) => c.matches('.cbd-host'));
+assert.equal(hostEl.dataset.level, 'campaign', 'по умолчанию — раздел кампании');
+let head = t.editor.children.find((c) => c.matches('.cbd-ed-head'));
+assert.equal(head.hidden, false);
+for (const lv of ['campaign', 'adset', 'ad']) assert.ok(head.innerHTML.includes('data-level="' + lv + '"'), 'нет уровня ' + lv);
+assert.ok(/data-level="campaign"[^>]*aria-selected="true"/.test(head.innerHTML));
+
+// Ad set: сегодня он один, а «+ Ad set» и «Copy ad set» выключены с названием задачи.
+clickAct(t, 'level', { level: 'adset' });
+assert.equal(hostEl.dataset.level, 'adset');
+assert.equal(t.stored['acl.builder.level'], 'adset', 'уровень не запомнен');
+assert.ok(/data-future="adsets"[^>]*title="Multiple ad sets — coming in ACL-1768"/.test(head.innerHTML), '«+ Ad set» не выключен с задачей');
+assert.ok(/data-future="copyAdset"/.test(head.innerHTML) && (head.innerHTML.match(/ disabled /g) || []).length >= 2);
+
+// Ad: выбора объявления нет, все карточки набора идут одним списком (владелец, 13.10).
+clickAct(t, 'level', { level: 'ad' });
+head = t.editor.children.find((c) => c.matches('.cbd-ed-head'));
+assert.ok(!head.innerHTML.includes('cbd-ed-ad') && !head.innerHTML.includes('<select'), 'выбор объявления остался');
+assert.ok(!head.innerHTML.includes('<option '), 'в шапке остался список объявлений');
+const slotNode = t.p.forms[0].querySelectorAll('.cb-slot')[0];
+const rows = slotNode.querySelectorAll('.cb-ad-row');
+assert.equal(rows.length, 2, 'строка объявления выброшена из формы');
+assert.deepEqual(rows.map((r) => r.classList.contains('cbd-ad-off')), [false, false], 'карточка скрыта');
+// Добавили объявление — карточка в списке, ни одна не скрыта.
+slotNode.appendChild(el('div', { classes: ['cb-ad-row'] }));
+t.api.refreshEditor();
+assert.deepEqual(slotNode.querySelectorAll('.cb-ad-row').map((r) => r.classList.contains('cbd-ad-off')), [false, false, false], 'после добавления часть карточек скрыта');
+// Убрали объявление — остальные на месте и видны.
+slotNode.querySelectorAll('.cb-ad-row')[1].remove();
+t.api.refreshEditor();
+assert.deepEqual(slotNode.querySelectorAll('.cb-ad-row').map((r) => r.classList.contains('cbd-ad-off')), [false, false]);
+
+// Мусорный уровень — кампания; запомненный уровень поднимается при загрузке.
+t.api.setLevel('nonsense');
+assert.equal(t.api.level(), 'campaign');
+assert.equal(boot(SPEC, { stored: { 'acl.builder.level': 'ad' } }).api.level(), 'ad', 'запомненный уровень не поднялся');
+assert.equal(boot(SPEC, { stored: { 'acl.builder.level': 'zzz' } }).api.level(), 'campaign');
+
+// Уровень с ошибкой помечен «!» на своей вкладке.
+t = boot(SPEC);
+id = /data-camp="([^"]+)"/.exec(t.body.innerHTML)[1];
+t.api.open(id);
+const bad = el('input', { classes: ['cb-field-error'] });
+const adSection = el('section', { classes: ['cb-lvl', 'cb-lvl-ad'], children: [bad] });
+t.p.forms[0].querySelectorAll('.cb-slot')[0].appendChild(adSection);
+t.api.refreshEditor();
+head = t.editor.children.find((c) => c.matches('.cbd-ed-head'));
+assert.ok(/class="cbd-lv-bad"[^>]*>Ad</.test(head.innerHTML), 'ошибка в разделе Ad не видна на вкладке');
+assert.ok(!/class="cbd-lv-bad"[^>]*>Campaign</.test(head.innerHTML), 'ошибка приписана не тому уровню');
+
+// Закрыли выбор — форма вернулась на страницу, справа снова пусто.
+t.api.close();
+assert.equal(t.editor.children.filter((c) => c.matches('.cbd-host')).length, 0, 'форма осталась в редакторе после закрытия');
+console.log('ok (two columns)');
+
+// ── ACL-1769: выбор кампании выводит из «Names only» ───────────────────
+t = boot(SPEC);
+clickAct(t, 'names-only');
+assert.equal(t.panel.dataset.namesOnly, '1');
+const pickId = /data-camp="([^"]+)"/.exec(t.body.innerHTML)[1];
+const rowHit = { dataset: { act: 'toggle' }, closest: () => ({ dataset: { camp: pickId } }) };
+t.panel.fire('click', { target: { closest: (s) => (s === '[data-act]' ? rowHit : null) } });
+assert.equal(t.panel.dataset.namesOnly, '0', 'выбор кампании оставил «Names only» включённым — редактору негде показаться');
+assert.equal(t.stored['acl.builder.names-only'], '0');
+assert.ok(t.editor.children.some((c) => c.matches('.cbd-host')), 'кампания не открылась');
+console.log('ok (names only exits on select)');

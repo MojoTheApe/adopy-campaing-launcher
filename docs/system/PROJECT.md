@@ -7,8 +7,20 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
 
 ## Components and current behavior
 
+- `src/meta_campaign_agent/official_token_verifier.py` and
+  `scripts/acl_meta_token_probe.py`: explicit standalone official-token application
+  inspection. One fixed versioned Graph GET returns typed, sanitized evidence;
+  it reads no machine configuration and makes no account/spend/publication calls.
+  See [safe diagnostic use](../runtime/OFFICIAL_TOKEN_DIAGNOSTIC.md). This is a
+  future connection-flow boundary, not a dashboard connection or readiness check.
+
 - `src/web`, `serve.py`: local dashboard, account/report views, campaign builder,
   machine configuration and update endpoints.
+  ACL-1651 refreshes the Builder creative list on search/window focus (ten-second
+  throttle) and once per missed search streak. A miss during the two-second request
+  gap waits in the background for its refresh; typing remains available and the
+  visible latest query is searched again without switching Image/Video. Selected
+  creatives and campaign fields remain unchanged until the user chooses a file.
 - `src/analysis_agent`: statistics workbook reading, reports and reconciliation.
 - `src/campaign_bridge`, `src/upload_agent`: campaign input/output preparation.
 - `src/fb_ads_rpa`, `src/meta_campaign_agent`: Ads Manager interactions, verified
@@ -57,6 +69,16 @@ Engineering delivery now has an explicitly prepared Approved/batch policy;
 actual state activation is separately verified under
 [ACL-1566](../repository/BATCH_INTEGRATION.md). Campaign runtime, employee
 installations and stable-package publication retain their existing boundaries.
+
+[Source child ACL-1875](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/875)
+prepares five implementation slots, five independent source-review slots and
+batches of at most five through explicit execution schema 3. ACL-owned CI scope
+and assembly recognize both v2/v3; combined verification and a single integration
+Coordinator/Reviewer remain mandatory. Actual source completion, compatible shared
+service publication and idle queue-preserving migration are separate gates in
+[SOURCE_REVIEWS.md](../repository/SOURCE_REVIEWS.md), retained in parent
+[ACL-1874](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/874). Preparation changes no
+campaign runtime or installed employee version.
 
 ## Maintaining this document
 

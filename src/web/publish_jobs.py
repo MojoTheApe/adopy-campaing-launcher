@@ -12,6 +12,7 @@ form fields and violated the product's manual-final-publish boundary.
 from __future__ import annotations
 
 import contextlib
+import logging
 import os
 import threading
 import time
@@ -163,6 +164,8 @@ def create_job(
             "dry_run": dry_run,
             "hand_off": hand_off,
             "backend": "rpa" if use_rpa_publish() else "api",
+            # ACL-1761: чем создаются кампании — роботом или Graph API (PAUSED).
+            "fb_backend": _fb_backend(),
             "status": "pending",
             "created_at": _now_iso(),
             "started_at": None,
@@ -637,6 +640,11 @@ def _run_job_inner(
             # не вокруг шага: прерывать нельзя всю. Очередь в это время ждёт
             # снаружи — держать экран ради ожидания незачем.
             with keep_display_awake(account_label), _watch_screen_lock(job_id):
+                if _fb_backend() == "api":
+                    # ACL-1761: Graph API в профиле, всё на паузе.
+                    _run_api(job_id, slots, account_label=account_label, country=country,
+                             dry_run=dry_run)
+                    return
                 _run_rpa(
                     job_id,
                     slots,
@@ -721,7 +729,21 @@ def _append_result(job_id: str, res: dict[str, Any]) -> None:
         _jobs[job_id]["done_count"] += 1
 
 
+def _mlx_text(job_id: str, msg: str) -> str:
+    """ACL-1826: потеря общей сессии Multilogin / вход в прокси — одной понятной фразой."""
+    try:
+        from src.fb_api import mlx_session
+
+        with _jobs_lock:
+            account = (_jobs.get(job_id) or {}).get("account_label", "")
+        text, _code = mlx_session.humanize(msg, "", account)
+        return text or msg
+    except Exception:
+        return msg
+
+
 def _fatal(job_id: str, msg: str) -> None:
+    msg = _mlx_text(job_id, msg)
     with _jobs_lock:
         if _abandoned(job_id):
             return
@@ -905,6 +927,22 @@ def _run_rpa(
             _active_publishers.pop(job_id, None)
         return
 
+    # ACL-1781: кампания, которую Meta отклонит по своим правилам, не идёт в
+    # Ads Manager — причина (English) показывается в карточке кампании.
+    try:
+        from src.web import publish_preflight as _pf
+
+        meta_errors = _pf.meta_rules_errors(slots, account_label=account_label, country=country, drafts=drafts)
+    except Exception:
+        # Проверка правил Meta не должна ронять публикацию, но и молчать о
+        # своём сбое нельзя: причина остаётся в логе.
+        logging.getLogger(__name__).exception("Meta rules check could not run; campaigns are not blocked by it")
+        meta_errors = {}
+    for draft in drafts:
+        for msg in meta_errors.get(getattr(draft, "name", ""), []):
+            if msg not in draft.errors:
+                draft.errors.append(msg)
+
     ready: list[Any] = []
     for draft in drafts:
         if _is_cancelled(job_id):
@@ -975,8 +1013,110 @@ def _run_rpa(
         _finish(job_id, cancelled=cancelled or _is_cancelled(job_id))
 
 
+def _fb_backend() -> str:
+    """`api` — создавать кампании через Graph API (ACL-1761), иначе `rpa`."""
+    from src.web import publish_api
+
+    return publish_api.backend()
+
+
+def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, country: str,
+             dry_run: bool = False) -> None:
+    """ACL-1761: те же черновики, но кампании создаёт Graph API, всё PAUSED.
+
+    Место по памяти и замок профиля уже взяты (`_run_job_inner`). Итоги — в том
+    же виде, что у робота; профиль отпускается тем же `_let_go_of_profile`.
+    """
+    from src.web import publish_api
+
+    def progress(text: str) -> None:
+        with _jobs_lock:
+            job = _jobs.get(job_id)
+            if job is not None and not job.get("abandoned"):
+                job["progress"] = str(text)[:200]
+
+    # Ревью M3: dry_run — предпроверка и план без единой записи (клиент без права записи).
+    publisher = publish_api.ApiPublisher(progress=progress, dry_run=dry_run)
+    with _jobs_lock:
+        _active_publishers[job_id] = publisher  # type: ignore[assignment]
+    job_cancel.bind(publisher.cancel_event)
+    if _is_cancelled(job_id):
+        publisher.cancel()
+    try:
+        drafts = publisher.build_drafts(slots, account_label=account_label, country=country)
+    except Exception as e:
+        job_cancel.unbind()
+        _fatal(job_id, f"Failed to build campaign drafts: {e}")
+        with _jobs_lock:
+            _active_publishers.pop(job_id, None)
+        return
+
+    with _jobs_lock:
+        if not _abandoned(job_id):
+            _jobs[job_id]["total"] = len(drafts)
+            _jobs[job_id]["campaign_names"] = [str(getattr(d, "name", "") or "") for d in drafts]
+    if not drafts:
+        job_cancel.unbind()
+        _fatal(job_id, "No campaigns to publish.")
+        with _jobs_lock:
+            _active_publishers.pop(job_id, None)
+        return
+
+    ready: list[Any] = []
+    for draft in drafts:
+        if draft.errors:
+            _append_result(job_id, publish_api.result_dict(
+                publish_api.Outcome(campaign_name=draft.name),
+                error="; ".join(draft.errors) + ". Nothing was created."))
+        else:
+            ready.append(draft)
+
+    cancelled = False
+    try:
+        if ready and not _is_cancelled(job_id):
+            publisher.open(account_label)
+            for draft in ready:
+                if _is_cancelled(job_id):
+                    cancelled = True
+                    _add_error(job_id, "Stopped by the user")
+                    break
+                _append_result(job_id, publisher.publish_draft(draft))
+    except job_cancel.JobCancelled:
+        cancelled = True
+        _add_error(job_id, "Stopped by the user")
+    except Exception as e:
+        if _is_cancelled(job_id):
+            cancelled = True
+            _add_error(job_id, "Stopped by the user")
+        else:
+            _add_error(job_id, f"Graph API publish error: {e}")
+            try:
+                from src import acl_sentry
+
+                acl_sentry.report_job_exception(e, job=job_id, account=account_label, phase="api_publish")
+            except Exception:
+                pass
+    finally:
+        job_cancel.unbind()
+        cancelled = cancelled or _is_cancelled(job_id)
+        clean = not cancelled and _job_is_clean(job_id)
+        other = clean and _profile_has_other_job(job_id, account_label)
+        try:
+            outcome = publisher.finish_job(account_label, clean=clean, other_job_waits=other)
+        except Exception:
+            outcome = ""
+            publisher.close()
+        if outcome == "closed":
+            with _jobs_lock:
+                if not _abandoned(job_id):
+                    _jobs[job_id]["profile_closed"] = True
+            _append_creative_notice(job_id, publish_api.PROFILE_CLOSED_NOTICE)
+        _finish(job_id, cancelled=cancelled)
+
+
 def _add_error(job_id: str, msg: str) -> None:
     """Ошибка в задание; брошенное по сроку Stop молчит (ACL-1614)."""
+    msg = _mlx_text(job_id, msg)
     with _jobs_lock:
         if not _abandoned(job_id):
             _jobs[job_id]["errors"].append(msg)
@@ -1256,6 +1396,12 @@ def close_profile(job_id: str) -> dict[str, Any]:
                                                 account_label, scrub(str(exc))[:200])
             return {"ok": False, "code": "failed",
                     "error": "Multilogin could not close the profile. Close its window in Multilogin."}
+        finally:
+            # ACL-1812 (ревью #813, B1-ter): остановка записана при любой попытке — следующий
+            # запуск ждёт паузу (ACL-1811). Кнопка есть на обоих бэкендах.
+            from src.fb_api import stop_log as _stop_log
+
+            _stop_log.record_stop(profile)
     finally:
         lease.release()
     with _jobs_lock:
