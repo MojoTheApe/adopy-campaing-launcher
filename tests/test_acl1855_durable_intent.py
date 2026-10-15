@@ -413,3 +413,32 @@ console.log(JSON.stringify(r));
     assert out.returncode == 0, out.stderr
     texts = json.loads(out.stdout)
     assert len(set(texts)) == 1 and "change history" in texts[0]
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="node is not installed")
+def test_page_never_says_not_sent_after_a_write_may_have_landed(world, monkeypatch, tmp_path):
+    """Итоги _finalize со сбоем журнала после записи — не «Not sent» на странице."""
+    pv = world.preview("set_status", "ACTIVE", TWO)
+    Faults(world.store, monkeypatch, at={4})                     # частичный успех: 1 из 2
+    world.execute(pv)
+    partial = world.final(pv)["message"]
+    w2 = World(tmp_path / "b")
+    pv2 = w2.preview("set_status", "ACTIVE", [t("campaign", CAMP_A)])
+    Faults(w2.store, monkeypatch, from_on=3)                     # итог после записи не лёг
+    w2.execute(pv2)
+    unknown = w2.final(pv2)["message"]
+    nothing = World(tmp_path / "c")
+    pv3 = nothing.preview("set_status", "ACTIVE", TWO)
+    Faults(nothing.store, monkeypatch, from_on=2)                # до первого POST: ничего не ушло
+    nothing.execute(pv3)
+    none_sent = nothing.final(pv3)["message"]
+    script = (ROOT / "src/web/static/acm_commands.js").read_text(encoding="utf-8") + (
+        "const A = globalThis.acmCommands; const m = " + json.dumps([partial, unknown, none_sent])
+        + "; console.log(JSON.stringify(m.map(x => A.explain(x, 'warn', '').text)));")
+    out = subprocess.run([shutil.which("node"), "-e", script], capture_output=True, text=True,
+                         encoding="utf-8", timeout=60)
+    assert out.returncode == 0, out.stderr
+    texts = json.loads(out.stdout)
+    assert not texts[0].startswith("Not sent") and "check Ads Manager" in texts[0]
+    assert not texts[1].startswith("Not sent") and "check Ads Manager" in texts[1]
+    assert texts[2].startswith("Not sent")

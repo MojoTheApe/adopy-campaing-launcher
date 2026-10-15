@@ -472,6 +472,7 @@
     permission: 'Multilogin refused to start this profile (permission) — another user may be signed in to the same Multilogin account',
     stale: 'Changed since the preview — review again',
     storage: "Not sent — this computer couldn't save the change history (disk full?)",
+    historyCheck: "Change history couldn't be saved on this computer — check Ads Manager",
     unknown: 'Something went wrong — see Details'
   };
   var OWN_TEXT_CODES = ['restart_cooldown', 'not_loopback', 'rpa_backend', 'rpa'];   // текст сервера уже человеческий (с оставшимся временем)
@@ -489,8 +490,12 @@
     if (/checkpoint/i.test(text)) return FRIENDLY.checkpoint;
     if (code === 'page_unresponsive' || /stopped answering|page[ _]unresponsive/i.test(text)) return FRIENDLY.unresponsive;
     if (code === 'stale' || /changed since|since the preview/i.test(text)) return FRIENDLY.stale;
-    // ACL-1855: журнал операций не записался — в Meta ничего не ушло
-    if (code === 'storage' || /history could not be saved/i.test(text)) return FRIENDLY.storage;
+    // ACL-1855: журнал операций не записался. «Not sent» — только когда в Meta точно ничего не ушло;
+    // если запись была (или могла быть), отдельный текст без «Not sent».
+    if (code === 'storage') return FRIENDLY.storage;
+    if (/history could not be saved/i.test(text)) {
+      return /^Not sent:|nothing was (?:sent|written)/i.test(text) ? FRIENDLY.storage : FRIENDLY.historyCheck;
+    }
     if (/listens on this computer alone|\(127\.0\.0\.1\)/.test(text) || /ACL_FB_BACKEND=api/.test(text)) return text.replace(/^Not sent:\s*/, '');
     return null;
   }
