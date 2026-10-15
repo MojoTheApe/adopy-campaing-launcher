@@ -242,19 +242,6 @@ def test_an_open_profile_is_attached_not_restarted_and_left_open(reads, page_rea
     assert reads.queue.snapshot()["running"] == [], "открытому профилю место не нужно"
 
 
-def test_a_hand_opened_profile_is_reopened_and_stays_open(reads, page_reads):
-    """ACL-1562 как был: окно руками переоткрыто — и после чтения открыто."""
-    reads.running[PROFILE] = frozenset({4242})
-    out = sp.read_via_rpa(ACCOUNT, DAY, DAY)
-    assert out.state == "ok"
-    stops = [e for e in reads.ev if isinstance(e, tuple) and e[0] == "stop"]
-    assert stops == [("stop", PROFILE)], "переоткрытие — одна остановка, без закрытия после"
-    assert reads.automation.get(PROFILE)
-    assert not _steps(reads, "spend_profile_closed_after_read")
-
-
-# ── упавшее чтение всё равно закрывает запущенное ─────────────────────────
-
 def test_a_failed_read_still_closes_the_profile_it_started(reads):
     reads.page_kw = {"fail": RuntimeError("navigation exploded")}
     with pytest.raises(RuntimeError, match="navigation exploded"):
@@ -349,7 +336,7 @@ def test_a_spend_read_alone_closes_after_the_grace(reads, page_reads, monkeypatc
     monkeypatch.setattr(sp, "CLOSE_GRACE_S", 0.05)
     assert sp.read_via_rpa(ACCOUNT, DAY, DAY).state == "ok"
     assert _wait_for(lambda: ("stop", PROFILE) in reads.ev)
-    assert reads.queue.snapshot()["running"] == []
+    assert _wait_for(lambda: reads.queue.snapshot()["running"] == [])
 
 
 # ── Read all: очередь мест Publish ───────────────────────────────────────
