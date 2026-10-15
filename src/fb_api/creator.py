@@ -389,7 +389,8 @@ class TargetingUnresolved(PlanError):
                        + " | ".join(f"picked '{i['suggested']['name']}' [{i['suggested']['type']}] for '{i['term']}'?"
                                     for i in asks) + " Confirm a candidate in Check plan.")
         if unknown:
-            msg.append(_tr.UNKNOWN_MESSAGE)
+            # Причина из резолвера: «Meta отказала в поиске X» или «нажмите Check plan ещё раз».
+            msg.extend(dict.fromkeys(i.get("reason") or _tr.UNKNOWN_MESSAGE for i in unknown))
         super().__init__(". ".join(msg))
 
 
@@ -481,6 +482,10 @@ class TargetingResolver:
     def targeting_report(self) -> list[dict]:
         """Что нашлось/ждёт подтверждения по всем терминам задания (для Check plan)."""
         return self.terms.report()
+
+    def refusal_warnings(self) -> list[str]:
+        """Необязательные поиски, в которых Meta отказала по правам (ACL-1920): предупреждения."""
+        return self.terms.refusals()
 
 
 def targeting_for(plan: CampaignPlan, ad_set: AdSetPlan, resolver: TargetingResolver) -> dict:
@@ -955,10 +960,19 @@ class CampaignCreator:
             out.error, out.stop_kind = f"Write result unknown: {exc}", "unknown"
         return out
 
+    def _add_refusal_warnings(self, out: Outcome) -> None:
+        fn = getattr(self.resolver, "refusal_warnings", None)
+        for w in (fn() if fn else []):
+            if w not in out.warnings:
+                out.warnings.append(w)
+
     def _prepare(self, plan: CampaignPlan, out: Outcome) -> tuple[list[dict], dict[str, bytes]]:
         """Всё, что проверяется до записи: страница, пиксель, таргетинг, файлы."""
         out.warnings += resolve_page_pixel(plan, self.facts)
-        targetings = [targeting_for(plan, s, self.resolver) for s in plan.ad_sets]
+        try:
+            targetings = [targeting_for(plan, s, self.resolver) for s in plan.ad_sets]
+        finally:
+            self._add_refusal_warnings(out)     # и при ошибке плана: человек видит, что Meta отказала
         self._step(out, "preflight: targeting resolved")
         self._page_forms = None
         if any(s.instant for s in plan.ad_sets):
@@ -1077,6 +1091,7 @@ class CampaignCreator:
         except GraphError as exc:
             out.error, out.stop_kind = f"Meta refused: {exc}", "graph_error"
         out.targeting = self._targeting_report()
+        self._add_refusal_warnings(out)
         self._audit(plan, out, existing=differences, checked=differences is not None, files=files)
         return out
 
