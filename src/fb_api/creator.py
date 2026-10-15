@@ -168,6 +168,9 @@ class CampaignPlan:
     pixel_id: str
     daily_budget: float
     ad_sets: list[AdSetPlan] = field(default_factory=list)
+    #: Откуда страница и пиксель: draft / map / account default (ACL-1766).
+    page_source: str = ""
+    pixel_source: str = ""
     #: Предупреждения черновика (смешанный таргетинг/бюджет) — в итог (ревью, minor 7).
     warnings: list[str] = field(default_factory=list)
 
@@ -195,6 +198,14 @@ def _kind_of(path: str, declared: str) -> str:
     if ext in IMAGE_EXT:
         return "image"
     return "video" if "video" in (declared or "").lower() else "image"
+
+
+def _source(draft: Any, what: str) -> str:
+    """Источник страницы/пикселя: enrich ставит map/draft; без него — draft, если значение есть."""
+    got = str(getattr(draft, f"{what}_source", "") or "")
+    if got:
+        return got
+    return "draft" if str(getattr(draft, f"{what}_id", "") or "").strip() else ""
 
 
 def plan_from_draft(draft: Any) -> CampaignPlan:
@@ -271,6 +282,7 @@ def plan_from_draft(draft: Any) -> CampaignPlan:
         page_id=str(getattr(draft, "page_id", "") or "").strip(),
         pixel_id=str(getattr(draft, "pixel_id", "") or "").strip(),
         daily_budget=float(budget), ad_sets=ad_sets,
+        page_source=_source(draft, "page"), pixel_source=_source(draft, "pixel"),
         warnings=[str(w) for w in (getattr(draft, "warnings", None) or [])])
 
 
@@ -319,10 +331,14 @@ def resolve_page(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
     """Страница плана: на кабинете и одна определённая. Заметки; ошибки — `PlanError`."""
     notes = []
     if plan.page_id:
-        if facts.pages and plan.page_id not in facts.pages:
-            raise PlanError("The page from the account map cannot advertise from this ad account.")
+        # Принадлежность проверяется и при пустом списке: пустой список — не «можно всё».
+        if plan.page_id not in facts.pages:
+            src = plan.page_source or "draft"
+            raise PlanError(f"The page from the {src} ({plan.page_id}) is not among the pages "
+                            f"this ad account can advertise from ({len(facts.pages)} found).")
     elif len(facts.pages) == 1:
         plan.page_id = facts.pages[0]
+        plan.page_source = "account default"
         notes.append("page_id was empty in the account map; the only page of the ad account is used")
     else:
         raise PlanError(f"page_id is empty in the account map and the ad account has "
@@ -334,12 +350,16 @@ def resolve_pixel(plan: CampaignPlan, facts: AccountFacts) -> None:
     """Пиксель плана (только сайтовые наборы). Ошибки — `PlanError`."""
     if plan.ad_sets and all(s.instant for s in plan.ad_sets):
         # Instant Form: цель — форма Страницы, пиксель не нужен (ACL-1775).
-        return
-    if plan.pixel_id:
-        if facts.pixels and plan.pixel_id not in facts.pixels:
-            raise PlanError("The pixel of the draft is not on this ad account.")
+        pass
+    elif plan.pixel_id:
+        # То же для пикселя. Читается первая страница (50): больше — безопасный отказ.
+        if plan.pixel_id not in facts.pixels:
+            src = plan.pixel_source or "draft"
+            raise PlanError(f"The pixel from the {src} ({plan.pixel_id}) is not on this ad account "
+                            f"({len(facts.pixels)} found). Fix the pixel instead of letting another one be picked.")
     elif len(facts.pixels) == 1:
         plan.pixel_id = facts.pixels[0]
+        plan.pixel_source = "account default"
     else:
         raise PlanError(f"The ad account has {len(facts.pixels)} pixels/datasets; "
                         "the API backend needs exactly one")
@@ -814,7 +834,7 @@ class CampaignCreator:
     @staticmethod
     def _mk_check(checks: list[dict], obj: str, fld: str, expected: Any, actual: Any) -> None:
         checks.append({"object": obj, "field": fld, "expected": expected, "actual": actual,
-                       "ok": _same(expected, actual)})
+                       "ok": _same(expected, actual), "not_read": _not_read(expected, actual)})
 
     def _campaign_checks(self, plan: CampaignPlan, camp: dict) -> list[dict]:
         checks: list[dict] = []
@@ -863,7 +883,11 @@ class CampaignCreator:
         check("geo", targeting["geo_locations"]["countries"], (t.get("geo_locations") or {}).get("countries"))
         check("age_min", targeting["age_min"], t.get("age_min"))
         check("age_max", targeting["age_max"], t.get("age_max"))
-        check("languages", targeting.get("locales") or [], t.get("locales") or [])
+        # Локали: если Meta поле не вернула, это «Not read», а не «пусто».
+        # None («Not read») только если локали ждали, а Meta их не вернула; иначе как раньше.
+        want_locales = targeting.get("locales") or []
+        check("languages", want_locales,
+              None if want_locales and "locales" not in t else t.get("locales") or [])
         check("detailed_targeting", _flex_ids(targeting.get("flexible_spec")), _flex_ids(t.get("flexible_spec")))
         check("os", targeting.get("user_os") or [], t.get("user_os") or [])
         # Площадки вручную, как у робота (паритет RPA): платформы, места, устройства.
@@ -1104,6 +1128,7 @@ class CampaignCreator:
             "daily_budget": plan.daily_budget, "currency": self.facts.currency,
             "budget_minor": budget_minor(plan.daily_budget, self.facts.currency),
             "page_id": plan.page_id, "pixel_id": plan.pixel_id,
+            "page_source": plan.page_source, "pixel_source": plan.pixel_source,
             "existing": existing, "existing_differences": list(existing_differences or []),
             "tag": plan.label, "ad_sets": sets,
         }
@@ -1222,7 +1247,7 @@ class CampaignCreator:
 
         def check(obj: str, fld: str, expected: Any, actual: Any) -> None:
             checks.append({"object": obj, "field": fld, "expected": expected, "actual": actual,
-                           "ok": _same(expected, actual)})
+                           "ok": _same(expected, actual), "not_read": _not_read(expected, actual)})
 
         def tag(obj: str, row: dict) -> None:
             check(obj, "tag", plan.label, plan.label if plan.label in _labels(row) else "")
@@ -1379,6 +1404,11 @@ def _flex_ids(spec: Any) -> list[list[str]]:
                      for i in bucket if isinstance(i, dict))
         out.append(ids)
     return sorted(out)
+
+
+def _not_read(expected: Any, actual: Any) -> bool:
+    """Meta поле не вернула (None), хотя от него что-то ждали → в отчёте «Not read»."""
+    return actual is None and expected not in (None, "", [])
 
 
 def _same(expected: Any, actual: Any) -> bool:

@@ -208,6 +208,9 @@ def test_column_widths_and_count_are_kept():
 
 def _all_css() -> str:
     src = (TPL / "report.html").read_text(encoding="utf-8")
+    # ACL-1797: палитра подключена в страницу через include — подставляем файл токенов.
+    tokens = (TPL / "adopy-tokens.css").read_text(encoding="utf-8")
+    src = re.sub(r"\{% autoescape false %\}.*?\{% endautoescape %\}", lambda m: tokens, src, flags=re.S)
     return "\n".join(re.findall(r"<style[^>]*>(.*?)</style>", src, re.S))
 
 

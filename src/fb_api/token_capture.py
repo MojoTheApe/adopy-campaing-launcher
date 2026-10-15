@@ -240,17 +240,42 @@ _HELPER_JS = r"""
     if (!WRITE) return { error: 'read_only' };
     if (spec.method !== 'POST') return { error: 'read_only' };
     const path = String(spec.path || '');
+    // ACL-1800: правка существующего объекта — отдельная узкая политика. Помощник
+    // создателя (без `object_update`) пути объекта не принимает; помощник правок
+    // (без рёбер) пути создания не принимает.
+    const objMatch = /^\/[1-9][0-9]{4,}$/.exec(path);
+    if (objMatch && !WRITE.object_update) return refused('path');
+    if (!objMatch && WRITE.object_update) return refused('path');
+    const params = spec.params || {};
+    let want = null;
+    let files = {};
+    let checked = null;
+    if (objMatch) {
+      const ou = WRITE.object_update;
+      if (spec.files && Object.keys(spec.files).length) return refused('file');
+      const pk = Object.keys(params);
+      if (pk.length !== 1) return refused('key');
+      const k = pk[0];
+      if (!KEY_RE.test(k) || ou.fields.indexOf(k) < 0 || WRITE.forbidden.indexOf(k.toLowerCase()) >= 0) return refused('key');
+      const v = params[k];
+      if (k === 'status') {
+        if (typeof v !== 'string' || ou.statuses.indexOf(v) < 0) return refused('status');
+      } else {
+        const okNum = typeof v === 'number' && Number.isSafeInteger(v) && v > 0 && v < 1e15;
+        const okStr = typeof v === 'string' && /^[1-9][0-9]{0,14}$/.test(v);
+        if (!okNum && !okStr) return refused('amount');
+      }
+    } else {
     const m = /^\/(act_[0-9]{5,})\/([a-z]+)$/.exec(path);
     if (!m || m[1] !== WRITE.act) return refused('path');
     const edge = m[2];
     const keys = WRITE.edges[edge];
     if (!keys) return refused('edge');
-    const params = spec.params || {};
     for (const k of Object.keys(params)) {
       if (!KEY_RE.test(String(k)) || keys.indexOf(String(k)) < 0) return refused('key');
     }
     if (WRITE.paused_required.indexOf(edge) >= 0 && params.status !== 'PAUSED') return refused('status');
-    const checked = Object.assign({}, params);
+    checked = Object.assign({}, params);
     for (const k of WRITE.json_keys) {
       if (!(k in params)) continue;
       let v = params[k];
@@ -285,11 +310,12 @@ _HELPER_JS = r"""
     const walked = withoutLeadForm(edge, checked, spec.on_ad === true);
     if (walked === null) return refused('lead_form');
     if (!statusOk(walked)) return refused('status');
-    const want = WRITE.files[edge];
-    const files = spec.files || {};
+    want = WRITE.files[edge] || null;
+    files = spec.files || {};
     const fk = Object.keys(files);
     if (want) { if (fk.length !== 1 || fk[0] !== want) return refused('file'); }
     else if (fk.length) return refused('file');
+    }
     let blob = null;
     if (want) {
       const parts = staged[String(files[want])];
@@ -434,10 +460,16 @@ class InPageGraph:
     def __init__(self, tab: Any, *, name: str | None = None,
                  graph_host: str = "captured", credentials: str = "captured",
                  allow_writes: bool = False, write_act: str | None = None,
+                 allow_object_updates: bool = False,
                  sleep: Callable[[float], None] = time.sleep,
                  clock: Callable[[], float] = time.monotonic):
         # ACL-1761: запись — только явно и только в один проверенный кабинет.
-        self.allow_writes = bool(allow_writes)
+        # ACL-1800: `allow_object_updates` — другой режим записи: только правка
+        # существующих объектов (статус/бюджет/ставка), создание невозможно.
+        if allow_writes and allow_object_updates:
+            raise ValueError("creation writes and object updates are separate modes")
+        self.object_updates = bool(allow_object_updates)
+        self.allow_writes = bool(allow_writes) or self.object_updates
         self.write_act = None
         self._write_policy: dict | None = None
         if self.allow_writes:
@@ -447,7 +479,8 @@ class InPageGraph:
             if not m:
                 raise ValueError("allow_writes needs the verified act_<id>")
             self.write_act = str(write_act)
-            self._write_policy = _wp.policy_for_page(self.write_act)
+            self._write_policy = (_wp.policy_for_commands(self.write_act) if self.object_updates
+                                  else _wp.policy_for_page(self.write_act))
         if graph_host not in GRAPH_HOST_MODES:
             raise ValueError(f"graph_host must be one of {sorted(GRAPH_HOST_MODES)}")
         if credentials not in CREDENTIAL_MODES:
@@ -598,6 +631,20 @@ class InPageGraph:
             got = None
         return got if isinstance(got, dict) else {"kind": "other", "has_token": False}
 
+    def live_state(self, *, timeout: float = 10.0) -> dict:
+        """Дешёвая проверка прогретой вкладки перед действием (ACL-1812).
+
+        Один `.state()` помощника; токена в нём нет, а вкладка на Ads Manager —
+        один полный `.probe()` (Resource Timing мог переполниться за часы, токен
+        остаётся в HTML). К Meta ничего не уходит. Зависшая вкладка поднимает
+        `GraphStop` (вход, checkpoint, не отвечает), мёртвая — `CdpError`: решает
+        вызывающий (заменить вкладку один раз).
+        """
+        got = self._eval_helper(".state()", timeout=timeout)
+        if isinstance(got, dict) and got.get("kind") == "ads_manager" and not got.get("has_token"):
+            got = self._eval_helper(".probe()", timeout=timeout)
+        return got if isinstance(got, dict) else {"kind": "unknown", "has_token": False}
+
     def state(self) -> dict:
         try:
             got = self._eval_helper(".state()", timeout=10.0)
@@ -662,7 +709,7 @@ class InPageGraph:
         раз): кусок не переотправляется в пустой новый мир под старым id.
         Итоговое число байт сверяется с `len(data)`. Возвращает (мир, id).
         """
-        if not self.allow_writes:
+        if not self.allow_writes or self.object_updates:
             raise ValueError("read-only: staging a file needs allow_writes")
         for attempt in (0, 1):
             self._ready_for_call()
@@ -690,7 +737,10 @@ class InPageGraph:
 
         from src.fb_api import write_policy as _wp
 
-        _wp.check(self.write_act, "POST", path, params, files, on_ad=on_ad)
+        if self.object_updates:
+            _wp.check_object_update("POST", path, params, files)
+        else:
+            _wp.check(self.write_act, "POST", path, params, files, on_ad=on_ad)
         spec: dict[str, Any] = {"method": "POST", "path": path, "params": params or {}, "files": {},
                                 "filename": filename, "host": self.graph_host,
                                 "credentials": self.credentials}
