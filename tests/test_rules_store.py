@@ -613,3 +613,23 @@ def test_malformed_rule_is_quarantined_not_fatal(st, caplog, changes):
     # битое правило остаётся на диске для разбора, новые правила создаются как обычно
     st.create_from_preset("stop_loss_new_tests", "Dan", by="dan", scope=_scope())
     assert bad["id"] in json.loads((st.directory / "rules.json").read_text("utf-8"))["rules"]
+
+
+def test_update_settings_refuses_automatic_true_while_gate_closed(st, gate_off, tmp_path):
+    with pytest.raises(store_mod.RulesStoreError, match="Automatic mode is not available yet."):
+        st.update_settings({"automatic_enabled": True}, by="dan")
+    # nothing True ever reaches the disk, so a later gate flip cannot switch it on
+    path = tmp_path / "rules_settings.json"
+    assert not path.exists() or json.loads(path.read_text("utf-8")).get("automatic_enabled") is not True
+
+
+def test_non_object_rule_entries_are_quarantined(tmp_path):
+    (tmp_path / "rules.json").write_text(
+        json.dumps({"schema_version": 1, "rules": {"x": "junk", "y": None}}), "utf-8")
+    s = RulesStore(tmp_path)
+    assert s.list_rules() == []
+    with pytest.raises(store_mod.RulesStoreError, match="malformed"):
+        s.get_rule("x")
+    with pytest.raises(store_mod.RuleNotFound):  # null entry reads as missing
+        s.get_rule("y")
+    assert s.create_rule("Dan", {"name": "ok"})["id"]

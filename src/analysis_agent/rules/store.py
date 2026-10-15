@@ -321,7 +321,7 @@ class RulesStore:
     def _load(self) -> dict:
         data, fallback, unversioned = self._read_rules()
         if not fallback and not unversioned and not any(
-                r.get("mode") == "automatic" and not self.rule_problem(r)
+                not self.rule_problem(r) and r.get("mode") == "automatic"
                 and (not automatic_available() or self.active_grant(r) is None)
                 for r in data["rules"].values()):
             return data
@@ -554,6 +554,8 @@ class RulesStore:
         return out
 
     def update_settings(self, changes: dict, *, by: str = "") -> dict:
+        if changes.get("automatic_enabled") is True and not automatic_available():
+            raise RulesStoreError(AUTOMATIC_UNAVAILABLE_MESSAGE)
         with self.lock():
             settings = self.load_settings()
             settings = _merge(settings, changes)
