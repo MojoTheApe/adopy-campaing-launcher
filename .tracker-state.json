@@ -3933,36 +3933,17 @@
       }
     },
     "stage": {
-      "pr": 926,
+      "pr": 931,
       "issues": [
-        819,
-        799,
-        814
+        924
       ],
-      "tree_sha": "51178fe84da2671e4244fc1f810512c44b657260",
-      "source_sha": "530066fe1fb0abd719dd7972b036f2bf076a83b7",
-      "main_tree": "503e92e7f6cf31505d335adfb68a77e547077d63",
+      "tree_sha": "da457106740ac89e01ab07052825f8a5cd0b3a97",
+      "source_sha": "0d9201cf199ca52aeb3b9ce691a87b3ba0c10745",
+      "main_tree": "51178fe84da2671e4244fc1f810512c44b657260",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "promoted",
-      "recorded_at": "2026-10-15T09:35:56+00:00",
-      "batch_id": "b2772e6f3da0420895f57066ce4339ff",
-      "verification": {
-        "kind": "stage-verification",
-        "target": "ACL isolated Windows stage installation",
-        "result": "passed",
-        "source_sha": "530066fe1fb0abd719dd7972b036f2bf076a83b7",
-        "tree_sha": "51178fe84da2671e4244fc1f810512c44b657260",
-        "checks": [
-          "Actual permanent stage commit/tree and merge parents verified against the frozen batch b2772e6f (ACL-1819, ACL-1799, ACL-1814) and the independently reviewed integration.",
-          "Stage CI runs 38713947271, 38713947222, 38713947423 succeeded with explicit same-tree reuse of full green runs none (full runs on the stage commit).",
-          "Previous actual package installs and starts with isolated data",
-          "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
-          "Updated installed application restarts with preserved machine/workspace/creative data",
-          "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts"
-        ],
-        "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/926#issuecomment-6189357007"
-      },
-      "verified_at": "2026-10-15T09:54:41+00:00"
+      "state": "testing",
+      "recorded_at": "2026-10-15T21:32:36+00:00",
+      "batch_id": "3bc5972db83a4bbeaf5f66bc508adadd"
     },
     "tasks": {
       "248": {
@@ -14856,7 +14837,7 @@
             "session": "acl_delivery"
           }
         ],
-        "state": "approved",
+        "state": "stage",
         "worker": "Worker-B71E",
         "coordinator": "Coordinator-DLV15",
         "handoff": {
@@ -45352,7 +45333,7 @@
       "id": "3bc5972db83a4bbeaf5f66bc508adadd",
       "actor": "Coordinator-DLV15",
       "session": "delivery_flow_root",
-      "state": "reviewing",
+      "state": "stage",
       "issues": [
         924
       ],
@@ -45414,7 +45395,7 @@
       "intake": "51497ef807684a1c8a8bc34ca6ddf8db",
       "started_at": "2026-10-15T11:47:43+00:00",
       "pr": 931,
-      "entered_stage": false,
+      "entered_stage": true,
       "history": [
         {
           "members": [
