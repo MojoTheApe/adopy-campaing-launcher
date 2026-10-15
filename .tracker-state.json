@@ -9358,9 +9358,11 @@
         "worktree": "C:\\wk-1920",
         "id": "cbf30124fe7a45f0b1c36b1072014078",
         "issue": 920,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-15T05:51:11+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 921,
+        "report": "ACL-1920 handoff, PR #921 (work/acl-1920-search-refused, head 2142a9c4, base main 3ee7c6d9).\nImplementation: 58a4e554 (refused optional resolver searches are skipped with an English warning naming the lookup; adinterest/adgeolocation/adlocale refusals still fail with the search type), review fixes 93ea6b49.\nStacked on ACL-1771 (#832, codex/acl-1771-targeting-resolver ffd8b307); 2026-10-15 both brought up to date with main (merge commits only, conflicts in app.py/creator.py/report.html resolved keeping both sides, main's pixel check). No change to ACL-1920 logic after review.\nLocal checks: tests/test_acl1920_search_refused.py + test_acl1771_targeting_resolver.py 73 passed; resolver/preflight/plan-check/platform set 245 passed. Hosted CI running on the PR.\nRemaining: independent review of the current head, merge after #832, live Check plan of MX_AMZ_All_Video_Day_35_15.10 on KLD_BFL_B90 (TEST9095)."
       },
       "853": {
         "actor": "Worker-T1853A",
