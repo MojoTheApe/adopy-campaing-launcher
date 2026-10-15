@@ -9362,20 +9362,6 @@
         "started_at": "2026-10-15T10:08:54+00:00",
         "from_status": "status:todo"
       },
-      "899": {
-        "actor": "Worker-RG1899",
-        "session": "wrg1899-20261015",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1899-video-upload-progress",
-        "worktree": "C:\\wk-1899",
-        "id": "065419e41db745e2a2eca2d59ba83ab9",
-        "issue": 899,
-        "state": "handoff",
-        "started_at": "2026-10-15T10:25:31+00:00",
-        "from_status": "status:todo",
-        "pr": 900,
-        "report": "# ACL-899 (ACL-1899) handoff r2\n\n- Claim: 065419e41db745e2a2eca2d59ba83ab9 (Worker-RG1899, Coordinator-M1011A, worktree C:\\wk-1899)\n- Branch: work/acl-1899-video-upload-progress\n- New head: eb4f87d69f21cf9a835dab826bb30799642759ed\n- Merge: `git merge --no-edit work/main` clean, no conflicts. 3ee7c6d9 is an ancestor of HEAD.\n- CHANGELOG commit: eb4f87d6, removes the `upload.onprogress` mention from the ACL-1899 first bullet. Nothing else changed.\n- Tests (`-k \"not browser\"`, 9 affected files): 607 passed, 0 failed, 4 deselected (browser).\n- Pushed: `git push work HEAD:work/acl-1899-video-upload-progress` (70517791..eb4f87d6)."
-      },
       "827": {
         "actor": "Worker-RS1827",
         "session": "wrs1827-20261015",
@@ -14610,25 +14596,25 @@
             "session": "wrg1899-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RG1899",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-RF1899",
-          "session": "wrf1899-20261015",
+          "actor": "Worker-RG1899",
+          "session": "wrg1899-20261015",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1899-video-upload-progress",
           "worktree": "C:\\wk-1899",
-          "id": "754b79aef795439c9419ed21961d13c5",
+          "id": "065419e41db745e2a2eca2d59ba83ab9",
           "issue": 899,
           "state": "handoff",
-          "started_at": "2026-10-15T07:56:05+00:00",
-          "from_status": "status:idea",
+          "started_at": "2026-10-15T10:25:31+00:00",
+          "from_status": "status:todo",
           "pr": 900,
-          "report": "# Handoff ACL-1899 (PR #900)\n\nBranch: work/acl-1899-video-upload-progress. Claim: 754b79aef795439c9419ed21961d13c5 (Worker-RF1899, taken over from Worker-V1899A).\nHead: 263b267f8b956a4779ba9f30bb4e2186e01853d5 (merge of 1776 f475cdb8, which is on main 080df2d8).\n\n## What the task does\nAPI backend: no time limit on file (video) uploads, and upload progress shown on the dashboard\n(progress/cancelled in graph.post/transport.write, polling and abort for file writes, live_progress;\nupload without a CORS preflight).\n\n## Stack\nStacked on ACL-1776 (codex/acl-1776-create-forms), which sits on ACL-1819. Merge-base checks pass:\nf475cdb8 and 080df2d8 are both ancestors of HEAD.\n\n## Merge\n`git merge FETCH_HEAD` of 1776 f475cdb8: no conflicts, no manual resolution.\n\n## Tests (affected only, -k \"not browser\")\ntests/test_acl1899_upload_progress.py, 1776, 1819, 1756 (fb_api, page_helper_node), 1761 (api_create, parity, hang_logout),\ntest_acl1775_*, 1800_campaign_commands, test_acl_test_platform, test_screens_are_in_english:\n947 passed, 4 deselected, 0 failed.\n\nexecution handoff NOT run."
+          "report": "# ACL-899 (ACL-1899) handoff r2\n\n- Claim: 065419e41db745e2a2eca2d59ba83ab9 (Worker-RG1899, Coordinator-M1011A, worktree C:\\wk-1899)\n- Branch: work/acl-1899-video-upload-progress\n- New head: eb4f87d69f21cf9a835dab826bb30799642759ed\n- Merge: `git merge --no-edit work/main` clean, no conflicts. 3ee7c6d9 is an ancestor of HEAD.\n- CHANGELOG commit: eb4f87d6, removes the `upload.onprogress` mention from the ACL-1899 first bullet. Nothing else changed.\n- Tests (`-k \"not browser\"`, 9 affected files): 607 passed, 0 failed, 4 deselected (browser).\n- Pushed: `git push work HEAD:work/acl-1899-video-upload-progress` (70517791..eb4f87d6)."
         },
         "pr": 900,
-        "queued_at": "2026-10-15T08:01:37+00:00",
+        "queued_at": "2026-10-15T10:30:51+00:00",
         "return_operation": {
           "id": "6ae8d9926cbb4d1f8887f85115453b82",
           "actor": "Coordinator-M1011A",
@@ -19510,7 +19496,8 @@
       891,
       855,
       920,
-      816
+      816,
+      899
     ],
     "review": null,
     "history": [
@@ -40492,6 +40479,13 @@
         "pr": 831,
         "lane": "9337d1daf9f447ec8040dc9665bf1bc0",
         "actor": "Reviewer-RV1015N"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-15T10:30:51+00:00",
+        "issue": 899,
+        "pr": 900,
+        "actor": "Worker-RG1899"
       }
     ],
     "policy": {
