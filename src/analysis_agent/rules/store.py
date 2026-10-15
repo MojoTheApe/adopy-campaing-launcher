@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
-from config.paths import get_local_config_dir
+from config.paths import get_local_config_dir, machine_file_lock
 
 from . import model
 
@@ -90,7 +90,7 @@ _held = threading.local()
 
 @contextlib.contextmanager
 def _file_lock(path: Path, timeout: float = 30.0) -> Iterator[None]:
-    """Эксклюзивная блокировка: RLock для потоков + msvcrt/fcntl для процессов. Реентерабельна."""
+    """Эксклюзивная блокировка: RLock для потоков + config.paths.machine_file_lock для процессов. Реентерабельна."""
     with _thread_lock:
         depth = getattr(_held, "depth", 0)
         if depth:
@@ -100,46 +100,17 @@ def _file_lock(path: Path, timeout: float = 30.0) -> Iterator[None]:
             finally:
                 _held.depth -= 1
             return
-        path.parent.mkdir(parents=True, exist_ok=True)
-        fh = open(path, "a+b")
         try:
-            deadline = time.monotonic() + timeout
-            while True:
-                try:
-                    _lock_fh(fh)
-                    break
-                except OSError:
-                    if time.monotonic() > deadline:
-                        raise RulesStoreError(f"could not lock {path} in {timeout}s")
-                    time.sleep(0.02)
-            _held.depth = 1
-            try:
-                yield
-            finally:
-                _held.depth = 0
-                _unlock_fh(fh)
+            cm = machine_file_lock(path, timeout=timeout)
+            cm.__enter__()
+        except TimeoutError as exc:
+            raise RulesStoreError(f"could not lock {path} in {timeout}s") from exc
+        _held.depth = 1
+        try:
+            yield
         finally:
-            fh.close()
-
-
-if os.name == "nt":
-    import msvcrt
-
-    def _lock_fh(fh) -> None:
-        fh.seek(0)
-        msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
-
-    def _unlock_fh(fh) -> None:
-        fh.seek(0)
-        msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
-else:  # pragma: no cover - dev на Windows, но код ходит и на macOS/Linux
-    import fcntl
-
-    def _lock_fh(fh) -> None:
-        fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-
-    def _unlock_fh(fh) -> None:
-        fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+            _held.depth = 0
+            cm.__exit__(None, None, None)
 
 
 # --- низкоуровневые файлы ----------------------------------------------------
