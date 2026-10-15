@@ -6717,7 +6717,7 @@ window.cbTree = (function () {
       var f = (openId && BORROWED) ? findCampaign(openId) : null;
       if (!f) return null;
       return { id: openId, name: f.camp.name || '', account: f.account.account, country: f.group.country,
-        countryName: f.group.countryName, slot: f.camp.slot, adIndex: adIdx, level: level };
+        countryName: f.group.countryName, slot: f.camp.slot, adIndex: 0, level: level };
     }
   };
 })();
