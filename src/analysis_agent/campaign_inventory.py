@@ -48,7 +48,8 @@ NEEDS_API_MESSAGE = "Campaign inventory needs the API backend"
 NEEDS_API_CODE = "needs_api_backend"
 
 CAMPAIGN_FIELDS = "id,name,status,effective_status,objective,daily_budget,lifetime_budget,bid_strategy"
-ADSET_FIELDS = "id,name,status,effective_status,campaign_id,daily_budget,lifetime_budget,bid_strategy"
+ADSET_FIELDS = ("id,name,status,effective_status,campaign_id,daily_budget,lifetime_budget,"
+                "bid_strategy,bid_amount")
 AD_FIELDS = "id,name,status,effective_status,campaign_id,adset_id"
 #: Insights на каждом уровне — отдельным запросом: Reach и Frequency
 #: родителя не выводятся из детей.
@@ -173,6 +174,7 @@ def parse_inventory(rows: list[dict], level: str) -> tuple[list[dict], int]:
             "daily_budget": _to_int(row.get("daily_budget")),
             "lifetime_budget": _to_int(row.get("lifetime_budget")),
             "bid_strategy": str(row.get("bid_strategy") or "").upper(),
+            "bid_amount": _to_int(row.get("bid_amount")),
             "objective": str(row.get("objective") or "").upper(),
             "campaign_id": str(row.get("campaign_id") or "").strip(),
             "adset_id": str(row.get("adset_id") or "").strip(),
@@ -363,6 +365,8 @@ def row_payload(snap: Snapshot, tree: dict, level: str, obj: dict, bi: dict | No
         "child_count": kids,
         "child_state": child_state(snap, kids_level) if kids_level else "",
         "budget": _budget(obj, level, snap.currency, parent),
+        "bid_strategy_raw": obj.get("bid_strategy") or "",
+        "bid_amount": _budget_amount(obj.get("bid_amount"), snap.currency) if level == "adset" else None,
         "bid_strategy": _BID_LABELS.get(obj.get("bid_strategy") or "",
                                         (obj.get("bid_strategy") or "").replace("_", " ").capitalize()) or None,
         "objective": (obj.get("objective") or "").replace("_", " ").capitalize() or None if level == "campaign" else None,
