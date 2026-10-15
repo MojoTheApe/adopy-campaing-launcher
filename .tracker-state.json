@@ -13125,7 +13125,7 @@
             "session": "run_s1819a_1012"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1819A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -13143,7 +13143,8 @@
           "report": "# ACL-1819 handoff\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/821 (head cd71964c0cc3bdfc376d2f3b872f49189005edfb), stacked on #809 -> #796 -> #765; CI blocked.\n\nChecks (client = instant on edit, server = /publish-plan, read-only):\n- client: country, link https, tracking params (warning), media chosen, primary text, headline, headline over 40 (warning), primary over 125 (warning), CTA allowed, daily budget set, age 18-65, unique ad names, Instant Form chosen.\n- server: account ACTIVE, Page, pixel / ACTIVE form, country, language, interests, media readable, media limits (type, size, video length), vertical file (warning), budget minimum (USD only, other currencies unknown), existing campaign differences.\n\nTests: tests/test_acl1819_preflight.py 72, tests/test_acl1819_preflight_browser.py 4; 413 affected non-browser and 57 browser tests pass locally. Gate mutation check: 5 of 5 mutations caught.\nScreenshots: C:\\acl-notes\\acl-1819-shots\\ (light and dark).\nOpen point: Meta has no public per-currency minimum budget table; only USD 1.00 is listed."
         },
         "pr": 821,
-        "queued_at": "2026-10-12T08:26:53+00:00"
+        "queued_at": "2026-10-12T08:26:53+00:00",
+        "reviewer": "Reviewer-RRN819"
       },
       "816": {
         "implementers": [
@@ -15957,6 +15958,10 @@
       "Reviewer-RRN814": {
         "session": "rrn814-20261015",
         "role": "Reviewer"
+      },
+      "Reviewer-RRN819": {
+        "session": "rrn819-20261015",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -18631,7 +18636,6 @@
       642,
       739,
       816,
-      819,
       822,
       827,
       767,
@@ -37826,6 +37830,13 @@
           "report": "# Return for a dependency refresh\n\nMain now also contains batch e677f638 (ACL-1812 warm sessions, ACL-1826, ACL-1775 Instant Forms, ACL-1815 rules evidence; PR 919 -> 922). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-15T06:29:29+00:00",
+        "pr": 821,
+        "lane": "56cb6b61ae434e58ad5f28d78aa1c9c7",
+        "actor": "Reviewer-RRN819"
       }
     ],
     "policy": {
@@ -41458,6 +41469,19 @@
       "started_at": "2026-10-15T05:43:00+00:00",
       "ineligible": {}
     },
-    "source_reviews": {}
+    "source_reviews": {
+      "821": {
+        "id": "56cb6b61ae434e58ad5f28d78aa1c9c7",
+        "pr": 821,
+        "issues": [
+          819
+        ],
+        "actor": "Reviewer-RRN819",
+        "session": "rrn819-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-15T06:29:29+00:00",
+        "state": "reviewing"
+      }
+    }
   }
 }
