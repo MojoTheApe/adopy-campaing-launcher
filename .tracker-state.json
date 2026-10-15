@@ -8958,9 +8958,11 @@
         "worktree": "C:\\wk-rm1815",
         "id": "cb6162f9772342ec8a8f3b2138c47324",
         "issue": 815,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-15T04:30:11+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 818,
+        "report": "# ACL-1815 refresh (merge origin/main)\n\nMerged origin/main into codex/acl-1815-rules-evidence (previous head 0ff5cea6, new head ba1fc162). One conflict, docs/system/CHANGELOG.md: the branch carried an older ACL-1800 entry, main's final ACL-1800 entry was kept and the old one dropped. 1800 code and tests match main. scripts/acl_scan_secrets.py is clean (act_9999999999 gone).\n\nTests (not browser): test_acl1815_rules_evidence.py, test_acl1800_campaign_commands.py, test_acl1798_campaign_inventory.py: 293 passed."
       },
       "826": {
         "actor": "Worker-RL1826",
