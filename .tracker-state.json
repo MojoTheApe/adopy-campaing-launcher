@@ -9131,19 +9131,6 @@
         "state": "implementing",
         "started_at": "2026-10-15T06:56:36+00:00",
         "from_status": "status:todo"
-      },
-      "923": {
-        "actor": "Worker-B71E",
-        "session": "acl_delivery",
-        "coordinator": "Coordinator-DLV15",
-        "branch": "codex/acl-1923-delivery-flow",
-        "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-delivery-flow",
-        "id": "b386321114064a58a00f98191ddbb809",
-        "issue": 923,
-        "state": "stopping",
-        "started_at": "2026-10-15T07:13:07+00:00",
-        "from_status": "status:backlog",
-        "report": "No implementation edits were made under ACL-1923. Its full outcome is split into a source child and separately verified live activation; parent becomes initiative and retains all original criteria. Releasing this real Worker claim deliberately before claiming the source child. No other task, claim or review is changed."
       }
     },
     "tasks": {
@@ -14482,9 +14469,22 @@
             "session": "acl_delivery"
           }
         ],
-        "state": "implementing",
+        "state": "stopped",
         "worker": "Worker-B71E",
-        "coordinator": "Coordinator-DLV15"
+        "coordinator": "Coordinator-DLV15",
+        "handoff": {
+          "actor": "Worker-B71E",
+          "session": "acl_delivery",
+          "coordinator": "Coordinator-DLV15",
+          "branch": "codex/acl-1923-delivery-flow",
+          "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-delivery-flow",
+          "id": "b386321114064a58a00f98191ddbb809",
+          "issue": 923,
+          "state": "stopping",
+          "started_at": "2026-10-15T07:13:07+00:00",
+          "from_status": "status:backlog",
+          "report": "No implementation edits were made under ACL-1923. Its full outcome is split into a source child and separately verified live activation; parent becomes initiative and retains all original criteria. Releasing this real Worker claim deliberately before claiming the source child. No other task, claim or review is changed."
+        }
       },
       "313": {
         "implementers": [],
@@ -38217,6 +38217,13 @@
         "at": "2026-10-15T07:14:51+00:00",
         "issue": 313,
         "reason": "Closed in the Playwright backlog cleanup 2026-10-15: we are moving campaign creation and account reads to the Meta API (ACL-1760/1761/1883), so this Ads Manager UI/Playwright-only work is no longer relevant. Restore if the UI path comes back."
+      },
+      {
+        "event": "stopped",
+        "at": "2026-10-15T07:15:57+00:00",
+        "issue": 923,
+        "actor": "Worker-B71E",
+        "report": "No implementation edits were made under ACL-1923. Its full outcome is split into a source child and separately verified live activation; parent becomes initiative and retains all original criteria. Releasing this real Worker claim deliberately before claiming the source child. No other task, claim or review is changed."
       }
     ],
     "policy": {
