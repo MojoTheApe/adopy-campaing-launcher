@@ -253,6 +253,7 @@
   <div class="hc-needs" data-hc="needs" hidden>Campaign inventory needs the API backend
     <small>Switch this machine to <code>ACL_FB_BACKEND=api</code> to read campaigns. Nothing was read.</small></div>
   <div data-hc="body" hidden>
+    <div class="hc-needs" data-hc="banner" role="alert" hidden></div>
     <div class="hc-toolbar" role="toolbar" aria-label="Campaign tree controls">
       <input type="search" data-hc="search" placeholder="Search campaigns, ad sets or ads" aria-label="Search names">
       <select data-hc="delivery" aria-label="Delivery filter">
@@ -302,20 +303,32 @@
      (`hcMount`): одна таблица на страну, внутри — её аккаунты. */
   if (window.hcMount) return;
   var instances = [], queueBusy = false;
+  /* ACL-1826: коды, после которых сервер пропускает остальные старты слота в пачке. */
+  var BATCH_STOPS = {mlx_session_lost: 1, mlx_token_expired: 1, mlx_token_workspace: 1};
 
   /* Общая очередь чтений: jobs = [{inst, account}], по одному, человек нажал — человек и спросил. */
   async function queueRun(jobs, progress) {
     if (queueBusy || !jobs.length) return;
     queueBusy = true;
     instances.forEach(function (i) { i.setReadBusy(true); });
+    /* ACL-1826: одна пачка на нажатие. Потеряна общая сессия Multilogin слота B — остальные
+       B-аккаунты пропускает сервер с той же причиной, слот A идёт дальше; над таблицей одна
+       строка и Retry, который перечитывает только пропущенных. */
+    var batch = 'rc-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8), stopped = [];
+    instances.forEach(function (i) { i.banner(null); });
     try {
       for (var i = 0; i < jobs.length; i++) {
         if (progress) progress(i + 1, jobs.length);
-        await jobs[i].inst.readOne(jobs[i].account);
+        var stop = await jobs[i].inst.readOne(jobs[i].account, batch);
+        if (stop) stopped.push({job: jobs[i], text: stop.text});
       }
     } finally {
       queueBusy = false;
       instances.forEach(function (i) { i.setReadBusy(false); });
+    }
+    if (stopped.length) {
+      stopped[0].job.inst.banner(stopped[0].text + ' (' + stopped.length + ' account' + (stopped.length === 1 ? '' : 's') + ' not read) ',
+        function () { return queueRun(stopped.map(function (x) { return x.job; }), progress); });
     }
   }
   var REASON_COPY = 'ACL-1773';
@@ -944,9 +957,11 @@
     return found;
   }
 
-  function readOne(account) {
+  function readOne(account, batch) {
+    var stop = null;
     var body = new FormData();
     body.append('account', account); body.append('date_from', period.from); body.append('date_to', period.to); body.append('span', period.span || '');
+    if (batch) body.append('batch', batch);
     S.running[account] = true; render();
     return fetch('/campaign-inventory/read', {method: 'POST', body: body, credentials: 'same-origin'}).then(function (r) {
       return r.json().then(function (j) { if (!r.ok || !j.ok) { var e = new Error(j.error || ('HTTP ' + r.status)); e.code = j.code; throw e; } });
@@ -954,12 +969,15 @@
       return refreshAccount(account).then(function () {
         /* Тот же аккаунт открыт в другой области (он стоит в двух странах) — её данные устарели. */
         instances.forEach(function (i) { if (i !== api && i.watches(account)) i.reload(account); });
+        var at = (S.summaries[account] || {}).attempt;
+        if (at && BATCH_STOPS[at.code]) stop = {account: account, text: at.error || ''};
         loadWarm();
       });
     }).catch(function (e) {
       if (e && e.code === 'needs_api_backend') { showNeedsApi(); return; }
+      if (e && BATCH_STOPS[e.code]) stop = {account: account, text: String(e.message || '')};
       S.summaries[account] = Object.assign({}, S.summaries[account] || {state: 'idle'}, {attempt: {state: 'failed', at: '', error: String(e && e.message || e), code: e && e.code || ''}});
-    }).then(function () { delete S.running[account]; render(); });
+    }).then(function () { delete S.running[account]; render(); return stop; });
   }
   /* Ждём конец чтения у СВОЕГО сервера (локальный статус задания); Meta это не трогает. */
   function awaitDone(account) {
@@ -1301,6 +1319,14 @@
     state: S, render: render, init: init, syncTop: syncTop, loadHistory: loadHistory,
     watches: function (a) { return !!S.accountCountries[a]; },
     readOne: readOne,
+    banner: function (text, retry) {
+      var b = el('banner'); if (!b) return;
+      b.textContent = ''; b.hidden = !text; if (!text) return;
+      var sp = document.createElement('span'); sp.textContent = text;
+      var bt = document.createElement('button'); bt.type = 'button'; bt.textContent = 'Retry';
+      bt.addEventListener('click', function () { retry(); });
+      b.appendChild(sp); b.appendChild(bt);
+    },
     accounts: function () { return Object.keys(S.accountCountries); },
     readAll: function (progress) { return periodOk ? queueRun(Object.keys(S.accountCountries).map(function (a) { return {inst: api, account: a}; }), progress) : Promise.resolve(); },
     periodOk: periodOk,

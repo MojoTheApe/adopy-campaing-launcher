@@ -35,6 +35,7 @@ import time
 from collections import Counter
 from contextlib import suppress
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -47,10 +48,16 @@ log = logging.getLogger(__name__)
 NEEDS_API_MESSAGE = "Campaign inventory needs the API backend"
 NEEDS_API_CODE = "needs_api_backend"
 
-CAMPAIGN_FIELDS = "id,name,status,effective_status,objective,daily_budget,lifetime_budget,bid_strategy"
+# ACL-1815: `adlabels{name}` (признак «создано ACL», метки `acl-*`) и `updated_time`
+# («менялся после нашей записи») читаются теми же запросами, что и раньше:
+# новых вызовов к Meta нет, потолок вызовов не затронут.
+CAMPAIGN_FIELDS = ("id,name,status,effective_status,objective,daily_budget,lifetime_budget,bid_strategy,"
+                   "adlabels{name},updated_time")
 ADSET_FIELDS = ("id,name,status,effective_status,campaign_id,daily_budget,lifetime_budget,"
-                "bid_strategy,bid_amount")
-AD_FIELDS = "id,name,status,effective_status,campaign_id,adset_id"
+                "bid_strategy,bid_amount,adlabels{name},updated_time")
+AD_FIELDS = "id,name,status,effective_status,campaign_id,adset_id,updated_time"
+#: Префикс метки, которой ACL помечает созданное им (`creator.py`).
+ACL_LABEL_PREFIX = "acl-"
 #: Insights на каждом уровне — отдельным запросом: Reach и Frequency
 #: родителя не выводятся из детей.
 INSIGHT_ID = {"campaign": "campaign_id", "adset": "adset_id", "ad": "ad_id"}
@@ -105,6 +112,9 @@ class Snapshot:
     source: str = "api"
     started_at: str = ""
     finished_at: str = ""
+    #: ISO UTC (`2026-10-12T07:31:45+00:00`) рядом с локальным `finished_at` без зоны:
+    #: правилам нужно сравнение возраста, не зависящее от часового пояса машины.
+    finished_at_utc: str = ""
     took_s: float = 0.0
     date_from: str = ""
     date_to: str = ""
@@ -147,6 +157,34 @@ def _to_int(value: Any) -> int | None:
     return None if number is None else int(number)
 
 
+def _iso_utc(value: Any) -> str:
+    """Время Graph (`2026-10-12T10:11:12+0000`) → ISO UTC; нечитаемое → пустая строка."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        moment = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        try:
+            moment = datetime.strptime(text, "%Y-%m-%dT%H:%M:%S%z")
+        except ValueError:
+            return ""
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(timezone.utc).isoformat(timespec="seconds")
+
+
+def _label_names(raw: Any) -> list[str]:
+    """Имена меток: Graph отдаёт список или `{"data": [...]}`; неразборчивое пропускаем."""
+    rows = raw.get("data") if isinstance(raw, dict) else raw
+    names = []
+    for item in rows if isinstance(rows, list) else []:
+        name = str(item.get("name") if isinstance(item, dict) else item or "").strip()
+        if name:
+            names.append(name)
+    return names
+
+
 def parse_inventory(rows: list[dict], level: str) -> tuple[list[dict], int]:
     """Строки Graph → объекты описи. Возвращает `(объекты, сколько отброшено)`.
 
@@ -179,6 +217,15 @@ def parse_inventory(rows: list[dict], level: str) -> tuple[list[dict], int]:
             "campaign_id": str(row.get("campaign_id") or "").strip(),
             "adset_id": str(row.get("adset_id") or "").strip(),
         }
+        # ACL-1815: метки и время правки. Нет поля в ответе — пусто, а не «не ACL»:
+        # `acl_created` честно `None`, когда метки не читались.
+        if "adlabels" in row:
+            labels = _label_names(row.get("adlabels"))
+            obj["adlabels"] = labels
+            obj["acl_created"] = any(x.casefold().startswith(ACL_LABEL_PREFIX) for x in labels)
+        updated = _iso_utc(row.get("updated_time"))
+        if updated:
+            obj["updated_time"] = updated
         if level == "campaign":
             obj["campaign_id"] = obj["adset_id"] = ""
         elif level == "adset":
@@ -451,79 +498,13 @@ def bi_metrics(spend: float | None, leads: int | None, ftds: int | None) -> dict
 def join_bi(snap: Snapshot, bi: dict | None) -> tuple[dict[str, dict], dict]:
     """Цепляет BI к объектам Meta. Возвращает `(ключ строки → BI, сводка)`.
 
-    Ключ совпадения — ИМЯ (точное, пробелы схлопнуты) внутри одного аккаунта и
-    только если оно однозначно: два ad set с одним именем — нет совпадения,
-    как и два объявления с одним заголовком в одном ad set. Книга хранит
-    данные на уровне `Adset Name` / `Ad Title`:
-
-    * ad set — точное имя среди ad set аккаунта;
-    * кампания — точное имя (у наших кампаний имя ad set совпадает с именем
-      кампании); либо, если имени нет, все её ad set совпали — тогда сумма
-      по ним (отношения пересчитываются). Частичное покрытие не складываем;
-    * объявление — заголовок под совпавшим ad set.
-
-    Что не зацепилось ни за кого — `evidence_only` (только справка).
+    ACL-1815: сам джойн вынесен в `rules.evidence.exact_name_join` — один на
+    таблицу Home и на правила; здесь остался тонкий вход с прежним ответом.
+    Правила и вердикты идентичности — в докстринге того модуля.
     """
-    summary = {"matched": 0, "evidence_only": [], "available": bi is not None}
-    if bi is None:
-        return {}, summary
-    book_c: dict[str, dict] = bi.get("campaigns") or {}
-    book_a: dict[str, dict[str, dict]] = bi.get("ads") or {}
-    tree = build_tree(snap)
-    out: dict[str, dict] = {}
-    used: set[str] = set()
+    from src.analysis_agent.rules.evidence import exact_name_join
 
-    adset_names = Counter(norm_name(a["name"]) for a in snap.adsets)
-    camp_names = Counter(norm_name(c["name"]) for c in snap.campaigns)
-
-    def numbers(m: dict) -> dict:
-        return bi_metrics(m.get("spend"), m.get("leads"), m.get("deposits"))
-
-    # ad set
-    for a in snap.adsets:
-        n = norm_name(a["name"])
-        if n and adset_names[n] == 1 and n in book_c:
-            out[f"adset:{a['id']}"] = {"match": "name", **numbers(book_c[n])}
-            used.add(n)
-    # объявления под совпавшим ad set
-    for ad in snap.ads:
-        parent = tree["adsets"].get(ad.get("adset_id"))
-        if parent is None or f"adset:{parent['id']}" not in out:
-            continue
-        pn = norm_name(parent["name"])
-        titles = Counter(norm_name(x["name"]) for x in tree["ads_of"].get(parent["id"], []))
-        t = norm_name(ad["name"])
-        per = book_a.get(pn) or {}
-        if t and titles[t] == 1 and t in per:
-            out[f"ad:{ad['id']}"] = {"match": "name", **numbers(per[t])}
-    # кампании
-    for c in snap.campaigns:
-        n = norm_name(c["name"])
-        kids = tree["adsets_of"].get(c["id"], [])
-        # Имя кампании = ключ книги (`Adset Name`) годится, только если строка книги
-        # покрывает ВСЮ кампанию: ad set нет вовсе или все они носят это же имя.
-        # Иначе (например, `X` и `X - Copy` после Duplicate) строка книги — лишь
-        # часть кампании, и итог идёт путём по ad set: полное покрытие или partial.
-        whole = all(norm_name(k["name"]) == n for k in kids)
-        if n and camp_names[n] == 1 and n in book_c and whole:
-            out[f"campaign:{c['id']}"] = {"match": "name", **numbers(book_c[n])}
-            used.add(n)
-            continue
-        hit = [k for k in kids if f"adset:{k['id']}" in out]
-        if kids and len(hit) == len(kids):
-            spend = leads = ftds = None
-            for k in hit:
-                m = out[f"adset:{k['id']}"]
-                spend = (spend or 0.0) + (m.get("spend") or 0.0)
-                leads = (leads or 0) + (m.get("leads") or 0)
-                ftds = (ftds or 0) + (m.get("ftds") or 0)
-            out[f"campaign:{c['id']}"] = {"match": "ad_sets", "coverage": f"{len(hit)}/{len(kids)}",
-                                          **bi_metrics(spend, leads, ftds)}
-        elif hit:
-            out[f"campaign:{c['id']}"] = {"match": "partial", "coverage": f"{len(hit)}/{len(kids)}"}
-    summary["matched"] = len(used)
-    summary["evidence_only"] = sorted(n for n in book_c if n not in used)
-    return out, summary
+    return exact_name_join(snap, bi)
 
 
 # ───────────────────────── хранилище ─────────────────────────
@@ -848,6 +829,7 @@ def start_read(account: str, date_from: str, date_to: str = "", *,
                             error=f"{type(exc).__name__}: {exc}")
         done.started_at = started_at
         done.finished_at = _as._now()  # noqa: SLF001
+        done.finished_at_utc = datetime.now(timezone.utc).isoformat(timespec="seconds")
         done.took_s = round(time.time() - began, 1)
         try:
             put_result(done)
