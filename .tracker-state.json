@@ -41615,7 +41615,9 @@
         "session": "rt1015a-20261015",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-15T06:51:56+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "# Return for a dependency refresh\n\nACL-1902 is stacked on ACL-1899 (PR 900), which sits on 1776/1819. Current main 080df2d8 is not in this branch and the PR conflicts with main. Required: after ACL-1899 is refreshed, merge its new head into this branch (merge, no rebase), resolve conflicts keeping main's behaviour, re-run the affected tests, hand off again for fresh review.",
+        "keep_lane": false
       }
     }
   }
