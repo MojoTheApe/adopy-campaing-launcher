@@ -41693,7 +41693,9 @@
         "session": "rv1015f-843",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-15T06:54:54+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "Content approved; needs only a refresh onto current main (merge main, re-run checks, hand off again).\n\nReview of PR 843 / ACL-1839 (head 02eaf7d9) by Reviewer-RV1015F:\n- Scope matches issue #839: aria-labels on the account selector and profile search, min-width/overflow-wrap on .amap-ml, bounded select/input widths, `.amap-hits[hidden]{display:none}`. No behavior change to Add/filter handlers. User-facing text is English; no secrets.\n- Tests: tests/test_account_connection_layout.py, 18 passed (real Chromium, 3 hosts x 2 themes x 3 widths, geometry/focus/accessible names). Source CI on the current head is green.\n- Not approvable as it stands: the PR does not contain current main (167 commits behind).\n- Merge into current main (`git merge-tree --write-tree work/main HEAD`) conflicts in two places, both trivial: docs/system/CHANGELOG.md (keep both entries) and src/web/templates/report.html `.amap-ml` rule, where main changed `font-size: 0.74rem` to `var(--adopy-text-sm)`. Resolve by keeping main's font-size and adding `min-width: 0; overflow-wrap: anywhere`.\n- Main did not fix this itself (no amap-hits[hidden] rule, no min-width on .amap-add controls), so the fix is not obsolete. Note main's `.amap-add select, input` rule now uses `font-size: var(--adopy-text-table)`; the PR's min-width/max-width change to that block merged cleanly but re-run the layout test after merge to confirm the 280 px fit still holds with the token font sizes.",
+        "keep_lane": false
       },
       "803": {
         "id": "f79f080df19d47879b418a7a0687c25d",
