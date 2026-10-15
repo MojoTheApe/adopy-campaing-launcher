@@ -9350,20 +9350,6 @@
   },
   "execution": {
     "claims": {
-      "827": {
-        "actor": "Worker-RS1827",
-        "session": "wrs1827-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1827-design-parity-shell",
-        "worktree": "C:\\wk-rs1827",
-        "id": "21dbc4a616a6421e9f97c978ebcedb35",
-        "issue": 827,
-        "state": "handoff",
-        "started_at": "2026-10-15T10:26:44+00:00",
-        "from_status": "status:todo",
-        "pr": 829,
-        "report": "# ACL-1827 refresh handoff (Worker-RS1827)\nHead: de6dbfaf on codex/acl-1827-design-parity-shell (merge of origin/main 3ee7c6d9, merge only).\nConflicts: src/web/templates/report.html, two hunks. (1) style block order: took main's adopy-tokens style (1797) in its place before cw-styles. (2) kept 1827's shell-1827 style block, dropped the older duplicate adopy-tokens include from the branch. Result vs origin/main differs only by the 6 files of 1827 (KPI row, sidebar, Robot health popover, country_workbench, app.py, robot_health.py, tests).\nMain's 1797/1799/1778 versions win; every data-view of main is still present in the sidebar (main has no Rules nav item), 1778 header intact.\nTests: test_acl1827_shell_parity, 1797 design system, 1799 country workbench, test_header, test_stage_badge, test_screens_are_in_english, test_acl_test_platform, account header click test: 194 passed. node tests/cw_harness.cjs: ok. Secret scan clean. Browser tests not run. CI not awaited."
-      },
       "902": {
         "actor": "Worker-RG1902",
         "session": "wrg1902-20261015",
@@ -13640,25 +13626,25 @@
             "session": "wrs1827-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RS1827",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-S1827A",
-          "session": "run_s1827a_1012",
+          "actor": "Worker-RS1827",
+          "session": "wrs1827-20261015",
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1827-design-parity-shell",
-          "worktree": "C:\\acl-1827-shell",
-          "id": "754e17f1b92c41b8affb4bf77f360c1c",
+          "worktree": "C:\\wk-rs1827",
+          "id": "21dbc4a616a6421e9f97c978ebcedb35",
           "issue": 827,
           "state": "handoff",
-          "started_at": "2026-10-12T12:58:19+00:00",
-          "from_status": "status:idea",
+          "started_at": "2026-10-15T10:26:44+00:00",
+          "from_status": "status:todo",
           "pr": 829,
-          "report": "## Execution report: ACL-1827\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/829 (head 03b9d10fde052b20d236c75d384ede3e7aa38ffb), stacked on 1799 + 1797 + 1778.\n\nBuilt: Home six-tile You vs Others row above the Account map (ACL-1799 computations, real data only, labelled insufficient cohorts); sidebar without emoji, \"Target library\" label (route/ids unchanged), you/all FTD counters, Find country, asset sub-rows, all old links kept; Robot health popover from the header (page kept for direct links, new read-only /robot-health/summary).\n\nTests: 24 parity + 8 browser new; 158 passed across affected suites. Screenshot pairs in outbox screens/ (home-kpi__, sidebar__, robot-health__popover__; light and dark).\n\nDeferred: Workbench's own tile row stays at four tiles; Home tab strip/campaign table placement is a separate decision."
+          "report": "# ACL-1827 refresh handoff (Worker-RS1827)\nHead: de6dbfaf on codex/acl-1827-design-parity-shell (merge of origin/main 3ee7c6d9, merge only).\nConflicts: src/web/templates/report.html, two hunks. (1) style block order: took main's adopy-tokens style (1797) in its place before cw-styles. (2) kept 1827's shell-1827 style block, dropped the older duplicate adopy-tokens include from the branch. Result vs origin/main differs only by the 6 files of 1827 (KPI row, sidebar, Robot health popover, country_workbench, app.py, robot_health.py, tests).\nMain's 1797/1799/1778 versions win; every data-view of main is still present in the sidebar (main has no Rules nav item), 1778 header intact.\nTests: test_acl1827_shell_parity, 1797 design system, 1799 country workbench, test_header, test_stage_badge, test_screens_are_in_english, test_acl_test_platform, account header click test: 194 passed. node tests/cw_harness.cjs: ok. Secret scan clean. Browser tests not run. CI not awaited."
         },
         "pr": 829,
-        "queued_at": "2026-10-12T13:27:02+00:00",
+        "queued_at": "2026-10-15T10:34:58+00:00",
         "review_report": "# Return for a dependency refresh\n\nMain now also contains batch b2772e6f (ACL-1819 pre-flight, ACL-1799 country workbench, ACL-1814 rules store; PR 926 -> 928). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
       },
       "771": {
@@ -19517,7 +19503,8 @@
       920,
       816,
       899,
-      309
+      309,
+      827
     ],
     "review": null,
     "history": [
@@ -40520,6 +40507,13 @@
         "issue": 309,
         "pr": 929,
         "actor": "Worker-W1015K"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-15T10:34:58+00:00",
+        "issue": 827,
+        "pr": 829,
+        "actor": "Worker-RS1827"
       }
     ],
     "policy": {
