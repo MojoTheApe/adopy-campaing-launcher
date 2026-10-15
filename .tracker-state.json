@@ -9373,6 +9373,18 @@
         "state": "implementing",
         "started_at": "2026-10-15T10:25:31+00:00",
         "from_status": "status:todo"
+      },
+      "827": {
+        "actor": "Worker-RS1827",
+        "session": "wrs1827-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1827-design-parity-shell",
+        "worktree": "C:\\wk-rs1827",
+        "id": "21dbc4a616a6421e9f97c978ebcedb35",
+        "issue": 827,
+        "state": "implementing",
+        "started_at": "2026-10-15T10:26:44+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -13631,10 +13643,14 @@
           {
             "actor": "Worker-S1827A",
             "session": "run_s1827a_1012"
+          },
+          {
+            "actor": "Worker-RS1827",
+            "session": "wrs1827-20261015"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-S1827A",
+        "state": "implementing",
+        "worker": "Worker-RS1827",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
           "actor": "Worker-S1827A",
@@ -13652,7 +13668,6 @@
         },
         "pr": 829,
         "queued_at": "2026-10-12T13:27:02+00:00",
-        "reviewer": "Reviewer-RRS827",
         "review_report": "# Return for a dependency refresh\n\nMain now also contains batch b2772e6f (ACL-1819 pre-flight, ACL-1799 country workbench, ACL-1814 rules store; PR 926 -> 928). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
       },
       "771": {
@@ -16770,6 +16785,10 @@
       },
       "Worker-RG1899": {
         "session": "wrg1899-20261015",
+        "role": "Worker"
+      },
+      "Worker-RS1827": {
+        "session": "wrs1827-20261015",
         "role": "Worker"
       }
     },
@@ -40453,6 +40472,13 @@
         "issue": 899,
         "claim": "065419e41db745e2a2eca2d59ba83ab9",
         "actor": "Worker-RG1899"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-15T10:26:44+00:00",
+        "issue": 827,
+        "claim": "21dbc4a616a6421e9f97c978ebcedb35",
+        "actor": "Worker-RS1827"
       }
     ],
     "policy": {
