@@ -22,7 +22,10 @@ from __future__ import annotations
 import errno
 import json
 import os
+import secrets
 import socket
+import time
+import urllib.parse
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -41,19 +44,35 @@ def identity(config_directory: str | os.PathLike) -> str:
     return config_identity(config_directory)
 
 
-def health(port: int, *, timeout: float = 1.0) -> dict | None:
+def proof(config_directory: str | os.PathLike, nonce: str) -> str:
+    from config.paths import config_proof
+
+    return config_proof(nonce, config_directory)
+
+
+def health(port: int, *, timeout: float = 1.0, nonce: str | None = None) -> dict | None:
+    """Ответ /health; с `nonce` — вместе с доказательством, чей это ACL."""
+    query = f"?nonce={urllib.parse.quote(nonce)}" if nonce else ""
     try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=timeout) as response:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/health{query}",
+                                    timeout=timeout) as response:
             payload = json.loads(response.read().decode("utf-8"))
         return payload if isinstance(payload, dict) else None
     except (OSError, ValueError, urllib.error.URLError):
         return None
 
 
-def is_mine(payload: dict | None, mine: str) -> bool:
-    """ACL, живой и обслуживает мой каталог настроек."""
+def is_mine(payload: dict | None, config_directory: str | os.PathLike, nonce: str) -> bool:
+    """ACL, живой и обслуживает мой каталог настроек.
+
+    Мало, что `config` совпал с моим: отпечаток публичен (он в /health и в
+    реестре портов), и чужой дешборд мог бы его повторить. Решает `proof` —
+    ответ на мой свежий вызов, посчитать который можно только с секретом
+    моего каталога настроек (ACL-1931).
+    """
     return bool(payload and payload.get("app") == "ACL" and payload.get("ok") is True
-                and payload.get("config") == mine)
+                and isinstance(payload.get("proof"), str)
+                and payload.get("proof") == proof(config_directory, nonce))
 
 
 def port_in_use(port: int) -> bool:
@@ -126,14 +145,16 @@ def find_own(config_directory: str | os.PathLike, *, probe=health,
     По HTTP спрашиваем только порты, которые кто-то держит: пустой порт не
     может быть моим, а спрашивать его на Windows — секунда ожидания.
     """
-    mine = identity(config_directory)
-    hints = [p for p in (recorded_port(config_directory), remembered_port(config_directory))
-             if p is not None]
+    remembered = remembered_port(config_directory)
+    hints = [p for p in (recorded_port(config_directory), remembered) if p is not None]
     for port in dict.fromkeys(hints + list(PORTS)):
         if not in_use(port):
             continue
-        payload = probe(port)
-        if is_mine(payload, mine):
+        nonce = secrets.token_hex(16)  # свежий на каждый вопрос: старый ответ не подойдёт
+        payload = probe(port, nonce=nonce)
+        if is_mine(payload, config_directory, nonce):
+            if port == remembered:
+                _refresh_mark(port, identity(config_directory))
             return port, payload
     return None
 
@@ -184,13 +205,66 @@ def _read_json(path: Path) -> dict | None:
     return data if isinstance(data, dict) else None
 
 
-def claim_owner(port: int) -> str | None:
-    """Чей это порт по общему реестру: отпечаток хозяина, либо None."""
+#: Через сколько отметка, которую хозяин не подтверждал, перестаёт держать
+#: порт. Хозяин подтверждает её каждым запуском лаунчера (время изменения
+#: файла); человек, ушедший с машины, не держит порт вечно (ревью ACL-1309).
+MARK_TTL_S = 30 * 24 * 3600
+
+
+def _mark_path(port: int) -> Path | None:
     folder = registry_dir()
-    if folder is None:
+    return folder / f"{port}.json" if folder is not None else None
+
+
+def _mark_is_stale(path: Path) -> bool:
+    try:
+        return time.time() - path.stat().st_mtime > MARK_TTL_S
+    except OSError:
+        return False
+
+
+def claim_owner(port: int) -> str | None:
+    """Чей это порт по общему реестру: отпечаток хозяина, либо None.
+
+    Просроченная отметка — ничья.
+    """
+    path = _mark_path(port)
+    if path is None or _mark_is_stale(path):
         return None
-    owner = (_read_json(folder / f"{port}.json") or {}).get("config")
+    owner = (_read_json(path) or {}).get("config")
     return owner if isinstance(owner, str) and owner else None
+
+
+def _refresh_mark(port: int, mine: str) -> None:
+    """Подтвердить свою отметку: хозяин здесь, порт по-прежнему его.
+
+    Чужую не трогаем. Просроченную свою тоже подтверждаем: хозяин вернулся
+    и забирает порт назад, а сосед, который тем временем на нём стоял,
+    увидит чужую отметку и в следующий раз встанет на свободный.
+    """
+    path = _mark_path(port)
+    if path is None:
+        return
+    owner = (_read_json(path) or {}).get("config")
+    if owner == mine:
+        try:
+            os.utime(path)
+        except OSError:
+            pass
+
+
+def _reclaim_stale_mark(port: int) -> None:
+    """Убрать просроченную чужую отметку, если система позволит.
+
+    В %ProgramData% удалять чужие файлы обычно нельзя — тогда отметка
+    просто остаётся, а `claim_owner` её не слушает.
+    """
+    path = _mark_path(port)
+    if path is not None and _mark_is_stale(path):
+        try:
+            path.unlink()
+        except OSError:
+            pass
 
 
 def remembered_port(config_directory: str | os.PathLike) -> int | None:
@@ -223,6 +297,8 @@ def _remember(config_directory: str | os.PathLike, port: int) -> None:
     """
     mine = identity(config_directory)
     folder = registry_dir()
+    _reclaim_stale_mark(port)
+    _refresh_mark(port, mine)
     if folder is not None and claim_owner(port) is None:
         try:
             folder.mkdir(parents=True, exist_ok=True)

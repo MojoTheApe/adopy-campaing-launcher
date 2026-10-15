@@ -83,6 +83,167 @@ def get_local_config_dir() -> str:
     return os.path.join(os.path.expanduser("~"), ".config", "acl")
 
 
+IDENTITY_SECRET_FILE = ".identity_secret"
+_IDENTITY_SECRETS: dict[str, bytes] = {}
+
+
+def _identity_key(directory: str | os.PathLike | None) -> bytes:
+    """Секрет каталога настроек: случайные байты в файле внутри этого каталога.
+
+    Ревью ACL-1309: отпечаток был хэшем пути, а путь предсказуем
+    (C:\\Users\\<имя>\\AppData\\Local\\ACL). Любой на машине мог по /health
+    проверить догадку об имени соседа и посчитать чужой отпечаток сам.
+    Теперь ключ — секрет, который лежит у владельца и читается только им;
+    лаунчер и дешборд одного человека читают один и тот же файл.
+
+    Создаётся при первом обращении. Двое одновременно (лаунчер и сервер)
+    не перетирают друг друга: файл готовится рядом и ставится на место
+    жёсткой ссылкой, которая не заменяет уже существующий. Каталог
+    недоступен для записи — ключом остаётся путь: дешборд, который не
+    узнаёт сам себя, хуже слабого отпечатка.
+    """
+    folder = Path(os.path.realpath(str(directory or get_local_config_dir())))
+    cache_key = os.path.normcase(str(folder))
+    cached = _IDENTITY_SECRETS.get(cache_key)
+    if cached:
+        return cached
+    secret_path = folder / IDENTITY_SECRET_FILE
+    secret = _read_identity_secret(secret_path)
+    if secret is None:
+        try:
+            _create_identity_secret(secret_path)
+        except OSError:
+            pass
+        secret = _read_identity_secret(secret_path)
+    if secret is None:
+        return cache_key.encode("utf-8")
+    _IDENTITY_SECRETS[cache_key] = secret
+    return secret
+
+
+def _read_identity_secret(path: Path) -> bytes | None:
+    # Чужой процесс мог создать файл и ещё не дописать — короткий повтор.
+    for _ in range(5):
+        try:
+            data = path.read_bytes().strip()
+        except OSError:
+            return None
+        if len(data) >= 32:
+            return data
+        time.sleep(0.05)
+    return None
+
+
+def _create_identity_secret(path: Path) -> None:
+    import secrets
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
+    descriptor = os.open(str(temporary), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        os.close(descriptor)
+        _restrict_to_owner(temporary)
+        temporary.write_bytes(secrets.token_hex(32).encode("ascii"))
+        try:
+            os.link(temporary, path)
+        except FileExistsError:
+            pass  # успел другой процесс — берём его секрет
+        except OSError:
+            # Без жёстких ссылок (FAT, сетевой диск) — обычная замена, если
+            # файла всё ещё нет.
+            if not path.exists():
+                os.replace(temporary, path)
+    finally:
+        with contextlib.suppress(OSError):
+            temporary.unlink()
+
+
+def _restrict_to_owner(path: Path) -> None:
+    """Права «только я» — до того, как в файл попадёт секрет.
+
+    POSIX: 0o600 уже задан при создании. Windows: права наследуются от
+    каталога, а ACL_CONFIG_DIR может указывать туда, где читают все
+    (C:\\acl-state). Обрываем наследование и оставляем полный доступ одному
+    текущему пользователю — по SID, а не по имени (у доменных учёток имя
+    вида AzureAD+Имя). Не вышло — файл остаётся с правами каталога:
+    %LOCALAPPDATA% и так закрыт от соседей.
+    """
+    if os.name != "nt":
+        return
+    try:
+        sid = _current_user_sid()
+        if sid:
+            _set_protected_dacl(path, f"D:P(A;;FA;;;{sid})")
+    except Exception:  # noqa: BLE001 — права не главное, отпечаток должен посчитаться
+        pass
+
+
+def _current_user_sid() -> str | None:
+    """SID текущего пользователя строкой — через advapi32, без внешних процессов."""
+    import ctypes
+    from ctypes import wintypes
+
+    advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+    advapi32.OpenProcessToken.argtypes = [wintypes.HANDLE, wintypes.DWORD,
+                                          ctypes.POINTER(wintypes.HANDLE)]
+    advapi32.GetTokenInformation.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p,
+                                             wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+    advapi32.ConvertSidToStringSidW.argtypes = [ctypes.c_void_p,
+                                                ctypes.POINTER(wintypes.LPWSTR)]
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.LocalFree.argtypes = [ctypes.c_void_p]
+    token_query, token_user = 0x0008, 1
+    token = wintypes.HANDLE()
+    if not advapi32.OpenProcessToken(kernel32.GetCurrentProcess(), token_query,
+                                     ctypes.byref(token)):
+        return None
+    try:
+        size = wintypes.DWORD()
+        advapi32.GetTokenInformation(token, token_user, None, 0, ctypes.byref(size))
+        buffer = ctypes.create_string_buffer(size.value)
+        if not advapi32.GetTokenInformation(token, token_user, buffer, size,
+                                            ctypes.byref(size)):
+            return None
+        sid_pointer = ctypes.cast(buffer, ctypes.POINTER(ctypes.c_void_p))[0]
+        text = wintypes.LPWSTR()
+        if not advapi32.ConvertSidToStringSidW(sid_pointer, ctypes.byref(text)):
+            return None
+        try:
+            return text.value
+        finally:
+            kernel32.LocalFree(text)
+    finally:
+        kernel32.CloseHandle(token)
+
+
+def _set_protected_dacl(path: Path, sddl: str) -> None:
+    import ctypes
+    from ctypes import wintypes
+
+    advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW.argtypes = [
+        wintypes.LPCWSTR, wintypes.DWORD, ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(wintypes.DWORD)]
+    advapi32.SetFileSecurityW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, ctypes.c_void_p]
+    kernel32.LocalFree.argtypes = [ctypes.c_void_p]
+    dacl_security_information = 0x00000004
+    protected_dacl_security_information = 0x80000000
+    descriptor = ctypes.c_void_p()
+    if not advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            sddl, 1, ctypes.byref(descriptor), None):
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        if not advapi32.SetFileSecurityW(
+                str(path), dacl_security_information | protected_dacl_security_information,
+                descriptor):
+            raise ctypes.WinError(ctypes.get_last_error())
+    finally:
+        kernel32.LocalFree(descriptor)
+
+
 def config_identity(directory: str | os.PathLike | None = None) -> str:
     """Чей это ACL: короткий отпечаток каталога настроек, а не сам путь.
 
@@ -91,14 +252,30 @@ def config_identity(directory: str | os.PathLike | None = None) -> str:
     видел на 9090 «какой-то ACL» и открывал его как свой: второй человек
     молча попадал в дешборд первого, с чужими аккаунтами (ACL-1309, 24.09).
 
-    Отпечаток, а не путь: `/health` доступен любому процессу на машине, и
-    путь в нём выдал бы имя чужой учётной записи. Для сравнения «мой или
-    нет» хватает хэша.
+    Отпечаток — HMAC от секрета каталога (`_identity_key`), а не хэш пути:
+    по нему не проверить догадку об имени учётной записи. Это публичное имя
+    (его видно в /health и в общем реестре портов); доказать, что ты и есть
+    этот дешборд, — `config_proof`.
     """
     import hashlib
+    import hmac
 
-    path = os.path.normcase(os.path.realpath(str(directory or get_local_config_dir())))
-    return hashlib.sha256(path.encode("utf-8")).hexdigest()[:16]
+    return hmac.new(_identity_key(directory), b"acl-identity", hashlib.sha256).hexdigest()[:16]
+
+
+def config_proof(nonce: str, directory: str | os.PathLike | None = None) -> str:
+    """Ответ на вызов: HMAC секрета каталога от случайной строки спрашивающего.
+
+    Отпечаток `config_identity` публичен — чужой дешборд мог бы просто
+    повторить его в своём /health. Ответ на свежий вызов повторить нельзя:
+    без секрета его не посчитать, а прошлые ответы к новому вызову не
+    подходят.
+    """
+    import hashlib
+    import hmac
+
+    message = b"acl-proof:" + str(nonce).encode("utf-8")
+    return hmac.new(_identity_key(directory), message, hashlib.sha256).hexdigest()[:32]
 
 
 def get_obsidian_dashboard_dir() -> Path | None:
