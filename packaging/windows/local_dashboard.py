@@ -194,15 +194,20 @@ def claim_owner(port: int) -> str | None:
 
 
 def remembered_port(config_directory: str | os.PathLike) -> int | None:
-    """Мой закреплённый порт — из моей памяти, а без неё из общего реестра."""
+    """Мой закреплённый порт — из моей памяти, а без неё из общего реестра.
+
+    Память, которой противоречит реестр (порт отмечен за соседом), не в счёт:
+    иначе двое, запустившиеся впервые в одну секунду, оба запомнили бы один
+    порт и менялись бы им день ото дня (ревью ACL-1309).
+    """
+    mine = identity(config_directory)
     data = _read_json(Path(config_directory) / MEMORY_FILE) or {}
     try:
         port = int(data.get("port"))
     except (TypeError, ValueError):
         port = None
-    if port in PORTS:
+    if port in PORTS and claim_owner(port) in (None, mine):
         return port
-    mine = identity(config_directory)
     for candidate in PORTS:
         if claim_owner(candidate) == mine:
             return candidate
@@ -210,27 +215,29 @@ def remembered_port(config_directory: str | os.PathLike) -> int | None:
 
 
 def _remember(config_directory: str | os.PathLike, port: int) -> None:
-    """Закрепить порт за мной: в своей памяти и, если можно, в реестре.
+    """Закрепить порт за мной: в реестре, если он есть, и в своей памяти.
 
-    Ошибки записи не мешают запуску: дешборд на свободном порту лучше, чем
-    никакого. Чужую отметку в реестре не перезаписываем никогда.
+    Сначала реестр: если сосед успел отметить этот порт раньше, в память его
+    не пишем — порт не мой. Ошибки записи не мешают запуску: дешборд на
+    свободном порту лучше, чем никакого. Чужую отметку не перезаписываем.
     """
     mine = identity(config_directory)
+    folder = registry_dir()
+    if folder is not None and claim_owner(port) is None:
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            with open(folder / f"{port}.json", "x", encoding="utf-8") as handle:
+                json.dump({"config": mine}, handle)
+        except OSError:
+            pass  # сосед успел первым, либо реестр недоступен — решит проверка ниже
+    if folder is not None and claim_owner(port) not in (None, mine):
+        return
     memory = Path(config_directory) / MEMORY_FILE
     try:
         memory.parent.mkdir(parents=True, exist_ok=True)
         memory.write_text(json.dumps({"port": port}) + "\n", encoding="utf-8")
     except OSError:
         pass
-    folder = registry_dir()
-    if folder is None or claim_owner(port) is not None:
-        return
-    try:
-        folder.mkdir(parents=True, exist_ok=True)
-        with open(folder / f"{port}.json", "x", encoding="utf-8") as handle:
-            json.dump({"config": mine}, handle)
-    except OSError:
-        pass  # сосед успел первым, либо реестр недоступен — хватит памяти
 
 
 def choose_port(config_directory: str | os.PathLike, *, remember: bool = True,

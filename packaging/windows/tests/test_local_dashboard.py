@@ -521,6 +521,19 @@ class StickyPortTests(_SharedMachine):
         squatter.close()
         self.assertEqual(local_dashboard.choose_port(self.anna), self.ports[0])
 
+    def test_two_first_launches_in_the_same_second_do_not_share_a_port(self):
+        """Ревью ACL-1309: Анна и Дан впервые запускаются одновременно, оба
+        видят первый порт свободным и оба записывают его себе в память; в
+        реестре успевает отметиться только Анна. Память Дана, которой
+        противоречит реестр, не в счёт — иначе они менялись бы портом."""
+        local_dashboard.choose_port(self.anna)
+        (self.dan / local_dashboard.MEMORY_FILE).write_text(
+            json.dumps({"port": self.ports[0]}), encoding="utf-8")
+
+        self.assertEqual(local_dashboard.choose_port(self.dan), self.ports[1])
+        self.assertEqual(local_dashboard.remembered_port(self.dan), self.ports[1])
+        self.assertEqual(local_dashboard.claim_owner(self.ports[0]), config_identity(self.anna))
+
     def test_a_neighbours_mark_is_never_overwritten(self):
         """Когда встать больше некуда, можно постоять на месте спящего соседа,
         но отметка в реестре остаётся его."""
