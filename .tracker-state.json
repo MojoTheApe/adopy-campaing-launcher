@@ -9370,9 +9370,11 @@
         "worktree": "C:\\wk-1899",
         "id": "065419e41db745e2a2eca2d59ba83ab9",
         "issue": 899,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-15T10:25:31+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 900,
+        "report": "# ACL-899 (ACL-1899) handoff r2\n\n- Claim: 065419e41db745e2a2eca2d59ba83ab9 (Worker-RG1899, Coordinator-M1011A, worktree C:\\wk-1899)\n- Branch: work/acl-1899-video-upload-progress\n- New head: eb4f87d69f21cf9a835dab826bb30799642759ed\n- Merge: `git merge --no-edit work/main` clean, no conflicts. 3ee7c6d9 is an ancestor of HEAD.\n- CHANGELOG commit: eb4f87d6, removes the `upload.onprogress` mention from the ACL-1899 first bullet. Nothing else changed.\n- Tests (`-k \"not browser\"`, 9 affected files): 607 passed, 0 failed, 4 deselected (browser).\n- Pushed: `git push work HEAD:work/acl-1899-video-upload-progress` (70517791..eb4f87d6)."
       },
       "827": {
         "actor": "Worker-RS1827",
