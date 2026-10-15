@@ -14104,7 +14104,7 @@
             "session": "t1853a-20261015"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-T1853A",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -14129,7 +14129,8 @@
           "actor": "Coordinator-FLOW513",
           "session": "flow_five_reviews_coordinator_01a134f0_20261013",
           "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
-        }
+        },
+        "reviewer": "Reviewer-R1853B"
       },
       "864": {
         "implementers": [
@@ -16777,6 +16778,10 @@
       "Worker-RG1776": {
         "session": "wrg1776-20261015",
         "role": "Worker"
+      },
+      "Reviewer-R1853B": {
+        "session": "S-842a2ada-r1853",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -19489,8 +19494,7 @@
       907,
       891,
       855,
-      920,
-      853
+      920
     ],
     "review": null,
     "history": [
@@ -40430,6 +40434,13 @@
         "issue": 853,
         "pr": 863,
         "actor": "Worker-T1853A"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-15T10:20:43+00:00",
+        "pr": 863,
+        "lane": "945056de957d475fa85e398ac0d511d8",
+        "actor": "Reviewer-R1853B"
       }
     ],
     "policy": {
@@ -44417,6 +44428,19 @@
       "started_at": "2026-10-15T08:23:18+00:00",
       "ineligible": {}
     },
-    "source_reviews": {}
+    "source_reviews": {
+      "863": {
+        "id": "945056de957d475fa85e398ac0d511d8",
+        "pr": 863,
+        "issues": [
+          853
+        ],
+        "actor": "Reviewer-R1853B",
+        "session": "S-842a2ada-r1853",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-15T10:20:43+00:00",
+        "state": "reviewing"
+      }
+    }
   }
 }
