@@ -123,16 +123,6 @@ class LauncherOwnershipTests(unittest.TestCase):
                 process.terminate.reset_mock();process.exe.return_value=str(root/'unrelated.exe')
                 self.assertEqual(launcher._stop_server(),2);process.terminate.assert_not_called()
 
-    def test_setup_does_not_write_while_my_dashboard_runs(self):
-        with mock.patch.object(launcher.local_dashboard,'find_own',return_value=(9090,{})), mock.patch.object(launcher,'_show_message'), mock.patch.object(wizard,'run_setup_wizard') as run:
-            self.assertFalse(launcher._run_setup());run.assert_not_called()
-
-    def test_setup_runs_while_someone_elses_dashboard_holds_the_port(self):
-        """ACL-1309: «закройте работающий дешборд» — а у второго человека на
-        машине его нет, работает чужой. Настройку он обязан пройти."""
-        with mock.patch.object(launcher.local_dashboard,'find_own',return_value=None), mock.patch.object(launcher,'_acquire_server_mutex',return_value=True), mock.patch.object(launcher,'_release_server_mutex'), mock.patch.object(launcher,'_version_text',return_value='ACL test'), mock.patch.object(wizard,'run_setup_wizard',return_value=True) as run:
-            self.assertTrue(launcher._run_setup());run.assert_called_once()
-
 
 class GuardTests(unittest.TestCase):
     def test_deletions_and_moves_are_detected_in_all_git_states(self):

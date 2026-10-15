@@ -166,7 +166,8 @@ def system_readiness(config_directory: str | Path) -> list[ReadinessCheck]:
     # машине упирался в него на втором шаге (ACL-1309).
     import local_dashboard
 
-    port = local_dashboard.free_port()
+    # Тот же порт, что займёт лаунчер, — но ничего не закрепляем: это проверка.
+    port = local_dashboard.choose_port(config_dir, remember=False)
     first, last = local_dashboard.PORTS[0], local_dashboard.PORTS[-1]
     checks.append(
         ReadinessCheck(

@@ -42,6 +42,24 @@ else's. That cannot strand a person's own old dashboard: the installer holds the
 session mutex (`AppMutex=Local\ACL-Campaign-Launcher-Server-v1`) and refuses to install
 while it runs, and the in-app update stops it first.
 
+Review of the first version (PR #310) found three gaps, fixed on 2026-10-15:
+
+- **The port belongs to the person, not to whoever started first.** Before, the first person to
+  start took 9090 and the other took 9091, so the address changed from one day to the next. Each
+  person now remembers their port (`dashboard_port.json` in their configuration directory). The
+  port is also marked in a machine-wide registry, `%ProgramData%\ACL\ports\<port>.json`, which
+  holds the configuration hash, not the path. A newcomer who starts while the owner of 9090 is
+  away therefore does not take 9090. A neighbour's mark is never overwritten. When every other
+  port is busy, a neighbour's free port is used for that run only. The wizard's System check
+  names the same port the launcher will take, and does not claim it.
+- **A listener on `[::]` is now seen.** An exclusive bind on `0.0.0.0` alone missed it, and
+  Windows would have let us bind on top of it. Occupancy now also tries an exclusive dual-stack
+  bind on `::` with `IPV6_V6ONLY=0`.
+- **The tests now catch the bug they are named after.** The launcher and setup tests used to
+  replace `find_own`. On a clean machine they still passed when the original bug was put back.
+  They now run the real launcher against real stub dashboards on real ports. Each of the
+  reviewed bugs was restored in turn, and each one turns the suite red.
+
 ## Builder: pre-flight audit card that blocks Publish - ACL-1819
 
 - Every check is defined once in `src/fb_api/preflight_rules.py` (id, label, severity, field, hint,

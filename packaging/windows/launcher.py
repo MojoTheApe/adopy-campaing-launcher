@@ -251,8 +251,10 @@ def _launch_normal(*, open_browser: bool = True) -> int:
             webbrowser.open(f"http://127.0.0.1:{own[0]}/")
         return 0
     # Чужой ACL или посторонняя программа на порту — не наше дело и не повод
-    # падать: встаём рядом. Чужое не останавливаем никогда.
-    port = local_dashboard.free_port()
+    # падать: встаём рядом. Чужое не останавливаем никогда. Порт — свой,
+    # закреплённый за человеком, а не «первый свободный»: иначе кто раньше
+    # включил компьютер, тот и на 9090, и адрес меняется день ото дня.
+    port = local_dashboard.choose_port(config_dir)
     if port is None:
         first, last = local_dashboard.PORTS[0], local_dashboard.PORTS[-1]
         _show_message(
