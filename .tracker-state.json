@@ -9361,6 +9361,18 @@
         "state": "implementing",
         "started_at": "2026-10-15T10:08:54+00:00",
         "from_status": "status:todo"
+      },
+      "899": {
+        "actor": "Worker-RG1899",
+        "session": "wrg1899-20261015",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1899-video-upload-progress",
+        "worktree": "C:\\wk-1899",
+        "id": "065419e41db745e2a2eca2d59ba83ab9",
+        "issue": 899,
+        "state": "implementing",
+        "started_at": "2026-10-15T10:25:31+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -14574,10 +14586,14 @@
           {
             "actor": "Worker-RF1899",
             "session": "wrf1899-20261015"
+          },
+          {
+            "actor": "Worker-RG1899",
+            "session": "wrg1899-20261015"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-RF1899",
+        "state": "implementing",
+        "worker": "Worker-RG1899",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-RF1899",
@@ -14595,14 +14611,7 @@
         },
         "pr": 900,
         "queued_at": "2026-10-15T08:01:37+00:00",
-        "reviewer": "Reviewer-RV1015L",
         "return_operation": {
-          "id": "6ae8d9926cbb4d1f8887f85115453b82",
-          "actor": "Coordinator-M1011A",
-          "session": "coord-m1011a-20261015",
-          "report": "# Return for a main refresh\n\nMain moved to 3ee7c6d9 (batch with ACL-1819, 1799, 1814; promotion PR 928). The source approval is stale against it. Required: merge current main into the branch (merge, no rebase; a trial merge is clean), re-run the affected tests, hand off again for a delta review. No scope change."
-        },
-        "return": {
           "id": "6ae8d9926cbb4d1f8887f85115453b82",
           "actor": "Coordinator-M1011A",
           "session": "coord-m1011a-20261015",
@@ -16758,6 +16767,10 @@
       "Reviewer-R1853B": {
         "session": "S-842a2ada-r1853",
         "role": "Reviewer"
+      },
+      "Worker-RG1899": {
+        "session": "wrg1899-20261015",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -40433,6 +40446,13 @@
         "issue": 816,
         "pr": 820,
         "actor": "Worker-RS1816"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-15T10:25:31+00:00",
+        "issue": 899,
+        "claim": "065419e41db745e2a2eca2d59ba83ab9",
+        "actor": "Worker-RG1899"
       }
     ],
     "policy": {
