@@ -42,6 +42,20 @@ SPLIT = "split"
 WORK_SEARCHES = (("work_positions", "adworkposition"), ("work_employers", "adworkemployer"))
 EDU_SEARCHES = (("education_schools", "adeducationschool"), ("education_majors", "adeducationmajor"))
 
+#: Необязательные поиски: отказ Meta по правам не валит проверку, этот тип пропускается на всё задание.
+#: Ключ - тип поиска Graph, значение - (как назвать поиск человеку, что из-за этого не подобрано), English.
+OPTIONAL_SEARCHES = {
+    "adinterestvalid": ("interest validation", "interests are matched through the interest search instead; "
+                         "previously confirmed interests were not re-verified"),
+    "adTargetingCategory": ("behaviors", "behaviors were not matched"),
+    "adworkposition": ("work positions", "work positions were not matched"),
+    "adworkemployer": ("work employers", "work employers were not matched"),
+    "adeducationschool": ("education schools", "education schools were not matched"),
+    "adeducationmajor": ("education majors", "education majors were not matched"),
+}
+#: Коды Graph «нет прав»: 10 (Permission Denied), 200 (permission error), 294 (нужно разрешение Marketing API).
+PERMISSION_CODES = frozenset({10, 200, 294})
+
 #: Потолки в ЧТЕНИЯХ Graph (каждая страница = чтение): на искомую строку и на задание.
 TERM_READ_CAP = 8
 JOB_READ_CAP = 16
@@ -241,6 +255,24 @@ class _Spent(Exception):
     """Вышел потолок чтений термина/задания (не ошибка Meta)."""
 
 
+class _Refused(Exception):
+    """Meta отказала в необязательном поиске (код прав); тип уже запомнен, повторов не будет."""
+
+
+def is_permission_refusal(exc: BaseException) -> bool:
+    """Ошибка Graph с кодом «нет прав» (10 / 200 / 294)."""
+    return getattr(exc, "code", None) in PERMISSION_CODES
+
+
+def with_search_type(exc: Exception, search_type: str) -> Exception:
+    """Та же ошибка Graph, но с названием поиска в тексте: человек видит, какой запрос отказан."""
+    from src.fb_api.graph import GraphError
+    if not isinstance(exc, GraphError) or f"search_type={search_type}" in str(exc):
+        return exc
+    return GraphError(f"{exc} [search_type={search_type}]", code=exc.code, subcode=exc.subcode,
+                      status=exc.status, details=getattr(exc, "details", None))
+
+
 _OK_STATES = ("exact", "confirmed")
 
 
@@ -261,6 +293,12 @@ class TermResolver:
         self._valid_ids: set[str] = set()
         self._ids_checked = False
         self._behaviors: list[dict] | None = None
+        #: Типы поиска, в которых Meta отказала по правам: на задание, больше не спрашиваем.
+        self._refused: dict[str, str] = {}
+        #: Какие отказанные типы затронули ТЕКУЩИЙ черновик (предупреждения - по черновикам), и по термину.
+        self._draft_skips: set[str] = set()
+        self._skip_acc: set[str] = set()
+        self._key_skips: dict[str, set[str]] = {}
         self._query_cache: dict[tuple, list[dict]] = {}
 
     # -- бюджет чтений
@@ -276,7 +314,24 @@ class TermResolver:
         if isinstance(mx, int) and isinstance(used, int) and used + CLIENT_RESERVE + pages > mx:
             raise _Spent
         before = used if isinstance(used, int) else None
-        rows = cl.get_all("/search", params, max_pages=pages)
+        stype = str(params.get("type") or "")
+        try:
+            rows = cl.get_all("/search", params, max_pages=pages)
+        except Exception as exc:  # noqa: BLE001 - разбираем только ошибки Graph
+            from src.fb_api.graph import GraphError
+            if not isinstance(exc, GraphError):
+                raise
+            # Отказ тоже стоил чтение: учитываем в бюджете, как и успешный запрос.
+            now = getattr(cl, "calls", None)
+            lost = (now - before) if before is not None and isinstance(now, int) else 1
+            self.reads += max(1, lost)
+            if count_term:
+                self._term_reads += max(1, lost)
+            if stype in OPTIONAL_SEARCHES and is_permission_refusal(exc):
+                self._refused[stype] = str(exc)
+                self._note_skip(stype)
+                raise _Refused(stype) from exc
+            raise with_search_type(exc, stype) from exc
         after = getattr(cl, "calls", None)
         # Настоящие чтения: разница счётчика клиента (по странице на GET); без счётчика - как минимум одно.
         spent = (after - before) if before is not None and isinstance(after, int) else 1
@@ -289,6 +344,9 @@ class TermResolver:
 
     # -- пакет adinterestvalid: имена + перепроверка id подтверждённых интересов
     def _ask_valid(self, names: list[str], ids: list[str] | None = None) -> None:
+        if "adinterestvalid" in self._refused:
+            self._note_skip("adinterestvalid")
+            return           # Meta отказала: интересы ищутся обычным adinterest, пакет не повторяем
         todo = [n for n in dict.fromkeys(names) if norm(n) not in self._valid_asked]
         ids = [i for i in dict.fromkeys(ids or []) if i not in self._valid_ids]
         if not todo and not ids:
@@ -298,7 +356,10 @@ class TermResolver:
             params["interest_list"] = todo
         if ids:
             params["interest_fbid_list"] = ids
-        rows = self._get_all(params, 1)
+        try:
+            rows = self._get_all(params, 1)
+        except _Refused:
+            return
         for n in todo:
             self._valid_asked.add(norm(n))
         if ids:
@@ -333,20 +394,57 @@ class TermResolver:
             return None
         return {"id": str(r["id"]), "type": bucket, "name": str(r["name"])}
 
+    def _optional(self, typ: str, params: dict, pages: int, *, count_term: bool = True) -> list[dict]:
+        """Необязательный поиск: отказ по правам -> пустой список (тип пропущен до конца задания)."""
+        if typ in self._refused:
+            self._note_skip(typ)
+            return []
+        try:
+            return self._get_all(params, pages, count_term=count_term)
+        except _Refused:
+            return []
+
     def _stages(self, term: str, near):
         """Ленивый перебор групп строк (bucket, rows) в порядке резолва."""
         yield "interests", self._get_all({"type": "adinterest", "q": term, "limit": SEARCH_LIMIT}, SEARCH_PAGES)
-        if self._behaviors is None:
+        if self._behaviors is None and "adTargetingCategory" not in self._refused:
             # Общий список поведений: на задание один раз, в потолок термина не входит.
-            self._behaviors = self._get_all(
+            rows = self._optional(
+                "adTargetingCategory",
                 {"type": "adTargetingCategory", "class": "behaviors", "limit": BEHAVIOR_LIMIT},
                 BEHAVIOR_PAGES, count_term=False)
-        yield "behaviors", self._behaviors
+            if "adTargetingCategory" not in self._refused:
+                self._behaviors = rows
+        if "adTargetingCategory" in self._refused:
+            self._note_skip("adTargetingCategory")
+        yield "behaviors", self._behaviors or []
         for bucket, typ in WORK_SEARCHES:
-            yield bucket, self._get_all({"type": typ, "q": term, "limit": SEARCH_LIMIT}, 1)
+            yield bucket, self._optional(typ, {"type": typ, "q": term, "limit": SEARCH_LIMIT}, 1)
         if near():       # учебные заведения и специальности - только когда есть хоть что-то близкое
             for bucket, typ in EDU_SEARCHES:
-                yield bucket, self._get_all({"type": typ, "q": term, "limit": SEARCH_LIMIT}, 1)
+                yield bucket, self._optional(typ, {"type": typ, "q": term, "limit": SEARCH_LIMIT}, 1)
+
+    def _note_skip(self, typ: str) -> None:
+        self._draft_skips.add(typ)
+        self._skip_acc.add(typ)
+
+    def begin_draft(self) -> None:
+        """Новый черновик: предупреждения считаются заново, память об отказах (без повторов) остаётся."""
+        self._draft_skips = set()
+
+    def refusals(self) -> list[str]:
+        """Предупреждения (English) об отказанных поисках, которые затронули текущий черновик."""
+        out = []
+        for typ in self._refused:
+            if typ not in self._draft_skips:
+                continue
+            label, effect = OPTIONAL_SEARCHES[typ]
+            out.append(f"Meta refused the {label} lookup ({typ}) on this account; {effect}.")
+        return out
+
+    def _blind_spots(self) -> str:
+        """Что не проверено из-за отказов (adinterestvalid не в счёт: его заменяет adinterest)."""
+        return ", ".join(OPTIONAL_SEARCHES[t][0] for t in self._refused if t != "adinterestvalid")
 
     def _find(self, term: str) -> dict:
         """Одна строка целиком: подтверждённый -> точный -> кандидаты."""
@@ -384,6 +482,13 @@ class TermResolver:
             return {"term": term, "state": "unknown", "picks": [], "candidates": [],
                     "reason": UNKNOWN_MESSAGE}
         ranked = sorted(cands.values(), key=lambda c: (-c["score"], c["type"], c["name"]))[:MAX_CANDIDATES]
+        blind = self._blind_spots()
+        if blind:
+            note = f"Meta refused the {blind} lookup, so '{term}' could not be checked there"
+            if not ranked:
+                # Могло найтись только через отказанный поиск: не «не найдено», а «не проверено».
+                return {"term": term, "state": "unknown", "picks": [], "candidates": [], "reason": note}
+            stale = f"{stale}; {note}" if stale else note
         return {"term": term, "state": "unresolved", "picks": [], "candidates": ranked, "reason": stale}
 
     def _stale(self, entry: dict) -> bool:
@@ -396,13 +501,17 @@ class TermResolver:
         """Результат по термину: state exact|confirmed|pending|unresolved|unknown."""
         key = norm(term)
         if key in self._results:
+            self._draft_skips |= self._key_skips.get(key, set())      # результат из кэша: отказ тот же
             return self._results[key]
+        self._skip_acc = set()
         res = self._find(term)
         parts = split_term(term)
         if res["state"] == "unresolved" and parts:
             subs = [self._find(p) if norm(p) != key else res for p in parts]
             if any(s["state"] == "unknown" for s in subs):
-                res = {**res, "state": "unknown", "reason": UNKNOWN_MESSAGE, "parts": subs}
+                why = next((s["reason"] for s in subs if s["state"] == "unknown" and s.get("reason")),
+                           UNKNOWN_MESSAGE)
+                res = {**res, "state": "unknown", "reason": why, "parts": subs}
             elif all(s["state"] in _OK_STATES for s in subs):
                 # Разбиение - другой таргетинг (OR): предлагаем кандидатом, ждём подтверждения.
                 cand = split_candidate([p for s in subs for p in s["picks"]])
@@ -412,6 +521,7 @@ class TermResolver:
                 bad = [self._classify(s) for s in subs if s["state"] not in _OK_STATES]
                 res = {**self._classify(res), "parts": [self._classify(s) for s in subs], "bad_parts": bad}
         res = self._classify(res)
+        self._key_skips[key] = set(self._skip_acc)
         self._results[key] = res
         return res
 

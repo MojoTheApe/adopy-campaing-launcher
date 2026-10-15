@@ -130,6 +130,20 @@ a clear refusal.
   and the plan, pre-flight audit and preview show the field as empty. Picking a file again works as before.
 - A value placed without typing (Send-to-Builder prefill, Duplicate ad) is not touched.
 - Regression browser test: `tests/test_acl1903_builder_file_clear_browser.py`.
+## Check plan: optional targeting lookups that Meta refuses are skipped and named - ACL-1920
+
+- On the API backend, a "Permission Denied" answer (Graph code 10, also 200 and 294) to an optional
+  targeting lookup no longer fails Check plan for the whole campaign. Optional lookups are
+  `adinterestvalid`, behaviors (`adTargetingCategory`), work (`adworkposition`, `adworkemployer`)
+  and education (`adeducationschool`, `adeducationmajor`).
+- A refused lookup is skipped for the rest of the job (no retry, no extra Meta calls; the refused read
+  still counts against the read budget) and the result carries an English warning such as "Meta
+  refused the work positions lookup (adworkposition) on this account; work positions were not
+  matched." Interests still resolve through the `adinterest` search when `adinterestvalid` is refused.
+- A term that could only match through a refused lookup ends "unknown" (the line names the refused
+  lookup) or, with a close `adinterest` candidate, "needs your choice". It is never guessed.
+- A refusal of `adinterest`, `adgeolocation` or `adlocale` still fails, and the resolver's own error
+  text now carries `search_type=<type>` for every search it makes. Everything stays read-only.
 
 ## Builder: pre-flight audit card that blocks Publish - ACL-1819
 

@@ -637,7 +637,9 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
             asks = [i for i in exc.items if i.get("state") == "pending"]
             if any(i.get("state") == "unknown" for i in exc.items):
                 # Бюджет чтений вышел: не угадываем. Блокирует план (plan_error), человек жмёт Check plan снова.
-                put("interests_resolve", UNKNOWN, cr._tr.UNKNOWN_MESSAGE)
+                why = dict.fromkeys(i.get("reason") or cr._tr.UNKNOWN_MESSAGE
+                                    for i in exc.items if i.get("state") == "unknown")
+                put("interests_resolve", UNKNOWN, ". ".join(why))
             elif lost:
                 put("interests_resolve", ERROR,
                     "Detailed targeting not found by Meta: " + "; ".join(_item_text(i) for i in lost))
