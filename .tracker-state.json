@@ -16506,6 +16506,10 @@
       "Reviewer-R1872B": {
         "session": "S-fd075fc8",
         "role": "Reviewer"
+      },
+      "Reviewer-R926B": {
+        "session": "r926b-20261015",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -19190,7 +19194,21 @@
       907,
       891
     ],
-    "review": null,
+    "review": {
+      "id": "ceb4bcb079e644348335d635edbb25f5",
+      "batch_id": "b2772e6f3da0420895f57066ce4339ff",
+      "pr": 926,
+      "issues": [
+        819,
+        799,
+        814
+      ],
+      "actor": "Reviewer-R926B",
+      "session": "r926b-20261015",
+      "coordinator": "Coordinator-C1014I",
+      "state": "reviewing",
+      "started_at": "2026-10-15T09:24:26+00:00"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -39769,6 +39787,25 @@
             "approved_at": "2026-10-15T08:59:44+00:00"
           }
         }
+      },
+      {
+        "event": "batch-review-acquired",
+        "at": "2026-10-15T09:24:26+00:00",
+        "review": {
+          "id": "ceb4bcb079e644348335d635edbb25f5",
+          "batch_id": "b2772e6f3da0420895f57066ce4339ff",
+          "pr": 926,
+          "issues": [
+            819,
+            799,
+            814
+          ],
+          "actor": "Reviewer-R926B",
+          "session": "r926b-20261015",
+          "coordinator": "Coordinator-C1014I",
+          "state": "reviewing",
+          "started_at": "2026-10-15T09:24:26+00:00"
+        }
       }
     ],
     "policy": {
@@ -43745,7 +43782,7 @@
       "id": "b2772e6f3da0420895f57066ce4339ff",
       "actor": "Coordinator-C1014I",
       "session": "coord-c1014i-20261014",
-      "state": "assembling",
+      "state": "reviewing",
       "issues": [
         819,
         799,
@@ -43889,7 +43926,7 @@
       "branch": "codex/batch-b2772e6f3da0420895f57066ce4339ff",
       "intake": "a85c69b3d13f477c8440ae4c0c09854c",
       "started_at": "2026-10-15T08:43:35+00:00",
-      "pr": null,
+      "pr": 926,
       "entered_stage": false,
       "history": []
     },
