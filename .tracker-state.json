@@ -40152,7 +40152,51 @@
         "session": "r1815m-20261015",
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-15T05:32:22+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 815,
+          "pr": 818,
+          "branch": "codex/acl-1815-rules-evidence",
+          "head_sha": "ba1fc162c81a2fb3a97a1ee65f741f4758e7720d",
+          "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+          "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "scope": "d0edb4fa71627b40731aae36c0449abf03ea6a9660de369b26e0166980e748cb",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-R1815M",
+            "implementer": "Worker-RM1815",
+            "review_session": "r1815m-20261015",
+            "execution_lane": "44e41b202f884855b7c1fb98533e9a86",
+            "head_sha": "ba1fc162c81a2fb3a97a1ee65f741f4758e7720d",
+            "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+            "tree_sha": "61b647ecbf176785256d997ec96a5f2e7da4fd2d",
+            "report": "Independent review of ACL-1815 / PR 818 at head ba1fc162 against main 0850aa39. Reviewer-R1815M implemented none of it (handoff worker Worker-RM1815). Full diff vs main is 4 files: rules/evidence.py (new, pure: no network, file or profile access; only an env read for snapshot age), rules/__init__.py, campaign_inventory.py (adlabels and updated_time added to existing field lists, no new Meta calls; join_bi delegates to exact_name_join, whose logic is moved verbatim) and tests. BI join goes through exact_name_join in identity verdicts and every window; account alias trust goes through account_names.exact_alias/has_own_name (ACL-1824), tail-only matches are alias_heuristic and block Automatic. Maturity windows: stop-loss spend [start, through-D], FTD [start, through]; scale both [start, through-D] plus tail; D clamped 0..14. User-facing reason strings are English; Russian only in comments and docstrings. Tests: 1815, 1798 inventory and 1800 commands 293 passed (not browser). Mutation DEFAULT_MATURITY_DAYS 2 -> 5 is caught by 4 failing tests. scripts/acl_scan_secrets.py clean (the old 1800 file is gone). tracker-link run 38681970226 green. No live calls. Findings: no blocking issues.",
+            "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "issues": [
+              815
+            ],
+            "recorded_at": "2026-10-15T05:34:11+00:00",
+            "issue_scopes": {
+              "815": "d0edb4fa71627b40731aae36c0449abf03ea6a9660de369b26e0166980e748cb"
+            }
+          },
+          "lane": {
+            "id": "44e41b202f884855b7c1fb98533e9a86",
+            "pr": 818,
+            "issues": [
+              815
+            ],
+            "actor": "Reviewer-R1815M",
+            "session": "r1815m-20261015",
+            "coordinator": "Coordinator-C0930A",
+            "started_at": "2026-10-15T05:32:22+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-15T05:34:36+00:00"
+        }
       }
     }
   }
