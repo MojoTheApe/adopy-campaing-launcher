@@ -8949,20 +8949,6 @@
         "state": "implementing",
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
-      },
-      "826": {
-        "actor": "Worker-RL1826",
-        "session": "wrl1826-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1826-mlx-session-lost",
-        "worktree": "C:\\wk-rl1826",
-        "id": "3f8d591b5b1449faba5004259b1493c3",
-        "issue": 826,
-        "state": "handoff",
-        "started_at": "2026-10-15T04:31:29+00:00",
-        "from_status": "status:todo",
-        "pr": 828,
-        "report": "# ACL-1826 refresh handoff\nMerged origin/main (0850aa39) into codex/acl-1826-mlx-session-lost; head 285aca31.\nConflicts and resolution:\n- src/web/templates/_campaign_table.html: kept main's ACL-1800 toolbar (Expand/Collapse all and count live in the toolbar; the branch's duplicate hc-head2 header dropped) and re-applied the 1826 session-lost banner (data-hc=banner) above it; in the batch-read handler kept both the BATCH_STOPS stop capture (Retry/banner behaviour) and main's loadWarm().\n- docs/system/CHANGELOG.md: the branch carried no ACL-1826 entry of its own, only copies of main entries; took main's file (all entries present once).\nTests (-k \"not browser\"): test_acl1826_mlx_session_lost, test_review_ui_regressions, test_acl1800_* (account_scoped_table, account_tree, campaign_commands, home_wiring), test_acl1761_*: 560 passed. scripts/acl_scan_secrets.py clean."
       }
     },
     "tasks": {
@@ -13102,25 +13088,25 @@
             "session": "wrl1826-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RL1826",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-S1826M",
-          "session": "ws1826m-20261015",
+          "actor": "Worker-RL1826",
+          "session": "wrl1826-20261015",
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1826-mlx-session-lost",
-          "worktree": "C:\\wk-1826m",
-          "id": "b52403ba5b3349539a19f7865a6de291",
+          "worktree": "C:\\wk-rl1826",
+          "id": "3f8d591b5b1449faba5004259b1493c3",
           "issue": 826,
           "state": "handoff",
-          "started_at": "2026-10-15T03:46:05+00:00",
+          "started_at": "2026-10-15T04:31:29+00:00",
           "from_status": "status:todo",
           "pr": 828,
-          "report": "# Return 826 r1826l\n\nHead: b5d66a63 (on top of 4e2812a3), pushed to codex/acl-1826-mlx-session-lost.\n\nDefect: CI shard 1, test_poll_resumes_and_updates_all_copies_and_status: ReferenceError window is not defined (report.html slice evaluated in Node without window). Unguarded top-level mount `if (typeof document !== 'undefined' && window.AMAP_CAMPAIGN_TABLE)`.\n\nFix (same as ACL-1800 7efcc856): added `typeof window !== 'undefined'` to that condition in src/web/templates/report.html (browser behaviour unchanged); the poll test ctx stubs `window:{addEventListener(){}}`; test_acl1800_account_scoped_table.py anchor string updated to the new condition.\n\nTests: before fix test_review_ui_regressions.py failed (1 failed, 6 passed). After: test_review_ui_regressions + test_acl1800_account_scoped_table + test_acl1826_mlx_session_lost: 90 passed. scripts/acl_scan_secrets.py: clean. CI not awaited."
+          "report": "# ACL-1826 refresh handoff\nMerged origin/main (0850aa39) into codex/acl-1826-mlx-session-lost; head 285aca31.\nConflicts and resolution:\n- src/web/templates/_campaign_table.html: kept main's ACL-1800 toolbar (Expand/Collapse all and count live in the toolbar; the branch's duplicate hc-head2 header dropped) and re-applied the 1826 session-lost banner (data-hc=banner) above it; in the batch-read handler kept both the BATCH_STOPS stop capture (Retry/banner behaviour) and main's loadWarm().\n- docs/system/CHANGELOG.md: the branch carried no ACL-1826 entry of its own, only copies of main entries; took main's file (all entries present once).\nTests (-k \"not browser\"): test_acl1826_mlx_session_lost, test_review_ui_regressions, test_acl1800_* (account_scoped_table, account_tree, campaign_commands, home_wiring), test_acl1761_*: 560 passed. scripts/acl_scan_secrets.py clean."
         },
         "pr": 828,
-        "queued_at": "2026-10-15T03:48:37+00:00",
+        "queued_at": "2026-10-15T04:35:21+00:00",
         "review_report": "ACL-1826 / PR 828 at b5d66a63: code and the last fix (4e2812a3..b5d66a63: report.html window guard, window stub in test_review_ui_regressions, anchor update in test_acl1800) are correct; no weakening; 90 tests pass in a detached worktree, acl_scan_secrets clean, gh pr checks 828: 16/16 pass. RETURNED ONLY BECAUSE main moved: origin/main is now 0850aa39 (merge-base with the head is still a4e38b7c; 1797 and 1800 landed, incl. 7efcc856 which is the same window guard). PR 828 is CONFLICTING / DIRTY. git merge-tree origin/main head gives conflicts in docs/system/CHANGELOG.md and src/web/templates/_campaign_table.html (report.html, acm_commands.js and test_acl1800_account_scoped_table.py auto-merge). Fix: merge origin/main into the branch, resolve those two files (keep main's 1800 table structure and re-apply the 1826 session-lost change; CHANGELOG keep both entries), rerun the three tests, push; then request re-review. No other findings."
       },
       "767": {
@@ -18334,7 +18320,8 @@
       799,
       814,
       775,
-      815
+      815,
+      826
     ],
     "review": null,
     "history": [
@@ -36529,6 +36516,13 @@
         "event": "included-sources-closed",
         "at": "2026-10-15T04:34:42+00:00",
         "batch_id": "e76699eff67645bd910712ebbcde5107"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-15T04:35:21+00:00",
+        "issue": 826,
+        "pr": 828,
+        "actor": "Worker-RL1826"
       }
     ],
     "policy": {
