@@ -85,7 +85,7 @@ Object.keys(L.FUTURE).forEach((key) => {
   });
 });
 assert.equal(L.futureTip('adsets'), 'Multiple ad sets — coming in ACL-1768');
-assert.equal(L.futureTip('forms'), 'Instant Forms — coming in ACL-1775');
+assert.equal(L.futureTip('forms'), '', 'ACL-1775: формы больше не заглушка');
 assert.equal(L.futureTip('texts'), 'Up to 5 primary texts — coming in ACL-1774');
 assert.equal(L.futureTip('placements'), 'Placement editor — coming in ACL-1772');
 assert.equal(L.futureTip('copyTo'), 'Copy to accounts — coming in ACL-1773');

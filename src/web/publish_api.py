@@ -46,9 +46,11 @@ CREATE_MAX_CALLS_ENV = "ACL_FB_API_CREATE_MAX_CALLS"
 MIN_INTERVAL_ENV = "ACL_FB_API_MIN_INTERVAL_S"
 #: Потолок вызовов Graph на одну кампанию: предпроверка, поиск, медиа,
 #: ожидание видео, запись, проверка меток, сверка — с запасом на 4 объявления
-#: с видео (4 × (20 опросов + ~10) + ~20). Свой потолок кончает только эту
+#: с видео (4 × (20 опросов + ~10) + ~20). Instant Form (ACL-1775) добавляет
+#: до 4 чтений форм Страницы (до 2 в предпроверке и до 2 при сверке: список и
+#: условия), поэтому запас на них +10. Свой потолок кончает только эту
 #: кампанию, следующие идут со своим (ревью, minor 5).
-DEFAULT_CREATE_MAX_CALLS = 140
+DEFAULT_CREATE_MAX_CALLS = 150
 #: Потолок на предпроверку кабинета (один раз на задание).
 PREFLIGHT_MAX_CALLS = 12
 READY_TIMEOUT_S = 90.0
@@ -233,6 +235,8 @@ class ApiPublisher:
         self.cancel_event = threading.Event()
         self.progress = progress
         self._tab = None
+        #: ACL-1812: аренда тёплой вкладки профиля (вместо своей вкладки).
+        self._lease: Any = None
         self._client: GraphClient | None = None
         self._facts: AccountFacts | None = None
         self._resolver: TargetingResolver | None = None
@@ -279,9 +283,14 @@ class ApiPublisher:
         self._entry = entry
         from src.fb_api import profile as _fb_profile
 
+        if self._open_warm(account_label, profile_id):
+            return
+        from src.fb_api import mlx_session as _mlx
+
         try:
-            self._opened = _open_profile(profile_id, (getattr(entry, "folder_id", "") or "").strip(),
-                                         (getattr(entry, "multilogin_instance", "") or "A").strip() or "A")
+            with _mlx.scope(account=account_label):
+                self._opened = _open_profile(profile_id, (getattr(entry, "folder_id", "") or "").strip(),
+                                             (getattr(entry, "multilogin_instance", "") or "A").strip() or "A")
         except _fb_profile.ProfileError as exc:
             raise ApiPublishError(str(exc), code=getattr(exc, "code", "")) from exc
         except Exception as exc:  # noqa: BLE001
@@ -307,6 +316,10 @@ class ApiPublisher:
         if not state.get("has_token"):
             raise ApiPublishError(f"{account_label}: Ads Manager did not finish loading "
                                   "(no Graph session in the page); nothing was created")
+        self._finish_open(account_label, graph)
+
+    def _finish_open(self, account_label: str, graph: Any) -> None:
+        """Клиент Graph на готовой вкладке и предпроверка кабинета (общее для обоих путей)."""
         self._client = GraphClient(
             graph, allow_writes=not self.dry_run,
             min_interval_s=_env_number(MIN_INTERVAL_ENV, 1.0, 0.5, 10.0),
@@ -322,6 +335,34 @@ class ApiPublisher:
             raise ApiPublishError(f"{account_label}: Graph API error in the account check: {exc}") from exc
         self._resolver = TargetingResolver(self._client)
         self.progress("ad account verified")
+
+    def _open_warm(self, account_label: str, profile_id: str) -> bool:
+        """ACL-1812: профиль «на сегодня» — берём его вкладку робота, без перезагрузки.
+
+        True — вкладка взята, клиент и предпроверка кабинета сделаны. Профиль не
+        поднимаем и не останавливаем; вкладку по концу задания отпускаем, не закрывая.
+        """
+        from src.fb_api import warm as _warm
+
+        reg = _warm.registry()
+        if not reg.is_warm(profile_id):
+            return False
+        act, dry = self.act, self.dry_run
+        mode = "read" if dry else f"create:{act}"
+
+        def make(tab):
+            return _make_graph(tab, act, writes=not dry)
+
+        try:
+            self._lease = reg.checkout(profile_id, account=account_label, act=act, mode=mode,
+                                       make_graph=make, ready_timeout=READY_TIMEOUT_S)
+        except _warm.WarmError as exc:
+            raise ApiPublishError(str(exc), code=exc.code) from exc
+        except GraphStop as exc:
+            self._halt(exc)
+        self.progress("profile attached (warm)")
+        self._finish_open(account_label, self._lease.graph)
+        return True
 
     def _halt(self, stop: GraphStop) -> None:
         self.stop = stop
@@ -406,6 +447,14 @@ class ApiPublisher:
     def close(self, *, force: bool = False) -> None:
         """Закрыть свою вкладку. Профиль не трогаем."""
         _ = force
+        lease, self._lease = self._lease, None
+        if lease is not None:
+            # Тёплая вкладка остаётся открытой для следующего действия.
+            stop = self.stop if isinstance(self.stop, GraphStop) else None
+            try:
+                lease.release(stop)
+            except Exception:
+                log.exception("Could not release the warm tab for %s", self.account_label)
         tab, self._tab = self._tab, None
         if tab is not None:
             try:
@@ -425,12 +474,17 @@ class ApiPublisher:
         if not clean or other_job_waits or self.cancelled() or _keep_profiles_open():
             _record("profile_closed_after_job", None, diag={"note": "kept"})
             return ""
+        from src.fb_api import stop_log as _stop_log
+
         try:
             _stop_profile(self._entry, account_label)
         except Exception as exc:  # noqa: BLE001
             log.warning("%s: could not close the profile the job started (%s)", account_label, exc)
             _record("profile_closed_after_job", False, diag={"error": type(exc).__name__})
             return ""
+        finally:
+            # ACL-1812 (ревью #813, B2): остановка записана при любой попытке.
+            _stop_log.record_stop((getattr(self._entry, "profile_id", "") or "").strip())
         _record("profile_closed_after_job", True)
         return "closed"
 

@@ -726,7 +726,21 @@ def _append_result(job_id: str, res: dict[str, Any]) -> None:
         _jobs[job_id]["done_count"] += 1
 
 
+def _mlx_text(job_id: str, msg: str) -> str:
+    """ACL-1826: потеря общей сессии Multilogin / вход в прокси — одной понятной фразой."""
+    try:
+        from src.fb_api import mlx_session
+
+        with _jobs_lock:
+            account = (_jobs.get(job_id) or {}).get("account_label", "")
+        text, _code = mlx_session.humanize(msg, "", account)
+        return text or msg
+    except Exception:
+        return msg
+
+
 def _fatal(job_id: str, msg: str) -> None:
+    msg = _mlx_text(job_id, msg)
     with _jobs_lock:
         if _abandoned(job_id):
             return
@@ -1099,6 +1113,7 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
 
 def _add_error(job_id: str, msg: str) -> None:
     """Ошибка в задание; брошенное по сроку Stop молчит (ACL-1614)."""
+    msg = _mlx_text(job_id, msg)
     with _jobs_lock:
         if not _abandoned(job_id):
             _jobs[job_id]["errors"].append(msg)
@@ -1375,6 +1390,12 @@ def close_profile(job_id: str) -> dict[str, Any]:
                                                 account_label, scrub(str(exc))[:200])
             return {"ok": False, "code": "failed",
                     "error": "Multilogin could not close the profile. Close its window in Multilogin."}
+        finally:
+            # ACL-1812 (ревью #813, B1-ter): остановка записана при любой попытке — следующий
+            # запуск ждёт паузу (ACL-1811). Кнопка есть на обоих бэкендах.
+            from src.fb_api import stop_log as _stop_log
+
+            _stop_log.record_stop(profile)
     finally:
         lease.release()
     with _jobs_lock:

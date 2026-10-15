@@ -59,10 +59,16 @@
                              body: JSON.stringify(body) }).then(readReply);
   }
 
+  /* ACL-1826: понятные тексты устойчивых кодов Multilogin (те же, что отдаёт сервер). */
+  var FRIENDLY = {
+    mlx_session_lost: 'Multilogin on this computer lost the shared KLD sign-in (it was used on another computer). Sign in again in the Multilogin app here, then press Retry.',
+    proxy_auth: 'The proxy login for this profile is wrong or expired — update it in Multilogin'
+  };
+
   function readReply(resp) {
     return resp.json().catch(function () { return {}; }).then(function (data) {
       if (!resp.ok) {
-        var e = new Error(data.error || ('Request failed (' + resp.status + ')'));
+        var e = new Error(FRIENDLY[data.code] || data.error || ('Request failed (' + resp.status + ')'));
         e.code = data.code || '';
         e.status = resp.status;
         throw e;
@@ -525,6 +531,6 @@
     home: { availability: availability, controlState: controlState, statusTarget: statusTarget,
             stepValue: stepValue, batchPlan: batchPlan, flow: flow, classify: classify,
             applySaved: applySaved, editValue: editValue, actor: actor, AUTOMATIC: AUTOMATIC,
-            settle: settle, UNKNOWN_TEXT: UNKNOWN_TEXT, CHECK_TEXT: CHECK_TEXT }
+            settle: settle, FRIENDLY: FRIENDLY, UNKNOWN_TEXT: UNKNOWN_TEXT, CHECK_TEXT: CHECK_TEXT }
   };
 })(typeof window !== 'undefined' ? window : globalThis);
