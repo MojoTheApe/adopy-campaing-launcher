@@ -9140,9 +9140,11 @@
         "worktree": "C:\\wk-rn1799",
         "id": "f534b8b04e314798bd66e1bc27c3c69c",
         "issue": 799,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-15T06:30:48+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 803,
+        "report": "# Refresh ACL-1799 (PR 803)\n- Merged origin/main (080df2d8) into codex/acl-1799-country-workbench; head df6317d9.\n- Conflict: only src/web/templates/report.html at the end of the file. Kept both sides: 1799 cw-script block and 1812 warm_sessions.js include. cw-styles and the active() fix (adIndex: 0) are intact.\n- Tests: tests/test_acl1799_country_workbench.py (not browser) 22 passed; node tests/cw_harness.cjs src/web/templates/report.html: ok."
       }
     },
     "tasks": {
