@@ -8906,6 +8906,18 @@
         "state": "implementing",
         "started_at": "2026-10-15T04:23:56+00:00",
         "from_status": "status:todo"
+      },
+      "775": {
+        "actor": "Worker-RL1775",
+        "session": "wrl1775-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1775-instant-forms",
+        "worktree": "C:\\wk-rl1775",
+        "id": "acf0a97488964dcf8d94c43502a72e32",
+        "issue": 775,
+        "state": "implementing",
+        "started_at": "2026-10-15T04:24:26+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -12695,10 +12707,14 @@
           {
             "actor": "Worker-RH1775",
             "session": "wrh1775-20261015"
+          },
+          {
+            "actor": "Worker-RL1775",
+            "session": "wrl1775-20261015"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-RH1775",
+        "state": "implementing",
+        "worker": "Worker-RL1775",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
           "actor": "Worker-RH1775",
@@ -12718,13 +12734,6 @@
         "queued_at": "2026-10-14T23:03:06+00:00",
         "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e76699ef (ACL-1800 campaign commands, ACL-1797 design system; PR 917 -> 918). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
         "return_operation": {
-          "id": "259d2a7dc6294e45aae748865a9daf33",
-          "actor": "Coordinator-C0930A",
-          "session": "coord_c0930a_1009",
-          "report": "# Return for a dependency refresh\n\nMain now also contains batch e76699ef (ACL-1800 campaign commands, ACL-1797 design system; PR 917 -> 918). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
-        },
-        "reviewer": "Reviewer-R1775J",
-        "return": {
           "id": "259d2a7dc6294e45aae748865a9daf33",
           "actor": "Coordinator-C0930A",
           "session": "coord_c0930a_1009",
@@ -15593,6 +15602,10 @@
       },
       "Worker-RM1799": {
         "session": "wrm1799-20261015",
+        "role": "Worker"
+      },
+      "Worker-RL1775": {
+        "session": "wrl1775-20261015",
         "role": "Worker"
       }
     },
@@ -36239,6 +36252,13 @@
         "issue": 799,
         "claim": "66e4099a33fe4b1e941f206f1cfb9af7",
         "actor": "Worker-RM1799"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-15T04:24:26+00:00",
+        "issue": 775,
+        "claim": "acf0a97488964dcf8d94c43502a72e32",
+        "actor": "Worker-RL1775"
       }
     ],
     "policy": {
