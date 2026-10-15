@@ -579,7 +579,7 @@ def test_the_publish_buttons_are_wrapped_by_the_gate_and_the_originals_are_untou
 NAME_CASES = [
     ("2046 1.jpg", "Text A"), ("2046 1.mp4", "Text A"), ("1_es_2403_post.mp4", "Text B"),
     ("1000_img.png", "Text0"), ("coffee.mp4", "Text C"), ("1080x1080-17.png", "Text D"),
-    (r"C:\files\2403_square.JPG", "Text E"), ("", "Only text"), ("2046.png", ""), ("", ""),
+    (r"C:\files\2403_square.JPG", "Text E"), ("", "Only text"), ("2046.png", ""), ("", ""),  # linux-ok: Windows path is only data for the name function, which must take the basename of backslash paths too
     ("12_2403.png", "T"), ("2403x1080_3011.png", "T"),
 ]
 
