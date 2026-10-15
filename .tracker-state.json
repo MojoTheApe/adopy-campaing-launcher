@@ -3560,6 +3560,27 @@
         "issue_scopes": {
           "800": "c6a03d6f7d7359787e935af84597ca655ffb095293c7145fe32eb1f57394c2f5"
         }
+      },
+      "803": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1799L",
+        "implementer": "Worker-S1799K",
+        "review_session": "r1799l-20261015",
+        "execution_lane": "b8efe268899f4703950473f96933f289",
+        "head_sha": "3c9521c3dbea616f77c5e09ea2b77d3c15d47d65",
+        "base_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
+        "tree_sha": "e10dac971c558c0099f4a4d7594b1144b919579d",
+        "report": "Independent re-review of ACL-1799 / PR 803 at head 3c9521c3 against main a4e38b7c. Reviewer-R1799L implemented none of it. Previous review R1799J found one blocker: active() returned the removed adIdx, breaking the Workbench Use flow. Delta 253bcac8..3c9521c3 is exactly one line in src/web/templates/report.html: adIndex: adIdx -> adIndex: 0 in the drawer active() return; applyCreative already falls back to the first card. Verification: tests/test_acl1799_country_workbench.py 22 passed; node tests/cw_harness.cjs ok. CI on head: Linux 1-3 (shard 3 with the 1799 browser tests), Windows tests, installer, descriptor, process instructions all pass; tracker-link failed only because the task was not in Review and passed after review-acquire rerun. No live calls. Findings: no blocking issues.",
+        "main_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          799
+        ],
+        "recorded_at": "2026-10-15T04:10:27+00:00",
+        "issue_scopes": {
+          "799": "0b2f9e9baae64d82925ec94ddc2a28bcd01ffc31eadb8ce886535456b06792e3"
+        }
       }
     },
     "stage": {
