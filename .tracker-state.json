@@ -8949,20 +8949,6 @@
         "state": "implementing",
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
-      },
-      "812": {
-        "actor": "Worker-RL1812",
-        "session": "wrl1812-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1812-warm-sessions",
-        "worktree": "C:\\wk-rl1812",
-        "id": "e8e492b769644e9f90a657c763fb6a57",
-        "issue": 812,
-        "state": "handoff",
-        "started_at": "2026-10-15T04:35:42+00:00",
-        "from_status": "status:todo",
-        "pr": 813,
-        "report": "# ACL-1812 refresh handoff\nMerged origin/main (0850aa39) into codex/acl-1812-warm-sessions; head 55338399. The merge was clean: no textual conflicts. The stacked 1769/1798/1800 parts now equal main's final form (main wins); the branch diff against main contains only 1812 code (warm.py, warm_api.py, warm_sessions.js, stop_log.py, account_spend changes, cdp/profile/token_capture hooks, tests): open profiles kept warm, reusable robot tab, 3-minute restart cooldown on every start path, hand-opened profiles never auto-closed or restarted.\nTests (-k \"not browser\"): test_acl1812_warm_sessions, test_account_spend, test_september_review, test_reads_*, test_a_hand_opened_window_is_reopened_at_once, test_attach_short_path, test_connect_without_act, test_acl1798_campaign_inventory, test_acl1800_* (campaign_commands, account_scoped_table, home_wiring), test_acl1797_design_system, test_acl1761_*: 766 passed."
       }
     },
     "tasks": {
@@ -12831,25 +12817,25 @@
             "session": "wrl1812-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RL1812",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-W1014F",
-          "session": "w1014f-20261014",
-          "coordinator": "Coordinator-T1014C",
+          "actor": "Worker-RL1812",
+          "session": "wrl1812-20261015",
+          "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1812-warm-sessions",
-          "worktree": "C:\\wkf-1812",
-          "id": "de7c45331fa64b759374e96a922b8a19",
+          "worktree": "C:\\wk-rl1812",
+          "id": "e8e492b769644e9f90a657c763fb6a57",
           "issue": 812,
           "state": "handoff",
-          "started_at": "2026-10-14T10:59:52+00:00",
+          "started_at": "2026-10-15T04:35:42+00:00",
           "from_status": "status:todo",
           "pr": 813,
-          "report": "# Handoff ACL-1812 (PR #813)\nScope: returned-review fixes. Merged fixed parent codex/acl-1800-campaign-commands (7efcc856, includes #765/#796 and current main); no conflicts, no code changes needed on this branch. Shard spread, platform guard, poll test and the act_ id finding are all resolved by the merge (no act_9999999999 remains). Head aa4247c7.\nChecks: local test_acl_test_shard, test_acl_test_platform, test_review_ui_regressions, test_acl1812_* 213 passed; GitHub CI all green except tracker-link (needs Review status, this handoff)."
+          "report": "# ACL-1812 refresh handoff\nMerged origin/main (0850aa39) into codex/acl-1812-warm-sessions; head 55338399. The merge was clean: no textual conflicts. The stacked 1769/1798/1800 parts now equal main's final form (main wins); the branch diff against main contains only 1812 code (warm.py, warm_api.py, warm_sessions.js, stop_log.py, account_spend changes, cdp/profile/token_capture hooks, tests): open profiles kept warm, reusable robot tab, 3-minute restart cooldown on every start path, hand-opened profiles never auto-closed or restarted.\nTests (-k \"not browser\"): test_acl1812_warm_sessions, test_account_spend, test_september_review, test_reads_*, test_a_hand_opened_window_is_reopened_at_once, test_attach_short_path, test_connect_without_act, test_acl1798_campaign_inventory, test_acl1800_* (campaign_commands, account_scoped_table, home_wiring), test_acl1797_design_system, test_acl1761_*: 766 passed."
         },
         "pr": 813,
-        "queued_at": "2026-10-14T11:21:37+00:00",
+        "queued_at": "2026-10-15T04:38:51+00:00",
         "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e76699ef (ACL-1800 campaign commands, ACL-1797 design system; PR 917 -> 918). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
       },
       "814": {
@@ -18342,7 +18328,8 @@
       814,
       775,
       815,
-      826
+      826,
+      812
     ],
     "review": null,
     "history": [
@@ -36550,6 +36537,13 @@
         "at": "2026-10-15T04:35:42+00:00",
         "issue": 812,
         "claim": "e8e492b769644e9f90a657c763fb6a57",
+        "actor": "Worker-RL1812"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-15T04:38:51+00:00",
+        "issue": 812,
+        "pr": 813,
         "actor": "Worker-RL1812"
       }
     ],
