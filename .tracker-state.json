@@ -12682,7 +12682,7 @@
             "session": "wrh1775-20261015"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-RH1775",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12701,7 +12701,7 @@
         },
         "pr": 809,
         "queued_at": "2026-10-14T23:03:06+00:00",
-        "review_report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return.",
+        "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e76699ef (ACL-1800 campaign commands, ACL-1797 design system; PR 917 -> 918). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
         "return_operation": {
           "id": "259d2a7dc6294e45aae748865a9daf33",
           "actor": "Coordinator-C0930A",
@@ -36131,6 +36131,18 @@
           "report": "ACL-1826 / PR 828 at b5d66a63: code and the last fix (4e2812a3..b5d66a63: report.html window guard, window stub in test_review_ui_regressions, anchor update in test_acl1800) are correct; no weakening; 90 tests pass in a detached worktree, acl_scan_secrets clean, gh pr checks 828: 16/16 pass. RETURNED ONLY BECAUSE main moved: origin/main is now 0850aa39 (merge-base with the head is still a4e38b7c; 1797 and 1800 landed, incl. 7efcc856 which is the same window guard). PR 828 is CONFLICTING / DIRTY. git merge-tree origin/main head gives conflicts in docs/system/CHANGELOG.md and src/web/templates/_campaign_table.html (report.html, acm_commands.js and test_acl1800_account_scoped_table.py auto-merge). Fix: merge origin/main into the branch, resolve those two files (keep main's 1800 table structure and re-apply the 1826 session-lost change; CHANGELOG keep both entries), rerun the three tests, push; then request re-review. No other findings.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-15T04:21:28+00:00",
+        "issue": 775,
+        "operation": {
+          "id": "259d2a7dc6294e45aae748865a9daf33",
+          "actor": "Coordinator-C0930A",
+          "session": "coord_c0930a_1009",
+          "report": "# Return for a dependency refresh\n\nMain now also contains batch e76699ef (ACL-1800 campaign commands, ACL-1797 design system; PR 917 -> 918). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -37091,50 +37103,6 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-14T22:03:01+00:00"
-      },
-      "775": {
-        "issue": 775,
-        "pr": 809,
-        "branch": "codex/acl-1775-instant-forms",
-        "head_sha": "e2714db88c3b088482d4e9f21ce9f9660f8c14ff",
-        "base_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
-        "main_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
-        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-        "scope": "ceb045664960caec521fbc188384eaeb4a6ba049c145f62dde9e6d8e34e16091",
-        "review": {
-          "kind": "independent-review",
-          "verdict": "approved",
-          "reviewer": "Reviewer-R1775J",
-          "implementer": "Worker-RH1775",
-          "review_session": "r1775j-20261015",
-          "execution_lane": "b9ff97eb84de41a494a60bc54728078d",
-          "head_sha": "e2714db88c3b088482d4e9f21ce9f9660f8c14ff",
-          "base_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
-          "tree_sha": "3c97126e290ba11514acbfeb4aa24b73b0b10755",
-          "report": "Independent source re-review of ACL-1775 / PR 809 after main moved (ACL-1766 merged), at head e2714db8 against current main a4e38b7c (main is an ancestor of the head). Reviewer-R1775J implemented none of it. Previous approval: Reviewer-R1775G at 8ab25c24.\n\nVerified by reading the merged code (git diff origin/main...head, creator.py and report.html; golden fixture diffed 8ab25c24..e2714db8):\n- resolve_page_pixel keeps 1766 unchanged: a set page (draft/map) must be among the account pages unconditionally, including an empty list, else PlanError naming the source; account-default fallback and the several-pages error are intact.\n- Pixel: Instant-Form-only plans (non-empty ad_sets and every set instant) skip the pixel check, which is correct, since an ON_AD / LEAD_GENERATION ad set is promoted on the Page and carries no pixel. Any plan with a website set, mixed plans included, goes through the 1766 pixel check. Confirmed by running the function: mixed plan + foreign pixel -> PlanError; form-only + foreign pixel -> ok; website + foreign pixel -> PlanError. An empty ad_sets list also falls to the pixel check.\n- 1775 form checks intact: _check_forms reads the Page forms before any write; a form that is not on the plan's Page, not ACTIVE or unreadable raises PlanError; tos_accepted is not sent; ad sets/creatives/ads stay PAUSED; lead_gen_form_id goes only through the on_ad path of the write policy.\n- Golden fixture: the diff of tests/fixtures/acl1775_website_golden.json is additions only, no line removed or changed: page_source=draft and pixel_source=account default in the plan, and not_read=false on each readback check. Exactly the claimed fields.\n- report.html: the plan header shows page (page_source) and pixel (pixel_source); the pixel part is hidden only when every ad set is an Instant Form. Values are escaped.\n\nVerification:\n- CI on head e2714db8: all checks pass (Linux 1-3, Windows, process instructions, installer verification, descriptor, ACL verification); tracker-link failed at first (before the review lane existed) and passed on rerun; two build jobs skipped as expected.\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k \"not browser\": test_acl1775_instant_forms + test_acl1775_builder_forms + test_acl1766_map_pixel 113 passed; test_acl1761_* (7 files) 230 passed, 2 deselected.\n- Mutation: both 1766 account checks (page and pixel) replaced by if False -> 6 failures in test_acl1766_map_pixel (foreign page and pixel write nothing, empty lists, pixel error). Pixel check only -> 4 failures. Always skipping the pixel check -> 9 failures including test_instant_form_needs_no_pixel and the golden test. Reverted; worktree clean and removed.\n- No live Meta or Multilogin calls by this reviewer.\n\nFindings: no blocking issues. Minor, non-blocking: no test pins the mixed plan (website plus form ad sets) still checking the pixel; changing all() to any() in the skip condition survives the test suite (113 passed). Code is correct as is; a pinning test is a suggested follow-up.",
-          "main_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "issues": [
-            775
-          ],
-          "recorded_at": "2026-10-14T23:39:39+00:00",
-          "issue_scopes": {
-            "775": "ceb045664960caec521fbc188384eaeb4a6ba049c145f62dde9e6d8e34e16091"
-          }
-        },
-        "lane": {
-          "id": "b9ff97eb84de41a494a60bc54728078d",
-          "pr": 809,
-          "issues": [
-            775
-          ],
-          "actor": "Reviewer-R1775J",
-          "session": "r1775j-20261015",
-          "coordinator": "Coordinator-C0930A",
-          "started_at": "2026-10-14T23:24:38+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-14T23:40:13+00:00"
       },
       "797": {
         "issue": 797,
