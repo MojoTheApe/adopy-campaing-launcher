@@ -6,8 +6,92 @@ retains live activation and actual final delivery. Source child
 implements this selection. Shared contracts belong to MR-28 and TT-127. Selected actual merged pins are
 Master `a3f56106f52d0ae19986920519b2fa46a380798b` and Tracker
 `e775c624e0323e69ed891926691c3dee6587081a`.
-**Source preparation is not activation.** Until the separately recorded supported
-idle transition, all existing work uses its original stage/main admission rules.
+The selected route is active after the verified 2026-10-15 UTC transition below.
+The original source-preparation boundary remains historical:
+
+> **Source preparation is not activation.** Until the separately recorded supported
+> idle transition, all existing work uses its original stage/main admission rules.
+
+## Verified activation and published delivery — 2026-10-15 UTC
+
+The original ACL-1923 operational outcome is fulfilled. Its final
+repository-instruction handoff records these completed facts for independent review; it does
+not replace missing application, publication or business acceptance. Durable
+[activation evidence](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/923#issuecomment-6203646936)
+and [source delivery evidence](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/924#issuecomment-6203812879)
+are recorded separately.
+
+Source ACL-1924 followed the old stage/main route: [source PR925](https://github.com/MojoTheApe/adopy-campaing-launcher/pull/925),
+[combined Stage PR931](https://github.com/MojoTheApe/adopy-campaing-launcher/pull/931)
+and [main promotion PR940](https://github.com/MojoTheApe/adopy-campaing-launcher/pull/940).
+Actual main is `7d1ad46c14ddd2e08e507e33248af50af42df026`, tree
+`da457106740ac89e01ab07052825f8a5cd0b3a97`;
+[main CI 38813359345](https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38813359345)
+passed. The selected Master/Tracker pins above are actual merged revisions, and
+the maintained snapshot service remains compatible Tracker `e775c624e0323e69ed891926691c3dee6587081a`.
+
+The supported idle policy transition applied at **22:29:04 UTC** using the reviewed
+bounded [TT-131 operator](https://github.com/MojoTheApe/task-tracker/pull/132), actual
+merged revision `c0235292ed9d1c5e0f0e0ed57edb55a44a2df0d3` (the identical approved
+source tree), with TT-129's conservative pending-history repair. It inspected the
+official previous config at `080df2d8d9a846180753b1a425c289dcc5aefbb0` against
+the reviewed current config and used the genuine maintained idle/CAS gate. The
+same owner resumed admission at **22:30:13 UTC**. This explicit operator did not
+change consumer pins, exports, the deployed service or ordinary admission.
+
+The complete before/after comparison proved only the allowed additive policy
+changes. All **482 original Issues** remained unchanged by migration, including
+closed historical ACL-350's absent status and original Todo sorting timestamp.
+All **74 historical completions**, **128 original legacy pending receipts**,
+71 aliases, six modules, 5/5/5 capacity, the 18 queued Review handoffs and seven
+Approved records were preserved. Old pending work did not become Delivered;
+old Approved proof retains its required author-return/current-review boundary.
+Permanent `stage`, its history and the guarded `master` compatibility channel
+remain retained.
+
+The original batch `3bc5972db83a4bbeaf5f66bc508adadd` retained its exact one-task
+delivery request from **11:47:43 UTC** across the audited staging-only transition.
+The first automatic `workflow_run`
+[38813566631](https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38813566631)
+woke on main CI and ended with temporary exit 75 while owned cutover maintenance
+was held; it published nothing. After supported resume, the Coordinator agent
+recovered that unchanged request using `workflow_dispatch` and the same successful
+main CI in [continuation 38817558595](https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38817558595).
+That successful run was an agent-dispatched one-time adoption recovery. It needed
+no second human approval. Ordinary future requests retain the implemented automatic
+main-CI wakeup and the same durable exact-batch authorization checks.
+
+The immutable stable [release 2026-10-15.940](https://github.com/MojoTheApe/acl-releases/releases/tag/acl-release-2026-10-15.940)
+published at **22:38:46 UTC** with all four installer/hash/manifest/signature assets.
+Its signed manifest binds the exact main revision above and the actual previous stable
+`acl-release-2026-10-08b`, source `48bb8ee4898bc5845bd7a4cb33a052ce2f4cb496`.
+The installer is **94,152,447 bytes**, SHA-256
+`8e317993c5dd4131929cfaf9ac20fd7ae0a4f48ebd58912b66f6254a3d034286`.
+
+Native [Verify published Windows package job 116709133359](https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38817558595/job/116709133359)
+passed at **22:41:29 UTC**. It downloaded both actual published packages through
+the configured update channel, validated both signatures and installer size/hash,
+and passed real isolated installation, update, restart, controlled recovery and
+byte-identical machine/workspace/creative data preservation. The native acceptance
+report SHA-256 is `ab4cdd91a42a0afed44d6f75ddbbf1ba1689ad7cb3c868ecbf852951c3151a89`.
+This proves published-package behavior on isolated Windows; employee rollout and
+the deferred live advertising/Multilogin pilot retain their existing boundaries.
+
+The downstream native [recorder job 116710079574](https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38817558595/job/116710079574)
+passed at **22:42:12 UTC**, with the exact receipt `verified_at` **22:42:07 UTC**.
+Fresh pinned-e775 readback confirms only scoped ACL-1924 as `complete:true`,
+`delivery_state:verified`, and its batch Delivered **1/1**. The fresh maintained
+board at **22:42:27 UTC** confirmed the same result, no Stage column and no admission
+pause. This is scoped delivery evidence, not a bulk completion of historical work.
+
+Shared source changes are [MR-28 / PR 29](https://github.com/MojoTheApe/master-repo/pull/29),
+[TT-127 / PR 128](https://github.com/MojoTheApe/task-tracker/pull/128),
+[TT-129 / PR 130](https://github.com/MojoTheApe/task-tracker/pull/130) and
+[TT-131 / PR 132](https://github.com/MojoTheApe/task-tracker/pull/132); their actual
+merged-main checks and normal task completion passed. This factual handoff needs
+no further Master/Tracker contract or application/runtime change. The following
+activation checklist is retained as the procedure already completed above;
+returning to Stage remains a separate reviewed policy task.
 
 ## Selected route
 

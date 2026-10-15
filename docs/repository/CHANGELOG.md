@@ -1,5 +1,32 @@
 # Repository process history
 
+## ACL-1923 — Verified no-stage activation and published delivery — 2026-10-15 UTC
+
+Complete the original operational outcome after ACL-1924's old-route source,
+Stage PR 931 and main PR 940 integration at
+`7d1ad46c14ddd2e08e507e33248af50af42df026`. The supported idle staging-only
+operator applied at 22:29:04 UTC; the same owner resumed admission at 22:30:13 UTC.
+Exact comparison preserved all 482 Issues, 74 historical completions, 128 legacy
+pending receipts, aliases/modules, 5/5/5 capacity and the retained 18 Review/seven
+Approved queues. Current consumer/service pin remains Tracker e775; bounded
+TT-129/TT-131 migration operators grant no historical completion or delivery.
+
+The automatic main-CI wakeup 38813566631 stopped with temporary exit 75 during maintained
+cutover. After resume, the Coordinator agent dispatched recovery 38817558595 under
+the unchanged original exact-batch request; no second human approval was needed.
+The immutable stable release `acl-release-2026-10-15.940` published at 22:38:46 UTC.
+Native actual published Windows install/update/restart/recovery/data checks passed,
+then the recorder verified only scoped ACL-1924 at 22:42:07 UTC, batch Delivered 1/1.
+The fresh board at 22:42:27 UTC confirmed verified delivery, no Stage and no pause.
+See [the full factual record](POST_MAIN_DELIVERY.md#verified-activation-and-published-delivery--2026-10-15-utc)
+for immutable source, operator, native job, signature/hash and receipt evidence.
+
+Retain the permanent `stage` branch, `master` compatibility and the reviewed return-to-Stage
+procedure. This final three-file repository-instruction handoff preserves all
+original parent requirements and dated source/cutover history. Shared Master and
+Tracker changes are already merged and verified; no further contract, product,
+runtime or installer change belongs to this factual handoff.
+
 ## ACL-1924 / ACL-1923 — Temporary no-stage and authorized completion — 2026-10-15
 
 Select actual reviewed merged Master `a3f56106f52d0ae19986920519b2fa46a380798b`
