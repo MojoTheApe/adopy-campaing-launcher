@@ -5,7 +5,8 @@
 - The main Read Spend/country/RPA boundaries now share an OS-backed lease per
   physical Multilogin UUID across processes of the same OS user, independent of
   dashboard port and instance configuration. Dolphin IDs retain a separate namespace.
-- Waiting is bounded and cancellable, nested same-profile calls reenter, and process
+- Waiting is bounded and cancellable (reads 120 s; a publish job waiting for the
+  profile 30 min, stopped promptly by Stop), nested same-profile calls reenter, and process
   termination releases ownership. Missing identities, lock failures and changed map
   targets refuse browser entry; publishing reports a finished error.
 - See [scope and downstream warm/API integration](PROFILE_OWNERSHIP.md). This source

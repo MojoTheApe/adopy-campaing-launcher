@@ -29,6 +29,13 @@ the profile. Filesystem lock failures return an error instead of proceeding.
 Waiting checks cancellation every 50 ms between OS attempts and is bounded to
 120 seconds (OS/filesystem calls themselves remain subject to the OS).
 
+A publish job waiting for the lease (`publish_lease(key, cancelled=...)`, for example
+behind a read or Close profile) uses a separate cap of 30 minutes
+(`PUBLISH_WAIT_SECONDS`) and stops promptly when the job is cancelled, as the old
+unbounded queue did. Two publish jobs for one profile wait in the profile slot queue
+before they hold a memory slot; the lease wait after the slot is granted only happens
+behind a short read or Close.
+
 ## Exact boundary and follow-up integration
 
 The verified guarantee covers independently started Windows ACM processes

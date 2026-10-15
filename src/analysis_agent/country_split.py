@@ -35,6 +35,7 @@ from pathlib import Path
 
 from config import paths
 from src.fb_ads_rpa.operations import serialized_browser
+from src.analysis_agent.account_spend import _failure_text as _as_failure_text
 from src.analysis_agent.account_spend import (
     _act_from_url,
     _profile_key,
@@ -235,7 +236,7 @@ def start_split(
             done = fn(account, date_from, date_to)
         except Exception as exc:  # падение чтения не должно ронять сервер
             done = CountrySplit(account=account, date_from=date_from, date_to=date_to,
-                                state="failed", error=f"{type(exc).__name__}: {exc}")
+                                state="failed", error=_as_failure_text(exc))
         done.started_at = started.started_at
         done.finished_at = _now()
         done.spend_at = started.spend_at

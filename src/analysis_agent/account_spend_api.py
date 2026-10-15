@@ -836,7 +836,13 @@ def read_via_api(account: str, date_from: str, date_to: str = "") -> "_as.SpendR
 
 # ───────────────────────── разбивка по странам, отдельно ─────────────────────────
 
-@_as.serialized_browser(key=_as._profile_key, reading=True)
+def _split_lease_error(exc, account, date_from, date_to=""):
+    from src.analysis_agent import country_split
+
+    return country_split._lease_error(exc, account, date_from, date_to)  # noqa: SLF001
+
+
+@_as.serialized_browser(key=_as._profile_key, reading=True, on_lease_error=_split_lease_error)
 def read_country_split_via_api(account: str, date_from: str, date_to: str = ""):
     """Разбивка спенда по странам через `insights?breakdowns=country`.
 

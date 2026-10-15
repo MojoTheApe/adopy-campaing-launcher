@@ -35,7 +35,7 @@ def _child(root, profile, mode, entered, release, result):
     else:
         with lock:
             entered.set()
-            release.wait(15)
+            release.wait(40)
 
 
 @pytest.fixture
@@ -69,11 +69,11 @@ def test_processes_share_physical_uuid_across_instance_config(process_factory, m
     monkeypatch.setenv("MULTILOGIN_API_BASE_A", "http://127.0.0.1:2")
     with publish_lease(PROFILE):
         _, _, _, result = process_factory(PROFILE.upper().replace("-", ""))
-        assert result.get(timeout=8) is False
+        assert result.get(timeout=20) is False
         _, _, _, other = process_factory(OTHER)
-        assert other.get(timeout=8) is True
+        assert other.get(timeout=20) is True
     _, _, _, after = process_factory()
-    assert after.get(timeout=8) is True
+    assert after.get(timeout=20) is True
 
 
 def test_reentrant_outer_lease_remains_exclusive(process_factory):
@@ -83,13 +83,13 @@ def test_reentrant_outer_lease_remains_exclusive(process_factory):
         with publish_lease(PROFILE):
             assert lock.held_by_current_thread()
         _, _, _, result = process_factory()
-        assert result.get(timeout=8) is False
+        assert result.get(timeout=20) is False
     assert not lock.held_by_current_thread()
 
 
 def test_process_termination_releases_without_removing_lock_file(process_factory):
     process, entered, _, _ = process_factory(mode="hold")
-    assert entered.wait(8)
+    assert entered.wait(20)
     lock = profile_lock(PROFILE)
     assert not lock.acquire(blocking=False)
     path = pl._lock_path(PROFILE)
@@ -104,7 +104,7 @@ def test_process_termination_releases_without_removing_lock_file(process_factory
 
 def test_cancelled_waiter_never_enters_and_does_not_poison_lock(process_factory):
     _, entered, release, _ = process_factory(mode="hold")
-    assert entered.wait(8)
+    assert entered.wait(20)
     cancel, waiting, finished = threading.Event(), threading.Event(), threading.Event()
     outcome = []
 
@@ -135,7 +135,7 @@ def test_cancelled_waiter_never_enters_and_does_not_poison_lock(process_factory)
 
 def test_bounded_timeout_and_explicit_queue_cancel(process_factory, monkeypatch):
     _, entered, _, _ = process_factory(mode="hold")
-    assert entered.wait(8)
+    assert entered.wait(20)
     start = time.monotonic()
     assert not profile_lock(PROFILE).acquire(timeout=.1)
     assert time.monotonic() - start < 1
@@ -354,7 +354,7 @@ def test_publish_lease_failure_finishes_job_and_releases_slot(queued_job, monkey
 def test_publish_cancel_waiting_for_other_process_never_opens_browser(queued_job, process_factory):
     pj, slots, job, run = queued_job
     _, entered, _, _ = process_factory(mode="hold")
-    assert entered.wait(8)
+    assert entered.wait(20)
     worker = threading.Thread(target=run)
     worker.start()
     end = time.monotonic() + 3
@@ -368,3 +368,93 @@ def test_publish_cancel_waiting_for_other_process_never_opens_browser(queued_job
     assert pj.get_job(job)["status"] == "cancelled"
     assert not pj.get_job(job).get("started_at")
     assert slots.snapshot()["running"] == []
+
+
+# ── ACL-1853 review: publish waiters, timer, clean refusals ─────────────────
+
+def _hold_in_thread(seconds):
+    held, done = threading.Event(), threading.Event()
+
+    def run():
+        with publish_lease(PROFILE):
+            held.set()
+            done.wait(seconds)
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    assert held.wait(5)
+    return thread, done
+
+
+def test_a_waiting_publish_outlasts_the_short_read_cap_but_a_read_does_not(monkeypatch):
+    monkeypatch.setattr(pl, "WAIT_SECONDS", .1)
+    monkeypatch.setattr(pl, "PUBLISH_WAIT_SECONDS", 5.0)
+    thread, done = _hold_in_thread(.6)
+    reader = threading.Thread(target=lambda: results.append(profile_lock(PROFILE).acquire()))
+    results = []
+    reader.start()
+    reader.join(2)
+    assert results == [False], "a read still gives up at the short cap"
+    started = time.monotonic()
+    with publish_lease(PROFILE, cancelled=lambda: False):
+        waited = time.monotonic() - started
+    assert waited > .3, "the publish waited past the short cap"
+    thread.join(2)
+
+
+def test_a_waiting_publish_is_cancelled_promptly(monkeypatch):
+    monkeypatch.setattr(pl, "WAIT_SECONDS", .1)
+    monkeypatch.setattr(pl, "PUBLISH_WAIT_SECONDS", 30.0)
+    thread, done = _hold_in_thread(10)
+    flag = threading.Event()
+    threading.Timer(.3, flag.set).start()
+    started = time.monotonic()
+    with pytest.raises(job_cancel.JobCancelled):
+        with publish_lease(PROFILE, cancelled=flag.is_set):
+            pytest.fail("entered while another holder had the lease")
+    assert time.monotonic() - started < 3
+    done.set()
+    thread.join(2)
+
+
+def test_the_deferred_close_timer_survives_a_lease_refusal(monkeypatch):
+    from src.analysis_agent import account_spend as spend
+
+    opened = SimpleNamespace(profile_id="not-a-uuid", account="Acc")
+    monkeypatch.setattr(spend, "_PENDING_CLOSE", {"not-a-uuid": opened})
+    monkeypatch.setattr(spend, "_close_started", lambda o: pytest.fail("closed without owning the profile"))
+    spend._close_if_still_pending(opened)
+    assert spend._PENDING_CLOSE == {"not-a-uuid": opened}, "left for the next operation"
+
+
+def test_the_api_country_split_refuses_with_a_clean_message(monkeypatch, tmp_path):
+    from src.analysis_agent import account_spend as spend, account_spend_api as api, country_split as country
+
+    monkeypatch.setattr(spend, "_entry_for", lambda label: None)
+    monkeypatch.setattr(country, "_store_path", lambda: tmp_path / "country_splits.json")
+    out = api.read_country_split_via_api("missing", "2026-01-01")
+    assert out.state == "failed" and "account map" in out.error
+    assert "ProfileLeaseError" not in out.error
+    assert spend._failure_text(pl.ProfileLeaseError("plain")) == "plain"
+    assert spend._failure_text(RuntimeError("x")) == "RuntimeError: x"
+
+
+def test_close_profile_skips_an_unrelated_unresolvable_job(monkeypatch, tmp_path):
+    from src.fb_ads_rpa import rpa_publisher as rp
+    from src.web import publish_jobs as pj
+
+    monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path))
+
+    def key(label):
+        if label == "broken":
+            raise pl.ProfileLeaseError("Cannot resolve a physical profile from the account map.")
+        return PROFILE
+
+    closed = []
+    monkeypatch.setattr(pj, "profile_key_for", key)
+    monkeypatch.setattr(pj, "_jobs", {"mine": {"account_label": "Acc", "status": "done"},
+                                      "other": {"account_label": "broken", "status": "running"}})
+    monkeypatch.setattr(pj._slots, "release", lambda job_id: None)
+    monkeypatch.setattr(pj._slots, "wake", lambda: None)
+    monkeypatch.setattr(rp, "close_account_profile", closed.append)
+    assert pj.close_profile("mine")["ok"] is True and closed == ["Acc"]

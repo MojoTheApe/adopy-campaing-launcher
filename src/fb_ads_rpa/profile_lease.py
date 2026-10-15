@@ -23,6 +23,10 @@ class ProfileLeaseError(RuntimeError):
 
 
 WAIT_SECONDS = 120.0
+#: Publish jobs queue behind each other and behind reads for as long as a real
+#: publish takes (the old RLock waited without limit). Still cancellable; used
+#: only where a caller asks for it explicitly (`publish_lease(..., cancelled=)`).
+PUBLISH_WAIT_SECONDS = 1800.0
 POLL_SECONDS = 0.05
 
 
@@ -82,7 +86,7 @@ class ProfileLease:
             raise ValueError("can't specify a timeout for a non-blocking call")
         if not math.isfinite(timeout) or (timeout < 0 and timeout != -1):
             raise ValueError("timeout must be non-negative")
-        limit = WAIT_SECONDS if timeout == -1 else min(float(timeout), WAIT_SECONDS)
+        limit = WAIT_SECONDS if timeout == -1 else min(float(timeout), max(WAIT_SECONDS, PUBLISH_WAIT_SECONDS))
         deadline = time.monotonic() + (limit if blocking else 0)
 
         def check_cancel() -> None:
@@ -140,8 +144,8 @@ class ProfileLease:
             self._thread_lock.release()
 
     @contextmanager
-    def holding(self, *, cancelled=None):
-        if not self.acquire(cancelled=cancelled):
+    def holding(self, *, cancelled=None, timeout: float = -1):
+        if not self.acquire(cancelled=cancelled, timeout=timeout):
             raise ProfileLeaseError("This profile is busy in another ACM operation; try again after it finishes.")
         try:
             yield self

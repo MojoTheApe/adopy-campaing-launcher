@@ -49,6 +49,7 @@ same live Multilogin profile» — то есть про один и тот же 
 import threading
 import inspect
 from functools import wraps
+from src.fb_ads_rpa import profile_lease as _pl
 from src.fb_ads_rpa.profile_lease import profile_lock, check_nested_profile, ProfileLeaseError
 
 
@@ -153,7 +154,7 @@ def publish_lease(key: str, *, cancelled=None):
     `publish_draft` внутри — ещё раз, тем же потоком.
     """
     lease = profile_lock(key)
-    return lease if cancelled is None else lease.holding(cancelled=cancelled)
+    return lease if cancelled is None else lease.holding(cancelled=cancelled, timeout=_pl.PUBLISH_WAIT_SECONDS)
 
 
 def serialized_browser(fn=None, *, key=None, reading=False, on_lease_error=None):

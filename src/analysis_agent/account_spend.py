@@ -536,6 +536,13 @@ def _profile_key(account: str, *_a, **_k) -> str:
     return physical_profile_key(profile)
 
 
+def _failure_text(exc: BaseException) -> str:
+    """Текст сбоя чтения для человека; отказ замка профиля уже написан словами."""
+    from src.fb_ads_rpa.profile_lease import ProfileLeaseError
+
+    return str(exc) if isinstance(exc, ProfileLeaseError) else f"{type(exc).__name__}: {exc}"
+
+
 def _lock_for(account: str):
     """Очередь на профиль, а не на весь браузер (`acl-113e`).
 
@@ -607,7 +614,7 @@ def start_read(
             text, code = _mlx.humanize(exc, "", account)
             done = SpendReading(
                 account=account, date_from=date_from, date_to=date_to,
-                state="failed", error=text or f"{type(exc).__name__}: {exc}", error_code=code,
+                state="failed", error=text or _failure_text(exc), error_code=code,
             )
         done.started_at = reading.started_at
         done.finished_at = _now()
@@ -975,12 +982,19 @@ def _publish_touched(opened: _ReadOpen) -> bool:
 
 def _close_if_still_pending(opened: _ReadOpen) -> None:
     """Конец `CLOSE_GRACE_S`: никто не забрал профиль — закрыть его."""
-    with browser_operation.reading(), profile_lock(opened.profile_id):
-        with _PENDING_LOCK:
-            if _PENDING_CLOSE.get(opened.profile_id) is not opened:
-                return
-            _PENDING_CLOSE.pop(opened.profile_id, None)
-        _close_started(opened)
+    from src.fb_ads_rpa.profile_lease import ProfileLeaseError
+
+    # ACL-1853: таймер в своём потоке — отказ замка не должен его ронять; запись остаётся
+    # в `_PENDING_CLOSE`, следующая операция с этим профилем возьмёт её или закроет.
+    try:
+        with browser_operation.reading(), profile_lock(opened.profile_id):
+            with _PENDING_LOCK:
+                if _PENDING_CLOSE.get(opened.profile_id) is not opened:
+                    return
+                _PENDING_CLOSE.pop(opened.profile_id, None)
+            _close_started(opened)
+    except ProfileLeaseError as exc:
+        log.warning("Deferred close of %s skipped: %s", opened.account, exc)
 
 
 def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False) -> None:

@@ -1331,6 +1331,14 @@ def _let_go_of_profile(job_id: str, publisher: Any, account_label: str, *, clean
         # Очередь будит `_slots.release` в `_run_job` сразу после этого.
 
 
+def _same_profile(label: str, profile: str) -> bool:
+    """Тот ли профиль у активного задания; не разрешившийся ярлык чужого задания — не наш профиль."""
+    try:
+        return profile_key_for(label) == profile
+    except ProfileLeaseError:
+        return False
+
+
 def _profile_has_other_job(job_id: str, account_label: str) -> bool:
     """На профиль этого задания уже стоит другое активное задание (ревью PR #446, F6)."""
     with _jobs_lock:
@@ -1376,7 +1384,7 @@ def close_profile(job_id: str) -> dict[str, Any]:
     busy_msg = "A run is using this profile — wait until it finishes, then close it."
     try:
         profile = profile_key_for(account_label)
-        if any(status in _ACTIVE_STATUSES and profile_key_for(label) == profile
+        if any(status in _ACTIVE_STATUSES and _same_profile(label, profile)
                for label, status in others):
             return {"ok": False, "code": "busy", "error": busy_msg}
         lease = _publish_serial(profile)
