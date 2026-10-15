@@ -13633,7 +13633,7 @@
             "session": "run_s1827a_1012"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-S1827A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -13652,7 +13652,8 @@
         },
         "pr": 829,
         "queued_at": "2026-10-12T13:27:02+00:00",
-        "reviewer": "Reviewer-RRS827"
+        "reviewer": "Reviewer-RRS827",
+        "review_report": "# Return for a dependency refresh\n\nMain now also contains batch b2772e6f (ACL-1819 pre-flight, ACL-1799 country workbench, ACL-1814 rules store; PR 926 -> 928). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
       },
       "771": {
         "implementers": [
@@ -40246,6 +40247,24 @@
         "pr": 829,
         "lane": "b4f883a514e74e5c81b16ae573f8be2c",
         "actor": "Reviewer-RRS827"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-15T10:10:18+00:00",
+        "review": {
+          "id": "b4f883a514e74e5c81b16ae573f8be2c",
+          "pr": 829,
+          "issues": [
+            827
+          ],
+          "actor": "Reviewer-RRS827",
+          "session": "rrs827-20261015",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-15T10:09:55+00:00",
+          "state": "returning",
+          "report": "# Return for a dependency refresh\n\nMain now also contains batch b2772e6f (ACL-1819 pre-flight, ACL-1799 country workbench, ACL-1814 rules store; PR 926 -> 928). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -44409,21 +44428,6 @@
       "started_at": "2026-10-15T08:23:18+00:00",
       "ineligible": {}
     },
-    "source_reviews": {
-      "829": {
-        "id": "b4f883a514e74e5c81b16ae573f8be2c",
-        "pr": 829,
-        "issues": [
-          827
-        ],
-        "actor": "Reviewer-RRS827",
-        "session": "rrs827-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "started_at": "2026-10-15T10:09:55+00:00",
-        "state": "returning",
-        "report": "# Return for a dependency refresh\n\nMain now also contains batch b2772e6f (ACL-1819 pre-flight, ACL-1799 country workbench, ACL-1814 rules store; PR 926 -> 928). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
-        "keep_lane": false
-      }
-    }
+    "source_reviews": {}
   }
 }
