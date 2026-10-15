@@ -28,6 +28,23 @@ a clear refusal.
   confirmed readback, and a failed or unknown outcome keeps the previous state. Duplicate and Copy
   stay disabled (ACL-1773). With the rpa backend or a non-loopback bind the controls stay disabled
   with the reason (`GET /campaign-commands/availability`).
+- Under `ACL_FB_BACKEND=api` accounts and campaigns are one tree inside each country block. The account row of
+  the country's accounts list is the parent: clicking the row (anywhere except its own buttons, inputs and the
+  note), the chevron, or Enter/Space on the focused row expands that account's campaigns, then ad sets and ads,
+  in place (`aria-expanded`). Expanding only shows what is saved and never reads Meta. There is no separate
+  campaign table and no account bands any more: the account row carries "Read campaigns", the snapshot age, one
+  status/error line and, when the warm-sessions API is present, the profile chip with "Open profile". Search,
+  delivery filter, column-group jumps, Expand/Collapse all, columns and the batch bar sit in one compact toolbar
+  above the accounts list; "Read campaigns in <Country>" reads the accounts one at a time. Horizontal scroll and
+  the pinned name width are shared by all open accounts. Columns follow the design prototype (Delivery,
+  Duplicate, Bid control, Budget, Optimization hint, Alerts, Goal CPA, Benchmark CPA, BI, Meta, Tracking); Goal
+  CPA comes from My Goals and Benchmark CPA from `config/benchmarks`, hints and alerts are advisory text computed
+  from the numbers on screen, and a missing input is a dash with the reason. Results of commands and read
+  failures are one compact line with Details; common causes (Multilogin not running, profile opened by hand,
+  closing, cooldown, logged out, checkpoint, permission, stale preview) have short friendly messages in one
+  place, `acmCommands.friendly`, and a row failure with the same cause as its account shows only "Profile
+  problem - see account above". `GET /campaign-commands/history?account=` backs "What was changed here".
+- Backend switch: the country table and "Read campaigns in <Country>" render only with `ACL_FB_BACKEND=api`. Under `rpa` (the default) the previous per-account list from Read spend, with its Off/On chips, "Turn off?" flow, log and coverage note, is unchanged; the two are never shown for the same country.
 - The first live check runs on the 9095 test dashboard with test accounts, after the owner agrees.
 
 ## Explicit official-token application inspection — ACL-1879

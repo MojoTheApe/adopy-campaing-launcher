@@ -118,6 +118,20 @@ def get_status(op_id: str) -> tuple[dict, int]:
     return op, 200
 
 
+def account_history(account: str, limit: int = 20) -> tuple[dict, int]:
+    """Журнал команд одного аккаунта («What was changed here» под его строкой).
+
+    Только чтение локального журнала, Meta не трогается и бэкенд не важен: журнал показывают и там, где команды выключены. Превью в журнал не
+    попадает (`history()` их отсекает): нажатие без подтверждения ничего не меняло.
+    """
+    account = str(account or "").strip()
+    if not account:
+        return {"ok": False, "error": "account is required"}, 400
+    ops = [o for o in _cmd.get_store().history(limit=500) if o.get("account") == account]
+    keep = ("op_id", "state", "command", "value", "currency", "actor", "created_at", "summary", "message")
+    return {"ok": True, "entries": [{k: o.get(k) for k in keep} for o in ops[:max(1, min(200, limit))]]}, 200
+
+
 def _sessions():
     """Точка подмены в тестах: `open_session(account, commands)`."""
     return open_session
