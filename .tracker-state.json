@@ -9096,18 +9096,6 @@
   },
   "execution": {
     "claims": {
-      "872": {
-        "actor": "Worker-IS1013",
-        "session": "isolated_app_sol_20261013",
-        "coordinator": "Coordinator-CR1012",
-        "branch": "work/acl-1872-isolated-meta-setup",
-        "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\Adopy Campaign Manager\\ACM-Audit-2026-10-12\\worktrees\\acl-1872",
-        "id": "4c418734d7f24e53987d2c370714dfd6",
-        "issue": 872,
-        "state": "implementing",
-        "started_at": "2026-10-13T20:56:19+00:00",
-        "from_status": "status:todo"
-      },
       "899": {
         "actor": "Worker-V1899A",
         "session": "w1899a-20261014",
@@ -9131,6 +9119,18 @@
         "state": "implementing",
         "started_at": "2026-10-15T05:51:11+00:00",
         "from_status": "status:idea"
+      },
+      "872": {
+        "actor": "Worker-T1872A",
+        "session": "t1872a-20261015",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1872-isolated-meta-setup",
+        "worktree": "C:\\acl-1872",
+        "id": "4356be6a85ae44d781e577d3badf0e7e",
+        "issue": 872,
+        "state": "implementing",
+        "started_at": "2026-10-15T06:24:37+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -14017,11 +14017,15 @@
           {
             "actor": "Worker-IS1013",
             "session": "isolated_app_sol_20261013"
+          },
+          {
+            "actor": "Worker-T1872A",
+            "session": "t1872a-20261015"
           }
         ],
         "state": "implementing",
-        "worker": "Worker-IS1013",
-        "coordinator": "Coordinator-CR1012",
+        "worker": "Worker-T1872A",
+        "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-IS1013",
           "session": "isolated_app_sol_20261013",
@@ -15934,6 +15938,10 @@
       "Reviewer-R919B": {
         "session": "r919b-20261015",
         "role": "Reviewer"
+      },
+      "Worker-T1872A": {
+        "session": "t1872a-20261015",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -37505,6 +37513,25 @@
         "issue": 902,
         "pr": 904,
         "actor": "Worker-W1902N"
+      },
+      {
+        "event": "takeover",
+        "at": "2026-10-15T06:24:37+00:00",
+        "issue": 872,
+        "previous": {
+          "actor": "Worker-IS1013",
+          "session": "isolated_app_sol_20261013",
+          "coordinator": "Coordinator-CR1012",
+          "branch": "work/acl-1872-isolated-meta-setup",
+          "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\Adopy Campaign Manager\\ACM-Audit-2026-10-12\\worktrees\\acl-1872",
+          "id": "4c418734d7f24e53987d2c370714dfd6",
+          "issue": 872,
+          "state": "implementing",
+          "started_at": "2026-10-13T20:56:19+00:00",
+          "from_status": "status:todo"
+        },
+        "claim": "4356be6a85ae44d781e577d3badf0e7e",
+        "reason": "Previous Codex worker stopped: Codex usage limit exhausted 2026-10-13T21:43Z (credits 0, resets 2026-10-20); no Codex session activity since 2026-10-14T01:00. Worktree clean at PR head 7c6907f8; owner asked to take over."
       }
     ],
     "policy": {
