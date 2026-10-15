@@ -12939,7 +12939,7 @@
             "session": "ws1814m-20261015"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-S1814M",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12958,7 +12958,7 @@
         },
         "pr": 817,
         "queued_at": "2026-10-15T05:27:10+00:00",
-        "review_report": "Windows CI (run 38681684978) fails: tests/test_shared_file_locks.py::test_no_inline_os_file_locks_remain_in_src. src/analysis_agent/rules/store.py lines 130-142 use inline msvcrt.locking/LK_NBLCK and fcntl.flock/LOCK_EX; must use config.paths.machine_file_lock. Returned for fix.",
+        "review_report": "# Review PR 817 / ACL-1814 head 7256242b - Reviewer-R1814N - verdict: RETURN (2 small fixes)\n\nVerified OK: gate (grant_automatic store.py:477, set_automatic_enabled :566); stored automatic rule loads as Suggest and persists (:310,:316); schema_version / SchemaTooNew (:176-187, settings :537); machine_file_lock + TimeoutError -> RulesStoreError (:104-107); atomic write + .bak (:118-150); torn-tail repair (:190-213); no network/Meta imports in rules/*; messages English.\nTests (detached worktree): test_rules_store 84 passed, test_goals 17 passed, test_shared_file_locks 12 passed.\nMutations: grant allowed with gate off -> 5 tests fail (caught); newer-schema refusal removed -> 2 tests fail (caught).\n\nFindings:\n1. store.py:323-326 (_load fast path): `r.get(\"mode\")` is evaluated before the rule_problem guard on non-dict entries. rules.json {\"rules\":{\"x\":\"junk\",\"y\":null}} -> AttributeError from list_rules/get_rule/create_rule; quarantine does not hold for non-object entries although rule_problem (:289) is written for them. Fix: check `not self.rule_problem(r)` first (or isinstance dict) in the generator; add a test with a string/null rule entry.\n2. store.py:556-563 update_settings: update_settings({\"automatic_enabled\": True}) bypasses the gate: returns automatic_enabled True and persists True on disk (load_settings only masks it). The day AUTOMATIC_AVAILABLE flips, a stale True silently turns the global switch on. Fix: in update_settings refuse/clear automatic_enabled=True when not automatic_available() (and return the coerced value); add test.\nNote (non-blocking): ACL_RULES_AUTOMATIC=1 env is a production bypass if set on a machine; acceptable only as documented test switch.",
         "reviewer": "Reviewer-R1814N"
       },
       "815": {
@@ -37295,6 +37295,24 @@
         "issue": 920,
         "claim": "cbf30124fe7a45f0b1c36b1072014078",
         "actor": "Worker-S1920A"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-15T05:51:32+00:00",
+        "review": {
+          "id": "c37514f11523475888831479a1aecf43",
+          "pr": 817,
+          "issues": [
+            814
+          ],
+          "actor": "Reviewer-R1814N",
+          "session": "r1814n-20261015",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-15T05:50:51+00:00",
+          "state": "returning",
+          "report": "# Review PR 817 / ACL-1814 head 7256242b - Reviewer-R1814N - verdict: RETURN (2 small fixes)\n\nVerified OK: gate (grant_automatic store.py:477, set_automatic_enabled :566); stored automatic rule loads as Suggest and persists (:310,:316); schema_version / SchemaTooNew (:176-187, settings :537); machine_file_lock + TimeoutError -> RulesStoreError (:104-107); atomic write + .bak (:118-150); torn-tail repair (:190-213); no network/Meta imports in rules/*; messages English.\nTests (detached worktree): test_rules_store 84 passed, test_goals 17 passed, test_shared_file_locks 12 passed.\nMutations: grant allowed with gate off -> 5 tests fail (caught); newer-schema refusal removed -> 2 tests fail (caught).\n\nFindings:\n1. store.py:323-326 (_load fast path): `r.get(\"mode\")` is evaluated before the rule_problem guard on non-dict entries. rules.json {\"rules\":{\"x\":\"junk\",\"y\":null}} -> AttributeError from list_rules/get_rule/create_rule; quarantine does not hold for non-object entries although rule_problem (:289) is written for them. Fix: check `not self.rule_problem(r)` first (or isinstance dict) in the generator; add a test with a string/null rule entry.\n2. store.py:556-563 update_settings: update_settings({\"automatic_enabled\": True}) bypasses the gate: returns automatic_enabled True and persists True on disk (load_settings only masks it). The day AUTOMATIC_AVAILABLE flips, a stale True silently turns the global switch on. Fix: in update_settings refuse/clear automatic_enabled=True when not automatic_available() (and return the coerced value); add test.\nNote (non-blocking): ACL_RULES_AUTOMATIC=1 env is a production bypass if set on a machine; acceptable only as documented test switch.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -40951,21 +40969,6 @@
       "started_at": "2026-10-15T05:43:00+00:00",
       "ineligible": {}
     },
-    "source_reviews": {
-      "817": {
-        "id": "c37514f11523475888831479a1aecf43",
-        "pr": 817,
-        "issues": [
-          814
-        ],
-        "actor": "Reviewer-R1814N",
-        "session": "r1814n-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "started_at": "2026-10-15T05:50:51+00:00",
-        "state": "returning",
-        "report": "# Review PR 817 / ACL-1814 head 7256242b - Reviewer-R1814N - verdict: RETURN (2 small fixes)\n\nVerified OK: gate (grant_automatic store.py:477, set_automatic_enabled :566); stored automatic rule loads as Suggest and persists (:310,:316); schema_version / SchemaTooNew (:176-187, settings :537); machine_file_lock + TimeoutError -> RulesStoreError (:104-107); atomic write + .bak (:118-150); torn-tail repair (:190-213); no network/Meta imports in rules/*; messages English.\nTests (detached worktree): test_rules_store 84 passed, test_goals 17 passed, test_shared_file_locks 12 passed.\nMutations: grant allowed with gate off -> 5 tests fail (caught); newer-schema refusal removed -> 2 tests fail (caught).\n\nFindings:\n1. store.py:323-326 (_load fast path): `r.get(\"mode\")` is evaluated before the rule_problem guard on non-dict entries. rules.json {\"rules\":{\"x\":\"junk\",\"y\":null}} -> AttributeError from list_rules/get_rule/create_rule; quarantine does not hold for non-object entries although rule_problem (:289) is written for them. Fix: check `not self.rule_problem(r)` first (or isinstance dict) in the generator; add a test with a string/null rule entry.\n2. store.py:556-563 update_settings: update_settings({\"automatic_enabled\": True}) bypasses the gate: returns automatic_enabled True and persists True on disk (load_settings only masks it). The day AUTOMATIC_AVAILABLE flips, a stale True silently turns the global switch on. Fix: in update_settings refuse/clear automatic_enabled=True when not automatic_available() (and return the coerced value); add test.\nNote (non-blocking): ACL_RULES_AUTOMATIC=1 env is a production bypass if set on a machine; acceptable only as documented test switch.",
-        "keep_lane": false
-      }
-    }
+    "source_reviews": {}
   }
 }
