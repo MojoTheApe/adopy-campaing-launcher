@@ -8961,6 +8961,18 @@
         "state": "implementing",
         "started_at": "2026-10-15T04:24:26+00:00",
         "from_status": "status:todo"
+      },
+      "815": {
+        "actor": "Worker-RM1815",
+        "session": "wrm1815-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1815-rules-evidence",
+        "worktree": "C:\\wk-rm1815",
+        "id": "cb6162f9772342ec8a8f3b2138c47324",
+        "issue": 815,
+        "state": "implementing",
+        "started_at": "2026-10-15T04:30:11+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -12896,10 +12908,14 @@
           {
             "actor": "Worker-RH1815",
             "session": "wrh1815-20261015"
+          },
+          {
+            "actor": "Worker-RM1815",
+            "session": "wrm1815-20261015"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-RH1815",
+        "state": "implementing",
+        "worker": "Worker-RM1815",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
           "actor": "Worker-RH1815",
@@ -12917,8 +12933,7 @@
         },
         "pr": 818,
         "queued_at": "2026-10-14T23:10:11+00:00",
-        "review_report": "\ufeff# Review PR 818 (ACL-1815), head 0ff5cea6 - CHANGES REQUESTED (CI red on the secret scan only)\nReviewer-R1815J.\n\nBlocker: scripts/acl_scan_secrets.py (jobs \"Classify and check project tooling\", \"windows tests / Data and secret scan\", and so \"Process instructions\", \"Verify build inputs\", \"Installer verification\") fails:\n  tests/test_acl1800_campaign_commands.py:720  ad account id: act_9999999999\nThe line comes from the stacked 1800 content in this branch (SimpleNamespace(..., act=\"act_9999999999\")). Allowed placeholders are listed in _PLACEHOLDERS (e.g. act_1234567890). Fix: use act_1234567890 (or another allowed placeholder) there. The 826 branch already has this fixed (4-line change in the same file); take the same change. Local run of the scanner on the worktree reproduces it; nothing else is flagged.\n\nChecked, no findings (code identical to the approved 9aa2b052; rules/evidence.py, campaign_inventory.py and test_acl1815 have zero diff since then, merge only added main):\n- read-only: no network, POST/DELETE, timers; the only thread is the existing on-demand inventory thread.\n- join: exact_name_join is the shared join, join_bi is a thin wrapper; aliases come from the caller and classify_alias uses account_names exact_alias/has_own_name; tail-only match -> alias_heuristic, never Automatic. test_dashboard_review (ACL-1824 alias/suffix) 26 passed.\n- windows: stop-loss spend [start, through-D], FTD [start, through]; scale both mature plus tail; empty mature window -> no_mature_spend.\n- copy_suffix not Automatic, inherited by campaign and ad; unreconciled blocks Automatic only; reasons are English.\n- Tests (not browser): 1815 + 1798 + 1800 commands/wiring + static scripts = 323 passed; 1761 in neighbouring run fine. Linux shards 6/6 pass in CI.\n- Mutation: stop-loss/scale mature window no longer excludes the last D days -> 10 tests fail (killed).\nAfter the one-line placeholder fix and green CI I expect to approve without a new review round of the logic.",
-        "reviewer": "Reviewer-R1815J"
+        "review_report": "\ufeff# Review PR 818 (ACL-1815), head 0ff5cea6 - CHANGES REQUESTED (CI red on the secret scan only)\nReviewer-R1815J.\n\nBlocker: scripts/acl_scan_secrets.py (jobs \"Classify and check project tooling\", \"windows tests / Data and secret scan\", and so \"Process instructions\", \"Verify build inputs\", \"Installer verification\") fails:\n  tests/test_acl1800_campaign_commands.py:720  ad account id: act_9999999999\nThe line comes from the stacked 1800 content in this branch (SimpleNamespace(..., act=\"act_9999999999\")). Allowed placeholders are listed in _PLACEHOLDERS (e.g. act_1234567890). Fix: use act_1234567890 (or another allowed placeholder) there. The 826 branch already has this fixed (4-line change in the same file); take the same change. Local run of the scanner on the worktree reproduces it; nothing else is flagged.\n\nChecked, no findings (code identical to the approved 9aa2b052; rules/evidence.py, campaign_inventory.py and test_acl1815 have zero diff since then, merge only added main):\n- read-only: no network, POST/DELETE, timers; the only thread is the existing on-demand inventory thread.\n- join: exact_name_join is the shared join, join_bi is a thin wrapper; aliases come from the caller and classify_alias uses account_names exact_alias/has_own_name; tail-only match -> alias_heuristic, never Automatic. test_dashboard_review (ACL-1824 alias/suffix) 26 passed.\n- windows: stop-loss spend [start, through-D], FTD [start, through]; scale both mature plus tail; empty mature window -> no_mature_spend.\n- copy_suffix not Automatic, inherited by campaign and ad; unreconciled blocks Automatic only; reasons are English.\n- Tests (not browser): 1815 + 1798 + 1800 commands/wiring + static scripts = 323 passed; 1761 in neighbouring run fine. Linux shards 6/6 pass in CI.\n- Mutation: stop-loss/scale mature window no longer excludes the last D days -> 10 tests fail (killed).\nAfter the one-line placeholder fix and green CI I expect to approve without a new review round of the logic."
       },
       "819": {
         "implementers": [
@@ -15658,6 +15673,10 @@
       },
       "Worker-RM1814": {
         "session": "wrm1814-20261015",
+        "role": "Worker"
+      },
+      "Worker-RM1815": {
+        "session": "wrm1815-20261015",
         "role": "Worker"
       }
     },
@@ -36478,6 +36497,13 @@
         "issue": 814,
         "pr": 817,
         "actor": "Worker-RM1814"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-15T04:30:11+00:00",
+        "issue": 815,
+        "claim": "cb6162f9772342ec8a8f3b2138c47324",
+        "actor": "Worker-RM1815"
       }
     ],
     "policy": {
