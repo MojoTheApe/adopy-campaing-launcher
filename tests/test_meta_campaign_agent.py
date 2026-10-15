@@ -170,3 +170,36 @@ def test_meta_publisher_success_chain(tmp_path: Path):
     assert result.campaign_id == "camp_1"
     assert result.ad_id == "ad_1"
     uploader.upload_image.assert_called_once()
+
+
+# --- ACL-1783: версия Graph/Marketing API по умолчанию ---
+
+def test_acl1783_default_graph_version_is_v26(monkeypatch):
+    from src.meta_campaign_agent.meta_client import (
+        DEFAULT_GRAPH_VERSION, MetaClient, MetaClientConfig, meta_client_from_env)
+    assert DEFAULT_GRAPH_VERSION == "v26.0"
+    assert MetaClient(MetaClientConfig(access_token="t")).base_url == "https://graph.facebook.com/v26.0"
+    assert MetaClient(MetaClientConfig(access_token="t", graph_version=" ")).base_url.endswith("/v26.0")
+    monkeypatch.setenv("META_ACCESS_TOKEN", "t")
+    monkeypatch.delenv("META_GRAPH_API_VERSION", raising=False)
+    assert meta_client_from_env().base_url.endswith("/v26.0")
+    monkeypatch.setenv("META_GRAPH_API_VERSION", "v25.0")
+    assert meta_client_from_env().base_url.endswith("/v25.0")
+
+
+def test_acl1783_payloads_have_no_v26_removed_fields():
+    """Поля, убранные/изменённые в v24-v26 (placements, poll, advantage_audience), мы не шлём."""
+    import inspect
+    from src.meta_campaign_agent import meta_client
+    src = inspect.getsource(meta_client)
+    for bad in ("messenger_positions", "instagram_positions", "poll_spec", "applink_treatment"):
+        assert bad not in src
+    sent = []
+
+    class C(meta_client.MetaClient):
+        def post_form(self, path, data=None):
+            sent.append((path, data)); return {"id": "1"}
+    c = C(meta_client.MetaClientConfig(access_token="t"))
+    c.create_campaign("act_1", name="n", objective="OUTCOME_LEADS", status="PAUSED")
+    assert sent[0][1]["is_adset_budget_sharing_enabled"] == "false"
+    assert sent[0][1]["special_ad_categories"] == "[]"
