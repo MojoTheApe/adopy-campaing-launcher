@@ -3805,20 +3805,20 @@
       "900": {
         "kind": "independent-review",
         "verdict": "approved",
-        "reviewer": "Reviewer-RV1015L",
-        "review_session": "rv1015l-900",
-        "execution_lane": "4c961fa887a0442d9e0009590cef8951",
-        "implementer": "Worker-RF1899",
-        "head_sha": "263b267f8b956a4779ba9f30bb4e2186e01853d5",
-        "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
-        "tree_sha": "53e21517e197fce7e74de31d197a52f6bd9b8975",
-        "report": "ACL-1899 (issue 899) own diff f475cdb8..HEAD touches only creator.py, graph.py, token_capture.py, publish_api.py, test stubs, the new test_acl1899_upload_progress.py, PROJECT.md and CHANGELOG; nothing out of scope. File writes (advideos/adimages) run as a page-helper job (startCall/poll/abort, XHR, no upload listener to avoid a CORS preflight) polled about once per second over local CDP with no overall deadline; write policy and size+SHA-256 checks unchanged; PAUSED-only, no deletes, no Meta polling; Stop aborts and reconciles by readback without re-upload; unknown-result readback is 6 reads over about 2 min, counted in the call budget; non-file writes keep the short timeout; redirect abort handled with documented residual risk. Elapsed time instead of percent accepted by owner on the Issue. No tokens or ids in the diff, English UI text, Tracker issues line present. Tests: 1899 + 1761 + 1776 + 1775 + 1760 files 474 passed with one unrelated-looking flaky Node-helper test that passed in 3 reruns (30 passed each); CI all green including linux x3, windows, tracker-link. Head contains current work/main 080df2d8. No live check claimed.",
-        "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+        "reviewer": "Reviewer-RV1015P",
+        "review_session": "rv1015p-900",
+        "execution_lane": "b935e9a50ab2457381a5e31dacdb934e",
+        "implementer": "Worker-RG1899",
+        "head_sha": "eb4f87d69f21cf9a835dab826bb30799642759ed",
+        "base_sha": "3ee7c6d9c7a394ecec9f0889805fadb188b3aab7",
+        "tree_sha": "539337642a658fba6fd851220cd535f58d9192b3",
+        "report": "Delta re-review of 263b267f (previously approved, no blockers). Head eb4f87d6 = 263b267f + clean merge of main 3ee7c6d9 (git show --remerge-diff is empty, no manual resolution) + one commit touching only docs/system/CHANGELOG.md that drops the upload.onprogress wording; the remaining xhr.upload mention explains why no upload listener is registered (CORS preflight), elapsed time + size progress, percentage deferred to ACL-891 - accurate. Head contains current work/main 3ee7c6d9; diff vs main is 1776 + 1899 changes only (22 files). Tests: test_acl1899_upload_progress, test_acl1761_api_create, test_acl1776_create_forms: 271 passed, including test_the_page_helper_keeps_the_write_policy_for_jobs. CI all green (tracker-link re-run after handoff passed). 1776 Approved in tracker. No live checks claimed.",
+        "main_sha": "3ee7c6d9c7a394ecec9f0889805fadb188b3aab7",
         "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
         "issues": [
           899
         ],
-        "recorded_at": "2026-10-15T08:31:04+00:00",
+        "recorded_at": "2026-10-15T10:55:30+00:00",
         "issue_scopes": {
           "899": "52d852154dfd159e49185f701d1c699a64ca2b269802ff49b0340c10537527de"
         }
