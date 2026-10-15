@@ -15094,7 +15094,7 @@
       },
       "163": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       }
     },
     "actors": {
@@ -40358,6 +40358,12 @@
           "report": "# Return for a main refresh\n\nMain moved to 3ee7c6d9 (batch with ACL-1819, 1799, 1814; promotion PR 928). The source approval is stale against it. Required: merge current main into the branch (merge, no rebase; a trial merge is clean), re-run the affected tests, hand off again for a delta review. No scope change."
         },
         "batch_id": null
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-15T10:13:16+00:00",
+        "issue": 163,
+        "reason": "Owner decision 2026-10-15: not scheduled, remove from backlog. Evidence log serve_9199_1405.log no longer exists."
       }
     ],
     "policy": {
