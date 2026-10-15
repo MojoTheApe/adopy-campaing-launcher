@@ -9373,6 +9373,18 @@
         "state": "implementing",
         "started_at": "2026-10-15T09:28:57+00:00",
         "from_status": "status:backlog"
+      },
+      "309": {
+        "actor": "Worker-W1015K",
+        "session": "S63c25b6e",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1309-own-dashboard",
+        "worktree": "C:\\acl-1309-v2",
+        "id": "f3bbd1b67c9249689796356aeb2c5270",
+        "issue": 309,
+        "state": "implementing",
+        "started_at": "2026-10-15T10:08:54+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -15017,6 +15029,17 @@
         },
         "pr": 927,
         "queued_at": "2026-10-15T09:53:41+00:00"
+      },
+      "309": {
+        "implementers": [
+          {
+            "actor": "Worker-W1015K",
+            "session": "S63c25b6e"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W1015K",
+        "coordinator": "Coordinator-M1011A"
       }
     },
     "actors": {
@@ -16663,6 +16686,10 @@
       "Reviewer-RRS816": {
         "session": "rrs816-20261015",
         "role": "Reviewer"
+      },
+      "Worker-W1015K": {
+        "session": "S63c25b6e",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -40201,6 +40228,13 @@
           "report": "# Return for a dependency refresh\n\nMain now also contains batch b2772e6f (ACL-1819 pre-flight, ACL-1799 country workbench, ACL-1814 rules store; PR 926 -> 928). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-15T10:08:54+00:00",
+        "issue": 309,
+        "claim": "f3bbd1b67c9249689796356aeb2c5270",
+        "actor": "Worker-W1015K"
       }
     ],
     "policy": {
