@@ -12605,7 +12605,7 @@
             "session": "wrj1797-20261015"
           }
         ],
-        "state": "stage",
+        "state": "merged",
         "worker": "Worker-RJ1797",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12631,7 +12631,8 @@
           "session": "coord_c0930a_1009",
           "report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
         },
-        "reviewer": "Reviewer-R1797J"
+        "reviewer": "Reviewer-R1797J",
+        "batch_id": "e76699eff67645bd910712ebbcde5107"
       },
       "800": {
         "implementers": [
@@ -12648,7 +12649,7 @@
             "session": "wrh11800-20261015"
           }
         ],
-        "state": "stage",
+        "state": "merged",
         "worker": "Worker-RH11800",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12668,7 +12669,8 @@
         "pr": 802,
         "queued_at": "2026-10-14T23:06:58+00:00",
         "review_report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return.",
-        "reviewer": "Reviewer-R1800J"
+        "reviewer": "Reviewer-R1800J",
+        "batch_id": "e76699eff67645bd910712ebbcde5107"
       },
       "799": {
         "implementers": [
@@ -18274,6 +18276,34 @@
         "coordinator": "Coordinator-C1014I",
         "state": "reviewing",
         "started_at": "2026-10-14T22:15:32+00:00"
+      },
+      "917": {
+        "id": "7afd66b09bb345d0af8d07c4fe79c1fa",
+        "batch_id": "e76699eff67645bd910712ebbcde5107",
+        "pr": 917,
+        "issues": [
+          800,
+          797
+        ],
+        "actor": "Reviewer-R917B",
+        "session": "r917b-20261015",
+        "coordinator": "Coordinator-C1014I",
+        "state": "reviewing",
+        "started_at": "2026-10-15T04:07:27+00:00"
+      },
+      "918": {
+        "id": "7afd66b09bb345d0af8d07c4fe79c1fa",
+        "batch_id": "e76699eff67645bd910712ebbcde5107",
+        "pr": 917,
+        "issues": [
+          800,
+          797
+        ],
+        "actor": "Reviewer-R917B",
+        "session": "r917b-20261015",
+        "coordinator": "Coordinator-C1014I",
+        "state": "reviewing",
+        "started_at": "2026-10-15T04:07:27+00:00"
       }
     },
     "review_queue": [
@@ -18299,20 +18329,7 @@
       891,
       799
     ],
-    "review": {
-      "id": "7afd66b09bb345d0af8d07c4fe79c1fa",
-      "batch_id": "e76699eff67645bd910712ebbcde5107",
-      "pr": 917,
-      "issues": [
-        800,
-        797
-      ],
-      "actor": "Reviewer-R917B",
-      "session": "r917b-20261015",
-      "coordinator": "Coordinator-C1014I",
-      "state": "reviewing",
-      "started_at": "2026-10-15T04:07:27+00:00"
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -36336,6 +36353,135 @@
         "issue": 814,
         "claim": "1b0e30d7170b484db48c6ea93dbdc92c",
         "actor": "Worker-RM1814"
+      },
+      {
+        "event": "batch-integrated",
+        "at": "2026-10-15T04:29:09+00:00",
+        "batch": {
+          "id": "e76699eff67645bd910712ebbcde5107",
+          "actor": "Coordinator-C1014I",
+          "session": "coord-c1014i-20261014",
+          "state": "merged",
+          "issues": [
+            800,
+            797
+          ],
+          "members": [
+            {
+              "issue": 800,
+              "pr": 802,
+              "branch": "codex/acl-1800-campaign-commands",
+              "head_sha": "fa2dab061c20873b403f99c31782238e827442c0",
+              "base_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
+              "main_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "c6a03d6f7d7359787e935af84597ca655ffb095293c7145fe32eb1f57394c2f5",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-R1800J",
+                "implementer": "Worker-RH11800",
+                "review_session": "r1800j-20261015",
+                "execution_lane": "1c1e7c8703d14377a22d75dcd7750b69",
+                "head_sha": "fa2dab061c20873b403f99c31782238e827442c0",
+                "base_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
+                "tree_sha": "7b4c0398a88b6a5e0088df7baa425c1599086f3f",
+                "report": "Independent source review of ACL-1800 / PR 802 at head fa2dab06 against current main a4e38b7c (main is an ancestor of the head). Reviewer-R1800J implemented none of it.\n\nScope: full diff origin/main...head, 24 files (fb_api/commands.py, write_policy.py, token_capture.py, web/campaign_commands.py, app.py endpoints, acm_commands.js, _campaign_table.html account tree, tests).\n\nVerified by reading the code:\n- Writes happen only after a human click: preview builds an immutable revision, the page shows a confirm dialog, execute needs the revision id plus an idempotency key. The only timer is the status poll of an operation the human already started (reads the local store, not Meta).\n- Policy is closed in both layers: write_policy.check_object_update (POST only, path fullmatch of one numeric id, exactly one field from status/daily_budget/bid_amount, status ACTIVE|PAUSED, positive integer amount below 1e15, no files) and the page helper (same rules, creation helper refuses object paths and the object helper refuses edge paths). token_capture.write calls check_object_update before any page call; object-update mode cannot be combined with creation writes.\n- Own-account only: read_object refuses an object whose account_id differs from the session account; execute re-reads every object before the first write and fails everything if anything (value, constraints, bid strategy) changed; the account currency and ACTIVE status are re-checked. Parents are never touched (constraints are shown as \"On - Campaign paused\").\n- Single shot per object, first failure stops the rest; WriteUnknown is reconciled by readback after a pause; a dead process leaves \"Outcome unknown\", nothing is retried. Call budget is capped by the operator ceiling (ACL_FB_API_MAX_CALLS). Store creation is locked.\n- Disabled under the rpa backend and when the server is not bound to loopback (409/403 with friendly English text). Expanding an account row only calls render(); it reads nothing from Meta. Rows keep owner placement under the account rows.\n- All three findings of the earlier out-of-tracker review (strategy change treated as stale, account status re-checked on execute, trailing-newline path regex) are fixed and pinned by tests.\n\nVerification:\n- CI on head fa2dab06: all 16 checks pass including Linux 1-3 (3.11 and 3.13, browser tests), Windows, installer, process instructions; tracker-link failed once on timing (issue not yet in review) and passed on rerun.\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k \"not browser\": the 1800 files, 1798 inventory and static-scripts files 351 passed; test_acl1761_* plus test_review_ui_regressions 237 passed.\n- Mutation 1: confirmation skipped in the page flow (if (!yes) -> if (false)) -> test_cancel_sends_neither_execute_nor_a_status_poll failed. Mutation 2: account_id check removed from read_object -> test_object_of_another_account_is_refused failed. Both reverted; worktree removed.\n- Tests are legitimate: new files plus extensions of 1798 tests; no assertion weakened.\n- No live Meta or Multilogin calls by this reviewer.\n\nFindings: no blocking issues. Minor, non-blocking: the policy layer cannot know the account of a bare object id, so account ownership rests on the pre-write read (verified and tested); the live check on 9095 with test accounts still needs the owner's yes.",
+                "main_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  800
+                ],
+                "recorded_at": "2026-10-14T23:48:57+00:00",
+                "issue_scopes": {
+                  "800": "c6a03d6f7d7359787e935af84597ca655ffb095293c7145fe32eb1f57394c2f5"
+                }
+              },
+              "lane": {
+                "id": "1c1e7c8703d14377a22d75dcd7750b69",
+                "pr": 802,
+                "issues": [
+                  800
+                ],
+                "actor": "Reviewer-R1800J",
+                "session": "r1800j-20261015",
+                "coordinator": "Coordinator-C0930A",
+                "started_at": "2026-10-14T23:36:45+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-14T23:50:40+00:00"
+            },
+            {
+              "issue": 797,
+              "pr": 810,
+              "branch": "codex/acl-1797-design-system",
+              "head_sha": "ea925cfc6defd5834d4d5cc85f64b55613ede3f0",
+              "base_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
+              "main_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "5c2d21567457ef4bf48283b34060170cecabad9ab74630b2363e00dfd9390453",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-R1797J",
+                "implementer": "Worker-RJ1797",
+                "review_session": "r1797j-20261015",
+                "execution_lane": "848e802205894b719e0f5390bb5f6f88",
+                "head_sha": "ea925cfc6defd5834d4d5cc85f64b55613ede3f0",
+                "base_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
+                "tree_sha": "37444908174083f36ff23a016e7bf00638d820b5",
+                "report": "Independent re-review of ACL-1797 / PR 810 at head ea925cfc6defd5834d4d5cc85f64b55613ede3f0 against current main a4e38b7c (main is an ancestor of the head). Reviewer-R1797J implemented none of it. Previous approval (R1797G, 52d3ecdc) was returned only because main moved (1798, 1766, 1778, 1769).\n\nDelta check: I reproduced the merge independently (git merge-tree origin/main 52d3ecdc) and diffed it with the pushed head. The ONLY difference is src/web/templates/report.html, and only inside the 7 conflict regions: main's redesigned header won everywhere (framed period range, stage badge, no old refresh form/buyer-pick/period-pick), plus the 1797 token font size var(--adopy-text-sm) on the plan meta line, which keeps main's page_source/pixel_source labels (1766). No extra hunk outside the conflicts; no conflict markers left. Everything else (1769 stacked cards, 1798 inventory/home campaigns, tokens css, all templates and tests) is the automatic merge result.\n\nVerification:\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k \"not browser\" on the 1797 design-system/token/theme/contrast/buttons/account-tree/notes/read-fallback tests plus 1769, 1766, header, stage badge and all builder tests (33 files): 434 passed, 39 deselected.\n- CI on the head: Linux 1-3, Windows tests, Windows installer, process instructions, descriptor all pass; tracker-link failed only because the task was in the returned state and passed after review-acquire (rerun).\n- No live Meta or Multilogin calls by this reviewer.\n\nFindings: no blocking issues.",
+                "main_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  797
+                ],
+                "recorded_at": "2026-10-14T23:46:49+00:00",
+                "issue_scopes": {
+                  "797": "5c2d21567457ef4bf48283b34060170cecabad9ab74630b2363e00dfd9390453"
+                }
+              },
+              "lane": {
+                "id": "848e802205894b719e0f5390bb5f6f88",
+                "pr": 810,
+                "issues": [
+                  797
+                ],
+                "actor": "Reviewer-R1797J",
+                "session": "r1797j-20261015",
+                "coordinator": "Coordinator-C0930A",
+                "started_at": "2026-10-14T23:35:41+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-14T23:47:23+00:00"
+            }
+          ],
+          "main_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
+          "branch": "codex/batch-e76699eff67645bd910712ebbcde5107",
+          "intake": "4d96961a854a4159a53e67a7ab144142",
+          "started_at": "2026-10-15T03:44:39+00:00",
+          "pr": 917,
+          "entered_stage": true,
+          "history": [],
+          "review": {
+            "id": "7afd66b09bb345d0af8d07c4fe79c1fa",
+            "batch_id": "e76699eff67645bd910712ebbcde5107",
+            "pr": 917,
+            "issues": [
+              800,
+              797
+            ],
+            "actor": "Reviewer-R917B",
+            "session": "r917b-20261015",
+            "coordinator": "Coordinator-C1014I",
+            "state": "reviewing",
+            "started_at": "2026-10-15T04:07:27+00:00"
+          },
+          "main_prs": [
+            918
+          ],
+          "finished_at": "2026-10-15T04:29:09+00:00"
+        }
       }
     ],
     "policy": {
@@ -39425,129 +39571,147 @@
         "entered_stage": false,
         "history": [],
         "report": "# Batch f15e647d cancelled at assembly\n\nMerging the frozen tips: ACL-1800 merged cleanly; ACL-1775 conflicts with ACL-1800 (src/fb_api/token_capture.py, docs/system/CHANGELOG.md) and with ACL-1797 (src/web/templates/report.html). No conflict resolution in the batch branch. New batch: ACL-1800 + ACL-1797 (they merge cleanly together); ACL-1775 stays approved and will be refreshed against main afterwards."
-      }
-    },
-    "integration": {
-      "id": "e76699eff67645bd910712ebbcde5107",
-      "actor": "Coordinator-C1014I",
-      "session": "coord-c1014i-20261014",
-      "state": "stage",
-      "issues": [
-        800,
-        797
-      ],
-      "members": [
-        {
-          "issue": 800,
-          "pr": 802,
-          "branch": "codex/acl-1800-campaign-commands",
-          "head_sha": "fa2dab061c20873b403f99c31782238e827442c0",
-          "base_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
-          "main_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "c6a03d6f7d7359787e935af84597ca655ffb095293c7145fe32eb1f57394c2f5",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-R1800J",
-            "implementer": "Worker-RH11800",
-            "review_session": "r1800j-20261015",
-            "execution_lane": "1c1e7c8703d14377a22d75dcd7750b69",
+      },
+      "e76699eff67645bd910712ebbcde5107": {
+        "id": "e76699eff67645bd910712ebbcde5107",
+        "actor": "Coordinator-C1014I",
+        "session": "coord-c1014i-20261014",
+        "state": "merged",
+        "issues": [
+          800,
+          797
+        ],
+        "members": [
+          {
+            "issue": 800,
+            "pr": 802,
+            "branch": "codex/acl-1800-campaign-commands",
             "head_sha": "fa2dab061c20873b403f99c31782238e827442c0",
             "base_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
-            "tree_sha": "7b4c0398a88b6a5e0088df7baa425c1599086f3f",
-            "report": "Independent source review of ACL-1800 / PR 802 at head fa2dab06 against current main a4e38b7c (main is an ancestor of the head). Reviewer-R1800J implemented none of it.\n\nScope: full diff origin/main...head, 24 files (fb_api/commands.py, write_policy.py, token_capture.py, web/campaign_commands.py, app.py endpoints, acm_commands.js, _campaign_table.html account tree, tests).\n\nVerified by reading the code:\n- Writes happen only after a human click: preview builds an immutable revision, the page shows a confirm dialog, execute needs the revision id plus an idempotency key. The only timer is the status poll of an operation the human already started (reads the local store, not Meta).\n- Policy is closed in both layers: write_policy.check_object_update (POST only, path fullmatch of one numeric id, exactly one field from status/daily_budget/bid_amount, status ACTIVE|PAUSED, positive integer amount below 1e15, no files) and the page helper (same rules, creation helper refuses object paths and the object helper refuses edge paths). token_capture.write calls check_object_update before any page call; object-update mode cannot be combined with creation writes.\n- Own-account only: read_object refuses an object whose account_id differs from the session account; execute re-reads every object before the first write and fails everything if anything (value, constraints, bid strategy) changed; the account currency and ACTIVE status are re-checked. Parents are never touched (constraints are shown as \"On - Campaign paused\").\n- Single shot per object, first failure stops the rest; WriteUnknown is reconciled by readback after a pause; a dead process leaves \"Outcome unknown\", nothing is retried. Call budget is capped by the operator ceiling (ACL_FB_API_MAX_CALLS). Store creation is locked.\n- Disabled under the rpa backend and when the server is not bound to loopback (409/403 with friendly English text). Expanding an account row only calls render(); it reads nothing from Meta. Rows keep owner placement under the account rows.\n- All three findings of the earlier out-of-tracker review (strategy change treated as stale, account status re-checked on execute, trailing-newline path regex) are fixed and pinned by tests.\n\nVerification:\n- CI on head fa2dab06: all 16 checks pass including Linux 1-3 (3.11 and 3.13, browser tests), Windows, installer, process instructions; tracker-link failed once on timing (issue not yet in review) and passed on rerun.\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k \"not browser\": the 1800 files, 1798 inventory and static-scripts files 351 passed; test_acl1761_* plus test_review_ui_regressions 237 passed.\n- Mutation 1: confirmation skipped in the page flow (if (!yes) -> if (false)) -> test_cancel_sends_neither_execute_nor_a_status_poll failed. Mutation 2: account_id check removed from read_object -> test_object_of_another_account_is_refused failed. Both reverted; worktree removed.\n- Tests are legitimate: new files plus extensions of 1798 tests; no assertion weakened.\n- No live Meta or Multilogin calls by this reviewer.\n\nFindings: no blocking issues. Minor, non-blocking: the policy layer cannot know the account of a bare object id, so account ownership rests on the pre-write read (verified and tested); the live check on 9095 with test accounts still needs the owner's yes.",
             "main_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
             "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              800
-            ],
-            "recorded_at": "2026-10-14T23:48:57+00:00",
-            "issue_scopes": {
-              "800": "c6a03d6f7d7359787e935af84597ca655ffb095293c7145fe32eb1f57394c2f5"
-            }
+            "scope": "c6a03d6f7d7359787e935af84597ca655ffb095293c7145fe32eb1f57394c2f5",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-R1800J",
+              "implementer": "Worker-RH11800",
+              "review_session": "r1800j-20261015",
+              "execution_lane": "1c1e7c8703d14377a22d75dcd7750b69",
+              "head_sha": "fa2dab061c20873b403f99c31782238e827442c0",
+              "base_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
+              "tree_sha": "7b4c0398a88b6a5e0088df7baa425c1599086f3f",
+              "report": "Independent source review of ACL-1800 / PR 802 at head fa2dab06 against current main a4e38b7c (main is an ancestor of the head). Reviewer-R1800J implemented none of it.\n\nScope: full diff origin/main...head, 24 files (fb_api/commands.py, write_policy.py, token_capture.py, web/campaign_commands.py, app.py endpoints, acm_commands.js, _campaign_table.html account tree, tests).\n\nVerified by reading the code:\n- Writes happen only after a human click: preview builds an immutable revision, the page shows a confirm dialog, execute needs the revision id plus an idempotency key. The only timer is the status poll of an operation the human already started (reads the local store, not Meta).\n- Policy is closed in both layers: write_policy.check_object_update (POST only, path fullmatch of one numeric id, exactly one field from status/daily_budget/bid_amount, status ACTIVE|PAUSED, positive integer amount below 1e15, no files) and the page helper (same rules, creation helper refuses object paths and the object helper refuses edge paths). token_capture.write calls check_object_update before any page call; object-update mode cannot be combined with creation writes.\n- Own-account only: read_object refuses an object whose account_id differs from the session account; execute re-reads every object before the first write and fails everything if anything (value, constraints, bid strategy) changed; the account currency and ACTIVE status are re-checked. Parents are never touched (constraints are shown as \"On - Campaign paused\").\n- Single shot per object, first failure stops the rest; WriteUnknown is reconciled by readback after a pause; a dead process leaves \"Outcome unknown\", nothing is retried. Call budget is capped by the operator ceiling (ACL_FB_API_MAX_CALLS). Store creation is locked.\n- Disabled under the rpa backend and when the server is not bound to loopback (409/403 with friendly English text). Expanding an account row only calls render(); it reads nothing from Meta. Rows keep owner placement under the account rows.\n- All three findings of the earlier out-of-tracker review (strategy change treated as stale, account status re-checked on execute, trailing-newline path regex) are fixed and pinned by tests.\n\nVerification:\n- CI on head fa2dab06: all 16 checks pass including Linux 1-3 (3.11 and 3.13, browser tests), Windows, installer, process instructions; tracker-link failed once on timing (issue not yet in review) and passed on rerun.\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k \"not browser\": the 1800 files, 1798 inventory and static-scripts files 351 passed; test_acl1761_* plus test_review_ui_regressions 237 passed.\n- Mutation 1: confirmation skipped in the page flow (if (!yes) -> if (false)) -> test_cancel_sends_neither_execute_nor_a_status_poll failed. Mutation 2: account_id check removed from read_object -> test_object_of_another_account_is_refused failed. Both reverted; worktree removed.\n- Tests are legitimate: new files plus extensions of 1798 tests; no assertion weakened.\n- No live Meta or Multilogin calls by this reviewer.\n\nFindings: no blocking issues. Minor, non-blocking: the policy layer cannot know the account of a bare object id, so account ownership rests on the pre-write read (verified and tested); the live check on 9095 with test accounts still needs the owner's yes.",
+              "main_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                800
+              ],
+              "recorded_at": "2026-10-14T23:48:57+00:00",
+              "issue_scopes": {
+                "800": "c6a03d6f7d7359787e935af84597ca655ffb095293c7145fe32eb1f57394c2f5"
+              }
+            },
+            "lane": {
+              "id": "1c1e7c8703d14377a22d75dcd7750b69",
+              "pr": 802,
+              "issues": [
+                800
+              ],
+              "actor": "Reviewer-R1800J",
+              "session": "r1800j-20261015",
+              "coordinator": "Coordinator-C0930A",
+              "started_at": "2026-10-14T23:36:45+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-14T23:50:40+00:00"
           },
-          "lane": {
-            "id": "1c1e7c8703d14377a22d75dcd7750b69",
-            "pr": 802,
-            "issues": [
-              800
-            ],
-            "actor": "Reviewer-R1800J",
-            "session": "r1800j-20261015",
-            "coordinator": "Coordinator-C0930A",
-            "started_at": "2026-10-14T23:36:45+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-14T23:50:40+00:00"
-        },
-        {
-          "issue": 797,
-          "pr": 810,
-          "branch": "codex/acl-1797-design-system",
-          "head_sha": "ea925cfc6defd5834d4d5cc85f64b55613ede3f0",
-          "base_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
-          "main_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "5c2d21567457ef4bf48283b34060170cecabad9ab74630b2363e00dfd9390453",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-R1797J",
-            "implementer": "Worker-RJ1797",
-            "review_session": "r1797j-20261015",
-            "execution_lane": "848e802205894b719e0f5390bb5f6f88",
+          {
+            "issue": 797,
+            "pr": 810,
+            "branch": "codex/acl-1797-design-system",
             "head_sha": "ea925cfc6defd5834d4d5cc85f64b55613ede3f0",
             "base_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
-            "tree_sha": "37444908174083f36ff23a016e7bf00638d820b5",
-            "report": "Independent re-review of ACL-1797 / PR 810 at head ea925cfc6defd5834d4d5cc85f64b55613ede3f0 against current main a4e38b7c (main is an ancestor of the head). Reviewer-R1797J implemented none of it. Previous approval (R1797G, 52d3ecdc) was returned only because main moved (1798, 1766, 1778, 1769).\n\nDelta check: I reproduced the merge independently (git merge-tree origin/main 52d3ecdc) and diffed it with the pushed head. The ONLY difference is src/web/templates/report.html, and only inside the 7 conflict regions: main's redesigned header won everywhere (framed period range, stage badge, no old refresh form/buyer-pick/period-pick), plus the 1797 token font size var(--adopy-text-sm) on the plan meta line, which keeps main's page_source/pixel_source labels (1766). No extra hunk outside the conflicts; no conflict markers left. Everything else (1769 stacked cards, 1798 inventory/home campaigns, tokens css, all templates and tests) is the automatic merge result.\n\nVerification:\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k \"not browser\" on the 1797 design-system/token/theme/contrast/buttons/account-tree/notes/read-fallback tests plus 1769, 1766, header, stage badge and all builder tests (33 files): 434 passed, 39 deselected.\n- CI on the head: Linux 1-3, Windows tests, Windows installer, process instructions, descriptor all pass; tracker-link failed only because the task was in the returned state and passed after review-acquire (rerun).\n- No live Meta or Multilogin calls by this reviewer.\n\nFindings: no blocking issues.",
             "main_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
             "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              797
-            ],
-            "recorded_at": "2026-10-14T23:46:49+00:00",
-            "issue_scopes": {
-              "797": "5c2d21567457ef4bf48283b34060170cecabad9ab74630b2363e00dfd9390453"
-            }
-          },
-          "lane": {
-            "id": "848e802205894b719e0f5390bb5f6f88",
-            "pr": 810,
-            "issues": [
-              797
-            ],
-            "actor": "Reviewer-R1797J",
-            "session": "r1797j-20261015",
-            "coordinator": "Coordinator-C0930A",
-            "started_at": "2026-10-14T23:35:41+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-14T23:47:23+00:00"
-        }
-      ],
-      "main_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
-      "branch": "codex/batch-e76699eff67645bd910712ebbcde5107",
-      "intake": "4d96961a854a4159a53e67a7ab144142",
-      "started_at": "2026-10-15T03:44:39+00:00",
-      "pr": 917,
-      "entered_stage": true,
-      "history": []
+            "scope": "5c2d21567457ef4bf48283b34060170cecabad9ab74630b2363e00dfd9390453",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-R1797J",
+              "implementer": "Worker-RJ1797",
+              "review_session": "r1797j-20261015",
+              "execution_lane": "848e802205894b719e0f5390bb5f6f88",
+              "head_sha": "ea925cfc6defd5834d4d5cc85f64b55613ede3f0",
+              "base_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
+              "tree_sha": "37444908174083f36ff23a016e7bf00638d820b5",
+              "report": "Independent re-review of ACL-1797 / PR 810 at head ea925cfc6defd5834d4d5cc85f64b55613ede3f0 against current main a4e38b7c (main is an ancestor of the head). Reviewer-R1797J implemented none of it. Previous approval (R1797G, 52d3ecdc) was returned only because main moved (1798, 1766, 1778, 1769).\n\nDelta check: I reproduced the merge independently (git merge-tree origin/main 52d3ecdc) and diffed it with the pushed head. The ONLY difference is src/web/templates/report.html, and only inside the 7 conflict regions: main's redesigned header won everywhere (framed period range, stage badge, no old refresh form/buyer-pick/period-pick), plus the 1797 token font size var(--adopy-text-sm) on the plan meta line, which keeps main's page_source/pixel_source labels (1766). No extra hunk outside the conflicts; no conflict markers left. Everything else (1769 stacked cards, 1798 inventory/home campaigns, tokens css, all templates and tests) is the automatic merge result.\n\nVerification:\n- Detached worktree at the head, PYTHONUTF8=1 pytest -k \"not browser\" on the 1797 design-system/token/theme/contrast/buttons/account-tree/notes/read-fallback tests plus 1769, 1766, header, stage badge and all builder tests (33 files): 434 passed, 39 deselected.\n- CI on the head: Linux 1-3, Windows tests, Windows installer, process instructions, descriptor all pass; tracker-link failed only because the task was in the returned state and passed after review-acquire (rerun).\n- No live Meta or Multilogin calls by this reviewer.\n\nFindings: no blocking issues.",
+              "main_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                797
+              ],
+              "recorded_at": "2026-10-14T23:46:49+00:00",
+              "issue_scopes": {
+                "797": "5c2d21567457ef4bf48283b34060170cecabad9ab74630b2363e00dfd9390453"
+              }
+            },
+            "lane": {
+              "id": "848e802205894b719e0f5390bb5f6f88",
+              "pr": 810,
+              "issues": [
+                797
+              ],
+              "actor": "Reviewer-R1797J",
+              "session": "r1797j-20261015",
+              "coordinator": "Coordinator-C0930A",
+              "started_at": "2026-10-14T23:35:41+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-14T23:47:23+00:00"
+          }
+        ],
+        "main_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
+        "branch": "codex/batch-e76699eff67645bd910712ebbcde5107",
+        "intake": "4d96961a854a4159a53e67a7ab144142",
+        "started_at": "2026-10-15T03:44:39+00:00",
+        "pr": 917,
+        "entered_stage": true,
+        "history": [],
+        "review": {
+          "id": "7afd66b09bb345d0af8d07c4fe79c1fa",
+          "batch_id": "e76699eff67645bd910712ebbcde5107",
+          "pr": 917,
+          "issues": [
+            800,
+            797
+          ],
+          "actor": "Reviewer-R917B",
+          "session": "r917b-20261015",
+          "coordinator": "Coordinator-C1014I",
+          "state": "reviewing",
+          "started_at": "2026-10-15T04:07:27+00:00"
+        },
+        "main_prs": [
+          918
+        ],
+        "finished_at": "2026-10-15T04:29:09+00:00"
+      }
     },
+    "integration": null,
     "intake": {
       "id": "4d96961a854a4159a53e67a7ab144142",
       "actor": "Coordinator-C1014I",
       "session": "coord-c1014i-20261014",
-      "state": "running",
+      "state": "finished",
       "issues": [
         800,
         797
       ],
-      "remaining": [
-        800,
-        797
+      "remaining": [],
+      "batches": [
+        "e76699eff67645bd910712ebbcde5107"
       ],
-      "batches": [],
       "started_at": "2026-10-15T03:44:03+00:00",
       "ineligible": {}
     },
