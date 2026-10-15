@@ -1,28 +1,4 @@
 {
-  "project": {
-    "name": "Adopy Campaign Launcher",
-    "repository": "https://github.com/MojoTheApe/adopy-campaing-launcher"
-  },
-  "checks": [
-    "python scripts/acl_scan_secrets.py",
-    "python scripts/acl_smoke.py",
-    "python -m pytest tests/ -q",
-    "python -m unittest discover -s packaging/windows/tests -p test_*.py -v",
-    "Windows CI on Python 3.11 and 3.13 plus packaged install/repair/uninstall; docs/runtime/STAGING.md",
-    "Pinned Master Repo scripts/standard.py validate --root . --allow-draft; scripts/acl_adoption.py audit"
-  ],
-  "environments": {
-    "stage": {
-      "target": "ACL isolated Windows stage installation",
-      "verify": "docs/runtime/STAGING.md; verify the exact stage tree in isolated Windows CI and the agreed pilot before recording Stage verification."
-    },
-    "production": {
-      "target": "ACL stable Windows installer and update channel",
-      "verify": "docs/runtime/DELIVERY.md; published immutable release plus verified Windows installation/update and recovery, before record-delivery."
-    }
-  },
-  "completion": "verified-stable-package",
-  "profile": "package",
   "exceptions": [
     {
       "scope": "Unreleased standard",
@@ -38,16 +14,20 @@
       "scope": "Legacy master update channel",
       "reason": "Existing source installations still fetch master. Retain it only as the guarded compatibility channel described in the cutover runbook; main is the development integration branch after activation.",
       "reference": "docs/repository/ADOPTION.md"
+    },
+    {
+      "scope": "Temporary pre-release direct-main integration",
+      "reason": "Owner selected no-stage frozen approved batches on 2026-10-15. Preserve permanent stage/history and all source/combined review and full CI. Live adoption remains guarded and separately evidenced in ACL-1923.",
+      "reference": "docs/repository/POST_MAIN_DELIVERY.md"
     }
   ],
-  "standard": {
-    "repository": "https://github.com/MojoTheApe/master-repo",
-    "revision": "eca8a857d9f7f81160bf248f9f9e3109a21ade49",
-    "version": "1.0.0"
+  "project": {
+    "name": "Adopy Campaign Launcher",
+    "repository": "https://github.com/MojoTheApe/adopy-campaing-launcher"
   },
-  "adoption": "draft",
+  "schema_version": 2,
   "workflow": {
-    "staging": true,
+    "staging": false,
     "main_branch": "main",
     "stage_branch": "stage",
     "required_checks": [
@@ -71,18 +51,39 @@
       ]
     }
   },
-  "tracker": {
-    "repository": "MojoTheApe/task-tracker",
-    "workspace_id": "acl",
-    "revision": "0d1fad44f5fdbef64b061324e9a1292fb77fb725",
-    "verification": "Existing acl board verified server-side on 2026-09-21 after Task Tracker PR #64 deployment 0dadc889e18b027c8ca98b888407d492848f2f19: 160 identities, seven columns, 74 bounded historical completions, all six fresh snapshots, preserved authentication and restricted HTTP access. Browser verification excluded by owner. See docs/repository/ADOPTION.md and ACL-1248.",
-    "registration": "verified"
+  "environments": {
+    "production": {
+      "target": "ACL stable Windows installer and update channel",
+      "verify": "docs/runtime/DELIVERY.md; published immutable release plus verified Windows installation/update and recovery, before record-delivery."
+    }
   },
-  "schema_version": 2,
+  "profile": "package",
   "delivery": {
-    "procedure": "docs/runtime/DELIVERY.md; existing annotated acl-release tag, validated release manifest and Windows installer/updater. No automatic production or employee rollout during adoption.",
-    "authorization": "Authorized source work includes review and merge after gates. Preserve separately scoped release and live-pilot authorization; previous CI exceptions cover only their recorded candidates.",
+    "procedure": "docs/runtime/DELIVERY.md; authorized frozen --deliver batch continues through exact-main CI, immutable annotated tag, published installer, isolated published-channel acceptance and native Tracker receipt.",
+    "authorization": "Standing owner policy: approving ACL integration or main merge includes verified package delivery unless the owner explicitly requests source-only/skip-release. The genuine Coordinator automatically persists batch begin --deliver for that approved task set. Development, bare pushes and unrequested machine batches grant no release authority; failures retain unfinished delivery without a routine second approval.",
     "rollback": "Existing Windows updater restores the previous installed version and shortcuts on verified failure. Preserve machine configuration and newer data; docs/runtime/DELIVERY.md.",
     "backup": "Preserve %LOCALAPPDATA%/ACL and user workbooks/creatives; isolated stage uses its own directories. Retain compatible recovery material before authorized runtime changes."
-  }
+  },
+  "standard": {
+    "repository": "https://github.com/MojoTheApe/master-repo",
+    "revision": "a3f56106f52d0ae19986920519b2fa46a380798b",
+    "version": "1.0.0"
+  },
+  "checks": [
+    "python scripts/acl_scan_secrets.py",
+    "python scripts/acl_smoke.py",
+    "python -m pytest tests/ -q",
+    "python -m unittest discover -s packaging/windows/tests -p test_*.py -v",
+    "Windows CI on Python 3.11 and 3.13 plus packaged install/repair/uninstall; docs/runtime/STAGING.md",
+    "Pinned Master Repo scripts/standard.py validate --root . --allow-draft; scripts/acl_adoption.py audit"
+  ],
+  "tracker": {
+    "repository": "MojoTheApe/task-tracker",
+    "verification": "Existing acl board verified server-side on 2026-09-21 after Task Tracker PR #64 deployment 0dadc889e18b027c8ca98b888407d492848f2f19: 160 identities, seven columns, 74 bounded historical completions, all six fresh snapshots, preserved authentication and restricted HTTP access. Browser verification excluded by owner. See docs/repository/ADOPTION.md and ACL-1248.",
+    "registration": "verified",
+    "revision": "e775c624e0323e69ed891926691c3dee6587081a",
+    "workspace_id": "acl"
+  },
+  "completion": "verified-stable-package",
+  "adoption": "draft"
 }
