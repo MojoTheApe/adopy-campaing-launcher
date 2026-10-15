@@ -14501,7 +14501,7 @@
             "session": "wk_w1886m_1014"
           }
         ],
-        "state": "approved",
+        "state": "returning_approval",
         "worker": "Worker-W1886M",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -14521,7 +14521,19 @@
         "pr": 887,
         "queued_at": "2026-10-14T09:56:34+00:00",
         "review_report": "# ACL-1886 / PR887 review return - refresh branch only\n\nContent review of head 8f3b07ac5e86e6a29f1a53da89477b88f54d4660 (tree 7ce8602fb78ee5e8603e33a727c85ab407b9ff2f, base 7cee2857d4b374bc564c5ca84b9f6ede69f96430): approved, no blocking findings. Affected tests 159 passed; current-head GitHub checks green.\n\nReturn reason is ONLY the baseline: record-review refused with \"Source review must use the current main baseline\". Main is now df6c2e8ac491aa1d03b10ba87641d1d785685c92. The 4 newer commits (ACL-1892 process tooling: delivery-check.yml, .workflow/**, AGENTS.md, delivery.json, docs/repository/*, scripts/tracker_ci_evidence.py, tracker/engine.json, two process tests) do not overlap the PR's 8 files. Please merge/refresh current main into the branch, re-run affected checks, and hand off again; the reviewer will re-review only the delta.\n\nOptional non-blocking nits: add a blank line before the new \"## Safe operation context for Graph read failures\" heading in docs/system/CHANGELOG.md; reduce the 3 blank lines after _read_context in src/fb_api/graph.py to 2. Optionally name account_spend_api._failure in the PROJECT.md limitation.",
-        "reviewer": "Reviewer-R1886M"
+        "reviewer": "Reviewer-R1886M",
+        "return_operation": {
+          "id": "2ed7c113f8e34d4bb109745d97e2c68b",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "report": "# Return for a main refresh\n\nMain moved to 3ee7c6d9 (batch with ACL-1819, 1799, 1814; promotion PR 928). The source approval is stale against it. Required: merge current main into the branch (merge, no rebase; a trial merge is clean), re-run the affected tests, hand off again for a delta review. No scope change."
+        },
+        "return": {
+          "id": "2ed7c113f8e34d4bb109745d97e2c68b",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "report": "# Return for a main refresh\n\nMain moved to 3ee7c6d9 (batch with ACL-1819, 1799, 1814; promotion PR 928). The source approval is stale against it. Required: merge current main into the branch (merge, no rebase; a trial merge is clean), re-run the affected tests, hand off again for a delta review. No scope change."
+        }
       },
       "888": {
         "implementers": [
