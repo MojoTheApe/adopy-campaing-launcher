@@ -13131,7 +13131,7 @@
             "session": "wrn1819-20261015"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-RN1819",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -13150,7 +13150,7 @@
         },
         "pr": 821,
         "queued_at": "2026-10-15T06:43:49+00:00",
-        "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e677f638 (ACL-1812 warm sessions, ACL-1826, ACL-1775 Instant Forms, ACL-1815 rules evidence; PR 919 -> 922). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
+        "review_report": "# Review of PR 821 / ACL-1819 at a957986b: returned, two blocking CI failures in this PR's own files\n\nContent review is clean (details below). Head contains current main (080df2d8). The PR cannot be approved because required CI is red on two guard tests that fail only because of lines this PR added.\n\n## Blocking\n1. tests/test_acl1819_preflight.py:582 - tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis fails (windows tests, linux shard 2, tooling job). The line `(r\"C:\\files\\2403_square.JPG\", \"Text E\")` is flagged [backslash-path]. Fix: add a `# linux-ok: <why, it is only data for the name function>` comment on that line (or mark the file windows_only, but the first is right: the case is data).\n2. src/web/templates/report.html:5704 (in cbPreflight.creativeNumber) - tests/test_screens_are_in_english.py::test_no_russian_text_reaches_the_screen fails (linux shard 1). The regex `/\\d{3,4}\\s*[x\u0445\u00d7]\\s*\\d{3,4}/gi` contains a Cyrillic \"\u0445\" (U+0445) and the guard rejects any Cyrillic in the template outside its ALLOWED patterns. Fix: write the character as an escape (`[x\\u0445\\xd7]`) so the source has no Cyrillic; the behaviour (Cyrillic x as a size separator, as in the server's AdDraft.ad_name) stays the same. Check the Python side keeps the same character set so JS/Python parity holds.\nOther red checks (Process instructions, ACL verification) are aggregates of these two. tracker-link failed at 06:43 because the issue was not yet in Review at that moment (label status:review is on #819 now); it should re-run green. Re-run all after the fix.\n\n## Checked and fine\n- Scope vs Issue #819: shared rule table (preflight_rules.py plus exported JSON, drift test passes), card with error/warning/ok/unknown, \"errors: N\" badge in the tree, click focuses the field, all listed client and server checks present, gate on Publish and Publish all, warnings in the confirm, RPA shows client checks only and the RPA publish path is untouched.\n- No Meta writes: audit runs only inside plan_only (client without write right), server_verdicts makes reads only; Graph stop kinds skip the audit; audit failure is logged and does not break the plan. Server checks are not run on keystroke or timer, only on Check and right before Publish; stale verdicts are shown as \"Edited since the last check\". Gate fails closed (missing tree, rules or state, failed fetch all block). Retry (ACL-1826 onlyKeys) goes through the same gate; CB_PF_RUNNING is reset before done().\n- creator.py refactor (resolve_page / resolve_pixel / resolve_page_pixel wrapper) keeps behaviour of main's final 1775/1769 form. Unknown currency gives \"unknown\" (non blocking), not an invented minimum; stated in PR and CHANGELOG. CHANGELOG entry present, user-facing text English, no secrets or ids in the diff, `Tracker issues: ACL-1819` in the PR body.\n\n## Tests run (affected only, local, Windows)\n- tests/test_acl1819_preflight.py, test_acl1761_parity.py, test_web_drill.py: 131 passed.\n- test_acl1819_preflight_browser.py, test_acl1775_builder_forms.py, test_acl1775_instant_forms.py, test_acl1826_mlx_session_lost.py, test_acl1604_preflight.py, test_the_builder_tree.py, test_acl1761_plan_check.py, test_acl1761_existing_check.py, test_builder_publish_selected_browser.py: 205 passed.\n- The two guard tests above were NOT in my set and are what CI caught.",
         "reviewer": "Reviewer-RV1015C"
       },
       "816": {
@@ -38066,6 +38066,24 @@
         "at": "2026-10-15T07:03:11+00:00",
         "issue": 168,
         "reason": "Not relevant after the move to the Meta API: this is a Playwright/Ads Manager UI wizard step (country step in the editor). Campaign creation moves to the API path (ACL-1761). Closed in the Playwright backlog cleanup 2026-10-15."
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-15T07:03:53+00:00",
+        "review": {
+          "id": "3b8af54b0b9d401a800330dd6047b97b",
+          "pr": 821,
+          "issues": [
+            819
+          ],
+          "actor": "Reviewer-RV1015C",
+          "session": "rv1015c-821",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-15T06:51:17+00:00",
+          "state": "returning",
+          "report": "# Review of PR 821 / ACL-1819 at a957986b: returned, two blocking CI failures in this PR's own files\n\nContent review is clean (details below). Head contains current main (080df2d8). The PR cannot be approved because required CI is red on two guard tests that fail only because of lines this PR added.\n\n## Blocking\n1. tests/test_acl1819_preflight.py:582 - tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis fails (windows tests, linux shard 2, tooling job). The line `(r\"C:\\files\\2403_square.JPG\", \"Text E\")` is flagged [backslash-path]. Fix: add a `# linux-ok: <why, it is only data for the name function>` comment on that line (or mark the file windows_only, but the first is right: the case is data).\n2. src/web/templates/report.html:5704 (in cbPreflight.creativeNumber) - tests/test_screens_are_in_english.py::test_no_russian_text_reaches_the_screen fails (linux shard 1). The regex `/\\d{3,4}\\s*[x\u0445\u00d7]\\s*\\d{3,4}/gi` contains a Cyrillic \"\u0445\" (U+0445) and the guard rejects any Cyrillic in the template outside its ALLOWED patterns. Fix: write the character as an escape (`[x\\u0445\\xd7]`) so the source has no Cyrillic; the behaviour (Cyrillic x as a size separator, as in the server's AdDraft.ad_name) stays the same. Check the Python side keeps the same character set so JS/Python parity holds.\nOther red checks (Process instructions, ACL verification) are aggregates of these two. tracker-link failed at 06:43 because the issue was not yet in Review at that moment (label status:review is on #819 now); it should re-run green. Re-run all after the fix.\n\n## Checked and fine\n- Scope vs Issue #819: shared rule table (preflight_rules.py plus exported JSON, drift test passes), card with error/warning/ok/unknown, \"errors: N\" badge in the tree, click focuses the field, all listed client and server checks present, gate on Publish and Publish all, warnings in the confirm, RPA shows client checks only and the RPA publish path is untouched.\n- No Meta writes: audit runs only inside plan_only (client without write right), server_verdicts makes reads only; Graph stop kinds skip the audit; audit failure is logged and does not break the plan. Server checks are not run on keystroke or timer, only on Check and right before Publish; stale verdicts are shown as \"Edited since the last check\". Gate fails closed (missing tree, rules or state, failed fetch all block). Retry (ACL-1826 onlyKeys) goes through the same gate; CB_PF_RUNNING is reset before done().\n- creator.py refactor (resolve_page / resolve_pixel / resolve_page_pixel wrapper) keeps behaviour of main's final 1775/1769 form. Unknown currency gives \"unknown\" (non blocking), not an invented minimum; stated in PR and CHANGELOG. CHANGELOG entry present, user-facing text English, no secrets or ids in the diff, `Tracker issues: ACL-1819` in the PR body.\n\n## Tests run (affected only, local, Windows)\n- tests/test_acl1819_preflight.py, test_acl1761_parity.py, test_web_drill.py: 131 passed.\n- test_acl1819_preflight_browser.py, test_acl1775_builder_forms.py, test_acl1775_instant_forms.py, test_acl1826_mlx_session_lost.py, test_acl1604_preflight.py, test_the_builder_tree.py, test_acl1761_plan_check.py, test_acl1761_existing_check.py, test_builder_publish_selected_browser.py: 205 passed.\n- The two guard tests above were NOT in my set and are what CI caught.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -41699,20 +41717,6 @@
       "ineligible": {}
     },
     "source_reviews": {
-      "821": {
-        "id": "3b8af54b0b9d401a800330dd6047b97b",
-        "pr": 821,
-        "issues": [
-          819
-        ],
-        "actor": "Reviewer-RV1015C",
-        "session": "rv1015c-821",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-15T06:51:17+00:00",
-        "state": "returning",
-        "report": "# Review of PR 821 / ACL-1819 at a957986b: returned, two blocking CI failures in this PR's own files\n\nContent review is clean (details below). Head contains current main (080df2d8). The PR cannot be approved because required CI is red on two guard tests that fail only because of lines this PR added.\n\n## Blocking\n1. tests/test_acl1819_preflight.py:582 - tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis fails (windows tests, linux shard 2, tooling job). The line `(r\"C:\\files\\2403_square.JPG\", \"Text E\")` is flagged [backslash-path]. Fix: add a `# linux-ok: <why, it is only data for the name function>` comment on that line (or mark the file windows_only, but the first is right: the case is data).\n2. src/web/templates/report.html:5704 (in cbPreflight.creativeNumber) - tests/test_screens_are_in_english.py::test_no_russian_text_reaches_the_screen fails (linux shard 1). The regex `/\\d{3,4}\\s*[x\u0445\u00d7]\\s*\\d{3,4}/gi` contains a Cyrillic \"\u0445\" (U+0445) and the guard rejects any Cyrillic in the template outside its ALLOWED patterns. Fix: write the character as an escape (`[x\\u0445\\xd7]`) so the source has no Cyrillic; the behaviour (Cyrillic x as a size separator, as in the server's AdDraft.ad_name) stays the same. Check the Python side keeps the same character set so JS/Python parity holds.\nOther red checks (Process instructions, ACL verification) are aggregates of these two. tracker-link failed at 06:43 because the issue was not yet in Review at that moment (label status:review is on #819 now); it should re-run green. Re-run all after the fix.\n\n## Checked and fine\n- Scope vs Issue #819: shared rule table (preflight_rules.py plus exported JSON, drift test passes), card with error/warning/ok/unknown, \"errors: N\" badge in the tree, click focuses the field, all listed client and server checks present, gate on Publish and Publish all, warnings in the confirm, RPA shows client checks only and the RPA publish path is untouched.\n- No Meta writes: audit runs only inside plan_only (client without write right), server_verdicts makes reads only; Graph stop kinds skip the audit; audit failure is logged and does not break the plan. Server checks are not run on keystroke or timer, only on Check and right before Publish; stale verdicts are shown as \"Edited since the last check\". Gate fails closed (missing tree, rules or state, failed fetch all block). Retry (ACL-1826 onlyKeys) goes through the same gate; CB_PF_RUNNING is reset before done().\n- creator.py refactor (resolve_page / resolve_pixel / resolve_page_pixel wrapper) keeps behaviour of main's final 1775/1769 form. Unknown currency gives \"unknown\" (non blocking), not an invented minimum; stated in PR and CHANGELOG. CHANGELOG entry present, user-facing text English, no secrets or ids in the diff, `Tracker issues: ACL-1819` in the PR body.\n\n## Tests run (affected only, local, Windows)\n- tests/test_acl1819_preflight.py, test_acl1761_parity.py, test_web_drill.py: 131 passed.\n- test_acl1819_preflight_browser.py, test_acl1775_builder_forms.py, test_acl1775_instant_forms.py, test_acl1826_mlx_session_lost.py, test_acl1604_preflight.py, test_the_builder_tree.py, test_acl1761_plan_check.py, test_acl1761_existing_check.py, test_builder_publish_selected_browser.py: 205 passed.\n- The two guard tests above were NOT in my set and are what CI caught.",
-        "keep_lane": false
-      },
       "803": {
         "id": "f79f080df19d47879b418a7a0687c25d",
         "pr": 803,
