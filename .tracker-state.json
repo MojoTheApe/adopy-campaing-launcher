@@ -12692,7 +12692,7 @@
             "session": "wrm1799-20261015"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-RM1799",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -36650,6 +36650,68 @@
         "pr": 809,
         "lane": "c44cf644faa94bb3b393938e5c8f5e10",
         "actor": "Reviewer-R1775M"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-15T05:31:48+00:00",
+        "issue": 799,
+        "pr": 803,
+        "review": {
+          "id": "dd4849377fd54398b984ce15da47ba1d",
+          "pr": 803,
+          "issues": [
+            799
+          ],
+          "actor": "Reviewer-R1799M",
+          "session": "r1799m-20261015",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-15T05:28:17+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 799,
+            "pr": 803,
+            "branch": "codex/acl-1799-country-workbench",
+            "head_sha": "9259d774c7c0c8491207d3ce83eaafb23f00f62c",
+            "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+            "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "scope": "0b2f9e9baae64d82925ec94ddc2a28bcd01ffc31eadb8ce886535456b06792e3",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-R1799M",
+              "implementer": "Worker-RM1799",
+              "review_session": "r1799m-20261015",
+              "execution_lane": "dd4849377fd54398b984ce15da47ba1d",
+              "head_sha": "9259d774c7c0c8491207d3ce83eaafb23f00f62c",
+              "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+              "tree_sha": "3c280a104854b227518c885c990209ceb7cd65ff",
+              "report": "Independent re-review of ACL-1799 / PR 803 at refreshed head 9259d774 (merge of main 0850aa39 into approved 3c9521c3). Reviewer-R1799M implemented none of it (handoff worker Worker-RM1799). Verified: diff of main..head touches only the 8 ACL-1799 files; the 619 changed lines of src/web/templates/report.html are identical to the approved 3c9521c3 diff against its old base, so the single style-block conflict kept both ACL-1797 tokens and 1799 cw-styles; adIndex: 0 is kept in the drawer active() return. Tests in a detached worktree: 1799, 1797, 1761, 1798 inventory tests 100 passed (not browser). Mutation adIndex: 0 -> adIdx is caught by 4 failing tests. Secret scan clean. No live calls. Findings: no blocking issues.",
+              "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                799
+              ],
+              "recorded_at": "2026-10-15T05:31:00+00:00",
+              "issue_scopes": {
+                "799": "0b2f9e9baae64d82925ec94ddc2a28bcd01ffc31eadb8ce886535456b06792e3"
+              }
+            },
+            "lane": {
+              "id": "dd4849377fd54398b984ce15da47ba1d",
+              "pr": 803,
+              "issues": [
+                799
+              ],
+              "actor": "Reviewer-R1799M",
+              "session": "r1799m-20261015",
+              "coordinator": "Coordinator-C0930A",
+              "started_at": "2026-10-15T05:28:17+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-15T05:31:18+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -37698,6 +37760,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-14T23:50:40+00:00"
+      },
+      "799": {
+        "issue": 799,
+        "pr": 803,
+        "branch": "codex/acl-1799-country-workbench",
+        "head_sha": "9259d774c7c0c8491207d3ce83eaafb23f00f62c",
+        "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+        "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "scope": "0b2f9e9baae64d82925ec94ddc2a28bcd01ffc31eadb8ce886535456b06792e3",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-R1799M",
+          "implementer": "Worker-RM1799",
+          "review_session": "r1799m-20261015",
+          "execution_lane": "dd4849377fd54398b984ce15da47ba1d",
+          "head_sha": "9259d774c7c0c8491207d3ce83eaafb23f00f62c",
+          "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+          "tree_sha": "3c280a104854b227518c885c990209ceb7cd65ff",
+          "report": "Independent re-review of ACL-1799 / PR 803 at refreshed head 9259d774 (merge of main 0850aa39 into approved 3c9521c3). Reviewer-R1799M implemented none of it (handoff worker Worker-RM1799). Verified: diff of main..head touches only the 8 ACL-1799 files; the 619 changed lines of src/web/templates/report.html are identical to the approved 3c9521c3 diff against its old base, so the single style-block conflict kept both ACL-1797 tokens and 1799 cw-styles; adIndex: 0 is kept in the drawer active() return. Tests in a detached worktree: 1799, 1797, 1761, 1798 inventory tests 100 passed (not browser). Mutation adIndex: 0 -> adIdx is caught by 4 failing tests. Secret scan clean. No live calls. Findings: no blocking issues.",
+          "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "issues": [
+            799
+          ],
+          "recorded_at": "2026-10-15T05:31:00+00:00",
+          "issue_scopes": {
+            "799": "0b2f9e9baae64d82925ec94ddc2a28bcd01ffc31eadb8ce886535456b06792e3"
+          }
+        },
+        "lane": {
+          "id": "dd4849377fd54398b984ce15da47ba1d",
+          "pr": 803,
+          "issues": [
+            799
+          ],
+          "actor": "Reviewer-R1799M",
+          "session": "r1799m-20261015",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-15T05:28:17+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-15T05:31:18+00:00"
       }
     },
     "batches": {
@@ -39897,62 +40003,6 @@
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-15T05:27:49+00:00",
         "state": "reviewing"
-      },
-      "803": {
-        "id": "dd4849377fd54398b984ce15da47ba1d",
-        "pr": 803,
-        "issues": [
-          799
-        ],
-        "actor": "Reviewer-R1799M",
-        "session": "r1799m-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "started_at": "2026-10-15T05:28:17+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 799,
-          "pr": 803,
-          "branch": "codex/acl-1799-country-workbench",
-          "head_sha": "9259d774c7c0c8491207d3ce83eaafb23f00f62c",
-          "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
-          "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "0b2f9e9baae64d82925ec94ddc2a28bcd01ffc31eadb8ce886535456b06792e3",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-R1799M",
-            "implementer": "Worker-RM1799",
-            "review_session": "r1799m-20261015",
-            "execution_lane": "dd4849377fd54398b984ce15da47ba1d",
-            "head_sha": "9259d774c7c0c8491207d3ce83eaafb23f00f62c",
-            "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
-            "tree_sha": "3c280a104854b227518c885c990209ceb7cd65ff",
-            "report": "Independent re-review of ACL-1799 / PR 803 at refreshed head 9259d774 (merge of main 0850aa39 into approved 3c9521c3). Reviewer-R1799M implemented none of it (handoff worker Worker-RM1799). Verified: diff of main..head touches only the 8 ACL-1799 files; the 619 changed lines of src/web/templates/report.html are identical to the approved 3c9521c3 diff against its old base, so the single style-block conflict kept both ACL-1797 tokens and 1799 cw-styles; adIndex: 0 is kept in the drawer active() return. Tests in a detached worktree: 1799, 1797, 1761, 1798 inventory tests 100 passed (not browser). Mutation adIndex: 0 -> adIdx is caught by 4 failing tests. Secret scan clean. No live calls. Findings: no blocking issues.",
-            "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
-            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              799
-            ],
-            "recorded_at": "2026-10-15T05:31:00+00:00",
-            "issue_scopes": {
-              "799": "0b2f9e9baae64d82925ec94ddc2a28bcd01ffc31eadb8ce886535456b06792e3"
-            }
-          },
-          "lane": {
-            "id": "dd4849377fd54398b984ce15da47ba1d",
-            "pr": 803,
-            "issues": [
-              799
-            ],
-            "actor": "Reviewer-R1799M",
-            "session": "r1799m-20261015",
-            "coordinator": "Coordinator-C0930A",
-            "started_at": "2026-10-15T05:28:17+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-15T05:31:18+00:00"
-        }
       },
       "809": {
         "id": "c44cf644faa94bb3b393938e5c8f5e10",
