@@ -14570,7 +14570,7 @@
             "session": "acl_delivery"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-B71E",
         "coordinator": "Coordinator-DLV15",
         "handoff": {
@@ -14588,7 +14588,8 @@
           "report": "ACL-1924 source implemented and self-checked in codex/acl-1924-delivery-flow at /Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-delivery-source. Ready PR#925: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/925 ; head82fd869c6b5851071bec714ccf11eaf21458155a, base080df2d8d9a846180753b1a425c289dcc5aefbb0. Worker-B71E / actual session acl_delivery / claim941dac02cdf44b4fb62ce2ac402c1e6a hands source to Coordinator-DLV15.\n\nActual merged Mastera3f56106f52d0ae19986920519b2fa46a380798b and Trackere775c624e0323e69ed891926691c3dee6587081a are adopted in source only. Exact old41/new44 pristine baseline and three explicit ACL conflicts preserve local controls. Checks:553 affected CI tests,46 packaging tests,82 focused recovery tests,137 post-export adoption/assembly tests pass; descriptor draft structure/scanner/smoke/links/diff pass.\n\nFinal current independent review and required hosted checks remain admission gates. Source itself MUST use OLD Stage/main route with original /tmp/acl-delivery-previous-config.json and clean actuale775 engine; no self-activation. ParentACL-1923 retains live service/idle state migration/fresh board/actual release-chain proof. No other claims, queue entries, histories or reviews were changed. No source merge or runtime activation performed."
         },
         "pr": 925,
-        "queued_at": "2026-10-15T08:18:01+00:00"
+        "queued_at": "2026-10-15T08:18:01+00:00",
+        "reviewer": "Reviewer-N61D"
       },
       "45": {
         "implementers": [],
@@ -16322,6 +16323,10 @@
       },
       "Reviewer-RV1015G": {
         "session": "rv1015g-740",
+        "role": "Reviewer"
+      },
+      "Reviewer-N61D": {
+        "session": "review_acl",
         "role": "Reviewer"
       }
     },
@@ -19008,8 +19013,7 @@
       891,
       872,
       899,
-      902,
-      924
+      902
     ],
     "review": null,
     "history": [
@@ -38981,6 +38985,13 @@
         "at": "2026-10-15T08:25:34+00:00",
         "issue": 475,
         "reason": "Closed in the Playwright backlog cleanup 2026-10-15: we are moving campaign creation and account reads to the Meta API (ACL-1760/1761/1883), so this Ads Manager UI/Playwright-only work is no longer relevant. Restore if the UI path comes back."
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-15T08:26:13+00:00",
+        "pr": 925,
+        "lane": "6baa41580ba045159d7981fb213ef83f",
+        "actor": "Reviewer-N61D"
       }
     ],
     "policy": {
@@ -42757,6 +42768,18 @@
         "session": "rv1015k-831",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-15T08:09:56+00:00",
+        "state": "reviewing"
+      },
+      "925": {
+        "id": "6baa41580ba045159d7981fb213ef83f",
+        "pr": 925,
+        "issues": [
+          924
+        ],
+        "actor": "Reviewer-N61D",
+        "session": "review_acl",
+        "coordinator": "Coordinator-DLV15",
+        "started_at": "2026-10-15T08:26:13+00:00",
         "state": "reviewing"
       }
     }
