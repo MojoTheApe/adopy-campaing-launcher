@@ -9128,9 +9128,11 @@
         "worktree": "C:\\wk-rf1776",
         "id": "6abbc7d2636d4830813a63a0cd9c0317",
         "issue": 776,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-15T06:56:36+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 831,
+        "report": "# Handoff ACL-1776 (dependency refresh)\n\nNew head: 979b592ac6ecccff816f6452a67525b58fc50dff (single merge commit of work/codex/acl-1819-preflight-audit a957986b into eb48c8c1). Contains main 080df2d8 and a957986b.\n\nConflicts (all additive, both sides kept):\n- src/fb_api/creator.py: 1819's _source() helper kept; plan_from_draft keeps 1776's template_loader signature.\n- src/fb_api/write_policy.py: 1776's form-create chain (check_form_create) and 1819/1800's object-update policy (check_object_update, policy_for_commands) both kept.\n- src/fb_api/token_capture.py (4 hunks): page-helper write(): 1776 form branch first (needs WRITE.form_create, which the commands helper does not have), then 1800 object-update logic; InPageGraph.__init__ takes both write_page and allow_object_updates; policy = policy_for_commands if object_updates else policy_for_page(act, write_page); write check order: form_page -> object_updates -> act chain.\n\nTests (venv C:\\fb_agents\\.venv, -k \"not browser\"): test_acl1776_create_forms, test_acl1819_preflight, test_acl1756_fb_api, test_acl1756_page_helper_node, test_acl1761_api_create, test_acl1761_parity, test_acl1761_hang_logout, test_acl1775_builder_forms, test_acl1775_instant_forms, test_acl1800_campaign_commands: 815 passed, 0 failed, 4 deselected (browser).\n\n## Update\nNew head: f475cdb884aa0417f06a5288368cf8dcb6fac49b (second merge of 1819 head 7cde3c4c, no conflicts). Tests: 917 passed, 0 failed, 4 deselected (browser) - previous set plus test_acl_test_platform and test_screens_are_in_english guards."
       },
       "924": {
         "actor": "Worker-B71E",
