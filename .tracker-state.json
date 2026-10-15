@@ -8961,6 +8961,18 @@
         "state": "implementing",
         "started_at": "2026-10-15T04:30:11+00:00",
         "from_status": "status:todo"
+      },
+      "826": {
+        "actor": "Worker-RL1826",
+        "session": "wrl1826-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1826-mlx-session-lost",
+        "worktree": "C:\\wk-rl1826",
+        "id": "3f8d591b5b1449faba5004259b1493c3",
+        "issue": 826,
+        "state": "implementing",
+        "started_at": "2026-10-15T04:31:29+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -13094,10 +13106,14 @@
           {
             "actor": "Worker-S1826M",
             "session": "ws1826m-20261015"
+          },
+          {
+            "actor": "Worker-RL1826",
+            "session": "wrl1826-20261015"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-S1826M",
+        "state": "implementing",
+        "worker": "Worker-RL1826",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
           "actor": "Worker-S1826M",
@@ -13115,8 +13131,7 @@
         },
         "pr": 828,
         "queued_at": "2026-10-15T03:48:37+00:00",
-        "review_report": "ACL-1826 / PR 828 at b5d66a63: code and the last fix (4e2812a3..b5d66a63: report.html window guard, window stub in test_review_ui_regressions, anchor update in test_acl1800) are correct; no weakening; 90 tests pass in a detached worktree, acl_scan_secrets clean, gh pr checks 828: 16/16 pass. RETURNED ONLY BECAUSE main moved: origin/main is now 0850aa39 (merge-base with the head is still a4e38b7c; 1797 and 1800 landed, incl. 7efcc856 which is the same window guard). PR 828 is CONFLICTING / DIRTY. git merge-tree origin/main head gives conflicts in docs/system/CHANGELOG.md and src/web/templates/_campaign_table.html (report.html, acm_commands.js and test_acl1800_account_scoped_table.py auto-merge). Fix: merge origin/main into the branch, resolve those two files (keep main's 1800 table structure and re-apply the 1826 session-lost change; CHANGELOG keep both entries), rerun the three tests, push; then request re-review. No other findings.",
-        "reviewer": "Reviewer-R1826N"
+        "review_report": "ACL-1826 / PR 828 at b5d66a63: code and the last fix (4e2812a3..b5d66a63: report.html window guard, window stub in test_review_ui_regressions, anchor update in test_acl1800) are correct; no weakening; 90 tests pass in a detached worktree, acl_scan_secrets clean, gh pr checks 828: 16/16 pass. RETURNED ONLY BECAUSE main moved: origin/main is now 0850aa39 (merge-base with the head is still a4e38b7c; 1797 and 1800 landed, incl. 7efcc856 which is the same window guard). PR 828 is CONFLICTING / DIRTY. git merge-tree origin/main head gives conflicts in docs/system/CHANGELOG.md and src/web/templates/_campaign_table.html (report.html, acm_commands.js and test_acl1800_account_scoped_table.py auto-merge). Fix: merge origin/main into the branch, resolve those two files (keep main's 1800 table structure and re-apply the 1826 session-lost change; CHANGELOG keep both entries), rerun the three tests, push; then request re-review. No other findings."
       },
       "767": {
         "implementers": [
@@ -15665,6 +15680,10 @@
       },
       "Worker-RM1815": {
         "session": "wrm1815-20261015",
+        "role": "Worker"
+      },
+      "Worker-RL1826": {
+        "session": "wrl1826-20261015",
         "role": "Worker"
       }
     },
@@ -36500,6 +36519,13 @@
         "issue": 775,
         "pr": 809,
         "actor": "Worker-RL1775"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-15T04:31:29+00:00",
+        "issue": 826,
+        "claim": "3f8d591b5b1449faba5004259b1493c3",
+        "actor": "Worker-RL1826"
       }
     ],
     "policy": {
