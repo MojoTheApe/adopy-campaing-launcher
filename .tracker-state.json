@@ -3120,21 +3120,21 @@
       },
       "887": {
         "kind": "independent-review",
-        "implementer": "Worker-W1886M",
-        "reviewer": "Reviewer-R1886M",
-        "review_session": "rev_r1886m_1014",
-        "execution_lane": "2b781db97eb347d4a8728baaabf1758b",
-        "head_sha": "d2e9a26a3c3a25cb3371f0be8a1f34d328ba7f9d",
-        "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-        "tree_sha": "d139c733118cfc23538926229ffe92195f8b1381",
         "verdict": "approved",
-        "report": "# ACL-1886 / PR887 independent source review - 8f3b07ac\n\nReviewer-R1886M / rev_r1886m_1014 (Coordinator-M1011A), not the author (Worker-SR1012). Lane a0e02e10f98a4486bb617a65f75b0759 obtained by review-takeover from stopped Reviewer-RS1012 lane c86db5aa (idle ~12h, no review recorded; owner reassignment 2026-10-14).\n\nExact head 8f3b07ac5e86e6a29f1a53da89477b88f54d4660, tree 7ce8602fb78ee5e8603e33a727c85ab407b9ff2f, reviewed base 7cee2857d4b374bc564c5ca84b9f6ede69f96430. NOTE: main is now df6c2e8ac491aa1d03b10ba87641d1d785685c92 (4 newer commits, ACL-1892 process tooling: delivery-check.yml, .workflow/**, AGENTS.md, delivery.json, docs/repository/*, scripts/tracker_ci_evidence.py, tracker/engine.json, two process tests). They do not overlap any of the PR's 8 files (src/fb_api/graph.py, tests, fixture, bench catalogue, docs/system). PR reported MERGEABLE.\n\nReviewed full issue 886 body, git diff 7cee2857..HEAD (8 files, +262/-1), all callers of GraphError/GraphClient.get/get_all in src (only inside graph.py; meta_campaign_agent uses separate MetaGraphError).\n\nFindings: 0 blocking.\n- _read_context copies no request data: fixed method GET, closed operation set, search_type only from a 3-literal allowlist; exact path matches, re.fullmatch with ASCII [0-9]{1,32}; non-str or >128-char paths and unhashable type values fail closed to unknown.\n- details.update(_read_context) runs after error_details, so response fields cannot spoof method/operation/search_type (tested in reply, endpoint and error objects).\n- Policy/rate/checkpoint/190 reacquire/pagination/pacing/budget code untouched; tests assert unchanged request counts and stop semantics.\n- Fixture is anonymized (generic Graph10 error, host, credentials mode). Docs state live permission cause unknown and that callers replacing exception text need their own integration (outer account_spend_api._failure is documented in the issue as not covered).\nNon-blocking nits: docs do not name account_spend_api._failure explicitly; missing blank line before the new CHANGELOG heading; extra blank lines after _read_context.\n\nTests run (affected only): tests/test_acl1886_graph_error_context.py tests/test_acl1756_fb_api.py tests/test_the_api_stop_is_asked_first.py tests/test_bench_catalogue.py -> 159 passed. Current-head GitHub checks all pass (linux 3.13 shards 1-3, windows 3.13, tooling, process, ACL verification, descriptor, installer classify/verification, tracker-link); installer build jobs skipping by classification.\n\nVerdict: approved. Does not claim the live permission cause is fixed or explained.\n\n## Delta re-review (v2) - head d2e9a26a3c3a25cb3371f0be8a1f34d328ba7f9d\n\nReviewer-R1886M / rev_r1886m_1014, new lane 2b781db97eb347d4a8728baaabf1758b. Head d2e9a26a3c3a25cb3371f0be8a1f34d328ba7f9d, tree d139c733118cfc23538926229ffe92195f8b1381, base/current main df6c2e8ac491aa1d03b10ba87641d1d785685c92 (verified unchanged just before recording). Author Worker-W1886M refreshed the branch: merge 20726b2a (parents 8f3b07ac and df6c2e8a; `git show --cc` shows no hand-resolved hunks) plus one spacing-nit commit.\n- `git diff df6c2e8a d2e9a26a --stat` is exactly the 8 PR files (+262/-1). Production graph.py is the previously reviewed 23-line addition with one blank line removed.\n- `git diff 8f3b07ac d2e9a26a -- src tests docs/system` shows only: the 2 spacing nits (blank line before the CHANGELOG heading, one blank line removed after _read_context) plus two test-file hunks (test_acl_ci_workflows.py, test_master_adoption.py) that come from main ACL-1892 and are not in the PR diff against main.\n- Affected tests re-run (graph error context, acl1756 fb_api, api-stop-first, bench catalogue): 159 passed.\n- Current-head GitHub checks all pass (ACL verification, tooling, installer classify/verification, process, descriptor, linux 3.13 shards 1-3, tracker-link, windows 3.13); installer build jobs skipping by classification.\nVerdict unchanged: approved, no blocking findings.\n",
-        "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
+        "reviewer": "Reviewer-RV1015R",
+        "review_session": "rv1015r-887",
+        "execution_lane": "2e6b36e3c70f43058147e21b746e9a76",
+        "implementer": "Worker-RG1886",
+        "head_sha": "31ee38c930d479a732fee6e346809c25cf5b655e",
+        "base_sha": "3ee7c6d9c7a394ecec9f0889805fadb188b3aab7",
+        "tree_sha": "7d825046b27edcc3d1ffa0e0e373c267fd7eed47",
+        "report": "Delta re-review of ACL-1886 (PR 887) after main moved to 3ee7c6d9. Head 31ee38c9 = previously approved d2e9a26a + merge of work/main 3ee7c6d9; 3ee7c6d9 is an ancestor of head; git show --remerge-diff HEAD is empty (clean merge, no manual resolution). git diff work/main...HEAD contains only 1886 files (graph.py +23, test_acl1886_graph_error_context.py, bench catalogue/fixture, CHANGELOG, PROJECT, fixtures README); PR is not stacked. Tests: acl1886 file 37 passed; all 14 test files referencing fb_api.graph/GraphClient plus test_bench_catalogue and test_ads_manager_bench: 984 passed. gh pr checks 887 all green (linux 1/2/3, windows, installer, tracker-link, descriptor, process instructions). No live Meta checks claimed; live Permission Denied cause remains unknown by design.",
+        "main_sha": "3ee7c6d9c7a394ecec9f0889805fadb188b3aab7",
         "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
         "issues": [
           886
         ],
-        "recorded_at": "2026-10-14T10:18:36+00:00",
+        "recorded_at": "2026-10-15T11:03:29+00:00",
         "issue_scopes": {
           "886": "291706aa97fea07f175753abc951ee231d86a7ea2d52cd679f94cf2db3f7bf9d"
         }
