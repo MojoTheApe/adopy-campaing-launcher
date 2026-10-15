@@ -13060,7 +13060,7 @@
             "session": "wrn1814-20261015"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-RN1814",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -13079,7 +13079,8 @@
         },
         "pr": 817,
         "queued_at": "2026-10-15T06:35:38+00:00",
-        "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e677f638 (ACL-1812 warm sessions, ACL-1826, ACL-1775 Instant Forms, ACL-1815 rules evidence; PR 919 -> 922). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
+        "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e677f638 (ACL-1812 warm sessions, ACL-1826, ACL-1775 Instant Forms, ACL-1815 rules evidence; PR 919 -> 922). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
+        "reviewer": "Reviewer-RV1015D"
       },
       "815": {
         "implementers": [
@@ -16008,6 +16009,10 @@
       "Reviewer-RV1015E": {
         "session": "rv1015e-803",
         "role": "Reviewer"
+      },
+      "Reviewer-RV1015D": {
+        "session": "rv1015d-817",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -18693,7 +18698,6 @@
       903,
       907,
       891,
-      814,
       872
     ],
     "review": null,
@@ -38027,6 +38031,13 @@
         "pr": 803,
         "lane": "f79f080df19d47879b418a7a0687c25d",
         "actor": "Reviewer-RV1015E"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-15T06:59:41+00:00",
+        "pr": 817,
+        "lane": "bc56f6fbb4054a23a0166c43623aff41",
+        "actor": "Reviewer-RV1015D"
       }
     ],
     "policy": {
@@ -41694,6 +41705,18 @@
         "session": "rv1015e-803",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-15T06:58:33+00:00",
+        "state": "reviewing"
+      },
+      "817": {
+        "id": "bc56f6fbb4054a23a0166c43623aff41",
+        "pr": 817,
+        "issues": [
+          814
+        ],
+        "actor": "Reviewer-RV1015D",
+        "session": "rv1015d-817",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-15T06:59:41+00:00",
         "state": "reviewing"
       }
     }
