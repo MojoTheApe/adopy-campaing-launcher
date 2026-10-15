@@ -12141,7 +12141,7 @@
             "session": "w1739f_1008"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-W1739F",
         "coordinator": "Coordinator-T1004Q",
         "handoff": {
@@ -12160,7 +12160,8 @@
         },
         "pr": 740,
         "queued_at": "2026-10-08T08:34:10+00:00",
-        "reviewer": "Reviewer-RV1015G"
+        "reviewer": "Reviewer-RV1015G",
+        "review_report": "Content approved; needs only a refresh onto current main.\n\nReviewed PR #740 / ACL-1739 (Reviewer-RV1015G) against its own merge-base 48419bde.\n\nFindings: none blocking.\n- Scope matches the issue. `_tab_frozen` in src/fb_ads_rpa/meta_dom.py now confirms a missed 5 s probe (after the ACL-1402 wake attempt) with the existing `FROZEN_CONFIRM_S` (10 s) probe before counting an episode. A tab that answers the long probe counts nothing and writes `tab_frozen` / `confirm_answered`. A tab that misses both is counted as before, so the ACL-1702 budget and the hung-tab watchdog are unchanged. A `None` from the probe (cannot ask) falls through to the old path.\n- Tests: the new test_a_busy_tab_is_not_a_frozen_episode.py covers a busy tab, a really frozen tab and the thread-local budget. The two probe-count assertions in test_a_frozen_tab_is_never_waited_on.py were updated correctly. I ran both files at the PR head: 14 passed.\n- CHANGELOG entry is present, the `Tracker issues: ACL-1739` line is in the PR body, and no secrets or ids are committed. Code comments are Russian, as the repo rule allows.\n- Minor, non-blocking: a truly frozen tab now costs up to 10 s more per check (5 s + 10 s). Accepted trade-off.\n\nApplies to current main: `git merge-tree --write-tree work/main <head>` merges meta_dom.py cleanly. The only conflict is docs/system/CHANGELOG.md (both sides add at the top). Main has 213 new commits and no equivalent fix: `_tab_frozen` on main is unchanged. `FROZEN_CONFIRM_S` exists on main but is used only in the campaign-open loop (PR #323 review F8). No merged PR addresses this.\n\nCI on the old head: windows tests and linux shards 2 and 3 pass. linux shard 1, tracker-link and ACL verification fail. These are most likely stale-base or tracker-link effects, and they must be green after the refresh.\n\nNeeded: merge or rebase onto current work/main, resolve the CHANGELOG conflict by keeping both entries, and re-run CI."
       },
       "743": {
         "implementers": [
@@ -38664,6 +38665,24 @@
         "pr": 740,
         "lane": "42a40e0469e34392b025583ad95fa71c",
         "actor": "Reviewer-RV1015G"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-15T08:13:30+00:00",
+        "review": {
+          "id": "42a40e0469e34392b025583ad95fa71c",
+          "pr": 740,
+          "issues": [
+            739
+          ],
+          "actor": "Reviewer-RV1015G",
+          "session": "rv1015g-740",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-15T08:12:34+00:00",
+          "state": "returning",
+          "report": "Content approved; needs only a refresh onto current main.\n\nReviewed PR #740 / ACL-1739 (Reviewer-RV1015G) against its own merge-base 48419bde.\n\nFindings: none blocking.\n- Scope matches the issue. `_tab_frozen` in src/fb_ads_rpa/meta_dom.py now confirms a missed 5 s probe (after the ACL-1402 wake attempt) with the existing `FROZEN_CONFIRM_S` (10 s) probe before counting an episode. A tab that answers the long probe counts nothing and writes `tab_frozen` / `confirm_answered`. A tab that misses both is counted as before, so the ACL-1702 budget and the hung-tab watchdog are unchanged. A `None` from the probe (cannot ask) falls through to the old path.\n- Tests: the new test_a_busy_tab_is_not_a_frozen_episode.py covers a busy tab, a really frozen tab and the thread-local budget. The two probe-count assertions in test_a_frozen_tab_is_never_waited_on.py were updated correctly. I ran both files at the PR head: 14 passed.\n- CHANGELOG entry is present, the `Tracker issues: ACL-1739` line is in the PR body, and no secrets or ids are committed. Code comments are Russian, as the repo rule allows.\n- Minor, non-blocking: a truly frozen tab now costs up to 10 s more per check (5 s + 10 s). Accepted trade-off.\n\nApplies to current main: `git merge-tree --write-tree work/main <head>` merges meta_dom.py cleanly. The only conflict is docs/system/CHANGELOG.md (both sides add at the top). Main has 213 new commits and no equivalent fix: `_tab_frozen` on main is unchanged. `FROZEN_CONFIRM_S` exists on main but is used only in the campaign-open loop (PR #323 review F8). No merged PR addresses this.\n\nCI on the old head: windows tests and linux shards 2 and 3 pass. linux shard 1, tracker-link and ACL verification fail. These are most likely stale-base or tracker-link effects, and they must be green after the refresh.\n\nNeeded: merge or rebase onto current work/main, resolve the CHANGELOG conflict by keeping both entries, and re-run CI.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -42376,20 +42395,6 @@
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-15T08:09:56+00:00",
         "state": "reviewing"
-      },
-      "740": {
-        "id": "42a40e0469e34392b025583ad95fa71c",
-        "pr": 740,
-        "issues": [
-          739
-        ],
-        "actor": "Reviewer-RV1015G",
-        "session": "rv1015g-740",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-15T08:12:34+00:00",
-        "state": "returning",
-        "report": "Content approved; needs only a refresh onto current main.\n\nReviewed PR #740 / ACL-1739 (Reviewer-RV1015G) against its own merge-base 48419bde.\n\nFindings: none blocking.\n- Scope matches the issue. `_tab_frozen` in src/fb_ads_rpa/meta_dom.py now confirms a missed 5 s probe (after the ACL-1402 wake attempt) with the existing `FROZEN_CONFIRM_S` (10 s) probe before counting an episode. A tab that answers the long probe counts nothing and writes `tab_frozen` / `confirm_answered`. A tab that misses both is counted as before, so the ACL-1702 budget and the hung-tab watchdog are unchanged. A `None` from the probe (cannot ask) falls through to the old path.\n- Tests: the new test_a_busy_tab_is_not_a_frozen_episode.py covers a busy tab, a really frozen tab and the thread-local budget. The two probe-count assertions in test_a_frozen_tab_is_never_waited_on.py were updated correctly. I ran both files at the PR head: 14 passed.\n- CHANGELOG entry is present, the `Tracker issues: ACL-1739` line is in the PR body, and no secrets or ids are committed. Code comments are Russian, as the repo rule allows.\n- Minor, non-blocking: a truly frozen tab now costs up to 10 s more per check (5 s + 10 s). Accepted trade-off.\n\nApplies to current main: `git merge-tree --write-tree work/main <head>` merges meta_dom.py cleanly. The only conflict is docs/system/CHANGELOG.md (both sides add at the top). Main has 213 new commits and no equivalent fix: `_tab_frozen` on main is unchanged. `FROZEN_CONFIRM_S` exists on main but is used only in the campaign-open loop (PR #323 review F8). No merged PR addresses this.\n\nCI on the old head: windows tests and linux shards 2 and 3 pass. linux shard 1, tracker-link and ACL verification fail. These are most likely stale-base or tracker-link effects, and they must be green after the refresh.\n\nNeeded: merge or rebase onto current work/main, resolve the CHANGELOG conflict by keeping both entries, and re-run CI.",
-        "keep_lane": false
       }
     }
   }
