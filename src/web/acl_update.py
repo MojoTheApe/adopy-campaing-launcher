@@ -252,7 +252,7 @@ def _check_uncached(*, fetch: bool) -> dict[str, Any]:
             "available": False,
             "current": _describe(""),
             "candidate": None,
-            "note": "This copy of ACL is not a git checkout, so it cannot update itself.",
+            "note": "This copy of ACM is not a git checkout, so it cannot update itself.",
             "supervised": is_supervised(),
         }
     current = _describe(head)
@@ -269,21 +269,29 @@ def _check_uncached(*, fetch: bool) -> dict[str, Any]:
     if not candidate_sha:
         return _no_update(current, "The release channel is unavailable on this machine.")
     if candidate_sha == head:
-        return _no_update(current, "ACL is up to date.")
+        return _no_update(current, "ACM is up to date.")
 
-    from scripts.acl_update_gate import validate_candidate
+    from scripts.acl_update_gate import UNVERIFIED_NOTE, validate_candidate
 
     allowed, detail = validate_candidate("origin/main")
     if not allowed:
         return _no_update(current, f"A newer commit exists but is not a promoted release ({detail}).")
 
     candidate = _describe(candidate_sha)
+    note = f"Update available: {candidate['tag'] or candidate['short']}."
+    # ACL-1357: гейт пропустил выпуск без проверки CI через API — причину
+    # показываем, чтобы машину без токена было видно, а не только в Sentry.
+    unverified = UNVERIFIED_NOTE in detail
+    if unverified:
+        reason = detail.split(UNVERIFIED_NOTE + ":", 1)[-1].split("; accepted", 1)[0].strip()
+        note += f" This machine could not verify its CI result ({reason})."
     return {
         "ok": True,
         "available": True,
         "current": current,
         "candidate": candidate,
-        "note": f"Update available: {candidate['tag'] or candidate['short']}.",
+        "note": note,
+        "gate": "unverified" if unverified else "verified",
         "supervised": is_supervised(),
     }
 

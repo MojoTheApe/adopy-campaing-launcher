@@ -29,7 +29,9 @@ from __future__ import annotations
 
 import csv
 import os
+import threading
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from config.paths import _replace_when_free, get_ad_account_map_path, get_local_config_dir
@@ -38,6 +40,10 @@ FIELDNAMES = ["account_name", "kind", "value"]
 KINDS = ("country", "asset")
 
 _SEEDED_MARK = ".account_links.seeded"
+
+#: ACL-1319: аккаунты, которые владелец сам убрал из Available accounts.
+HIDDEN_FIELDNAMES = ["account_name", "hidden_at"]
+_hidden_lock = threading.Lock()
 
 
 def links_path() -> Path:
@@ -72,7 +78,15 @@ def load() -> list[dict[str, str]]:
 
 
 def _write(rows: list[dict[str, str]]) -> None:
-    path = links_path()
+    _write_csv(links_path(), FIELDNAMES, rows)
+
+
+def _write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, str]]) -> None:
+    """Атомарная запись CSV: временный файл рядом и замена с ожиданием.
+
+    Одна процедура на оба файла рядом (связи и спрятанные аккаунты): второй
+    способ писать в ту же папку однажды забыл бы про короткое имя или про
+    ожидание Windows — а оба урока здесь уже оплачены."""
     path.parent.mkdir(parents=True, exist_ok=True)
     # Короткое служебное имя, а не `.{имя}.{32 hex}.tmp`: у Windows предел
     # пути 260 символов, и каталог рантайма — `.{sha40}.staging-{uuid32}` —
@@ -82,7 +96,7 @@ def _write(rows: list[dict[str, str]]) -> None:
     temp = path.with_name(f".{uuid.uuid4().hex[:8]}.tmp")
     try:
         with open(temp, "w", encoding="utf-8", newline="") as fh:
-            writer = csv.DictWriter(fh, fieldnames=FIELDNAMES, extrasaction="ignore")
+            writer = csv.DictWriter(fh, fieldnames=fieldnames, extrasaction="ignore")
             writer.writeheader()
             writer.writerows(rows)
             fh.flush()
@@ -244,6 +258,88 @@ def available_accounts(known_accounts: list[str]) -> list[str]:
     """
     placed = {r["account_name"].lower() for r in load() if r["kind"] == "country" and r["account_name"]}
     return sorted({a for a in known_accounts if _norm(a) and _norm(a).lower() not in placed})
+
+
+# ── ACL-1319: убранные из Available accounts ──────────────────────────────
+#
+# Это настройка вида одного списка и больше ничего. Строка в карте аккаунтов,
+# профиль Multilogin, размещение в странах и история в книге не трогаются:
+# «убрать» значит только «не показывать среди неразмещённых на этой машине».
+# Файл лежит рядом со связями, в машинной папке, и в гит не попадает — у
+# каждого байера свой набор. Отдельно от `hidden_accounts.json` вкладки
+# Accounts: там прячут строки общей таблицы, здесь — строки этого списка, и
+# одно не должно молча гасить другое.
+
+def hidden_path() -> Path:
+    return Path(get_local_config_dir()) / "available_hidden.csv"
+
+
+def hidden_key(account: str) -> str:
+    """Сравнение прощающее: регистр и лишние пробелы — та же строка."""
+    return " ".join(str(account or "").split()).casefold()
+
+
+def _load_hidden_rows() -> list[dict[str, str]]:
+    path = hidden_path()
+    if not path.is_file():
+        return []
+    try:
+        with path.open(encoding="utf-8-sig", newline="") as fh:
+            rows: list[dict[str, str]] = []
+            seen: set[str] = set()
+            for row in csv.DictReader(fh):
+                account = " ".join(str(row.get("account_name") or "").split())
+                key = hidden_key(account)
+                if not key or key in seen:
+                    continue
+                seen.add(key)
+                rows.append({"account_name": account, "hidden_at": _norm(row.get("hidden_at"))})
+            return rows
+    except (OSError, csv.Error, UnicodeDecodeError):
+        # Испорченная настройка вида не должна гасить список: лучше показать
+        # лишнее, чем молча спрятать всё.
+        return []
+
+
+def hidden_accounts() -> list[str]:
+    """Убранные аккаунты — в том написании, в каком их убирали."""
+    return sorted((r["account_name"] for r in _load_hidden_rows()), key=str.casefold)
+
+
+def hidden_keys() -> set[str]:
+    return {hidden_key(r["account_name"]) for r in _load_hidden_rows()}
+
+
+def hide_accounts(accounts: list[str]) -> list[str]:
+    """Убрать из Available accounts. Отдаёт тех, кого действительно добавили."""
+    wanted = [" ".join(str(a or "").split()) for a in accounts]
+    with _hidden_lock:
+        rows = _load_hidden_rows()
+        have = {hidden_key(r["account_name"]) for r in rows}
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        added: list[str] = []
+        for account in wanted:
+            key = hidden_key(account)
+            if not key or key in have:
+                continue
+            have.add(key)
+            rows.append({"account_name": account, "hidden_at": stamp})
+            added.append(account)
+        if added:
+            _write_csv(hidden_path(), HIDDEN_FIELDNAMES, rows)
+        return added
+
+
+def restore_accounts(accounts: list[str]) -> list[str]:
+    """Вернуть в список. Отдаёт тех, кто действительно был убран."""
+    keys = {hidden_key(a) for a in accounts if hidden_key(a)}
+    with _hidden_lock:
+        rows = _load_hidden_rows()
+        kept = [r for r in rows if hidden_key(r["account_name"]) not in keys]
+        restored = [r["account_name"] for r in rows if hidden_key(r["account_name"]) in keys]
+        if restored:
+            _write_csv(hidden_path(), HIDDEN_FIELDNAMES, kept)
+        return restored
 
 
 def seed_from_account_map() -> int:

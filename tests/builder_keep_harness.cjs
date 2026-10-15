@@ -43,6 +43,8 @@ function slot(idx, values = {}) {
     input('camp_' + idx + '_budget', values.budget || ''),
     input('camp_' + idx + '_asset', values.asset || ''),
     input('camp_' + idx + '_name', values.name || '', { classes: ['cb-name-hidden'] }),
+    // без `name`: своё имя живёт только в черновике (ACL-1769)
+    el('input', { classes: ['cb-name-override'], value: values.override || '' }),
     input('camp_' + idx + '_ad_0_creative_type', 'Image', { type: 'radio', checked: true }),
     input('camp_' + idx + '_ad_0_creative_type', 'Video', { type: 'radio' }),
     input('camp_' + idx + '_ad_0_copy', values.copy || ''),
@@ -195,5 +197,30 @@ t.document.fire('input', { target: { closest: (sel) => (sel === 'form.open-accou
 assert.equal(t.timers.length, before + 1, 'ввод не поставил запись в очередь');
 t.document.fire('input', { target: { closest: () => null } });
 assert.equal(t.timers.length, before + 1, 'ввод вне формы поставил запись');
+
+// ── ACL-1769: своё имя кампании — ещё одно необязательное поле ─────────
+// Форма хранения (v2) не менялась: `name_override` лежит среди `fields`
+// рядом с остальными. Значит, черновик, записанный до двухколоночного
+// билдера, раскладывается как раньше, а новый — со своим именем.
+store = memoryStore();
+t = boot({ store, slots: [{ asset: 'Alpha', name: 'SA_Alp', override: 'My own name' }] });
+t.api.save();
+entry = saved(store).forms['saudi-arabia|DQ438'];
+assert.equal(entry.campaigns[0].fields.name_override, 'My own name', 'своё имя не запомнено');
+back = boot({ store, slots: [] });
+assert.equal(back.form.querySelectorAll('.cb-slot')[0].querySelector('.cb-name-override').value, 'My own name', 'своё имя не вернулось');
+
+// Черновик, записанный раньше: поля name_override в нём нет вовсе.
+const oldDraft = { v: 2, forms: { 'saudi-arabia|DQ438': { touched: 1_700_000_000_000, tracking: '', campaigns: [
+  { fields: { asset: 'Old', age: '35', budget: '40', name: 'SA_Old_name', ad_0_creative_type: 'Image' }, shown: {}, hint: '', ads: 1 },
+] } } };
+store = memoryStore({ 'acl.builder.v2': JSON.stringify(oldDraft) });
+back = boot({ store, slots: [] });
+const restored = back.form.querySelectorAll('.cb-slot');
+assert.equal(restored.length, 1, 'старый черновик не поднялся');
+assert.equal(restored[0].querySelector('[name="camp_0_asset"]').value, 'Old');
+assert.equal(restored[0].querySelector('[name="camp_0_budget"]').value, '40');
+assert.equal(restored[0].querySelector('.cb-name-override').value, '', 'у старого черновика появилось чужое имя');
+assert.ok(restored[0]._named, 'имя старого черновика не пересобрано');
 
 console.log('ok');

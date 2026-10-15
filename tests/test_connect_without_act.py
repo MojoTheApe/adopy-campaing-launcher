@@ -137,7 +137,7 @@ def test_a_profile_opened_by_hand_is_still_refused(browser, monkeypatch, tmp_pat
     monkeypatch.setattr("src.fb_ads_rpa.browser.MultiloginDirectCDPProvider", _Running)
     ok, message = sp.open_profile_for_automation("prof-1", label="DQ438")
     assert not ok
-    assert "opened manually" in message
+    assert message == sp.HAND_OPEN_MESSAGE
     assert browser.opened_with is None, "профиль, открытый руками, всё-таки трогали"
 
 
@@ -210,19 +210,23 @@ def test_an_empty_account_number_no_longer_cancels_the_connect():
     assert "if (!act) return;" not in block, "пустой номер снова отменяет подключение"
 
 
-def test_the_prompt_offers_the_open_button_as_the_way_out():
-    """Прежний текст звал «open with automation», не говоря чем именно."""
+def test_the_prompt_says_what_to_do_when_the_profile_did_not_open():
+    """Кнопки Open больше нет (ACL-1457): выход — закрыть окно и снова Connect."""
     page = PAGE.read_text(encoding="utf-8")
-    assert "Press Open next to the profile" in page
-    assert "leave this empty to connect now" in page
+    assert "close it in Multilogin and press Connect again" in page
+    assert "leave this" in page and "empty to connect now" in page
 
 
-def test_every_found_profile_offers_open_before_connect():
+def test_every_found_profile_is_opened_by_its_connect_button():
+    """Было две кнопки в строгом порядке: Open, потом Connect. Теперь одна."""
     page = PAGE.read_text(encoding="utf-8")
     block = page[page.index("function amapRenderHits"):]
     block = block[: block.index("function amapHint")]
-    assert "amapOpenFoundProfile" in block, "кнопки Open в результатах поиска нет"
-    assert block.index("btnOpen") < block.index("btnAdd"), "порядок кнопок обратный работе"
+    assert "btnOpen" not in block, "отдельная кнопка Open вернулась"
+    assert "amapOpenAndConnect" in block, "Connect больше не открывает профиль"
+    flow = page[page.index("async function amapOpenAndConnect"):]
+    flow = flow[: flow.index("\n}\n")]
+    assert flow.index("amapOpenFoundProfile") < flow.index("amapConnect("), "подключение раньше открытия"
 
 
 def test_opening_a_found_profile_rereads_what_it_says_about_itself():

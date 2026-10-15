@@ -92,13 +92,13 @@ def test_update_is_refused_when_the_gate_offers_nothing(monkeypatch, tmp_path):
     monkeypatch.setattr(
         acl_update,
         "check",
-        lambda **k: _offer(available=False, candidate=None, note="ACL is up to date."),
+        lambda **k: _offer(available=False, candidate=None, note="ACM is up to date."),
     )
 
     response = asyncio.run(_request("POST", "/acl/update/apply"))
 
     assert response.status_code == 400
-    assert response.json()["error"] == "ACL is up to date."
+    assert response.json()["error"] == "ACM is up to date."
     assert not (tmp_path / acl_update.RESTART_MARKER).exists()
 
 
@@ -189,4 +189,27 @@ def test_check_reports_nothing_to_do_when_head_is_the_channel(monkeypatch):
     result = acl_update.check(fetch=False, use_cache=False)
 
     assert result["available"] is False
-    assert result["note"] == "ACL is up to date."
+    assert result["note"] == "ACM is up to date."
+
+
+@pytest.mark.parametrize("detail,gate,shown", [
+    ("acl-release-x (bbbbbbbbbbbb, CI run 1 verified)", "verified", None),
+    ("acl-release-x (bbbbbbbbbbbb) - CI not verified: CI run 1 could not be verified: GitHub answered HTTP 403; "
+     "accepted on the release tag's record (warn mode)", "unverified", "GitHub answered HTTP 403"),
+])
+def test_an_update_the_gate_could_not_verify_says_so(monkeypatch, detail, gate, shown):
+    """ACL-1357: a machine without a token for the Actions API is visible on the page."""
+    monkeypatch.setattr(
+        acl_update,
+        "_git_out",
+        lambda *a, **k: "b" * 40 if a[:2] == ("rev-parse", "origin/main^{commit}") else "a" * 40,
+    )
+    monkeypatch.setattr("scripts.acl_update_gate.validate_candidate", lambda *a, **k: (True, detail))
+
+    result = acl_update.check(fetch=False, use_cache=False)
+
+    assert result["available"] is True and result["gate"] == gate
+    if shown:
+        assert "could not verify its CI result" in result["note"] and shown in result["note"]
+    else:
+        assert "verify" not in result["note"]

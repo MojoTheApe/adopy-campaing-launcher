@@ -38,13 +38,16 @@ def sent(monkeypatch, tmp_path):
     return out
 
 
-def test_a_failed_step_is_reported(sent):
+def test_a_failed_row_alone_is_not_reported(sent):
+    """ACL-1318: строка с `ok=False` сама по себе в Sentry не едет — только
+    остановка попытки и блокирующие отказы итога (`sentry_signal`). Строка
+    запоминается: её причина и снимок станут контекстом такого события."""
     rt.record("placements", False, run_id="r1", campaign="GT_x",
               diag={"why": "таблица campaign: table-loading"})
-    assert len(sent) == 1
-    assert sent[0]["step"] == "placements"
-    assert sent[0]["why"] == "таблица campaign: table-loading"
-    assert sent[0]["run_id"] == "r1" and sent[0]["campaign"] == "GT_x"
+    assert sent == []
+    seen = rt.last_failure("placements", "r1")
+    assert seen["why"] == "таблица campaign: table-loading"
+    assert seen["diag"] == {"why": "таблица campaign: table-loading"}
 
 
 @pytest.mark.parametrize("ok", [True, None])
@@ -63,8 +66,8 @@ def test_success_and_skips_are_not_reported(sent, ok):
 ])
 def test_the_reason_is_found_wherever_the_step_put_it(sent, payload, expected):
     """Шаги кладут причину в три разных поля — так сложилось за полтора года."""
-    rt.record("ad_copy", False, **payload)
-    assert sent[0]["why"] == expected
+    rt.record("ad_copy", False, run_id=f"r-why-{expected}", **payload)
+    assert rt.last_failure("ad_copy", f"r-why-{expected}")["why"] == expected
 
 
 def test_a_broken_collector_does_not_break_the_run(monkeypatch, tmp_path):
@@ -76,6 +79,10 @@ def test_a_broken_collector_does_not_break_the_run(monkeypatch, tmp_path):
 
     monkeypatch.setattr(acl_sentry, "report_step_failure", _boom)
     rt.record("placements", False, diag={"why": "что угодно"})  # не бросает
+    from src.fb_ads_rpa import sentry_signal
+
+    assert sentry_signal.report_campaign_stop("campaign_name") == ""  # не бросает
+    assert sentry_signal.report_blocking_failures(["placements"]) == [""]
     assert (tmp_path / "telemetry.jsonl").exists(), "журнал всё равно записан"
 
 

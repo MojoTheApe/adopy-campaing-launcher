@@ -42,6 +42,7 @@ def quiet(monkeypatch):
     md._telemetry.set_current_run("run-x", "camp")
     md._uploaded_ok.clear(); md._failed_uploads.clear()
     yield
+    md._set_upload_why(None)
     md._uploaded_ok.clear(); md._failed_uploads.clear()
 
 
@@ -66,29 +67,84 @@ def test_a_copy_found_through_the_wizard_attaches_the_second_ad(quiet, monkeypat
 
 
 def test_no_copy_is_a_named_refusal_not_an_upload(quiet, monkeypatch):
+    """ACL-1637: «копии нет» ведёт к одной свежей заливке, но только если файл
+    до Meta не доходил. Файл, который Meta уже отвергла, второй раз не грузим:
+    объявление отказывает именованной причиной."""
     said: list[tuple] = []
     monkeypatch.setattr(md._telemetry, "record", lambda step, ok=None, **k: said.append((step, ok, k.get("note"))))
     uploads: list[bool] = []
 
     def fake_upload(page, ct, cp, *, edit_url="", reuse_only=False):
         uploads.append(reuse_only)
+        if reuse_only:
+            md._set_upload_why(md.LIBRARY_HAS_NO_COPY)
         return not reuse_only
 
     monkeypatch.setattr(md, "upload_ad_creative", fake_upload)
     md.upload_ad_creative_with_retry(object(), "video", FILE)
+    # Файл уже отвергнут Meta на соседнем объявлении.
+    md._failed_uploads[md._upload_memo_key(FILE)] = "media_refused_on_ad"
     assert md.upload_ad_creative_with_retry(object(), "video", FILE) is False
-    assert uploads == [False, True], "после отказа медиатеки не должно быть настоящей заливки"
+    assert uploads == [False, True], "отвергнутый Meta файл заново не грузим"
     assert ("ad_creative_upload", False, "same_file_already_uploaded_this_run") in said
 
 
 # ── reuse_only внутри самого шага ─────────────────────────────────────────
 
-def test_reuse_only_stops_before_the_upload_and_closes_the_wizard(monkeypatch):
-    """Мастер открыт, копии нет — закрыть и выйти, ничего не заливая."""
-    closed: list[bool] = []
-    src = __import__("inspect").getsource(md.upload_ad_creative)
-    assert "if reuse_only:" in src and "_close_creative_setup_modal(page)" in src.split("if reuse_only:")[1][:400]
-    assert "library_has_no_copy" in src
+def _reuse_only_block():
+    import ast
+    import inspect
+    import textwrap
+
+    tree = ast.parse(textwrap.dedent(inspect.getsource(md.upload_ad_creative)))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.If) and isinstance(node.test, ast.Name) and node.test.id == "reuse_only":
+            return node
+    raise AssertionError("в upload_ad_creative нет ветки `if reuse_only:`")
+
+
+def _calls_in(nodes) -> list[str]:
+    import ast
+
+    names = []
+    for top in nodes:
+        for n in ast.walk(top):
+            if isinstance(n, ast.Call):
+                f = n.func
+                names.append(f.id if isinstance(f, ast.Name) else getattr(f, "attr", ""))
+    return names
+
+
+def test_reuse_only_stops_before_the_upload_and_closes_the_wizard():
+    """Правило ACL-1637: в режиме reuse_only копию ищем и по имени сжатого
+    файла, при её отсутствии закрываем мастер и называем причину; заливки в
+    этой ветке нет — её решает вызывающий."""
+    import ast
+
+    block = _reuse_only_block()
+    calls = _calls_in(block.body)
+    assert "_reuse_known_copy" in calls, "медиатека ищется и по имени сжатой копии"
+    assert "_close_creative_setup_modal" in calls, "мастер закрыт"
+    assert block.body and isinstance(block.body[-1], ast.Return), "ветка выходит, не заливая"
+    assert not {"set_input_files", "_upload_in_progress"} & set(calls)
+    dumped = ast.dump(block)
+    assert "LIBRARY_HAS_NO_COPY" in dumped or "library_has_no_copy" in dumped
+    assert calls.index("_reuse_known_copy") < calls.index("_close_creative_setup_modal")
+
+
+def test_a_failed_library_pick_is_named_left_selection():
+    """`known is False` (выбор не снялся) — это `library_pick_left_selection`."""
+    import ast
+
+    block = _reuse_only_block()
+    found = False
+    for n in ast.walk(block):
+        if (isinstance(n, ast.If) and isinstance(n.test, ast.Compare)
+                and isinstance(n.test.left, ast.Name) and n.test.left.id == "known"
+                and isinstance(n.test.ops[0], ast.Is)
+                and getattr(n.test.comparators[0], "value", None) is False):
+            found = "library_pick_left_selection" in ast.dump(n)
+    assert found
 
 
 # ── выбор плитки при непустом счётчике ────────────────────────────────────
@@ -133,7 +189,6 @@ class _Grid:
 def _wire(monkeypatch, grid):
     monkeypatch.setattr(md, "_library_tiles", lambda page, filename: grid)
     monkeypatch.setattr(md, "_library_search", lambda page, filename: True)
-    monkeypatch.setattr(md, "_library_tile_ready", lambda tile: True)
     monkeypatch.setattr(md, "_tile_thumb_ids", lambda tile: ["111111_2222222222_3333333333_n"])
     monkeypatch.setattr(md, "_library_selected_count", lambda page: 1)   # всегда 1: эксклюзивно
     monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
@@ -236,11 +291,18 @@ def test_media_already_on_the_ad_is_recognised_by_todays_labels():
         b.close()
 
 
-def test_unreadable_attachment_after_selection_stays_dirty(monkeypatch):
+def test_a_different_thumbnail_after_selection_stays_dirty(monkeypatch):
+    """Чужая миниатюра на объявлении после выбора — отказ без загрузки.
+
+    Порт ACL-1284, вариант A (решение владельца 24.09): раньше здесь стояло
+    «нечитаемое медиа после выбора — dirty» (строгая проверка #238). В живом
+    коде нечитаемое медиа отказом не является — наличие медиа проверено
+    отдельно, и сверка миниатюр пишет `thumb: unconfirmed`. Инвариант, который
+    остаётся: другой файл на объявлении — никогда не наш креатив.
+    """
     verify = md._verify_ad_media_is_the_file
     grid = _Grid()
     page = _wire(monkeypatch, grid)
     monkeypatch.setattr(md, "_verify_ad_media_is_the_file", verify)
-    # This page double has no DOM reader. A selected tile and generic media
-    # presence cannot make that missing identity safe for upload fallback.
+    monkeypatch.setattr(md, "_ad_media_thumb_ids", lambda page: ["999999_8888888888_7777777777_n"])
     assert md._try_reuse_library_media(page, "2012.mp4") == md.REUSE_DIRTY

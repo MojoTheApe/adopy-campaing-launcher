@@ -249,7 +249,7 @@ def sanitized_setup_summary(configuration: MachineConfiguration, version: str) -
     instances = sorted({assignment.multilogin_instance for assignment in configuration.accounts})
     return "\n".join(
         (
-            "Adopy Campaign Launcher setup summary",
+            "Adopy Campaign Manager setup summary",
             f"Installer version: {version}",
             "Status: base setup ready; account connection continues in the dashboard",
             f"Assigned accounts: {len(configuration.accounts)} (labels and IDs omitted)",
@@ -289,7 +289,7 @@ class SetupWizard:
             value=self._existing_env_value("FB_CREATIVES_ROOT") or str(default_creatives_directory()))
         self.status = tk.StringVar()
 
-        root.title("Adopy Campaign Launcher Setup")
+        root.title("Adopy Campaign Manager Setup")
         # 590 точек в высоту резали низ окна вместе с кнопкой «Next», и
         # человек оказывался в тупике на ровном месте (24.09). Запас оставлен
         # с тем же умыслом: шаг «Local files» ещё подрастёт (ACL-1305).
@@ -373,7 +373,7 @@ class SetupWizard:
         self.next_button.config(state="normal")
 
     def _welcome(self) -> None:
-        self._text("Set up Adopy Campaign Launcher on this computer", bold=True)
+        self._text("Set up Adopy Campaign Manager on this computer", bold=True)
         self._text(self.version_text)
         self._text(
             "This wizard only configures the local application. It cannot create, publish, or change a campaign."
@@ -394,6 +394,8 @@ class SetupWizard:
         self.tk.Label(self.body, text="Your name", anchor="w").pack(fill="x")
         self.tk.Entry(self.body, textvariable=self.campaign_manager_name).pack(fill="x", pady=(2, 12))
         self._text("ACL finds your ad accounts in the workbook by this name.")
+        self._text("Run reports from this computer are labelled with this name, so support can tell whose "
+                   "runs they are. You can change the label later in the dashboard (Accounts → This computer).")
 
     def _path_row(self, label: str, variable, directory: bool = False) -> None:
         from tkinter import filedialog
@@ -440,7 +442,7 @@ class SetupWizard:
                    "“Connect Multilogin”, then sign in with your Multilogin email and password.")
 
     def _finish(self) -> None:
-        self._text("Adopy Campaign Launcher is ready on this computer.", bold=True, color="#17663a")
+        self._text("Adopy Campaign Manager is ready on this computer.", bold=True, color="#17663a")
         self._text("No campaign action was performed. The first campaign run must remain supervised.")
         self._text("Click Close to open the dashboard. Then open Accounts and press Connect Multilogin "
                    "to sign in — until that is done the robot cannot open a profile.")

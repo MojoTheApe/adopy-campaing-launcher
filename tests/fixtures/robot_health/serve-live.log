@@ -1,0 +1,43 @@
+[serve] RPA flow version: v96+9@d24c42c
+[serve] RPA flow version: v96+13@8cf4d93
+[serve] RPA flow version: v96+15@60aaae2
+[serve] RPA flow version: v96+29@f7ed367
+[serve] RPA flow version: v96+29@7dd36ae
+[serve] RPA flow version: v96+32@bbe44bf
+[serve] RPA flow version: v96+35@f036583
+[serve] RPA flow version: v96+35@f036583
+[serve] RPA flow version: v96+36@0c46414
+[serve] RPA flow version: v96+36@2e59a46
+[serve] RPA flow version: v96+39@354d610
+INFO:     127.0.0.1:1 - "GET /publish-jobs/job-0001/progress HTTP/1.1" 200 OK
+INFO:     127.0.0.1:1 - "GET /publish-jobs/job-0002/progress HTTP/1.1" 200 OK
+INFO:     127.0.0.1:1 - "GET /publish-jobs/job-0003/progress HTTP/1.1" 200 OK
+INFO:     127.0.0.1:1 - "GET /publish-jobs/job-0004/progress HTTP/1.1" 200 OK
+INFO:     127.0.0.1:1 - "GET /publish-jobs/job-0005/progress HTTP/1.1" 200 OK
+INFO:     127.0.0.1:1 - "GET /publish-jobs/job-0006/progress HTTP/1.1" 200 OK
+[serve] RPA flow version: v96+6@8e5823c
+[serve] RPA flow version: v96+6@b49f81b
+INFO:     127.0.0.1:1 - "GET /publish-jobs/job-0007/progress HTTP/1.1" 200 OK
+INFO:     127.0.0.1:1 - "GET /publish-jobs/job-0008/progress HTTP/1.1" 200 OK
+INFO:     127.0.0.1:1 - "GET /publish-jobs/job-0009/progress HTTP/1.1" 200 OK
+[serve] RPA flow version: v96+7@d3a67e7
+INFO:     127.0.0.1:1 - "GET /publish-jobs/job-0010/progress HTTP/1.1" 200 OK
+INFO:     127.0.0.1:1 - "GET /publish-jobs/job-0011/progress HTTP/1.1" 200 OK
+[serve] RPA flow version: v96+7@d3a67e7
+INFO:     127.0.0.1:1 - "GET /publish-jobs/job-0012/progress HTTP/1.1" 200 OK
+INFO:     127.0.0.1:1 - "GET /publish-jobs/job-0013/progress HTTP/1.1" 200 OK
+INFO:     127.0.0.1:1 - "GET /publish-jobs/job-0014/progress HTTP/1.1" 200 OK
+INFO:     127.0.0.1:1 - "GET /publish-jobs/job-0015/progress HTTP/1.1" 200 OK
+[serve] RPA flow version: v96+10@ddaf19b
+INFO:     127.0.0.1:1 - "GET /publish-jobs/job-0016/progress HTTP/1.1" 200 OK
+INFO:     127.0.0.1:1 - "GET /publish-jobs/job-0017/progress HTTP/1.1" 200 OK
+INFO:     127.0.0.1:1 - "GET /publish-jobs/job-0018/progress HTTP/1.1" 200 OK
+INFO:     127.0.0.1:1 - "GET /publish-jobs/job-0019/progress HTTP/1.1" 200 OK
+INFO:     127.0.0.1:1 - "GET /publish-jobs/job-0020/progress HTTP/1.1" 200 OK
+[serve] RPA flow version: v96+13@410bd23
+INFO:     127.0.0.1:1 - "GET /publish-jobs/job-0021/progress HTTP/1.1" 200 OK
+INFO:     127.0.0.1:1 - "GET /publish-jobs/job-0022/progress HTTP/1.1" 200 OK
+INFO:     127.0.0.1:1 - "GET /publish-jobs/job-0023/progress HTTP/1.1" 200 OK
+INFO:     127.0.0.1:1 - "GET /publish-jobs/job-0024/progress HTTP/1.1" 200 OK
+INFO:     127.0.0.1:1 - "GET /publish-jobs/job-0025/progress HTTP/1.1" 200 OK
+INFO:     127.0.0.1:1 - "GET /publish-jobs/job-0026/progress HTTP/1.1" 200 OK

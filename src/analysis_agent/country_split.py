@@ -38,13 +38,21 @@ from src.fb_ads_rpa.operations import serialized_browser
 from src.analysis_agent.account_spend import (
     _act_from_url,
     _profile_key,
+    ProfileNotAttachable,
     _attach_only,
     _entry_for,
     _period_matches,
     _read_status,
     _shoot,
     _sleep,
+    LOGGED_OUT_CODE,
+    _ReadOpen,
+    _finish_started,
+    _logged_out,
+    logged_out_message,
+    opening_closed_profile,
 )
+from src.fb_ads_rpa import profile_trouble as _profile_trouble
 
 #: Экран отчётов Ads Manager. `?act=` обязателен — без него Reporting
 #: откроет «какой-нибудь» кабинет, а чтение чужого кабинета — отказ.
@@ -77,6 +85,9 @@ class CountrySplit:
     #: «что мы вообще читали»: в отчёте байера могут висеть чужие фильтры.
     entered: str = ""
     error: str = ""
+    #: ACL-1518: устойчивое имя отказа (`open_by_hand`) — строка карты пишет
+    #: простой текст вместо «countries failed».
+    error_code: str = ""
     shot: str = ""
     #: Когда чтение началось и когда закончилось (ACL-1282).
     started_at: str = ""
@@ -176,6 +187,13 @@ def running_now() -> list[str]:
         return sorted({k.split("|")[0] for k in _RUNNING})
 
 
+def default_reader():
+    """Чем читать страны: `insights?breakdowns=country` (ACL-1760) или отчёт Ads Manager."""
+    from src.analysis_agent import account_spend_api
+
+    return account_spend_api.read_country_split_via_api if account_spend_api.api_enabled() else read_country_split
+
+
 def start_split(
     account: str,
     date_from: str,
@@ -210,7 +228,7 @@ def start_split(
             _RUNNING.discard(key)
             raise
 
-    fn = reader or read_country_split
+    fn = reader or default_reader()
 
     def run() -> None:
         try:
@@ -777,17 +795,17 @@ _DATE_CONTROLS_JS = "() => {" + _VISIBLE_JS + """
 _PICK_PIVOT_JS = "() => {" + _VISIBLE_JS + """
   const dlg = [...document.querySelectorAll('[role="dialog"]')].filter(visible)
     .find(d => norm(d.innerText).includes('create your report'));
-  if (!dlg) return { ok: false, why: 'диалог выбора вида отчёта не найден' };
+  if (!dlg) return { ok: false, why: 'report type dialog not found' };
   const rows = [...dlg.querySelectorAll('div,li,label')].filter(visible)
     .filter(e => norm(e.innerText).startsWith('pivot table'))
     .sort((a, b) => a.querySelectorAll('*').length - b.querySelectorAll('*').length);
-  if (!rows.length) return { ok: false, why: 'варианта «Pivot table» в диалоге нет' };
+  if (!rows.length) return { ok: false, why: 'no "Pivot table" option in the dialog' };
   let radio = null, node = rows[0];
   for (let i = 0; i < 4 && node && node !== dlg && !radio; i++) {
     radio = node.querySelector('[role="radio"],input[type="radio"]');
     node = node.parentElement;
   }
-  if (!radio) return { ok: false, why: 'у варианта «Pivot table» нет переключателя' };
+  if (!radio) return { ok: false, why: 'the "Pivot table" option has no radio button' };
   const aria = radio.getAttribute('aria-checked');
   const on = aria !== null ? aria === 'true' : !!radio.checked;
   if (!on) radio.click();
@@ -858,8 +876,8 @@ _SECTION_CHECKBOX_JS = "(args) => {" + _VISIBLE_JS + """
     // Без этого следующий разбор снова начнётся с живого прогона.
     const seen = [...new Set(leaves.map(e => norm(e.textContent))
       .filter(t => args.sections.some(s => norm(s) === t)))];
-    return { ok: false, why: 'раздел «' + args.section + '» найден ' + heads.length
-      + ' раз(а); в панели видно: ' + (seen.join(', ') || 'ни одного раздела') };
+    return { ok: false, why: 'section "' + args.section + '" found ' + heads.length
+      + ' time(s); the panel shows: ' + (seen.join(', ') || 'no sections') };
   }
   const start = top(heads[0]);
   const others = leaves.filter(e => args.sections.some(s => norm(e.textContent) === norm(s)))
@@ -873,10 +891,10 @@ _SECTION_CHECKBOX_JS = "(args) => {" + _VISIBLE_JS + """
   };
   const boxes = [...document.querySelectorAll('[role="checkbox"],input[type="checkbox"]')]
     .filter(el => visible(el) && top(el) >= start && top(el) < end && name(el) === norm(args.label));
-  if (boxes.length !== 1) return { ok: false, why: 'в разделе найдено ' + boxes.length + ' шт.' };
+  if (boxes.length !== 1) return { ok: false, why: 'found ' + boxes.length + ' checkboxes in the section' };
   const el = boxes[0];
   if (el.disabled || el.getAttribute('aria-disabled') === 'true' || el.indeterminate)
-    return { ok: false, why: 'галочка недоступна' };
+    return { ok: false, why: 'the checkbox is disabled' };
   const aria = el.getAttribute('aria-checked');
   const state = aria !== null ? aria === 'true' : !!el.checked;
   if (state !== args.wanted) el.click();
@@ -899,7 +917,7 @@ def _set_section_checkbox(page, section: str, label: str, wanted: bool) -> tuple
     Состояние перечитывается после клика: у переключателя нажатие и
     результат — разные вещи, и на этом мы уже обжигались дважды за сутки.
     """
-    why = "не пробовали"
+    why = "not tried"
     for _ in range(6):
         try:
             res = page.evaluate(
@@ -911,7 +929,7 @@ def _set_section_checkbox(page, section: str, label: str, wanted: bool) -> tuple
             res, why = {}, str(exc)[:80]
         if res.get("ok"):
             if res.get("was") == wanted:
-                return True, "уже стояла как надо"
+                return True, "already set"
             _sleep(1)
             try:
                 again = page.evaluate(
@@ -922,8 +940,8 @@ def _set_section_checkbox(page, section: str, label: str, wanted: bool) -> tuple
             except Exception:
                 again = {}
             if again.get("ok") and again.get("was") == wanted:
-                return True, "переключили"
-            why = "клик не удержался"
+                return True, "switched"
+            why = "the click did not stick"
         else:
             why = str(res.get("why") or why)
         _sleep(1)
@@ -1007,11 +1025,11 @@ def _set_period(page, date_from: str, date_to: str) -> tuple[bool, str]:
                 control = text
                 break
     except Exception as exc:
-        return False, f"не удалось найти кнопку периода ({str(exc)[:60]})"
+        return False, f"could not look for the period button ({str(exc)[:60]})"
     if not control:
-        return False, "кнопка периода не найдена"
+        return False, "period button not found"
     if not _click_label(page, control, tries=6, allow_many=True):
-        return False, f"кнопка периода «{control}» не нажалась"
+        return False, f"period button \"{control}\" did not respond"
     _sleep(2)
 
     found = 0
@@ -1024,7 +1042,7 @@ def _set_period(page, date_from: str, date_to: str) -> tuple[bool, str]:
             break
         _sleep(1)
     if found != 2:
-        return False, f"полей периода найдено {found}, а нужно два"
+        return False, f"found {found} period fields, expected two"
 
     read = "() => [...document.querySelectorAll('[data-acl-date]')].map(e => (e.value || '').trim())"
     got: tuple = ()
@@ -1050,7 +1068,7 @@ def _set_period(page, date_from: str, date_to: str) -> tuple[bool, str]:
             _sleep(0.7)
             _type_into('[data-acl-date="to"]', _typed_date(date_to))
         except Exception as exc:
-            return False, f"поля периода не заполнились ({str(exc)[:60]})"
+            return False, f"could not type into the period fields ({str(exc)[:60]})"
         _sleep(1)
         try:
             got = tuple(page.evaluate(read) or ())
@@ -1059,11 +1077,11 @@ def _set_period(page, date_from: str, date_to: str) -> tuple[bool, str]:
         if len(got) == 2 and _same_day(got[0], date_from) and _same_day(got[1], date_to):
             break
     else:
-        return False, (f"в полях осталось {list(got)}, "
-                       f"а вводили {[_typed_date(date_from), _typed_date(date_to)]}")
+        return False, (f"the period fields show {list(got)}, "
+                       f"but we typed {[_typed_date(date_from), _typed_date(date_to)]}")
 
     if not _click_label(page, "Update", tries=6):
-        return False, "«Update» не нажалась"
+        return False, "\"Update\" did not respond"
     _sleep(3)
     return True, f"{_meta_date(date_from)} — {_meta_date(date_to)}"
 
@@ -1120,22 +1138,22 @@ def _leave_open_report(page) -> tuple[bool, str]:
     знать, откуда мы пришли, важнее, чем кажется.
     """
     if "/reporting/view" not in _page_url(page):
-        return True, "сразу на списке отчётов"
+        return True, "already on the reports list"
     if not _click_label(page, "All reports", tries=6):
-        return False, "«All reports» не нашлась — из отчёта не выйти"
+        return False, "«All reports» not found — cannot leave the report"
     _sleep(2)
     try:
         asked = bool(page.evaluate(_UNSAVED_DIALOG_JS))
     except Exception:
         asked = False
     if asked and not _click_label(page, "Don't save", tries=6):
-        return False, "запрос о несохранённых изменениях не закрылся"
+        return False, "the unsaved-changes prompt did not close"
     for _ in range(12):
         if "/reporting/manage" in _page_url(page):
-            return True, "вышли из открытого отчёта" + (
-                ", изменения не сохраняли" if asked else "")
+            return True, "left the open report" + (
+                ", changes not saved" if asked else "")
         _sleep(1)
-    return False, "из отчёта выйти не удалось"
+    return False, "could not leave the report"
 
 
 def _click_label(page, label: str, tries: int = 10, *, allow_many: bool = False) -> bool:
@@ -1211,18 +1229,32 @@ def read_country_split(account: str, date_from: str, date_to: str = "") -> Count
     date_to = date_to or date_from
     out = CountrySplit(account=account, date_from=date_from, date_to=date_to)
     conn = None
+    held = _ReadOpen(account)
     try:
         entry = _entry_for(account)
         if entry is None:
-            raise ValueError(f"{account} нет в карте аккаунтов")
+            raise ValueError(f"{account} is not in the account map")
         act = (entry.ad_account_id or "").strip()
         url = _reporting_url(act, date_from, date_to)  # validate before attach
         expected_act = "act_" + act.removeprefix("act_")
-        conn = _attach_only(entry, account)
+        # ACL-1518: окно, открытое руками, переоткрывается путём Publish.
+        # ACL-1580: закрытый профиль чтение запускает само и потом закрывает.
+        with opening_closed_profile(held):
+            conn = _attach_only(entry, account)
         page = conn.page
-        page.goto(url, timeout=REPORT_TIMEOUT_MS, wait_until="domcontentloaded")
+        try:
+            page.goto(url, timeout=REPORT_TIMEOUT_MS, wait_until="domcontentloaded")
+        except Exception as exc:
+            if _profile_trouble.classify_error(exc)[0] == LOGGED_OUT_CODE:
+                raise ProfileNotAttachable(logged_out_message(account), code=LOGGED_OUT_CODE) from exc
+            raise
+        if _logged_out(page):
+            # Разлогинен — понятная строка и никаких повторов.
+            raise ProfileNotAttachable(logged_out_message(account), code=LOGGED_OUT_CODE)
         _sleep(4)
         if _act_from_url(page, tries=6) != expected_act:
+            if _logged_out(page, deep=True):
+                raise ProfileNotAttachable(logged_out_message(account), code=LOGGED_OUT_CODE)
             raise ValueError("Ads Reporting opened a different account; reading refused")
         out.status, out.status_text = _read_status(page)
         # Дождаться интерфейса и выйти из отчёта, который Reporting открыл сам:
@@ -1255,7 +1287,7 @@ def read_country_split(account: str, date_from: str, date_to: str = "") -> Count
         if not pick.get("ok"):
             raise ValueError(
                 "could not open fresh report: Pivot table — "
-                + str(pick.get("why") or "диалог не ответил")
+                + str(pick.get("why") or "the dialog did not answer")
             )
         _sleep(1)
         if not _click_label(page, "Continue", tries=8):
@@ -1294,10 +1326,10 @@ def read_country_split(account: str, date_from: str, date_to: str = "") -> Count
                 controls = page.evaluate(_DATE_CONTROLS_JS) or []
             except Exception:
                 controls = []
-            shown = _shown_period_text(page) or "(период не распознан)"
+            shown = _shown_period_text(page) or "(period not recognised)"
             raise ValueError(
                 "Displayed report period does not match the requested dates: "
-                f"на экране {shown!r}; чем задаётся период: {controls}"
+                f"shown {shown!r}; period controls: {controls}"
             )
 
         rows, how = [], "refused: report not loaded"
@@ -1322,8 +1354,8 @@ def read_country_split(account: str, date_from: str, date_to: str = "") -> Count
                 dropped = page.evaluate("() => window.__aclDropped || []") or []
             except Exception:
                 dropped = []
-            tail = f"; не легло в колонки: {dropped}" if dropped else ""
-            raise ValueError(f"{how}; таблица: [{shown[:600]}]{tail}")
+            tail = f"; did not fit the columns: {dropped}" if dropped else ""
+            raise ValueError(f"{how}; table: [{shown[:600]}]{tail}")
         if _act_from_url(page, tries=1) != expected_act:
             raise ValueError("Account changed during reading; result refused")
         if not _period_matches(_shown_period_text(page), date_from, date_to):
@@ -1335,6 +1367,14 @@ def read_country_split(account: str, date_from: str, date_to: str = "") -> Count
     except Exception as exc:
         out.state, out.rows = "failed", []
         out.error = str(exc) or type(exc).__name__
+        out.error_code = str(getattr(exc, "code", "") or "") if isinstance(exc, ProfileNotAttachable) else ""
+        if not out.error_code:
+            # ACL-1826: вход в прокси читается одной фразой.
+            from src.fb_api import mlx_session as _mlx
+
+            _text, _code = _mlx.humanize(exc, "", account)
+            if _code:
+                out.error, out.error_code = _text, _code
     finally:
         # Persist failures too: a failed retry must not expose an old success.
         try:
@@ -1350,14 +1390,18 @@ def read_country_split(account: str, date_from: str, date_to: str = "") -> Count
                     save_split(out)
                 except Exception:
                     pass
-            try:
-                conn.page.close()  # _attach_only creates a separate owned tab
-            except Exception:
-                pass
+            if not held.keep_tab:
+                try:
+                    conn.page.close()  # _attach_only creates a separate owned tab
+                except Exception:
+                    pass
             try:
                 conn.close(keep_browser_open=True)
             except Exception:
                 pass
+        # ACL-1580: профиль, который запустило это чтение (или Read spend перед
+        # ним), закрывается мягкой остановкой — и при отказе тоже.
+        _finish_started(held)
     return out
 
 

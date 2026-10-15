@@ -4,6 +4,11 @@ The setup wizard asks for both once; afterwards the manager changes them in the
 dashboard instead of editing `.env`. Values live in the machine `.env` under the
 keys the rest of ACL already reads (`FB_STATS_EXCEL`, `FB_CREATIVES_ROOT`) and are
 applied to the running process at once.
+
+ACL-1447: the manager label (`ACL_MACHINE_LABEL`) lives here too — every Sentry
+event from this computer carries it as the `manager` tag. The setup wizard sets
+it to the manager's name; this screen changes it without touching `MY_CM_NAME`,
+which decides whose accounts the report shows.
 """
 from __future__ import annotations
 
@@ -19,6 +24,15 @@ class MachinePathError(ValueError):
     """A path the manager can correct: missing file, wrong type, no access."""
 
 
+def manager_name() -> str:
+    """The label run reports carry: `ACL_MACHINE_LABEL`, else `MY_CM_NAME`."""
+    for key in ("ACL_MACHINE_LABEL", "MY_CM_NAME"):
+        value = (os.environ.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
 def current() -> dict:
     stats, creatives = get_excel_path(), get_creatives_root()
     return {
@@ -26,7 +40,19 @@ def current() -> dict:
         "stats_workbook_found": Path(stats).is_file(),
         "creatives_folder": creatives,
         "creatives_folder_found": Path(creatives).is_dir(),
+        "manager_name": manager_name(),
     }
+
+
+def check_manager_name(raw: str) -> str:
+    name = " ".join((raw or "").split())
+    if len(name) < 2:
+        raise MachinePathError("Enter your name (at least 2 characters).")
+    if len(name) > 60:
+        raise MachinePathError("The name is too long (60 characters at most).")
+    if any(ch in name for ch in '"\\=<>'):
+        raise MachinePathError("Use letters, digits and spaces in the name.")
+    return name
 
 
 def _clean(raw: str) -> str:
@@ -63,14 +89,17 @@ def check_creatives_folder(raw: str) -> tuple[str, bool]:
         except OSError as exc:
             raise MachinePathError(f"The Creatives folder could not be created: {exc}") from exc
     if not os.access(path, os.R_OK):
-        raise MachinePathError(f"ACL cannot read {path}.")
+        raise MachinePathError(f"ACM cannot read {path}.")
     return str(path.resolve()), created
 
 
-def save(stats_workbook: str | None = None, creatives_folder: str | None = None) -> dict:
-    """Validate everything first, then write both values in one update."""
+def save(stats_workbook: str | None = None, creatives_folder: str | None = None,
+         manager: str | None = None) -> dict:
+    """Validate everything first, then write all values in one update."""
     values: dict[str, str] = {}
     created = False
+    if manager is not None:
+        values["ACL_MACHINE_LABEL"] = check_manager_name(manager)
     if stats_workbook is not None:
         values["FB_STATS_EXCEL"] = check_stats_workbook(stats_workbook)
     if creatives_folder is not None:

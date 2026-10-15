@@ -78,7 +78,7 @@ def _collect_jobs(
             path_err: str | None = None
             if filename:
                 try:
-                    creative_path = str(find_creative_file(root, filename))
+                    creative_path = str(find_creative_file(root, filename, fresh=True))
                 except CreativeNotFoundError as e:
                     path_err = str(e)
                 except AmbiguousCreativeError as e:

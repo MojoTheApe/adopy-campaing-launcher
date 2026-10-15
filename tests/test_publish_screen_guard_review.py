@@ -10,6 +10,9 @@ from src.web import keep_awake as ka
 from src.web import publish_jobs as pj
 from src.fb_ads_rpa import run_telemetry as rt
 
+# ACL-1582: файл идёт только в Windows-задание CI; причина — в маркере.
+pytestmark = pytest.mark.windows_only(reason="real Windows session and screen APIs (ProcessIdToSessionId, keep-awake)")
+
 
 @pytest.fixture
 def job(monkeypatch):
@@ -17,6 +20,10 @@ def job(monkeypatch):
     monkeypatch.setattr(pj, '_clear_inherited_asyncio_loop', lambda: None)
     monkeypatch.setattr(pj, '_write_draft_status', lambda *a, **kw: None)
     monkeypatch.setattr(rt, 'screen_locked', lambda: None)
+    # ACL-1603: первому профилю тоже нужен запас памяти; своя память — не хоста.
+    from src.web import profile_slots as ps
+    monkeypatch.setattr(pj, '_slots', ps.ProfileSlots(
+        memory=lambda: ps.MemoryReading(total_mb=65536, available_mb=49152)))
     key = pj.create_job('Offline', 'Test', [{}])
     yield key
     with pj._jobs_lock:

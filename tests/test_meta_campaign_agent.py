@@ -1,3 +1,4 @@
+import os
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -6,7 +7,7 @@ import pytest
 
 from src.meta_campaign_agent.ad_account_map import AccountMapEntry, load_ad_account_map, resolve_account_entry
 from src.meta_campaign_agent.campaign_builder import PublishJob, build_publish_job
-from src.meta_campaign_agent.creative_finder import AmbiguousCreativeError, find_creative_file
+from src.meta_campaign_agent.creative_finder import AmbiguousCreativeError, CreativeNotFoundError, find_creative_file
 from src.meta_campaign_agent.excel_reader import UploadRow
 from src.meta_campaign_agent.meta_publisher import MetaPublisher
 from src.meta_campaign_agent.profile_proxy import ProfileProxy
@@ -50,6 +51,72 @@ def test_find_creative_ambiguous():
             find_creative_file(root, "dup.mp4")
 
 
+def test_find_creative_file_rejects_a_symlink_that_escapes_the_root():
+    """ACL-1342 S02: `is_file()` идёт по ссылке молча — ссылка может лежать
+    внутри корня и указывать на файл снаружи (например, системный файл)."""
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d) / "creatives"
+        outside = Path(d) / "outside"
+        root.mkdir()
+        outside.mkdir()
+        secret = outside / "secret.txt"
+        secret.write_text("not a creative", encoding="utf-8")
+
+        link = root / "escape.jpg"
+        try:
+            os.symlink(secret, link)
+        except (OSError, NotImplementedError):
+            pytest.skip("нет прав на создание symlink в этом окружении")
+
+        with pytest.raises(CreativeNotFoundError):
+            find_creative_file(root, "escape.jpg")
+
+
+def test_find_creative_file_still_finds_a_symlink_that_stays_inside_the_root():
+    """Фикс не должен отказывать ссылкам, которые целят внутрь того же
+    корня — только тем, что указывают наружу."""
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        real = root / "sub" / "real.jpg"
+        real.parent.mkdir()
+        real.write_bytes(b"x")
+
+        link = root / "alias.jpg"
+        try:
+            os.symlink(real, link)
+        except (OSError, NotImplementedError):
+            pytest.skip("нет прав на создание symlink в этом окружении")
+
+        found = find_creative_file(root, "alias.jpg")
+        assert found == link
+
+
+def test_the_realpath_escape_check_itself_does_not_need_symlink_privilege(monkeypatch):
+    """`os.symlink` требует привилегию, которой это окружение может не
+    выдавать (уже видно по скипам выше) — сама проверка эскейпа устроена
+    так, что её можно проверить и без реальной ссылки: достаточно
+    подменить `os.path.realpath`, ровно то, что функция и вызывает для
+    каждого совпадения."""
+    from src.meta_campaign_agent import creative_finder as cf
+
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        (root / "escape.jpg").write_bytes(b"x")
+        outside_real = str(Path(d).parent / "somewhere_outside" / "secret.jpg")
+
+        real_realpath = os.path.realpath
+
+        def fake_realpath(p):
+            if os.fspath(p).endswith("escape.jpg"):
+                return outside_real
+            return real_realpath(p)
+
+        monkeypatch.setattr(cf.os.path, "realpath", fake_realpath)
+
+        with pytest.raises(CreativeNotFoundError):
+            find_creative_file(root, "escape.jpg")
+
+
 def test_profile_proxy_to_requests():
     p = ProfileProxy.from_csv_fields(
         proxy_type="http",
@@ -63,7 +130,7 @@ def test_profile_proxy_to_requests():
     assert proxies["https"] == "http://u:p@1.2.3.4:8080"
 
 
-def test_meta_publisher_success_chain():
+def test_meta_publisher_success_chain(tmp_path: Path):
     client = MagicMock()
     client.create_campaign.return_value = "camp_1"
     client.create_ad_set.return_value = "adset_1"
@@ -97,9 +164,42 @@ def test_meta_publisher_success_chain():
     )
     assert not job.errors
 
-    pub = MetaPublisher(client, uploader, log_path="output/test_publish_log.jsonl")
+    pub = MetaPublisher(client, uploader, log_path=str(tmp_path / "test_publish_log.jsonl"))
     result = pub.publish_job(job)
     assert result.success
     assert result.campaign_id == "camp_1"
     assert result.ad_id == "ad_1"
     uploader.upload_image.assert_called_once()
+
+
+# --- ACL-1783: версия Graph/Marketing API по умолчанию ---
+
+def test_acl1783_default_graph_version_is_v26(monkeypatch):
+    from src.meta_campaign_agent.meta_client import (
+        DEFAULT_GRAPH_VERSION, MetaClient, MetaClientConfig, meta_client_from_env)
+    assert DEFAULT_GRAPH_VERSION == "v26.0"
+    assert MetaClient(MetaClientConfig(access_token="t")).base_url == "https://graph.facebook.com/v26.0"
+    assert MetaClient(MetaClientConfig(access_token="t", graph_version=" ")).base_url.endswith("/v26.0")
+    monkeypatch.setenv("META_ACCESS_TOKEN", "t")
+    monkeypatch.delenv("META_GRAPH_API_VERSION", raising=False)
+    assert meta_client_from_env().base_url.endswith("/v26.0")
+    monkeypatch.setenv("META_GRAPH_API_VERSION", "v25.0")
+    assert meta_client_from_env().base_url.endswith("/v25.0")
+
+
+def test_acl1783_payloads_have_no_v26_removed_fields():
+    """Поля, убранные/изменённые в v24-v26 (placements, poll, advantage_audience), мы не шлём."""
+    import inspect
+    from src.meta_campaign_agent import meta_client
+    src = inspect.getsource(meta_client)
+    for bad in ("messenger_positions", "instagram_positions", "poll_spec", "applink_treatment"):
+        assert bad not in src
+    sent = []
+
+    class C(meta_client.MetaClient):
+        def post_form(self, path, data=None):
+            sent.append((path, data)); return {"id": "1"}
+    c = C(meta_client.MetaClientConfig(access_token="t"))
+    c.create_campaign("act_1", name="n", objective="OUTCOME_LEADS", status="PAUSED")
+    assert sent[0][1]["is_adset_budget_sharing_enabled"] == "false"
+    assert sent[0][1]["special_ad_categories"] == "[]"

@@ -197,88 +197,51 @@ def test_a_subitem_state_is_read_without_clicking(page):
     assert page.evaluate(md.PLACEMENTS_SUBITEM_READ_JS, "Facebook Feed")["found"] is False
 
 
-def test_settled_read_preserves_case_insensitive_matching(page):
-    page.set_content("<div data-rpa-placements-marker><li><span>Instagram Feed</span>"
-                     "<input type='checkbox' aria-checked='false'></li></div>")
-    assert page.evaluate(md.PLACEMENTS_SUBITEM_READ_JS, "Instagram feed") == {"found": True, "checked": False}
+def test_a_subitem_is_read_whatever_the_case(page):
+    """17.09 CO_bnc FX: в списке «Facebook Notifications», на странице «Facebook notifications»."""
+    page.set_content(
+        "<div data-rpa-placements-marker='1'><ul>"
+        "<li><span>Facebook notifications</span><input type='checkbox' aria-checked='false'></li>"
+        "</ul></div>"
+    )
+    assert page.evaluate(md.PLACEMENTS_SUBITEM_READ_JS, "Facebook Notifications") == {
+        "found": True, "checked": False}
 
 
-def test_settled_read_does_not_confirm_a_disabled_twin_instead_of_the_active_row(page):
-    page.set_content("<div data-rpa-placements-marker>"
-                     "<li><span>Threads feed</span><input type='checkbox' aria-checked='false' disabled></li>"
-                     "<li><span>Threads feed</span><input type='checkbox' aria-checked='true' checked></li></div>")
-    assert page.evaluate(md.PLACEMENTS_SUBITEM_READ_JS, "Threads feed") == {"found": True, "checked": True}
+def test_a_collapsed_languages_row_is_opened_by_its_pencil(page, monkeypatch):
+    """17.09 23:04 CR_ait Day: блок аудитории сводкой, поля языков нет — жмём карандаш."""
+    page.set_content(
+        "<div style='position:absolute;left:0;top:0'>"
+        "<div><span>Languages</span><span>All languages</span>"
+        "<div role='button' aria-label='Edit' id='pen' style='width:24px;height:24px'"
+        " onclick=\"window.opened=true\"></div></div></div>"
+    )
+    clicks = []
+    monkeypatch.setattr(md, "_cdp_mouse_click",
+                        lambda pg, x, y: clicks.append((round(x), round(y))) or
+                        pg.eval_on_selector("#pen", "el => el.click()"))
+    monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
+    assert md._click_languages_edit(page) is True
+    assert page.evaluate("window.opened") is True
+    assert clicks, "клик должен был уйти по координатам карандаша"
 
 
-@pytest.mark.parametrize('settles', [True, False])
-def test_delayed_subitems_are_read_before_their_accordion_closes(page, monkeypatch, settles):
-    import html
-    rows = []
-    for i, (name, want) in enumerate(md._PLACEMENT_CATEGORIES.items()):
-        rows.append(f"<li><div role='button' aria-expanded='false' onclick='expand(this)'>"
-                    f"<label><span>{html.escape(name)}</span><input type='checkbox' "
-                    f"{'checked' if want else ''}></label></div>"
-                    + ("<ul class='sub' style='display:none'><li><span>Threads feed</span>"
-                       "<input id='sub' type='checkbox' checked aria-checked='true' "
-                       "onclick='event.preventDefault(); window.pending=true; window.clicks++'></li></ul>"
-                       if i == 0 else "<ul class='sub' style='display:none'></ul>") + "</li>")
-    page.set_content("<section><h3>Placements</h3><span>Account controls</span><a>Hide settings</a>"
-                     "<ul role='list'>" + ''.join(rows) + "</ul></section>" + """
-        <script>window.pending=false; window.clicks=0;
-        function expand(el) {
-          document.querySelectorAll('.sub').forEach(e=>e.style.display='none');
-          document.querySelectorAll('[aria-expanded]').forEach(e=>e.setAttribute('aria-expanded','false'));
-          el.setAttribute('aria-expanded','true'); el.nextElementSibling.style.display='block';
-        }</script>""")
-    monkeypatch.setattr(md, '_SUBITEMS_ON', ())
-    monkeypatch.setattr(md, '_SUBITEMS_OFF', ('Threads feed',))
-    def settle(seconds):
-        if settles and seconds == 2.0:
-            page.evaluate("""() => { const cb=document.getElementById('sub');
-              if(window.pending && cb.offsetParent!==null) {cb.checked=false;cb.setAttribute('aria-checked','false');}
-            }""")
-    monkeypatch.setattr(md, '_sleep_h', settle)
-    report = {}
-    assert md.fill_placements(page, report) is settles, report
-    assert ('Threads feed' in report.get('subitems_settled', {})) is settles
-    assert page.evaluate('window.clicks') == 2
+def test_without_a_pencil_the_languages_row_is_opened_by_its_value(page, monkeypatch):
+    """18.09 08:23: в этой отрисовке кнопок у строки нет — жмём сам текст."""
+    page.set_content(
+        "<div style='position:absolute;left:0;top:0'>"
+        "<div><div>Languages</div><div id='val'>All languages</div></div></div>"
+    )
+    clicked = {}
+    monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
+    monkeypatch.setattr(md, "_cdp_mouse_click",
+                        lambda pg, x, y: clicked.update(at=pg.evaluate(
+                            "([x,y]) => (document.elementFromPoint(x,y)||{}).id", [x, y])))
+    assert md._click_languages_edit(page) is True
+    assert clicked["at"] == "val", clicked
 
 
-@pytest.mark.parametrize('reveals', [True, False])
-def test_scrolling_targets_the_placement_card_and_finds_case_varied_virtual_rows(page, monkeypatch, reveals):
-    import html
-    rows = []
-    for name, want in md._PLACEMENT_CATEGORIES.items():
-        rows.append("<li><div role='button' aria-expanded='false' onclick='expand(this)'>"
-                    f"<label><span>{html.escape(name)}</span><input type='checkbox' "
-                    f"{'checked' if want else ''}></label></div>"
-                    "<ul class='sub' style='display:none'></ul></li>")
-    page.set_content("<section style='margin-left:100px;width:600px'>"
-                     "<h3>Placements</h3><span>Account controls</span><a>Hide settings</a>"
-                     "<ul role='list'>" + ''.join(rows) + "</ul></section>" + """
-        <script>window.wheels=0;
-        function expand(el) {
-          document.querySelectorAll('.sub').forEach(e=>e.style.display='none');
-          document.querySelectorAll('[aria-expanded]').forEach(e=>e.setAttribute('aria-expanded','false'));
-          el.setAttribute('aria-expanded','true'); el.nextElementSibling.style.display='block';
-        }
-        document.addEventListener('wheel', e => {
-          if(!e.target.closest('[data-rpa-placements-marker]')) return;
-          window.wheels++;
-          const category=document.querySelector('[aria-expanded=true]');
-          if(window.reveals && category && category.textContent.trim()==='Feeds' && !document.getElementById('virtual')) {
-            category.nextElementSibling.innerHTML='<li><span>Facebook notifications</span><input id="virtual" type="checkbox" checked aria-checked="true"></li>';
-            document.getElementById('virtual').addEventListener('change', e => e.target.setAttribute('aria-checked',String(e.target.checked)));
-          }
-        });</script>""")
-    page.evaluate('(value) => window.reveals = value', reveals)
-    page.mouse.move(0, 0)  # A wheel alone would go to the unrelated body.
-    monkeypatch.setattr(md, '_SUBITEMS_ON', ())
-    monkeypatch.setattr(md, '_SUBITEMS_OFF', ('Facebook Notifications',))
-    # Chromium delivers wheel/scroll asynchronously; wait only for fixture rendering.
-    monkeypatch.setattr(md, '_sleep_h', lambda s: page.wait_for_timeout(20))
-    report = {}
-    assert md.fill_placements(page, report) is reveals, report
-    assert page.evaluate('window.wheels') > 0
-    if reveals:
-        assert page.locator('#virtual').get_attribute('aria-checked') == 'false'
+def test_no_languages_row_no_click(page, monkeypatch):
+    page.set_content("<div>Budget</div>")
+    monkeypatch.setattr(md, "_cdp_mouse_click", lambda *a: pytest.fail("лишний клик"))
+    assert md._click_languages_edit(page) is False

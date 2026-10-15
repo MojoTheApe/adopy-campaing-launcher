@@ -33,15 +33,14 @@
         книжные тоталы страны (те же my_totals, что показывал overview),
         колонки выровнены общей сеткой, у строк с нулём аккаунтов красная
         подсветка: деньги в книге идут, а картой они не покрыты. -#}
+    {#- ACL-1652: шесть метрик (Spend · Leads · FTDs · CPL · CPA · CR) из
+        `_metrics.html`, как и во всех таблицах атрибуции. -#}
+    {% import "_metrics.html" as mx %}
     <div class="amap-grid-head" aria-hidden="true">
       <span></span>
       <span>Country</span>
       <span title="Spend read from the ad accounts themselves for the period on screen">Account read</span>
-      <span class="num">Spend</span>
-      <span class="num">Dep</span>
-      <span class="num">Leads</span>
-      <span class="num">CPA</span>
-      <span class="num">CR</span>
+      {{ mx.span_headers() }}
       <span class="num">Accounts</span>
       <span></span>
     </div>
@@ -54,7 +53,9 @@
              data-country="{{ (mc.key or mc.country) | e }}"
              data-country-name="{{ mc.country | e }}">
       <summary class="amap-row">
-        <span class="amap-cell-name">{{ mc.country }}</span>
+        <span class="amap-cell-name">{{ mc.country }}
+          {#- ACL-1721: заметки у стран убраны (хранятся в файле, но не показываются и не правятся); остались только заметки аккаунтов. -#}
+        </span>
         {#- Спенд, снятый с самих кабинетов (Read). Прочерк значит «никто не
             читал», это не ноль.
 
@@ -91,11 +92,8 @@
           </i>
           {%- endif %}
         </span>
-        <span class="num"><b>{{ bk.spend | fmt_usd if bk.spend else '—' }}</b></span>
-        <span class="num"><b>{{ bk.deposits if bk.deposits is defined and bk.deposits is not none else '—' }}</b></span>
-        <span class="num"><b>{{ bk.leads if bk.leads is defined and bk.leads is not none else '—' }}</b></span>
-        <span class="num"><b>{% if bk.deposits %}{{ (bk.spend / bk.deposits) | fmt_usd }}{% else %}—{% endif %}</b></span>
-        <span class="num"><b>{% if bk.leads %}{{ '%.1f%%' | format(100 * (bk.deposits or 0) / bk.leads) }}{% else %}—{% endif %}</b></span>
+        {#- У страны без строк в книге (`book` пуст) чисел нет — прочерки, а не нули. -#}
+        {% if bk %}{{ mx.spans(bk.spend, bk.leads, bk.deposits) }}{% else %}{{ mx.dash_spans() }}{% endif %}
         <span class="num{% if not mc.rows %} amap-nocov-count{% endif %}"><b>{{ mc.rows | length }}</b></span>
         <span class="amap-cell-act">
           {%- if not mc.virtual %}
@@ -137,28 +135,54 @@
     </div></div>
     {% endif %}
 
-    {# Свободные аккаунты: настроены и подключены, но не размещены ни в одной
-       стране. Сюда же падают аккаунты закрытой страны — связь снимается,
-       аккаунт остаётся. #}
-    <details class="amap-country amap-available" {% if amap.available %}open{% endif %}>
-      <summary>
-        Available accounts
-        <span class="amap-sum"><span><b>{{ amap.available | length }}</b> not placed</span></span>
-      </summary>
-      {% if amap.available %}
-      <table>
-        <thead><tr><th>Account</th><th>Ad Asset</th></tr></thead>
-        <tbody>
-        {% for r in amap.available %}
-          <tr>
-            <td class="amap-acc">{{ r.account }}</td>
-            <td>{% if r.assets %}<span class="amap-tags">{% for a in r.assets %}<span class="amap-tag">{{ a }}</span>{% endfor %}</span>{% else %}<span class="nodata">—</span>{% endif %}</td>
-          </tr>
+    {#- ACL-1654: строка Totals — суммы Spend/Leads/FTDs по странам, а CPL, CPA и
+        CR посчитаны из этих сумм (не среднее по странам). Колонки те же. -#}
+    {% if amap.countries and amap.totals %}
+    {% set tt = amap.totals %}
+    <div class="amap-total-row amap-row" id="amap-totals">
+      <span></span>
+      <span class="amap-cell-name">Total</span>
+      <span class="amap-cell-read"
+            title="{{ tt.read_count }} of {{ tt.accounts }} accounts read. The accounts' own spend, added up once per account; shown only when every read account is in the same currency{% if tt.mixed %} — mixed currencies here, so not added up{% endif %}, otherwise a dash.">
+        {%- if tt.read %}<b>{{ tt.read.spend | fmt_summary_amount(tt.read.currency) }}</b>{% else %}<b>—</b>{% endif %}</span>
+      {{ mx.spans(tt.spend, tt.leads, tt.deposits) }}
+      <span class="num"><b>{{ amap.countries | sum(attribute='rows', start=[]) | length }}</b></span>
+      <span></span>
+    </div>
+    {% endif %}
+
+    {% include "_account_map_available.html" %}
+
+    {#- ACL-1656: Campaign managers — внизу Home, свёрнуто. Строка страны —
+        сумма всех менеджеров, под ней менеджеры; текущий подсвечен. Строки
+        те же, что у CM Comparison в Manage. Раскрытие помнит localStorage
+        (`acl.amap.open`, тот же ключ, что у стран на карте). -#}
+    {% if amap.cm_section %}
+    <details class="amap-cm" data-country="__cm__" id="amap-cm">
+      <summary class="amap-cm-title"><h3>Campaign managers</h3>
+        <span class="amap-note">every manager in each country · you are highlighted</span></summary>
+      <div class="amap-grid-head" aria-hidden="true">
+        <span></span><span>Country / manager</span><span></span>
+        {{ mx.span_headers() }}
+        <span></span><span></span>
+      </div>
+      {% for g in amap.cm_section %}
+      <details class="amap-cm-country" data-country="__cm__:{{ g.country | e }}">
+        <summary class="amap-cm-row amap-row">
+          <span class="amap-cell-name">{{ g.country }}</span>
+          {{ mx.spans(g.spend, g.leads, g.deposits) }}
+          <span></span><span></span>
+        </summary>
+        {% for r in g.rows %}
+        <div class="amap-cm-row amap-row amap-cm-person{% if r.is_me %} me{% endif %}">
+          <span></span>
+          <span class="amap-cell-name">{{ r.cm }}{% if r.is_me %} (you){% endif %}</span>
+          {{ mx.spans(r.spend, r.leads, r.deposits) }}
+          <span></span><span></span>
+        </div>
         {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-      <div class="amap-empty">Every configured account is placed in a country.</div>
-      {% endif %}
+      </details>
+      {% endfor %}
     </details>
+    {% endif %}
   </div>

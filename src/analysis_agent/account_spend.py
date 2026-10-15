@@ -8,10 +8,13 @@
 * **Только по нажатию.** Никаких таймеров и фоновых обходов: опрос Ads Manager
   по расписанию уже предшествовал чекпоинту на телефон. Нажатие человека —
   человеческое поведение, расписание — нет.
-* **Только прицепиться, никогда не перезапускать.** Профиль должен быть уже
-  открыт автоматизацией; читаем в этом же окне. Перезапуск ради одного числа
-  разлогинивает аккаунт — так и вышло на x01, — а ветка перезапуска вдобавок
-  умеет терять прокси. Обычный браузер не годится ни при каких обстоятельствах.
+* **Никогда не перезапускать открытое.** Открытый автоматизацией профиль
+  читаем в его же окне. Перезапуск ради одного числа разлогинивает аккаунт —
+  так и вышло на x01, — а ветка перезапуска вдобавок умеет терять прокси.
+  Закрытый профиль чтение запускает само (ACL-1580) тем же путём, что кнопка
+  «open profile» — это обычное открытие, не перезапуск, — и после чтения
+  мягко закрывает то, что запустило. Обычный браузер не годится ни при каких
+  обстоятельствах.
 * **Число без подтверждённого периода — не число.** Прежде чем вернуть спенд,
   на странице сверяется показанный диапазон дат. Иначе достаточно смены
   параметра в URL, чтобы получить чужой день с видом правильного ответа.
@@ -24,7 +27,10 @@ import re
 import tempfile
 import os
 import threading
+import uuid
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
@@ -38,6 +44,7 @@ from src.fb_ads_rpa.operations import (
     publish_lease,
     serialized_browser,
 )
+from src.fb_ads_rpa import profile_trouble as _profile_trouble
 
 _STORE_LOCK = threading.RLock()
 _UNSAVED: dict[str, "SpendReading"] = {}
@@ -189,12 +196,19 @@ class SpendReading:
     state: str = "idle"           # idle | running | ok | failed
     how: str = ""                 # каким приёмом прочитано — чтобы знать, что сломалось
     error: str = ""
+    #: ACL-1518: устойчивое имя отказа для экрана (`open_by_hand`) — по нему
+    #: строка пишет простой текст вместо «failed · retry». Пусто — обычный отказ.
+    error_code: str = ""
     started_at: str = ""
     finished_at: str = ""
     took_s: float = 0.0
     shot: str = ""                # скриншот при неудаче
     status: str = ""              # см. _read_status: clear | disabled | restricted | review | unknown
     status_text: str = ""         # словами страницы — человеку с этим идти и разбираться
+    #: Снимок страницы с проблемным состоянием (ACL-1430) — id для
+    #: `/account-spend/status-shot/<id>`, не путь: путь наружу не отдаётся.
+    status_shot: str = ""
+    status_shot_at: str = ""
 
     #: Дерево аккаунта: кампании и объявления с их id и положением тумблера.
     #: Читается тем же нажатием, что и спенд (решение владельца 11.09) — см.
@@ -204,9 +218,110 @@ class SpendReading:
     objects: list[dict] = field(default_factory=list)
     objects_error: str = ""
     objects_how: str = ""         # чем разобрана таблица — чтобы знать, что сломалось
+    #: ACL-1504: дошло ли чтение до самого списка кампаний. `False` — не
+    #: дошло (Ads Manager не открылся, открылся чужой кабинет…), и пустой
+    #: `objects` тогда значит «не прочитано», а не «0 кампаний». `None` — запись
+    #: старше этого поля: тогда судим по ней самой, см. `tree_not_read`.
+    objects_read: bool | None = None
+    #: ACL-1504: последнее удачно прочитанное дерево аккаунта, если это чтение
+    #: до списка не дошло: `{objects, at, date_from, date_to}`. Иначе пусто.
+    objects_prev: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        out = asdict(self)
+        # ACL-1504: текст ошибки дерева уходит на экран и в «Technical
+        # details» — без id кабинета и адресов. Чистим здесь, на выходе, чтобы
+        # это касалось и записей, сохранённых до правки.
+        out["objects_error"] = scrub_tree_error(self.objects_error)
+        if tree_not_read(self):
+            out["objects_problem"] = tree_problem(self.objects_error)
+        return out
+
+
+# ─────────────────────── дерево не прочитано (ACL-1504) ───────────────────────
+
+_URL_RE = re.compile(r"""\b(?:https?|wss?)://[^\s"'<>)\]]+""", re.I)
+_ACT_ID_RE = re.compile(r"\bact_\d+")
+#: Токен Meta сам по себе, без `access_token=` и вне адреса (ревью L1):
+#: `run_telemetry.scrub` ловит его только по имени ключа.
+_META_TOKEN_RE = re.compile(r"\bEAA[A-Za-z0-9]{20,}")
+
+
+def scrub_tree_error(text: str) -> str:
+    """Текст ошибки дерева без `act=`/`act_` id, адресов и токенов Meta."""
+    from src.fb_ads_rpa import run_telemetry
+
+    out = _URL_RE.sub("<url>", str(text or ""))
+    out = _ACT_ID_RE.sub("act_<hidden>", out)
+    out = _META_TOKEN_RE.sub("<token>", out)
+    return run_telemetry.scrub(out)
+
+
+def tree_not_read(reading: "SpendReading") -> bool:
+    """Чтение не дошло до списка кампаний — показывать «not read», не «0».
+
+    Старые записи поля `objects_read` не знают: у них пустое дерево вместе с
+    ошибкой значит то же самое — удачно прочитанный пустой список ошибки не
+    оставляет.
+    """
+    if reading.state != "ok":
+        return False
+    if reading.objects_read is not None:
+        return not reading.objects_read
+    return not reading.objects and bool(reading.objects_error)
+
+
+#: Сырые ошибки дерева → одна фраза человеку и что делать. Подход ACL-1437
+#: (`failure_policy.GUIDE`), но своё и местное: здесь читают, а не строят.
+_TREE_RETRY = "Open the profile in Multilogin, check Ads Manager loads, close it, then Read again."
+_TREE_GUIDE: tuple[tuple[str, str, str], ...] = (
+    # (признак в сырой ошибке, причина, что делать)
+    ("navigation failed", "Ads Manager did not open.", _TREE_RETRY),
+    ("did not load in time", "The campaign table did not load in time.", _TREE_RETRY),
+    ("a different ad account opened", "Ads Manager opened a different ad account.",
+     "Open the profile in Multilogin, switch Ads Manager to this ad account, close it, then Read again."),
+    ("a different period is on screen", "Ads Manager showed a different period.",
+     "Read again; if it repeats, check the date picker in Ads Manager."),
+    ("table was not parsed", "The campaign table could not be read.", _TREE_RETRY),
+    ("unexpected page response", "The campaign table could not be read.", _TREE_RETRY),
+)
+
+
+def tree_problem(error: str) -> dict[str, str]:
+    """Почему список кампаний не прочитан — одной фразой, и что делать."""
+    low = str(error or "").lower()
+    for sign, reason, action in _TREE_GUIDE:
+        if sign in low:
+            if sign == "navigation failed":
+                m = re.search(r"timeout\s+(\d+)\s*ms", low)
+                if m:
+                    reason = f"Ads Manager did not open in {int(m.group(1)) // 1000} s."
+            return {"reason": reason, "action": action}
+    return {"reason": "The campaign list was not reached.", "action": _TREE_RETRY}
+
+
+def _last_good_tree(data: dict[str, dict], account: str) -> dict:
+    """Последнее удачно прочитанное дерево аккаунта за любой период.
+
+    Берём и из записей, которые сами несут прежнее дерево (`objects_prev`):
+    две неудачи подряд не должны стирать то, что было прочитано до них.
+    """
+    best: dict = {}
+    for key, rec in data.items():
+        if key.startswith(_STATUS_PREFIX) or not isinstance(rec, dict):
+            continue
+        if rec.get("account") != account:
+            continue
+        got: dict = {}
+        if rec.get("objects") and rec.get("objects_read") is not False:
+            got = {"objects": rec["objects"], "at": str(rec.get("finished_at") or ""),
+                   "date_from": str(rec.get("date_from") or ""),
+                   "date_to": str(rec.get("date_to") or "")}
+        elif isinstance(rec.get("objects_prev"), dict) and rec["objects_prev"].get("objects"):
+            got = dict(rec["objects_prev"])
+        if got and str(got.get("at") or "") > str(best.get("at") or ""):
+            best = got
+    return best
 
 
 # ─────────────────────────── хранилище ───────────────────────────
@@ -239,7 +354,10 @@ def _save_all(data: dict[str, dict]) -> None:
             json.dump(data, handle, ensure_ascii=False, indent=2)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(tmp, p)
+        # Windows на миг держит файл (прошлая подмена, Defender, индексатор) и
+        # отвечает WinError 5 — показание Read терялось (ACL-1466). Ждём, как
+        # файл связей (ACL-1216); упорный отказ по-прежнему бросает.
+        paths._replace_when_free(tmp, p)
     finally:
         if tmp is not None:
             tmp.unlink(missing_ok=True)
@@ -260,9 +378,17 @@ def get_reading(account: str, date_from: str, date_to: str) -> SpendReading:
         return _restore_reading(key, raw)
 
 
+#: Те же четыре знака, что `account_spend_api._SIGNS` (импорт оттуда — цикл).
+_API_SIGNS = {"USD": "$", "EUR": "€", "GBP": "£", "ILS": "₪"}
+
+
 def _restore_reading(key: str, raw: dict) -> SpendReading:
     known = SpendReading.__dataclass_fields__
     reading = SpendReading(**{k: v for k, v in raw.items() if k in known})
+    if reading.source == "api":
+        # API-чтения до 10.10 сохраняли ISO-код («USD 179.47» не влезал в ячейку);
+        # показываем знаком, как новые чтения (`account_spend_api.display_currency`).
+        reading.currency = _API_SIGNS.get(str(reading.currency or "").strip().upper(), reading.currency)
     if reading.state == "running" and key not in _RUNNING:
         reading.state = "failed"
         reading.error = "Reading was interrupted. You can retry."
@@ -320,12 +446,18 @@ def _put(reading: SpendReading) -> None:
     with _STORE_LOCK:
         data = _load_all()
         key = _key(reading.account, reading.date_from, reading.date_to)
+        if tree_not_read(reading) and not reading.objects_prev:
+            # ACL-1504: список не прочитан — прежнее дерево остаётся на экране
+            # со своей датой, а не исчезает вместе с неудачей.
+            reading.objects_prev = _last_good_tree(data, reading.account)
         data[key] = reading.to_dict()
         if reading.status:
             data[_STATUS_PREFIX + reading.account] = {
                 "status": reading.status,
                 "status_text": reading.status_text,
                 "at": reading.finished_at or _now(),
+                "shot_id": reading.status_shot,
+                "shot_at": reading.status_shot_at,
             }
         _save_all(data)
         _UNSAVED.pop(key, None)
@@ -336,15 +468,50 @@ def get_status(account: str) -> dict[str, str]:
 
     Пусто и `clear` — разное. Первое значит «не смотрели», второе — «смотрели,
     предупреждений не было». Экран обязан их различать.
+
+    И ещё одно различие (ACL-1391): состояние, которое с тех пор не удалось
+    перечитать. 30.09 карта показывала у Doc20 «no warning» от 22.09, хотя
+    все чтения после этого упали, а сам кабинет уже был отключён. Старый ответ
+    выглядел как сегодняшний. `stale` говорит, что после этого состояния была
+    попытка чтения, и она ничего о состоянии не узнала.
     """
-    raw = _load_all().get(_STATUS_PREFIX + account)
+    data = _load_all()
+    raw = data.get(_STATUS_PREFIX + account)
     if not isinstance(raw, dict):
         return {}
-    return {
+    at = str(raw.get("at") or "")
+    out = {
         "status": str(raw.get("status") or ""),
         "status_text": str(raw.get("status_text") or ""),
-        "at": str(raw.get("at") or ""),
+        "at": at,
+        "at_short": f"{at[8:10]}.{at[5:7]}.{at[2:4]}" if len(at) >= 10 else "",
+        "stale": "",
+        "tried_at": "",
+        "tried_error": "",
+        "shot_id": "",
+        "shot_at": "",
     }
+    # Кнопка «Copy screenshot» — только у снимка, который ещё лежит на диске.
+    shot_id = str(raw.get("shot_id") or "")
+    if shot_id and out["status"] != "clear" and status_shot_path(shot_id) is not None:
+        out["shot_id"] = shot_id
+        out["shot_at"] = str(raw.get("shot_at") or "")
+    last_at, last = "", None
+    for key, rec in data.items():
+        if key.startswith(_STATUS_PREFIX) or not isinstance(rec, dict):
+            continue
+        if rec.get("account") != account:
+            continue
+        finished = str(rec.get("finished_at") or "")
+        if finished > last_at:
+            last_at, last = finished, rec
+    # Чтение, которое прочитало состояние, само его и записало с тем же
+    # временем, поэтому «позже» здесь значит только неудачу до состояния.
+    if last is not None and at and last_at > at and not last.get("status"):
+        out["stale"] = "1"
+        out["tried_at"] = last_at
+        out["tried_error"] = str(last.get("error") or "")[:200]
+    return out
 
 
 # ─────────────────────────── очередь ───────────────────────────
@@ -423,7 +590,7 @@ def start_read(
             _RUNNING.discard(key)
             raise
 
-    fn = reader or read_via_rpa
+    fn = reader or default_reader()
 
     def run() -> None:
         started = time.time()
@@ -431,9 +598,13 @@ def start_read(
             with browser_operation.reading(), _lock_for(account):
                 done = fn(account, date_from, date_to)
         except Exception as exc:  # noqa: BLE001 — падение чтения не должно ронять сервер
+            from src.fb_api import mlx_session as _mlx
+
+            # ACL-1826: вход в прокси (ERR_INVALID_AUTH_CREDENTIALS) читается одной фразой.
+            text, code = _mlx.humanize(exc, "", account)
             done = SpendReading(
                 account=account, date_from=date_from, date_to=date_to,
-                state="failed", error=f"{type(exc).__name__}: {exc}",
+                state="failed", error=text or f"{type(exc).__name__}: {exc}", error_code=code,
             )
         done.started_at = reading.started_at
         done.finished_at = _now()
@@ -458,6 +629,13 @@ def start_read(
     return reading
 
 
+def default_reader() -> Callable[[str, str, str], SpendReading]:
+    """Чем читать спенд: Graph API в профиле (`ACL_FB_BACKEND=api`, ACL-1760) или RPA."""
+    from src.analysis_agent import account_spend_api
+
+    return account_spend_api.read_via_api if account_spend_api.api_enabled() else read_via_rpa
+
+
 def _now() -> str:
     from datetime import datetime
 
@@ -475,7 +653,361 @@ def _entry_for(account: str):
 
 
 class ProfileNotAttachable(RuntimeError):
-    """Профиль есть, но прицепиться к нему нельзя — а перезапускать мы не станем."""
+    """Профиль есть, но прицепиться к нему нельзя — а перезапускать мы не станем.
+
+    ACL-1518: `code` — устойчивое имя отказа для экрана (`HAND_OPEN_CODE`).
+    """
+
+    def __init__(self, message: str = "", code: str = "") -> None:
+        super().__init__(message)
+        self.code = code
+
+
+# ── окно, открытое руками ──────────────────────────────────────────────────
+#
+# ACL-1812 / ACL-1811: дашборд окно, открытое руками, НИКОГДА не останавливает и не
+# поднимает заново (так 12.10 в 08:42-08:43 разлогинило 5414). Отказ с понятным текстом;
+# закрыть окно и подождать 3 минуты должен человек.
+
+#: Код отказа, когда окно так и осталось открытым руками.
+HAND_OPEN_CODE = "open_by_hand"
+
+#: Окно открыто руками (нет порта автоматизации). Текст зависит от бэкенда: на `api` есть
+#: кнопка «Open profiles for today», на `rpa` её нет — там кнопка «open profile» в строке.
+HAND_OPEN_MESSAGE_API = ("Opened in Multilogin by hand \u2014 close it there, wait about 3 minutes, "
+                         "then use Open profiles for today")
+HAND_OPEN_MESSAGE = ("Opened in Multilogin by hand \u2014 close it there, wait about 3 minutes, "
+                     "then use the open profile button on this row")
+HAND_WINDOW_MESSAGE = HAND_OPEN_MESSAGE
+
+
+def hand_message() -> str:
+    """Текст отказа «открыто руками» для текущего бэкенда."""
+    import os
+
+    return HAND_OPEN_MESSAGE_API if (os.environ.get("ACL_FB_BACKEND") or "").strip().lower() == "api" \
+        else HAND_OPEN_MESSAGE
+
+
+#: Аккаунт → строка переоткрытия. Живёт только в памяти и только пока окно
+#: переоткрывается: опрос `/account-spend/status` отдаёт её строке аккаунта.
+_HAND_WAIT: dict[str, str] = {}
+_HAND_WAIT_LOCK = threading.Lock()
+
+
+def hand_wait_note(account: str) -> str:
+    """Переоткрывается ли сейчас окно этого аккаунта — строкой для экрана."""
+    with _HAND_WAIT_LOCK:
+        return _HAND_WAIT.get(str(account or ""), "")
+
+
+# ── закрытый профиль: чтение открывает его само (ACL-1580) ────────────────
+#
+# До ACL-1580 чтение на закрытом профиле отказывало («the profile is not
+# open»), и человек жал «open profile» руками. Отказ защищал от перезапуска
+# ОТКРЫТОГО окна (разлогинил x01); запуск ЗАКРЫТОГО — обычное открытие, ровно
+# то, что делает «open profile». Решение владельца 05.10: чтения открывают
+# нужное сами.
+#
+# * Запуск — путём «open profile»: `multilogin_attach.open(allow_restart=False,
+#   allow_kill=False)` — только старт, открытое окно не перезапускается,
+#   простого браузера нет. Окно, открытое руками, переоткрывается как прежде
+#   (ACL-1562) и остаётся открытым.
+# * Место — из той же очереди профилей по памяти, что у Publish (ACL-1424):
+#   разом не больше, чем тянет машина; пока ждём, строка аккаунта говорит
+#   «Waiting for a free profile slot».
+# * После чтения профиль, который запустило само чтение, закрывается мягкой
+#   остановкой ЭТОГО профиля через MLX API (`allow_kill=False`) — и при
+#   упавшем чтении тоже. Уже открытый остаётся открытым.
+# * Удачный Read spend закрывает не сразу, а через `CLOSE_GRACE_S`: за ним
+#   тем же нажатием идёт чтение стран (ACL-1282), и закрыть профиль между
+#   ними значило бы открыть его второй раз. Чтение стран, пришедшее за это
+#   время, забирает профиль себе и закрывает его по своему концу.
+
+#: Код отказа «профиль разлогинен в Facebook» — тот же, что у Publish.
+LOGGED_OUT_CODE = _profile_trouble.LOGGED_OUT
+
+#: Строка на карте: разлогинен — войти может только человек, повторов нет.
+LOGGED_OUT_MESSAGE = ("The {account} profile is logged out of Facebook — "
+                      "log in inside Multilogin, then Read again")
+
+#: Строка на карте, пока чтение ждёт места в очереди профилей.
+SLOT_WAIT_NOTE = "Waiting for a free profile slot"
+
+#: Строка на карте, пока закрытый профиль поднимается.
+STARTING_NOTE = "Opening the {account} profile with automation"
+
+#: Сколько секунд удачный Read spend держит открытым запущенный им профиль —
+#: чтобы чтение стран (ACL-1282) пришло в то же окно. Страница просит страны
+#: через 3–6 с после конца спенда.
+CLOSE_GRACE_S = 30.0
+
+
+def logged_out_message(account: str) -> str:
+    return LOGGED_OUT_MESSAGE.format(account=str(account or "") or "profile")
+
+
+def _set_wait_note(account: str, note: str) -> None:
+    """Строка ожидания на карте (та же, что у переоткрытия окна, ACL-1518)."""
+    with _HAND_WAIT_LOCK:
+        if note:
+            _HAND_WAIT[str(account or "")] = note
+        else:
+            _HAND_WAIT.pop(str(account or ""), None)
+
+
+def _slot_queue():
+    """Очередь профилей по памяти — та же, что у Publish (ACL-1321/1424)."""
+    from src.web import publish_jobs
+
+    return publish_jobs._slots
+
+
+@dataclass
+class _ReadOpen:
+    """Что чтение сделало с профилем: запустило ли его само и чьё место держит."""
+
+    account: str
+    started: bool = False
+    slot_id: str = ""
+    profile_id: str = ""
+    entry: Any = None
+    started_mono: float = 0.0
+    #: Вкладка чтения — вкладка окна, которое чтение подняло: её не закрываем
+    #: (закрылось бы окно); профиль закроет мягкая остановка или Publish.
+    keep_tab: bool = False
+    #: Сколько мест очередь выдала профилю к моменту запуска (`grants`).
+    grants_seen: int = 0
+
+
+#: Чтение просит запускать закрытый профиль (`opening_closed_profile`). Флагом
+#: контекста, как `_REOPEN_BY_HAND`: `_attach_only` подменяют десятки тестов.
+_READ_OPEN: ContextVar["_ReadOpen | None"] = ContextVar("acl_read_open", default=None)
+
+#: Профиль → запуск чтения, ждущий закрытия по `CLOSE_GRACE_S`.
+_PENDING_CLOSE: dict[str, _ReadOpen] = {}
+_PENDING_LOCK = threading.Lock()
+
+
+@contextmanager
+def opening_closed_profile(opened: _ReadOpen):
+    """Внутри блока `_attach_only` запускает закрытый профиль (ACL-1580)."""
+    token = _READ_OPEN.set(opened)
+    try:
+        yield opened
+    finally:
+        _READ_OPEN.reset(token)
+
+
+def _record(step: str, ok: bool, duration_s: float, diag: dict) -> None:
+    try:
+        from src.fb_ads_rpa import run_telemetry as _rt
+
+        _rt.record(step, ok, duration_s=round(float(duration_s), 1), diag=diag)
+    except Exception:
+        pass
+
+
+def _slot_wait_note(verdict: dict) -> str:
+    ahead = int((verdict or {}).get("ahead") or 0)
+    return SLOT_WAIT_NOTE + (f" ({ahead} ahead)" if ahead else "")
+
+
+def _take_over_pending(profile_id: str, opened: "_ReadOpen | None") -> None:
+    """Профиль, запущенный прошлым чтением и ждущий закрытия, — теперь наш."""
+    if opened is None or opened.started:
+        return
+    with _PENDING_LOCK:
+        prev = _PENDING_CLOSE.pop(profile_id, None)
+    if prev is None:
+        return
+    opened.started, opened.slot_id = True, prev.slot_id
+    opened.profile_id, opened.started_mono = prev.profile_id, prev.started_mono
+    opened.entry = opened.entry or prev.entry
+    opened.grants_seen = prev.grants_seen
+
+
+def _start_closed(entry, account_label: str, opened: _ReadOpen, recheck=None):
+    """Запустить закрытый профиль для чтения путём «open profile» (ACL-1580).
+
+    Сначала место в очереди профилей Publish (строка ожидания на карте), потом
+    старт: `allow_restart=False` — открытое окно не перезапускается,
+    `allow_kill=False` — ничего не убивается. Не поднялся — место отпускаем.
+
+    Ревью PR #583:
+    * (F2) ожидание места бывает долгим, а `/mlx-profile-open` замок профиля
+      не берёт — профиль могли открыть автоматизацией, пока мы ждали.
+      `recheck()` после выдачи места: прицепились — профиль не наш, место
+      отпускаем и после чтения его не закрываем.
+    * (F1) место профиля держит Publish (`shared`) — профиль после чтения
+      остаётся Publish: чтение его не закрывает (ни сразу, ни по таймеру).
+    """
+    from src.fb_ads_rpa import browser as rpa_browser
+    from src.fb_api import stop_log as _stop_log
+
+    profile_id = (getattr(entry, "profile_id", "") or "").strip()
+    # ACL-1812 (ревью #813, B1-bis): закрыли недавно — не поднимаем (ACL-1811).
+    why = _stop_log.refusal(profile_id)
+    if why:
+        raise ProfileNotAttachable(why, code="restart_cooldown")
+    queue = _slot_queue()
+    slot_id = f"read:{account_label}:{uuid.uuid4().hex[:8]}"
+    waited_from = time.monotonic()
+    try:
+        grant = queue.acquire(
+            slot_id, profile_id,
+            on_wait=lambda verdict: _set_wait_note(account_label, _slot_wait_note(verdict)),
+            share_profile=True,
+        )
+    finally:
+        _set_wait_note(account_label, "")
+    shared = bool(grant and grant.get("shared"))
+    waited_s = time.monotonic() - waited_from
+    if recheck is not None:
+        try:
+            ready = recheck()
+        except Exception:
+            ready = None
+        if ready is not None:
+            if not shared:
+                queue.release(slot_id)
+            return ready
+    _set_wait_note(account_label, STARTING_NOTE.format(account=account_label))
+    began = time.monotonic()
+    try:
+        conn = rpa_browser.get_browser_provider("multilogin_attach").open(
+            entry, account_label, allow_missing_dir=True, allow_restart=False, allow_kill=False)
+    except Exception as exc:  # noqa: BLE001
+        if not shared:
+            queue.release(slot_id)
+        _record("spend_profile_started", False, time.monotonic() - began,
+                {"account": account_label, "slot_wait_s": round(waited_s, 1),
+                 "error": type(exc).__name__})
+        # ACL-1826: 403 «restricted permission» на слоте B / вход в прокси — понятный текст и код.
+        from src.fb_api import mlx_session as _mlx
+
+        text, code = _mlx.humanize(exc, getattr(entry, "multilogin_instance", "") or "A", account_label)
+        if code:
+            raise ProfileNotAttachable(text, code=code) from exc
+        raise ProfileNotAttachable(
+            f"{account_label}: the profile is closed and could not be started with automation: {exc}"
+        ) from exc
+    finally:
+        _set_wait_note(account_label, "")
+    opened.keep_tab = True
+    # Место профиля держит Publish — после чтения профиль его, а не наш.
+    opened.started = not shared
+    opened.slot_id = "" if shared else slot_id
+    opened.profile_id = profile_id
+    opened.entry = entry
+    opened.started_mono = began
+    try:
+        opened.grants_seen = int(queue.grants(profile_id))
+    except Exception:
+        opened.grants_seen = 0
+    _record("spend_profile_started", True, time.monotonic() - began,
+            {"account": account_label, "slot_wait_s": round(waited_s, 1), "shared_slot": shared})
+    return conn
+
+
+def _close_started(opened: _ReadOpen) -> None:
+    """Мягко закрыть профиль, который запустило чтение, и отпустить его место.
+
+    Только MLX API этого профиля, `allow_kill=False` (`stop_profile_on_request`,
+    как у ACL-1444): не закрылся — окно остаётся, ничего не убиваем.
+    """
+    from src.fb_ads_rpa import browser as rpa_browser
+
+    began = time.monotonic()
+    if _publish_touched(opened):
+        # Ревью PR #583 (F1): профилем пользуется (или воспользовалось) другое
+        # задание — окно его: Publish сам решает, закрывать ли (ACL-1444).
+        if opened.slot_id:
+            try:
+                _slot_queue().release(opened.slot_id)
+            except Exception:
+                log.exception("Could not release the profile slot of %s", opened.account)
+        _record("spend_profile_closed_after_read", None, 0.0,
+                {"account": opened.account, "skipped": "another_job"})
+        opened.started = False
+        return
+    ok, error = True, ""
+    try:
+        rpa_browser.stop_profile_on_request(opened.entry, opened.account)
+    except Exception as exc:  # noqa: BLE001 — закрытие не отменяет прочитанное
+        ok, error = False, type(exc).__name__
+        log.warning("%s: could not close the profile the read started (%s); its window stays open",
+                    opened.account, exc)
+    finally:
+        if opened.profile_id:
+            # Остановку записываем при любой ПОПЫТКЕ: профиль мог закрыться, хотя вызов упал
+            # (ревью #813, B2 minor); лишняя пауза безопасна, лишний запуск — нет.
+            from src.fb_api import stop_log as _stop_log
+
+            _stop_log.record_stop(opened.profile_id)
+        if opened.slot_id:
+            try:
+                _slot_queue().release(opened.slot_id)
+            except Exception:
+                log.exception("Could not release the profile slot of %s", opened.account)
+    diag = {"account": opened.account, "held_s": round(time.monotonic() - opened.started_mono, 1)}
+    if error:
+        diag["error"] = error
+    _record("spend_profile_closed_after_read", ok, time.monotonic() - began, diag)
+    opened.started = False
+
+
+def _publish_touched(opened: _ReadOpen) -> bool:
+    """Держит ли место профиля другое задание, ждёт ли его, или держало ли
+    после нашего запуска (`grants` вырос). Не прочиталось — считаем, что да:
+    оставить окно открытым безопаснее, чем закрыть чужое."""
+    try:
+        queue = _slot_queue()
+        return bool(queue.others_on(opened.profile_id, opened.slot_id)
+                    or int(queue.grants(opened.profile_id)) != opened.grants_seen)
+    except Exception:
+        log.exception("Could not ask the profile queue about %s", opened.account)
+        return True
+
+
+def _close_if_still_pending(opened: _ReadOpen) -> None:
+    """Конец `CLOSE_GRACE_S`: никто не забрал профиль — закрыть его."""
+    with browser_operation.reading(), profile_lock(opened.profile_id):
+        with _PENDING_LOCK:
+            if _PENDING_CLOSE.get(opened.profile_id) is not opened:
+                return
+            _PENDING_CLOSE.pop(opened.profile_id, None)
+        _close_started(opened)
+
+
+def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False) -> None:
+    """После чтения: закрыть то, что чтение запустило (сразу или после паузы)."""
+    if not opened.started:
+        return
+    if keep_for_next and CLOSE_GRACE_S > 0 and opened.profile_id:
+        with _PENDING_LOCK:
+            _PENDING_CLOSE[opened.profile_id] = opened
+        timer = threading.Timer(CLOSE_GRACE_S, _close_if_still_pending, args=(opened,))
+        timer.daemon = True
+        timer.start()
+        return
+    _close_started(opened)
+
+
+def _logged_out(page, *, deep: bool = False) -> bool:
+    """Вкладка на странице входа Facebook? `deep` — ещё и форма входа в разметке."""
+    try:
+        if _profile_trouble.login_url(page.url):
+            return True
+    except Exception:
+        return False
+    if not deep:
+        return False
+    try:
+        code, _ = _profile_trouble.classify_page(page, history=False)
+    except Exception:
+        return False
+    return code == _profile_trouble.LOGGED_OUT
 
 
 def _mlx_profile_dir(profile_id: str, folder_id: str = "") -> Path | None:
@@ -571,6 +1103,19 @@ def _short_path(path: str) -> str:
         return ""
 
 
+def _attach_open(direct_cls, entry, profile_id: str):
+    """Прицепиться к профилю, если он уже открыт автоматизацией; иначе None."""
+    udd = _mlx_profile_dir(profile_id, (getattr(entry, "folder_id", "") or ""))
+    if udd is None:
+        return None
+    direct = direct_cls()
+    for spelling in _dir_spellings(udd):
+        conn = direct.attach_existing_only(profile_id, spelling, new_page=True)
+        if conn is not None:
+            return conn
+    return None
+
+
 def _attach_only(entry, account_label: str):
     """Подключиться к уже открытому профилю. Никогда его не перезапускать.
 
@@ -586,7 +1131,16 @@ def _attach_only(entry, account_label: str):
 
     Используем публичный attach_existing_only: проверка принадлежности
     профилю закреплена в провайдере, для чтения создаётся отдельная вкладка.
+
+    ACL-1812 / ACL-1811: окно, открытое руками, не останавливается и не переоткрывается
+    автоматически — отказ `HAND_OPEN_CODE` с понятным текстом.
+
+    ACL-1580: внутри `opening_closed_profile(...)` (так читают спенд и
+    страны) закрытый профиль не отказ — он запускается путём «open profile»
+    с местом из очереди профилей Publish (`_start_closed`), и в переданной
+    записи отмечается, что его запустило чтение. Без блока — прежний отказ.
     """
+    opening = _READ_OPEN.get()
     from src.fb_ads_rpa import browser as rpa_browser
 
     profile_id = (getattr(entry, "profile_id", "") or "").strip()
@@ -601,6 +1155,11 @@ def _attach_only(entry, account_label: str):
 
     udd = _mlx_profile_dir(profile_id, (getattr(entry, "folder_id", "") or ""))
     if udd is None:
+        # Папку создаёт сам Multilogin при первом запуске — у профиля, ни разу
+        # не запускавшегося здесь, её нет; открытым он быть не может.
+        if opening is not None:
+            return _start_closed(entry, account_label, opening,
+                                 recheck=lambda: _attach_open(direct_cls, entry, profile_id))
         raise ProfileNotAttachable(
             f"Profile folder {profile_id} was not found. Is this profile open on this machine?"
         )
@@ -609,6 +1168,9 @@ def _attach_only(entry, account_label: str):
     for spelling in _dir_spellings(udd):
         conn = direct.attach_existing_only(profile_id, spelling, new_page=True)
         if conn is not None:
+            # Профиль, который прошлое чтение запустило и ещё не закрыло
+            # (`CLOSE_GRACE_S`), закроет теперь это чтение.
+            _take_over_pending(profile_id, opening)
             return conn
 
     running = False
@@ -617,26 +1179,13 @@ def _attach_only(entry, account_label: str):
     except Exception:
         pass
     if running:
-        # Как у Publish: вручную открытое окно (без отладочного порта) мягко
-        # останавливаем через API Multilogin — куки и вход сохраняются, другие
-        # профили не трогаются — и поднимаем заново с автоматизацией. Убивать
-        # окно чтению нельзя: жёсткий перезапуск однажды разлогинил x01, поэтому
-        # allow_kill=False, и при отказе API окно остаётся как было (ACL-1234).
-        try:
-            conn = rpa_browser.get_browser_provider("multilogin_attach").open(
-                entry, account_label, allow_restart=True, allow_kill=False)
-        except Exception as exc:  # noqa: BLE001
-            raise ProfileNotAttachable(
-                f"{account_label}: the profile is open in MLX Desktop and could not be reopened "
-                f"with automation: {exc}"
-            ) from exc
-        try:
-            from src.fb_ads_rpa import run_telemetry as _rt
-
-            _rt.record("spend_profile_restarted", True, diag={"account": account_label})
-        except Exception:
-            pass
-        return conn
+        # ACL-1812 (ревью #813, B1-bis; ACL-1811): окно, открытое руками, АВТОМАТИЧЕСКИ не
+        # останавливаем и не поднимаем заново. «Закрыли — через 10 секунд открыли» разлогинило
+        # 5414 (12.10, 08:42-08:43). Остановка и запуск — только руками человека.
+        raise ProfileNotAttachable(hand_message(), code=HAND_OPEN_CODE)
+    if opening is not None:
+        return _start_closed(entry, account_label, opening,
+                             recheck=lambda: _attach_open(direct_cls, entry, profile_id))
     raise ProfileNotAttachable(
         f"{account_label}: the profile is not open. Open it through automation and leave the window open; "
         "the read will attach to it without restarting anything."
@@ -788,6 +1337,10 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
     может быть: мы отказывались запускать профиль потому, что его ни разу не
     запускали. Без папки пробуем API Multilogin; если профиль уже занят,
     возвращаем отказ и никогда не останавливаем его ради этой кнопки.
+
+    ACL-1812 / ACL-1811: окно, открытое руками, не трогается ни этой кнопкой, ни Connect —
+    `(False, hand_message())` с кодом `HAND_OPEN_CODE`. Перед запуском закрытого профиля
+    проверяется общий журнал остановок (`fb_api.stop_log`).
     """
     profile_id = (profile_id or "").strip()
     who = label or profile_id[:8] or "profile"
@@ -813,20 +1366,29 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
                 return True, "The profile is already open through automation. You can read it."
         try:
             if any(direct.profile_is_running(p, profile_id) for p in _dir_spellings(udd)):
-                return False, (
-                    f"{who}: the profile was opened manually in MLX Desktop. Opening it through "
-                    "automation would require stopping it, which logs the account out. "
-                    "Close the window in MLX Desktop and try again."
-                )
+                # ACL-1812 (B1-bis): и кнопка «open profile» руками открытое окно не трогает.
+                return False, CodedMessage(hand_message(), HAND_OPEN_CODE)
         except Exception as exc:
             return False, f"Could not check open profiles: {exc}. Nothing was launched."
 
+
+    # ACL-1812 (B1-bis): обе кнопки («open profile» на строке и Connect) идут через общий журнал.
+    from src.fb_api import stop_log as _stop_log
+
+    why = _stop_log.refusal(profile_id)
+    if why:
+        return False, CodedMessage(why, "restart_cooldown")
 
     entry = _Profile(profile_id, folder_id, instance)
     try:
         conn = rpa_browser.get_browser_provider("multilogin_attach").open(
             entry, who, allow_missing_dir=True, allow_restart=False)
     except Exception as exc:  # noqa: BLE001
+        from src.fb_api import mlx_session as _mlx
+
+        text, code = _mlx.humanize(exc, instance, who)   # ACL-1826
+        if code:
+            return False, CodedMessage(text, code)
         return False, f"{type(exc).__name__}: {exc}"
     try:
         # Окно остаётся человеку: отключаемся, не закрывая браузер.
@@ -834,6 +1396,21 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
     except Exception:
         pass
     return True, "The profile is open. Log in if needed and leave the window open."
+
+
+class CodedMessage(str):
+    """Текст ответа «open profile» с устойчивым кодом отказа (ревью PR #519, F6).
+
+    Строка — чтобы ответ `(ok, message)` остался прежним для всех вызывающих;
+    `code` — чтобы маршрут решал по коду, а не по сравнению текста.
+    """
+
+    code: str = ""
+
+    def __new__(cls, text: str, code: str = ""):
+        obj = super().__new__(cls, text)
+        obj.code = code
+        return obj
 
 
 @serialized_browser(key=_profile_key, reading=True)
@@ -879,14 +1456,25 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
         return out
 
     conn = None
+    held = _ReadOpen(account)
     try:
         try:
-            conn = _attach_only(entry, account)
+            with opening_closed_profile(held):
+                conn = _attach_only(entry, account)
         except ProfileNotAttachable as exc:
             out.error = str(exc)
+            out.error_code = getattr(exc, "code", "")
             return out
         page = conn.page
-        page.goto(url, timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
+        try:
+            page.goto(url, timeout=TABLE_TIMEOUT_MS, wait_until="domcontentloaded")
+        except Exception as exc:
+            # ACL-1580: переход сорвался на страницу входа — профиль разлогинен.
+            if _profile_trouble.classify_error(exc)[0] != LOGGED_OUT_CODE:
+                raise
+            return _logged_out_reading(out, account)
+        if _logged_out(page):
+            return _logged_out_reading(out, account)
 
         # Ads Manager рисуется скриптом, и `domcontentloaded` на нём не значит
         # почти ничего: первый прогон 2026-09-07 проверил период через четыре
@@ -896,6 +1484,8 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
         expected_act = act if act.startswith("act_") else "act_" + act
         opened = _act_from_url(page, tries=1)
         if opened != expected_act:
+            if _logged_out(page, deep=True):
+                return _logged_out_reading(out, account)
             # Оба номера помогают сверить карту и доступ профиля без нового чтения.
             out.error = (
                 f"Ads Manager opened ad account {opened or '(no act in the URL)'}, "
@@ -904,9 +1494,12 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
             )
             return out
         if not grid_ready:
+            if _logged_out(page, deep=True):
+                return _logged_out_reading(out, account)
             # Статус спрашиваем и здесь: у отключённого кабинета таблицы может
             # не быть вовсе, а знать о нём надо именно тогда.
             out.status, out.status_text = _read_status(page)
+            _shoot_status(page, out)
             out.error = "Ads Manager did not finish loading in time"
             # было `day` — переменной, которой здесь нет. Ошибка жила только на
             # пути отказа, то есть ровно там, где снимок и нужен: вместо
@@ -917,6 +1510,7 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
         # Один заход — оба ответа. Отдельный визит ради состояния кабинета
         # ничем не оправдан: каждое касание живого аккаунта чего-то стоит.
         out.status, out.status_text = _read_status(page)
+        _shoot_status(page, out)
 
         shown = _shown_period(page)
         if not _period_matches(shown, date_from, date_to):
@@ -936,7 +1530,7 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
             return out
 
         if _act_from_url(page, tries=1) != expected_act or not _period_matches(_shown_period(page), date_from, date_to):
-            out.status = out.status_text = ""
+            out.status = out.status_text = out.status_shot = out.status_shot_at = ""
             out.error = "Account or period changed during reading; result refused."
             return out
         out.spend = spend
@@ -953,25 +1547,43 @@ def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReadin
         # здесь `except Exception`: сюда мы приходим с готовым результатом, и
         # уронить его необработанным исключением — самое плохое, что может
         # случиться.
+        reached: dict[str, bool] = {}
         try:
             out.objects, out.objects_how, out.objects_error = _read_tree(
-                page, act, expected_act, date_from, date_to
+                page, act, expected_act, date_from, date_to, reached=reached,
             )
         except Exception as exc:            # noqa: BLE001 — см. выше
             out.objects_error = f"Campaign tree was not read: {exc}"
+        # ACL-1504: «0 кампаний» — только если список действительно прочитан.
+        out.objects_read = bool(reached.get("list"))
         return out
     finally:
         if conn is not None:
-            try:
-                conn.page.close()
-            except Exception:
-                pass
+            # ACL-1580: у профиля, который чтение само подняло, это вкладка
+            # окна — её не закрываем (закрылось бы окно); профиль закроет
+            # мягкая остановка ниже.
+            if not held.keep_tab:
+                try:
+                    conn.page.close()
+                except Exception:
+                    pass
             # Окно остаётся открытым: профиль, закрытый сразу после захода,
             # выглядит хуже, чем человек, который посмотрел и ушёл.
             try:
                 conn.close(keep_browser_open=True)
             except Exception:
                 pass
+        # ACL-1580: запущенное чтением — закрыть (и при отказе). Удачное
+        # чтение ждёт `CLOSE_GRACE_S`: за ним может прийти чтение стран.
+        _finish_started(held, keep_for_next=out.state == "ok")
+
+
+def _logged_out_reading(out: "SpendReading", account: str) -> "SpendReading":
+    """Профиль разлогинен в Facebook: понятная строка, без повторов (ACL-1580)."""
+    out.state = "failed"
+    out.error = logged_out_message(account)
+    out.error_code = LOGGED_OUT_CODE
+    return out
 
 
 #: Что Ads Manager пишет человеку, когда с кабинетом что-то не так. Ищем его
@@ -1058,6 +1670,91 @@ def _read_status(page, tries: int = STATUS_TRIES) -> tuple[str, str]:
     return answer
 
 
+#: Вид блокировки, который узнаёт RPA (`meta_dom._ACCOUNT_BLOCKED_PATTERNS`), —
+#: словом колонки состояния. Неизвестный вид становится `blocked`, не `clear`.
+_BLOCKED_KIND_STATUS: dict[str, str] = {
+    "account_disabled": "disabled",
+    "verification_required": "restricted",
+    "start_authentication": "blocked",
+    "authentication_error": "blocked",
+}
+
+#: Кто весомее, если на странице несколько признаков сразу.
+_STATUS_RANK = {"disabled": 0, "restricted": 1, "review": 2, "blocked": 3}
+
+
+#: Анкер в `meta_dom._ACCOUNT_BLOCKED_JS`, рядом с которым чтение добавляет
+#: тот же узел словами `innerText`. `textContent` склеивает строки Meta без
+#: пробела («…advertiseComplete verification…»), а человеку в подсказке нужен
+#: читаемый текст. Код RPA не правится — меняется копия строки здесь; нет
+#: анкера — работает исходный скрипт, просто без пробелов.
+_BLOCKED_JS_PUSH = "out.push(t);"
+_BLOCKED_JS_SPACED = (
+    "{ const s = norm(el.innerText); if (s && s !== t) out.push(s); } out.push(t);"
+)
+
+#: Сломанная связка с RPA (переименовали приватные имена) — одно
+#: предупреждение на процесс, а не на каждую из восьми попыток чтения.
+_blocked_warned = False
+
+
+def _warn_blocked_once(why: str) -> None:
+    global _blocked_warned
+    if _blocked_warned:
+        return
+    _blocked_warned = True
+    log.warning(
+        "account status: the RPA account-block detector is unavailable (%s); "
+        "reading banners only, a disabled account may show as 'no warning'",
+        why,
+    )
+
+
+def _blocked_on_page(page) -> list[tuple[str, str]]:
+    """Блокировка, которую видит RPA перед публикацией, — по отдельным ячейкам.
+
+    Баннера у отключённого кабинета может не быть вовсе: у Doc20 30.09 было
+    только «Account disabled» в колонке Delivery, и чтение отвечало «no
+    warning». Признаки берутся у RPA, а не копируются: две копии одного списка
+    уже разошлись, и ошиблась та, что показывает статус на экране (ACL-1391).
+    Совпадение — весь текст ячейки, а не подстрока страницы: справка «Why is
+    my ad account disabled?» есть и у здорового кабинета.
+
+    Возвращаются **все** совпадения во всех фреймах, а не первое по порядку
+    DOM: у прогона ecce52f330b8 (22.09) баннер «Verification required to
+    advertise» стоял выше ячейки «Account disabled», и первое совпадение дало
+    бы `restricted`. Кто весомее, решает `_STATUS_RANK` в `_status_once`.
+    """
+    try:
+        from src.fb_ads_rpa import meta_dom
+
+        js = meta_dom._ACCOUNT_BLOCKED_JS
+        match = meta_dom._account_blocked_match
+        roots_of = meta_dom._roots
+    except Exception as exc:  # noqa: BLE001 — нет детектора: читаем баннеры
+        _warn_blocked_once(f"{type(exc).__name__}: {exc}")
+        return []
+    try:
+        roots = roots_of(page)
+    except Exception:
+        # Подставная страница без фреймов: признаки ячеек — только добавка.
+        return []
+    if _BLOCKED_JS_PUSH in js:
+        js = js.replace(_BLOCKED_JS_PUSH, _BLOCKED_JS_SPACED, 1)
+    found: list[tuple[str, str]] = []
+    for root in roots:
+        try:
+            texts = root.evaluate(js) or []
+        except Exception:
+            # Фрейм ушёл между перечислением и вопросом — обычное дело.
+            continue
+        for text in texts:
+            kind = match(text)
+            if kind:
+                found.append((_BLOCKED_KIND_STATUS.get(kind, "blocked"), text))
+    return found
+
+
 def _status_once(page) -> tuple[str, str]:
     """Один взгляд на страницу. Ожиданием заведует `_read_status`."""
     try:
@@ -1068,12 +1765,17 @@ def _status_once(page) -> tuple[str, str]:
     if not flat:
         return "unknown", ""
     low = flat.lower()
+    found: list[tuple[str, str]] = []
     for state, phrases in _STATUS_SIGNS:
-        for phrase in phrases:
-            at = low.find(phrase)
-            if at != -1:
-                start = max(0, at - 60)
-                return state, flat[start : at + len(phrase) + 140].strip()
+        hit = next((p for p in phrases if p in low), None)
+        if hit:
+            at = low.find(hit)
+            start = max(0, at - 60)
+            found.append((state, flat[start : at + len(hit) + 140].strip()))
+            break
+    found.extend(_blocked_on_page(page))
+    if found:
+        return min(found, key=lambda f: _STATUS_RANK.get(f[0], len(_STATUS_RANK)))
 
     # Банер есть, а какой — не опознали. Говорим это вслух её же словами.
     #
@@ -1418,10 +2120,25 @@ def _currency(page) -> str:
     return getattr(page, "_acl_spend_currency", "")
 
 
+def _shots_dir() -> Path:
+    return Path(paths.get_local_config_dir()) / "spend_shots"
+
+
+def _safe_name(account: str) -> str:
+    return "".join(c if c.isascii() and (c.isalnum() or c in "-_") else "_" for c in account)
+
+
 def _shoot(page, account: str, day: str) -> str:
-    """Снимок при неудаче: первый живой прогон стоит тестового аккаунта."""
+    """Снимок при неудаче: первый живой прогон стоит тестового аккаунта.
+
+    ACL-1535: тот же `page.screenshot`, что сбрасывал вьюпорт профиля
+    (ACL-1532), — поэтому только при `ACL_STATUS_SHOT=1`. Без него "" и
+    страница не трогается; HTML-снимки `page_capture` остаются как были.
+    """
+    if not status_shot_enabled():
+        return ""
     try:
-        out = Path(paths.get_local_config_dir()) / "spend_shots"
+        out = _shots_dir()
         out.mkdir(parents=True, exist_ok=True)
         safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in account)
         target = out / f"{safe}_{day}.png"
@@ -1429,6 +2146,119 @@ def _shoot(page, account: str, day: str) -> str:
         return str(target)
     except Exception:
         return ""
+
+
+# ── Снимок проблемного состояния (ACL-1430) ──────────────────────────────
+#
+# Отключённый или ограниченный кабинет человеку надо доказать — поддержке,
+# поставщику аккаунта, коллеге. Снимаем видимую часть той самой страницы
+# Ads Manager, с которой только что прочитали состояние: баннер и колонка
+# Delivery там. Страница — вкладка профиля Multilogin, в которую чтение уже
+# вошло (`_attach_only`); другой страницы у чтения нет, и снимка вне
+# Multilogin здесь не бывает (решение владельца 26.09).
+#
+# Наружу уходит id, а не путь: `/account-spend/status-shot/<id>` отдаёт файл
+# только из этой папки и только по строгому имени.
+
+#: Сколько снимков держать на аккаунт. Нужен последний; пара предыдущих —
+#: чтобы сравнить, а не копить диск при каждом Read all.
+STATUS_SHOTS_KEEP = 5
+_STATUS_SHOT_PREFIX = "status_"
+_STATUS_SHOT_ID = re.compile(r"status_[A-Za-z0-9_-]{1,160}")
+_SHOT_STAMP = re.compile(r"\d{8}-\d{6}(?:-\d{1,3})?")
+
+
+def _shot_stamp() -> str:
+    from datetime import datetime
+
+    return datetime.now().strftime("%Y%m%d-%H%M%S")
+
+
+def status_shot_path(shot_id: str) -> Path | None:
+    """Файл снимка по id — или None. Ничего за пределами папки снимков."""
+    if not isinstance(shot_id, str) or not _STATUS_SHOT_ID.fullmatch(shot_id):
+        return None
+    try:
+        folder = _shots_dir().resolve()
+        target = (folder / f"{shot_id}.png").resolve()
+    except (OSError, ValueError):
+        return None
+    if target.parent != folder or not target.is_file():
+        return None
+    return target
+
+
+def _prune_status_shots(folder: Path, safe: str) -> None:
+    """Оставить последние `STATUS_SHOTS_KEEP` снимков этого аккаунта.
+
+    Имя чужого аккаунта может начинаться так же («Doc2» и «Doc20»), поэтому
+    свой файл узнаём по точному хвосту-времени, а не по началу имени.
+    """
+    head = f"{_STATUS_SHOT_PREFIX}{safe}__"
+    mine = sorted(
+        p for p in folder.glob(f"{_STATUS_SHOT_PREFIX}*.png")
+        if p.stem.startswith(head) and _SHOT_STAMP.fullmatch(p.stem[len(head):])
+    )
+    for old in mine[:-STATUS_SHOTS_KEEP]:
+        try:
+            old.unlink()
+        except OSError:
+            pass
+
+
+def _status_shot(page, account: str) -> tuple[str, str]:
+    """Снять видимую часть страницы. (id, время) или ("", "") при неудаче."""
+    try:
+        folder = _shots_dir()
+        folder.mkdir(parents=True, exist_ok=True)
+        safe = _safe_name(account)[:120] or "account"
+        stem = f"{_STATUS_SHOT_PREFIX}{safe}__{_shot_stamp()}"
+        shot_id, n = stem, 1
+        while (folder / f"{shot_id}.png").exists() and n < 1000:
+            shot_id, n = f"{stem}-{n}", n + 1
+        page.screenshot(path=str(folder / f"{shot_id}.png"), full_page=False)
+        at = _now()
+        _prune_status_shots(folder, safe)
+        return shot_id, at
+    except Exception as exc:  # noqa: BLE001 — снимок не стоит чтения
+        log.warning("account status: screenshot for %s was not saved: %s", account, exc)
+        return "", ""
+
+
+def status_shot_enabled() -> bool:
+    """Снимать ли состояние (ACL-1535). По умолчанию — нет.
+
+    ACL-1532 измерил вживую: `page.screenshot` сбрасывал чужой (Multilogin)
+    override вьюпорта — 1919×1079 → 3837×2157 и так и оставалось, а размер окна
+    входит в отпечаток браузера. Решение владельца 03.10: выключить, пока способ
+    снимка не доказан безопасным. `ACL_STATUS_SHOT=1` в машинном .env
+    (serve.py грузит его через `paths.load_env`) — только для контролируемых
+    проверок.
+    """
+    return (os.environ.get("ACL_STATUS_SHOT") or "").strip() == "1"
+
+
+def _last_status_shot(account: str) -> tuple[str, str]:
+    """Последний сохранённый снимок аккаунта, если он ещё на диске."""
+    try:
+        got = get_status(account)
+    except Exception:  # noqa: BLE001 — без старого снимка чтение не хуже
+        return "", ""
+    return got.get("shot_id", ""), got.get("shot_at", "")
+
+
+def _shoot_status(page, out: "SpendReading") -> None:
+    """Снимок, если состояние — не «чисто». Чистая страница не снимается.
+
+    Без `ACL_STATUS_SHOT=1` страницу не трогаем вовсе (ACL-1535): ни
+    `page.screenshot`, ни CDP. Строке и Copy for group остаётся последний
+    сохранённый снимок, если он есть.
+    """
+    if out.status and out.status != "clear":
+        if status_shot_enabled():
+            out.status_shot, out.status_shot_at = _status_shot(page, out.account)
+        else:
+            out.status_shot, out.status_shot_at = _last_status_shot(out.account)
 
 
 # ══ Дерево аккаунта: кампании и объявления ════════════════════════════════
@@ -1618,9 +2448,71 @@ def _snapshot_empty_table(page, level: str, how: str) -> None:
         pass
 
 
+#: Надписи, которые Meta рисует в ячейке имени рядом с самим именем (ACL-1395).
+#:
+#: 30.09, Facebook_6540: объявление прочиталось как
+#: «1741 - Pro Bancolombia Unpublished edits Unpublished edits» — надпись о
+#: несохранённых правках, дважды, — и книга статистики не нашла под ним ни
+#: одной строки. Так же пришли ещё одно объявление и кампания (сохранённые
+#: чтения этой машины). «In draft» Meta пишет у черновиков (снятые страницы
+#: `rpa_pages`); «In review» и «Draft» — надписи того же ряда по списку
+#: владельца.
+#:
+#: Список один. Им пользуются разбор таблицы и поиск тумблера (в JS он
+#: подставляется отсюда) и `clean_object_name`; в `report.html` — копия для
+#: уже сохранённых чтений, и тест держит её равной этой.
+#:
+#: Снимаются только с конца имени, целым словом и точно как написано:
+#: «2002 - Draft 5 promo» остаётся как есть.
+META_NAME_LABELS: tuple[str, ...] = ("Unpublished edits", "In draft", "In review", "Draft")
+
+
+def clean_object_name(name: Any) -> str:
+    """Имя без надписей Meta в конце; пробелы схлопнуты, как их схлопывает разбор.
+
+    Надпись снимается, только если перед ней есть имя: объект, названный
+    просто «Draft», остаётся «Draft», а не пустой строкой.
+    """
+    text = " ".join(str(name or "").split())
+    while True:
+        for label in META_NAME_LABELS:
+            if text.endswith(" " + label):
+                text = text[: -len(label) - 1].rstrip()
+                break
+        else:
+            return text
+
+
+#: Та же чистка для страницы. Список подставляется из `META_NAME_LABELS`,
+#: чтобы у разбора таблицы и у поиска тумблера не было своих копий.
+#:
+#: Имя ячейки берётся сперва из подсказки вокруг ссылки на объект
+#: (`data-tooltip-content`) — там Meta держит одно имя, без надписей рядом;
+#: на снятых страницах она есть у каждой строки. Нет подсказки — текст
+#: ячейки, и тогда надписи снимает правило.
+_CLEAN_NAME_JS = (
+    "const META_NAME_LABELS = " + json.dumps(list(META_NAME_LABELS)) + ";\n"
+    r"""  const cleanName = (s) => {
+    let text = (s || '').replace(/\s+/g, ' ').trim();
+    for (;;) {
+      const hit = META_NAME_LABELS.find(l => text.endsWith(' ' + l));
+      if (!hit) return text;
+      text = text.slice(0, -hit.length - 1).trim();
+    }
+  };
+  const cellName = (cell) => {
+    const tips = Array.from(cell.querySelectorAll('[data-tooltip-content]'))
+      .filter(e => e.querySelector('a'));
+    const tip = tips.length === 1 ? tips[0].getAttribute('data-tooltip-content') : '';
+    return cleanName(tip && tip.trim() ? tip : cell.innerText);
+  };"""
+)
+
+
 _READ_TREE_JS = r"""
 (level) => {
   const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
+  /*ACL_CLEAN_NAME*/
   // Разметку строк Meta теперь вешает на обёртки `display: contents` (17.09):
   // своих прямоугольников у них нет, и все 88 строк Doc20 считались
   // невидимыми. Видимость такой обёртки — видимость её содержимого.
@@ -1687,7 +2579,7 @@ _READ_TREE_JS = r"""
       const sw = row.querySelector('[role="switch"]');
       const aria = sw ? sw.getAttribute('aria-checked') : null;
       rows.push({
-        id: '', id_from: 'none', name: norm(n.getAttribute('data-tooltip-content')),
+        id: '', id_from: 'none', name: cleanName(n.getAttribute('data-tooltip-content')),
         switch: aria === 'true' ? 'on' : aria === 'false' ? 'off' : 'unknown',
         switch_label: sw ? norm(sw.getAttribute('aria-label')) : '',
         delivery: val('delivery'), results: val('results'),
@@ -1740,7 +2632,8 @@ _READ_TREE_JS = r"""
     // Одна и та же разметка висит на нескольких вложенных узлах: берём первое
     // непустое, а не последнее — внутренние копии часто пустые.
     if (cell.startsWith('forObjectType(name')) {
-      const txt = norm(el.innerText);
+      // Имя без надписей Meta рядом с ним (ACL-1395): «Unpublished edits».
+      const txt = cellName(el);
       if (txt && !r.name) r.name = txt;
     } else if (cell.startsWith('forObjectType(delivery')) {
       const txt = norm(el.innerText);
@@ -1803,7 +2696,7 @@ _READ_TREE_JS = r"""
   return {rows: Array.from(rows.values()), how: 'data-surface',
           kinds: Array.from(kinds), view: view, partial: scrollable};
 }
-"""
+""".replace("/*ACL_CLEAN_NAME*/", _CLEAN_NAME_JS)
 
 
 def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
@@ -1866,7 +2759,9 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
         AdObject(
             level=level,
             id=str(r.get("id") or ""),
-            name=str(r.get("name") or ""),
+            # Страница уже чистит; правило ещё раз — на случай, если её
+            # разметка изменится, а надпись окажется в тексте ячейки.
+            name=clean_object_name(r.get("name")),
             switch=str(r.get("switch") or "unknown"),
             switch_label=str(r.get("switch_label") or ""),
             delivery=str(r.get("delivery") or ""),
@@ -1903,6 +2798,32 @@ def read_level(page, level: str) -> tuple[list[AdObject], str, str]:
         if got.get("partial") else ""
     )
     return objects, how, warning
+
+
+def _read_settled_ads(page, *, timeout_s: float = 10.0) -> tuple[list[AdObject], str, str]:
+    """Прочитать объявления одной кампании, когда список перестал меняться.
+
+    19.09 Doc20: все десять кампаний вернули один и тот же набор объявлений,
+    хотя 17–18.09 при пяти кампаниях тот же путь давал верную разбивку. Meta
+    сперва рисует таблицу без фильтра по кампании и сужает её чуть позже;
+    чтение сразу по появлению таблицы брало общий список. Читаем, пока два
+    чтения подряд не совпадут.
+    """
+    import time as _time
+
+    got, how, err = read_level(page, "ad")
+    pause = getattr(page, "wait_for_timeout", None)
+    if pause is None:  # не браузер (подставная страница) — ждать нечего
+        return got, how, err
+    deadline = _time.monotonic() + timeout_s
+    while _time.monotonic() < deadline:
+        pause(1500)
+        again, how2, err2 = read_level(page, "ad")
+        # У таблицы без id (Doc19) id пустые — сравниваем и по имени.
+        if [(o.id, o.name) for o in again] == [(o.id, o.name) for o in got]:
+            return again, how2, err2
+        got, how, err = again, how2, err2
+    return got, how, err
 
 
 #: Данные дерева, которые Meta вшивает в страницу списка кампаний.
@@ -1990,6 +2911,7 @@ def _campaigns_from_page_data(page) -> dict[str, dict]:
 
 def _read_tree(
     page, act: str, expected_act: str, date_from: str, date_to: str = "",
+    *, reached: dict[str, bool] | None = None,
 ) -> tuple[list[dict], str, str]:
     """Пройти уровни и собрать дерево. Возвращает `(объекты, чем, ошибка)`.
 
@@ -2042,6 +2964,10 @@ def _read_tree(
         parents, how, err = read_level(page, top)
         if not _context_matches(top):
             return [], how, "; ".join(errors)
+        if reached is not None:
+            # ACL-1504: список кампаний прочитан (пусть и пустой) — отказ
+            # разбора таблицы приходит пустым списком с ошибкой, это не он.
+            reached["list"] = bool(parents) or not err
         if how:
             hows.append(f"{top}:{how}")
         if err:
@@ -2098,7 +3024,7 @@ def _read_tree(
                             parent_level=top, parent_id=key)
             if not _open(url, what, key):
                 continue
-            got, how, err = read_level(page, "ad")
+            got, how, err = _read_settled_ads(page)
             if not _context_matches(what, key):
                 continue
             if how:
@@ -2168,6 +3094,15 @@ def _read_tree(
             owners.setdefault(obj["id"], set()).add(obj["parent_id"])
     ambiguous = {oid for oid, parents in owners.items() if len(parents) > 1}
     if ambiguous:
+        # Снимок страницы объявлений: что Meta показывает при фильтре по
+        # кампании, если фильтр не сработал (Doc20, 19.09).
+        try:
+            from src.fb_ads_rpa import page_capture as _pc
+            _pc.capture(page, step="tree_ad_ambiguous_parents",
+                        diag={"ambiguous": len(ambiguous), "url_params": page.url.split("?", 1)[-1][:300]},
+                        blocks={"table": _TOP_TABLE_JS})
+        except Exception:
+            pass
         objects = [o for o in objects if not (o["level"] == "ad" and o["id"] in ambiguous)]
         errors.append("the same ads came back under different campaigns; ambiguous links skipped")
     return objects, " ".join(hows), "; ".join(errors)
@@ -2367,6 +3302,7 @@ SEL_MARKED_SWITCH = '[data-acl-switch="1"]'
 _FIND_SWITCH_JS = r"""
 (args) => {
   const norm = s => (s || '').replace(/\s+/g, ' ').trim();
+  /*ACL_CLEAN_NAME*/
   // display:contents-обёртки строк (Meta, 17.09) своих прямоугольников не имеют —
   // их видимость берётся у содержимого, как в чтении дерева.
   const hasBox = e => e.getClientRects().length > 0 || (getComputedStyle(e).display === 'contents' && [...e.children].some(hasBox));
@@ -2385,7 +3321,10 @@ _FIND_SWITCH_JS = r"""
     if (!m || m[1] !== args.id) continue;
     const kind = m[2].match(/forObjectType\([^,]+,([^,)]+)/);
     if (kind) kinds.add(kind[1]);
-    if (m[2].startsWith('forObjectType(name') && norm(el.innerText)) names.add(norm(el.innerText));
+    // Имя — как его прочитало дерево: без надписей Meta (ACL-1395). Иначе
+    // строку с «Unpublished edits» нельзя было бы выключить: дешборд
+    // показывает и присылает чистое имя.
+    if (m[2].startsWith('forObjectType(name') && cellName(el)) names.add(cellName(el));
     if (m[2].startsWith('forObjectType(delivery') && norm(el.innerText)) deliveries.add(norm(el.innerText));
     if (m[2].startsWith('forObjectType(toggle')) {
       el.querySelectorAll('[role="switch"],input[type="checkbox"]').forEach(sw => {
@@ -2395,7 +3334,7 @@ _FIND_SWITCH_JS = r"""
   }
   if (kinds.size !== 1 || !kinds.has(args.kind) || names.size !== 1 || switches.size !== 1) return fail('row identity or switch is ambiguous');
   const name = [...names][0], sw = [...switches][0];
-  if (!args.name || name !== norm(args.name)) return fail('row name changed');
+  if (!args.name || name !== cleanName(args.name)) return fail('row name changed');
   if (sw.disabled || sw.closest('[aria-disabled="true"]')) return fail('switch is disabled');
   const aria = sw.getAttribute('aria-checked');
   const state = aria === 'true' ? 'on' : aria === 'false' ? 'off' :
@@ -2435,7 +3374,7 @@ _FIND_SWITCH_JS = r"""
   sw.setAttribute('data-acl-switch', '1');
   return result;
 }
-"""
+""".replace("/*ACL_CLEAN_NAME*/", _CLEAN_NAME_JS)
 
 # Re-read the same visible period in the exact browser task that may click.
 _SWITCH_ACTION_JS = """args => {
@@ -2594,7 +3533,9 @@ def _turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
 
         # Имя сверяется, если дешборд его прислал: id мог устареть, а строка
         # под ним — оказаться чужой. Выключить не то хуже, чем не выключить.
-        if expected_name and out.name and out.name != expected_name:
+        # Сравниваются имена без надписей Meta (ACL-1395): страница их уже
+        # сняла, а чтение, сохранённое раньше, могло прислать имя с ними.
+        if expected_name and out.name and out.name != clean_object_name(expected_name):
             out.error = (
                 f"the page shows \"{out.name}\" under this id, but the dashboard showed "
                 f"\"{expected_name}\"; nothing was touched"

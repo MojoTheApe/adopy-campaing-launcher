@@ -2,11 +2,15 @@
 from __future__ import annotations
 
 import logging
+import os
+import threading
+import time
 from typing import Any
 
 from config.paths import get_ad_account_map_path
 from src.fb_ads_rpa.ads_manager_flow import AdsManagerFlow
 from src.fb_ads_rpa.browser import (
+    ReopenCancelled,
     BrowserConnection,
     PlaywrightProfileProvider,
     get_browser_provider,
@@ -16,6 +20,8 @@ from src.fb_ads_rpa.config import get_browser_provider as get_browser_provider_n
 from src.fb_ads_rpa.draft import CampaignDraft, RpaPublishResult
 from src.fb_ads_rpa.operations import serialized_browser
 from src.fb_ads_rpa.enrich_draft import enrich_campaign_drafts
+from src.fb_ads_rpa import profile_trouble
+from src.fb_ads_rpa import run_telemetry as _telemetry
 from src.meta_campaign_agent.ad_account_map import load_ad_account_map, resolve_account_entry
 
 log = logging.getLogger(__name__)
@@ -39,6 +45,51 @@ def profile_key_for(account_label: str) -> str:
     return profile or label
 
 
+#: ACL-1444: машинный выключатель — `1` держит открытыми все окна профилей,
+#: как до ACL-1444 (чистое задание профиль не закрывает).
+ENV_KEEP_PROFILES_OPEN = "FB_RPA_KEEP_PROFILES_OPEN"
+
+#: Строка в панели задания, когда робот закрыл профиль сам.
+PROFILE_CLOSED_NOTICE = "Closed the profile — all campaigns are ready"
+
+
+def keep_profiles_open() -> bool:
+    """Выключатель ACL-1444 из окружения (машинный `.env`), читается при каждом задании."""
+    return str(os.environ.get(ENV_KEEP_PROFILES_OPEN, "") or "").strip().lower() in (
+        "1", "true", "yes", "on")
+
+
+def _on_campaign_list(url: str) -> bool:
+    """Список кампаний Ads Manager — не редактор (ни `/edit`, ни `simple_create`)."""
+    from src.fb_ads_rpa.simple_create import url_is_simple_create
+
+    path = (url or "").split("?", 1)[0]
+    return ("/adsmanager/manage/campaigns" in path and "/edit" not in path
+            and not url_is_simple_create(url))
+
+
+def _resolve_account(account_label: str):
+    try:
+        return resolve_account_entry(load_ad_account_map(get_ad_account_map_path()), account_label)
+    except Exception:
+        return None
+
+
+def close_account_profile(account_label: str) -> str:
+    """Закрыть профиль аккаунта по кнопке «Close profile» (ACL-1444).
+
+    Мягкая остановка через MLX API, без kill (`browser.stop_profile_on_request`).
+    Работает ли на профиле задание, проверяет дешборд (`publish_jobs.close_profile`)
+    под замком профиля.
+    """
+    from src.fb_ads_rpa import browser as _browser
+
+    entry = _resolve_account(account_label)
+    if entry is None or not (getattr(entry, "profile_id", "") or "").strip():
+        raise RuntimeError(f"{account_label}: no Multilogin profile in the account map")
+    return _browser.stop_profile_on_request(entry, account_label)
+
+
 class RpaPublisher:
     """Publish dashboard slots via Playwright + antidetect browser."""
 
@@ -58,11 +109,21 @@ class RpaPublisher:
         self._conn: BrowserConnection | None = None
         self._entry = None
         self._cancelled = False
+        # ACL-1614: Stop только сигналит. Поток задания слышит Event в ожиданиях
+        # (`job_cancel.check`) и сам закрывает соединение на выходе.
+        self.cancel_event = threading.Event()
 
     def cancel(self) -> None:
-        """Stop RPA work; disconnect CDP but leave Multilogin window open."""
+        """Сигнал остановки; безопасно из любого потока.
+
+        Соединение Playwright и браузер отсюда НЕ закрываются (ACL-1614): sync
+        Playwright принадлежит потоку задания, а закрытие из чужого потока
+        оставляло его в бесконечном цикле с GIL в руках (05.10). Поток
+        задания увидит флаг, выйдет `JobCancelled` и вызовет `close` сам;
+        окно Multilogin остаётся открытым, как и раньше.
+        """
         self._cancelled = True
-        self.close(force=False)
+        self.cancel_event.set()
 
     def build_drafts(
         self,
@@ -73,23 +134,36 @@ class RpaPublisher:
         activate: bool = False,
         preview_mode: bool = False,
     ) -> list[CampaignDraft]:
-        drafts = slots_to_campaign_drafts(
-            slots,
-            account_label=account_label,
-            country=country,
-            activate=activate,
-        )
-        return enrich_campaign_drafts(
-            drafts,
-            account_label=account_label,
-            preview_mode=preview_mode,
-        )
+        # ACL-1313: длительность сборки (вместе с библиотекой и книгой) — в
+        # телеметрию, а момент конца — для замера ожидания профиля.
+        with _telemetry.phase("build_drafts", diag={"slots": len(slots or []),
+                                                    "preview": bool(preview_mode)}):
+            drafts = slots_to_campaign_drafts(
+                slots,
+                account_label=account_label,
+                country=country,
+                activate=activate,
+            )
+            drafts = enrich_campaign_drafts(
+                drafts,
+                account_label=account_label,
+                preview_mode=preview_mode,
+            )
+        self._built_at = time.monotonic()
+        return drafts
 
     def _resolve_entry(self, account_label: str):
         account_map = load_ad_account_map(get_ad_account_map_path())
         return resolve_account_entry(account_map, account_label)
 
     def _reset_browser(self, *, keep_browser_open: bool = False) -> None:
+        # ACL-1702 (ревью PR #704, m3): адрес CDP старого соединения сторожу больше не нужен.
+        try:
+            from src.fb_ads_rpa import tab_watchdog
+
+            tab_watchdog.forget_endpoint()
+        except Exception:
+            pass
         if self._conn:
             try:
                 self._conn.close(keep_browser_open=keep_browser_open)
@@ -243,20 +317,34 @@ class RpaPublisher:
                 self._reset_browser(keep_browser_open=True)
 
         try:
+            # ACL-1562: окно, открытое руками, провайдер переоткрывает сразу —
+            # ожидания тишины ввода (ACL-1427) и его Stop больше нет.
+            # ACL-1606: Stop слышен и между повторами запуска профиля.
+            try:
+                self._provider.cancel_check = lambda: bool(getattr(self, "_cancelled", False))
+            except Exception:
+                pass
             self._conn = self._provider.open(entry, account_label)
             log.info("Browser opened via %s", self._provider.__class__.__name__)
         except Exception as exc:
             err_str = str(exc)
             self._reset_browser(keep_browser_open=soft)
+            if isinstance(exc, (profile_trouble.ProfileStop, ReopenCancelled)):
+                # ACL-1320: причина в профиле (вход, сеть, открыт руками) —
+                # её текст и есть сообщение; обходных путей нет.
+                raise
             if attach_only:
                 # The reason above is the one from the Multilogin automation
                 # API, and it is the whole message worth reading. A profile
                 # left open in MLX Desktop is no longer a reason to do
                 # anything: that path restarts it by itself.
+                # ACL-1320: профиль, открытый руками, робот больше не
+                # перезапускает (это `profile_open_by_hand` выше) — хвост
+                # сообщения не обещает того, чего не будет.
                 raise RuntimeError(
                     f"{exc} "
                     "(MLX attach-only: RPA connects through the Multilogin automation API "
-                    "on Publish, restarting the profile itself when it has no debug port.)"
+                    "on Publish.)"
                 ) from exc
             if "401" in err_str or "Authorization" in err_str or "authorization" in err_str:
                 log.warning("MLX API returned 401 (token expired). Trying DirectCDP.")
@@ -294,6 +382,7 @@ class RpaPublisher:
         # Always leave Multilogin/Mimic open so the user can verify FB login.
         # force/cancel only stop RPA + disconnect CDP — never stop_profile.
         _ = force  # kept for call-site compat; must not close MLX window
+        self._account_stop = None
         if self._conn:
             try:
                 self._conn.close(keep_browser_open=True)
@@ -306,6 +395,219 @@ class RpaPublisher:
             except Exception:
                 pass
             self._entry = None
+
+    def finish_job(self, account_label: str, *, clean: bool, other_job_waits: bool = False) -> str:
+        """Конец задания: отпустить браузер и, если всё чисто, закрыть профиль (ACL-1444).
+
+        `clean` — вердикт задания (все кампании годны к публикации, ошибок
+        нет; решает `publish_jobs`). Профиль закрывается, только когда ВСЁ:
+        выключатель `FB_RPA_KEEP_PROFILES_OPEN` не стоит, задание не отменяли,
+        черновик сохранён (`_draft_saved`), а провайдер умеет и вправе закрыть
+        этот профиль (`close_finished_profile`: только профиль робота, мягкая
+        остановка через MLX API). Иначе окно остаётся, как раньше.
+
+        `other_job_waits` — на этот же профиль уже стоит другое задание:
+        закрывать незачем, оно поднимет профиль сразу (ревью PR #446, F6).
+
+        CDP отпускается всегда (`close`), до остановки профиля. Строка
+        телеметрии `profile_closed_after_job`: ok True — закрыт, False — MLX
+        не остановил, None — оставлен намеренно (в т.ч. окно руками); `note` — почему.
+        """
+        entry, conn = self._entry, self._conn
+        provider = self._provider
+        outcome = ""
+        if keep_profiles_open():
+            outcome = "kept_switch"
+        elif not clean:
+            outcome = "kept_problem"
+        elif self._cancelled:
+            outcome = "kept_cancelled"
+        elif entry is None or conn is None:
+            outcome = "kept_no_session"
+        elif not callable(getattr(provider, "close_finished_profile", None)):
+            outcome = "kept_provider"
+        else:
+            try:
+                saved = self._draft_saved(conn.page)
+            except Exception:
+                saved = False
+            if not saved:
+                outcome = "kept_unsaved"
+        self.close()
+        if not outcome and self._cancelled:
+            # Stop нажали, пока ждали автосохранения (ревью PR #446, F2).
+            outcome = "kept_cancelled"
+        if not outcome and other_job_waits:
+            outcome = "kept_next_job"
+        if not outcome:
+            try:
+                outcome = str(provider.close_finished_profile(entry, account_label) or "stop_failed")
+            except Exception as exc:
+                log.warning("%s: closing the finished profile failed: %s", account_label,
+                            _telemetry.scrub(str(exc))[:200])
+                outcome = "stop_failed"
+        ok = True if outcome == "closed" else (False if outcome == "stop_failed" else None)
+        _telemetry.record("profile_closed_after_job", ok, note=outcome,
+                          diag={"provider": type(provider).__name__})
+        if outcome == "closed":
+            log.info("%s: all campaigns are ready - closed the profile", account_label)
+        return outcome
+
+    @staticmethod
+    def _draft_saved(page: Any) -> bool:
+        """Черновик сохранён (ACL-1444). Закрыто по умолчанию: «нечего
+        сохранять» — только на списке кампаний; любая другая страница
+        (прежний редактор `/edit`, новый «в один экран» `simple_create`,
+        чужая или непрочитанная) — дождаться автосохранения Meta и увидеть
+        «All edits saved» (ревью PR #446, F1)."""
+        from src.fb_ads_rpa import meta_dom
+
+        try:
+            url = str(page.url or "")
+        except Exception:
+            url = ""
+        if _on_campaign_list(url):
+            return True
+        try:
+            meta_dom.wait_editor_saved(page, timeout_s=15)
+        except Exception:
+            pass
+        return bool(meta_dom._all_edits_saved(page))
+
+    def _drop_hung_tab(self) -> None:
+        """Вкладку закрыл сторож (ACL-1702): снять метку и отпустить соединение.
+
+        Отключение Playwright — из ЭТОГО потока (потока задания), окно
+        профиля остаётся открытым (`keep_browser_open`). Следующая кампания
+        задания подключается заново (`_ensure_browser`) и берёт живую вкладку;
+        иначе страж «вкладки нет» отвечал бы `browser_closed` на каждую.
+        """
+        from src.fb_ads_rpa import tab_watchdog
+
+        conn = getattr(self, "_conn", None)
+        if conn is not None:
+            tab_watchdog.clear_page_mark(getattr(conn, "page", None))
+        self._reset_browser(keep_browser_open=True)
+
+    def _flow(self, conn: BrowserConnection, account_label: str) -> AdsManagerFlow:
+        """Поток кампании, который может сменить вкладку и перезапустить профиль."""
+        return AdsManagerFlow(
+            conn.page, selectors_path=self.selectors_path,
+            on_page_replaced=self._adopt_page,
+            restart_profile=lambda: self._restart_unresponsive_profile(account_label),
+        )
+
+    def _adopt_page(self, page: Any) -> None:
+        """Поток сменил зависшую вкладку на свежую (ACL-1320): соединение
+        дальше отдаёт её — и следующей кампании, и уборке в конце."""
+        if self._conn is not None and page is not None:
+            self._conn.page = page
+
+    def _restart_unresponsive_profile(self, account_label: str) -> Any:
+        """Перезапустить не отвечающий профиль через MLX API (ACL-1320).
+
+        Только у провайдера, который это умеет (`restart_unresponsive`,
+        attach-only по умолчанию): остановка и запуск идут через API
+        рабочего пространства профиля, простой браузер не открывается
+        никогда. Возвращает страницу нового соединения или None.
+        """
+        entry = self._entry
+        restart = getattr(self._provider, "restart_unresponsive", None)
+        if entry is None or restart is None:
+            return None
+        self._reset_browser(keep_browser_open=True)
+        try:
+            self._conn = restart(entry, account_label)
+        except profile_trouble.ProfileStop:
+            self._conn = None
+            raise
+        except Exception as exc:
+            # ACL-1320, живой прогон 26.09 15:40 (Facebook_9943): остановка
+            # прошла, подключение — `connect ECONNREFUSED`, и профиль остался
+            # закрытым, а итог говорил только «профиль не отвечает». Теперь
+            # это своя остановка с понятным текстом для человека.
+            log.warning("Restart of unresponsive profile %s failed: %s", account_label, exc)
+            self._conn = None
+            raise profile_trouble.ProfileStop(
+                profile_trouble.RESTART_FAILED, f"{type(exc).__name__}: {str(exc)[:120]}") from exc
+        return self._conn.page
+
+    @staticmethod
+    def _report_profile_stop(stop: "profile_trouble.ProfileStop", campaign_name: str,
+                             account: str, where: str, *, cancelled: bool = False) -> None:
+        """Остановка из-за профиля до кампании (подключение): строка
+        телеметрии и событие Sentry — как у остановки внутри кампании
+        (ревью PR #323, F7: open-by-hand чаще всего случается именно здесь).
+
+        Без раздела страницы (ревью PR #328, F2): страницы этой кампании не
+        было, а раздел, оставшийся в памяти, снят другой кампанией или до
+        падения вкладки."""
+        try:
+            _telemetry.record(stop.code, False, campaign=campaign_name, note=where,
+                              diag={"detail": stop.detail, "message": profile_trouble.message(stop.code)})
+        except Exception:
+            pass
+        if cancelled:
+            # Ревью PR #428 (F3): задание остановил человек (Stop) — это не
+            # сбой кампании, в Sentry не шлём (ACL-1318: туда — только
+            # настоящие сбои).
+            return
+        try:
+            from src.fb_ads_rpa import sentry_signal
+
+            sentry_signal.report_campaign_stop(stop.code, campaign=campaign_name,
+                                               account=account or "", attempt=1,
+                                               attach_section=False)
+        except Exception:
+            pass
+        try:
+            # ACL-1447: и итог кампании — остановлена до первого шага.
+            from src.fb_ads_rpa import run_summary
+
+            run_summary.report_finished(campaign=campaign_name, account=account or "",
+                                        stopped_at=stop.code, steps=[])
+        except Exception:
+            pass
+
+    @staticmethod
+    def _begin_campaign_context() -> None:
+        """Забыть прогон предыдущей кампании в этом потоке (ревью PR #328, F2).
+
+        Задание публикует кампании аккаунта по очереди в одном потоке, а
+        номер прогона называет только поток кампании (`set_current_run`).
+        Без этого остановка при подключении кампании B шла с номером прогона
+        кампании A — и разбор шёл по чужому прогону. Номер задания (ACL-1315)
+        сохраняется: он общий для всех кампаний задания.
+        """
+        try:
+            job = _telemetry.current_job_id()
+            _telemetry.clear_current_run()
+            if job:
+                _telemetry.set_current_job(job)
+        except Exception:
+            pass
+        # ACL-1702 (ревью PR #704, B3): разблокировка, случившаяся вне кампании
+        # (уборка окна, шаги после потока), не клеймит `tab_hung` следующую.
+        try:
+            from src.fb_ads_rpa import tab_watchdog
+
+            tab_watchdog.take_hung()
+        except Exception:
+            pass
+
+    @staticmethod
+    def _profile_stop_result(campaign_name: str, stop: "profile_trouble.ProfileStop", *,
+                             again: bool = False) -> RpaPublishResult:
+        """Итог кампании, которую остановил профиль (ACL-1320): не собрана,
+        блокирует, причина — текстом для человека."""
+        result = RpaPublishResult(campaign_name=campaign_name, success=False)
+        result.error = f"{stop.code}: {profile_trouble.message(stop.code)}"
+        if stop.detail and not again:
+            result.error += f" ({stop.detail})"
+        result.blocking_failures.append(stop.code)
+        result.steps_completed.append(
+            f"profile_stop:{stop.code}" + (":earlier_campaign" if again else ""))
+        return result
 
     @serialized_browser(key=lambda self, draft: profile_key_for(draft.account_label))
     def publish_draft(self, draft: CampaignDraft) -> RpaPublishResult:
@@ -322,11 +624,67 @@ class RpaPublisher:
         # hand_off: fill everything but leave browser open; treat as DRAFT status
         if self.hand_off:
             draft.status = "DRAFT"
-        conn = self._ensure_browser(draft.account_label)
-        flow = AdsManagerFlow(conn.page, selectors_path=self.selectors_path)
+        # ACL-1313: от конца сборки черновиков до сюда — ожидание очереди
+        # профиля (publish_lease) и подготовки; замеряется один раз на сборку.
+        campaign_name = str(getattr(draft, "name", "") or "")
+        self._begin_campaign_context()
+        built_at = getattr(self, "_built_at", None)
+        if built_at is not None:
+            self._built_at = None
+            _telemetry.record("job_phase", True, campaign=campaign_name, note="profile_queue",
+                              duration_s=time.monotonic() - built_at)
+        # ACL-1320: профиль уже остановил задание (вход, сеть, открыт руками,
+        # не поднялся) — следующая кампания упрётся в то же, браузер не трогаем.
+        stopped = getattr(self, "_account_stop", None)
+        if stopped is not None:
+            return self._profile_stop_result(campaign_name, stopped, again=True)
+        try:
+            if getattr(self, "_conn", None) is None:
+                with _telemetry.phase("browser_attach", campaign=campaign_name) as info:
+                    conn = self._ensure_browser(draft.account_label)
+                    info["provider"] = str(getattr(conn, "provider", "") or type(getattr(self, "_provider", None)).__name__)
+            else:
+                conn = self._ensure_browser(draft.account_label)
+        except profile_trouble.ProfileStop as stop:
+            self._account_stop = stop
+            self._report_profile_stop(stop, campaign_name, draft.account_label, "attach",
+                                      cancelled=bool(getattr(self, "_cancelled", False)))
+            return self._profile_stop_result(campaign_name, stop)
+        except ReopenCancelled:
+            # ACL-1606: Stop нажат, пока профиль ждали; профиль не поднят.
+            return RpaPublishResult(campaign_name=campaign_name, success=False,
+                                    error="Stopped by the user before the campaign started",
+                                    steps_completed=["cancelled_before_campaign"])
+        if getattr(self, "_cancelled", False):
+            # Ревью PR #563 (F2): Stop нажали, пока открывался браузер
+            # (переоткрытие окна, открытого руками, идёт секунды и не
+            # прерывается — ACL-1562). Кампанию не начинаем; окно остаётся
+            # открытым, отключаемся только от CDP.
+            self._reset_browser(keep_browser_open=True)
+            return RpaPublishResult(campaign_name=campaign_name, success=False,
+                                    error="Stopped by the user before the campaign started",
+                                    steps_completed=["cancelled_before_campaign"])
+        flow = self._flow(conn, draft.account_label)
         try:
             result = flow.publish_campaign(draft, dry_run=self.dry_run)
         except Exception as exc:
+            # ACL-1702: вкладку разблокировал сторож (зависла в одном вызове) —
+            # кампания кончена красным `tab_hung`, без переподключения и
+            # повтора: черновик частичный, повтор наплодил бы дубли.
+            from src.fb_ads_rpa import failure_policy, tab_watchdog
+
+            hung = tab_watchdog.take_hung()
+            if hung:
+                step = f"tab_hung:{hung}"
+                # Ревью PR #704 (B3): метку снять и соединение сбросить — вкладку
+                # сторож закрыл, следующая кампания задания подключится заново.
+                self._drop_hung_tab()
+                return RpaPublishResult(
+                    campaign_name=campaign_name, success=False,
+                    error=f"Recorded flow failed at: {step} - {failure_policy.reason(step)}",
+                    steps_completed=[f"recorded_flow_fail:{step}"],
+                    blocking_failures=[step],
+                    run_id=_telemetry.current_run_id() or None)
             if not self._browser_closed_error(exc):
                 raise
             # A dead PAGE usually does not mean a dead BROWSER — confirmed
@@ -338,10 +696,26 @@ class RpaPublisher:
             self._reset_browser(keep_browser_open=True)
             try:
                 conn = self._ensure_browser(draft.account_label)
+            except profile_trouble.ProfileStop as stop:
+                self._account_stop = stop
+                self._report_profile_stop(stop, campaign_name, draft.account_label, "reattach")
+                return self._profile_stop_result(campaign_name, stop)
             except Exception as re_exc:
                 raise self._mlx_fallback_error(exc, re_exc) from re_exc
-            flow = AdsManagerFlow(conn.page, selectors_path=self.selectors_path)
+            flow = self._flow(conn, draft.account_label)
             result = flow.publish_campaign(draft, dry_run=self.dry_run)
+        # ACL-1702 (ревью PR #704, B3): кампания кончилась `tab_hung` — вкладку
+        # закрыл сторож; соединение сбросить, следующая кампания — заново.
+        if any(str(f).startswith("tab_hung") for f in (getattr(result, "blocking_failures", None) or [])):
+            self._drop_hung_tab()
+        # ACL-1437: номер прогона — в «Technical details» карточки.
+        if isinstance(result, RpaPublishResult) and not result.run_id:
+            result.run_id = _telemetry.current_run_id() or None
+        for failure in result.blocking_failures or []:
+            code = str(failure).split(":", 1)[0]
+            if code in profile_trouble.ACCOUNT_STOPS:
+                self._account_stop = profile_trouble.ProfileStop(code)
+                break
         if self.hand_off and result.publishable:
             result.error = "Draft ready — browser left open, Meta Publish was not clicked"
         elif self.hand_off and result.success:
@@ -429,7 +803,10 @@ class RpaPublisher:
             wait_until="domcontentloaded",
             timeout=30000,
         )
-        page.wait_for_timeout(3000)
+        # ACL-1313: без `wait_for_timeout(3000)`. Цель — уйти из редактора,
+        # и она достигнута, когда goto вернулся: документ редактора выгружен
+        # (domcontentloaded нового). Браузер профиля после close() остаётся
+        # открытым и догружает список сам; 3 с ожидания ничего не добавляли.
 
     def __enter__(self) -> "RpaPublisher":
         return self

@@ -373,6 +373,8 @@ tried — don't loop forever on one field."""
         # same CDP-first capture the rest of the RPA stack relies on.
         try:
             path = capture_screenshot(self.page, "llm_agent_view")
+            if not path:
+                return _ToolOutcome("Screenshot skipped: the browser window is minimized.")
             with open(path, "rb") as f:
                 img_bytes = f.read()
             if not img_bytes:
@@ -483,7 +485,9 @@ tried — don't loop forever on one field."""
             result.error = f"LLM agent exceeded max_steps ({self.max_steps}) without calling finish()"
 
         try:
-            result.screenshot_paths.append(capture_screenshot(self.page, "llm_agent_final"))
+            final = capture_screenshot(self.page, "llm_agent_final")
+            if final:
+                result.screenshot_paths.append(final)
         except Exception:
             pass
         return result

@@ -1,0 +1,78 @@
+{
+    "_note": "ACL-1582: derived from ci_full_jobs_legacy.json (recorded run 37197547291) by renaming the jobs to the current ci.yml layout; synthetic, not a recording.",
+    "jobs": [
+        {
+            "conclusion": "success",
+            "id": 111422418935,
+            "name": "Classify and check project tooling",
+            "run_attempt": 1,
+            "run_id": 37197547291,
+            "status": "completed"
+        },
+        {
+            "conclusion": "success",
+            "id": 111422471912,
+            "name": "linux tests (3.11, 3)",
+            "run_attempt": 1,
+            "run_id": 37197547291,
+            "status": "completed"
+        },
+        {
+            "conclusion": "success",
+            "id": 111422471936,
+            "name": "linux tests (3.13, 3)",
+            "run_attempt": 1,
+            "run_id": 37197547291,
+            "status": "completed"
+        },
+        {
+            "conclusion": "success",
+            "id": 111422471940,
+            "name": "linux tests (3.11, 2)",
+            "run_attempt": 1,
+            "run_id": 37197547291,
+            "status": "completed"
+        },
+        {
+            "conclusion": "success",
+            "id": 111422471983,
+            "name": "linux tests (3.13, 2)",
+            "run_attempt": 1,
+            "run_id": 37197547291,
+            "status": "completed"
+        },
+        {
+            "conclusion": "success",
+            "id": 111422471988,
+            "name": "linux tests (3.13, 1)",
+            "run_attempt": 1,
+            "run_id": 37197547291,
+            "status": "completed"
+        },
+        {
+            "conclusion": "success",
+            "id": 111422471997,
+            "name": "linux tests (3.11, 1)",
+            "run_attempt": 1,
+            "run_id": 37197547291,
+            "status": "completed"
+        },
+        {
+            "conclusion": "success",
+            "id": 111425320443,
+            "name": "windows tests (3.13)",
+            "run_attempt": 1,
+            "run_id": 37197547291,
+            "status": "completed"
+        },
+        {
+            "conclusion": "success",
+            "id": 111425320444,
+            "name": "ACL verification",
+            "run_attempt": 1,
+            "run_id": 37197547291,
+            "status": "completed"
+        }
+    ],
+    "total_count": 9
+}

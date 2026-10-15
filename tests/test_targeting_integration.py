@@ -1,7 +1,7 @@
 """Offline integration of the library, HTTP API, builder and RPA resolution."""
 import asyncio
 import json
-import multiprocessing
+import os
 import shutil
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
@@ -13,6 +13,7 @@ import pytest
 
 from src.analysis_agent import team_library as tl, targeting_registry as tr
 from src.web import app as web
+from tests import targeting_worker
 
 
 @pytest.fixture(autouse=True)
@@ -31,23 +32,21 @@ def test_bad_registry_is_preserved(tmp_path):
         assert tr._store().read_text(encoding='utf-8') == content
 
 
-def _process_add(path, prefix):
-    tr._store = lambda: Path(path)
-    for i in range(8):
-        tr.add(f'{prefix}-{i}', f'Interest {prefix} {i}')
+def test_save_waits_out_a_briefly_held_registry(monkeypatch):
+    # ACL-1419: Windows refuses os.replace (WinError 5) while the target is
+    # open for a moment elsewhere; the save must wait, not drop the edit.
+    real, refusals = os.replace, []
 
+    def held_twice(src, dst):
+        if len(refusals) < 2:
+            refusals.append(dst)
+            raise PermissionError(5, 'Access is denied')
+        return real(src, dst)
 
-def test_multiple_processes_do_not_lose_writes():
-    ctx = multiprocessing.get_context('spawn')
-    workers = [ctx.Process(target=_process_add, args=(str(tr._store()), i)) for i in range(3)]
-    for w in workers:
-        w.start()
-    for w in workers:
-        w.join(40)
-        if w.is_alive():
-            w.terminate()
-        assert w.exitcode == 0
-    assert len(tr.all_targets()) == 24
+    monkeypatch.setattr(os, 'replace', held_twice)
+    tr.add('Held', 'Finance')
+    assert len(refusals) == 2
+    assert [t.name for t in tr.all_targets()] == ['Held']
 
 
 def test_concurrent_duplicate_check_is_atomic():

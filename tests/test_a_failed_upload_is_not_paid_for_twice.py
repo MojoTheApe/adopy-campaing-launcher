@@ -24,7 +24,7 @@ sys.path.insert(0, str(ROOT))
 from src.fb_ads_rpa import meta_dom as md  # noqa: E402
 from src.fb_ads_rpa import run_telemetry as rt  # noqa: E402
 
-FILE = r"C:\creatives\heavy.mp4"
+FILE = r"C:\creatives\heavy.mp4"  # linux-ok: a Windows path as opaque data, never touched on disk
 
 
 @pytest.fixture(autouse=True)
@@ -36,10 +36,18 @@ def clean(monkeypatch):
     md._failed_uploads.clear()
 
 
+def _offered_and_failed(*a, **k) -> bool:
+    """Файл подали Meta, и он не встал. Только такой отказ запоминается
+    (ACL-1348): отказ мастера до подачи файла — не приговор файлу."""
+    if not k.get("reuse_only"):
+        md._note_file_offered()
+    return False
+
+
 def test_the_same_file_is_not_uploaded_again_after_it_failed(monkeypatch):
     tries: list[dict] = []
     monkeypatch.setattr(md, "upload_ad_creative",
-                        lambda *a, **k: tries.append(k) or False)
+                        lambda *a, **k: tries.append(k) or _offered_and_failed(*a, **k))
     monkeypatch.setattr(md, "_close_creative_setup_modal", lambda page: True)
     monkeypatch.setattr(md, "_verify_ad_media_present", lambda page: False)
     monkeypatch.setattr(md, "_upload_stalled", lambda page: False)
@@ -68,7 +76,8 @@ def test_a_copy_that_appeared_meanwhile_still_wins(monkeypatch):
     # Копия ищется внутри мастера (acl-1192): `reuse_only`-заход отвечает
     # «прикрепили», когда она появилась.
     monkeypatch.setattr(md, "upload_ad_creative",
-                        lambda *a, **k: bool(k.get("reuse_only") and copy_there["yes"]))
+                        lambda *a, **k: bool(k.get("reuse_only") and copy_there["yes"])
+                        or _offered_and_failed(*a, **k))
     monkeypatch.setattr(md, "_close_creative_setup_modal", lambda page: True)
     monkeypatch.setattr(md, "_verify_ad_media_present", lambda page: False)
     monkeypatch.setattr(md, "_upload_stalled", lambda page: False)
@@ -90,13 +99,13 @@ def test_a_different_file_is_not_punished(monkeypatch):
 
     md.upload_ad_creative_with_retry(object(), "video", FILE)
     uploads.clear()
-    md.upload_ad_creative_with_retry(object(), "video", r"C:\creatives\other.mp4")
+    md.upload_ad_creative_with_retry(object(), "video", r"C:\creatives\other.mp4")  # linux-ok: a Windows path as opaque data, never touched on disk
     assert uploads, "другой файл обязан получить свою попытку"
 
 
 def test_the_verdict_does_not_survive_into_the_next_run(monkeypatch):
     """Между прогонами меняются кабинет, сеть и профиль — приговор не переносим."""
-    monkeypatch.setattr(md, "upload_ad_creative", lambda *a, **k: False)
+    monkeypatch.setattr(md, "upload_ad_creative", _offered_and_failed)
     monkeypatch.setattr(md, "_close_creative_setup_modal", lambda page: True)
     monkeypatch.setattr(md, "_verify_ad_media_present", lambda page: False)
     monkeypatch.setattr(md, "_upload_stalled", lambda page: False)

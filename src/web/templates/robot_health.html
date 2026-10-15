@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="/favicon.ico?v=acm" sizes="32x32">
+  <title>Robot health{% if run %} — run {{ run.run_id }}{% endif %}</title>
+  <script>
+    // Та же тема, что у дешборда: выбор человека в localStorage, иначе ОС.
+    (function () {
+      var t = null;
+      try { t = localStorage.getItem('acl.theme'); } catch (e) {}
+      if (t !== 'light' && t !== 'dark') {
+        t = (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+      }
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+  <style id="adopy-tokens">{% autoescape false %}{% include "adopy-tokens.css" %}{% endautoescape %}</style>
+  <style>
+    /* ACL-1797: цвета из токенов Adopy (adopy-tokens.css). */
+    :root {
+      --bg: var(--adopy-bg); --bg-elev: var(--adopy-surface); --border: var(--adopy-border);
+      --text: var(--adopy-text); --muted: var(--adopy-text-muted); --accent: var(--adopy-link);
+      --good: var(--adopy-success); --warn: var(--adopy-warning); --bad: var(--adopy-danger);
+      --good-bg: var(--adopy-success-bg); --warn-bg: var(--adopy-warning-bg); --bad-bg: var(--adopy-danger-bg);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 1.25rem 1.5rem 3rem; background: var(--bg); color: var(--text);
+           font-family: var(--adopy-font-sans); font-size: var(--adopy-text-table); line-height: var(--adopy-leading-ui); }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    header { display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap;
+             padding-bottom: 0.75rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); }
+    header h1 { font-size: 1.15rem; margin: 0; }
+    .muted { color: var(--muted); }
+    form.win { margin-left: auto; display: flex; gap: 0.4rem; align-items: center; }
+    form.win input { width: 4rem; padding: 0.2rem 0.4rem; background: var(--bg-elev);
+                     color: var(--text); border: 1px solid var(--border); border-radius: 4px; }
+    form.win button { padding: 0.2rem 0.7rem; background: var(--bg-elev); color: var(--accent);
+                      border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }
+    h2 { font-size: 0.95rem; margin: 1.6rem 0 0.4rem; }
+    p.help { margin: 0 0 0.6rem; color: var(--muted); max-width: 70rem; }
+    .scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-elev); }
+    table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+    th, td { padding: 0.3rem 0.55rem; border-bottom: 1px solid var(--border); text-align: center; white-space: nowrap; }
+    th { position: sticky; top: 0; background: var(--bg-elev); font-weight: 600; }
+    td.step, th.step { text-align: left; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    td.r-good { color: var(--good); }
+    td.r-warn { background: var(--warn-bg); color: var(--warn); }
+    td.r-bad { background: var(--bad-bg); color: var(--bad); }
+    td.flag { outline: 2px solid var(--bad); outline-offset: -2px; font-weight: 600; }
+    .trend { font-size: 0.85em; margin-left: 0.25rem; }
+    .trend.up { color: var(--good); } .trend.down { color: var(--bad); }
+    .tag { display: inline-block; padding: 0 0.35rem; border-radius: 3px; font-size: 0.8em;
+           border: 1px solid var(--border); margin-left: 0.25rem; }
+    .tag.new { color: var(--bad); border-color: var(--bad); }
+    .tag.known { color: var(--muted); }
+    ul.hl { margin: 0; padding-left: 1.2rem; }
+    ul.hl li { margin: 0.2rem 0; }
+    td.left { text-align: left; white-space: normal; }
+    .ok-yes { color: var(--good); } .ok-no { color: var(--bad); font-weight: 600; }
+    .shots { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+    .shots figure { margin: 0; max-width: 32rem; }
+    .shots img { max-width: 100%; border: 1px solid var(--border); border-radius: 4px; }
+    .shots figcaption { font-size: 0.8em; color: var(--muted); word-break: break-all; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92em; }
+  </style>
+</head>
+<body>
+{%- macro cell(c) -%}
+  {%- if not c.total -%}<td class="muted">–</td>
+  {%- else -%}
+  {%- set cls = 'r-good' if c.rate >= 90 else ('r-warn' if c.rate >= 60 else 'r-bad') -%}
+  <td class="{{ cls }}{% if c.flags %} flag{% endif %}"
+      title="{{ c.ok }} ok of {{ c.total }}{% if c.prev_total is defined and c.prev_total %}; previous window {{ c.prev_ok }}/{{ c.prev_total }}{% endif %}{% if c.failed_runs %}; failed runs: {{ c.failed_runs | join(', ') }}{% endif %}{% if 'streak' in c.flags %}; {{ c.streak | length }} failures in a row{% endif %}">
+    {{ c.ok }}/{{ c.total }}
+    {%- if c.trend is defined and c.trend -%}
+      <span class="trend {{ 'up' if c.trend > 0 else 'down' }}">{{ '%+d' % c.trend }}</span>
+    {%- endif -%}
+  </td>
+  {%- endif -%}
+{%- endmacro -%}
+
+<header>
+  <h1>Robot health</h1>
+  <a href="/">← Dashboard</a>
+  {% if run %}<a href="/robot-health?n={{ window }}">← All steps</a>{% endif %}
+  <span class="muted">Read-only, from this machine's run log. No account is opened.</span>
+  {% if not run %}
+  <form class="win" method="get" action="/robot-health">
+    <label for="n" class="muted">Last runs</label>
+    <input id="n" name="n" type="number" min="1" max="200" value="{{ window }}">
+    <button type="submit">Show</button>
+  </form>
+  {% endif %}
+</header>
+
+{% if error %}
+  <p class="help">{{ error }}</p>
+{% elif run %}
+  {#- Один прогон: исходы шагов по порядку и его снимки. -#}
+  <h2>Run {{ run.run_id }} · {{ run.account }} · build {{ run.build }}</h2>
+  <p class="help">Started {{ run.started[:19] | replace('T', ' ') }} UTC · {{ run.n_ok }}/{{ run.n_steps }} steps ok
+    {%- if run.abort %} · stopped at <code>{{ run.abort }}</code>{% endif %}
+    {%- if run.abort_label %} · <strong>{{ run.abort_label }}</strong>{% endif %}</p>
+  {% if run.failures %}
+  <ul class="hl">
+    {% for f in run.failures %}
+    <li><code>{{ f.step }}</code>{% if f.note %} <span class="muted">({{ f.note }})</span>{% endif %}
+      <span class="tag {{ 'new' if f.status == 'new' else 'known' }}">{{ f.status }}</span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  <h2>Steps</h2>
+  <div class="scroll"><table>
+    <tr><th class="step">Step</th><th>Result</th><th class="left">Note</th></tr>
+    {% for s in run_steps %}
+    <tr><td class="step">{{ s.step }}</td>
+      <td class="{{ 'ok-yes' if s.ok else 'ok-no' }}">{{ 'ok' if s.ok else 'failed' }}</td>
+      <td class="left muted">{{ s.note }}</td></tr>
+    {% endfor %}
+  </table></div>
+  <h2>Captures</h2>
+  {% if capture_dirs %}
+    <p class="help">Folders: {% for d in capture_dirs %}<code>{{ d }}</code>{% if not loop.last %} · {% endif %}{% endfor %}</p>
+  {% else %}
+    <p class="help">No capture folder for this run on this machine.</p>
+  {% endif %}
+  <div class="shots">
+    {% for name in shots %}
+    <figure><a href="/robot-health/capture/{{ run.run_id }}/{{ name | urlencode }}" target="_blank" rel="noopener">
+      <img src="/robot-health/capture/{{ run.run_id }}/{{ name | urlencode }}" alt="{{ name }}" loading="lazy"></a>
+      <figcaption>{{ name }}</figcaption></figure>
+    {% endfor %}
+  </div>
+{% else %}
+  <p class="help">{{ report.n_runs }} runs from {{ report.first_ts[:16] | replace('T', ' ') }} to
+    {{ report.last_ts[:16] | replace('T', ' ') }} UTC. A cell is <b>ok / total</b> over each column's
+    last {{ window }} runs; the small number is the change in points against the {{ window }} runs before.
+    A run that stopped earlier does not count for steps it never reached. Outlined cells: the rate
+    dropped by {{ drop_points }}+ points, or the step failed {{ streak_len }}+ times in a row. Hover a cell
+    for the failed runs.</p>
+
+  {% if report.highlights %}
+  <h2>Needs attention</h2>
+  <ul class="hl">
+    {% for h in report.highlights[:25] %}
+    {%- set why = [] -%}
+    {%- if 'streak' in h.flags %}{% set _ = why.append((h.streak | length) ~ ' failures in a row') %}{% endif -%}
+    {%- if 'drop' in h.flags %}{% set _ = why.append(h.prev_rate ~ '% → ' ~ h.rate ~ '%') %}{% endif %}
+    <li><code>{{ h.step }}</code> on <b>{{ h.column }}</b>: {{ why | join('; ') }} — runs
+      {% for rid in (h.streak or h.failed_runs)[-5:] %}<a href="/robot-health/run/{{ rid }}?n={{ window }}">{{ rid }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <h2>Steps by account (last {{ window }} runs)</h2>
+  <div class="scroll"><table>
+    <tr><th class="step">Step</th>
+      {% for col in report.columns %}<th title="{{ 'all accounts' if col == 'all' else 'account ' ~ col }}">{{ col }}</th>{% endfor %}</tr>
+    {% for step in report.steps %}
+    <tr><td class="step">{{ step }}{% if step in report.fail_only %} <span class="muted" title="Written only on failure: its success is logged under another step, so the cell is 0 / failures.">*</span>{% endif %}</td>
+      {% for col in report.columns %}{{ cell(report.cells[step][col]) }}{% endfor %}</tr>
+    {% endfor %}
+  </table></div>
+
+  <h2>Steps by build (all accounts, every run of the build)</h2>
+  <p class="help">Builds in the order they first ran. A build comes from the dashboard log line
+    "RPA flow version"; "unknown" means the log did not name the run's job.</p>
+  <div class="scroll"><table>
+    <tr><th class="step">Step</th>{% for b in report.builds %}<th>{{ b }}</th>{% endfor %}</tr>
+    {% for step in report.steps %}
+    <tr><td class="step">{{ step }}</td>
+      {% for b in report.builds %}{{ cell(report.by_build[step][b]) }}{% endfor %}</tr>
+    {% endfor %}
+  </table></div>
+
+  <h2>Recent runs</h2>
+  <div class="scroll"><table>
+    <tr><th>Run</th><th>Started (UTC)</th><th>Account</th><th>Build</th><th>Steps ok</th><th class="left">Failed steps</th></tr>
+    {% for r in report.runs %}
+    <tr><td><a href="/robot-health/run/{{ r.run_id }}?n={{ window }}">{{ r.run_id }}</a></td>
+      <td>{{ r.started[:16] | replace('T', ' ') }}</td><td>{{ r.account }}</td><td>{{ r.build }}</td>
+      <td>{{ r.n_ok }}/{{ r.n_steps }}</td>
+      <td class="left">
+        {% for f in r.failures %}<code>{{ f.step }}</code><span class="tag {{ 'new' if f.status == 'new' else 'known' }}">{{ f.status }}</span>{% if not loop.last %} {% endif %}{% endfor %}
+        {% if not r.failures and r.abort %}<span class="muted">stopped at <code>{{ r.abort }}</code></span>{% endif %}
+        {% if r.abort_label %}<span class="tag new">{{ r.abort_label }}</span>{% endif %}
+      </td></tr>
+    {% endfor %}
+  </table></div>
+{% endif %}
+</body>
+</html>

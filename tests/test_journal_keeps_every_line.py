@@ -26,6 +26,10 @@ sys.path.insert(0, str(ROOT))
 
 from src.acl_log import JournalWriteError, append_line
 
+# ACL-1582: файл идёт только в Windows-задание CI; причина — в маркере.
+pytestmark = pytest.mark.windows_only(
+    reason="concurrent appends under machine_file_lock, an msvcrt lock on Windows (fcntl elsewhere)")
+
 WRITERS = 12
 PER_WRITER = 60
 EXPECTED = WRITERS * PER_WRITER
@@ -174,14 +178,13 @@ def test_os_lock_serializes_processes_with_an_unlocked_control(tmp_path, bypass)
 import sys
 from src import acl_log
 if sys.argv[2] == 'bypass':
-    acl_log._grab = lambda guard: None
-    acl_log._release = lambda guard: None
+    import contextlib
+    acl_log._os_lock = lambda path: contextlib.nullcontext()
 print('ready', flush=True)
 acl_log.append_line(sys.argv[1], '{"record": 1}')
 """
-    with open(str(path) + '.lock', 'a+b') as guard:
-        guard.seek(0)
-        acl_log._grab(guard)
+    from config import paths
+    with paths.machine_file_lock(str(path) + '.lock'):
         proc = None
         try:
             proc = subprocess.Popen([sys.executable, '-c', script, str(path),
@@ -194,12 +197,14 @@ acl_log.append_line(sys.argv[1], '{"record": 1}')
             else:
                 with pytest.raises(subprocess.TimeoutExpired):
                     proc.communicate(timeout=.3)
-        finally:
-            acl_log._release(guard)
-            if proc is not None:
-                try:
-                    _, err = proc.communicate(timeout=10)
-                except subprocess.TimeoutExpired:
-                    proc.kill(); proc.communicate(); raise
-        assert proc.returncode == 0, err
+        except BaseException:
+            if proc is not None and proc.poll() is None:
+                proc.kill(); proc.communicate()
+            raise
+    # Замок отпущен — дочерний писатель доходит до записи.
+    try:
+        _, err = proc.communicate(timeout=10)
+    except subprocess.TimeoutExpired:
+        proc.kill(); proc.communicate(); raise
+    assert proc.returncode == 0, err
     assert path.read_text(encoding='utf-8').splitlines() == ['{"record": 1}']

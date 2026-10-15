@@ -1,10 +1,10 @@
 @echo off
 setlocal
-title ACL - Install
+title ACM - Install
 cd /d "%~dp0"
 
 echo.
-echo  ACL - Adopy Campaigns Launcher
+echo  ACL - Adopy Campaign Manager
 echo  Install / update
 echo  =============================
 echo.

@@ -25,18 +25,48 @@ from pathlib import Path
 
 from config.paths import get_local_config_dir
 
-# Where the numbers came from when they lived in the template. Kept as the seed
-# so an existing machine opens the new screen with what it always showed, rather
-# than with an empty page that looks like data loss.
-DEFAULT_GOALS: list[dict] = [
-    {"country": "Kuwait", "code": "KW", "market": "GCC", "ftd": 15, "cpa": 3000, "cr": 3.0, "leads_per_day": 16},
-    {"country": "United Arab Emirates", "code": "UAE", "market": "GCC", "ftd": 20, "cpa": 3000, "cr": 2.0, "leads_per_day": 33},
-    {"country": "Saudi Arabia", "code": "SA", "market": "GCC", "ftd": 15, "cpa": 1500, "cr": 2.5, "leads_per_day": 19},
-    {"country": "Chile", "code": "CL", "market": "Latam", "ftd": 20, "cpa": 1000, "cr": 2.0, "leads_per_day": 32},
-    {"country": "Colombia", "code": "CO", "market": "Latam", "ftd": 40, "cpa": 1000, "cr": 1.3, "leads_per_day": 99},
-    {"country": "Ecuador", "code": "EC", "market": "Latam", "ftd": 40, "cpa": 1000, "cr": 2.0, "leads_per_day": 65},
-    {"country": "Mexico", "code": "MX", "market": "Latam", "ftd": 40, "cpa": 1000, "cr": 1.0, "leads_per_day": 129},
-]
+#: Цель по FTD, с которой человек начинает, пока не задал свою.
+#:
+#: Раньше стартом были цели владельца из старого шаблона — семь стран с его
+#: числами. 30.09 тестовая установка «от имени Дана» показала их как цели Дана
+#: (ACL-1452). Старт теперь — страны самого человека, по 10 FTD, остальное пусто.
+DEFAULT_FTD = 10
+
+#: Код и рынок для известных стран — справочник, а не чьи-то цели.
+COUNTRY_INFO: dict[str, tuple[str, str]] = {
+    "kuwait": ("KW", "GCC"),
+    "united arab emirates": ("UAE", "GCC"),
+    "saudi arabia": ("SA", "GCC"),
+    "qatar": ("QA", "GCC"),
+    "bahrain": ("BH", "GCC"),
+    "oman": ("OM", "GCC"),
+    "chile": ("CL", "Latam"),
+    "colombia": ("CO", "Latam"),
+    "ecuador": ("EC", "Latam"),
+    "mexico": ("MX", "Latam"),
+    "peru": ("PE", "Latam"),
+    "panama": ("PA", "Latam"),
+    "guatemala": ("GT", "Latam"),
+    "costa rica": ("CR", "Latam"),
+    "el salvador": ("SV", "Latam"),
+    "argentina": ("AR", "Latam"),
+}
+
+
+def starting_goals(countries) -> list[dict]:
+    """Цели человека, который своих ещё не задавал: его страны по DEFAULT_FTD."""
+    out: list[dict] = []
+    seen: set[str] = set()
+    for raw in countries or []:
+        name = (str(raw or "")).strip()
+        if not name or name.casefold() in seen:
+            continue
+        seen.add(name.casefold())
+        code, market = COUNTRY_INFO.get(name.casefold(), ("", "Other"))
+        out.append({"country": name, "code": code, "market": market, "ftd": DEFAULT_FTD,
+                    "cpa": None, "cr": None, "leads_per_day": None})
+    out.sort(key=lambda g: (g["market"], g["country"]))
+    return out
 
 _FIELDS = ("country", "code", "market", "ftd", "cpa", "cr", "leads_per_day")
 
@@ -75,6 +105,18 @@ def _write(data: dict) -> None:
         temp.unlink(missing_ok=True)
 
 
+def _num_of(raw, key: str):
+    if raw in (None, ""):
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        raise ValueError(f"assets {key} must be a number, got {raw!r}")
+    if value < 0:
+        raise ValueError(f"assets {key} cannot be negative")
+    return value
+
+
 def _clean(goal: dict) -> dict:
     country = (str(goal.get("country") or "")).strip()
     if not country:
@@ -92,7 +134,7 @@ def _clean(goal: dict) -> dict:
             raise ValueError(f"{key} cannot be negative")
         return value
 
-    return {
+    out = {
         "country": country,
         "code": (str(goal.get("code") or "")).strip().upper()[:4],
         "market": (str(goal.get("market") or "")).strip() or "Other",
@@ -101,20 +143,39 @@ def _clean(goal: dict) -> dict:
         "cr": _num("cr", float),
         "leads_per_day": _num("leads_per_day", int),
     }
+    # Необязательные цели по Ad Asset (Rules): {"<asset>": {"cpa": .., "cr": ..}}
+    assets = goal.get("assets")
+    if isinstance(assets, dict) and assets:
+        clean: dict = {}
+        for name, val in assets.items():
+            name = str(name or "").strip()
+            if not name or not isinstance(val, dict):
+                continue
+            entry = {k: _num_of(val.get(k), k) for k in ("cpa", "cr")}
+            if any(v is not None for v in entry.values()):
+                clean[name] = entry
+        if clean:
+            out["assets"] = clean
+    return out
 
 
-def for_cm(cm: str) -> list[dict]:
-    """This person's goals, seeded from the old template numbers the first time.
+def for_cm(cm: str, countries=None) -> list[dict]:
+    """This person's goals; without stored ones — their countries at DEFAULT_FTD.
 
-    Seeding on read rather than on write keeps a machine that never edits
-    anything from acquiring a file it does not need — and keeps the screen from
-    opening empty on a machine that has been showing these numbers for months.
+    `countries` are the person's own countries (the caller knows them from the
+    report and the account map). Seeding on read rather than on write keeps a
+    machine that never edits anything from acquiring a file it does not need.
     """
     cm = (cm or "").strip()
     stored = _read().get(cm)
     if stored is None:
-        return [dict(g) for g in DEFAULT_GOALS]
+        return starting_goals(countries)
     return [dict(g) for g in stored if isinstance(g, dict)]
+
+
+def has_stored(cm: str) -> bool:
+    """Задал ли человек свои цели (тогда стартовый список не нужен)."""
+    return _read().get((cm or "").strip()) is not None
 
 
 def save(cm: str, goals: list[dict]) -> list[dict]:
@@ -134,20 +195,24 @@ def save(cm: str, goals: list[dict]) -> list[dict]:
     return cleaned
 
 
-def upsert(cm: str, goal: dict) -> list[dict]:
-    """Add a country or change one. Country name is the identity."""
+def upsert(cm: str, goal: dict, countries=None) -> list[dict]:
+    """Add a country or change one. Country name is the identity.
+
+    `countries` — те же страны, что видел человек: первая правка сохраняет
+    стартовые цели вместе с ней, а не одну правленую страну.
+    """
     cleaned = _clean(goal)
-    goals = [g for g in for_cm(cm) if (g.get("country") or "").casefold() != cleaned["country"].casefold()]
+    goals = [g for g in for_cm(cm, countries) if (g.get("country") or "").casefold() != cleaned["country"].casefold()]
     goals.append(cleaned)
     goals.sort(key=lambda g: (g.get("market") or "", g.get("country") or ""))
     return save(cm, goals)
 
 
-def delete(cm: str, country: str) -> list[dict]:
+def delete(cm: str, country: str, countries=None) -> list[dict]:
     """Stop tracking a country. Nothing else is touched — the country keeps its
     accounts, its history and its section; it simply stops being a target."""
     country = (country or "").strip().casefold()
-    goals = [g for g in for_cm(cm) if (g.get("country") or "").casefold() != country]
+    goals = [g for g in for_cm(cm, countries) if (g.get("country") or "").casefold() != country]
     return save(cm, goals)
 
 

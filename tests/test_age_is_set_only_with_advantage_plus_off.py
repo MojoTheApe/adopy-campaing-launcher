@@ -8,6 +8,13 @@
 берётся. В трёх других прогонах дня возраст ставился: дело не в селекторах,
 а в том, что переключатель оказался включён к моменту шага.
 
+ACL-1313 (25.09): `_ensure_manual_audience` читает состояние по бейджу
+карточки Audience (`#advantage-state-audience-section-header`) и без него
+ничего не кликает, поэтому бейдж синтетических страниц `_PAGE` и
+`_MENU_PAGE` обёрнут в этот заголовок, как в живой раскладке 09.2026. Сами
+утверждения о выключении не менялись: при бейдже «on» выключение по-прежнему
+кликается и пишется.
+
 Проверяется на синтетической странице в офлайн-Chrome: детектор видит оба
 признака Advantage+ и различает «выключено» и «не нашёл»; выключение
 переключает и пишет телеметрию; чтение показывает, что стоит в выпадашках;
@@ -33,7 +40,7 @@ _PAGE = """
 <!doctype html><html><body>
 <div id="card">
   <div>Audience</div>
-  <span id="badge" %(badge_style)s>Advantage+ %(badge)s</span>
+  <div id="advantage-state-audience-section-header"><span id="badge" %(badge_style)s>Advantage+ %(badge)s</span></div>
   <div>
     <div>Advantage+ leads campaign</div>
     <div id="sw" role="switch" aria-checked="%(checked)s" onclick="flip()">toggle</div>
@@ -138,7 +145,7 @@ _MENU_PAGE = """
 <!doctype html><html><body>
 <div id="card">
   <div>Audience</div>
-  <span id="badge">Advantage+ on</span>
+  <div id="advantage-state-audience-section-header"><span id="badge">Advantage+ on</span></div>
   <div id="trig" role="button" tabindex="-1" onclick="openMenu()">
     <span role="heading">Advantage+ leads campaign</span>
     <span id="state">On</span>
@@ -227,7 +234,10 @@ def test_a_switch_that_stays_on_does_not_block_settable_age_controls(page, tmp_p
     assert meta_dom.fill_audience_age(page, 35, 65) is True
     assert touched == [(35, 65)]
     rows = [r for r in _rows(tmp_path) if r["step"] == "advantage_plus_off"]
-    assert rows and rows[-1]["note"] == "still_on", "попытка выключить всё равно записана"
+    # ACL-1544: на синтетической странице нет ни контролов, ни строки Further
+    # limit — режим карточки не прочитать, и шаг не гадает: `unconfirmed`.
+    assert rows and rows[-1]["note"] == "unconfirmed", "попытка выключить всё равно записана"
+    assert rows[-1]["ok"] is None
 
 
 def test_clicked_35_is_not_the_same_as_shows_35(page, tmp_path, monkeypatch):
@@ -302,6 +312,18 @@ def test_an_open_dynamic_creative_dialog_is_cancelled_not_continued(page, tmp_pa
     assert not page.is_visible("#dlg")
 
 
+def test_the_age_step_believes_the_field_over_its_own_boundary_report(page, monkeypatch):
+    """17.09 22:12 CR_ait FX_Y: на экране «35 – 65+», а шаг отказал и не снял галочку."""
+    monkeypatch.setattr(meta_dom, "_sleep_h", lambda *a, **k: None)
+    monkeypatch.setattr(meta_dom, "_mark_age_trigger", lambda *a, **k: False)
+    page.set_content(
+        "<div><div>Age</div><div><div>35</div><div>65+</div></div>"
+        "<div><span>Use as a suggestion</span><input id='sug' type='checkbox' checked></div></div>"
+    )
+    assert meta_dom.fill_audience_age(page, 35, 65) is True
+    assert page.eval_on_selector("#sug", "el => el.checked") is False
+
+
 def test_unreadable_age_does_not_count_as_verified(page, tmp_path, monkeypatch):
     page.set_content('<div>Advantage+ off</div><div>Age</div>')
     monkeypatch.setattr(meta_dom, '_fill_audience_age_controls', lambda p, a, b: True)
@@ -331,17 +353,6 @@ def test_clock_18_is_untouched_by_the_integrated_age_setter(page, monkeypatch):
     assert page.evaluate('window.clockClicked === undefined')
     assert page.evaluate('window.maximumClicked === undefined')
 
-
-def test_the_age_step_believes_the_field_over_its_own_boundary_report(page, monkeypatch):
-    """17.09 22:12 CR_ait FX_Y: на экране «35 – 65+», а шаг отказал и не снял галочку."""
-    monkeypatch.setattr(meta_dom, "_sleep_h", lambda *a, **k: None)
-    monkeypatch.setattr(meta_dom, "_mark_age_trigger", lambda *a, **k: False)
-    page.set_content(
-        "<div><div>Age</div><div><div>35</div><div>65+</div></div>"
-        "<div><span>Use as a suggestion</span><input id='sug' type='checkbox' checked></div></div>"
-    )
-    assert meta_dom.fill_audience_age(page, 35, 65) is True
-    assert page.eval_on_selector("#sug", "el => el.checked") is False
 
 def test_the_age_field_is_read_the_same_way_the_click_finds_it(page, monkeypatch):
     """18.09 CL_ml Trading: «35 – 65+» на экране, а старое чтение отвечало «нет»."""

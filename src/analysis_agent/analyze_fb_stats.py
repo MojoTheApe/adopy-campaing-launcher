@@ -29,6 +29,7 @@ from config.paths import get_excel_path
 from src.knowledge_agent.knowledge_base import (
     resolve_targeting_text,
     log_unknown_target,
+    logged_unknown_targets,
 )
 from src.analysis_agent.report_markdown import build_full_report_markdown
 
@@ -74,8 +75,17 @@ def normalize_account_alias(alias) -> str:
 
 def alias_matches(series, alias):
     """Boolean mask: rows of `series` whose alias matches `alias`, suffix-blind."""
-    target = normalize_account_alias(alias)
-    return series.fillna("").astype(str).map(normalize_account_alias) == target
+    # Сравнение — единственное место, где работает явное правило имён
+    # (config/account_name_rules.json) и где регистр не важен.
+    from src.analysis_agent.account_names import account_key
+
+    target = account_key(alias)
+    # ACL-1729: в книге десятки тысяч строк, но алиасов — сотни. Ключ считался
+    # на каждую строку (и каждый раз stat файла правил) — страница Home
+    # собиралась 90 с. Считаем один раз на уникальное значение.
+    text = series.fillna("").astype(str)
+    hits = {v for v in text.unique() if account_key(v) == target}
+    return text.isin(hits)
 
 
 # A creative is identified by a 3-4 digit number; everything else in the
@@ -84,8 +94,10 @@ def alias_matches(series, alias):
 _CREATIVE_NUM_RE = re.compile(r"(?<!\d)(\d{3,4})(?!\d)")
 
 
-def split_ad_title(ad_title) -> tuple[str, str]:
-    """Split an Ad Title into (creative id, text name).
+def split_ad_title_variant(ad_title) -> tuple[str, str, str]:
+    """Split an Ad Title into (creative id, variant, text name).
+
+    ACL-1593: the variant digit is kept instead of dropped; "" when absent.
 
     The sheet stores both halves in one cell. This used to split on a dash
     with whitespace on at least one side, which is how most titles are
@@ -99,19 +111,19 @@ def split_ad_title(ad_title) -> tuple[str, str]:
     after it is the text, minus a variant digit ("2046 1 - Story14" is
     creative 2046) and any separators:
 
-        "2046 1 - Story14"  -> ("2046", "Story14")
-        "2257 Story3"       -> ("2257", "Story3")
-        "2307_2- 6"         -> ("2307", "6")
-        "Vid 2257 - Story13"-> ("2257", "Story13")
-        "2046- Powered"     -> ("2046", "Powered")
+        "2046 1 - Story14"  -> ("2046", "1", "Story14")
+        "2257 Story3"       -> ("2257", "", "Story3")
+        "2307_2- 6"         -> ("2307", "2", "6")
+        "Vid 2257 - Story13"-> ("2257", "", "Story13")
+        "2046- Powered"     -> ("2046", "", "Powered")
 
     Titles with no number at all fall back to the dash rule, which is all
-    there is to go on ("Blue - modern" -> ("Blue", "modern")). Titles with
+    there is to go on ("Blue - modern" -> ("Blue", "", "modern")). Titles with
     neither ("New Engagement Ad", "-") return an empty text.
     """
     s = "" if ad_title is None else str(ad_title).strip()
     if not s or s == "-":
-        return "", ""
+        return "", "", ""
 
     m = _CREATIVE_NUM_RE.search(s)
     if m:
@@ -119,17 +131,67 @@ def split_ad_title(ad_title) -> tuple[str, str]:
         # A digit right after the creative number is a variant, not the text —
         # unless dropping it would leave nothing, as in "2046 - 6" where the
         # text really is "6".
-        trimmed = re.sub(r"^\d+(?!\d)[\s_\-–—]*", "", rest)
-        if trimmed.strip(" -_–—"):
-            rest = trimmed
-        return m.group(1), rest.strip(" -_–—")
+        vm = re.match(r"^(\d+)(?!\d)[\s_\-–—]*", rest)
+        variant = ""
+        if vm:
+            trimmed = rest[vm.end():]
+            if trimmed.strip(" -_–—"):
+                rest = trimmed
+                variant = str(int(vm.group(1)))  # «01» и «1» — один вариант
+        return m.group(1), variant, rest.strip(" -_–—")
 
     m = re.search(r"\s-|-\s", s)
     if not m:
-        return s, ""
+        return s, "", ""
     creative = s[: m.start()].strip(" -")
     text = s[m.end():].strip(" -")
-    return (creative or s), text
+    return (creative or s), "", text
+
+
+def split_ad_title(ad_title) -> tuple[str, str]:
+    """(creative id, text name) — the group contract; the variant is dropped.
+
+    Every caller that groups by creative + text uses this; the ones that need
+    the variant too call `split_ad_title_variant`.
+    """
+    creative, _variant, text = split_ad_title_variant(ad_title)
+    return creative, text
+
+
+def creative_identity(ad_title) -> dict:
+    """Идентичность креатива с сохранением версии (ACL-1799).
+
+    `split_ad_title` намеренно сводит заголовок к паре (номер пакета, текст) и
+    этим склеивает версии одного пакета. Здесь версия остаётся: «1121 1» и
+    «1121 - 2» — один пакет 1121, но две разные версии. Старая функция и её
+    потребители не тронуты; эта живёт рядом и ничего у них не отнимает.
+
+    Версия берётся из того, что `split_ad_title_variant` уже умеет («2046 1 -
+    Story14» -> версия 1). Кроме того, если после номера пакета стоит только
+    число («1121 1», «1121 - 2»), это тоже версия, но помечается `ambiguous`:
+    такая запись может быть и текстовым названием. Сырая строка сохраняется,
+    чтобы разбор можно было поправить позже, ничего не потеряв.
+
+    status:
+      exact      — есть пакет и версия;
+      pack_only  — есть пакет, версии в заголовке нет;
+      unresolved — номера пакета нет (разбору нечего сказать).
+    """
+    raw = "" if ad_title is None else str(ad_title).strip()
+    if not raw or raw == "-":
+        return {"raw": raw, "pack_id": "", "version_id": "", "text_name": "",
+                "key": "", "status": "unresolved", "ambiguous": False}
+    if not _CREATIVE_NUM_RE.search(raw):
+        return {"raw": raw, "pack_id": "", "version_id": "", "text_name": "",
+                "key": "raw:" + raw.casefold(), "status": "unresolved", "ambiguous": False}
+
+    pack, version, text = split_ad_title_variant(raw)
+    ambiguous = False
+    if not version and re.fullmatch(r"\d+", text or ""):
+        version, text, ambiguous = str(int(text)), "", True  # «01» и «1» — одна версия
+    key = f"{pack}|{version}|{(text or '').casefold()}"
+    return {"raw": raw, "pack_id": pack, "version_id": version, "text_name": text,
+            "key": key, "status": "exact" if version else "pack_only", "ambiguous": ambiguous}
 
 
 _MEDIA_TYPE_TOKENS = frozenset(
@@ -332,6 +394,10 @@ def enrich_structure(df: pd.DataFrame) -> pd.DataFrame:
     _split = df["Ad Title"].apply(split_ad_title)
     df["CreativeId"] = _split.apply(lambda t: t[0])
     df["TextName"] = _split.apply(lambda t: t[1])
+    # ACL-1593: вариант креатива (ведущее число файла) — отдельной колонкой.
+    df["VariantId"] = df["Ad Title"].apply(lambda t: split_ad_title_variant(t)[1])
+    # ACL-1799: ключ креатива с версией рядом с пакетным CreativeId.
+    df["CreativeKey"] = df["Ad Title"].apply(lambda t: creative_identity(t)["key"])
 
     df["Country Final"] = df["Country"]
 
@@ -358,17 +424,22 @@ def _log_unknown_interests(df: pd.DataFrame) -> None:
     if "Interest" not in df.columns or "Adset Name" not in df.columns:
         return
     skip_values = {"", "nan", "none", "wide"}
-    unique_interests = (
-        df["Interest"].dropna().astype(str).str.strip().unique()
+    # ACL-1399: раньше на каждый неизвестный код заново резалась вся книга
+    # (astype+strip по 70 тысячам строк) и заново читался журнал — ~15 с на
+    # холодной сборке. Пример адсета и журнал берутся один раз.
+    present = df["Interest"].notna()
+    interests = df.loc[present, "Interest"].astype(str).str.strip()
+    first_adset = (
+        df.loc[present, "Adset Name"].groupby(interests.values, sort=False).first()
     )
-    for interest in unique_interests:
-        if interest.lower() in skip_values:
+    known = logged_unknown_targets()
+    for interest in interests.unique():
+        if interest.lower() in skip_values or interest in known:
             continue
         if resolve_targeting_text(interest) is None:
-            # Find an example adset name for context
-            example_rows = df[df["Interest"].astype(str).str.strip() == interest]["Adset Name"]
-            source = str(example_rows.iloc[0]) if not example_rows.empty else ""
-            log_unknown_target(interest, source=source)
+            example = first_adset.get(interest)
+            source = "" if example is None or pd.isna(example) else str(example)
+            log_unknown_target(interest, source=source, known=known)
 
 
 def aggregate_combos(df: pd.DataFrame) -> pd.DataFrame:
@@ -666,7 +737,9 @@ def main(  # noqa: PLR0913
             raise ValueError(f"Missing expected columns in Excel: {missing}")
 
         df = compute_metrics(df)
-        df = enrich_structure(df)
+        from src.creative_variant import apply_backfill
+
+        df = apply_backfill(enrich_structure(df))
         combos = aggregate_combos(df)
         preamble = "\n".join(filter_lines)
         return build_full_report_markdown(

@@ -135,7 +135,7 @@ def test_no_suggestions_after_retry_fails_without_blind_enter(page, monkeypatch)
     page.set_content("<input placeholder='Search locations' id='country'>")
     page.locator('#country').fill('Colombia')
     page.locator('#country').focus()
-    monkeypatch.setattr(md, '_wait_location_options', lambda root: False)
+    monkeypatch.setattr(md, '_wait_location_options', lambda root, **k: False)
     monkeypatch.setattr(md._telemetry, 'record', lambda *a, **k: None)
     page.evaluate("window.entered=false; document.addEventListener('keydown', e => {if(e.key==='Enter') window.entered=true;})")
     assert md._pick_country_suggestion(page, page, 'Colombia') is False
@@ -172,6 +172,7 @@ def test_a_collapsed_locations_card_is_opened_by_its_pencil(page, monkeypatch):
     assert md._click_locations_edit(page) is True
     assert page.evaluate("window.opened") is True
 
+
 def test_the_pencil_is_used_before_giving_up_on_unreadable_rows(page, monkeypatch):
     """Строки читаются только после раскрытия карточки."""
     opened = {"yes": False}
@@ -186,6 +187,7 @@ def test_the_pencil_is_used_before_giving_up_on_unreadable_rows(page, monkeypatc
     assert md._clear_other_locations(page, "Chile") == []
     assert opened["yes"] is True
 
+
 def test_a_row_without_a_pencil_is_opened_by_clicking_its_value(page, monkeypatch):
     """18.09 08:23 CL_ml Trading: у свёрнутой строки ни одной кнопки, только текст."""
     page.set_content(
@@ -199,6 +201,7 @@ def test_a_row_without_a_pencil_is_opened_by_clicking_its_value(page, monkeypatc
                             "([x,y]) => (document.elementFromPoint(x,y)||{}).id", [x, y])))
     assert md._click_locations_edit(page) is True
     assert clicked["at"] == "val", clicked
+
 
 def test_the_value_click_is_not_used_when_a_pencil_exists(page, monkeypatch):
     page.set_content(
@@ -267,3 +270,241 @@ def test_nested_locations_text_keeps_its_own_edit_and_collapse_control(page):
     assert page.locator('button').get_attribute('aria-expanded') == 'true'
     assert md._collapse_locations_card(page) is True
     assert page.locator('button').get_attribute('aria-expanded') == 'false'
+
+
+def test_a_summary_row_with_only_an_expander_is_opened_by_it(page, monkeypatch):
+    """19.09 15:00 SA_arc GMBL: «Inclusion: Saudi Arabia, United States», ни
+    карандаша, клик по значению не раскрывает — справа безымянная стрелка."""
+    page.set_content(
+        "<div style='position:absolute;left:0;top:0;width:600px'>"
+        "<div><span>Locations</span><span>​</span>"
+        "<div><span>Inclusion:</span><span id='val'>Saudi Arabia, United States</span></div>"
+        "<div role='button' aria-expanded='false' id='arrow' style='width:24px;height:24px'></div></div></div>")
+    clicked = {}
+    monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
+    monkeypatch.setattr(md, "_cdp_mouse_click",
+                        lambda pg, x, y: clicked.update(at=pg.evaluate(
+                            "([x,y]) => (document.elementFromPoint(x,y)||{}).id", [x, y])))
+    assert md._click_locations_edit(page) is True
+    assert clicked["at"] == "arrow", clicked
+
+
+def _record_clicks(page, monkeypatch):
+    clicked = {}
+    monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
+    monkeypatch.setattr(md, "_cdp_mouse_click",
+                        lambda pg, x, y: clicked.update(at=pg.evaluate(
+                            "([x,y]) => { const e = document.elementFromPoint(x,y); "
+                            "return e && (e.closest('[id]') || {}).id; }", [x, y])))
+    return clicked
+
+
+def test_a_whole_row_button_deep_above_the_label_is_opened_after_scrolling(page, monkeypatch):
+    """20.09 00:16 SA_arc GMBL: вся строка — role=button aria-expanded=false
+    на 10 уровней выше подписи, и строка ниже края окна."""
+    deep = "<div>" * 9 + "<span>Locations</span><span>​</span>" + "</div>" * 9
+    page.set_content(
+        "<div style='height:2500px'></div>"
+        "<div role='button' aria-expanded='false' id='row'>" + deep
+        + "<div>Inclusion: Saudi Arabia, United States</div></div>"
+        "<div style='height:2500px'></div>")
+    clicked = _record_clicks(page, monkeypatch)
+    assert md._click_locations_edit(page) is True
+    assert clicked["at"] == "row", clicked
+
+
+def test_a_row_hidden_under_the_editor_footer_is_never_clicked_through(page, monkeypatch):
+    """20.09 00:16 SA_arc GMBL: «All languages» под нижней панелью с Close —
+    клик по координатам закрыл редактор. Такую точку не жмём."""
+    page.set_content(
+        "<div style='position:fixed;left:0;right:0;top:0;bottom:0;z-index:5;background:#fff'>"
+        "<button id='close'>Close</button></div>"
+        "<div><div>Languages</div><div id='val'>All languages</div></div>")
+    clicked = _record_clicks(page, monkeypatch)
+    assert md._click_languages_edit(page) is False
+    assert "at" not in clicked, clicked
+
+
+def test_the_pencil_that_only_exists_under_the_cursor_is_found(page, monkeypatch):
+    """20.09 01:30 SA_arc GMBL: карандаш строки Meta рисует только под курсором."""
+    page.set_content(
+        "<style>#pen{display:none;width:24px;height:24px}"
+        "#row:hover #pen{display:block}</style>"
+        "<div id='row' style='width:600px'><div>Locations</div>"
+        "<div>Inclusion: Saudi Arabia, United States</div>"
+        "<div role='button' aria-label='Edit' id='pen'></div></div>")
+    clicked = _record_clicks(page, monkeypatch)
+    assert md._click_locations_edit(page) is True
+    assert clicked["at"] == "pen", clicked
+
+
+def test_a_row_far_below_the_window_is_scrolled_to_before_the_click(page, monkeypatch):
+    """21.09 18:44 CR_ait IPO: строка стояла на y=3811 — клик по её координатам
+    уходил в пустоту, и United States оставалась рядом с нужной страной.
+    Имя при этом читалось как «United StatesClose»."""
+    page.set_content(
+        "<div style='height:3600px'></div>"
+        "<div id='loc'><div>Locations</div>"
+        "<div class='grp' data-c='United States'><div>United States"
+        "<div role='button' style='display:inline-block;width:20px;height:20px'"
+        " onclick=\"window.clicked.push('us')\"><span>Close</span></div></div></div>"
+        "<div><div role='combobox'><input placeholder='Search locations'></div></div></div>"
+        "<script>window.clicked = [];</script>"
+    )
+    rows = md._location_rows(page)
+    assert [r["name"] for r in rows] == ["United States"], rows
+    assert rows[0]["y"] > 900, "строка должна лежать за окном"
+
+    fresh = md._scroll_location_row_into_view(page, "United States")
+    assert fresh and 0 < fresh["y"] < 900, fresh
+
+
+def test_the_card_is_found_by_its_rows_when_no_locations_heading_exists(page):
+    """21.09 20:31 SA_arc GMBL: блока, чей текст начинается словом «Locations»,
+    в разметке нет вовсе — поиск упирался в двенадцатый уровень, а строки стран
+    оставались в стороне, и список выходил пустым."""
+    page.set_content(
+        "<div id='outer'>"
+        "<div class='grp'><div>Saudi Arabia<div role='button'"
+        " style='display:inline-block;width:20px;height:20px'><span>Close</span></div></div></div>"
+        "<div class='grp'><div>United States<div role='button'"
+        " style='display:inline-block;width:20px;height:20px'><span>Close</span></div></div></div>"
+        "<div><div><div><div role='combobox'><input placeholder='Search locations'></div></div></div></div>"
+        "</div>"
+    )
+    names = [r["name"] for r in md._location_rows(page)]
+    assert names == ["Saudi Arabia", "United States"], names
+
+
+# ── стрелка строки: только своя, не выключенная, не «Remove» (PR #314, M6) ──
+
+def test_a_section_toggle_holding_other_fields_is_not_the_rows_expander(page, monkeypatch):
+    """Свёрнутая кнопка-раздел над подписью, но в ней и чужое поле
+    (Languages): это не строка Locations — жать её нельзя."""
+    page.set_content(
+        "<div role='button' aria-expanded='false' id='section' style='width:600px'>"
+        "<div><span>Locations</span><span>Inclusion: Chile</span></div>"
+        "<div><span>Languages</span><span>All languages</span></div></div>")
+    clicked = _record_clicks(page, monkeypatch)
+    assert md._click_row_expander(page, "Locations") is False
+    assert "at" not in clicked, clicked
+
+
+def test_a_disabled_whole_row_button_is_not_clicked(page, monkeypatch):
+    page.set_content(
+        "<div role='button' aria-expanded='false' aria-disabled='true' id='row' style='width:600px'>"
+        "<div><span>Locations</span></div><div>Inclusion: Chile, United States</div></div>")
+    clicked = _record_clicks(page, monkeypatch)
+    assert md._click_row_expander(page, "Locations") is False
+    assert "at" not in clicked, clicked
+
+
+def test_the_expander_skips_remove_and_disabled_controls(page, monkeypatch):
+    """Справа у строки сначала «Remove United States» и выключенная стрелка,
+    потом настоящая стрелка: жмётся только она."""
+    page.set_content(
+        "<div style='position:absolute;left:0;top:0;width:600px'>"
+        "<div><span>Locations</span>"
+        "<div><span>Inclusion:</span><span>Chile, United States</span></div>"
+        "<div role='button' aria-expanded='false' aria-label='Remove United States' id='rm'"
+        " style='width:24px;height:24px'></div>"
+        "<div role='button' aria-expanded='false' aria-disabled='true' id='off'"
+        " style='width:24px;height:24px'></div>"
+        "<div role='button' aria-expanded='false' id='arrow' style='width:24px;height:24px'></div>"
+        "</div></div>")
+    clicked = _record_clicks(page, monkeypatch)
+    assert md._click_row_expander(page, "Locations") is True
+    assert clicked["at"] == "arrow", clicked
+
+
+# ── последняя страна: Meta выключает и прячет её крестик (63710223de4c) ─────
+
+_DISABLE_LAST = """() => {
+  const orig = window.drop;
+  window.drop = (c) => {
+    orig(c);
+    const left = document.querySelectorAll('.grp');
+    if (left.length === 1) {
+      const x = left[0].querySelector('[role=button]');
+      x.outerHTML = '<button disabled style="display:none"><span>Close</span></button>';
+    }
+  };
+}"""
+
+
+def test_the_last_country_with_a_disabled_hidden_x_is_clean(page):
+    """25.09 12:02 GT FX: United States снята, у Guatemala крестик стал
+    `<button disabled>` нулевого размера — строки «не читались», и шаг
+    отказал при одной нужной стране."""
+    page.set_content(_CARD % {"us_click": "onclick=\"drop('United States')\""})
+    page.evaluate(_DISABLE_LAST)
+    assert md._clear_other_locations(page, "Guatemala") == []
+    assert page.evaluate("window.clicked") == ["United States"]
+
+
+def test_a_disabled_x_is_read_but_never_clicked(page):
+    page.set_content(_CARD % {"us_click": "onclick=\"drop('United States')\""})
+    page.evaluate("""() => {
+      const x = document.querySelector('.grp[data-c="United States"] [role=button]');
+      x.setAttribute('aria-disabled', 'true');
+      x.setAttribute('onclick', "window.clicked.push('disabled-us')");
+    }""")
+    rows = md._location_rows(page)
+    assert {r["name"]: bool(r.get("disabled")) for r in rows} == {"Guatemala": False, "United States": True}
+    left = md._clear_other_locations(page, "Guatemala")
+    assert left == ["United States"]
+    assert page.evaluate("window.clicked") == []
+
+
+def test_the_expander_is_taken_after_the_label_not_before_it(page, monkeypatch):
+    """PR #314, повторное ревью (A4): стрелка строки — после своей подписи;
+    свёрнутый контрол ПЕРЕД подписью принадлежит чему-то выше."""
+    page.set_content(
+        "<div style='position:absolute;left:0;top:0;width:600px'>"
+        "<div><div role='button' aria-expanded='false' id='before' style='width:24px;height:24px'></div>"
+        "<span>Locations</span>"
+        "<div><span>Inclusion:</span><span>Chile, United States</span></div>"
+        "<div role='button' aria-expanded='false' id='after' style='width:24px;height:24px'></div>"
+        "</div></div>")
+    clicked = _record_clicks(page, monkeypatch)
+    assert md._click_row_expander(page, "Locations") is True
+    assert clicked["at"] == "after", clicked
+
+
+# ── карточка на миг пуста после ✕ (GT FX 63710223de4c, GT Day 503b0c077db6) ──
+
+_SINGLE = (Path(__file__).parent / "fixtures" / "ads_manager"
+           / "locations_single_country_2026_09_25.html").read_text(encoding="utf-8")
+
+
+def test_the_live_card_with_one_country_and_a_disabled_close_is_clean(page):
+    """Живая карточка 503b0c/01: одна Guatemala, Close выключен, Remove aria-disabled."""
+    page.set_content(f"<div style='width:600px'>{_SINGLE}</div>")
+    rows = md._location_rows(page)
+    assert [r["name"] for r in rows] == ["Guatemala"] and rows[0].get("disabled") is True
+    assert md._clear_other_locations(page, "Guatemala") == []
+
+
+def test_a_card_blank_for_a_moment_after_the_x_is_read_again(page, monkeypatch):
+    """После ✕ у United States карточка на полторы секунды пуста (Meta её
+    перерисовывает), потом в ней одна Guatemala с выключенным Close.
+    Одно чтение в пустой миг давало «строки не прочитаны» (None)."""
+    import time as _t
+
+    monkeypatch.setattr(md, "_sleep_h", lambda s, *a, **k: _t.sleep(s))
+    page.set_content(_CARD % {"us_click": "onclick=\"redraw()\""})
+    page.evaluate("""() => {
+      window.redraw = () => {
+        window.clicked.push('United States');
+        const loc = document.getElementById('loc'); const html = loc.innerHTML;
+        loc.innerHTML = '';
+        setTimeout(() => {
+          loc.innerHTML = html;
+          loc.querySelector('.grp[data-c="United States"]').remove();
+          loc.querySelector('.grp[data-c="Guatemala"] [role=button]').outerHTML =
+            '<button disabled style="display:none"><span>Close</span></button>';
+        }, 1250);
+      };
+    }""")
+    assert md._clear_other_locations(page, "Guatemala") == []
+    assert page.evaluate("window.clicked") == ["United States"]

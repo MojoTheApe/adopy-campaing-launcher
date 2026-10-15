@@ -1,4 +1,4 @@
-# ACL — Adopy Campaigns Launcher · runtime dependencies
+# ACL — Adopy Campaign Manager · runtime dependencies
 #
 # Pinned with ==, not >=. These are the versions ACL actually runs on today
 # (verified 2026-08-25 on the machine that published a live campaign), and ACL
@@ -33,6 +33,11 @@ python-multipart==0.0.32  # required by Starlette Request.form() in Campaign Bui
 google-api-python-client==2.193.0
 google-auth-oauthlib==1.3.1
 google-auth-httplib2==0.3.0
+
+# Подпись выпусков (ACL-1357): клиент проверяет release.json ключом Ed25519,
+# закреплённым в src/web/release_signing.py. Раньше пакет приезжал только
+# транзитивно через google-auth — теперь закреплён явно.
+cryptography==50.0.1
 
 # --- Analysis / content helpers ---
 anthropic==0.117.0

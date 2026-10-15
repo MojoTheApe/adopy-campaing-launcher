@@ -69,8 +69,9 @@ def _geo_language_for_country(country_code: str) -> str:
     "Countries" sheet doesn't have an explicit language value for that row.
     """
     # Pass the base name only — fill_audience_languages() already searches
-    # for a "<name> (all)" suggestion first and falls back to the first
-    # match if there isn't one (confirmed live: Arabic has no such variant).
+    # for a "<name> (all)" suggestion first and falls back to the suggestion
+    # that is exactly "<name>" (confirmed live: Arabic has no such variant).
+    # Регионального варианта «<name> (Egypt)» шаг не берёт никогда (25.09).
     c = (country_code or "").strip().upper()
     if c in _GCC_ARABIC_COUNTRIES:
         return "Arabic"
@@ -102,6 +103,50 @@ def _get_ref(excel_path: str) -> dict:
         return ref
 
 
+#: ACL-1313: библиотеку, которую ЭТОТ ЖЕ шаг стянул меньше минуты назад, повторно
+#: не тянем. Кнопка Publish в дешборде сначала зовёт /preview-publish, и тот
+#: уже делает здесь `pull(force=True)` обоих реестров; сразу за ним то же
+#: самое делал запуск задания — два сетевых похода к GitHub на старте каждого
+#: задания. Минута — больше, чем проходит между предпросмотром и запуском, и
+#: меньше, чем нужно, чтобы кто-то успел поправить цель или текст.
+#:
+#: Считаются только наши принудительные походы, а не любое обновление копии:
+#: своя запись в библиотеку тоже обновляет её, но чужих правок после неё не
+#: приносит — после неё запуск тянет, как прежде.
+LIBRARY_FRESH_S = 60.0
+
+#: kind → time.monotonic() последнего удачного `pull(force=True)` отсюда.
+_forced_pull_at: dict[str, float] = {}
+
+
+def _pull_unless_just_pulled(kind: str, pull, info: dict) -> dict:
+    """`pull(force=True)`, если этот шаг не тянул библиотеку `kind` < минуты назад.
+
+    Когда тянул — удачно, в этом же процессе, — отдаётся статус копии без
+    похода в сеть (`team_library` — код дешборда, его не меняем).
+    """
+    import time as _time
+
+    last = _forced_pull_at.get(kind)
+    if last is not None and _time.monotonic() - last < LIBRARY_FRESH_S:
+        try:
+            from src.analysis_agent import team_library
+
+            state = team_library.status(kind)
+        except Exception:
+            state = {}
+        if state.get("ok"):
+            info.setdefault("fresh", []).append(kind)
+            return state
+    info.setdefault("pulled", []).append(kind)
+    state = pull(force=True)
+    if (state or {}).get("ok"):
+        _forced_pull_at[kind] = _time.monotonic()
+    else:
+        _forced_pull_at.pop(kind, None)
+    return state
+
+
 def enrich_campaign_drafts(
     drafts: list[Any],
     *,
@@ -127,11 +172,15 @@ def enrich_campaign_drafts(
     # A publish must see changes made since the builder opened, even inside
     # the per-ad read throttle. Refresh each needed registry once per batch.
     from src.analysis_agent import targeting_registry, ad_text_registry
+    from src.fb_ads_rpa import run_telemetry as _telemetry
     library_states = []
-    if any(getattr(a, "targeting_label", "") for d in drafts for a in d.ad_sets):
-        library_states.append(("Targeting", targeting_registry.pull(force=True)))
-    if any(ad.copy_name for d in drafts for a in d.ad_sets for ad in a.ads):
-        library_states.append(("Ad texts", ad_text_registry.pull(force=True)))
+    with _telemetry.phase("library_pull", diag={"preview": bool(preview_mode)}) as info:
+        if any(getattr(a, "targeting_label", "") for d in drafts for a in d.ad_sets):
+            library_states.append(("Targeting", _pull_unless_just_pulled(
+                "targets", targeting_registry.pull, info)))
+        if any(ad.copy_name or ad.copy2_name for d in drafts for a in d.ad_sets for ad in a.ads):
+            library_states.append(("Ad texts", _pull_unless_just_pulled(
+                "ad_texts", ad_text_registry.pull, info)))
 
     for draft in drafts:
         for label, state in library_states:
@@ -140,7 +189,12 @@ def enrich_campaign_drafts(
                 draft.warnings.append(f"{label}: team library unavailable; using the saved copy from {stamp}. "
                                       + state.get("error", ""))
         draft.ad_account_id = entry.ad_account_id if entry else None
-        draft.page_id = (entry.page_id if entry else None)
+        # ACL-1766: что уже в черновике, то и берём; карта — следующий источник.
+        # Источник запоминаем для «Check plan»; RPA эти поля не читает.
+        draft.page_source = "draft" if draft.page_id else ("map" if entry and entry.page_id else "")
+        draft.pixel_source = "draft" if draft.pixel_id else ("map" if entry and getattr(entry, "pixel_id", None) else "")
+        draft.page_id = draft.page_id or (entry.page_id if entry else None)
+        draft.pixel_id = draft.pixel_id or ((getattr(entry, "pixel_id", None) or "") if entry else "")
         # Что набрано в билдере, то и берём. Раньше строка ниже перетирала
         # ссылку значением из книги безусловно: человек вписывал её в форму,
         # видел «Link empty» и не мог понять, куда она делась.
@@ -239,9 +293,38 @@ def enrich_campaign_drafts(
                             f"ad text {ad.copy_name!r} has no body — check it in Ad titles"
                         )
 
+                # ACL-1344: второй вариант основного текста — body другой записи
+                # той же библиотеки. Нет записи — ошибка до открытия браузера,
+                # как у первого текста; пустой или повтор первого — предупреждение,
+                # и объявление идёт с одним текстом, как раньше.
+                if ad.copy2_name:
+                    from src.analysis_agent.ad_text_registry import AdTextError
+                    try:
+                        copy2 = lookup_ad_copy_by_title(ad.copy2_name)
+                    except AdTextError as exc:
+                        draft.errors.append(f"Primary text 2 {ad.copy2_name!r}: {exc}")
+                        continue
+                    ad.ad_body2 = (copy2.get("body") or "").strip()
+                    if ad.ad_body2 and not ad.ad_body:
+                        # Ревью PR #346: без основного текста второй вариант
+                        # некуда добавить — говорим об этом до браузера.
+                        draft.warnings.append(
+                            f"Primary text 2 {ad.copy2_name!r} needs an Ad Title with a primary text — ignored"
+                        )
+                        ad.ad_body2 = ""
+                    elif not ad.ad_body2:
+                        draft.warnings.append(
+                            f"Primary text 2 {ad.copy2_name!r} has no body — the ad gets one primary text"
+                        )
+                    elif ad.ad_body and "".join(ad.ad_body2.split()) == "".join(ad.ad_body.split()):
+                        draft.warnings.append(
+                            f"Primary text 2 {ad.copy2_name!r} repeats the first primary text — ignored"
+                        )
+                        ad.ad_body2 = ""
+
                 if ad.creative_filename and not preview_mode:
                     try:
-                        ad.creative_path = str(find_creative_file(root, ad.creative_filename))
+                        ad.creative_path = str(find_creative_file(root, ad.creative_filename, fresh=True))
                     except (CreativeNotFoundError, AmbiguousCreativeError, FileNotFoundError) as exc:
                         draft.errors.append(str(exc))
                 elif ad.creative_filename:

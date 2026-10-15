@@ -44,6 +44,8 @@ import os
 import threading
 from pathlib import Path
 
+from config.paths import machine_file_lock
+
 __all__ = ["append_line", "JournalWriteError"]
 
 
@@ -70,27 +72,11 @@ def _lock_for(path: Path) -> threading.Lock:
         return lock
 
 
-if os.name == "nt":
-    import msvcrt
-
-    def _grab(fh) -> None:
-        # LK_LOCK ждёт освобождения, но сдаётся через десять попыток по
-        # секунде. Для строки журнала этого с запасом: держат замок на время
-        # одной записи, а не на время прогона.
-        msvcrt.locking(fh.fileno(), msvcrt.LK_LOCK, 1)
-
-    def _release(fh) -> None:
-        fh.seek(0)
-        msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
-
-else:
-    import fcntl
-
-    def _grab(fh) -> None:
-        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
-
-    def _release(fh) -> None:
-        fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+# ACL-1512: межпроцессный замок — общий `config.paths.machine_file_lock`
+# (ACL-1495). Прежний `msvcrt.locking(LK_LOCK)` сдавался после 10 × 1 с с
+# EDEADLK, а файл замка открывался в `a+b`; общий помощник ждёт сам, с
+# ограничением, и создаёт файл замка одним атомарным `os.open`.
+_os_lock = machine_file_lock
 
 
 def append_line(path: str | os.PathLike[str], line: str) -> None:
@@ -105,13 +91,8 @@ def append_line(path: str | os.PathLike[str], line: str) -> None:
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
         with _lock_for(p):
-            with open(str(p) + ".lock", "a+b") as guard:
-                guard.seek(0)
-                _grab(guard)
-                try:
-                    with p.open("a", encoding="utf-8") as fh:
-                        fh.write(line)
-                finally:
-                    _release(guard)
+            with _os_lock(str(p) + ".lock"):
+                with p.open("a", encoding="utf-8") as fh:
+                    fh.write(line)
     except OSError as exc:
         raise JournalWriteError(f"{p}: {exc}") from exc

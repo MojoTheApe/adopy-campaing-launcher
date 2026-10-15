@@ -62,8 +62,10 @@ def test_upload_waits_for_the_actual_compressed_filename(browser, tmp_path, monk
         with cc.observe_preparation(notices.append):
             result = meta_dom.upload_ad_creative(page, 'video', str(original))
         if reuse.startswith('dirty_'):
+            # Порт ACL-1284, вариант A: флага `reuse_unverified` строгого #238
+            # в живом коде нет; неудача медиатеки видна по результату и по
+            # тому, что загрузки не было.
             assert result is False
-            assert meta_dom.last_upload_diag()['reuse_unverified'] is True
             assert page.evaluate('window.uploadFilter === undefined')
             assert page.locator('#editor').inner_text() == ''
             return

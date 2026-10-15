@@ -22,6 +22,7 @@ on:
 permissions:
   contents: write
   pull-requests: read
+  checks: read
   actions: read
 
 concurrency:
@@ -33,8 +34,13 @@ jobs:
     name: Build, test and publish the installer
     runs-on: windows-latest
     timeout-minutes: 60
+    # ACL-1357: after the plan upgrade (environments with protection rules
+    # are not available for a private repository on GitHub Free) add
+    # `environment: release` here and move ACL_RELEASE_SIGNING_KEY into it.
+    # See docs/RELEASE_TRUST.md.
     env:
       ACL_NO_TELEMETRY: "1"
+      PYTHONUTF8: "1"
       PYTHONIOENCODING: utf-8
       RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
       RELEASES_REPO: ${{ vars.ACL_RELEASES_REPO || github.repository }}
@@ -78,6 +84,8 @@ jobs:
           # read-only and should be scoped to the releases repository only.
           ACL_RELEASES_REPO: ${{ vars.ACL_RELEASES_REPO || github.repository }}
           ACL_UPDATE_TOKEN: ${{ secrets.ACL_UPDATE_TOKEN }}
+          # ACL-1357: "true" builds a client that refuses unsigned releases.
+          ACL_ENFORCE_RELEASE_SIGNATURES: ${{ vars.ACL_ENFORCE_RELEASE_SIGNATURES }}
         run: |
           if (-not $env:ACL_UPDATE_TOKEN) { Remove-Item Env:ACL_RELEASES_REPO; Write-Warning "ACL_UPDATE_TOKEN is not set: this release cannot update itself." }
           ./packaging/windows/build.ps1 -Version "$env:ACL_PACKAGE_VERSION"
@@ -105,6 +113,24 @@ jobs:
             --repo "$env:RELEASES_REPO" --source-repo "${{ github.repository }}" --out packaging/windows/.artifacts/release
           if ($LASTEXITCODE -ne 0) { throw "release.json could not be written." }
           Copy-Item $installer.FullName packaging/windows/.artifacts/release/
+
+      # ACL-1357: release.json.sig — Ed25519 signature checked by clients with
+      # the key pinned in src/web/release_signing.py. The private key exists
+      # only in the secret ACL_RELEASE_SIGNING_KEY (ideally an environment
+      # secret of the protected "release" environment). Until the owner sets
+      # it, releases go out unsigned and clients in warn mode report that.
+      # Repository variable ACL_REQUIRE_RELEASE_SIGNATURE=true (or
+      # ACL_ENFORCE_RELEASE_SIGNATURES=true) makes a missing key fail the release.
+      - name: Sign release.json with the publisher key
+        shell: pwsh
+        env:
+          ACL_RELEASE_SIGNING_KEY: ${{ secrets.ACL_RELEASE_SIGNING_KEY }}
+          REQUIRE_SIGNATURE: ${{ vars.ACL_REQUIRE_RELEASE_SIGNATURE || vars.ACL_ENFORCE_RELEASE_SIGNATURES }}
+        run: |
+          $signArgs = @('scripts/acl_sign_release.py', 'sign', '--manifest', 'packaging/windows/.artifacts/release/release.json')
+          if ($env:REQUIRE_SIGNATURE -eq 'true') { $signArgs += '--require' }
+          python @signArgs
+          if ($LASTEXITCODE -ne 0) { throw "release.json could not be signed." }
 
       - name: Recheck promotion before publication
         shell: pwsh
@@ -134,4 +160,5 @@ jobs:
             packaging/windows/.artifacts/test-logs/
             packaging/windows/.artifacts/installer-test-logs/
             packaging/windows/.artifacts/release/release.json
+            packaging/windows/.artifacts/release/release.json.sig
           if-no-files-found: ignore

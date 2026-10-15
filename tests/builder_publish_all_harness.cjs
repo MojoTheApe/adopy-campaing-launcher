@@ -151,21 +151,34 @@ console.log('ok');
 // последнюю в любом порядке. Первый живой «Publish all» на параллельном
 // сервере дал одно задание — второй замок был здесь.
 const queueCode = cut('window.cbPublishAll = function', '// ── Диагностика превью');
+// ACL-1313: занятая очередь объясняет себя — берём настоящую проверку.
+// ACL-1355: держат только потерянный статус и тот же аккаунт.
+const busyCode = cut('function cbQueueUncertain() {', '\nwindow.cbPublish = function');
+
+// `country` — необязательна: один аккаунт бывает привязан к двум странам,
+// и тогда у каждой своя форма (ревью PR #363).
+function fakeForm(label, country) {
+  return {
+    _label: country ? label + '@' + country : label,
+    querySelectorAll: () => [{}],                        // одна карточка
+    querySelector: (sel) => (sel === '[name="account_label"]' ? { value: label }
+      : sel === '[name="country"]' && country ? { value: country } : null),
+  };
+}
 
 function runQueue(accounts, opts = {}) {
   const events = [];
+  const said = [];
   const pending = [];
-  const forms = accounts.map((label) => ({
-    _label: label,
-    querySelectorAll: () => [{}],                        // одна карточка
-    querySelector: (sel) => (sel === '[name="account_label"]' ? { value: label } : null),
-  }));
+  const keys = [];
+  const forms = accounts.map((a) => (Array.isArray(a) ? fakeForm(a[0], a[1]) : fakeForm(a)));
   const sandbox = {
     window: {},
     FormData, RegExp, String, parseInt, Object, JSON, Promise,
     aclEscHtml: (v) => String(v == null ? '' : v),
-    document: { querySelectorAll: () => forms, querySelector: () => null },
-    _safeConfirm: (title, body, onYes) => { events.push('asked'); if (opts.confirm !== false) onYes(); },
+    document: { querySelectorAll: () => forms, querySelector: () => null,
+                getElementById: (id) => (id === 'cb-pf-anyway' && opts.box ? opts.box : null) },
+    _safeConfirm: (title, body, onYes) => { events.push('asked'); if (opts.defer) { opts.defer.push(onYes); return; } if (opts.confirm !== false) onYes(); },
     cbPreview: (form, done) => {
       events.push('preview:' + form._label);
       if (opts.preview) return opts.preview(form, done);
@@ -174,20 +187,31 @@ function runQueue(accounts, opts = {}) {
     cbSkipByName: opts.skip || (() => ({ skip: {}, unchecked: 0, broken: 0 })),
     cbFormDataSkipping: opts.pack || (() => ({ body: new FormData(), kept: 1 })),
     cbPollJob: (jobId, panel, btn, done) => { events.push('poll'); pending.push(done); },
-    fetch: (url) => {
+    fetch: (url, init) => {
       events.push('POST');
+      keys.push(init && init.body && init.body.get ? init.body.get('request_id') : null);
+      // ACL-1399: `fail` — сколько первых отправок сервер не отвечает.
+      if (opts.fail === true || (typeof opts.fail === 'number' && keys.length <= opts.fail)) {
+        return Promise.reject(new TypeError('Failed to fetch'));
+      }
       return Promise.resolve({ json: () => Promise.resolve({ job_id: 'j' + pending.length }) });
     },
-    alert: (m) => events.push('alert'),
+    alert: (m) => { events.push('alert'); said.push(String(m)); },
   };
   sandbox.window.window = sandbox.window;
   sandbox.window.cbPreview = sandbox.cbPreview;
   sandbox.window.alert = sandbox.alert;
   vm.runInNewContext(
-    'window.cbSkipByName = cbSkipByName; window.cbFormDataSkipping = cbFormDataSkipping;\n' + queueCode,
+    'window.cbSkipByName = cbSkipByName; window.cbFormDataSkipping = cbFormDataSkipping;\n' + busyCode + '\n' + queueCode,
     sandbox);
+  // ACL-1604: проверка аккаунтов живёт на window; без неё подтверждение открывается сразу.
+  if (opts.preflight) sandbox.window.cbPreflightFetch = opts.preflight;
+  // ACL-1819: ворота pre-flight audit — заглушка; сам гейт проверяют preflight_gate_harness.cjs.
+  const gated = [];
+  sandbox.window.cbPreflightGate = (items, go) => { gated.push(items); if (!opts.gateRefuses) go(); };
+  sandbox.window.cbPreflightDecision = (queued, skipped, anyway) => { events.push('decision'); (opts.decisions || []).push({ queued, skipped, anyway }); };
   sandbox.window.cbPublishAll(() => {});
-  return { events, pending, sandbox };
+  return { events, said, pending, sandbox, forms, keys, gated };
 }
 
 // Запрос уходит через микрозадачи — без этого проверка смотрит на «ещё
@@ -232,16 +256,29 @@ const posts = (q) => q.events.filter((e) => e === 'POST').length;
   q.sandbox.window.cbPublishAll(() => {});
   assert.equal(posts(q), 2, 'unknown outcome allowed duplicate work');
 
+  // ACL-1355: Stop у A — только задание A; B и C идут дальше. «Publish all»
+  // поверх идущей сборки докладывает в неё A, а идущие B и C второй раз не шлёт.
   q = runQueue(['A', 'B', 'C']);
   await flush();
   q.pending[0]({ status: 'cancelled' });
   assert.ok(q.sandbox.window.CB_QUEUE.active, 'cancelling A released running B and C');
+  assert.equal(q.sandbox.window.CB_QUEUE.progress.report[0].why, 'Stopped by user');
+  const runBefore = q.sandbox.window.CB_QUEUE;
+  const previewsBefore = q.events.filter((e) => e.startsWith('preview')).length;
   q.sandbox.window.cbPublishAll(() => {});
-  assert.equal(posts(q), 3, 'a duplicate batch was submitted');
+  await flush();
+  assert.strictEqual(q.sandbox.window.CB_QUEUE, runBefore, 'a second run replaced the active one');
+  assert.equal(posts(q), 4, 'the stopped account was not queued again, or a running one was duplicated');
+  assert.deepEqual(q.events.filter((e) => e.startsWith('preview')).slice(previewsBefore), ['preview:A'],
+    'a running account went through preview again');
+  assert.equal(q.said.length, 0, 'joining the run was refused with an alert');
+  assert.equal(q.sandbox.window.CB_QUEUE.progress.of, 4);
   q.pending[1]({ results: [{ publishable: true }] });
-  assert.ok(q.sandbox.window.CB_QUEUE.active);
   q.pending[2]({ results: [{ publishable: true }] });
+  assert.ok(q.sandbox.window.CB_QUEUE.active, 'the run closed while the re-queued A was still going');
+  q.pending[3]({ results: [{ publishable: true }] });
   assert.ok(!q.sandbox.window.CB_QUEUE.active);
+  assert.equal(q.sandbox.window.CB_QUEUE.progress.report.length, 4);
   q.sandbox.window.cbPublishAll(() => {});
   await flush();
   const currentBatch = q.sandbox.window.CB_QUEUE;
@@ -250,6 +287,33 @@ const posts = (q) => q.events.filter((e) => e === 'POST').length;
   assert.strictEqual(currentBatch.progress, progress);
   assert.ok(currentBatch.active && !currentBatch.uncertain);
 
+  // Все аккаунты уже собираются: вопроса нет, работы нет, сказано почему.
+  q = runQueue(['A', 'B']);
+  await flush();
+  const asked = q.events.filter((e) => e === 'asked').length;
+  q.sandbox.window.cbPublishAll(() => {});
+  await flush();
+  assert.equal(posts(q), 2, 'a duplicate job was submitted');
+  assert.equal(q.events.filter((e) => e === 'asked').length, asked, 'asked to publish accounts that are all running');
+  assert.equal(q.said.length, 1, 'a busy tab ignored Publish all silently');
+  assert.ok(/A, B are already being built/.test(q.said[0]), q.said[0]);
+
+  // Аккаунт, пришедший в идущую сборку, — строкой в ней же; закрывается
+  // сборка с последним из всех.
+  q = runQueue(['A']);
+  await flush();
+  q.forms.push(fakeForm('B'));
+  q.sandbox.window.cbPublishAll(() => {});
+  await flush();
+  assert.equal(posts(q), 2);
+  assert.deepEqual(q.events.filter((e) => e.startsWith('preview')), ['preview:A', 'preview:B']);
+  q.pending[0]({ results: [{ publishable: true }] });
+  assert.ok(q.sandbox.window.CB_QUEUE.active, 'the run closed while B was still going');
+  q.pending[1]({ results: [{ publishable: true }] });
+  assert.ok(!q.sandbox.window.CB_QUEUE.active);
+  assert.deepEqual(q.sandbox.window.CB_QUEUE.progress.report.map((r) => r.account), ['A', 'B']);
+
+  // Stop у A не отменяет B, чьё превью ещё в полёте.
   let delayedPreview;
   q = runQueue(['A', 'B', 'C'], { preview: (form, done) => {
     if (form._label === 'B') delayedPreview = done;
@@ -259,9 +323,108 @@ const posts = (q) => q.events.filter((e) => e === 'POST').length;
   q.pending[0]({ status: 'cancelled' });
   delayedPreview([{ 'Campaign Name': 'B', errors: [] }], null);
   await flush();
-  assert.equal(posts(q), 1, 'a late preview submitted another job after cancellation');
+  assert.equal(posts(q), 3, 'stopping A cancelled the accounts after it');
+
+  // Потерянный статус — другое дело: превью в полёте после него не шлёт.
+  q = runQueue(['A', 'B', 'C'], { preview: (form, done) => {
+    if (form._label === 'B') delayedPreview = done;
+    else done([{ 'Campaign Name': form._label, errors: [] }], null);
+  }});
+  await flush();
+  q.pending[0]({ status: 'unknown' });
+  delayedPreview([{ 'Campaign Name': 'B', errors: [] }], null);
+  await flush();
+  assert.equal(posts(q), 1, 'a late preview submitted another job after the status was lost');
   assert.ok(!q.sandbox.window.CB_QUEUE.active);
+  assert.ok(q.sandbox.window.CB_QUEUE.uncertain);
   assert.equal(q.sandbox.window.CB_QUEUE.progress.report.length, 3);
+
+  // Ревью PR #363: один аккаунт в двух странах — две формы, два задания.
+  // По одному имени аккаунта вторая страна молча не собиралась.
+  q = runQueue([['UL869', 'Chile'], ['UL869', 'Peru']]);
+  await flush();
+  assert.equal(posts(q), 2, 'the second country of the same account was dropped');
+  assert.equal(q.said.length, 0, q.said.join('; '));
+  assert.deepEqual(q.sandbox.window.CB_QUEUE.progress.live.map((x) => x.account),
+    ['UL869 (Chile)', 'UL869 (Peru)']);
+  // Идут обе — повтор ничего не шлёт и называет обе страны.
+  q.sandbox.window.cbPublishAll(() => {});
+  await flush();
+  assert.equal(posts(q), 2);
+  assert.ok(/UL869 \(Chile\), UL869 \(Peru\) are already being built/.test(q.said[0]), q.said[0]);
+  // Кончилась одна страна — докладывается она, другая не дублируется.
+  q.pending[1]({ results: [{ publishable: true }] });
+  q.sandbox.window.cbPublishAll(() => {});
+  await flush();
+  assert.equal(posts(q), 3);
+  assert.equal(q.events.filter((e) => e.startsWith('preview')).pop(), 'preview:UL869@Peru');
+
+  // Сама сборка тоже не берёт идущий аккаунт вторым, даже если вызвать её
+  // мимо кнопок (Publish selected и другие вызывающие): отказ в `skipped`.
+  q = runQueue(['A']);
+  await flush();
+  const again = q.sandbox._runPublishQueue([q.forms[0]], () => {});
+  await flush();
+  assert.deepEqual(again.added, [], 'the run accepted an account that is already building');
+  assert.deepEqual(again.skipped, ['A']);
+  assert.equal(posts(q), 1, 'a duplicate job was submitted');
+
+  // ACL-1399 (было — ревью PR #363: «исход неизвестен, F5»): сервер не
+  // ответил на отправку. 30.09 так пропал Publish владельца — «Failed to
+  // fetch», и вкладка встала. Теперь аккаунт ждёт повтора: он занят (второго
+  // задания мимо повтора нет), повтор идёт с тем же ключом отправки — сервер
+  // по нему вернёт уже созданное задание, если первая попытка до него дошла.
+  q = runQueue(['A', 'B'], { fail: 2 });
+  await flush();
+  assert.equal(posts(q), 2);
+  assert.ok(!q.sandbox.window.CB_QUEUE.uncertain, 'a busy server froze the whole tab again');
+  assert.ok(q.sandbox.window.CB_QUEUE.active, 'the run closed with accounts still unsent');
+  assert.deepEqual(q.sandbox.window.CB_QUEUE.progress.live.map((x) => x.stage), ['busy', 'busy']);
+  assert.equal(q.sandbox.window.CB_QUEUE.progress.report.length, 0, 'an unsent account was reported as failed');
+  assert.ok(q.keys[0] && q.keys[1] && q.keys[0] !== q.keys[1], 'each account needs its own submission key');
+  // Publish all поверх — ничего не шлёт: оба аккаунта ждут своего повтора.
+  q.sandbox.window.cbPublishAll(() => {});
+  await flush();
+  assert.equal(posts(q), 2, 'a second job was sent past the pending retry');
+  assert.ok(/A, B are already being built/.test(q.said.pop()));
+  // Retry у A — тот же ключ; сервер ответил, за заданием следят.
+  assert.equal(q.sandbox.window.CB_QUEUE.retry('|A'), true);
+  await flush();
+  assert.equal(q.gated.length, 1, 'the retry skipped the pre-flight gate');
+  assert.equal(posts(q), 3);
+  assert.equal(q.keys[2], q.keys[0], 'retry used a new key: the server could start a second job');
+  assert.equal(q.pending.length, 1, 'the retried job is not being watched');
+  assert.equal(q.sandbox.window.CB_QUEUE.retry('|A'), false, 'retry fired twice');
+  q.pending[0]({ results: [{ publishable: true }] });
+  assert.ok(q.sandbox.window.CB_QUEUE.active, 'the run closed while B still waits for its retry');
+  q.sandbox.window.CB_QUEUE.retry('|B');
+  await flush();
+  assert.equal(q.keys[3], q.keys[1]);
+  q.pending[1]({ results: [{ publishable: true }] });
+  assert.ok(!q.sandbox.window.CB_QUEUE.active);
+  assert.deepEqual(q.sandbox.window.CB_QUEUE.progress.report.map((r) => r.state), ['ok', 'ok']);
+
+  // Ревью PR #408, R9: Dismiss освобождает аккаунт, не дожидаясь повтора, —
+  // а следующая его отправка идёт с ТЕМ ЖЕ ключом: если первая всё же дошла,
+  // сервер вернёт её задание, второго не будет.
+  // ACL-1819: ворота не пустили — повтор ничего не шлёт.
+  q = runQueue(['A'], { fail: 1, gateRefuses: true });
+  await flush();
+  assert.equal(posts(q), 1);
+  q.sandbox.window.CB_QUEUE.retry('|A');
+  await flush();
+  assert.equal(posts(q), 1, 'a refused gate still let the retry post');
+  assert.equal(q.gated.length, 1);
+  q = runQueue(['A', 'B'], { fail: 2 });
+  await flush();
+  assert.equal(q.sandbox.window.CB_QUEUE.dismiss('|B'), true);
+  assert.equal(q.sandbox.window.CB_QUEUE.dismiss('|B'), false, 'dismissed twice');
+  assert.ok(/dismissed/.test(q.sandbox.window.CB_QUEUE.progress.report[0].why));
+  assert.ok(q.sandbox.window.CB_QUEUE.active, 'A still waits for its retry');
+  q.sandbox.window.cbPublishAll(() => {});          // B свободен и уходит снова; A ждёт повтора
+  await flush();
+  assert.equal(posts(q), 3, 'the dismissed account could not be published again');
+  assert.equal(q.keys[2], q.keys[1], 'a dismissed account came back with a new key: possible double job');
 
   // Отказ на вопросе — ни одной работы.
   q = runQueue(['A'], { confirm: false });
@@ -276,6 +439,40 @@ const posts = (q) => q.events.filter((e) => e === 'POST').length;
   assert.equal(posts(q), 0, 'отправлена кампания, у которой нет ни одной годной');
   assert.deepEqual(q.events.filter((e) => e.startsWith('preview')), ['preview:A', 'preview:B'],
     'очередь встала на сломанном аккаунте');
+
+  // ACL-1604: проверка аккаунтов до подтверждения.
+  const notReady = { accounts: [
+    { account: 'A', ready: false, reasons: [{ message: 'no token', hint: 'connect', seen_label: '' }], notes: [] },
+    { account: 'B', ready: true, reasons: [], notes: [] }] };
+  // Не ответила (сеть, таймаут, не тот ответ — на странице это null): старое
+  // подтверждение и все аккаунты уходят, как раньше.
+  q = runQueue(['A', 'B'], { preflight: () => Promise.resolve(null) });
+  await flush();
+  assert.equal(q.events.filter((e) => e === 'asked').length, 1, 'без проверки подтверждение не открылось');
+  assert.equal(posts(q), 2, 'без ответа проверки аккаунты не ушли');
+  assert.ok(!q.events.includes('decision'), 'решение записано без проверки');
+
+  // Неготовый пропускается, готовый уходит; решение записано.
+  let decisions = [];
+  q = runQueue(['A', 'B'], { preflight: () => Promise.resolve(notReady), decisions });
+  await flush();
+  assert.equal(posts(q), 1, 'неготовый аккаунт ушёл без Run anyway');
+  assert.deepEqual(q.events.filter((e) => e.startsWith('preview')), ['preview:B']);
+  assert.deepEqual(decisions, [{ queued: ['B'], skipped: ['A'], anyway: [] }]);
+
+  // Run anyway: человек ставит галку, и оба идут; решение это записывает.
+  decisions = [];
+  const yes = [];
+  const box = { checked: false, addEventListener: (t, f) => { box.handler = f; } };
+  q = runQueue(['A', 'B'], { preflight: () => Promise.resolve(notReady), decisions, box, defer: yes });
+  await flush();
+  assert.equal(posts(q), 0, 'ушло до подтверждения');
+  assert.ok(box.handler, 'галка Run anyway не подключена');
+  box.checked = true; box.handler();
+  yes[0]();
+  await flush();
+  assert.equal(posts(q), 2, 'Run anyway не отправил неготовый аккаунт');
+  assert.deepEqual(decisions, [{ queued: ['A', 'B'], skipped: [], anyway: ['A'] }]);
 
   console.log('ok (queue)');
 })();

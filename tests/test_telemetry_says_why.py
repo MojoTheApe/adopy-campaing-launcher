@@ -392,8 +392,11 @@ def test_the_recovery_runs_where_nothing_is_entered_yet():
     """
     source = (ROOT / "src" / "fb_ads_rpa" / "meta_dom.py").read_text(encoding="utf-8")
     at = source.index("_recover_from_browser_error(page)", source.index("run_id = _telemetry.new_run_id()"))
-    after = source[at : at + 1200]
-    assert 'name="Create"' in after, "проверка стоит не в начале потока"
+    # ACL-1320: + определение `_adopt` перед `_open_campaign` и остановка
+    # `profile_network`, когда страница ошибки сети пережила перезагрузки.
+    after = source[at : at + 2800]
+    # ACL-1320: Create жмёт `_open_campaign` — сразу за проверкой идёт он.
+    assert 'name="Create"' in after or "_open_campaign(" in after, "проверка стоит не в начале потока"
     calls = source.count("_recover_from_browser_error(page)")
     assert calls <= 2, f"проверка расставлена в {calls} местах — правило стало сплошным"
 

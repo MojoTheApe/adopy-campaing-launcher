@@ -1,0 +1,80 @@
+{#- Available accounts — отдельным файлом (ACL-1319): после Remove/Restore
+    блок перерисовывается сам по себе маршрутом /account-map/available, и
+    разметка у обоих путей должна быть одна. -#}
+    {# Свободные аккаунты: настроены и подключены, но не размещены ни в одной
+       стране. Сюда же падают аккаунты закрытой страны — связь снимается,
+       аккаунт остаётся.
+
+       ACL-1319 (решение владельца 26.09): показываются только работающие —
+       спенд за последние 30 дней книги — и только что подключённые на этой
+       машине. Остальные скрыты за «Show inactive». Убранные руками лежат в
+       «Hidden accounts» и возвращаются кнопкой Restore. Ничего, кроме этого
+       списка, убирание не трогает. Правило — в available_accounts.py. #}
+    {%- set av_shown = amap.available or [] -%}
+    {%- set av_inactive = amap.available_inactive or [] -%}
+    {%- set av_hidden = amap.available_hidden or [] -%}
+    {%- set av_window = amap.activity_window -%}
+    <details class="amap-country amap-available" {% if av_shown or av_hidden %}open{% endif %}>
+      <summary>
+        Available accounts
+        <span class="amap-sum"><span><b class="amap-avail-count">{{ av_shown | length }}</b> not placed</span>
+          {%- if av_inactive %}<span class="amap-avail-inactive-note"><b>{{ av_inactive | length }}</b> inactive</span>{% endif %}</span>
+      </summary>
+      {% if av_shown or av_inactive %}
+      <div class="amap-avail-bar">
+        <label class="amap-avail-opt"><input type="checkbox" class="amap-avail-all" onchange="amapAvailAll(this)"> Select all</label>
+        <button type="button" class="amap-btn danger amap-avail-remove" onclick="amapAvailRemove(this)" disabled
+                title="Hide the selected accounts from this list on this machine. Nothing is deleted.">Remove selected</button>
+        {%- if av_inactive %}
+        <label class="amap-avail-opt" title="Accounts with no spend in the last {{ av_window.days if av_window else 30 }} days of the workbook"><input type="checkbox" class="amap-avail-show-inactive" onchange="amapAvailShowInactive(this)"> Show inactive ({{ av_inactive | length }})</label>
+        {%- endif %}
+        <span class="amap-msg amap-avail-msg"></span>
+      </div>
+      {% endif %}
+      {% if av_shown or av_inactive %}
+      <table class="amap-avail-table">
+        <thead><tr><th class="amap-avail-pickcol"></th><th>Account</th><th>Activity</th><th>Ad Asset</th></tr></thead>
+        <tbody>
+        {% for r in av_shown + av_inactive %}
+          <tr class="amap-avail-row{% if r.status == 'inactive' %} amap-avail-inactive{% endif %}" data-account="{{ r.account | e }}"{% if r.status == 'inactive' %} hidden{% endif %}>
+            <td class="amap-avail-pickcol"><input type="checkbox" class="amap-avail-pick" value="{{ r.account | e }}" onchange="amapAvailSync(this)" aria-label="Select {{ r.account | e }}"></td>
+            <td class="amap-acc">{{ r.account }}</td>
+            <td>
+              {%- if r.status == 'active' %}<span title="Spend in the last {{ av_window.days }} days of the workbook ({{ av_window.from }} → {{ av_window.to }})">{{ r.spend | fmt_usd }} in {{ av_window.days }}d</span>
+              {%- elif r.status == 'new' %}<span class="amap-tag" title="Connected on this machine; the workbook has no spend for it yet">new</span>
+              {%- elif r.status == 'inactive' %}<span class="nodata" title="No spend in the last {{ av_window.days }} days of the workbook ({{ av_window.from }} → {{ av_window.to }})">no spend in {{ av_window.days }}d</span>
+              {%- else %}<span class="nodata">—</span>{% endif -%}
+            </td>
+            <td>{% if r.assets %}<span class="amap-tags">{% for a in r.assets %}<span class="amap-tag">{{ a }}</span>{% endfor %}</span>{% else %}<span class="nodata">—</span>{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+      {% if not av_shown %}
+      <div class="amap-empty amap-avail-empty">
+        {%- if av_inactive %}No active accounts to place — the others had no spend in the last {{ av_window.days if av_window else 30 }} days. Tick "Show inactive" to see them.
+        {%- elif av_hidden %}Nothing left to place — the remaining accounts are hidden.
+        {%- else %}Every configured account is placed in a country.{% endif -%}
+      </div>
+      {% endif %}
+      {% if av_window %}
+      <div class="amap-avail-rule">Active = spend in the last {{ av_window.days }} days of the stats workbook ({{ av_window.from }} → {{ av_window.to }}), or connected on this machine and not started yet. Remove only hides an account from this list on this machine — its profile, placements and history stay.</div>
+      {% endif %}
+      {% if av_hidden %}
+      <details class="amap-avail-hidden">
+        <summary>Hidden accounts (<span class="amap-avail-hidden-count">{{ av_hidden | length }}</span>)</summary>
+        <table>
+          <tbody>
+          {% for r in av_hidden %}
+            <tr data-account="{{ r.account | e }}">
+              <td class="amap-acc">{{ r.account }}</td>
+              <td><button type="button" class="amap-btn amap-avail-restore"
+                          onclick="amapAvailRestore(this, {{ r.account | tojson | forceescape }})">Restore</button></td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </details>
+      {% endif %}
+    </details>

@@ -12,7 +12,9 @@ RPA_FLOW_VERSION = "v96"
 
 from playwright.sync_api import Frame, Locator, Page, TimeoutError as PlaywrightTimeout
 
-from src.fb_ads_rpa import failure_policy, retry_policy
+from src.fb_ads_rpa import ad_account_guard, failure_policy, job_cancel, profile_trouble, retry_policy, run_summary, sentry_signal
+from src.fb_ads_rpa import tab_watchdog
+from src.fb_ads_rpa import meta_dom as _md
 from src.fb_ads_rpa.draft import AdDraft, AdSetDraft, CampaignDraft, RpaPublishResult
 from src.fb_ads_rpa.page_diagnostics import diagnose_and_recover
 from src.fb_ads_rpa.meta_dom import (
@@ -64,6 +66,7 @@ from src.fb_ads_rpa.pacing import (
     end_teach_wait,
     get_teach_state,
 )
+from src.fb_ads_rpa.run_telemetry import phase as _telemetry_phase
 from src.fb_ads_rpa.screenshots import capture
 from src.fb_ads_rpa.selectors import load_selectors
 
@@ -371,6 +374,7 @@ def _click_manual_campaign_setup(page: Page) -> bool:
                 if radio.is_visible(timeout=1500):
                     radio.click(timeout=4000, force=True)
                     time.sleep(0.45)
+                    job_cancel.check()
                     if _is_manual_setup_selected(page):
                         return True
             except Exception:
@@ -380,6 +384,7 @@ def _click_manual_campaign_setup(page: Page) -> bool:
                 if el.is_visible(timeout=1500):
                     el.click(timeout=4000, force=True)
                     time.sleep(0.45)
+                    job_cancel.check()
                     if _is_manual_setup_selected(page):
                         return True
                     # Mouse chain on bbox (CDP-safe)
@@ -387,10 +392,13 @@ def _click_manual_campaign_setup(page: Page) -> bool:
                     if box:
                         page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
                         time.sleep(0.05)
+                        job_cancel.check()
                         page.mouse.down()
                         time.sleep(0.07)
+                        job_cancel.check()
                         page.mouse.up()
                         time.sleep(0.45)
+                        job_cancel.check()
                         if _is_manual_setup_selected(page):
                             return True
             except Exception:
@@ -433,6 +441,7 @@ def _click_manual_campaign_setup(page: Page) -> bool:
         try:
             if root.evaluate(script):
                 time.sleep(0.5)
+                job_cancel.check()
                 if _is_manual_setup_selected(page):
                     return True
         except Exception:
@@ -457,17 +466,20 @@ def _dismiss_ai_guided_setup_dialog(page: Page, *, timeout_ms: int = 20000) -> b
             return True
         _click_manual_campaign_setup(page)
         time.sleep(0.55)
+        job_cancel.check()
         if _objectives_chooser_visible(page):
             return True
         if _is_manual_setup_selected(page) and not _ai_describe_textarea_visible(page):
             # Manual selected; wait briefly for objectives to render
             time.sleep(0.8)
+            job_cancel.check()
             if _objectives_chooser_visible(page):
                 return True
             # Objectives may already be there under a slightly different label
             if _is_objective_modal_open(page):
                 return True
         time.sleep(0.35)
+        job_cancel.check()
 
     return _objectives_chooser_visible(page) or (
         _is_manual_setup_selected(page) and not _ai_describe_textarea_visible(page)
@@ -502,6 +514,7 @@ def _wait_for_ads_manager_ready(page: Page, *, timeout_ms: int = 60000) -> None:
                     except Exception:
                         pass
         _time.sleep(0.5)
+        job_cancel.check()
 
 
 def _wait_for_standalone_url(page: Page, *, timeout_ms: int = 8000) -> bool:
@@ -513,6 +526,7 @@ def _wait_for_standalone_url(page: Page, *, timeout_ms: int = 8000) -> bool:
         if "/edit/standalone" in page.url or "/campaigns/edit/" in page.url:
             return True
         _time.sleep(0.3)
+        job_cancel.check()
     return False
 
 
@@ -534,6 +548,7 @@ def _click_continue_when_enabled(page: Page, *, timeout_ms: int) -> None:
             except Exception as exc:
                 last_err = exc
         _time.sleep(0.35)
+        job_cancel.check()
     raise AdsManagerFlowError("Continue button not enabled/visible") from last_err
 
 
@@ -750,8 +765,10 @@ def _select_leads_objective(page: Page, selectors: list[str], *, timeout_ms: int
                     if box:
                         page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
                         time.sleep(0.05)
+                        job_cancel.check()
                         page.mouse.down()
                         time.sleep(0.07)
+                        job_cancel.check()
                         page.mouse.up()
                     else:
                         heading.click(timeout=per_try, force=True)
@@ -913,15 +930,70 @@ def _fill_ad_copy(page: Page, ad: AdDraft, selectors_cfg: dict[str, Any], timeou
             pass
 
 
+#: ACL-1320: сколько ждать готовый список кампаний (видимая Create, нет
+#: маршрутного спиннера) после перехода, прежде чем перезагрузить его.
+CAMPAIGNS_READY_S = 30.0
+
+
 class AdsManagerFlow:
     """Navigate Ads Manager UI and create one campaign tree."""
 
-    def __init__(self, page: Page, *, selectors_path: str | None = None):
+    def __init__(self, page: Page, *, selectors_path: str | None = None,
+                 on_page_replaced=None, restart_profile=None):
         self.page = page
+        # ACL-1320: поток может сменить зависшую вкладку на свежую, а
+        # публикатор — перезапустить не отвечающий профиль. Оба сообщают
+        # новую страницу сюда, а `on_page_replaced` — дальше, владельцу
+        # соединения (`BrowserConnection.page`).
+        self._on_page_replaced = on_page_replaced
+        self._restart_profile = restart_profile
         self.cfg = load_selectors(selectors_path)
         timing = self.cfg.get("timing") or {}
         self.nav_timeout = int(timing.get("navigation_timeout_ms") or 90000)
         self.action_timeout = int(timing.get("action_timeout_ms") or 45000)
+
+    def _record_profile_stop(self, stop: "profile_trouble.ProfileStop") -> str:
+        """Остановка из-за профиля (ACL-1320): строка телеметрии и имя отказа.
+
+        `note` — устойчивая метка для Sentry (`login_page`, `login_form`, код
+        сети), подробность — в `diag`.
+        """
+        detail = stop.detail or ""
+        if stop.code == profile_trouble.LOGGED_OUT:
+            # ACL-1604: окно разлогиненного профиля — на экран, чтобы человек вошёл.
+            try:
+                from src.fb_ads_rpa import browser as _browser
+
+                _browser.front_if_logged_out(self.page, stop.code)
+            except Exception:
+                pass
+            note = "login_form" if detail == "login_form" else "login_page"
+        elif profile_trouble.net_code(detail):
+            note = profile_trouble.net_code(detail)
+        else:
+            note = stop.code
+        try:
+            from src.fb_ads_rpa import run_telemetry as _rt
+
+            _rt.record(stop.code, False, note=note,
+                       diag={"detail": detail[:200], "message": profile_trouble.message(stop.code)})
+        except Exception:
+            pass
+        if stop.code == profile_trouble.WRONG_AD_ACCOUNT and detail:
+            # ACL-1697: «expected act_X, opened act_Y» видно в ошибке задания.
+            return f"{stop.code}: {detail}"
+        return stop.code
+
+    def _adopt_page(self, page: Page) -> None:
+        """Дальше работать в `page` — свежей вкладке или перезапущенном профиле."""
+        if page is None or page is self.page:
+            return
+        self.page = page
+        if self._on_page_replaced is not None:
+            try:
+                self._on_page_replaced(page)
+            except Exception:
+                pass
 
     def _variations_ranks(self) -> "StrategyRanks | None":
         cached = getattr(self, "_strategy_ranks", None)
@@ -1023,7 +1095,8 @@ class AdsManagerFlow:
 
     def _shot(self, label: str, result: RpaPublishResult) -> str:
         path = capture(self.page, label)
-        result.screenshot_paths.append(path)
+        if path:  # "" — окно свёрнуто, снимка нет (screenshots._page_hidden)
+            result.screenshot_paths.append(path)
         return path
 
     def _wait_ad_set_level(self, *, timeout_s: float = 12) -> bool:
@@ -1034,6 +1107,7 @@ class AdsManagerFlow:
             if _is_ad_set_level_visible(self.page):
                 return True
             _time.sleep(0.4)
+            job_cancel.check()
         return False
 
     def _navigate_to_ad_set_level(self, result: RpaPublishResult) -> bool:
@@ -1150,14 +1224,141 @@ class AdsManagerFlow:
         act = _act_numeric(draft.ad_account_id or "")
         if not act:
             raise AdsManagerFlowError("ad_account_id missing on draft")
+        self._expected_act = act
         url_tpl = (self.cfg.get("urls") or {}).get("campaigns") or (
             "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act={act_id}"
         )
         url = url_tpl.format(act_id=act)
-        self.page.goto(url, wait_until="domcontentloaded", timeout=self.nav_timeout)
-        pause_after_navigation()
+        # 20.09 06:50 (KLD_BFL_S15): самый первый переход падал с
+        # ERR_SSL_PROTOCOL_ERROR, и кампания не начиналась вовсе — обрыв
+        # соединения профиля лечится повтором, а не отказом всего задания.
+        last_exc = None
+        net_codes: list[str] = []
+        # ACL-1313: переход на список кампаний — последний этап начала
+        # задания; его длительность — в телеметрию (`job_phase`).
+        with _telemetry_phase("open_campaigns", campaign=draft.name) as info:
+            for attempt in range(3):
+                try:
+                    self.page.goto(url, wait_until="domcontentloaded", timeout=self.nav_timeout)
+                    last_exc = None
+                    break
+                except Exception as exc:
+                    last_exc = exc
+                    # ACL-1320, живой прогон 26.09 15:22 (Facebook_1443):
+                    # «Navigation … is interrupted by another navigation to
+                    # business.facebook.com/business/loginpage» — аккаунт
+                    # разлогинен, повторы и перезапуски не помогут.
+                    kind, detail = profile_trouble.classify_error(exc)
+                    if kind == profile_trouble.LOGGED_OUT:
+                        info["stop"] = kind
+                        raise profile_trouble.ProfileStop(kind, detail) from exc
+                    if kind == profile_trouble.NETWORK:
+                        profile_trouble.note_net_error(self.page, detail)
+                        net_codes.append(detail)
+                    if "ERR_" not in str(exc):
+                        raise
+                    log.warning("campaigns goto failed (%s/3): %s", attempt + 1, str(exc)[:80])
+                    time.sleep(8.0)
+                    job_cancel.check()
+            info["attempts"] = attempt + 1
+            if last_exc is None:
+                # Ревью PR #323 (F3): переход удался — прежние ошибки сети
+                # (разовый разрыв, вылеченный повтором) больше не в счёт.
+                profile_trouble.note_nav_ok(self.page)
+            if last_exc is not None:
+                # ACL-1320: все три перехода упали с ошибкой сети профиля —
+                # это прокси, а не разовый разрыв (20.09 S15 лечился повтором).
+                if len(net_codes) == 3:
+                    info["stop"] = profile_trouble.NETWORK
+                    raise profile_trouble.ProfileStop(profile_trouble.NETWORK, net_codes[-1]) from last_exc
+                raise last_exc
+            pause_after_navigation()
+        # ACL-1320: переход «удался», а на экране вход в Facebook (редирект
+        # после domcontentloaded) — та же остановка. Только адрес и форма:
+        # разовая ошибка сети перед удачным переходом — не повод.
+        kind, detail = profile_trouble.classify_page(self.page, history=False)
+        if kind:
+            raise profile_trouble.ProfileStop(kind, detail)
+        # ACL-1697: Meta мог открыть другой кабинет (нет доступа к act из
+        # черновика или помнит прошлый) — до любых действий на странице.
+        ad_account_guard.stop_if_wrong(self.page, draft.ad_account_id or "", "campaigns_open")
+        self._ensure_campaigns_ready(draft.name)
+        # ... и снова: готовность могла перезагрузить страницу. Не на Ads
+        # Manager (обрыв сети) — не судим: каждый Create проверит сам.
+        ad_account_guard.stop_if_wrong(self.page, draft.ad_account_id or "", "campaigns_ready")
         result.steps_completed.append("open_campaigns")
-        self._shot("01_campaigns", result)
+        # ACL-1313: удачный переход — без PNG (5–7 с при трёх профилях);
+        # вернуть: FB_RPA_SHOT_ALL=1.
+        from src.fb_ads_rpa.screenshots import capture_on_success
+
+        shot = capture_on_success(self.page, "01_campaigns")
+        if shot:
+            result.screenshot_paths.append(shot)
+
+    def _campaigns_not_ready(self, timeout_s: float) -> str:
+        """Почему список кампаний не готов к Create: "" — готов.
+
+        Оба ожидания — с таймаутом драйвера: видимая кнопка Create и нет
+        маршрутного спиннера Meta на месте страницы.
+        """
+        from src.fb_ads_rpa.meta_dom import _ROUTE_PLACEHOLDER_SEL
+
+        deadline = time.time() + timeout_s
+
+        def left_ms() -> int:
+            return max(int((deadline - time.time()) * 1000), 500)
+
+        try:
+            self.page.get_by_role("button", name="Create", exact=True).first.wait_for(
+                state="visible", timeout=left_ms())
+        except Exception:
+            return "no_create"
+        try:
+            self.page.wait_for_selector(_ROUTE_PLACEHOLDER_SEL, state="hidden", timeout=left_ms())
+        except Exception:
+            return "route_placeholder"
+        return ""
+
+    def _ensure_campaigns_ready(self, campaign: str) -> bool:
+        """Список кампаний готов к Create — иначе одна перезагрузка (ACL-1320).
+
+        `domcontentloaded` — это ещё не список: в прогоне cf563b4ba594 первое
+        нажатие Create шло в страницу, которая минутами не дорисовывалась, и
+        дальше робот ждал уже окно цели. Ждём до `CAMPAIGNS_READY_S` видимую
+        Create без маршрутного спиннера; нет — перезагрузка (троттлинг после
+        неё снимается заново) и ещё одно такое же ожидание. Не готов и после
+        этого — идём дальше: у `_open_campaign` свой бюджет и свежая вкладка.
+        Строка телеметрии `campaigns_list_ready`.
+        """
+        started = time.time()
+        first = self._campaigns_not_ready(CAMPAIGNS_READY_S)
+        final = first
+        reloaded = False
+        if first:
+            try:
+                self.page.reload(wait_until="domcontentloaded", timeout=self.nav_timeout)
+                reloaded = True
+                profile_trouble.note_nav_ok(self.page)
+                from src.fb_ads_rpa.browser import _disable_background_throttling, page_answers
+
+                if page_answers(self.page, 5.0):
+                    _disable_background_throttling(self.page.context, self.page)
+            except Exception as exc:
+                log.warning("campaigns list reload failed: %s", str(exc)[:80])
+                # ACL-1320: ошибка сети профиля — в память профиля: вкладка,
+                # которая следом «не отвечает», скорее без сети, чем зависла.
+                profile_trouble.note_net_error(self.page, profile_trouble.net_code(str(exc)))
+            final = self._campaigns_not_ready(CAMPAIGNS_READY_S)
+        try:
+            from src.fb_ads_rpa import run_telemetry as _rt
+
+            _rt.record("campaigns_list_ready", not final, campaign=campaign,
+                       note=final or ("after_reload" if reloaded else "ready"),
+                       duration_s=time.time() - started,
+                       diag={"first": first, "reloaded": reloaded})
+        except Exception:
+            pass
+        return not final
 
     def _start_create_wizard(self, result: RpaPublishResult) -> None:
         sels = self.cfg.get("selectors") or {}
@@ -1165,6 +1366,11 @@ class AdsManagerFlow:
 
         _wait_for_ads_manager_ready(self.page, timeout_ms=self.nav_timeout)
         result.steps_completed.append("campaigns_ready")
+        # ACL-1697: кабинет — перед каждым Create (страница могла смениться).
+        # (`_expected_act` ставит `_goto_campaigns`, он всегда идёт первым.)
+        if getattr(self, "_expected_act", ""):
+            if not ad_account_guard.stop_if_wrong(self.page, self._expected_act, "create_wizard"):
+                raise AdsManagerFlowError("Ads Manager is not open on the campaigns page; Create was not pressed")
 
         _click_first(self.page, create_sels, timeout_ms=self.action_timeout)
         pause_medium()
@@ -1347,6 +1553,7 @@ class AdsManagerFlow:
                     except Exception:
                         pass
             _time.sleep(0.4)
+            job_cancel.check()
         result.steps_completed.append("wizard_form_wait_timeout")
 
     def _fill_campaign_name(self, draft: CampaignDraft, result: RpaPublishResult) -> None:
@@ -1479,6 +1686,7 @@ class AdsManagerFlow:
                 result.steps_completed.append("ad_level_ready")
                 return True
             _time.sleep(0.4)
+            job_cancel.check()
 
         result.steps_completed.append("ad_level_wait_timeout")
         self._shot("04e_ad_level_wait_fail", result)
@@ -1622,6 +1830,7 @@ class AdsManagerFlow:
         if click_conversion_location_dropdown(self.page):
             wait_conversion_menu_open(self.page)
             time.sleep(0.5)
+            job_cancel.check()
             menu_open = conversion_menu_is_open(self.page)
             if menu_open and conversion_location_menu_visible(self.page):
                 result.steps_completed.append("conversion_location_menu_opened")
@@ -1684,6 +1893,10 @@ class AdsManagerFlow:
             pass
 
         result.steps_completed.append("conversion_location_website_skipped")
+        # ACL-1572: причина отказа — в текст шага, а не только в телеметрию.
+        why = _md.last_conversion_failure_reason()
+        if why:
+            result.steps_completed.append(f"conversion_location_website_reason:{why}")
         fail_shot = self._shot("04d_conversion_location_fail", result)
         if menu_shot:
             result.steps_completed.append(f"screenshot_menu_open:{menu_shot}")
@@ -1711,6 +1924,7 @@ class AdsManagerFlow:
         if resumed:
             # After user click: capture what changed and verify
             time.sleep(0.8)
+            job_cancel.check()
             if is_website_conversion_selected(self.page):
                 result.steps_completed.append("conversion_location_website_teach")
                 shot = self._shot("04d_conversion_website_teach", result)
@@ -2173,6 +2387,8 @@ class AdsManagerFlow:
         from src.fb_ads_rpa.config import get_use_llm_agent, get_use_recipe_player, get_use_recorded_flow
 
         if get_use_recorded_flow():
+            # ACL-1447: общая длительность кампании — для её итога в Sentry.
+            flow_started = time.monotonic()
             ad = ad_set.ads[0]
             additional_ads = [
                 {
@@ -2181,6 +2397,9 @@ class AdsManagerFlow:
                     "creative_path": extra.creative_path or "",
                     "ad_title": extra.ad_title,
                     "ad_body": extra.ad_body,
+                    # ACL-1344: второй вариант основного текста — только если
+                    # задан, чтобы объявления без него шли как прежде.
+                    **({"ad_body2": extra.ad_body2} if extra.ad_body2 else {}),
                 }
                 for extra in ad_set.ads[1:]
             ]
@@ -2192,34 +2411,120 @@ class AdsManagerFlow:
             max_attempts = retry_policy.MAX_CAMPAIGN_ATTEMPTS
             fail_step = ""
             ad_soft_fails: list[str] = []
+            profile_restarted = False
             for attempt in range(1, max_attempts + 1):
                 # Only the surviving attempt's state matters — a retry rebuilds
                 # the campaign from scratch, so failures from the abandoned one
                 # would otherwise be reported against the draft that replaced it.
                 ad_soft_fails.clear()
-                self._goto_campaigns(draft, result)
-                fail_step = run_recorded_campaign_flow(
-                    self.page,
-                    campaign_name=draft.name,
-                    budget=str(ad_set.daily_budget or ""),
-                    adset_name=ad_set.name,
-                    country=draft.country,
-                    age_min=ad_set.age_min,
-                    age_max=ad_set.age_max,
-                    targeting_label=ad_set.targeting_label,
-                    language_names=[draft.language] if draft.language else None,
-                    ad_name=ad.ad_name(),
-                    creative_type=ad.creative_type,
-                    creative_path=ad.creative_path or "",
-                    ad_title=ad.ad_title,
-                    ad_body=ad.ad_body,
-                    destination_url=draft.link,
-                    os_val=ad_set.os,
-                    additional_ads=additional_ads,
-                    soft_fails_out=ad_soft_fails,
-                )
+                # ACL-1320: разлогиненный профиль или мёртвый прокси видны уже
+                # на переходе к списку — это остановка, а не отказ шага.
+                try:
+                    self._goto_campaigns(draft, result)
+                    stopped = ""
+                except profile_trouble.ProfileStop as stop:
+                    stopped = self._record_profile_stop(stop)
+                hung_exc: Exception | None = None
+                try:
+                    fail_step = stopped or run_recorded_campaign_flow(
+                        self.page,
+                        campaign_name=draft.name,
+                        budget=str(ad_set.daily_budget or ""),
+                        adset_name=ad_set.name,
+                        country=draft.country,
+                        age_min=ad_set.age_min,
+                        age_max=ad_set.age_max,
+                        targeting_label=ad_set.targeting_label,
+                        language_names=[draft.language] if draft.language else None,
+                        ad_name=ad.ad_name(),
+                        creative_type=ad.creative_type,
+                        creative_path=ad.creative_path or "",
+                        ad_title=ad.ad_title,
+                        ad_body=ad.ad_body,
+                        destination_url=draft.link,
+                        os_val=ad_set.os,
+                        additional_ads=additional_ads,
+                        soft_fails_out=ad_soft_fails,
+                        on_new_page=self._adopt_page,
+                        expected_act=draft.ad_account_id or "",
+                        **({"ad_body2": ad.ad_body2} if ad.ad_body2 else {}),
+                    )
+                    if fail_step == profile_trouble.WRONG_AD_ACCOUNT and _md.last_wrong_ad_account():
+                        # ACL-1697: в имени отказа — «expected act_X, opened act_Y».
+                        fail_step += ": " + _md.last_wrong_ad_account()
+                except Exception as exc:
+                    # ACL-1702: разблокированный сторожем вызов бросает ошибку
+                    # драйвера; это не сбой кода — итог `tab_hung` ниже.
+                    if not tab_watchdog.peek_hung():
+                        raise
+                    hung_exc = exc
+                    fail_step = ""
+                finally:
+                    # ACL-1614: после Stop окно не трогаем — им может уже
+                    # владеть другое задание этого профиля. ACL-1702: и
+                    # вкладку, которую разблокировал сторож, — она могла не ожить.
+                    if not job_cancel.requested():
+                        try:
+                            if not tab_watchdog.peek_hung():
+                                from src.fb_ads_rpa.browser import put_window_back
+                                put_window_back(self.page)
+                        except Exception:
+                            pass
+                # ACL-1702: сторож разблокировал зависшую вкладку посреди
+                # попытки — кампания кончается красным `tab_hung:<шаг>`, без
+                # повтора (черновик частичный, повтор наплодил бы дубли). Метку
+                # со страницы снимаем: выжила вкладка — следующая кампания по ней.
+                hung = tab_watchdog.take_hung()
+                if hung:
+                    tab_watchdog.clear_page_mark(self.page)
+                    fail_step = f"tab_hung:{hung}"
+                    result.steps_completed.append(
+                        f"tab_unblocked:{type(hung_exc).__name__ if hung_exc else 'returned'}")
                 if not fail_step:
                     break
+                # ACL-1318: попытка кончилась — это настоящий отказ кампании, и
+                # в Sentry он уходит здесь, по событию на попытку. Прогон
+                # попытки назван внутри `run_recorded_campaign_flow`, так что
+                # номер и контекст шага берутся из текущего потока.
+                sentry_signal.report_campaign_stop(
+                    fail_step, campaign=draft.name,
+                    account=draft.account_label or "", attempt=attempt,
+                    names=sentry_signal.draft_names(draft),
+                )
+                if fail_step.split(":", 1)[0] == "profile_unresponsive":
+                    # ACL-1320: профиль не отвечает — перезапустить его через
+                    # MLX API (один раз на кампанию) и повторить кампанию в
+                    # живом браузере. Не вышло — повтор в том же мёртвом
+                    # профиле ничего не даст.
+                    new_page = None
+                    stop = None
+                    if not profile_restarted and self._restart_profile is not None:
+                        profile_restarted = True
+                        try:
+                            new_page = self._restart_profile()
+                        except profile_trouble.ProfileStop as exc:
+                            stop = exc
+                        except Exception as exc:
+                            # ACL-1320: неудачный перезапуск не оставляет
+                            # профиль закрытым молча — это своя остановка.
+                            log.warning("profile restart failed: %s", exc)
+                            stop = profile_trouble.ProfileStop(
+                                profile_trouble.RESTART_FAILED, f"{type(exc).__name__}: {str(exc)[:120]}")
+                    result.steps_completed.append(
+                        "profile_restarted_unresponsive:" + ("ok" if new_page is not None else "failed"))
+                    if stop is not None:
+                        fail_step = self._record_profile_stop(stop)
+                        sentry_signal.report_campaign_stop(
+                            fail_step, campaign=draft.name,
+                            account=draft.account_label or "", attempt=attempt,
+                            names=sentry_signal.draft_names(draft),
+                        )
+                    elif new_page is None:
+                        result.steps_completed.append(
+                            f"recorded_flow_retry_blocked:{fail_step}:no_restart")
+                        break
+                    else:
+                        self._adopt_page(new_page)
                 decision = retry_policy.disposition(fail_step)
                 if decision.action != retry_policy.RETRY_CAMPAIGN:
                     result.steps_completed.append(
@@ -2239,12 +2544,28 @@ class AdsManagerFlow:
                 result.steps_completed.append(
                     f"recorded_flow_retry_scheduled:{fail_step}:attempt{attempt + 1}"
                 )
-                time.sleep(1.5)
+                time.sleep(retry_policy.backoff_s(fail_step, attempt))
+                job_cancel.check()
 
             result.steps_completed.append("recorded_flow:reached_ad" if not fail_step else f"recorded_flow_fail:{fail_step}")
             result.success = not fail_step
             if fail_step:
                 result.error = f"Recorded flow failed at: {fail_step}"
+                if fail_step.split(":", 1)[0] in ("conversion_website", "conversion_website_verify"):
+                    # ACL-1572: почему Website не выбран (меню не открылось, поля нет...).
+                    _why = _md.last_conversion_failure_reason()
+                    if _why:
+                        result.error += " - " + _why
+                # ACL-1313: остановку, которую повтор не лечит (account_blocked),
+                # человек должен понять из самой ошибки, без разбора телеметрии.
+                if (fail_step.split(":", 1)[0] in ("account_blocked", "browser_closed", "tab_hung",
+                                                   "conversion_website_name_changed",
+                                                   "next_to_ad_stuck_on_adset",
+                                                   "profile_unresponsive", "simple_create_layout",
+                                                   *retry_policy.FLOW_BUDGET_STOPS)
+                        or fail_step.split(":", 1)[0] in profile_trouble.ACCOUNT_STOPS):
+                    result.error += " - " + failure_policy.reason(fail_step)
+                    result.blocking_failures.append(fail_step)
 
             # Reaching the ad level is not the same as building a publishable
             # draft. An ad whose creative or destination step failed still
@@ -2255,6 +2576,19 @@ class AdsManagerFlow:
             # invite a re-run that builds a duplicate), but say plainly that
             # this one must not go out untouched.
             apply_step_failures(result, ad_soft_fails)
+            # ACL-1318: блокирующие отказы итога — по событию на каждый, один
+            # раз на кампанию (по выжившей попытке). Остальные `ok=False` из
+            # телеметрии в Sentry не уходят — см. `sentry_signal`.
+            sentry_signal.report_blocking_failures(
+                ad_soft_fails, campaign=draft.name, account=draft.account_label or "",
+                names=sentry_signal.draft_names(draft),
+            )
+            # ACL-1447: итог кампании — одно событие info/warning, в фоне.
+            run_summary.report_finished(
+                campaign=draft.name, account=draft.account_label or "",
+                stopped_at=fail_step, failures=ad_soft_fails, ads=len(ad_set.ads),
+                started=flow_started, attempts=attempt,
+            )
             return result
 
         # LLM agent (opt-in, FB_RPA_ENGINE=llm_agent): live Claude-driven loop —
@@ -2343,7 +2677,8 @@ class AdsManagerFlow:
                     )
         except (AdsManagerFlowError, PlaywrightTimeout) as exc:
             shot = capture(self.page, f"error_{draft.name[:20]}")
-            result.screenshot_paths.append(shot)
+            if shot:
+                result.screenshot_paths.append(shot)
             result.error = str(exc)
             if isinstance(exc, AdsManagerFlowError) and exc.screenshot:
                 result.screenshot_paths.append(exc.screenshot)

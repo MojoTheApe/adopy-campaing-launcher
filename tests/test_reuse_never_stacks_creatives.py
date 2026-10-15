@@ -75,7 +75,6 @@ def grid(monkeypatch):
     g = _Grid()
     monkeypatch.setattr(md, "_library_tiles", lambda page, filename: g)
     monkeypatch.setattr(md, "_library_search", lambda page, filename: True)
-    monkeypatch.setattr(md, "_library_tile_ready", lambda tile: True)
     monkeypatch.setattr(md, "_library_selected_count", lambda page: len(g.selected))
     monkeypatch.setattr(md, "_sleep_h", lambda *a, **k: None)
     monkeypatch.setattr(md, "_close_creative_setup_modal", lambda page: True)

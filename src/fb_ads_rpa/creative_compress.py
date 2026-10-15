@@ -46,6 +46,8 @@ from typing import Callable
 
 from config import paths
 
+from src.fb_ads_rpa import job_cancel
+
 #: Выше этого веса обычный путь загрузки перестаёт работать. То же число, что
 #: и `meta_dom._PW_FILE_LIMIT_MB`, и не случайно: именно там кончается дорога,
 #: которую Playwright проходит сам.
@@ -103,6 +105,14 @@ def observe_preparation(callback: Callable[[str], None]):
         _notice_sink.reset(token)
 
 
+def report_notice(text: str) -> None:
+    """Строка для человека в панели задания (ACL-1388: робот сам закрыл окно
+    профиля). Тот же канал, что у сжатия креативов; вне задания — ничего."""
+    callback = _notice_sink.get()
+    if callback and text:
+        callback(text)
+
+
 def report_preparation(original_path: str, prepared: Prepared) -> None:
     callback = _notice_sink.get()
     if callback and prepared.note:
@@ -135,12 +145,34 @@ def ffmpeg_exe() -> str:
 
 
 def _run(args: list[str], timeout: float) -> tuple[int, str]:
-    proc = subprocess.run(
-        args, capture_output=True, text=True, encoding="utf-8",
-        errors="replace", timeout=timeout,
-        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    """Запустить ffmpeg и дождаться; Stop задания его обрывает (ACL-1614).
+
+    Ждём опросом, а не одним вызовом: сжатие идёт минуты, и всё это время Stop
+    должен быть слышен. На Stop завершаем СВОЙ дочерний процесс ffmpeg (не
+    Multilogin) и бросаем `JobCancelled`. Пока ждём — heartbeat: сжатие не
+    пишет строк телеметрии, и это не зависание (`step_stuck`).
+    """
+    proc = subprocess.Popen(
+        args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8",
+        errors="replace", creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
-    return proc.returncode, (proc.stderr or "") + (proc.stdout or "")
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            out, err = proc.communicate(timeout=0.5)
+            break
+        except subprocess.TimeoutExpired:
+            pass
+        if job_cancel.requested():
+            proc.kill()
+            proc.communicate()
+            job_cancel.check()
+        if time.monotonic() >= deadline:
+            proc.kill()
+            proc.communicate()
+            raise subprocess.TimeoutExpired(args, timeout)
+        job_cancel.heartbeat()
+    return proc.returncode, (err or "") + (out or "")
 
 
 def duration_s(path: str, *, run=_run, exe: str = "") -> float:
@@ -198,6 +230,24 @@ def cache_path(src: str, target_mb: float) -> Path:
     # Always use an MP4 container for the H.264/AAC copy, including AVI/WebM inputs.
     key = hashlib.sha1(f"v2|{os.path.abspath(src)}|{stamp}|{target_mb}".encode("utf-8")).hexdigest()[:16]
     return cache_dir() / f"{Path(src).stem}.{key}.mp4"
+
+
+def cached_copy_name(src: str, *, limit_mb: float = DEFAULT_LIMIT_MB,
+                     target_mb: float = DEFAULT_TARGET_MB) -> str:
+    """Имя сжатой копии `src` в кэше, если она уже есть; иначе пусто.
+
+    ACL-1637: в Meta уезжает именно эта копия, и в медиатеке она подписана
+    ЕЁ именем (`<имя>.<ключ>.mp4`), а не именем исходника. Объявление 2+ искало
+    плитку по имени исходника и «не находило копии». Здесь ничего не сжимается
+    и ffmpeg не нужен: только проверка, что копия лежит в кэше.
+    """
+    original = size_mb(src)
+    if original <= limit_mb:
+        return ""
+    dst = cache_path(src, target_mb)
+    if dst.is_file() and 0 < size_mb(dst) <= min(limit_mb, original):
+        return dst.name
+    return ""
 
 
 def compress(src: str, dst: str, video_kbps: int, *, run=_run,
@@ -269,6 +319,7 @@ def ensure_uploadable(path: str, *, limit_mb: float = DEFAULT_LIMIT_MB,
         with tempfile.TemporaryDirectory(prefix="encode-", dir=dst.parent) as tmp:
             pending = Path(tmp) / "creative.mp4"
             ok = compress(path, str(pending), kbps, run=run, exe=exe)
+            job_cancel.check()    # ACL-1614: Stop во время сжатия — дальше не идём
             got = size_mb(pending)
             if not ok or not (0 < got <= min(limit_mb, original)):
                 raise ValueError("encoded copy is incomplete or too large")

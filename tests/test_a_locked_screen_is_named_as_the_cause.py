@@ -122,7 +122,7 @@ def test_the_watcher_stops_with_the_run(monkeypatch):
 def test_the_watch_covers_the_run_itself():
     """Смотреть надо, пока идёт сборка: после неё экран уже разблокирован."""
     src = (ROOT / "src" / "web" / "publish_jobs.py").read_text(encoding="utf-8")
-    start = src.index("def _run_job(")
+    start = src.index("def _run_job_inner(")
     body = src[start: src.index("\ndef ", start + 1)]
     assert "_run_rpa(" in body, "срез не захватил тело работы — проверка ничего не стережёт"
     assert "_watch_screen_lock(job_id)" in body, "за экраном никто не смотрит во время работы"
@@ -142,7 +142,7 @@ def _render_status() -> str:
 def test_the_dashboard_names_the_cause():
     block = _render_status()
     assert "job.screen_was_locked" in block, "дешборд не смотрит на признак"
-    assert re.search(r"экран был заблокирован", block), "причина не названа словами"
+    assert re.search(r"screen was locked", block), "причина не названа словами"
 
 
 def test_it_is_not_said_over_a_finished_draft():

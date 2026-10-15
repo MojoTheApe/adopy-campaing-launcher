@@ -149,7 +149,7 @@ def slots_to_publish_jobs(
         path_err: str | None = None
         if creative_filename and not preview_mode:
             try:
-                creative_path = str(find_creative_file(root, creative_filename))
+                creative_path = str(find_creative_file(root, creative_filename, fresh=True))
             except (CreativeNotFoundError, AmbiguousCreativeError, FileNotFoundError) as e:
                 path_err = str(e)
         elif creative_filename and preview_mode:

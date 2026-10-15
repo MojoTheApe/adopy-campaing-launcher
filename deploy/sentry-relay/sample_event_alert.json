@@ -1,0 +1,38 @@
+{
+  "action": "triggered",
+  "actor": {"id": "sentry", "name": "Sentry", "type": "application"},
+  "data": {
+    "event": {
+      "event_id": "e4874d664c3540c1a32eab185f12c5ab",
+      "issue_id": "1117540176",
+      "issue_url": "https://de.sentry.io/api/0/issues/1117540176/",
+      "web_url": "https://adopy-7t.sentry.io/issues/1117540176/events/e4874d664c3540c1a32eab185f12c5ab/",
+      "url": "https://de.sentry.io/api/0/projects/adopy-7t/python/events/e4874d664c3540c1a32eab185f12c5ab/",
+      "title": "further_limit_reach_radio: not-found",
+      "culprit": "src.fb_ads_rpa.sentry_signal in report",
+      "release": "v96+8@22aea04",
+      "environment": "production",
+      "platform": "python",
+      "level": "error",
+      "datetime": "2026-09-30T12:00:01.000000Z",
+      "timestamp": 1790769601.0,
+      "tags": [
+        ["environment", "production"],
+        ["failure_kind", "blocking"],
+        ["level", "error"],
+        ["machine", "SYNTH-LT01"],
+        ["reason", "not-found"],
+        ["release", "v96+8@22aea04"],
+        ["server_name", "SYNTH-LT01"],
+        ["step", "further_limit_reach_radio"],
+        ["account", "FacebookSynthetic1"],
+        ["page_snapshot", "section"]
+      ],
+      "user": {"email": "someone@example.com", "ip_address": "10.0.0.1"},
+      "contexts": {"run": {"campaign": "Synthetic campaign name", "run_id": "run_synthetic"}}
+    },
+    "triggered_rule": "ACL - new failure kind",
+    "issue_alert": {"title": "ACL - new failure kind", "settings": []}
+  },
+  "installation": {"uuid": "00000000-0000-0000-0000-000000000000"}
+}
