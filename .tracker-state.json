@@ -14436,7 +14436,7 @@
             "session": "wrf1902-20261015"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-RF1902",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -14455,7 +14455,8 @@
         },
         "pr": 904,
         "queued_at": "2026-10-15T08:10:10+00:00",
-        "review_report": "# Return for a dependency refresh\n\nACL-1902 is stacked on ACL-1899 (PR 900), which sits on 1776/1819. Current main 080df2d8 is not in this branch and the PR conflicts with main. Required: after ACL-1899 is refreshed, merge its new head into this branch (merge, no rebase), resolve conflicts keeping main's behaviour, re-run the affected tests, hand off again for fresh review."
+        "review_report": "# Return for a dependency refresh\n\nACL-1902 is stacked on ACL-1899 (PR 900), which sits on 1776/1819. Current main 080df2d8 is not in this branch and the PR conflicts with main. Required: after ACL-1899 is refreshed, merge its new head into this branch (merge, no rebase), resolve conflicts keeping main's behaviour, re-run the affected tests, hand off again for fresh review.",
+        "reviewer": "Reviewer-RV1015M"
       },
       "903": {
         "implementers": [
@@ -16433,6 +16434,10 @@
       },
       "Reviewer-RV1015L": {
         "session": "rv1015l-900",
+        "role": "Reviewer"
+      },
+      "Reviewer-RV1015M": {
+        "session": "rv1015m-904",
         "role": "Reviewer"
       }
     },
@@ -19117,8 +19122,7 @@
       903,
       907,
       891,
-      872,
-      902
+      872
     ],
     "review": null,
     "history": [
@@ -39531,6 +39535,13 @@
         "at": "2026-10-15T08:45:36+00:00",
         "issue": 617,
         "reason": "Closed in the Playwright backlog cleanup 2026-10-15: we are moving campaign creation and account reads to the Meta API (ACL-1760/1761/1883), so this Ads Manager UI/Playwright-only work is no longer relevant. Restore if the UI path comes back."
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-15T08:46:30+00:00",
+        "pr": 904,
+        "lane": "6e18576614624623bb7d912a0c8173ae",
+        "actor": "Reviewer-RV1015M"
       }
     ],
     "policy": {
@@ -43586,6 +43597,19 @@
       "started_at": "2026-10-15T08:23:18+00:00",
       "ineligible": {}
     },
-    "source_reviews": {}
+    "source_reviews": {
+      "904": {
+        "id": "6e18576614624623bb7d912a0c8173ae",
+        "pr": 904,
+        "issues": [
+          902
+        ],
+        "actor": "Reviewer-RV1015M",
+        "session": "rv1015m-904",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-15T08:46:30+00:00",
+        "state": "reviewing"
+      }
+    }
   }
 }
