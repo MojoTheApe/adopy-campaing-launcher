@@ -12789,7 +12789,7 @@
             "session": "wrl1775-20261015"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-RL1775",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -36868,6 +36868,68 @@
             "approved_at": "2026-10-15T05:34:36+00:00"
           }
         }
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-15T05:37:11+00:00",
+        "issue": 775,
+        "pr": 809,
+        "review": {
+          "id": "c44cf644faa94bb3b393938e5c8f5e10",
+          "pr": 809,
+          "issues": [
+            775
+          ],
+          "actor": "Reviewer-R1775M",
+          "session": "r1775m-20261015",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-15T05:28:53+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 775,
+            "pr": 809,
+            "branch": "codex/acl-1775-instant-forms",
+            "head_sha": "c56238119957d22eb66ce3812455a4abe70ea066",
+            "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+            "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "scope": "ceb045664960caec521fbc188384eaeb4a6ba049c145f62dde9e6d8e34e16091",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-R1775M",
+              "implementer": "Worker-RL1775",
+              "review_session": "r1775m-20261015",
+              "execution_lane": "c44cf644faa94bb3b393938e5c8f5e10",
+              "head_sha": "c56238119957d22eb66ce3812455a4abe70ea066",
+              "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+              "tree_sha": "388bdb0f041afa33aef4f6abfa7770b1fdbd331f",
+              "report": "Independent source review of ACL-1775 / PR 809 after the refresh onto main 0850aa39 (ACL-1800 object-update policy, ACL-1797 tokens merged); head c5623811, main is an ancestor. Reviewer-R1775M implemented none of it. Previous approval: Reviewer-R1775J at e2714db8.\n\nFocus: write safety of the merged policy. Read git diff e2714db8 c5623811 for src/fb_api/token_capture.py and src/fb_api/write_policy.py.\n- JS helper write(): ACL-1800 object-update branch intact (path /<id>=[1-9]\\d{4,}, exactly one key, field in OBJECT_FIELDS and not forbidden, status only ACTIVE/PAUSED, amount safe positive integer < 1e15, no files); creator helper refuses object paths and the commands helper refuses creation paths. The creation branch is the former code inside else, with 1775 withoutLeadForm(edge, checked, spec.on_ad===true) before statusOk; files/want assigned as in main.\n- lead_gen_form_id: allowed only in object_story_spec.<fmt>.call_to_action.value as the sole key, numeric id, and only with on_ad; elsewhere it stays in FORBIDDEN and is caught by statusOk. Python _without_lead_form mirrors it; check() uses fullmatch path, check_object_update() is separate; InPageGraph rejects allow_writes together with allow_object_updates, stage_file refused in update mode. Modes cannot be combined.\n- Python write(): object_updates -> check_object_update, else check(..., on_ad=on_ad). Parity holds.\n\nVerification (detached worktree at c5623811, PYTHONUTF8=1, node present so node matrices ran, not skipped):\n- test_acl1761_parity + test_acl1775_instant_forms + test_acl1775_builder_forms + test_acl1800_campaign_commands: 340 passed.\n- All test_acl1761_*, 1766*, 1775*, 1797*, 1800_account*, 1800_campaign_commands, 1800_home_wiring: 359 passed, 2 deselected. Golden website plan test passes.\n- Mutation 1: removed the on_ad requirement in the JS withoutLeadForm -> 2 failed. Mutation 2: removed the one-field check (pk.length !== 1) in the JS object-update branch -> 1 failed. Both reverted; worktree clean.\n- CI on head: all checks pass including tracker-link (green on the current check list); linux 1-3 and windows pass; two build jobs skipped as expected. Rerun of run 38681590041 was refused by GitHub as not retriable, tracker-link already passes in that run.\n- No live Meta or Multilogin calls.\n\nFindings: no blocking issues. Full local suite not run (CI covers it).",
+              "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                775
+              ],
+              "recorded_at": "2026-10-15T05:36:05+00:00",
+              "issue_scopes": {
+                "775": "ceb045664960caec521fbc188384eaeb4a6ba049c145f62dde9e6d8e34e16091"
+              }
+            },
+            "lane": {
+              "id": "c44cf644faa94bb3b393938e5c8f5e10",
+              "pr": 809,
+              "issues": [
+                775
+              ],
+              "actor": "Reviewer-R1775M",
+              "session": "r1775m-20261015",
+              "coordinator": "Coordinator-C0930A",
+              "started_at": "2026-10-15T05:28:53+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-15T05:36:37+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -38048,6 +38110,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-15T05:34:36+00:00"
+      },
+      "775": {
+        "issue": 775,
+        "pr": 809,
+        "branch": "codex/acl-1775-instant-forms",
+        "head_sha": "c56238119957d22eb66ce3812455a4abe70ea066",
+        "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+        "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "scope": "ceb045664960caec521fbc188384eaeb4a6ba049c145f62dde9e6d8e34e16091",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-R1775M",
+          "implementer": "Worker-RL1775",
+          "review_session": "r1775m-20261015",
+          "execution_lane": "c44cf644faa94bb3b393938e5c8f5e10",
+          "head_sha": "c56238119957d22eb66ce3812455a4abe70ea066",
+          "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+          "tree_sha": "388bdb0f041afa33aef4f6abfa7770b1fdbd331f",
+          "report": "Independent source review of ACL-1775 / PR 809 after the refresh onto main 0850aa39 (ACL-1800 object-update policy, ACL-1797 tokens merged); head c5623811, main is an ancestor. Reviewer-R1775M implemented none of it. Previous approval: Reviewer-R1775J at e2714db8.\n\nFocus: write safety of the merged policy. Read git diff e2714db8 c5623811 for src/fb_api/token_capture.py and src/fb_api/write_policy.py.\n- JS helper write(): ACL-1800 object-update branch intact (path /<id>=[1-9]\\d{4,}, exactly one key, field in OBJECT_FIELDS and not forbidden, status only ACTIVE/PAUSED, amount safe positive integer < 1e15, no files); creator helper refuses object paths and the commands helper refuses creation paths. The creation branch is the former code inside else, with 1775 withoutLeadForm(edge, checked, spec.on_ad===true) before statusOk; files/want assigned as in main.\n- lead_gen_form_id: allowed only in object_story_spec.<fmt>.call_to_action.value as the sole key, numeric id, and only with on_ad; elsewhere it stays in FORBIDDEN and is caught by statusOk. Python _without_lead_form mirrors it; check() uses fullmatch path, check_object_update() is separate; InPageGraph rejects allow_writes together with allow_object_updates, stage_file refused in update mode. Modes cannot be combined.\n- Python write(): object_updates -> check_object_update, else check(..., on_ad=on_ad). Parity holds.\n\nVerification (detached worktree at c5623811, PYTHONUTF8=1, node present so node matrices ran, not skipped):\n- test_acl1761_parity + test_acl1775_instant_forms + test_acl1775_builder_forms + test_acl1800_campaign_commands: 340 passed.\n- All test_acl1761_*, 1766*, 1775*, 1797*, 1800_account*, 1800_campaign_commands, 1800_home_wiring: 359 passed, 2 deselected. Golden website plan test passes.\n- Mutation 1: removed the on_ad requirement in the JS withoutLeadForm -> 2 failed. Mutation 2: removed the one-field check (pk.length !== 1) in the JS object-update branch -> 1 failed. Both reverted; worktree clean.\n- CI on head: all checks pass including tracker-link (green on the current check list); linux 1-3 and windows pass; two build jobs skipped as expected. Rerun of run 38681590041 was refused by GitHub as not retriable, tracker-link already passes in that run.\n- No live Meta or Multilogin calls.\n\nFindings: no blocking issues. Full local suite not run (CI covers it).",
+          "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "issues": [
+            775
+          ],
+          "recorded_at": "2026-10-15T05:36:05+00:00",
+          "issue_scopes": {
+            "775": "ceb045664960caec521fbc188384eaeb4a6ba049c145f62dde9e6d8e34e16091"
+          }
+        },
+        "lane": {
+          "id": "c44cf644faa94bb3b393938e5c8f5e10",
+          "pr": 809,
+          "issues": [
+            775
+          ],
+          "actor": "Reviewer-R1775M",
+          "session": "r1775m-20261015",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-15T05:28:53+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-15T05:36:37+00:00"
       }
     },
     "batches": {
@@ -40235,63 +40341,6 @@
       "started_at": "2026-10-15T03:44:03+00:00",
       "ineligible": {}
     },
-    "source_reviews": {
-      "809": {
-        "id": "c44cf644faa94bb3b393938e5c8f5e10",
-        "pr": 809,
-        "issues": [
-          775
-        ],
-        "actor": "Reviewer-R1775M",
-        "session": "r1775m-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "started_at": "2026-10-15T05:28:53+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 775,
-          "pr": 809,
-          "branch": "codex/acl-1775-instant-forms",
-          "head_sha": "c56238119957d22eb66ce3812455a4abe70ea066",
-          "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
-          "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "ceb045664960caec521fbc188384eaeb4a6ba049c145f62dde9e6d8e34e16091",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-R1775M",
-            "implementer": "Worker-RL1775",
-            "review_session": "r1775m-20261015",
-            "execution_lane": "c44cf644faa94bb3b393938e5c8f5e10",
-            "head_sha": "c56238119957d22eb66ce3812455a4abe70ea066",
-            "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
-            "tree_sha": "388bdb0f041afa33aef4f6abfa7770b1fdbd331f",
-            "report": "Independent source review of ACL-1775 / PR 809 after the refresh onto main 0850aa39 (ACL-1800 object-update policy, ACL-1797 tokens merged); head c5623811, main is an ancestor. Reviewer-R1775M implemented none of it. Previous approval: Reviewer-R1775J at e2714db8.\n\nFocus: write safety of the merged policy. Read git diff e2714db8 c5623811 for src/fb_api/token_capture.py and src/fb_api/write_policy.py.\n- JS helper write(): ACL-1800 object-update branch intact (path /<id>=[1-9]\\d{4,}, exactly one key, field in OBJECT_FIELDS and not forbidden, status only ACTIVE/PAUSED, amount safe positive integer < 1e15, no files); creator helper refuses object paths and the commands helper refuses creation paths. The creation branch is the former code inside else, with 1775 withoutLeadForm(edge, checked, spec.on_ad===true) before statusOk; files/want assigned as in main.\n- lead_gen_form_id: allowed only in object_story_spec.<fmt>.call_to_action.value as the sole key, numeric id, and only with on_ad; elsewhere it stays in FORBIDDEN and is caught by statusOk. Python _without_lead_form mirrors it; check() uses fullmatch path, check_object_update() is separate; InPageGraph rejects allow_writes together with allow_object_updates, stage_file refused in update mode. Modes cannot be combined.\n- Python write(): object_updates -> check_object_update, else check(..., on_ad=on_ad). Parity holds.\n\nVerification (detached worktree at c5623811, PYTHONUTF8=1, node present so node matrices ran, not skipped):\n- test_acl1761_parity + test_acl1775_instant_forms + test_acl1775_builder_forms + test_acl1800_campaign_commands: 340 passed.\n- All test_acl1761_*, 1766*, 1775*, 1797*, 1800_account*, 1800_campaign_commands, 1800_home_wiring: 359 passed, 2 deselected. Golden website plan test passes.\n- Mutation 1: removed the on_ad requirement in the JS withoutLeadForm -> 2 failed. Mutation 2: removed the one-field check (pk.length !== 1) in the JS object-update branch -> 1 failed. Both reverted; worktree clean.\n- CI on head: all checks pass including tracker-link (green on the current check list); linux 1-3 and windows pass; two build jobs skipped as expected. Rerun of run 38681590041 was refused by GitHub as not retriable, tracker-link already passes in that run.\n- No live Meta or Multilogin calls.\n\nFindings: no blocking issues. Full local suite not run (CI covers it).",
-            "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
-            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              775
-            ],
-            "recorded_at": "2026-10-15T05:36:05+00:00",
-            "issue_scopes": {
-              "775": "ceb045664960caec521fbc188384eaeb4a6ba049c145f62dde9e6d8e34e16091"
-            }
-          },
-          "lane": {
-            "id": "c44cf644faa94bb3b393938e5c8f5e10",
-            "pr": 809,
-            "issues": [
-              775
-            ],
-            "actor": "Reviewer-R1775M",
-            "session": "r1775m-20261015",
-            "coordinator": "Coordinator-C0930A",
-            "started_at": "2026-10-15T05:28:53+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-15T05:36:37+00:00"
-        }
-      }
-    }
+    "source_reviews": {}
   }
 }
