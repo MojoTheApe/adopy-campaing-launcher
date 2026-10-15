@@ -16,7 +16,7 @@ from typing import Any, Callable, Protocol
 from playwright.sync_api import Browser, Page, Playwright, sync_playwright
 
 from src.meta_campaign_agent.ad_account_map import AccountMapEntry
-from src.fb_ads_rpa import hand_window, profile_trouble
+from src.fb_ads_rpa import hand_window, profile_dir, profile_trouble
 from src.fb_ads_rpa.config import ensure_playwright_browsers_path
 from src.fb_ads_rpa.window_visibility import PerPage
 
@@ -1867,8 +1867,19 @@ class MultiloginDirectCDPProvider:
         Нужно, чтобы отличить «профиль закрыт» от «профиль открыт руками в MLX
         Desktop»: у второго нет отладочного порта, прицепиться не к чему, и
         человеку надо сказать именно это, а не «профиль не найден».
+
+        ACL-1184: это ЕДИНСТВЕННАЯ проверка «профиль запущен» — её зовут и
+        дешборд (чтение, «open profile»), и `MultiloginAttachProvider.open`.
+        Раньше у них были свои, с разными аргументами, и они расходились:
+        дешборд говорил «закрыт», RPA — «запущен», и человеку выходил голый
+        `RuntimeError`. Оба написания папки (длинное и 8.3) проверяются
+        здесь же; папка не найдена (`""`) — ищем по id профиля.
         """
-        return self._profile_process_running(user_data_dir, profile_id)
+        if not user_data_dir:
+            # Пустая строка совпала бы с любой командной строкой Mimic.
+            return bool(profile_id) and self._profile_process_running(profile_id, profile_id)
+        return any(self._profile_process_running(spelling, profile_id)
+                   for spelling in profile_dir.spellings(user_data_dir))
 
     def _try_attach_existing(
         self, profile_id: str, user_data_dir: str, *, strict_profile: bool = False, new_page: bool = False,
@@ -2478,9 +2489,11 @@ class MultiloginAttachOnlyProvider:
         # yet; the job stops with `profile_open_by_hand`. Only a profile the robot
         # started itself earlier is restarted through the MLX API here (graceful
         # stop of ONLY this profile, cookies kept, other profiles untouched).
-        elif self._direct._profile_process_running(udd or profile_id, profile_id):
+        elif self._direct.profile_is_running(udd, profile_id):
             if not allow_restart:
-                raise RuntimeError(f"{account_label}: profile is already running; no restart was performed")
+                # ACL-1184: не голый RuntimeError, а остановка «открыт руками» —
+                # дешборд показывает по ней `hand_message()` с выходом.
+                raise _open_by_hand(profile_id, account_label, "no_restart")
             if not _robot_profile(profile_id, udd):
                 if reopen_by_hand:
                     return self._reopen_hand_opened(entry, account_label, profile_id, udd,

@@ -689,6 +689,25 @@ def hand_message() -> str:
         else HAND_OPEN_MESSAGE
 
 
+def _running_by_hand(direct, udd, profile_id: str) -> bool:
+    """Запущен ли профиль — единой проверкой слоя RPA (ACL-1184).
+
+    `profile_is_running` сам перебирает написания папки, а без папки
+    (`udd is None`) ищет по id профиля: «папка не найдена» больше не
+    пропускает проверку.
+    """
+    return bool(direct.profile_is_running(str(udd) if udd is not None else "", profile_id))
+
+
+def _hand_refusal(exc: BaseException, account_label: str) -> bool:
+    """Отказ слоя RPA «профиль открыт руками» — исходник в лог, человеку текст (ACL-1184)."""
+    if not (isinstance(exc, _profile_trouble.ProfileStop) and exc.code == _profile_trouble.OPEN_BY_HAND):
+        return False
+    log.warning("%s: the profile is open by hand; showing the way out instead of %s: %s",
+                account_label, type(exc).__name__, exc)
+    return True
+
+
 #: Аккаунт → строка переоткрытия. Живёт только в памяти и только пока окно
 #: переоткрывается: опрос `/account-spend/status` отдаёт её строке аккаунта.
 _HAND_WAIT: dict[str, str] = {}
@@ -883,6 +902,8 @@ def _start_closed(entry, account_label: str, opened: _ReadOpen, recheck=None):
         _record("spend_profile_started", False, time.monotonic() - began,
                 {"account": account_label, "slot_wait_s": round(waited_s, 1),
                  "error": type(exc).__name__})
+        if _hand_refusal(exc, account_label):
+            raise ProfileNotAttachable(hand_message(), code=HAND_OPEN_CODE) from exc
         # ACL-1826: 403 «restricted permission» на слоте B / вход в прокси — понятный текст и код.
         from src.fb_api import mlx_session as _mlx
 
@@ -1055,52 +1076,21 @@ def _mlx_profile_dir(profile_id: str, folder_id: str = "") -> Path | None:
 
 
 def _dir_spellings(path) -> list[str]:
-    """Написания одной и той же папки, которые Windows считает равными.
+    """Написания одной и той же папки (длинное и 8.3) — см. `fb_ads_rpa.profile_dir`.
 
-    9 сентября чтение спенда X84 отказывало словами «профиль открыт вручную»
-    сразу после того, как дешборд сам его и открыл. Прицепиться мешало
-    единственное: **у папки два написания**. Multilogin запускает Mimic с
-    коротким именем 8.3 —
-
-        C:\\Users\\EXAMPL~1\\mlx\\profiles\\WORKSP~1\\FOLDER~1\\PROFIL~1
-
-    — а мы вычисляем длинное, и проверка владения портом сравнивает их как
-    строки. `os.path.abspath` и `normcase` короткое имя не разворачивают, и
-    два имени одной папки расходятся.
-
-    Проверять владение по папке — правильно: без этого можно прицепиться к
-    браузеру **другого** аккаунта, а это хуже любого непрочитанного числа.
-    Поэтому сравнение остаётся, а сюда добавляется второе написание.
-
-    Разворачивать короткое в длинное было бы половиной решения: неизвестно,
-    какое из двух придёт следующим, и на машине с выключенным 8.3 короткого
-    имени нет вовсе. Поэтому возвращаются оба, без повторов и в понятном
-    порядке — длинное первым.
+    ACL-1184: реализация переехала к проверке «профиль запущен», чтобы
+    дешборд и RPA отвечали на этот вопрос одинаково.
     """
-    out: list[str] = []
-    text = str(path)
-    for value in (text, _short_path(text)):
-        if value and value not in out:
-            out.append(value)
-    return out
+    from src.fb_ads_rpa import profile_dir
+
+    return profile_dir.spellings(path, _short_path)
 
 
 def _short_path(path: str) -> str:
-    """Имя 8.3 для существующей папки — или пусто, если его нет.
+    """Имя 8.3 для существующей папки — или пусто (`fb_ads_rpa.profile_dir`)."""
+    from src.fb_ads_rpa import profile_dir
 
-    Пусто — обычный ответ, а не сбой: на томах с выключенным 8.3 короткого
-    имени не существует, и тогда написание всего одно.
-    """
-    if os.name != "nt":
-        return ""
-    try:
-        import ctypes
-
-        buf = ctypes.create_unicode_buffer(4096)
-        length = ctypes.windll.kernel32.GetShortPathNameW(str(path), buf, 4096)
-        return buf.value if 0 < length < 4096 and buf.value != str(path) else ""
-    except Exception:
-        return ""
+    return profile_dir.short_path(path)
 
 
 def _attach_open(direct_cls, entry, profile_id: str):
@@ -1154,28 +1144,23 @@ def _attach_only(entry, account_label: str):
         )
 
     udd = _mlx_profile_dir(profile_id, (getattr(entry, "folder_id", "") or ""))
-    if udd is None:
-        # Папку создаёт сам Multilogin при первом запуске — у профиля, ни разу
-        # не запускавшегося здесь, её нет; открытым он быть не может.
-        if opening is not None:
-            return _start_closed(entry, account_label, opening,
-                                 recheck=lambda: _attach_open(direct_cls, entry, profile_id))
-        raise ProfileNotAttachable(
-            f"Profile folder {profile_id} was not found. Is this profile open on this machine?"
-        )
-
     direct = direct_cls()
-    for spelling in _dir_spellings(udd):
-        conn = direct.attach_existing_only(profile_id, spelling, new_page=True)
-        if conn is not None:
-            # Профиль, который прошлое чтение запустило и ещё не закрыло
-            # (`CLOSE_GRACE_S`), закроет теперь это чтение.
-            _take_over_pending(profile_id, opening)
-            return conn
+    if udd is not None:
+        for spelling in _dir_spellings(udd):
+            conn = direct.attach_existing_only(profile_id, spelling, new_page=True)
+            if conn is not None:
+                # Профиль, который прошлое чтение запустило и ещё не закрыло
+                # (`CLOSE_GRACE_S`), закроет теперь это чтение.
+                _take_over_pending(profile_id, opening)
+                return conn
 
+    # ACL-1184: проверяем и без папки. Обычно у профиля без папки (её создаёт сам
+    # Multilogin при первом запуске) открытого окна нет, но папку мы ищем своей
+    # раскладкой и можем не найти — тогда окно, открытое руками, раньше
+    # доходило до запуска и голого RuntimeError вместо подсказки.
     running = False
     try:
-        running = any(direct.profile_is_running(p, profile_id) for p in _dir_spellings(udd))
+        running = _running_by_hand(direct, udd, profile_id)
     except Exception:
         pass
     if running:
@@ -1186,6 +1171,10 @@ def _attach_only(entry, account_label: str):
     if opening is not None:
         return _start_closed(entry, account_label, opening,
                              recheck=lambda: _attach_open(direct_cls, entry, profile_id))
+    if udd is None:
+        raise ProfileNotAttachable(
+            f"Profile folder {profile_id} was not found. Is this profile open on this machine?"
+        )
     raise ProfileNotAttachable(
         f"{account_label}: the profile is not open. Open it through automation and leave the window open; "
         "the read will attach to it without restarting anything."
@@ -1357,20 +1346,20 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
         return False, "The RPA browser layer changed (see acl-108e)"
 
     udd = _mlx_profile_dir(profile_id, folder_id)
+    direct = direct_cls()
     if udd is not None:
-        direct = direct_cls()
         for spelling in _dir_spellings(udd):
             attached = direct.attach_existing_only(profile_id, spelling)
             if attached is not None:
                 attached.close(keep_browser_open=True)
                 return True, "The profile is already open through automation. You can read it."
-        try:
-            if any(direct.profile_is_running(p, profile_id) for p in _dir_spellings(udd)):
-                # ACL-1812 (B1-bis): и кнопка «open profile» руками открытое окно не трогает.
-                return False, CodedMessage(hand_message(), HAND_OPEN_CODE)
-        except Exception as exc:
-            return False, f"Could not check open profiles: {exc}. Nothing was launched."
-
+    try:
+        # ACL-1184: и без найденной папки — по id профиля (та же проверка, что у RPA).
+        if _running_by_hand(direct, udd, profile_id):
+            # ACL-1812 (B1-bis): и кнопка «open profile» руками открытое окно не трогает.
+            return False, CodedMessage(hand_message(), HAND_OPEN_CODE)
+    except Exception as exc:
+        return False, f"Could not check open profiles: {exc}. Nothing was launched."
 
     # ACL-1812 (B1-bis): обе кнопки («open profile» на строке и Connect) идут через общий журнал.
     from src.fb_api import stop_log as _stop_log
@@ -1384,6 +1373,8 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
         conn = rpa_browser.get_browser_provider("multilogin_attach").open(
             entry, who, allow_missing_dir=True, allow_restart=False)
     except Exception as exc:  # noqa: BLE001
+        if _hand_refusal(exc, who):
+            return False, CodedMessage(hand_message(), HAND_OPEN_CODE)
         from src.fb_api import mlx_session as _mlx
 
         text, code = _mlx.humanize(exc, instance, who)   # ACL-1826
