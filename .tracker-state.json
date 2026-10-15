@@ -14166,7 +14166,7 @@
             "session": "t1872a-20261015"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-T1872A",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -14191,7 +14191,8 @@
           "session": "flow_five_reviews_coordinator_01a134f0_20261013",
           "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
         },
-        "review_report": "# ACL-1872 / PR873 \u2014 current-main reconciliation return\n\nActual separate non-implementing Reviewer-RS1012 / connection_review_rs1012; Coordinator-CR1012. Original author Worker-IS1013 / isolated_app_sol_20261013. Genuine supported source-review claim846a05ed690f48b88696e29b60ff6a3f, acquired only after fresh readback confirmed task872 queued, implementation claim absent, PR873 ready/open and no existing source review owner. No other claim or foreign integration ownership was changed.\n\nExact source remains1b5459a02ef24408f2d497b0af0487ffb5e4b7bf, tree9335195716d2c1c19768ae7c995def2947140dac, on preserved branch work/acl-1872-isolated-meta-setup. Checkout is clean. Fresh git ls-remote and fetched origin/main both identify7cee2857d4b374bc564c5ca84b9f6ede69f96430. The source/current-main merge-base is still777663bf539308c0898cc177f872a8e0f63b597e, also the PR base checkpoint exposed by GitHub at readback. Current main therefore advanced beyond the source's admitted verification baseline. Full refreshed source review/admission against the new main is required; stale approval is not appropriate.\n\nThe entire current Issue872 body (updated2026-10-13T20:00:47Z), full PR body, original specifications, every acceptance criterion, historical handoffs and latest retirement repair/handoff evidence were read. Nothing in the issue was removed or rewritten. Snapshots: acl1872-new-main-full-issue-1b5459a0.json and acl1872-new-main-pr-1b5459a0.json. The bounded local preparation outcome and unfinished ACL1858/1358 wider official access/HTTP/app-creation work remain unchanged.\n\nCurrent source repair is preserved: registry-load validation precedes retirement cleanup and writes; public malformed-state cases preserve metadata/ciphertext/map bytes, with normal cleanup recovery retained. The author reports235 affected local tests and46 packaging units passing plus scanner/smoke/diff. Exact1b5459a0 product CI38455307156 and actual installer38455307278 succeeded, and ready tracker-link38455371265 attempt2 plus supported check-pr passed after durable handoff. These are valid source evidence for their recorded base/tree, not proof of a newly reconciled candidate. No successful unchanged test was repeated and no final full Standards/Spec approval of this repaired head is claimed in this bounded return.\n\nCurrent-main governance comparison shows AGENTS, delivery/config, workflow pins, source-review procedure and launcher unchanged; the only matching process-document delta is the ACL1879 CI-sharding history entry in docs/repository/CHANGELOG.md. Genuine schema3 policy5/5/5 and clean pinned Tracker46283b8a6fe444065838e136c89ef4ed64bd1528 remain applicable. This return uses their supported execution review-return operation under the actual acquired lane.\n\nDisposition: return to the same original author for a fresh normal implementation claim and reconciliation with actual current main7cee2857 (or newer freshly verified main if it advances again). Preserve the complete issue/history, original source branch, retirement repair, public preservation regressions, prior independent findings/evidence and all other owners. Resolve any actual base delta in that source under the author claim, then run checks justified by the resulting candidate and complete required current-head product/applicable installer CI before normal handoff. A fresh independent full-scope source review is still required afterward. This is a baseline freshness return, not a new product defect, rejection of the repair, or authorization to import unrelated sibling code.\n\nNo product/test/runtime/root-configuration edits, installation, merge, live Meta/Multilogin, credential/profile operation, source approval or foreign ownership mutation was performed. Only read-only Git metadata fetch and private audit evidence were written before the supported return. Historical source approval and successful evidence remain preserved as history; they are not asserted usable against the changed current main."
+        "review_report": "# ACL-1872 / PR873 \u2014 current-main reconciliation return\n\nActual separate non-implementing Reviewer-RS1012 / connection_review_rs1012; Coordinator-CR1012. Original author Worker-IS1013 / isolated_app_sol_20261013. Genuine supported source-review claim846a05ed690f48b88696e29b60ff6a3f, acquired only after fresh readback confirmed task872 queued, implementation claim absent, PR873 ready/open and no existing source review owner. No other claim or foreign integration ownership was changed.\n\nExact source remains1b5459a02ef24408f2d497b0af0487ffb5e4b7bf, tree9335195716d2c1c19768ae7c995def2947140dac, on preserved branch work/acl-1872-isolated-meta-setup. Checkout is clean. Fresh git ls-remote and fetched origin/main both identify7cee2857d4b374bc564c5ca84b9f6ede69f96430. The source/current-main merge-base is still777663bf539308c0898cc177f872a8e0f63b597e, also the PR base checkpoint exposed by GitHub at readback. Current main therefore advanced beyond the source's admitted verification baseline. Full refreshed source review/admission against the new main is required; stale approval is not appropriate.\n\nThe entire current Issue872 body (updated2026-10-13T20:00:47Z), full PR body, original specifications, every acceptance criterion, historical handoffs and latest retirement repair/handoff evidence were read. Nothing in the issue was removed or rewritten. Snapshots: acl1872-new-main-full-issue-1b5459a0.json and acl1872-new-main-pr-1b5459a0.json. The bounded local preparation outcome and unfinished ACL1858/1358 wider official access/HTTP/app-creation work remain unchanged.\n\nCurrent source repair is preserved: registry-load validation precedes retirement cleanup and writes; public malformed-state cases preserve metadata/ciphertext/map bytes, with normal cleanup recovery retained. The author reports235 affected local tests and46 packaging units passing plus scanner/smoke/diff. Exact1b5459a0 product CI38455307156 and actual installer38455307278 succeeded, and ready tracker-link38455371265 attempt2 plus supported check-pr passed after durable handoff. These are valid source evidence for their recorded base/tree, not proof of a newly reconciled candidate. No successful unchanged test was repeated and no final full Standards/Spec approval of this repaired head is claimed in this bounded return.\n\nCurrent-main governance comparison shows AGENTS, delivery/config, workflow pins, source-review procedure and launcher unchanged; the only matching process-document delta is the ACL1879 CI-sharding history entry in docs/repository/CHANGELOG.md. Genuine schema3 policy5/5/5 and clean pinned Tracker46283b8a6fe444065838e136c89ef4ed64bd1528 remain applicable. This return uses their supported execution review-return operation under the actual acquired lane.\n\nDisposition: return to the same original author for a fresh normal implementation claim and reconciliation with actual current main7cee2857 (or newer freshly verified main if it advances again). Preserve the complete issue/history, original source branch, retirement repair, public preservation regressions, prior independent findings/evidence and all other owners. Resolve any actual base delta in that source under the author claim, then run checks justified by the resulting candidate and complete required current-head product/applicable installer CI before normal handoff. A fresh independent full-scope source review is still required afterward. This is a baseline freshness return, not a new product defect, rejection of the repair, or authorization to import unrelated sibling code.\n\nNo product/test/runtime/root-configuration edits, installation, merge, live Meta/Multilogin, credential/profile operation, source approval or foreign ownership mutation was performed. Only read-only Git metadata fetch and private audit evidence were written before the supported return. Historical source approval and successful evidence remain preserved as history; they are not asserted usable against the changed current main.",
+        "reviewer": "Reviewer-R1872B"
       },
       "874": {
         "implementers": [
@@ -16471,6 +16472,10 @@
       },
       "Reviewer-RV1015M": {
         "session": "rv1015m-904",
+        "role": "Reviewer"
+      },
+      "Reviewer-R1872B": {
+        "session": "S-fd075fc8",
         "role": "Reviewer"
       }
     },
@@ -19154,8 +19159,7 @@
       841,
       903,
       907,
-      891,
-      872
+      891
     ],
     "review": null,
     "history": [
@@ -39593,6 +39597,13 @@
         "at": "2026-10-15T08:50:04+00:00",
         "issue": 646,
         "reason": "Closed in the Playwright backlog cleanup 2026-10-15: we are moving campaign creation and account reads to the Meta API (ACL-1760/1761/1883), so this Ads Manager UI/Playwright-only work is no longer relevant. Restore if the UI path comes back."
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-15T08:50:57+00:00",
+        "pr": 873,
+        "lane": "32e478ac0eaf445bb2497f0376c9f142",
+        "actor": "Reviewer-R1872B"
       }
     ],
     "policy": {
@@ -43704,6 +43715,18 @@
           },
           "approved_at": "2026-10-15T08:48:02+00:00"
         }
+      },
+      "873": {
+        "id": "32e478ac0eaf445bb2497f0376c9f142",
+        "pr": 873,
+        "issues": [
+          872
+        ],
+        "actor": "Reviewer-R1872B",
+        "session": "S-fd075fc8",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-15T08:50:57+00:00",
+        "state": "reviewing"
       }
     }
   }
