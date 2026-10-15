@@ -14296,7 +14296,7 @@
             "session": "wk_w1902n_1014"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1902N",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -14314,7 +14314,8 @@
           "report": "# ACL-1902 handoff report\n\nHead: 13643e161c342b88d45578763dc60806588ae118 (PR #904, branch work/acl-1902-campaign-name-suffix).\nBase: stacked on ACL-1899 (#900) head 8c526be1, itself on ACL-1776.\n\nChange: the creator picks a free campaign name before any write (NAME, NAME_2 ... NAME_20), in the run and in Check plan. Free -> use; ours and identical -> reuse (resume, no duplicate); ours but different or same name without our tag -> next; all taken -> stop before any write. `campaign_name` stays the builder name everywhere; the chosen name is the new field `published_as`. Check plan shows a WARNING instead of an error.\n\nTests: 602 passed (non-browser affected set) + 40 passed (4 browser files). No full suite run locally.\n\nReview rounds:\n1. Independent Opus review of bba2d90a: changes required (results keyed by new name broke the dashboard dots and preflight gate; truncated search; X_2 reuse; limits; docs). Fixed in 0ee67bd5.\n2. Re-review of 0ee67bd5: clean except R1 (the lost-ad-set-tag stop was wrong: tag is not a difference, children are matched by name). Fixed in 13643e16. Coordinator approved at 13643e16 and verified the R1 delta; live on TEST9095.\n\nACL-1907 interaction (note on PR #904): with ACL-1907 present, tests/test_acl1907_locale_groups.py `test_rerun_still_stops_on_a_genuinely_different_language` and `test_unknown_members_keep_strict_compare_and_say_so` expect an existing_differs stop; under ACL-1902 that case publishes as NAME_2 with the language diff in the rename warning. Whichever of 1902/1907 merges second must carry that test update (already done in the TEST9095 preview).\n\nOpen: stats matched by the builder name will see NAME_2 in Meta; the 400-character name guard is conservative (limit unverified); EQUAL filter on campaign name not yet seen live."
         },
         "pr": 904,
-        "queued_at": "2026-10-15T06:20:34+00:00"
+        "queued_at": "2026-10-15T06:20:34+00:00",
+        "reviewer": "Reviewer-RT1015A"
       },
       "903": {
         "implementers": [
@@ -18663,7 +18664,6 @@
       903,
       907,
       891,
-      902,
       799,
       814,
       872
@@ -37953,6 +37953,13 @@
         "pr": 821,
         "lane": "3b8af54b0b9d401a800330dd6047b97b",
         "actor": "Reviewer-RV1015C"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-15T06:51:56+00:00",
+        "pr": 904,
+        "lane": "3d23547c70e346ad9930152bec51073d",
+        "actor": "Reviewer-RT1015A"
       }
     ],
     "policy": {
@@ -41596,6 +41603,18 @@
         "session": "rv1015c-821",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-15T06:51:17+00:00",
+        "state": "reviewing"
+      },
+      "904": {
+        "id": "3d23547c70e346ad9930152bec51073d",
+        "pr": 904,
+        "issues": [
+          902
+        ],
+        "actor": "Reviewer-RT1015A",
+        "session": "rt1015a-20261015",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-15T06:51:56+00:00",
         "state": "reviewing"
       }
     }
