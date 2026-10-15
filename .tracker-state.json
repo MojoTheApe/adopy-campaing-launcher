@@ -3581,6 +3581,36 @@
         "issue_scopes": {
           "799": "0b2f9e9baae64d82925ec94ddc2a28bcd01ffc31eadb8ce886535456b06792e3"
         }
+      },
+      "917": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R917B",
+        "implementer": "Coordinator-C1014I",
+        "head_sha": "1591df08a8798d0836b1e0e63dfbe1178fb05ea1",
+        "base_sha": "6ff7aa988530610e6a631b986cbd5b1b4f0a3403",
+        "tree_sha": "e1ff679ef9e1f9079fafd7ab737392854e0eacc4",
+        "execution_lane": "7afd66b09bb345d0af8d07c4fe79c1fa",
+        "review_session": "r917b-20261015",
+        "batch_id": "e76699eff67645bd910712ebbcde5107",
+        "source_heads": [
+          "fa2dab061c20873b403f99c31782238e827442c0",
+          "ea925cfc6defd5834d4d5cc85f64b55613ede3f0"
+        ],
+        "scope": "Combined batch e76699ef: ACL-800 (PR 802), ACL-797 (PR 810) into stage via PR 917; main a4e38b7c still current",
+        "findings": [],
+        "report": "Composition: first parent is main a4e38b7c, exactly two merges in manifest order of fa2dab06 and ea925cfc, no extra commits; each batch merge tree equals git merge-tree of its parents (no hidden edits); final diff against main equals the union of the two sources (same file list, same changed-line count 8160). PR base stage (6ff7aa98) has the same tree as main (618ed14c). Source approvals for both heads on main a4e38b7c (R1800J, R1797J) present in tracker state. Combined sanity in detached worktree at the head, PYTHONUTF8=1 pytest -k \"not browser\": 1800 files + 1798 inventory + static_scripts + review_ui_regressions: 358 passed, 1 skipped; 1797 design_system, theme, field_contrast, buttons, account_tree, read_fallback, notes, connecting: 224 passed. CI on PR 917: all checks pass. No live calls. Reviewer implemented nothing and is a different run from the Coordinator.",
+        "main_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          800,
+          797
+        ],
+        "recorded_at": "2026-10-15T04:12:34+00:00",
+        "issue_scopes": {
+          "800": "c6a03d6f7d7359787e935af84597ca655ffb095293c7145fe32eb1f57394c2f5",
+          "797": "5c2d21567457ef4bf48283b34060170cecabad9ab74630b2363e00dfd9390453"
+        }
       }
     },
     "stage": {
