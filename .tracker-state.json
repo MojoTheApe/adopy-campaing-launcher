@@ -14817,7 +14817,7 @@
             "session": "acl_delivery"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-B71E",
         "coordinator": "Coordinator-DLV15",
         "handoff": {
@@ -14848,7 +14848,8 @@
           "actor": "Coordinator-DLV15",
           "session": "delivery_flow_root",
           "report": "Owner requested continuing the already authorized ACL delivery-flow activation on2026-10-15. Source PR925 remains Approved at82fd869c against old main080df2d8, but actual main advanced to3ee7c6d9c7a394ecec9f0889805fadb188b3aab7 and GitHub now reports conflicts. Preserve the full task924 scope, source branch, prior successful CI/independent review as history and all unrelated owners. Return only our own approved source to its actual author for current-main reconciliation, affected checks, hosted CI and fresh independent approval. Do not edit the frozen source as Coordinator or reuse old-base approval for changed content. Initial admission still uses the actual old Stage policy."
-        }
+        },
+        "review_report": "Owner requested continuing the already authorized ACL delivery-flow activation on2026-10-15. Source PR925 remains Approved at82fd869c against old main080df2d8, but actual main advanced to3ee7c6d9c7a394ecec9f0889805fadb188b3aab7 and GitHub now reports conflicts. Preserve the full task924 scope, source branch, prior successful CI/independent review as history and all unrelated owners. Return only our own approved source to its actual author for current-main reconciliation, affected checks, hosted CI and fresh independent approval. Do not edit the frozen source as Coordinator or reuse old-base approval for changed content. Initial admission still uses the actual old Stage policy."
       },
       "45": {
         "implementers": [],
@@ -40676,6 +40677,18 @@
         "pr": 887,
         "lane": "2e6b36e3c70f43058147e21b746e9a76",
         "actor": "Reviewer-RV1015R"
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-15T10:47:59+00:00",
+        "issue": 924,
+        "operation": {
+          "id": "8a44bd5cb1e44da29fbd5e9273ec77ad",
+          "actor": "Coordinator-DLV15",
+          "session": "delivery_flow_root",
+          "report": "Owner requested continuing the already authorized ACL delivery-flow activation on2026-10-15. Source PR925 remains Approved at82fd869c against old main080df2d8, but actual main advanced to3ee7c6d9c7a394ecec9f0889805fadb188b3aab7 and GitHub now reports conflicts. Preserve the full task924 scope, source branch, prior successful CI/independent review as history and all unrelated owners. Return only our own approved source to its actual author for current-main reconciliation, affected checks, hosted CI and fresh independent approval. Do not edit the frozen source as Coordinator or reuse old-base approval for changed content. Initial admission still uses the actual old Stage policy."
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -41988,57 +42001,6 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-15T08:19:42+00:00"
-      },
-      "924": {
-        "issue": 924,
-        "pr": 925,
-        "branch": "codex/acl-1924-delivery-flow",
-        "head_sha": "82fd869c6b5851071bec714ccf11eaf21458155a",
-        "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
-        "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
-        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-        "scope": "10fb5111bd8d9d45454ebbbe1eca97c42f68ba6f0f298f59fd964e78c9120bb4",
-        "review": {
-          "kind": "independent-review",
-          "verdict": "approved",
-          "reviewer": "Reviewer-N61D",
-          "implementer": "Worker-B71E",
-          "review_session": "review_acl",
-          "execution_lane": "6baa41580ba045159d7981fb213ef83f",
-          "head_sha": "82fd869c6b5851071bec714ccf11eaf21458155a",
-          "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
-          "tree_sha": "21f5a23b462e328c9693966707f649110d08900e",
-          "report": "# ACL-1924 / PR925 final independent source review\n\nActual non-implementing Reviewer: `review_acl` / `Reviewer-N61D`, 2026-10-15. Implementer: actual `Worker-B71E` / `acl_delivery`. No source edits or installer/runtime operations were performed by the Reviewer.\n\nReviewed PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/925\n\n- Exact head: `82fd869c6b5851071bec714ccf11eaf21458155a`.\n- Exact current main/base: `080df2d8d9a846180753b1a425c289dcc5aefbb0`.\n- Head tree: `21f5a23b462e328c9693966707f649110d08900e`.\n- Complete 39-path binary diff SHA-256: `b26a9a030f4444fd540b7dde0016fc5aacb070771f3966b112a4d42b6dbb274e`.\n- Clean source checkout; actual ready PR head/base match these identities.\n\nRead the full unchanged Issue924 scope and acceptance, project reading map, existing pinned source/runtime constraints and the complete final diff. The source task implements reviewed repository support; initial admission must retain the old Stage/main route. Parent ACL-1923 retains separately evidenced live idle migration, fresh board and actual final published package acceptance. A source PR or source approval proves none of those outcomes and cannot complete the parent.\n\n## Findings and fixes\n\nNo remaining actionable finding on this exact source candidate. The initial two ACL P2 findings are resolved:\n\n1. The release manifest now selects the actual prior stable publication using successful release inventory and the production updater's signed latest-channel path; it binds that publication to the included immutable source tag/commit, repository and release ID. Orphan tags and failed drafts remain preserved and cannot become the prior installer baseline. The actual Git orphan/draft-to-recovery regression exercises the producer and serialized manifest.\n2. Successful prerequisite request/evidence outputs retain their real artifact producers across partial GitHub retries. Receipt-only recovery selects the latest genuine verifier, reads its trusted native log artifact binding and reuses exact request/evidence bytes without republishing or reinstalling. This accounts for GitHub's new-ID carried-forward job clones rather than treating the latest overall run attempt as the artifact producer. Superseding failed/skipped/running verification cannot hide behind older success.\n\nThe exported canonical native helper includes the separately reviewed modern gh colored-log compatibility and partial-rerun/uncertain-CAS idempotency fixes. Existing identical verified receipts retain their original native identity; a proposed clone requires fresh latest native proof before returning idempotently without another state PUT. See `tracker-native-retry-review.md` for exact review and real native original/clone log comparison.\n\n## Shared adoption and preserved controls\n\nActual reviewed merged Master pin/Action: `a3f56106f52d0ae19986920519b2fa46a380798b` (MR-28 / PR29). Actual reviewed merged Tracker pin/lock: `e775c624e0323e69ed891926691c3dee6587081a` (TT-127 / PR128). Descriptor, lock, Action and repository links agree. The exported delivery, batch, process and native-receipt helpers byte-match the clean official e775 checkout; the PR checker differs only by its preserved correct separated-layout default config path.\n\nThe maintained three-way upgrade preserves the 44-file new pristine baseline after reproducing the 41-file old baseline. Pristine generation inputs retain original staging=true; the explicit project-owned no-Stage selection remains a local policy change. All 74 historical task proof entries are unchanged; only the supported staging-only historical policy binding changes. IDs, six modules, 5/5/5 limits, guarded project client, permanent stage/history and compatibility master are preserved. Source and combined admission retain independent actual review and complete applicable CI.\n\nThe adopted standing owner policy automatically includes verified package delivery when the owner approves ordinary integration/main merge. The genuine Coordinator persists the exact batch's `--deliver` request; no additional owner wording is required. Development, source approval, bare pushes and unrequested machine batches cannot authorize publication. Explicit source-only instructions retain unfinished package obligations.\n\n## Verification evidence and limits\n\nReviewed successful author evidence: 553 affected tooling/classifier/platform regressions; 46 packaging unit tests; 82 recovery-focused tests including real Git failed-tag recovery and partial-retry provenance; 137 final post-export adoption/assembly/metadata checks; scanner, dashboard/RPA import smoke, local links, diff checks and selected-Master draft validation. Successful unchanged suites were not blindly repeated.\n\nReviewer independently reproduced the failed-tag baseline defect before its fix, verified real native GitHub partial-rerun clone semantics, exercised the fixed canonical reader/selector against original and cloned native logs while printing only counts/digests, checked final clean tree/diff and compared exported helpers with actual official pinned bytes. The final exported native receipt wrapper imports successfully with required entry points.\n\nRequired hosted source checks are a separate admission gate. At initial final-review preparation, descriptor and refreshed tracker linkage pass; complete native product/installer jobs are still running. The source may enter Approved only after all four current required checks pass. Combined candidate review/CI, exact old-policy Stage verification, unchanged main promotion and retained acceptance evidence remain later Coordinator gates. Real publication, Windows published-channel acceptance, live policy migration and employee rollout are not asserted by this source review.\n\nSource-content verdict: **approved for this exact head/base/tree and unchanged scope**, subject to current native source checks for the supported Approved transition. Genuine lane acquisition and durable record must be verified separately; no self-created identity substitute or manual state change is permitted.\n",
-          "checks": [
-            "Full unchanged Issue924 scope and full39-path exact source diff independently reviewed",
-            "Actual reviewed merged Master a3f56106 and Tracker e775c624 pins/export verified",
-            "Initial published-baseline and partial-rerun findings fixed with meaningful regressions",
-            "Canonical native retry/log-reader fix independently verified against actual original/cloned GitHub job logs",
-            "Successful unchanged author affected-check evidence inspected; current hosted source admission checks remain separately required"
-          ],
-          "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "issues": [
-            924
-          ],
-          "recorded_at": "2026-10-15T08:27:36+00:00",
-          "issue_scopes": {
-            "924": "10fb5111bd8d9d45454ebbbe1eca97c42f68ba6f0f298f59fd964e78c9120bb4"
-          }
-        },
-        "lane": {
-          "id": "6baa41580ba045159d7981fb213ef83f",
-          "pr": 925,
-          "issues": [
-            924
-          ],
-          "actor": "Reviewer-N61D",
-          "session": "review_acl",
-          "coordinator": "Coordinator-DLV15",
-          "started_at": "2026-10-15T08:26:13+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-15T08:39:54+00:00"
       },
       "872": {
         "issue": 872,
