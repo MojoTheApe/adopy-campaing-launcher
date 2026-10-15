@@ -9372,9 +9372,11 @@
         "worktree": "C:\\acl-1853",
         "id": "30d0677551c44417870a375fc36e63b4",
         "issue": 853,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-15T09:28:57+00:00",
-        "from_status": "status:backlog"
+        "from_status": "status:backlog",
+        "pr": 863,
+        "report": "# ACL-1853 source handoff (takeover)\n\nWorker-T1853A / t1853a-20261015; Coordinator-M1011A. Claim 30d0677551c44417870a375fc36e63b4.\nCodex Worker-N7Q4 stopped (usage limit). Prior head 9aaabdd6 was independently approved (RS1012) on old main 3327465f and returned only because main advanced.\nBranch codex/acl-1853-profile-process-lease, worktree C:\\acl-1853, head afe200905c65636a33daeb68d5b1bcf694c681cf, tree 6ca6d26169fbcf45eee2f8462919ed50de29c8eb, base main 3ee7c6d9c7a394ecec9f0889805fadb188b3aab7.\n\n## Changes since 9aaabdd6\n- 00c34974 merge main 080df2d8 (now incl. ACL-1760/1761/1800/1812/1826): account_spend.py (main removed _reopen_for_automation; on_lease_error kept), CHANGELOG union, four tests.\n- d000b0da: warm adopt lease refusal returns result code profile_lease instead of aborting open_many; account_spend_api clean message for empty profile_id and lease refusal; main-origin test fixtures given synthetic UUIDs.\n- e21f4818 (pre-handoff review findings): publish waiters cap 30 min, cancellable (reads 120 s); deferred close timer survives lease refusal; clean refusal text (no class prefix) in API country split / start_read / inventory; Close skips unresolvable unrelated job labels; spawn test timeouts 20 s.\n- afe20090 merge main 3ee7c6d9 (CHANGELOG only).\n- PROFILE_OWNERSHIP.md: merged API/warm paths not holding the lease across the full session are listed as #862 scope.\n\n## Verification\nTargeted tests: 1197+668 after merge; 551 after fixes (lease suite 43 incl. 5 new). Secret scan clean. Pre-handoff independent read-only review (Sonnet): APPROVE, 1 MEDIUM + 4 LOW, all fixed in e21f4818. No live profile/Meta operations."
       },
       "309": {
         "actor": "Worker-W1015K",
