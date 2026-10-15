@@ -13157,7 +13157,7 @@
             "session": "ws1819p-20261015"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-S1819P",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -38845,6 +38845,68 @@
         "at": "2026-10-15T08:20:24+00:00",
         "issue": 469,
         "reason": "Closed in the Playwright backlog cleanup 2026-10-15: we are moving campaign creation and account reads to the Meta API (ACL-1760/1761/1883), so this Ads Manager UI/Playwright-only work is no longer relevant. Restore if the UI path comes back."
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-15T08:21:04+00:00",
+        "issue": 819,
+        "pr": 821,
+        "review": {
+          "id": "dae6f1124fc7418faff9c2cbf6ac3bd3",
+          "pr": 821,
+          "issues": [
+            819
+          ],
+          "actor": "Reviewer-R1819Q",
+          "session": "r1819q-20261015",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-15T07:52:58+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 819,
+            "pr": 821,
+            "branch": "codex/acl-1819-preflight-audit",
+            "head_sha": "7cde3c4c124627802275f3e18dd5e6a8eb43a3c4",
+            "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+            "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "scope": "427543ed85c18a99f5702966cfbabaa5ac03e03fc15edfa01bd94026edfe89ee",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-R1819Q",
+              "implementer": "Worker-S1819P",
+              "review_session": "r1819q-20261015",
+              "execution_lane": "dae6f1124fc7418faff9c2cbf6ac3bd3",
+              "head_sha": "7cde3c4c124627802275f3e18dd5e6a8eb43a3c4",
+              "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+              "tree_sha": "8159e6d665f412b899c113518c19cbc3ee0effb7",
+              "report": "Independent review of ACL-1819 / PR 821 at head 7cde3c4c (main 080df2d8). Reviewer-R1819Q implemented none of it. Verified: one rule table with Python/JS parity tests and in-sync JSON; server verdicts read-only; errors block Publish, warnings only in the confirm; Publish all, publish selected, single Publish and 1826 Retry (onlyKeys) and queue resend all go through cbPreflightGate, fail-closed; English escaped UI; aligned 1766 wording matches main creator.py. Tests in a detached worktree: 1819+1826 115 passed, 1775 96 passed, preflight_gate_harness ok (not browser). Mutations: gate bypass in the wrapper caught (1 failed); dropping onlyKeys from the original call caught by a source-text test; dropping the wrapper form filter not caught but only widens the gate. CI all green incl. tracker-link. Non-blocking: wrapper Retry covered by source-text assertion rather than the 1826 behavioural harness. No live calls. No blocking issues.",
+              "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                819
+              ],
+              "recorded_at": "2026-10-15T08:19:20+00:00",
+              "issue_scopes": {
+                "819": "427543ed85c18a99f5702966cfbabaa5ac03e03fc15edfa01bd94026edfe89ee"
+              }
+            },
+            "lane": {
+              "id": "dae6f1124fc7418faff9c2cbf6ac3bd3",
+              "pr": 821,
+              "issues": [
+                819
+              ],
+              "actor": "Reviewer-R1819Q",
+              "session": "r1819q-20261015",
+              "coordinator": "Coordinator-C0930A",
+              "started_at": "2026-10-15T07:52:58+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-15T08:19:42+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -40157,6 +40219,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-15T08:15:58+00:00"
+      },
+      "819": {
+        "issue": 819,
+        "pr": 821,
+        "branch": "codex/acl-1819-preflight-audit",
+        "head_sha": "7cde3c4c124627802275f3e18dd5e6a8eb43a3c4",
+        "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+        "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "scope": "427543ed85c18a99f5702966cfbabaa5ac03e03fc15edfa01bd94026edfe89ee",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-R1819Q",
+          "implementer": "Worker-S1819P",
+          "review_session": "r1819q-20261015",
+          "execution_lane": "dae6f1124fc7418faff9c2cbf6ac3bd3",
+          "head_sha": "7cde3c4c124627802275f3e18dd5e6a8eb43a3c4",
+          "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+          "tree_sha": "8159e6d665f412b899c113518c19cbc3ee0effb7",
+          "report": "Independent review of ACL-1819 / PR 821 at head 7cde3c4c (main 080df2d8). Reviewer-R1819Q implemented none of it. Verified: one rule table with Python/JS parity tests and in-sync JSON; server verdicts read-only; errors block Publish, warnings only in the confirm; Publish all, publish selected, single Publish and 1826 Retry (onlyKeys) and queue resend all go through cbPreflightGate, fail-closed; English escaped UI; aligned 1766 wording matches main creator.py. Tests in a detached worktree: 1819+1826 115 passed, 1775 96 passed, preflight_gate_harness ok (not browser). Mutations: gate bypass in the wrapper caught (1 failed); dropping onlyKeys from the original call caught by a source-text test; dropping the wrapper form filter not caught but only widens the gate. CI all green incl. tracker-link. Non-blocking: wrapper Retry covered by source-text assertion rather than the 1826 behavioural harness. No live calls. No blocking issues.",
+          "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "issues": [
+            819
+          ],
+          "recorded_at": "2026-10-15T08:19:20+00:00",
+          "issue_scopes": {
+            "819": "427543ed85c18a99f5702966cfbabaa5ac03e03fc15edfa01bd94026edfe89ee"
+          }
+        },
+        "lane": {
+          "id": "dae6f1124fc7418faff9c2cbf6ac3bd3",
+          "pr": 821,
+          "issues": [
+            819
+          ],
+          "actor": "Reviewer-R1819Q",
+          "session": "r1819q-20261015",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-15T07:52:58+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-15T08:19:42+00:00"
       }
     },
     "batches": {
@@ -42566,62 +42672,6 @@
       "ineligible": {}
     },
     "source_reviews": {
-      "821": {
-        "id": "dae6f1124fc7418faff9c2cbf6ac3bd3",
-        "pr": 821,
-        "issues": [
-          819
-        ],
-        "actor": "Reviewer-R1819Q",
-        "session": "r1819q-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "started_at": "2026-10-15T07:52:58+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 819,
-          "pr": 821,
-          "branch": "codex/acl-1819-preflight-audit",
-          "head_sha": "7cde3c4c124627802275f3e18dd5e6a8eb43a3c4",
-          "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
-          "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "427543ed85c18a99f5702966cfbabaa5ac03e03fc15edfa01bd94026edfe89ee",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-R1819Q",
-            "implementer": "Worker-S1819P",
-            "review_session": "r1819q-20261015",
-            "execution_lane": "dae6f1124fc7418faff9c2cbf6ac3bd3",
-            "head_sha": "7cde3c4c124627802275f3e18dd5e6a8eb43a3c4",
-            "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
-            "tree_sha": "8159e6d665f412b899c113518c19cbc3ee0effb7",
-            "report": "Independent review of ACL-1819 / PR 821 at head 7cde3c4c (main 080df2d8). Reviewer-R1819Q implemented none of it. Verified: one rule table with Python/JS parity tests and in-sync JSON; server verdicts read-only; errors block Publish, warnings only in the confirm; Publish all, publish selected, single Publish and 1826 Retry (onlyKeys) and queue resend all go through cbPreflightGate, fail-closed; English escaped UI; aligned 1766 wording matches main creator.py. Tests in a detached worktree: 1819+1826 115 passed, 1775 96 passed, preflight_gate_harness ok (not browser). Mutations: gate bypass in the wrapper caught (1 failed); dropping onlyKeys from the original call caught by a source-text test; dropping the wrapper form filter not caught but only widens the gate. CI all green incl. tracker-link. Non-blocking: wrapper Retry covered by source-text assertion rather than the 1826 behavioural harness. No live calls. No blocking issues.",
-            "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
-            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              819
-            ],
-            "recorded_at": "2026-10-15T08:19:20+00:00",
-            "issue_scopes": {
-              "819": "427543ed85c18a99f5702966cfbabaa5ac03e03fc15edfa01bd94026edfe89ee"
-            }
-          },
-          "lane": {
-            "id": "dae6f1124fc7418faff9c2cbf6ac3bd3",
-            "pr": 821,
-            "issues": [
-              819
-            ],
-            "actor": "Reviewer-R1819Q",
-            "session": "r1819q-20261015",
-            "coordinator": "Coordinator-C0930A",
-            "started_at": "2026-10-15T07:52:58+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-15T08:19:42+00:00"
-        }
-      },
       "831": {
         "id": "868564cffd0b403f81be4bf5c34b80b1",
         "pr": 831,
