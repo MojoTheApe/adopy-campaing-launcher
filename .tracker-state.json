@@ -9119,6 +9119,18 @@
         "state": "implementing",
         "started_at": "2026-10-15T05:51:11+00:00",
         "from_status": "status:idea"
+      },
+      "776": {
+        "actor": "Worker-RF1776",
+        "session": "wrf1776-20261015",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "codex/acl-1776-create-forms",
+        "worktree": "C:\\wk-rf1776",
+        "id": "6abbc7d2636d4830813a63a0cd9c0317",
+        "issue": 776,
+        "state": "implementing",
+        "started_at": "2026-10-15T06:56:36+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -13244,11 +13256,15 @@
           {
             "actor": "Worker-S1776B",
             "session": "run_s1776b_1012"
+          },
+          {
+            "actor": "Worker-RF1776",
+            "session": "wrf1776-20261015"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-S1776B",
-        "coordinator": "Coordinator-C0930A",
+        "state": "implementing",
+        "worker": "Worker-RF1776",
+        "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-S1776B",
           "session": "run_s1776b_1012",
@@ -13265,7 +13281,6 @@
         },
         "pr": 831,
         "queued_at": "2026-10-12T13:46:44+00:00",
-        "reviewer": "Reviewer-RT1015A",
         "review_report": "# Return for a dependency refresh\n\nACL-1776 is stacked on ACL-1819 (PR 821). 1819 was refreshed on current main 080df2d8 (head a957986b). Required: merge codex/acl-1819-preflight-audit (a957986b) into this branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
       },
       "826": {
@@ -15984,6 +15999,10 @@
       "Reviewer-RV1015F": {
         "session": "rv1015f-843",
         "role": "Reviewer"
+      },
+      "Worker-RF1776": {
+        "session": "wrf1776-20261015",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -37990,6 +38009,13 @@
         "pr": 843,
         "lane": "183206fbc32c4ee9939ed895ca158bfb",
         "actor": "Reviewer-RV1015F"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-15T06:56:36+00:00",
+        "issue": 776,
+        "claim": "6abbc7d2636d4830813a63a0cd9c0317",
+        "actor": "Worker-RF1776"
       }
     ],
     "policy": {
