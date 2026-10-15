@@ -247,3 +247,18 @@ def test_a_split_part_that_only_a_refused_lookup_could_find_makes_the_term_unkno
     res = _one(_resolver(c, tmp_path), "Marketing Manager or Plus500")
     assert res["state"] == "unknown" and res["picks"] == []
     assert "'Marketing Manager' could not be checked" in res["reason"]
+
+
+def test_or_and_and_in_the_targeting_text_are_commas():
+    assert cr._interest_groups("Alpari Group or Plus500") == [["Alpari Group", "Plus500"]]
+    assert cr._interest_groups("Forex AND Stocks, Day trading [AND] Gold or Silver") == [
+        ["Forex", "Stocks", "Day trading"], ["Gold", "Silver"]]
+    # Слова внутри имени не трогаем: только « or » / « and » с пробелами вокруг.
+    assert cr._interest_groups("Oracle, Android, Orange") == [["Oracle", "Android", "Orange"]]
+
+
+def test_or_text_resolves_as_two_interests_without_a_split_confirm_when_work_lookups_are_refused(tmp_path):
+    c = RefusingSearch(refuse=WORK, interests={"Alpari Group": [{"id": "1", "name": "Alpari Group"}],
+                                               "Plus500": [{"id": "2", "name": "Plus500"}]})
+    spec = cr.TargetingResolver(c, _store(tmp_path)).interests(cr._interest_groups("Alpari Group or Plus500"))
+    assert spec == [{"interests": [{"id": "1", "name": "Alpari Group"}, {"id": "2", "name": "Plus500"}]}]

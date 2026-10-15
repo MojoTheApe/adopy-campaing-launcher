@@ -7,6 +7,8 @@
   Publish, even though both parts are ordinary interests. Such a term is now split into its parts
   as before: if every part resolves, the split is offered for one-time confirmation; if a part could
   only be found through a refused lookup, the term stays unknown with that part's reason.
+- " or " and " and " inside the targeting text now work like a comma: "Alpari Group or Plus500" is two
+  interests, matched one by one, with no split to confirm. The `[AND]` group separator is unchanged.
 
 ## Videos over 200 MB upload in chunks through the Graph API - ACL-1891
 
