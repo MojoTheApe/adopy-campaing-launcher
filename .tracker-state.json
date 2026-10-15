@@ -40384,7 +40384,51 @@
         "session": "r1812p-20261015",
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-15T05:39:35+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 812,
+          "pr": 813,
+          "branch": "codex/acl-1812-warm-sessions",
+          "head_sha": "55338399fdabecf46cc32b6597a98281d5ff417d",
+          "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+          "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "scope": "2e553f1df188893e8bb8852ea4e3436791fb85dae0c8bf2b5b56a7b8f66c4e1d",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-R1812P",
+            "implementer": "Worker-RL1812",
+            "review_session": "r1812p-20261015",
+            "execution_lane": "acf86f7aacc04ada948afc1bb84a090c",
+            "head_sha": "55338399fdabecf46cc32b6597a98281d5ff417d",
+            "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+            "tree_sha": "ba5e0e99b5639f8f7843df482cdc237be8efd449",
+            "report": "Independent review of ACL-1812 / PR 813 at head 55338399 against main 0850aa39 by Reviewer-R1812P, who implemented none of it (22 files, full diff read). Robot safety: profiles opened from the dashboard enter the warm registry and keep one reusable robot tab (lease release never closes it; a dead or hung tab is replaced exactly once). A shared file-locked stop log (stop_log.py) with a 3-minute restart cooldown (ACL_PROFILE_RESTART_COOLDOWN_S) is checked on every dashboard start path: fb_api.profile.open_profile, warm.open_one, account_spend._start_closed, open_profile_for_automation (row button and Connect), account_spend_api._open_gated; stops are recorded in _close_started, finish_job, the job panel Close profile (publish_jobs.close_profile, in a finally so a failed call still counts) and warm close/forget. Hand-opened profiles (open_by_hand, no debug port) are never auto-closed or restarted: warm.open_one, close_one and _verify_process refuse with English text, and the old reopening_by_hand path in account_spend and country_split is removed. Nothing polls live accounts: /warm/state reads only the registry and local processes, the JS refreshes on page load and a debounced htmx settle and polls only the local job every 2 s while it runs. The branch has no relaunch code and no browser.py change, so the DirectCDP proxy behaviour is untouched; profiles start through MLX start as before. RPA-publisher start/stop paths (browser.py) stay with ACL-1811 by design and are not in this diff. Messages are friendly English. Tests: 287 passed in the 1812 and read test files plus 707 passed in the combined 1812/1800/1761/spend set; CI is all green; acl_scan_secrets clean. Mutations, each failing at least one test: no cooldown in open_profile, in open_profile_for_automation, in _start_closed, in _open_gated, in warm.open_one; no stop record in the job panel Close profile; warm.open_one starting a hand-opened profile; _attach_only continuing on a hand-opened profile. Worktree restored after each. No live calls. Findings: no blocking issues.",
+            "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "issues": [
+              812
+            ],
+            "recorded_at": "2026-10-15T05:40:30+00:00",
+            "issue_scopes": {
+              "812": "2e553f1df188893e8bb8852ea4e3436791fb85dae0c8bf2b5b56a7b8f66c4e1d"
+            }
+          },
+          "lane": {
+            "id": "acf86f7aacc04ada948afc1bb84a090c",
+            "pr": 813,
+            "issues": [
+              812
+            ],
+            "actor": "Reviewer-R1812P",
+            "session": "r1812p-20261015",
+            "coordinator": "Coordinator-C0930A",
+            "started_at": "2026-10-15T05:39:35+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-15T05:40:46+00:00"
+        }
       }
     }
   }
