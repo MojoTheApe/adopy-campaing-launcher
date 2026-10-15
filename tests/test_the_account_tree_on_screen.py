@@ -1007,6 +1007,38 @@ def test_a_row_the_workbook_does_not_know_gets_dashes(page):
     assert "No rows" in page.evaluate("() => document.querySelector('.amap-tree-num.attr').title")
 
 
+def _nowb(page):
+    return page.evaluate("""() => Array.from(document.querySelectorAll('.amap-tree-line'))
+      .map(l => { const t = l.querySelector('.amap-tree-nowb'); return t ? t.textContent.trim() : ''; })""")
+
+
+def test_a_meta_only_campaign_says_it_is_not_in_the_workbook(page):
+    """ACL-1377: прогревочная кампания (MaxWarmup на Doc19) с числами Meta и
+    без строк в книге. Прочерки там — не поломка, и это сказано пометкой."""
+    warm = dict(ADSET, id="999", name="MaxWarmup Engagement")
+    draft = dict(ADSET, id="998", name="Draft", spend="", results="", cost_per_result="")
+    _paint(page, [ADSET, warm, draft])
+    _fill(page, [ADSET, warm, draft], ATTR)
+    assert _nowb(page) == ["", "· not in workbook", ""], (
+        "пометка — только у кампании с числами Meta и без строк книги")
+    assert set(_attr(page, 1).values()) == {"—"}, "прочерки в колонках книги остаются"
+    assert "not an error" in page.evaluate("() => document.querySelector('.amap-tree-nowb').title")
+
+
+def test_the_not_in_workbook_hint_goes_when_the_workbook_finds_the_campaign(page):
+    warm = dict(ADSET, id="999", name="MaxWarmup Engagement")
+    _paint(page, [warm])
+    _fill(page, [warm], ATTR)
+    assert _nowb(page) == ["· not in workbook"]
+    found = {"ok": True, "has_data": True, "ads": {},
+             "campaigns": {"MaxWarmup Engagement": {"spend": "$5", "leads": 1, "deposits": 0,
+                                                    "cpl": "$5", "cpa": None, "cr": None}}}
+    _fill(page, [warm], found)
+    assert _nowb(page) == [""], "пометка пережила ответ, в котором кампания нашлась"
+    _fill(page, [warm], {"ok": False, "error": "busy"})
+    assert _nowb(page) == [""], "непрочитанная книга — не «нет в книге»"
+
+
 SHARED_TIP = ("The workbook cannot tell ads with the same name apart; "
               "these are the totals for all of them")
 

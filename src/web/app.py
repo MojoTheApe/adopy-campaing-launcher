@@ -2030,6 +2030,10 @@ def _alias_without_id_suffix(label: str, known) -> str:
 
     Берётся только единственное имя: два разных алиаса в книге — это не
     «выберем первое», а отказ, как и у хвостовой догадки.
+
+    ACL-1377: книга пишет то же имя и без подчёркиваний — `Facebook6540` для
+    `Facebook_6540_<id>`. Сжатый ключ (только буквы и цифры) — второй шаг,
+    после точного: если книга знает имя с подчёркиванием, берётся оно.
     """
     m = _ID_SUFFIX_RE.match((label or "").strip())
     if not m:
@@ -2038,7 +2042,16 @@ def _alias_without_id_suffix(label: str, known) -> str:
     if not want:
         return ""
     hits = {str(a).strip() for a in known if _account_key(a) == want}
+    if not hits:
+        compact = _compact_account_key(m.group("alias"))
+        if compact:
+            hits = {str(a).strip() for a in known if _compact_account_key(a) == compact}
     return next(iter(hits)) if len(hits) == 1 else ""
+
+
+def _compact_account_key(name) -> str:
+    """`account_key` без разделителей: `Facebook_6540` и `Facebook6540` равны (ACL-1377)."""
+    return re.sub(r"[^0-9a-z]", "", _account_key(name))
 
 
 def _alias_by_tail(label: str, known: dict) -> str:
