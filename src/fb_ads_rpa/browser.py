@@ -2660,7 +2660,8 @@ class MultiloginAttachOnlyProvider:
                 conn = self._connect_started(started, profile_id)
                 break
             except Exception as exc:
-                detail = _exc_text(exc)
+                # ACL-1184: у отказа «MLX держит профиль» в телеметрию — исходный текст MLX.
+                detail = _exc_text(exc.__cause__ if _start_still_held(exc) and exc.__cause__ else exc)
                 if _start_still_held(exc) and retries < len(HAND_WINDOW_START_BACKOFF_S):
                     pause = HAND_WINDOW_START_BACKOFF_S[retries]
                     retries += 1
