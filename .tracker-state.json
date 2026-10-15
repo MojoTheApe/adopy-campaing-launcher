@@ -13058,7 +13058,7 @@
             "session": "ws1814p-20261015"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-S1814P",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -13077,7 +13077,7 @@
         },
         "pr": 817,
         "queued_at": "2026-10-15T05:58:11+00:00",
-        "review_report": "# Review PR 817 / ACL-1814 head 7256242b - Reviewer-R1814N - verdict: RETURN (2 small fixes)\n\nVerified OK: gate (grant_automatic store.py:477, set_automatic_enabled :566); stored automatic rule loads as Suggest and persists (:310,:316); schema_version / SchemaTooNew (:176-187, settings :537); machine_file_lock + TimeoutError -> RulesStoreError (:104-107); atomic write + .bak (:118-150); torn-tail repair (:190-213); no network/Meta imports in rules/*; messages English.\nTests (detached worktree): test_rules_store 84 passed, test_goals 17 passed, test_shared_file_locks 12 passed.\nMutations: grant allowed with gate off -> 5 tests fail (caught); newer-schema refusal removed -> 2 tests fail (caught).\n\nFindings:\n1. store.py:323-326 (_load fast path): `r.get(\"mode\")` is evaluated before the rule_problem guard on non-dict entries. rules.json {\"rules\":{\"x\":\"junk\",\"y\":null}} -> AttributeError from list_rules/get_rule/create_rule; quarantine does not hold for non-object entries although rule_problem (:289) is written for them. Fix: check `not self.rule_problem(r)` first (or isinstance dict) in the generator; add a test with a string/null rule entry.\n2. store.py:556-563 update_settings: update_settings({\"automatic_enabled\": True}) bypasses the gate: returns automatic_enabled True and persists True on disk (load_settings only masks it). The day AUTOMATIC_AVAILABLE flips, a stale True silently turns the global switch on. Fix: in update_settings refuse/clear automatic_enabled=True when not automatic_available() (and return the coerced value); add test.\nNote (non-blocking): ACL_RULES_AUTOMATIC=1 env is a production bypass if set on a machine; acceptable only as documented test switch.",
+        "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e677f638 (ACL-1812 warm sessions, ACL-1826, ACL-1775 Instant Forms, ACL-1815 rules evidence; PR 919 -> 922). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
         "reviewer": "Reviewer-RRN814"
       },
       "815": {
@@ -37808,6 +37808,24 @@
         "pr": 817,
         "lane": "d7c0120846644b65915530a38e86af69",
         "actor": "Reviewer-RRN814"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-15T06:29:04+00:00",
+        "review": {
+          "id": "d7c0120846644b65915530a38e86af69",
+          "pr": 817,
+          "issues": [
+            814
+          ],
+          "actor": "Reviewer-RRN814",
+          "session": "rrn814-20261015",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-15T06:28:45+00:00",
+          "state": "returning",
+          "report": "# Return for a dependency refresh\n\nMain now also contains batch e677f638 (ACL-1812 warm sessions, ACL-1826, ACL-1775 Instant Forms, ACL-1815 rules evidence; PR 919 -> 922). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -41440,21 +41458,6 @@
       "started_at": "2026-10-15T05:43:00+00:00",
       "ineligible": {}
     },
-    "source_reviews": {
-      "817": {
-        "id": "d7c0120846644b65915530a38e86af69",
-        "pr": 817,
-        "issues": [
-          814
-        ],
-        "actor": "Reviewer-RRN814",
-        "session": "rrn814-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "started_at": "2026-10-15T06:28:45+00:00",
-        "state": "returning",
-        "report": "# Return for a dependency refresh\n\nMain now also contains batch e677f638 (ACL-1812 warm sessions, ACL-1826, ACL-1775 Instant Forms, ACL-1815 rules evidence; PR 919 -> 922). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
-        "keep_lane": false
-      }
-    }
+    "source_reviews": {}
   }
 }
