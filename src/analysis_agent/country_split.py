@@ -45,7 +45,6 @@ from src.analysis_agent.account_spend import (
     _read_status,
     _shoot,
     _sleep,
-    reopening_by_hand,
     LOGGED_OUT_CODE,
     _ReadOpen,
     _finish_started,
@@ -1240,7 +1239,7 @@ def read_country_split(account: str, date_from: str, date_to: str = "") -> Count
         expected_act = "act_" + act.removeprefix("act_")
         # ACL-1518: окно, открытое руками, переоткрывается путём Publish.
         # ACL-1580: закрытый профиль чтение запускает само и потом закрывает.
-        with reopening_by_hand(), opening_closed_profile(held):
+        with opening_closed_profile(held):
             conn = _attach_only(entry, account)
         page = conn.page
         try:

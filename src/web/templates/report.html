@@ -16261,5 +16261,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
   <p>The RPA needs a profile with CDP access. It leaves the Multilogin window open so you can check the draft and the selected Facebook account. Keep it open during the run.</p>
   <button type="button" onclick="this.closest('dialog').close()">Close</button>
 </dialog>
+{#- ACL-1812: состояние тёплых профилей в строках аккаунтов; всё остальное рисует сам файл. -#}
+<script src="/static/warm_sessions.js"></script>
 </body>
 </html>

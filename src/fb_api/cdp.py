@@ -259,6 +259,24 @@ class PageTab:
     def reload(self, *, timeout: float = 30.0) -> None:
         self.call("Page.reload", {"ignoreCache": False}, timeout=timeout)
 
+    def close_target(self, target_id: str) -> bool:
+        """Закрыть ЧУЖУЮ нашу прежнюю вкладку (осталась от прошлого запуска дешборда).
+
+        Только если в браузере есть другие вкладки (наша живая — одна из них);
+        единственную не закрываем. Любая ошибка — False, ничего не ломаем.
+        """
+        if self.closed or not target_id or target_id == self.target_id:
+            return False
+        try:
+            infos = (self._cdp.call("Target.getTargets", timeout=CALL_S) or {}).get("targetInfos") or []
+            pages = [t for t in infos if t.get("type") == "page" and not t.get("subtype")]
+            if len(pages) < 2 or not any(t.get("targetId") == target_id for t in pages):
+                return False
+            self._cdp.call("Target.closeTarget", {"targetId": target_id}, timeout=CALL_S)
+            return True
+        except Exception:
+            return False
+
     # -- закрытие
     def close(self) -> None:
         """Закрыть СВОЮ вкладку. Сокет не ответил — через HTTP отладочного порта.

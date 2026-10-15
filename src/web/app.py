@@ -5294,6 +5294,43 @@ async def _campaign_commands_body(request: Request) -> dict:
     return body if isinstance(body, dict) else {}
 
 
+# ACL-1812: тёплые сессии. Состояние строк — только реестр и процессы на машине
+# (ни одного вызова к Meta); запуск и закрытие профилей — по клику человека.
+@app.get("/warm/state")
+async def warm_state(request: Request) -> JSONResponse:
+    from src.web import warm_api
+
+    labels = request.query_params.getlist("account")
+    return JSONResponse(await asyncio.to_thread(warm_api.state, labels))
+
+
+@app.post("/warm/open")
+async def warm_open(request: Request) -> JSONResponse:
+    from src.web import warm_api
+
+    body = await _campaign_commands_body(request)
+    data, code = await asyncio.to_thread(warm_api.start_open, body.get("accounts"))
+    return JSONResponse(data, status_code=code)
+
+
+@app.get("/warm/job/{job_id}")
+async def warm_job(job_id: str) -> JSONResponse:
+    from src.web import warm_api
+
+    data, code = warm_api.job_status(job_id)
+    return JSONResponse(data, status_code=code)
+
+
+@app.post("/warm/close")
+async def warm_close(request: Request) -> JSONResponse:
+    from src.web import warm_api
+
+    body = await _campaign_commands_body(request)
+    data, code = await asyncio.to_thread(warm_api.close_profiles, body.get("accounts"),
+                                         body.get("confirm") is True)
+    return JSONResponse(data, status_code=code)
+
+
 @app.get("/publish-jobs/slots")
 async def publish_jobs_slots() -> JSONResponse:
     """Сколько профилей публикуют разом и почему (ACL-1321).

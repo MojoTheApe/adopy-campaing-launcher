@@ -1375,6 +1375,12 @@ def close_profile(job_id: str) -> dict[str, Any]:
                                                 account_label, scrub(str(exc))[:200])
             return {"ok": False, "code": "failed",
                     "error": "Multilogin could not close the profile. Close its window in Multilogin."}
+        finally:
+            # ACL-1812 (ревью #813, B1-ter): остановка записана при любой попытке — следующий
+            # запуск ждёт паузу (ACL-1811). Кнопка есть на обоих бэкендах.
+            from src.fb_api import stop_log as _stop_log
+
+            _stop_log.record_stop(profile)
     finally:
         lease.release()
     with _jobs_lock:
