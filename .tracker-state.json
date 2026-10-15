@@ -11893,7 +11893,20 @@
     ]
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "923": {
+        "actor": "Worker-B71E",
+        "session": "acl_delivery",
+        "coordinator": "Coordinator-DLV15",
+        "branch": "codex/acl-1923-delivery-flow",
+        "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-delivery-flow",
+        "id": "43a1c516803741cd99083c85dedb1894",
+        "issue": 923,
+        "state": "implementing",
+        "started_at": "2026-10-15T22:44:43+00:00",
+        "from_status": "status:backlog"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -17329,9 +17342,13 @@
           {
             "actor": "Worker-B71E",
             "session": "acl_delivery"
+          },
+          {
+            "actor": "Worker-B71E",
+            "session": "acl_delivery"
           }
         ],
-        "state": "stopped",
+        "state": "implementing",
         "worker": "Worker-B71E",
         "coordinator": "Coordinator-DLV15",
         "handoff": {
@@ -45684,6 +45701,13 @@
           234,
           240
         ]
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-15T22:44:43+00:00",
+        "issue": 923,
+        "claim": "43a1c516803741cd99083c85dedb1894",
+        "actor": "Worker-B71E"
       }
     ],
     "policy": {
