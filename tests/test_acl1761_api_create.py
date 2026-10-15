@@ -1138,13 +1138,14 @@ class FakeApiPublisher:
 
 def test_publish_job_routes_to_the_api_only_when_switched(monkeypatch):
     from src.web import publish_api, publish_jobs
+    from tests.profile_lease_fakes import fake_profile
 
     monkeypatch.setattr(publish_api, "ApiPublisher", FakeApiPublisher)
     called = {"rpa": 0}
     monkeypatch.setattr(publish_jobs, "_run_rpa", lambda *a, **k: called.__setitem__("rpa", called["rpa"] + 1))
     monkeypatch.setattr(publish_jobs, "_write_draft_status", lambda *a, **k: None)
     monkeypatch.setattr(publish_jobs, "_start_stuck_watch", lambda *a, **k: None)
-    monkeypatch.setattr(publish_jobs, "profile_key_for", lambda label: "p-" + label)
+    monkeypatch.setattr(publish_jobs, "profile_key_for", lambda label: fake_profile(label))
     monkeypatch.setattr(publish_jobs, "use_rpa_publish", lambda: True)
 
     monkeypatch.setenv("ACL_FB_BACKEND", "api")

@@ -263,7 +263,7 @@ def test_a_hand_opened_profile_is_reopened_gently_like_publish(monkeypatch):
     provider = _Provider(result=object())
     monkeypatch.setattr(rpa_browser, "get_browser_provider", lambda name: provider)
     with pytest.raises(sp.ProfileNotAttachable) as exc:
-        sp._attach_only(_Entry(), "Acc")
+        _owned_attach(_Entry(), "Acc")
     assert str(exc.value) == sp.HAND_OPEN_MESSAGE and exc.value.code == sp.HAND_OPEN_CODE
     assert provider.calls == [], provider.calls
 

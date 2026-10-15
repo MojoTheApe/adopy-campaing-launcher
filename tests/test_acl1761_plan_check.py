@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from src.fb_api import graph as g  # noqa: E402
+from tests.profile_lease_fakes import fake_profile  # noqa: E402
 from tests.test_acl1761_api_create import ACT, FakeMeta, _draft  # noqa: E402
 
 
@@ -82,7 +83,7 @@ def _read_session(monkeypatch, meta, *, writes=False):
         yield SimpleNamespace(client=client, act=ACT, account=account, notes={}, keep_next=False)
 
     monkeypatch.setattr(_api, "_session", session)
-    monkeypatch.setattr(_as, "_profile_key", lambda account, *a, **k: "p-" + account)
+    monkeypatch.setattr(_as, "_profile_key", lambda account, *a, **k: fake_profile(account))
     return opened
 
 

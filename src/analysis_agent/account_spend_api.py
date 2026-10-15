@@ -477,7 +477,9 @@ def _session(account: str, *, commands: bool = False):
     except ValueError as exc:
         raise ApiReadError(str(exc)) from exc
 
-    key = _as._profile_key(account)
+    if not (getattr(entry, "profile_id", "") or "").strip():
+        raise ApiReadError(f"{account} has no profile_id in the account map")
+    key = _as._profile_key(account)   # ACL-1853: физический UUID; ярлык ключом не бывает
     left, why = _cooldown_state(key)
     if left > 0:
         mins = int(left // 60) + 1
@@ -576,6 +578,10 @@ def _failure(account: str, exc: BaseException) -> tuple[str, str]:
     """Исключение чтения → `(текст человеку, код для экрана)`."""
     if isinstance(exc, ApiReadError):
         return str(exc), exc.code
+    from src.fb_ads_rpa.profile_lease import ProfileLeaseError
+
+    if isinstance(exc, ProfileLeaseError):   # ACL-1853: отказ замка профиля уже написан словами
+        return str(exc), ""
     if isinstance(exc, LoggedOut):
         return _as.logged_out_message(account), _as.LOGGED_OUT_CODE
     if isinstance(exc, Checkpoint):

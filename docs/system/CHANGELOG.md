@@ -9,7 +9,10 @@
   termination releases ownership. Missing identities, lock failures and changed map
   targets refuse browser entry; publishing reports a finished error.
 - See [scope and downstream warm/API integration](PROFILE_OWNERSHIP.md). This source
-  change does not claim live verification or coverage of the unmerged ACL-1812 lifecycle.
+  change does not claim live verification. Covered after the merge with main: Publish
+  jobs (RPA and API), plan check, forms read, campaign commands and warm adoption. The
+  Graph API reads and the warm open/close/checkout lifecycle (ACL-1760/1761/1812) still
+  take no lease across a session; that is the follow-up #862.
 
 ## Builder: Instant Forms - use an existing form of the Page (API backend) - ACL-1775
 
