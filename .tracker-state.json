@@ -14383,7 +14383,7 @@
             "session": "wrf1899-20261015"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-RF1899",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -14401,7 +14401,8 @@
           "report": "# Handoff ACL-1899 (PR #900)\n\nBranch: work/acl-1899-video-upload-progress. Claim: 754b79aef795439c9419ed21961d13c5 (Worker-RF1899, taken over from Worker-V1899A).\nHead: 263b267f8b956a4779ba9f30bb4e2186e01853d5 (merge of 1776 f475cdb8, which is on main 080df2d8).\n\n## What the task does\nAPI backend: no time limit on file (video) uploads, and upload progress shown on the dashboard\n(progress/cancelled in graph.post/transport.write, polling and abort for file writes, live_progress;\nupload without a CORS preflight).\n\n## Stack\nStacked on ACL-1776 (codex/acl-1776-create-forms), which sits on ACL-1819. Merge-base checks pass:\nf475cdb8 and 080df2d8 are both ancestors of HEAD.\n\n## Merge\n`git merge FETCH_HEAD` of 1776 f475cdb8: no conflicts, no manual resolution.\n\n## Tests (affected only, -k \"not browser\")\ntests/test_acl1899_upload_progress.py, 1776, 1819, 1756 (fb_api, page_helper_node), 1761 (api_create, parity, hang_logout),\ntest_acl1775_*, 1800_campaign_commands, test_acl_test_platform, test_screens_are_in_english:\n947 passed, 4 deselected, 0 failed.\n\nexecution handoff NOT run."
         },
         "pr": 900,
-        "queued_at": "2026-10-15T08:01:37+00:00"
+        "queued_at": "2026-10-15T08:01:37+00:00",
+        "reviewer": "Reviewer-RV1015L"
       },
       "902": {
         "implementers": [
@@ -16363,6 +16364,10 @@
       },
       "Reviewer-N61D": {
         "session": "review_acl",
+        "role": "Reviewer"
+      },
+      "Reviewer-RV1015L": {
+        "session": "rv1015l-900",
         "role": "Reviewer"
       }
     },
@@ -19048,7 +19053,6 @@
       907,
       891,
       872,
-      899,
       902
     ],
     "review": null,
@@ -39102,6 +39106,13 @@
         "at": "2026-10-15T08:28:42+00:00",
         "issue": 538,
         "reason": "Closed in the Playwright backlog cleanup 2026-10-15: we are moving campaign creation and account reads to the Meta API (ACL-1760/1761/1883), so this Ads Manager UI/Playwright-only work is no longer relevant. Restore if the UI path comes back."
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-15T08:29:16+00:00",
+        "pr": 900,
+        "lane": "4c961fa887a0442d9e0009590cef8951",
+        "actor": "Reviewer-RV1015L"
       }
     ],
     "policy": {
@@ -42922,6 +42933,18 @@
         "session": "review_acl",
         "coordinator": "Coordinator-DLV15",
         "started_at": "2026-10-15T08:26:13+00:00",
+        "state": "reviewing"
+      },
+      "900": {
+        "id": "4c961fa887a0442d9e0009590cef8951",
+        "pr": 900,
+        "issues": [
+          899
+        ],
+        "actor": "Reviewer-RV1015L",
+        "session": "rv1015l-900",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-15T08:29:16+00:00",
         "state": "reviewing"
       }
     }
