@@ -9131,20 +9131,6 @@
         "state": "implementing",
         "started_at": "2026-10-15T06:24:37+00:00",
         "from_status": "status:todo"
-      },
-      "819": {
-        "actor": "Worker-RN1819",
-        "session": "wrn1819-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1819-preflight-audit",
-        "worktree": "C:\\wk-rn1819",
-        "id": "3f7660e12413401584f621636e056793",
-        "issue": 819,
-        "state": "handoff",
-        "started_at": "2026-10-15T06:36:01+00:00",
-        "from_status": "status:todo",
-        "pr": 821,
-        "report": "# Refresh ACL-1819 (PR 821)\n- Merged origin/main (080df2d8) into codex/acl-1819-preflight-audit (was 0f2406eb); head a957986b.\n- Conflicts: (1) src/fb_api/creator.py resolve_pixel: main (final 1775/1769 form) wins. (2) report.html pfAsk: kept 1819's cbPreflightWarnHtml lines plus main's `if (mine)` line (font-size token from main). preflight_rules.json needed no regeneration (only 1819 added rules; the module tests agree).\n- Gate fix found in the merge: the 1819 cbPublishAll wrapper took only (onProgress, picked), so 1826's Retry call cbPublishAll(showQueue, picked, keys) lost its onlyKeys and would have retried every form. The wrapper now accepts onlyKeys, skips other forms when building gate items and passes onlyKeys to the original. Retry therefore goes through the same pre-flight gate. The 1819 source-text test was updated to the new call text.\n- Stale expectation: test_page_not_on_the_account expected \"cannot advertise\"; main's 1766 message is \"... is not among the pages this ad account can advertise from (N found)\", so the expectation was aligned to that text.\n- Tests (not browser): test_acl1819_preflight, test_acl1775_*, test_acl1761_*, test_acl1826_*, test_acl1604_preflight: 460 passed. Node preflight_gate_harness: ok."
       }
     },
     "tasks": {
@@ -13143,25 +13129,25 @@
             "session": "wrn1819-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RN1819",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-S1819A",
-          "session": "run_s1819a_1012",
+          "actor": "Worker-RN1819",
+          "session": "wrn1819-20261015",
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1819-preflight-audit",
-          "worktree": "C:\\acl-1819-preflight",
-          "id": "594d40897bcc455399bc506fbd5b8bec",
+          "worktree": "C:\\wk-rn1819",
+          "id": "3f7660e12413401584f621636e056793",
           "issue": 819,
           "state": "handoff",
-          "started_at": "2026-10-12T07:45:24+00:00",
-          "from_status": "status:idea",
+          "started_at": "2026-10-15T06:36:01+00:00",
+          "from_status": "status:todo",
           "pr": 821,
-          "report": "# ACL-1819 handoff\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/821 (head cd71964c0cc3bdfc376d2f3b872f49189005edfb), stacked on #809 -> #796 -> #765; CI blocked.\n\nChecks (client = instant on edit, server = /publish-plan, read-only):\n- client: country, link https, tracking params (warning), media chosen, primary text, headline, headline over 40 (warning), primary over 125 (warning), CTA allowed, daily budget set, age 18-65, unique ad names, Instant Form chosen.\n- server: account ACTIVE, Page, pixel / ACTIVE form, country, language, interests, media readable, media limits (type, size, video length), vertical file (warning), budget minimum (USD only, other currencies unknown), existing campaign differences.\n\nTests: tests/test_acl1819_preflight.py 72, tests/test_acl1819_preflight_browser.py 4; 413 affected non-browser and 57 browser tests pass locally. Gate mutation check: 5 of 5 mutations caught.\nScreenshots: C:\\acl-notes\\acl-1819-shots\\ (light and dark).\nOpen point: Meta has no public per-currency minimum budget table; only USD 1.00 is listed."
+          "report": "# Refresh ACL-1819 (PR 821)\n- Merged origin/main (080df2d8) into codex/acl-1819-preflight-audit (was 0f2406eb); head a957986b.\n- Conflicts: (1) src/fb_api/creator.py resolve_pixel: main (final 1775/1769 form) wins. (2) report.html pfAsk: kept 1819's cbPreflightWarnHtml lines plus main's `if (mine)` line (font-size token from main). preflight_rules.json needed no regeneration (only 1819 added rules; the module tests agree).\n- Gate fix found in the merge: the 1819 cbPublishAll wrapper took only (onProgress, picked), so 1826's Retry call cbPublishAll(showQueue, picked, keys) lost its onlyKeys and would have retried every form. The wrapper now accepts onlyKeys, skips other forms when building gate items and passes onlyKeys to the original. Retry therefore goes through the same pre-flight gate. The 1819 source-text test was updated to the new call text.\n- Stale expectation: test_page_not_on_the_account expected \"cannot advertise\"; main's 1766 message is \"... is not among the pages this ad account can advertise from (N found)\", so the expectation was aligned to that text.\n- Tests (not browser): test_acl1819_preflight, test_acl1775_*, test_acl1761_*, test_acl1826_*, test_acl1604_preflight: 460 passed. Node preflight_gate_harness: ok."
         },
         "pr": 821,
-        "queued_at": "2026-10-12T08:26:53+00:00",
+        "queued_at": "2026-10-15T06:43:49+00:00",
         "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e677f638 (ACL-1812 warm sessions, ACL-1826, ACL-1775 Instant Forms, ACL-1815 rules evidence; PR 919 -> 922). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
       },
       "816": {
@@ -18681,7 +18667,8 @@
       891,
       902,
       799,
-      814
+      814,
+      819
     ],
     "review": null,
     "history": [
@@ -37921,6 +37908,13 @@
         "at": "2026-10-15T06:36:01+00:00",
         "issue": 819,
         "claim": "3f7660e12413401584f621636e056793",
+        "actor": "Worker-RN1819"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-15T06:43:49+00:00",
+        "issue": 819,
+        "pr": 821,
         "actor": "Worker-RN1819"
       }
     ],
