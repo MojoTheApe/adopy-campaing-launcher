@@ -9349,22 +9349,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "902": {
-        "actor": "Worker-RG1902",
-        "session": "wrg1902-20261015",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1902-campaign-name-suffix",
-        "worktree": "C:\\acl-1902-name-suffix",
-        "id": "88b9a478600740828178e0fae2d1bad1",
-        "issue": 902,
-        "state": "handoff",
-        "started_at": "2026-10-15T10:32:11+00:00",
-        "from_status": "status:todo",
-        "pr": 904,
-        "report": "# ACL-902 handoff (r2)\n\n- Claim: 88b9a478600740828178e0fae2d1bad1 (Worker-RG1902, session wrg1902-20261015, coordinator Coordinator-M1011A)\n- Branch: work/acl-1902-campaign-name-suffix, worktree C:\\acl-1902-name-suffix\n- Previous head: 519d6e5e. New head: 3c5007af (pushed to work).\n- Merge: `git merge --no-edit work/main` (main at 3ee7c6d9) was clean, no conflicts. 3ee7c6d9 is an ancestor of HEAD.\n- Tests: `pytest` on the 8 affected files with `-k \"not browser\"`: 489 passed, 0 failed.\n- PR: 904."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -14628,25 +14613,25 @@
             "session": "wrg1902-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RG1902",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-RF1902",
-          "session": "wrf1902-20261015",
+          "actor": "Worker-RG1902",
+          "session": "wrg1902-20261015",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1902-campaign-name-suffix",
           "worktree": "C:\\acl-1902-name-suffix",
-          "id": "26d38e9133ba4cb1aed9caf095aca831",
+          "id": "88b9a478600740828178e0fae2d1bad1",
           "issue": 902,
           "state": "handoff",
-          "started_at": "2026-10-15T08:03:12+00:00",
+          "started_at": "2026-10-15T10:32:11+00:00",
           "from_status": "status:todo",
           "pr": 904,
-          "report": "# ACL-1902 handoff (PR #904)\n\n## What the task does\nWhen a different campaign with the requested name already exists, the robot now picks a free name NAME_2, NAME_3, ... instead of stopping. The Check plan / preflight shows the same result (preflight rule in src/fb_api/preflight_rules.json/.py updated; tests/test_acl1819_preflight.py, tests/test_acl1902_name_suffix.py).\n\n## New head\n519d6e5ee0842a4520936ad376465939e8adb996 (merge of work/acl-1899-video-upload-progress at 263b267f into 13643e16). 263b267f and 080df2d8 are ancestors of HEAD.\n\n## Conflicts\nNone. The merge was clean (1819 commit 7cde3c4c is kept). CHANGELOG/PROJECT records of both sides are kept as merged.\n\n## Tests (affected only, -k \"not browser\")\n834 passed, 2 deselected, 0 failed: test_acl1902_name_suffix, test_acl1819_preflight, test_acl1761_existing_check, test_acl1899_upload_progress, test_acl1776_create_forms, test_acl1761_api_create, test_acl1761_parity, test_acl1756_fb_api, test_acl1800_campaign_commands, test_acl_test_platform, test_screens_are_in_english.\n\n## Stacking\nStacked on ACL-1899 -> ACL-1776 -> ACL-1819 -> main 080df2d8.\n\n## Known interaction with ACL-1907 (PR #908, not in main)\nWith 1902, a different-language campaign re-run publishes as NAME_2 instead of stopping with existing_differs; 1907's two re-run tests must be adapted when 1907 is refreshed on top of 1902."
+          "report": "# ACL-902 handoff (r2)\n\n- Claim: 88b9a478600740828178e0fae2d1bad1 (Worker-RG1902, session wrg1902-20261015, coordinator Coordinator-M1011A)\n- Branch: work/acl-1902-campaign-name-suffix, worktree C:\\acl-1902-name-suffix\n- Previous head: 519d6e5e. New head: 3c5007af (pushed to work).\n- Merge: `git merge --no-edit work/main` (main at 3ee7c6d9) was clean, no conflicts. 3ee7c6d9 is an ancestor of HEAD.\n- Tests: `pytest` on the 8 affected files with `-k \"not browser\"`: 489 passed, 0 failed.\n- PR: 904."
         },
         "pr": 904,
-        "queued_at": "2026-10-15T08:10:10+00:00",
+        "queued_at": "2026-10-15T10:36:11+00:00",
         "review_report": "# Return for a main refresh\n\nMain moved to 3ee7c6d9 (batch with ACL-1819, 1799, 1814; promotion PR 928). The source approval is stale against it. Required: merge current main into the branch (merge, no rebase; a trial merge is clean), re-run the affected tests, hand off again for a delta review. No scope change.",
         "return_operation": {
           "id": "396f1b2fdbad4b79a91950b1be6afb7e",
@@ -19506,7 +19491,8 @@
       816,
       899,
       309,
-      827
+      827,
+      902
     ],
     "review": null,
     "history": [
@@ -40516,6 +40502,13 @@
         "issue": 827,
         "pr": 829,
         "actor": "Worker-RS1827"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-15T10:36:11+00:00",
+        "issue": 902,
+        "pr": 904,
+        "actor": "Worker-RG1902"
       }
     ],
     "policy": {
