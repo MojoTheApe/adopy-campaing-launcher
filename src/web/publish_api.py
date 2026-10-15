@@ -193,11 +193,18 @@ class ApiPublishError(RuntimeError):
         self.code = code
 
 
+def _published_as(outcome: Outcome) -> str:
+    """ACL-1902: имя в Meta, только если оно не совпадает с именем из билдера (иначе пусто)."""
+    chosen = str(outcome.published_as or "")
+    return chosen if chosen and chosen != outcome.campaign_name else ""
+
+
 def dry_run_result(outcome: Outcome) -> dict[str, Any]:
     """Итог пробного запуска: план и предпроверка, ничего не создано (ревью M3)."""
     ok = not outcome.error
     return {
-        "campaign_name": outcome.campaign_name, "backend": "api", "dry_run": True, "status": "",
+        "campaign_name": outcome.campaign_name, "published_as": _published_as(outcome),
+        "backend": "api", "dry_run": True, "status": "",
         "success": ok, "publishable": False,
         "warnings": list(outcome.warnings) + (["Dry run: nothing was created"] if ok else []),
         "blocking_failures": [], "problems": [], "run_id": None, "campaign_id": None,
@@ -224,6 +231,7 @@ def result_dict(outcome: Outcome, *, error: str = "") -> dict[str, Any]:
     success = created and not error
     return {
         "campaign_name": outcome.campaign_name,
+        "published_as": _published_as(outcome),
         "backend": "api",
         "status": "PAUSED" if created else "",
         "success": success,

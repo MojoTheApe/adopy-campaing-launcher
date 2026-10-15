@@ -15977,6 +15977,7 @@ function cbPlanHtml(data) {
     h += '<div class="cbd-plan-camp" style="margin:0.4rem 0;padding-left:0.4rem;border-left:2px solid '
       + (r.error ? 'var(--bad)' : 'var(--good)') + '">';
     h += '<div><strong>' + aclEscHtml(r.campaign_name || '?') + '</strong>'
+      + (r.published_as ? ' → published as <strong>' + aclEscHtml(r.published_as) + '</strong>' : '')
       + (s ? ' · PAUSED · ' + aclEscHtml(cbPlanMoney(s))
            + (s.existing ? ' · <em>already exists; a publish would reuse it</em>' : '') : '')
       + '</div>';
@@ -15986,13 +15987,6 @@ function cbPlanHtml(data) {
       h += '<div class="cbd-plan-warn" style="color:#b45309">⚠ ' + aclEscHtml(w) + '</div>';
     });
     h += cbTargetingHtml(r.targeting || []);
-    if (s && (s.existing_differences || []).length) {
-      h += '<div class="cbd-plan-diff" style="color:#b45309;margin:0.2rem 0">⚠ Already exists in Ads Manager — differs from the builder:<ul style="margin:0.1rem 0 0 1.1rem">';
-      s.existing_differences.forEach(function (d) {
-        h += '<li><strong>' + aclEscHtml(d.object) + '</strong>: ' + aclEscHtml((d.differences || []).join('; ')) + '</li>';
-      });
-      h += '</ul>A publish would stop before writing anything. Delete or rename the old campaign in Ads Manager, or rename the campaign in the builder.</div>';
-    }
     if (s) {
       if ((s.manual_required || []).length) h += '<div class="cbd-plan-manual" style="color:var(--warn)"><strong>Manual completion required</strong>: '
         + s.manual_required.map(aclEscHtml).join(' ') + '</div>';
@@ -17390,7 +17384,8 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
       var icon = manual ? '⚠️' : (!r.success ? '❌' : (blocked ? '❌' : (warningOnly ? '⚠️' : '✅')));
       html += '<div class="cb-status-row">';
       html += '<span class="cb-status-icon">' + icon + '</span>';
-      html += '<span class="cb-status-name">' + aclEscHtml(r.campaign_name || '?') + '</span>';
+      html += '<span class="cb-status-name">' + aclEscHtml(r.campaign_name || '?')
+        + (r.published_as ? ' → published as ' + aclEscHtml(r.published_as) : '') + '</span>';
       if (r.success && r.campaign_id) {
         html += '<span class="cb-status-id">campaign_id: ' + aclEscHtml(r.campaign_id) + '</span>';
       }

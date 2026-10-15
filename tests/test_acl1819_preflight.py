@@ -503,7 +503,7 @@ def test_the_budget_minimum_by_currency_is_documented_and_unknown_when_unlisted(
     assert not pf.blocks([got]), "неизвестный минимум не блокирует"
 
 
-def test_an_existing_campaign_with_other_settings_is_an_error(tmp_path):
+def test_an_existing_campaign_with_other_settings_is_a_rename_warning(tmp_path):
     from tests.test_acl1761_api_create import _run
 
     meta = AuditMeta()
@@ -517,7 +517,9 @@ def test_an_existing_campaign_with_other_settings_is_an_error(tmp_path):
     d2 = _draft(tmp_path, ads=1)
     d2.ad_sets[0].daily_budget = 35.0
     got = _by(_audit(meta, d2))["existing_diffs"]
-    assert got["status"] == "error" and "campaign" in got["detail"]
+    # ACL-1902: другая кампания с этим именем - не ошибка, а предупреждение: робот возьмёт NAME_2.
+    assert got["status"] == "warning" and "Will be published as" in got["detail"]
+    assert "daily budget" in got["detail"] and not pf.blocks([got])
 
 
 def test_existing_check_is_unknown_when_an_earlier_check_failed(tmp_path):

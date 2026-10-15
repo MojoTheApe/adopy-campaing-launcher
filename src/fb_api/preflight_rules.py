@@ -178,8 +178,9 @@ RULES: list[dict[str, Any]] = [
        "give every ad set of the campaign its own name", sel=".cb-adset-name", level="adset"),
     _r("adset_has_ads", "Every ad set has an ad", ERROR, "client",
        "add an ad to the ad set or remove the ad set", sel="", level="ad"),
-    _r("existing_diffs", "No existing campaign with different settings", ERROR, "server",
-       "a campaign with this name already exists with other settings: rename yours or fix it in Meta"),
+    _r("existing_diffs", "Campaign name is free, or gets a _2, _3 suffix", ERROR, "server",
+       "if a different campaign already has this name, the robot publishes as NAME_2, NAME_3 ... "
+       "(up to _20); an error only when all 20 names are taken: rename the campaign"),
 ]
 RULE_BY_ID = {r["id"]: r for r in RULES}
 CLIENT_IDS = [r["id"] for r in RULES if r["side"] == "client"]
@@ -524,7 +525,8 @@ def _item_text(item: dict) -> str:
 
 
 def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = None,
-                    existing_checked: bool = False, files: dict[str, bytes] | None = None) -> list[dict[str, Any]]:
+                    existing_checked: bool = False, files: dict[str, bytes] | None = None,
+                    renamed: str = "", name_error: str = "") -> list[dict[str, Any]]:
     """Серверные вердикты кампании. Только чтения: ни одного POST (клиент без права записи).
 
     Каждая проверка независима — отказ одной не гасит остальные. Остановка Graph
@@ -761,10 +763,14 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
     else:
         put("budget_min", OK)
 
-    if not existing_checked:
+    if name_error:
+        # ACL-1902: заняты все NAME ... NAME_20 - публикация остановилась бы до записи.
+        put("existing_diffs", ERROR, name_error)
+    elif not existing_checked:
         put("existing_diffs", UNKNOWN, "Not checked: fix the errors above first")
-    elif existing:
-        put("existing_diffs", ERROR, cr._existing_message(existing))
+    elif renamed:
+        # ACL-1902: имя занято другой кампанией - робот возьмёт свободное, это не блокирует публикацию.
+        put("existing_diffs", WARNING, renamed)
     else:
         put("existing_diffs", OK)
 

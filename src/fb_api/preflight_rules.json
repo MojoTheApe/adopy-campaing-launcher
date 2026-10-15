@@ -539,9 +539,9 @@
         "level": "campaign",
         "sel": ""
       },
-      "hint": "a campaign with this name already exists with other settings: rename yours or fix it in Meta",
+      "hint": "if a different campaign already has this name, the robot publishes as NAME_2, NAME_3 ... (up to _20); an error only when all 20 names are taken: rename the campaign",
       "id": "existing_diffs",
-      "label": "No existing campaign with different settings",
+      "label": "Campaign name is free, or gets a _2, _3 suffix",
       "severity": "error",
       "side": "server",
       "unit": "campaign"
