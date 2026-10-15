@@ -9288,20 +9288,6 @@
         "state": "implementing",
         "started_at": "2026-10-15T09:28:57+00:00",
         "from_status": "status:backlog"
-      },
-      "855": {
-        "actor": "Worker-W1855A",
-        "session": "821e4a97-45d7-466a-b9ea-56309769a6f1",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1855-durable-intent",
-        "worktree": "C:\\acl-1855-durable-intent",
-        "id": "0a9330cdff9e414aa31394dd4bc3440e",
-        "issue": 855,
-        "state": "handoff",
-        "started_at": "2026-10-15T09:31:15+00:00",
-        "from_status": "status:backlog",
-        "pr": 927,
-        "report": "ACL-1855 implementation complete on work/acl-1855-durable-intent at 363be1c8 (base main 080df2d8), PR #927.\n- Mandatory durable \"sending\" record (append+flush+fsync) before every POST; storage refusal 503/code storage before first write; later object not sent on failure, partial success visible; post-POST failures keep the durable intent and report Outcome unknown.\n- Restart after readback restores confirmed results; torn lines (incl. mid-UTF-8) skipped; page shows a clear storage reason and never \"Not sent\" after a write may have landed.\n- Checks: targeted tests 330 passed, 1 skipped (test_acl1855_*, test_acl1800_*); seam-free reproduction fails on base with the original bug. Full suite left to CI.\n- Pre-handoff read-only Opus review: 3 rounds, final APPROVE at 363be1c8 (no open findings; LOW 3/5/6 accepted by design).\n- No live Meta write; 9090 untouched. Remaining: official independent review, batch approval, delivery."
       }
     },
     "tasks": {
@@ -14922,9 +14908,25 @@
             "session": "821e4a97-45d7-466a-b9ea-56309769a6f1"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1855A",
-        "coordinator": "Coordinator-M1011A"
+        "coordinator": "Coordinator-M1011A",
+        "handoff": {
+          "actor": "Worker-W1855A",
+          "session": "821e4a97-45d7-466a-b9ea-56309769a6f1",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "work/acl-1855-durable-intent",
+          "worktree": "C:\\acl-1855-durable-intent",
+          "id": "0a9330cdff9e414aa31394dd4bc3440e",
+          "issue": 855,
+          "state": "handoff",
+          "started_at": "2026-10-15T09:31:15+00:00",
+          "from_status": "status:backlog",
+          "pr": 927,
+          "report": "ACL-1855 implementation complete on work/acl-1855-durable-intent at 363be1c8 (base main 080df2d8), PR #927.\n- Mandatory durable \"sending\" record (append+flush+fsync) before every POST; storage refusal 503/code storage before first write; later object not sent on failure, partial success visible; post-POST failures keep the durable intent and report Outcome unknown.\n- Restart after readback restores confirmed results; torn lines (incl. mid-UTF-8) skipped; page shows a clear storage reason and never \"Not sent\" after a write may have landed.\n- Checks: targeted tests 330 passed, 1 skipped (test_acl1855_*, test_acl1800_*); seam-free reproduction fails on base with the original bug. Full suite left to CI.\n- Pre-handoff read-only Opus review: 3 rounds, final APPROVE at 363be1c8 (no open findings; LOW 3/5/6 accepted by design).\n- No live Meta write; 9090 untouched. Remaining: official independent review, batch approval, delivery."
+        },
+        "pr": 927,
+        "queued_at": "2026-10-15T09:53:41+00:00"
       }
     },
     "actors": {
@@ -19249,7 +19251,8 @@
       841,
       903,
       907,
-      891
+      891,
+      855
     ],
     "review": {
       "id": "ceb4bcb079e644348335d635edbb25f5",
@@ -39876,6 +39879,13 @@
         "at": "2026-10-15T09:31:15+00:00",
         "issue": 855,
         "claim": "0a9330cdff9e414aa31394dd4bc3440e",
+        "actor": "Worker-W1855A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-15T09:53:41+00:00",
+        "issue": 855,
+        "pr": 927,
         "actor": "Worker-W1855A"
       }
     ],
