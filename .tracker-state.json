@@ -12853,7 +12853,7 @@
             "session": "wrm1799-20261015"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-RM1799",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12872,7 +12872,7 @@
         },
         "pr": 803,
         "queued_at": "2026-10-15T04:26:35+00:00",
-        "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e76699ef (ACL-1800 campaign commands, ACL-1797 design system; PR 917 -> 918). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
+        "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e677f638 (ACL-1812 warm sessions, ACL-1826, ACL-1775 Instant Forms, ACL-1815 rules evidence; PR 919 -> 922). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
         "return_operation": {
           "id": "1c8396f8dfeb464c93c786677e36dd67",
           "actor": "Coordinator-C0930A",
@@ -37785,6 +37785,18 @@
         "event": "included-sources-closed",
         "at": "2026-10-15T06:27:34+00:00",
         "batch_id": "e677f638b7ad4190887362ffb391ec98"
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-15T06:28:16+00:00",
+        "issue": 799,
+        "operation": {
+          "id": "1c8396f8dfeb464c93c786677e36dd67",
+          "actor": "Coordinator-C0930A",
+          "session": "coord_c0930a_1009",
+          "report": "# Return for a dependency refresh\n\nMain now also contains batch e677f638 (ACL-1812 warm sessions, ACL-1826, ACL-1775 Instant Forms, ACL-1815 rules evidence; PR 919 -> 922). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -38833,50 +38845,6 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-14T23:50:40+00:00"
-      },
-      "799": {
-        "issue": 799,
-        "pr": 803,
-        "branch": "codex/acl-1799-country-workbench",
-        "head_sha": "9259d774c7c0c8491207d3ce83eaafb23f00f62c",
-        "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
-        "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
-        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-        "scope": "0b2f9e9baae64d82925ec94ddc2a28bcd01ffc31eadb8ce886535456b06792e3",
-        "review": {
-          "kind": "independent-review",
-          "verdict": "approved",
-          "reviewer": "Reviewer-R1799M",
-          "implementer": "Worker-RM1799",
-          "review_session": "r1799m-20261015",
-          "execution_lane": "dd4849377fd54398b984ce15da47ba1d",
-          "head_sha": "9259d774c7c0c8491207d3ce83eaafb23f00f62c",
-          "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
-          "tree_sha": "3c280a104854b227518c885c990209ceb7cd65ff",
-          "report": "Independent re-review of ACL-1799 / PR 803 at refreshed head 9259d774 (merge of main 0850aa39 into approved 3c9521c3). Reviewer-R1799M implemented none of it (handoff worker Worker-RM1799). Verified: diff of main..head touches only the 8 ACL-1799 files; the 619 changed lines of src/web/templates/report.html are identical to the approved 3c9521c3 diff against its old base, so the single style-block conflict kept both ACL-1797 tokens and 1799 cw-styles; adIndex: 0 is kept in the drawer active() return. Tests in a detached worktree: 1799, 1797, 1761, 1798 inventory tests 100 passed (not browser). Mutation adIndex: 0 -> adIdx is caught by 4 failing tests. Secret scan clean. No live calls. Findings: no blocking issues.",
-          "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "issues": [
-            799
-          ],
-          "recorded_at": "2026-10-15T05:31:00+00:00",
-          "issue_scopes": {
-            "799": "0b2f9e9baae64d82925ec94ddc2a28bcd01ffc31eadb8ce886535456b06792e3"
-          }
-        },
-        "lane": {
-          "id": "dd4849377fd54398b984ce15da47ba1d",
-          "pr": 803,
-          "issues": [
-            799
-          ],
-          "actor": "Reviewer-R1799M",
-          "session": "r1799m-20261015",
-          "coordinator": "Coordinator-C0930A",
-          "started_at": "2026-10-15T05:28:17+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-15T05:31:18+00:00"
       },
       "826": {
         "issue": 826,
