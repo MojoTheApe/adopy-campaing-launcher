@@ -117,7 +117,7 @@ def test_refused_reads_count_against_the_budget(tmp_path):
     r = _resolver(c, tmp_path)
     r.prefetch(["Nothing Like It"])
     r.resolve("Nothing Like It")
-    assert r.reads >= len([t for t in set(c.attempts)]) and r.reads <= tr.JOB_READ_CAP
+    assert r.reads == c.calls and r.reads <= tr.JOB_READ_CAP
 
 
 # ───────────────────────────── Check plan целиком ─────────────────────────────
@@ -165,3 +165,64 @@ def test_check_plan_still_fails_on_refusal_of_core_searches_with_the_type(tmp_pa
     if typ == "adinterest":
         assert "search_type=adinterest" in out.error
     assert not any("Meta refused the" in w for w in out.warnings)
+
+
+# ───────────────────────────── ревью: доработки ─────────────────────────────
+
+def test_cached_confirmed_interest_stays_confirmed_and_the_warning_says_it_was_not_reverified(tmp_path):
+    store = _store(tmp_path)
+    store.put("forex trading", id="6", type="interests", name="Forex Trading Tips")
+    c = RefusingSearch(refuse=["adinterestvalid"])
+    r = tr.TermResolver(c, store)
+    res = _one(r, "forex trading")
+    assert res["state"] == "confirmed" and res["picks"][0]["id"] == "6"
+    assert any("previously confirmed interests were not re-verified" in w for w in r.refusals())
+
+
+@pytest.mark.parametrize("exc", [
+    g.RateLimited("slow down", code=4), g.LoggedOut("logged out"), g.PolicyBlocked("policy", code=368),
+    g.Checkpoint("checkpoint", code=190, subcode=459),
+])
+def test_graph_stops_on_an_optional_search_propagate_and_are_not_refusals(tmp_path, exc):
+    class Stopping(FakeSearch):
+        def get_all(self, path, params=None, *, max_pages=5):
+            if params["type"] == "adTargetingCategory":
+                raise exc
+            return super().get_all(path, params, max_pages=max_pages)
+
+    r = _resolver(Stopping(), tmp_path)
+    with pytest.raises(type(exc)):
+        _one(r, "Nothing Like It")
+    assert r.refusals() == []
+
+
+def test_a_token_error_190_is_not_a_permission_refusal(tmp_path):
+    c = RefusingSearch(refuse=["adinterestvalid"], code=190)
+    r = _resolver(c, tmp_path)
+    with pytest.raises(g.GraphError) as err:
+        _one(r, "Yoga")
+    assert err.value.code == 190 and "search_type=adinterestvalid" in str(err.value)
+    assert r.refusals() == []
+
+
+def test_warnings_are_per_draft_but_the_no_retry_memory_is_shared(tmp_path):
+    c = RefusingSearch(refuse=OPTIONAL, interests={"Yoga": [{"id": "11", "name": "Yoga"}]})
+    r = _resolver(c, tmp_path)
+    r.begin_draft()
+    r.prefetch(["Marketing Manager"])
+    assert _one(r, "Marketing Manager")["state"] == "unknown"
+    assert any("work positions" in w for w in r.refusals())
+    asked = list(c.attempts)
+
+    r.begin_draft()                      # второй черновик: чужие отказы не показываем
+    assert r.refusals() == []
+    r.prefetch(["Yoga"])
+    assert r.resolve("Yoga")["state"] == "exact"
+    assert not any("work positions" in w for w in r.refusals())
+
+    r.begin_draft()                      # третий: тот же термин (из кэша) снова получает предупреждение
+    r.resolve("Marketing Manager")
+    assert any("work positions" in w for w in r.refusals())
+    new = c.attempts[len(asked):]
+    for t in OPTIONAL:
+        assert t not in new, f"{t} asked again"

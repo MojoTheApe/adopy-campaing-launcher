@@ -483,6 +483,9 @@ class TargetingResolver:
         """Что нашлось/ждёт подтверждения по всем терминам задания (для Check plan)."""
         return self.terms.report()
 
+    def begin_draft(self) -> None:
+        self.terms.begin_draft()
+
     def refusal_warnings(self) -> list[str]:
         """Необязательные поиски, в которых Meta отказала по правам (ACL-1920): предупреждения."""
         return self.terms.refusals()
@@ -943,6 +946,7 @@ class CampaignCreator:
     # -- весь путь
     def run(self, plan: CampaignPlan) -> Outcome:
         self._creatives = None
+        getattr(self.resolver, "begin_draft", lambda: None)()   # предупреждения об отказах - по черновику
         out = Outcome(campaign_name=plan.name, warnings=list(plan.warnings))
         try:
             self._run(plan, out)
@@ -1053,6 +1057,7 @@ class CampaignCreator:
         `post` не зовётся ни разу.
         """
         self._creatives = None
+        getattr(self.resolver, "begin_draft", lambda: None)()   # предупреждения об отказах - по черновику
         out = Outcome(campaign_name=plan.name, warnings=list(plan.warnings))
         differences: list | None = None
         files: dict | None = None

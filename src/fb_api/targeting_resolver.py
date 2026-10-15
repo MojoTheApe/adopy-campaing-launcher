@@ -45,7 +45,8 @@ EDU_SEARCHES = (("education_schools", "adeducationschool"), ("education_majors",
 #: Необязательные поиски: отказ Meta по правам не валит проверку, этот тип пропускается на всё задание.
 #: Ключ - тип поиска Graph, значение - (как назвать поиск человеку, что из-за этого не подобрано), English.
 OPTIONAL_SEARCHES = {
-    "adinterestvalid": ("interest validation", "interests are matched through the interest search instead"),
+    "adinterestvalid": ("interest validation", "interests are matched through the interest search instead; "
+                         "previously confirmed interests were not re-verified"),
     "adTargetingCategory": ("behaviors", "behaviors were not matched"),
     "adworkposition": ("work positions", "work positions were not matched"),
     "adworkemployer": ("work employers", "work employers were not matched"),
@@ -294,6 +295,10 @@ class TermResolver:
         self._behaviors: list[dict] | None = None
         #: Типы поиска, в которых Meta отказала по правам: на задание, больше не спрашиваем.
         self._refused: dict[str, str] = {}
+        #: Какие отказанные типы затронули ТЕКУЩИЙ черновик (предупреждения - по черновикам), и по термину.
+        self._draft_skips: set[str] = set()
+        self._skip_acc: set[str] = set()
+        self._key_skips: dict[str, set[str]] = {}
         self._query_cache: dict[tuple, list[dict]] = {}
 
     # -- бюджет чтений
@@ -324,6 +329,7 @@ class TermResolver:
                 self._term_reads += max(1, lost)
             if stype in OPTIONAL_SEARCHES and is_permission_refusal(exc):
                 self._refused[stype] = str(exc)
+                self._note_skip(stype)
                 raise _Refused(stype) from exc
             raise with_search_type(exc, stype) from exc
         after = getattr(cl, "calls", None)
@@ -339,6 +345,7 @@ class TermResolver:
     # -- пакет adinterestvalid: имена + перепроверка id подтверждённых интересов
     def _ask_valid(self, names: list[str], ids: list[str] | None = None) -> None:
         if "adinterestvalid" in self._refused:
+            self._note_skip("adinterestvalid")
             return           # Meta отказала: интересы ищутся обычным adinterest, пакет не повторяем
         todo = [n for n in dict.fromkeys(names) if norm(n) not in self._valid_asked]
         ids = [i for i in dict.fromkeys(ids or []) if i not in self._valid_ids]
@@ -390,6 +397,7 @@ class TermResolver:
     def _optional(self, typ: str, params: dict, pages: int, *, count_term: bool = True) -> list[dict]:
         """Необязательный поиск: отказ по правам -> пустой список (тип пропущен до конца задания)."""
         if typ in self._refused:
+            self._note_skip(typ)
             return []
         try:
             return self._get_all(params, pages, count_term=count_term)
@@ -407,6 +415,8 @@ class TermResolver:
                 BEHAVIOR_PAGES, count_term=False)
             if "adTargetingCategory" not in self._refused:
                 self._behaviors = rows
+        if "adTargetingCategory" in self._refused:
+            self._note_skip("adTargetingCategory")
         yield "behaviors", self._behaviors or []
         for bucket, typ in WORK_SEARCHES:
             yield bucket, self._optional(typ, {"type": typ, "q": term, "limit": SEARCH_LIMIT}, 1)
@@ -414,10 +424,20 @@ class TermResolver:
             for bucket, typ in EDU_SEARCHES:
                 yield bucket, self._optional(typ, {"type": typ, "q": term, "limit": SEARCH_LIMIT}, 1)
 
+    def _note_skip(self, typ: str) -> None:
+        self._draft_skips.add(typ)
+        self._skip_acc.add(typ)
+
+    def begin_draft(self) -> None:
+        """Новый черновик: предупреждения считаются заново, память об отказах (без повторов) остаётся."""
+        self._draft_skips = set()
+
     def refusals(self) -> list[str]:
-        """Предупреждения (English) о необязательных поисках, в которых Meta отказала на этом задании."""
+        """Предупреждения (English) об отказанных поисках, которые затронули текущий черновик."""
         out = []
         for typ in self._refused:
+            if typ not in self._draft_skips:
+                continue
             label, effect = OPTIONAL_SEARCHES[typ]
             out.append(f"Meta refused the {label} lookup ({typ}) on this account; {effect}.")
         return out
@@ -481,7 +501,9 @@ class TermResolver:
         """Результат по термину: state exact|confirmed|pending|unresolved|unknown."""
         key = norm(term)
         if key in self._results:
+            self._draft_skips |= self._key_skips.get(key, set())      # результат из кэша: отказ тот же
             return self._results[key]
+        self._skip_acc = set()
         res = self._find(term)
         parts = split_term(term)
         if res["state"] == "unresolved" and parts:
@@ -499,6 +521,7 @@ class TermResolver:
                 bad = [self._classify(s) for s in subs if s["state"] not in _OK_STATES]
                 res = {**self._classify(res), "parts": [self._classify(s) for s in subs], "bad_parts": bad}
         res = self._classify(res)
+        self._key_skips[key] = set(self._skip_acc)
         self._results[key] = res
         return res
 
