@@ -3713,35 +3713,20 @@
       }
     },
     "stage": {
-      "pr": 917,
+      "pr": 919,
       "issues": [
-        800,
-        797
+        812,
+        826,
+        775,
+        815
       ],
-      "tree_sha": "e1ff679ef9e1f9079fafd7ab737392854e0eacc4",
-      "source_sha": "79813fbf8af32989d5466cd201bbf6fab6ab069a",
-      "main_tree": "618ed14c6847d30cc5d8ea66248b90b9f864a9a7",
+      "tree_sha": "503e92e7f6cf31505d335adfb68a77e547077d63",
+      "source_sha": "f740a50aa9cef295b43cc78d2108217611ec783e",
+      "main_tree": "e1ff679ef9e1f9079fafd7ab737392854e0eacc4",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "promoted",
-      "recorded_at": "2026-10-15T04:14:58+00:00",
-      "batch_id": "e76699eff67645bd910712ebbcde5107",
-      "verification": {
-        "kind": "stage-verification",
-        "target": "ACL isolated Windows stage installation",
-        "result": "passed",
-        "source_sha": "79813fbf8af32989d5466cd201bbf6fab6ab069a",
-        "tree_sha": "e1ff679ef9e1f9079fafd7ab737392854e0eacc4",
-        "checks": [
-          "Actual permanent stage commit/tree and merge parents verified against the frozen batch e76699ef (ACL-1800, ACL-1797) and the independently reviewed integration.",
-          "Stage CI runs 38680423499, 38680423577, 38680423534 succeeded with explicit same-tree reuse of full green runs 38677914039, 38677914047.",
-          "Previous actual package installs and starts with isolated data",
-          "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
-          "Updated installed application restarts with preserved machine/workspace/creative data",
-          "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts"
-        ],
-        "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/917#issuecomment-6184279028"
-      },
-      "verified_at": "2026-10-15T04:16:13+00:00"
+      "state": "testing",
+      "recorded_at": "2026-10-15T06:15:51+00:00",
+      "batch_id": "e677f638b7ad4190887362ffb391ec98"
     },
     "tasks": {
       "248": {
@@ -12858,7 +12843,7 @@
             "session": "wrl1775-20261015"
           }
         ],
-        "state": "approved",
+        "state": "stage",
         "worker": "Worker-RL1775",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12930,7 +12915,7 @@
             "session": "wrl1812-20261015"
           }
         ],
-        "state": "approved",
+        "state": "stage",
         "worker": "Worker-RL1812",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -13015,7 +13000,7 @@
             "session": "wrm1815-20261015"
           }
         ],
-        "state": "approved",
+        "state": "stage",
         "worker": "Worker-RM1815",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -13214,7 +13199,7 @@
             "session": "wrl1826-20261015"
           }
         ],
-        "state": "approved",
+        "state": "stage",
         "worker": "Worker-RL1826",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -40852,7 +40837,7 @@
       "id": "e677f638b7ad4190887362ffb391ec98",
       "actor": "Coordinator-C1014I",
       "session": "coord-c1014i-20261014",
-      "state": "reviewing",
+      "state": "stage",
       "issues": [
         812,
         826,
@@ -41042,7 +41027,7 @@
       "intake": "4ef8c2f10750455fa1e67cee957a42f6",
       "started_at": "2026-10-15T05:44:03+00:00",
       "pr": 919,
-      "entered_stage": false,
+      "entered_stage": true,
       "history": []
     },
     "intake": {
