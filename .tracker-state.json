@@ -13633,7 +13633,7 @@
             "session": "run_s1827a_1012"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1827A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -13651,7 +13651,8 @@
           "report": "## Execution report: ACL-1827\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/829 (head 03b9d10fde052b20d236c75d384ede3e7aa38ffb), stacked on 1799 + 1797 + 1778.\n\nBuilt: Home six-tile You vs Others row above the Account map (ACL-1799 computations, real data only, labelled insufficient cohorts); sidebar without emoji, \"Target library\" label (route/ids unchanged), you/all FTD counters, Find country, asset sub-rows, all old links kept; Robot health popover from the header (page kept for direct links, new read-only /robot-health/summary).\n\nTests: 24 parity + 8 browser new; 158 passed across affected suites. Screenshot pairs in outbox screens/ (home-kpi__, sidebar__, robot-health__popover__; light and dark).\n\nDeferred: Workbench's own tile row stays at four tiles; Home tab strip/campaign table placement is a separate decision."
         },
         "pr": 829,
-        "queued_at": "2026-10-12T13:27:02+00:00"
+        "queued_at": "2026-10-12T13:27:02+00:00",
+        "reviewer": "Reviewer-RRS827"
       },
       "771": {
         "implementers": [
@@ -16690,6 +16691,10 @@
       "Worker-W1015K": {
         "session": "S63c25b6e",
         "role": "Worker"
+      },
+      "Reviewer-RRS827": {
+        "session": "rrs827-20261015",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -19392,7 +19397,6 @@
       433,
       526,
       822,
-      827,
       767,
       771,
       768,
@@ -40235,6 +40239,13 @@
         "issue": 309,
         "claim": "f3bbd1b67c9249689796356aeb2c5270",
         "actor": "Worker-W1015K"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-15T10:09:55+00:00",
+        "pr": 829,
+        "lane": "b4f883a514e74e5c81b16ae573f8be2c",
+        "actor": "Reviewer-RRS827"
       }
     ],
     "policy": {
@@ -44398,6 +44409,19 @@
       "started_at": "2026-10-15T08:23:18+00:00",
       "ineligible": {}
     },
-    "source_reviews": {}
+    "source_reviews": {
+      "829": {
+        "id": "b4f883a514e74e5c81b16ae573f8be2c",
+        "pr": 829,
+        "issues": [
+          827
+        ],
+        "actor": "Reviewer-RRS827",
+        "session": "rrs827-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-15T10:09:55+00:00",
+        "state": "reviewing"
+      }
+    }
   }
 }
