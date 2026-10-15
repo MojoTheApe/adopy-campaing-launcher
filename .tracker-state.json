@@ -8895,20 +8895,6 @@
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
       },
-      "799": {
-        "actor": "Worker-RM1799",
-        "session": "wrm1799-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1799-country-workbench",
-        "worktree": "C:\\wk-rm1799",
-        "id": "66e4099a33fe4b1e941f206f1cfb9af7",
-        "issue": 799,
-        "state": "handoff",
-        "started_at": "2026-10-15T04:23:56+00:00",
-        "from_status": "status:todo",
-        "pr": 803,
-        "report": "# ACL-1799 refresh (merge origin/main 0850aa39)\n\nMerged origin/main into codex/acl-1799-country-workbench (approved head 3c9521c3, merge commit 9259d774). One conflict, src/web/templates/report.html, in the style block: kept both the ACL-1797 shell/primitives plus adopy-tokens style and the ACL-1799 cw-styles block. active() adIndex: 0 fix preserved.\n\nTests: tests/test_acl1799_country_workbench.py, test_acl1797_design_system.py, test_acl1761_country_resolve.py (not browser): 43 passed. scripts/acl_scan_secrets.py: clean."
-      },
       "775": {
         "actor": "Worker-RL1775",
         "session": "wrl1775-20261015",
@@ -12640,25 +12626,25 @@
             "session": "wrm1799-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RM1799",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-S1799K",
-          "session": "ws1799k-20261015",
+          "actor": "Worker-RM1799",
+          "session": "wrm1799-20261015",
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1799-country-workbench",
-          "worktree": "C:\\wk-1799k",
-          "id": "50134ffa14aa4dd88dc6623b36798f90",
+          "worktree": "C:\\wk-rm1799",
+          "id": "66e4099a33fe4b1e941f206f1cfb9af7",
           "issue": 799,
           "state": "handoff",
-          "started_at": "2026-10-14T23:56:35+00:00",
+          "started_at": "2026-10-15T04:23:56+00:00",
           "from_status": "status:todo",
           "pr": 803,
-          "report": "# ACL-1799 return fix (Worker-S1799K)\n\nFix: report.html builder drawer active() returned adIndex: adIdx, but 1769 removed adIdx, so every call threw ReferenceError and the Workbench Use flow broke. The drawer tracks no focused card, so active() now returns adIndex: 0 (first card; applyCreative already falls back to rows[0]). No other adIdx leftovers (line 12517 is an unrelated dataset attribute).\n\nTests: tests/test_acl1799_country_workbench.py 22 passed; node tests/cw_harness.cjs ok. Browser tests not run locally (free RAM 4.4 GB < 6 GB); CI to verify, coordinator watches it."
+          "report": "# ACL-1799 refresh (merge origin/main 0850aa39)\n\nMerged origin/main into codex/acl-1799-country-workbench (approved head 3c9521c3, merge commit 9259d774). One conflict, src/web/templates/report.html, in the style block: kept both the ACL-1797 shell/primitives plus adopy-tokens style and the ACL-1799 cw-styles block. active() adIndex: 0 fix preserved.\n\nTests: tests/test_acl1799_country_workbench.py, test_acl1797_design_system.py, test_acl1761_country_resolve.py (not browser): 43 passed. scripts/acl_scan_secrets.py: clean."
         },
         "pr": 803,
-        "queued_at": "2026-10-15T03:40:08+00:00",
+        "queued_at": "2026-10-15T04:26:35+00:00",
         "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e76699ef (ACL-1800 campaign commands, ACL-1797 design system; PR 917 -> 918). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
         "return_operation": {
           "id": "13ca577b927a4e838fb75ff8e53a4b1b",
@@ -18236,7 +18222,8 @@
       841,
       903,
       907,
-      891
+      891,
+      799
     ],
     "review": {
       "id": "7afd66b09bb345d0af8d07c4fe79c1fa",
@@ -36261,6 +36248,13 @@
         "issue": 775,
         "claim": "acf0a97488964dcf8d94c43502a72e32",
         "actor": "Worker-RL1775"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-15T04:26:35+00:00",
+        "issue": 799,
+        "pr": 803,
+        "actor": "Worker-RM1799"
       }
     ],
     "policy": {
