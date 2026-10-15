@@ -15807,6 +15807,10 @@
       "Worker-S1814P": {
         "session": "ws1814p-20261015",
         "role": "Worker"
+      },
+      "Reviewer-R919B": {
+        "session": "r919b-20261015",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -18465,7 +18469,22 @@
       891,
       814
     ],
-    "review": null,
+    "review": {
+      "id": "cec28a01db264470aafd81b45c13cd34",
+      "batch_id": "e677f638b7ad4190887362ffb391ec98",
+      "pr": 919,
+      "issues": [
+        812,
+        826,
+        775,
+        815
+      ],
+      "actor": "Reviewer-R919B",
+      "session": "r919b-20261015",
+      "coordinator": "Coordinator-C1014I",
+      "state": "reviewing",
+      "started_at": "2026-10-15T06:07:25+00:00"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -37335,6 +37354,26 @@
         "issue": 814,
         "pr": 817,
         "actor": "Worker-S1814P"
+      },
+      {
+        "event": "batch-review-acquired",
+        "at": "2026-10-15T06:07:25+00:00",
+        "review": {
+          "id": "cec28a01db264470aafd81b45c13cd34",
+          "batch_id": "e677f638b7ad4190887362ffb391ec98",
+          "pr": 919,
+          "issues": [
+            812,
+            826,
+            775,
+            815
+          ],
+          "actor": "Reviewer-R919B",
+          "session": "r919b-20261015",
+          "coordinator": "Coordinator-C1014I",
+          "state": "reviewing",
+          "started_at": "2026-10-15T06:07:25+00:00"
+        }
       }
     ],
     "policy": {
@@ -40777,7 +40816,7 @@
       "id": "e677f638b7ad4190887362ffb391ec98",
       "actor": "Coordinator-C1014I",
       "session": "coord-c1014i-20261014",
-      "state": "assembling",
+      "state": "reviewing",
       "issues": [
         812,
         826,
@@ -40966,7 +41005,7 @@
       "branch": "codex/batch-e677f638b7ad4190887362ffb391ec98",
       "intake": "4ef8c2f10750455fa1e67cee957a42f6",
       "started_at": "2026-10-15T05:44:03+00:00",
-      "pr": null,
+      "pr": 919,
       "entered_stage": false,
       "history": []
     },
