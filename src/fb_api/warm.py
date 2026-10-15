@@ -723,14 +723,26 @@ class WarmRegistry:
         """Запуск по очереди; между настоящими запусками — пауза 5–10 с. Не больше одного профиля за раз."""
         results: dict[str, dict] = {}
         pending_pause = False
+        from src.fb_api import mlx_session as _mlx
+
+        # ACL-1826: пачка = это задание. После потери общей сессии слота B остальные B-старты
+        # пропускаются с той же причиной (слот A идёт дальше).
+        batch = job_id or f"open-{int(self._wall())}"
+        _mlx.begin_batch(batch)
         for label, entry in items:
             if cancelled():
                 break
-            if pending_pause:
-                self._sleep(self._stagger())
-            res = self.open_one(label, entry, job_id=job_id, cancelled=cancelled)
+            slot = (getattr(entry, "multilogin_instance", "") or "A").strip().upper() or "A"
+            skip = _mlx.refusal(batch, slot, label)
+            if skip:
+                res = _result(False, skip["message"], skip["code"], skipped=True)
+            else:
+                if pending_pause:
+                    self._sleep(self._stagger())
+                with _mlx.scope(account=label, batch=batch):
+                    res = self.open_one(label, entry, job_id=job_id, cancelled=cancelled)
             results[label] = res
-            pending_pause = bool(res.get("started"))
+            pending_pause = bool(res.get("started")) and not skip
             if on_result is not None:
                 try:
                     on_result(label, res)

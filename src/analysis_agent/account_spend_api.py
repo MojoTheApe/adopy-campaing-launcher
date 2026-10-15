@@ -365,7 +365,10 @@ def _open_gated(entry, account: str, held: "_as._ReadOpen"):
     try:
         if gated:
             _as._set_wait_note(account, _as.STARTING_NOTE.format(account=account))
-        opened = _open_profile(profile_id, folder_id, instance)
+        from src.fb_api import mlx_session as _mlx
+
+        with _mlx.scope(account=account):
+            opened = _open_profile(profile_id, folder_id, instance)
     except BaseException:
         if gated and not shared:
             try:
@@ -511,6 +514,11 @@ def _session(account: str, *, commands: bool = False):
         except ApiReadError:
             raise
         except Exception as exc:  # noqa: BLE001 — MLX/сеть: отказ с понятным текстом
+            from src.fb_api import mlx_session as _mlx
+
+            text, code = _mlx.humanize(exc, "", account)   # ACL-1826: потеря сессии / вход в прокси
+            if code:
+                raise ApiReadError(text, code=code) from exc
             raise ApiReadError(
                 f"{account}: the profile could not be opened with automation: {_tm.scrub(str(exc))}"
             ) from exc

@@ -3679,6 +3679,24 @@ def _split_plan(account: str, date_from: str, date_to: str, *,
     return {"needed": bool(why), "why": why}
 
 
+def _mlx_batch_refusal(form, account: str) -> JSONResponse | None:
+    """ACL-1826: пачка уже потеряла общую сессию Multilogin слота — этот старт пропускаем.
+
+    Страница шлёт `batch` (один id на нажатие Read all / Publish all). Без него
+    поведение прежнее: одиночные нажатия не пропускаются.
+    """
+    batch = str(form.get("batch") or "").strip()
+    if not batch:
+        return None
+    from src.fb_api import mlx_session
+
+    skip = mlx_session.refusal(batch, mlx_session.instance_of(account), account)
+    if not skip:
+        return None
+    return JSONResponse({"ok": False, "error": skip["message"], "code": skip["code"], "skipped": True},
+                        status_code=409)
+
+
 @app.post("/account-spend/read")
 async def account_spend_read(request: Request) -> JSONResponse:
     """Прочитать спенд с аккаунта. Только по нажатию человека.
@@ -3692,6 +3710,9 @@ async def account_spend_read(request: Request) -> JSONResponse:
     account = (form.get("account") or "").strip()
     if not account:
         return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    skipped = _mlx_batch_refusal(form, account)
+    if skipped is not None:
+        return skipped
     # Период приходит с экрана: число, снятое не за тот отрезок, который
     # показан рядом, выглядело бы расхождением источников, а было бы ответом
     # на другой вопрос.
@@ -3760,6 +3781,9 @@ async def account_spend_read_countries(request: Request) -> JSONResponse:
     account = (form.get("account") or "").strip()
     if not account:
         return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    skipped = _mlx_batch_refusal(form, account)
+    if skipped is not None:
+        return skipped
     try:
         date_from, date_to = _spend_period(
             str(form.get("date_from") or ""), str(form.get("date_to") or ""),
@@ -4239,6 +4263,9 @@ async def campaign_inventory_read(request: Request) -> JSONResponse:
     account = (form.get("account") or "").strip()
     if not account:
         return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    skipped = _mlx_batch_refusal(form, account)
+    if skipped is not None:
+        return skipped
     try:
         date_from, date_to = _spend_period(str(form.get("date_from") or ""), str(form.get("date_to") or ""),
                                            str(form.get("span") or ""))
@@ -5182,6 +5209,10 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
         )
     if not country or not account_label or not slots:
         return JSONResponse({"error": "Missing country, account or slots."}, status_code=400)
+    skipped = _mlx_batch_refusal(form, account_label)
+    if skipped is not None:
+        body = json.loads(skipped.body)
+        return JSONResponse({"error": body["error"], "code": body["code"], "skipped": True}, status_code=409)
 
     def launch() -> tuple[str, int]:
         # Черновики собираются из библиотек и книги — не в цикле событий:

@@ -185,14 +185,32 @@
       .then(function (r) { return r.json().then(function (j) { return { status: r.status, body: j }; }); });
   }
 
+  // ACL-1826: после потери общей сессии Multilogin слота B остальные B-профили пачки пропущены
+  // сервером с той же причиной: одна строка на пачку и Retry только для них.
+  var BATCH_STOPS = { mlx_session_lost: 1, mlx_token_expired: 1, mlx_token_workspace: 1 };
+
   function summarize(results) {
-    var ok = 0, bad = [];
+    var ok = 0, bad = [], stopped = [], stopText = '';
     Object.keys(results || {}).forEach(function (k) {
       var r = results[k];
       if (r.state === 'ok' || r.ok) ok++;
+      else if (BATCH_STOPS[r.code]) { stopped.push(k); stopText = stopText || r.message || ''; }
       else if (r.state !== 'waiting') bad.push(k + ': ' + (r.message || r.code || 'failed'));
     });
-    return { ok: ok, bad: bad };
+    return { ok: ok, bad: bad, stopped: stopped, stopText: stopText };
+  }
+
+  function sayStopped(grid, s) {
+    if (!s.stopped.length) return;
+    var m = barOf(grid).querySelector('.warm-msg');
+    var retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'warm-retry';
+    retry.textContent = 'Retry';
+    retry.addEventListener('click', function () { runOpen(grid, s.stopped); });
+    m.appendChild(document.createTextNode(' ' + s.stopText + ' (' + s.stopped.length + ' not opened) '));
+    m.appendChild(retry);
+    m.classList.add('warm-bad');
   }
 
   function runOpen(grid, labels) {
@@ -220,7 +238,9 @@
           return;
         }
         setBusy(false);
-        say(grid, s.ok + ' of ' + total + ' ready.' + (s.bad.length ? ' ' + s.bad.join(' · ') : ''), s.bad.length > 0);
+        say(grid, s.ok + ' of ' + total + ' ready.' + (s.bad.length ? ' ' + s.bad.join(' · ') : ''),
+            s.bad.length > 0 || s.stopped.length > 0);
+        sayStopped(grid, s);
         refresh();
       })
       .catch(function () { setBusy(false); say(grid, 'Lost the opening job; check the account rows.', true); });

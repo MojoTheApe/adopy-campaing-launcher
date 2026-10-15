@@ -6256,6 +6256,7 @@ window.cbTree = (function () {
      Аккаунтов может быть пять, каждый — минуты. Очередь видна: иначе
      «нажал и жду» отличается от «нажал, и ничего не произошло» только
      терпением. */
+  var AMLX_STOPS = {mlx_session_lost: 1, mlx_token_expired: 1, mlx_token_workspace: 1};
   function showQueue(p) {
     var box = foot.querySelector('.cbd-queue');
     var btn = foot.querySelector('.cbd-publish-all');
@@ -6321,7 +6322,19 @@ window.cbTree = (function () {
         + (p.stage === 'checking' ? 'checking' : 'building the draft')
         + ' <span class="cbd-q-why">' + p.at + ' of ' + p.of + '</span></div>');
     }
+    // ACL-1826: потеряна общая сессия Multilogin слота B — у каждого пропущенного аккаунта своя
+    // строка, а над ними одна на пачку и Retry только для пропущенных.
+    var lost = (p.report || []).filter(function (r) { return r.code && AMLX_STOPS[r.code]; });
+    if (lost.length) {
+      lines.unshift('<div class="cbd-q-line cbd-q-bad" role="alert">' + aclEscHtml(lost[0].why || '')
+        + ' (' + lost.length + ' account' + (lost.length === 1 ? '' : 's') + ' not sent) '
+        + '<button type="button" class="cbd-q-retry" data-cb-stop-retry="1">Retry</button></div>');
+    }
     box.innerHTML = lines.join('');
+    var stopRetry = box.querySelector('[data-cb-stop-retry]');
+    if (stopRetry) stopRetry.addEventListener('click', function () {
+      window.cbPublishAll(showQueue, selectedForPublish(), lost.map(function (r) { return r.key; }));
+    });
     box.querySelectorAll('[data-cb-retry]').forEach(function (b) {
       b.addEventListener('click', function () {
         if (window.CB_QUEUE && window.CB_QUEUE.retry) window.CB_QUEUE.retry(b.getAttribute('data-cb-retry'));
@@ -7889,7 +7902,7 @@ function amapSplitDone(btn) {
   btn.title = 'Read spend again';
 }
 
-function amapRunSplit(account, btn, per) {
+function amapRunSplit(account, btn, per, batch) {
   /* Возвращает обещание с 'ok' или 'failed'. Обещание нужно очереди
      Read all: аккаунты идут друг за другом, и следующий профиль нельзя
      открывать, пока в этом ещё строится отчёт (правило «один профиль
@@ -7901,6 +7914,8 @@ function amapRunSplit(account, btn, per) {
   body.append('date_from', per.from);
   body.append('date_to', per.to);
   body.append('span', per.span || '');
+  /* ACL-1826: отдельная кнопка тоже шлёт id пачки (свою, если не из Read all). */
+  body.append('batch', batch || 'rs-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
   return fetch('/account-spend/read-countries', { method: 'POST', body: body, credentials: 'same-origin' })
     .then(function (r) { return r.json(); })
     .then(function (j) {
@@ -9574,15 +9589,32 @@ async function amapReadAll(btn) {
     jobs.push({account: account, btn: b, cell: cell});
   });
   if (!jobs.length) { btn.title = 'No connected accounts to read here'; return; }
+  await amapRunJobs(btn, scope, jobs, per);
+}
+
+/* ACL-1826: одна пачка = одно нажатие Read all (или Retry). Если общая сессия
+   Multilogin слота B потеряна, сервер пропускает остальные B-аккаунты пачки с
+   той же причиной (слот A идёт дальше), а страница показывает ОДНУ строку над
+   таблицей и кнопку Retry, которая перечитывает только пропущенные. */
+var AMAP_BATCH_STOPS = {mlx_session_lost: 1, mlx_token_expired: 1, mlx_token_workspace: 1};
+async function amapRunJobs(btn, scope, jobs, per) {
   amapReadAllBusy = true;
   amapReadAllControls(true);
+  var old = scope.querySelector(':scope > .amap-batch-banner');
+  if (old) old.remove();
+  var batch = 'ra-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   var label = btn.textContent;
-  var okCount = 0, failCount = 0;
+  var okCount = 0, failCount = 0, stopped = [], stopText = '';
   try {
     for (var i = 0; i < jobs.length; i++) {
       btn.textContent = 'Reading spend ' + (i + 1) + ' of ' + jobs.length + '…';
-      var state = await amapQueueRead(jobs[i], per);
+      jobs[i].code = '';
+      var state = await amapQueueRead(jobs[i], per, batch);
       if (state === 'ok') okCount++; else failCount++;
+      if (state !== 'ok' && AMAP_BATCH_STOPS[jobs[i].code]) {
+        stopped.push(jobs[i]);
+        stopText = jobs[i].message || stopText;
+      }
     }
     btn.title = okCount + ' read, ' + failCount + ' failed (spend)';
   } finally {
@@ -9590,6 +9622,31 @@ async function amapReadAll(btn) {
     amapReadAllControls(false);
     btn.textContent = label;
   }
+  if (stopped.length) amapBatchBanner(btn, scope, stopped, per, stopText);
+}
+
+function amapBatchBanner(btn, scope, stopped, per, text) {
+  var bar = document.createElement('div');
+  bar.className = 'amap-batch-banner';
+  bar.setAttribute('role', 'alert');
+  bar.style.cssText = 'margin:6px 0;padding:8px 10px;border:1px solid var(--bad);border-radius:4px;'
+    + 'background:rgba(220,38,38,0.1);font-size:0.8rem';
+  var span = document.createElement('span');
+  span.textContent = (text || 'Multilogin needs attention.') + ' (' + stopped.length + ' account'
+    + (stopped.length === 1 ? '' : 's') + ' not read)';
+  var retry = document.createElement('button');
+  retry.type = 'button';
+  retry.className = 'amap-batch-retry';
+  retry.textContent = 'Retry';
+  retry.style.marginLeft = '10px';
+  retry.addEventListener('click', function () {
+    if (amapReadAllBusy) return;
+    bar.remove();
+    amapRunJobs(btn, scope, stopped, per);   // только пропущенные, новая пачка
+  });
+  bar.appendChild(span);
+  bar.appendChild(retry);
+  scope.insertBefore(bar, scope.firstChild);
 }
 
 // A stalled HTTP request must not leave the manual queue locked forever.
@@ -9599,14 +9656,18 @@ async function amapReadJson(url, options) {
   try {
     var r = await fetch(url, Object.assign({}, options, {signal: controller.signal}));
     var j = await r.json();
-    if (!r.ok || !j.ok) throw new Error(j.error || 'Could not read account spend');
+    if (!r.ok || !j.ok) {
+      var err = new Error(j.error || 'Could not read account spend');
+      err.code = j.code || '';
+      throw err;
+    }
     return j;
   } finally {
     clearTimeout(timeout);
   }
 }
 
-async function amapQueueRead(job, per) {
+async function amapQueueRead(job, per, batch) {
   try {
     var extra = job.btn.parentNode && job.btn.parentNode.querySelector('.amap-openprof');
     if (extra) extra.remove();
@@ -9616,6 +9677,7 @@ async function amapQueueRead(job, per) {
     body.append('date_from', per.from);
     body.append('date_to', per.to);
     body.append('span', per.span || '');
+    if (batch) body.append('batch', batch);
     // The server joins an existing read for this account and exact period.
     await amapReadJson('/account-spend/read', {method: 'POST', body: body, credentials: 'same-origin'});
     var done = await amapAwaitReading(job.account, per, 0);
@@ -9627,12 +9689,15 @@ async function amapQueueRead(job, per) {
     if (done.state === 'ok' && done.plan && done.plan.needed) {
       // Ответ разбивки нарочно не возвращается: упавшая разбивка не делает
       // прочитанный спенд неудачей и не портит счёт «N read, M failed».
-      await amapRunSplit(job.account, job.btn, per);
+      await amapRunSplit(job.account, job.btn, per, batch);
     }
+    if (done.state !== 'ok') { job.code = done.code || ''; job.message = done.message || ''; }
     return done.state;
   } catch (e) {
     var message = e && e.name === 'AbortError' ? 'Read request timed out — check the Adopy Campaign Manager window' : String(e && e.message || e);
-    amapApplyReading(job.account, {state: 'failed', error: message});
+    job.code = (e && e.code) || '';
+    job.message = job.code ? message : '';
+    amapApplyReading(job.account, {state: 'failed', error: message, error_code: job.code});
     return 'failed';
   }
 }
@@ -9649,7 +9714,8 @@ async function amapAwaitReading(account, per, tries) {
     var s = j.reading || {};
     amapApplyReading(account, s, j.split, j.waiting);
     if (s.state !== 'running') {
-      return {state: s.state === 'ok' ? 'ok' : 'failed', plan: j.plan || null};
+      return {state: s.state === 'ok' ? 'ok' : 'failed', plan: j.plan || null,
+              code: s.error_code || '', message: s.error || ''};
     }
   }
   throw new Error('no answer after six minutes — check the Adopy Campaign Manager window');
@@ -13507,7 +13573,7 @@ function cbFormDataSkipping(form, skip, snapshot) {
   return { body: out, kept: kept };
 }
 
-window.cbPublishAll = function (onProgress, picked) {
+window.cbPublishAll = function (onProgress, picked, onlyKeys) {
   if (cbQueueUncertain()) return;
   // ACL-1360: отмечена часть кампаний — едут только они, по заданию на
   // аккаунт. `picked` — отмеченные карточки; пусто — прежний «Publish all».
@@ -13523,6 +13589,8 @@ window.cbPublishAll = function (onProgress, picked) {
     if (!slots.length) return;
     var mine = only ? cbPickedIn(form, only) : null;
     if (mine && !mine.length) return;
+    // ACL-1826: Retry пропущенных — только их формы.
+    if (onlyKeys && onlyKeys.indexOf(cbFormKey(form)) < 0) return;
     if (cbAccountBusy(cbFormKey(form))) { running.push(cbFormTitle(form)); return; }
     forms.push(form);
     campaigns += mine ? mine.length : slots.length;
@@ -13857,7 +13925,10 @@ function cbPostPublish(fd) {
 }
 
 function cbNewRun(notify) {
-  var batch = { active: true, uncertain: false, progress: null };
+  // ACL-1826: id пачки уходит с каждой отправкой — потеряна общая сессия Multilogin слота B,
+  // сервер пропускает остальные B-аккаунты пачки с той же причиной.
+  var batch = { active: true, uncertain: false, progress: null,
+                id: 'pa-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8) };
   var entries = [];        // {form, key, account, country, label, only, sent, panel, state, live, jobId}
   var report = [];
   var settled = 0;         // сколько строк дошли до конца (или отпали)
@@ -13965,6 +14036,7 @@ function cbNewRun(notify) {
       e.panel.style.display = 'block';
       e.panel.innerHTML = '<div class="cb-status-title">Building the campaign (draft)…</div>';
     }
+    fd.set('batch', batch.id);
     cbPostPublish(fd)
       .then(function (data) {
         if (window.CB_QUEUE !== batch || e.state === 'settled') return;
@@ -13976,7 +14048,7 @@ function cbNewRun(notify) {
         }
         if (data.error) {
           if (e.panel) e.panel.innerHTML = '<span class="cb-status-fatal">Error: ' + aclEscHtml(data.error) + '</span>';
-          settle(e, { account: e.label, state: 'bad', why: data.error, skipped: skipped });
+          settle(e, { account: e.label, state: 'bad', why: data.error, skipped: skipped, code: data.code || '', key: e.key });
           return;
         }
         if (!data.job_id) throw new Error('Server did not identify the job; outcome unknown');

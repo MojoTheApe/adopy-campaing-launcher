@@ -1368,6 +1368,13 @@ def read_country_split(account: str, date_from: str, date_to: str = "") -> Count
         out.state, out.rows = "failed", []
         out.error = str(exc) or type(exc).__name__
         out.error_code = str(getattr(exc, "code", "") or "") if isinstance(exc, ProfileNotAttachable) else ""
+        if not out.error_code:
+            # ACL-1826: вход в прокси читается одной фразой.
+            from src.fb_api import mlx_session as _mlx
+
+            _text, _code = _mlx.humanize(exc, "", account)
+            if _code:
+                out.error, out.error_code = _text, _code
     finally:
         # Persist failures too: a failed retry must not expose an old success.
         try:
