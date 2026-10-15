@@ -9349,7 +9349,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "924": {
+        "actor": "Worker-B71E",
+        "session": "acl_delivery",
+        "coordinator": "Coordinator-DLV15",
+        "branch": "codex/acl-1924-delivery-flow",
+        "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-delivery-source",
+        "id": "9ee4ff8dca764afd91ade55716029f04",
+        "issue": 924,
+        "state": "implementing",
+        "started_at": "2026-10-15T10:49:05+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -14815,9 +14828,13 @@
           {
             "actor": "Worker-B71E",
             "session": "acl_delivery"
+          },
+          {
+            "actor": "Worker-B71E",
+            "session": "acl_delivery"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-B71E",
         "coordinator": "Coordinator-DLV15",
         "handoff": {
@@ -14836,14 +14853,7 @@
         },
         "pr": 925,
         "queued_at": "2026-10-15T08:18:01+00:00",
-        "reviewer": "Reviewer-N61D",
         "return_operation": {
-          "id": "8a44bd5cb1e44da29fbd5e9273ec77ad",
-          "actor": "Coordinator-DLV15",
-          "session": "delivery_flow_root",
-          "report": "Owner requested continuing the already authorized ACL delivery-flow activation on2026-10-15. Source PR925 remains Approved at82fd869c against old main080df2d8, but actual main advanced to3ee7c6d9c7a394ecec9f0889805fadb188b3aab7 and GitHub now reports conflicts. Preserve the full task924 scope, source branch, prior successful CI/independent review as history and all unrelated owners. Return only our own approved source to its actual author for current-main reconciliation, affected checks, hosted CI and fresh independent approval. Do not edit the frozen source as Coordinator or reuse old-base approval for changed content. Initial admission still uses the actual old Stage policy."
-        },
-        "return": {
           "id": "8a44bd5cb1e44da29fbd5e9273ec77ad",
           "actor": "Coordinator-DLV15",
           "session": "delivery_flow_root",
@@ -40689,6 +40699,13 @@
           "report": "Owner requested continuing the already authorized ACL delivery-flow activation on2026-10-15. Source PR925 remains Approved at82fd869c against old main080df2d8, but actual main advanced to3ee7c6d9c7a394ecec9f0889805fadb188b3aab7 and GitHub now reports conflicts. Preserve the full task924 scope, source branch, prior successful CI/independent review as history and all unrelated owners. Return only our own approved source to its actual author for current-main reconciliation, affected checks, hosted CI and fresh independent approval. Do not edit the frozen source as Coordinator or reuse old-base approval for changed content. Initial admission still uses the actual old Stage policy."
         },
         "batch_id": null
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-15T10:49:05+00:00",
+        "issue": 924,
+        "claim": "9ee4ff8dca764afd91ade55716029f04",
+        "actor": "Worker-B71E"
       }
     ],
     "policy": {
