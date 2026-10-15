@@ -44860,7 +44860,51 @@
         "session": "rv1015r-887",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-15T10:46:35+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 886,
+          "pr": 887,
+          "branch": "codex/acl-1886-graph-error-context",
+          "head_sha": "31ee38c930d479a732fee6e346809c25cf5b655e",
+          "base_sha": "3ee7c6d9c7a394ecec9f0889805fadb188b3aab7",
+          "main_sha": "3ee7c6d9c7a394ecec9f0889805fadb188b3aab7",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "scope": "291706aa97fea07f175753abc951ee231d86a7ea2d52cd679f94cf2db3f7bf9d",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-RV1015R",
+            "review_session": "rv1015r-887",
+            "execution_lane": "2e6b36e3c70f43058147e21b746e9a76",
+            "implementer": "Worker-RG1886",
+            "head_sha": "31ee38c930d479a732fee6e346809c25cf5b655e",
+            "base_sha": "3ee7c6d9c7a394ecec9f0889805fadb188b3aab7",
+            "tree_sha": "7d825046b27edcc3d1ffa0e0e373c267fd7eed47",
+            "report": "Delta re-review of ACL-1886 (PR 887) after main moved to 3ee7c6d9. Head 31ee38c9 = previously approved d2e9a26a + merge of work/main 3ee7c6d9; 3ee7c6d9 is an ancestor of head; git show --remerge-diff HEAD is empty (clean merge, no manual resolution). git diff work/main...HEAD contains only 1886 files (graph.py +23, test_acl1886_graph_error_context.py, bench catalogue/fixture, CHANGELOG, PROJECT, fixtures README); PR is not stacked. Tests: acl1886 file 37 passed; all 14 test files referencing fb_api.graph/GraphClient plus test_bench_catalogue and test_ads_manager_bench: 984 passed. gh pr checks 887 all green (linux 1/2/3, windows, installer, tracker-link, descriptor, process instructions). No live Meta checks claimed; live Permission Denied cause remains unknown by design.",
+            "main_sha": "3ee7c6d9c7a394ecec9f0889805fadb188b3aab7",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "issues": [
+              886
+            ],
+            "recorded_at": "2026-10-15T11:03:29+00:00",
+            "issue_scopes": {
+              "886": "291706aa97fea07f175753abc951ee231d86a7ea2d52cd679f94cf2db3f7bf9d"
+            }
+          },
+          "lane": {
+            "id": "2e6b36e3c70f43058147e21b746e9a76",
+            "pr": 887,
+            "issues": [
+              886
+            ],
+            "actor": "Reviewer-RV1015R",
+            "session": "rv1015r-887",
+            "coordinator": "Coordinator-M1011A",
+            "started_at": "2026-10-15T10:46:35+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-15T11:03:52+00:00"
+        }
       },
       "925": {
         "id": "8f8a72ec6f1942378f7d9e222dfc6991",
