@@ -38917,6 +38917,29 @@
         "at": "2026-10-15T08:21:58+00:00",
         "issue": 471,
         "reason": "Closed in the Playwright backlog cleanup 2026-10-15: we are moving campaign creation and account reads to the Meta API (ACL-1760/1761/1883), so this Ads Manager UI/Playwright-only work is no longer relevant. Restore if the UI path comes back."
+      },
+      {
+        "event": "intake-frozen",
+        "at": "2026-10-15T08:23:18+00:00",
+        "intake": {
+          "id": "a85c69b3d13f477c8440ae4c0c09854c",
+          "actor": "Coordinator-C1014I",
+          "session": "coord-c1014i-20261014",
+          "state": "running",
+          "issues": [
+            819,
+            799,
+            814
+          ],
+          "remaining": [
+            819,
+            799,
+            814
+          ],
+          "batches": [],
+          "started_at": "2026-10-15T08:23:18+00:00",
+          "ineligible": {}
+        }
       }
     ],
     "policy": {
@@ -42664,21 +42687,22 @@
     },
     "integration": null,
     "intake": {
-      "id": "4ef8c2f10750455fa1e67cee957a42f6",
+      "id": "a85c69b3d13f477c8440ae4c0c09854c",
       "actor": "Coordinator-C1014I",
       "session": "coord-c1014i-20261014",
-      "state": "finished",
+      "state": "running",
       "issues": [
-        812,
-        826,
-        775,
-        815
+        819,
+        799,
+        814
       ],
-      "remaining": [],
-      "batches": [
-        "e677f638b7ad4190887362ffb391ec98"
+      "remaining": [
+        819,
+        799,
+        814
       ],
-      "started_at": "2026-10-15T05:43:00+00:00",
+      "batches": [],
+      "started_at": "2026-10-15T08:23:18+00:00",
       "ineligible": {}
     },
     "source_reviews": {
