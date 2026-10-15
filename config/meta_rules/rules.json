@@ -1,0 +1,678 @@
+[
+  {
+    "id": "objective.odax",
+    "kind": "objective",
+    "applies_to": {},
+    "allowed": [
+      "OUTCOME_APP_PROMOTION",
+      "OUTCOME_AWARENESS",
+      "OUTCOME_ENGAGEMENT",
+      "OUTCOME_LEADS",
+      "OUTCOME_SALES",
+      "OUTCOME_TRAFFIC"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/reference/ad-campaign-group",
+    "checked_date": "2026-10-11",
+    "note": "ODAX objectives listed on the campaign reference."
+  },
+  {
+    "id": "objective.legacy",
+    "kind": "objective",
+    "applies_to": {},
+    "allowed": [
+      "APP_INSTALLS",
+      "BRAND_AWARENESS",
+      "CONVERSIONS",
+      "EVENT_RESPONSES",
+      "LEAD_GENERATION",
+      "LINK_CLICKS",
+      "LOCAL_AWARENESS",
+      "MESSAGES",
+      "OFFER_CLAIMS",
+      "PAGE_LIKES",
+      "POST_ENGAGEMENT",
+      "PRODUCT_CATALOG_SALES",
+      "REACH",
+      "STORE_VISITS",
+      "VIDEO_VIEWS"
+    ],
+    "status": "deprecated",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/reference/ad-campaign-group",
+    "checked_date": "2026-10-11",
+    "note": "Original objectives; the page says OUTCOME_* will eventually replace them. Not for new campaigns."
+  },
+  {
+    "id": "optimization_goal.enum",
+    "kind": "optimization_goal_enum",
+    "applies_to": {},
+    "allowed": [
+      "NONE",
+      "APP_INSTALLS",
+      "AD_RECALL_LIFT",
+      "ENGAGED_USERS",
+      "EVENT_RESPONSES",
+      "IMPRESSIONS",
+      "LEAD_GENERATION",
+      "QUALITY_LEAD",
+      "LINK_CLICKS",
+      "OFFSITE_CONVERSIONS",
+      "PAGE_LIKES",
+      "POST_ENGAGEMENT",
+      "QUALITY_CALL",
+      "REACH",
+      "LANDING_PAGE_VIEWS",
+      "VISIT_INSTAGRAM_PROFILE",
+      "ENGAGED_PAGE_VIEWS",
+      "VALUE",
+      "THRUPLAY",
+      "DERIVED_EVENTS",
+      "APP_INSTALLS_AND_OFFSITE_CONVERSIONS",
+      "CONVERSATIONS",
+      "IN_APP_VALUE",
+      "MESSAGING_PURCHASE_CONVERSION",
+      "MESSAGING_DEEP_CONVERSATION_AND_FOLLOW",
+      "SUBSCRIBERS",
+      "REMINDERS_SET",
+      "MEANINGFUL_CALL_ATTEMPT",
+      "PROFILE_VISIT",
+      "PROFILE_AND_PAGE_ENGAGEMENT",
+      "ADVERTISER_SILOED_VALUE",
+      "AUTOMATIC_OBJECTIVE",
+      "MESSAGING_APPOINTMENT_CONVERSION"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/reference/ad-campaign",
+    "checked_date": "2026-10-11",
+    "note": "Enum values of ad set optimization_goal (the page states no objective-to-goal mapping; also listed on the adsets reference)."
+  },
+  {
+    "id": "billing_event.enum",
+    "kind": "billing_event_enum",
+    "applies_to": {},
+    "allowed": [
+      "APP_INSTALLS",
+      "CLICKS",
+      "IMPRESSIONS",
+      "LINK_CLICKS",
+      "NONE",
+      "OFFER_CLAIMS",
+      "PAGE_LIKES",
+      "POST_ENGAGEMENT",
+      "THRUPLAY",
+      "PURCHASE",
+      "LISTING_INTERACTION"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/reference/ad-campaign",
+    "checked_date": "2026-10-11",
+    "note": "Enum values of ad set billing_event (the page states no goal-to-billing mapping)."
+  },
+  {
+    "id": "bid_strategy.enum",
+    "kind": "bid_strategy_enum",
+    "applies_to": {},
+    "allowed": [
+      "LOWEST_COST_WITHOUT_CAP",
+      "LOWEST_COST_WITH_BID_CAP",
+      "COST_CAP",
+      "LOWEST_COST_WITH_MIN_ROAS"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/reference/ad-campaign-group",
+    "checked_date": "2026-10-11",
+    "note": "Enum values of bid_strategy."
+  },
+  {
+    "id": "destination_type.enum",
+    "kind": "destination_type_enum",
+    "applies_to": {},
+    "allowed": [
+      "WEBSITE",
+      "APP",
+      "MESSENGER",
+      "APPLINKS_AUTOMATIC",
+      "WHATSAPP",
+      "INSTAGRAM_DIRECT",
+      "FACEBOOK",
+      "MESSAGING_MESSENGER_WHATSAPP",
+      "MESSAGING_INSTAGRAM_DIRECT_MESSENGER",
+      "MESSAGING_INSTAGRAM_DIRECT_MESSENGER_WHATSAPP",
+      "MESSAGING_INSTAGRAM_DIRECT_WHATSAPP",
+      "SHOP_AUTOMATIC",
+      "ON_AD",
+      "ON_POST",
+      "ON_EVENT",
+      "ON_VIDEO",
+      "ON_PAGE",
+      "INSTAGRAM_PROFILE",
+      "FACEBOOK_PAGE",
+      "INSTAGRAM_PROFILE_AND_FACEBOOK_PAGE",
+      "INSTAGRAM_LIVE",
+      "FACEBOOK_LIVE",
+      "IMAGINE"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/reference/ad-campaign",
+    "checked_date": "2026-10-11",
+    "note": "Enum values of ad set destination_type."
+  },
+  {
+    "id": "cta.enum",
+    "kind": "cta_enum",
+    "applies_to": {},
+    "allowed": [
+      "OPEN_LINK",
+      "LIKE_PAGE",
+      "SHOP_NOW",
+      "PLAY_GAME",
+      "INSTALL_APP",
+      "USE_APP",
+      "CALL",
+      "CALL_ME",
+      "VIDEO_CALL",
+      "INSTALL_MOBILE_APP",
+      "USE_MOBILE_APP",
+      "MOBILE_DOWNLOAD",
+      "BOOK_TRAVEL",
+      "LISTEN_MUSIC",
+      "WATCH_VIDEO",
+      "LEARN_MORE",
+      "SIGN_UP",
+      "DOWNLOAD",
+      "WATCH_MORE",
+      "NO_BUTTON",
+      "VISIT_PAGES_FEED",
+      "CALL_NOW",
+      "APPLY_NOW",
+      "CONTACT",
+      "BUY_NOW",
+      "GET_OFFER",
+      "GET_OFFER_VIEW",
+      "BUY_TICKETS",
+      "UPDATE_APP",
+      "GET_DIRECTIONS",
+      "BUY",
+      "SEND_UPDATES",
+      "MESSAGE_PAGE",
+      "DONATE",
+      "SUBSCRIBE",
+      "SAY_THANKS",
+      "SELL_NOW",
+      "SHARE",
+      "DONATE_NOW",
+      "GET_QUOTE",
+      "CONTACT_US",
+      "ORDER_NOW",
+      "START_ORDER",
+      "ADD_TO_CART",
+      "VIEW_CART",
+      "VIEW_IN_CART",
+      "VIDEO_ANNOTATION",
+      "RECORD_NOW",
+      "INQUIRE_NOW",
+      "CONFIRM",
+      "REFER_FRIENDS",
+      "REQUEST_TIME",
+      "GET_SHOWTIMES",
+      "LISTEN_NOW",
+      "TRY_DEMO",
+      "WOODHENGE_SUPPORT",
+      "SOTTO_SUBSCRIBE",
+      "FOLLOW_USER",
+      "RAISE_MONEY",
+      "SEE_SHOP",
+      "GET_DETAILS",
+      "FIND_OUT_MORE",
+      "VISIT_WEBSITE",
+      "BROWSE_SHOP",
+      "EVENT_RSVP",
+      "WHATSAPP_MESSAGE",
+      "FOLLOW_NEWS_STORYLINE",
+      "SEE_MORE",
+      "BOOK_NOW",
+      "FIND_A_GROUP",
+      "FIND_YOUR_GROUPS",
+      "PAY_TO_ACCESS",
+      "PURCHASE_GIFT_CARDS",
+      "FOLLOW_PAGE",
+      "SEND_A_GIFT",
+      "SWIPE_UP_SHOP",
+      "SWIPE_UP_PRODUCT",
+      "SEND_GIFT_MONEY",
+      "PLAY_GAME_ON_FACEBOOK",
+      "GET_STARTED",
+      "OPEN_INSTANT_APP",
+      "AUDIO_CALL",
+      "GET_PROMOTIONS",
+      "JOIN_CHANNEL",
+      "MAKE_AN_APPOINTMENT",
+      "ASK_ABOUT_SERVICES",
+      "BOOK_A_CONSULTATION",
+      "GET_A_QUOTE",
+      "BUY_VIA_MESSAGE",
+      "ASK_FOR_MORE_INFO",
+      "CHAT_WITH_US",
+      "VIEW_PRODUCT",
+      "VIEW_CHANNEL",
+      "GET_IN_TOUCH",
+      "ASK_A_QUESTION",
+      "START_A_CHAT",
+      "CHAT_NOW",
+      "ASK_US",
+      "WATCH_LIVE_VIDEO",
+      "JOIN_LIVE_VIDEO",
+      "SHOP_WITH_AI",
+      "TRY_ON_WITH_AI",
+      "WATCH_NOW",
+      "STREAM_NOW",
+      "BUY_ACTIVITY_TICKETS"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/reference/ad-creative-link-data-call-to-action",
+    "checked_date": "2026-10-11",
+    "note": "Enum values of call_to_action type; the page does not state a per-objective list."
+  },
+  {
+    "id": "bid_amount.required_for_bid_cap",
+    "kind": "required_field",
+    "applies_to": {
+      "bid_strategy": "LOWEST_COST_WITH_BID_CAP"
+    },
+    "required": [
+      "bid_amount"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/reference/ad-campaign-group",
+    "checked_date": "2026-10-11",
+    "note": "Page: a bid cap must be provided in bid_amount for each ad set."
+  },
+  {
+    "id": "special_ad_categories.required",
+    "kind": "required_field",
+    "applies_to": {},
+    "required": [
+      "api_preview.campaign.special_ad_categories"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/reference/ad-campaign-group",
+    "checked_date": "2026-10-11",
+    "note": "Page: the field is required; send an empty array when no special category applies."
+  },
+  {
+    "id": "optimization_goal.by_objective.outcome_awareness",
+    "kind": "optimization_goal_by_objective",
+    "applies_to": {
+      "objective": "OUTCOME_AWARENESS"
+    },
+    "allowed": [
+      "AD_RECALL_LIFT",
+      "REACH",
+      "IMPRESSIONS",
+      "THRUPLAY",
+      "TWO_SECOND_CONTINUOUS_VIDEO_VIEWS"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/reference/ad-campaign-group/#odax-mapping",
+    "checked_date": "2026-10-11",
+    "note": "Objective Mapping table (ODAX). OUTCOME_SALES has no rows in the fetched table, so it is not checked."
+  },
+  {
+    "id": "optimization_goal.by_objective.outcome_traffic",
+    "kind": "optimization_goal_by_objective",
+    "applies_to": {
+      "objective": "OUTCOME_TRAFFIC"
+    },
+    "allowed": [
+      "LINK_CLICKS",
+      "LANDING_PAGE_VIEWS",
+      "REACH",
+      "IMPRESSIONS",
+      "QUALITY_CALL"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/reference/ad-campaign-group/#odax-mapping",
+    "checked_date": "2026-10-11",
+    "note": "Objective Mapping table (ODAX). OUTCOME_SALES has no rows in the fetched table, so it is not checked."
+  },
+  {
+    "id": "optimization_goal.by_objective.outcome_engagement",
+    "kind": "optimization_goal_by_objective",
+    "applies_to": {
+      "objective": "OUTCOME_ENGAGEMENT"
+    },
+    "allowed": [
+      "POST_ENGAGEMENT",
+      "REACH",
+      "IMPRESSIONS",
+      "PAGE_LIKES",
+      "EVENT_RESPONSES",
+      "THRUPLAY",
+      "TWO_SECOND_CONTINUOUS_VIDEO_VIEWS",
+      "CONVERSATIONS",
+      "LINK_CLICKS",
+      "LEAD_GENERATION",
+      "OFFSITE_CONVERSIONS",
+      "LANDING_PAGE_VIEWS"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/reference/ad-campaign-group/#odax-mapping",
+    "checked_date": "2026-10-11",
+    "note": "Objective Mapping table (ODAX). OUTCOME_SALES has no rows in the fetched table, so it is not checked."
+  },
+  {
+    "id": "optimization_goal.by_objective.outcome_app_promotion",
+    "kind": "optimization_goal_by_objective",
+    "applies_to": {
+      "objective": "OUTCOME_APP_PROMOTION"
+    },
+    "allowed": [
+      "LINK_CLICKS",
+      "OFFSITE_CONVERSIONS",
+      "APP_INSTALLS"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/reference/ad-campaign-group/#odax-mapping",
+    "checked_date": "2026-10-11",
+    "note": "Objective Mapping table (ODAX). OUTCOME_SALES has no rows in the fetched table, so it is not checked."
+  },
+  {
+    "id": "optimization_goal.by_objective.outcome_leads",
+    "kind": "optimization_goal_by_objective",
+    "applies_to": {
+      "objective": "OUTCOME_LEADS"
+    },
+    "allowed": [
+      "LEAD_GENERATION",
+      "QUALITY_LEAD",
+      "QUALITY_CALL",
+      "OFFSITE_CONVERSIONS",
+      "LINK_CLICKS"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/reference/ad-campaign-group/#odax-mapping",
+    "checked_date": "2026-10-11",
+    "note": "Objective Mapping table (ODAX). OUTCOME_SALES has no rows in the fetched table, so it is not checked."
+  },
+  {
+    "id": "billing_event.by_goal.app_installs",
+    "kind": "billing_event_by_goal",
+    "applies_to": {
+      "optimization_goal": "APP_INSTALLS"
+    },
+    "allowed": [
+      "IMPRESSIONS"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/bidding/overview/billing-events#opt_bids",
+    "checked_date": "2026-10-11",
+    "note": "Table \"Optimization goal and billing events\"."
+  },
+  {
+    "id": "billing_event.by_goal.ad_recall_lift",
+    "kind": "billing_event_by_goal",
+    "applies_to": {
+      "optimization_goal": "AD_RECALL_LIFT"
+    },
+    "allowed": [
+      "IMPRESSIONS"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/bidding/overview/billing-events#opt_bids",
+    "checked_date": "2026-10-11",
+    "note": "Table \"Optimization goal and billing events\"."
+  },
+  {
+    "id": "billing_event.by_goal.engaged_users",
+    "kind": "billing_event_by_goal",
+    "applies_to": {
+      "optimization_goal": "ENGAGED_USERS"
+    },
+    "allowed": [
+      "IMPRESSIONS"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/bidding/overview/billing-events#opt_bids",
+    "checked_date": "2026-10-11",
+    "note": "Table \"Optimization goal and billing events\"."
+  },
+  {
+    "id": "billing_event.by_goal.event_responses",
+    "kind": "billing_event_by_goal",
+    "applies_to": {
+      "optimization_goal": "EVENT_RESPONSES"
+    },
+    "allowed": [
+      "IMPRESSIONS"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/bidding/overview/billing-events#opt_bids",
+    "checked_date": "2026-10-11",
+    "note": "Table \"Optimization goal and billing events\"."
+  },
+  {
+    "id": "billing_event.by_goal.impressions",
+    "kind": "billing_event_by_goal",
+    "applies_to": {
+      "optimization_goal": "IMPRESSIONS"
+    },
+    "allowed": [
+      "IMPRESSIONS"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/bidding/overview/billing-events#opt_bids",
+    "checked_date": "2026-10-11",
+    "note": "Table \"Optimization goal and billing events\"."
+  },
+  {
+    "id": "billing_event.by_goal.lead_generation",
+    "kind": "billing_event_by_goal",
+    "applies_to": {
+      "optimization_goal": "LEAD_GENERATION"
+    },
+    "allowed": [
+      "IMPRESSIONS"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/bidding/overview/billing-events#opt_bids",
+    "checked_date": "2026-10-11",
+    "note": "Table \"Optimization goal and billing events\"."
+  },
+  {
+    "id": "billing_event.by_goal.link_clicks",
+    "kind": "billing_event_by_goal",
+    "applies_to": {
+      "optimization_goal": "LINK_CLICKS"
+    },
+    "allowed": [
+      "LINK_CLICKS",
+      "IMPRESSIONS"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/bidding/overview/billing-events#opt_bids",
+    "checked_date": "2026-10-11",
+    "note": "Table \"Optimization goal and billing events\"."
+  },
+  {
+    "id": "billing_event.by_goal.offsite_conversions",
+    "kind": "billing_event_by_goal",
+    "applies_to": {
+      "optimization_goal": "OFFSITE_CONVERSIONS"
+    },
+    "allowed": [
+      "IMPRESSIONS"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/bidding/overview/billing-events#opt_bids",
+    "checked_date": "2026-10-11",
+    "note": "Table \"Optimization goal and billing events\"."
+  },
+  {
+    "id": "billing_event.by_goal.page_likes",
+    "kind": "billing_event_by_goal",
+    "applies_to": {
+      "optimization_goal": "PAGE_LIKES"
+    },
+    "allowed": [
+      "IMPRESSIONS"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/bidding/overview/billing-events#opt_bids",
+    "checked_date": "2026-10-11",
+    "note": "Table \"Optimization goal and billing events\"."
+  },
+  {
+    "id": "billing_event.by_goal.post_engagement",
+    "kind": "billing_event_by_goal",
+    "applies_to": {
+      "optimization_goal": "POST_ENGAGEMENT"
+    },
+    "allowed": [
+      "IMPRESSIONS"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/bidding/overview/billing-events#opt_bids",
+    "checked_date": "2026-10-11",
+    "note": "Table \"Optimization goal and billing events\"."
+  },
+  {
+    "id": "billing_event.by_goal.reach",
+    "kind": "billing_event_by_goal",
+    "applies_to": {
+      "optimization_goal": "REACH"
+    },
+    "allowed": [
+      "IMPRESSIONS"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/bidding/overview/billing-events#opt_bids",
+    "checked_date": "2026-10-11",
+    "note": "Table \"Optimization goal and billing events\"."
+  },
+  {
+    "id": "billing_event.by_goal.replies",
+    "kind": "billing_event_by_goal",
+    "applies_to": {
+      "optimization_goal": "REPLIES"
+    },
+    "allowed": [
+      "IMPRESSIONS"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/bidding/overview/billing-events#opt_bids",
+    "checked_date": "2026-10-11",
+    "note": "Table \"Optimization goal and billing events\"."
+  },
+  {
+    "id": "billing_event.by_goal.social_impressions",
+    "kind": "billing_event_by_goal",
+    "applies_to": {
+      "optimization_goal": "SOCIAL_IMPRESSIONS"
+    },
+    "allowed": [
+      "IMPRESSIONS"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/bidding/overview/billing-events#opt_bids",
+    "checked_date": "2026-10-11",
+    "note": "Table \"Optimization goal and billing events\"."
+  },
+  {
+    "id": "billing_event.by_goal.thruplay",
+    "kind": "billing_event_by_goal",
+    "applies_to": {
+      "optimization_goal": "THRUPLAY"
+    },
+    "allowed": [
+      "IMPRESSIONS",
+      "THRUPLAY"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/bidding/overview/billing-events#opt_bids",
+    "checked_date": "2026-10-11",
+    "note": "Table \"Optimization goal and billing events\"."
+  },
+  {
+    "id": "billing_event.by_goal.two_second_continuous_video_views",
+    "kind": "billing_event_by_goal",
+    "applies_to": {
+      "optimization_goal": "TWO_SECOND_CONTINUOUS_VIDEO_VIEWS"
+    },
+    "allowed": [
+      "IMPRESSIONS",
+      "TWO_SECOND_CONTINUOUS_VIDEO_VIEWS"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/bidding/overview/billing-events#opt_bids",
+    "checked_date": "2026-10-11",
+    "note": "Table \"Optimization goal and billing events\"."
+  },
+  {
+    "id": "billing_event.by_goal.value",
+    "kind": "billing_event_by_goal",
+    "applies_to": {
+      "optimization_goal": "VALUE"
+    },
+    "allowed": [
+      "IMPRESSIONS"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/bidding/overview/billing-events#opt_bids",
+    "checked_date": "2026-10-11",
+    "note": "Table \"Optimization goal and billing events\"."
+  },
+  {
+    "id": "billing_event.by_goal.landing_page_views",
+    "kind": "billing_event_by_goal",
+    "applies_to": {
+      "optimization_goal": "LANDING_PAGE_VIEWS"
+    },
+    "allowed": [
+      "IMPRESSIONS"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/bidding/overview/billing-events#opt_bids",
+    "checked_date": "2026-10-11",
+    "note": "Table \"Optimization goal and billing events\"."
+  },
+  {
+    "id": "destination_type.odax_mapping",
+    "kind": "destination_type_enum",
+    "applies_to": {},
+    "allowed": [
+      "LEAD_FROM_MESSENGER",
+      "LEAD_FROM_IG_DIRECT",
+      "PHONE_CALL"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/reference/ad-campaign-group/#odax-mapping",
+    "checked_date": "2026-10-11",
+    "note": "Destination types used in the Objective Mapping table but absent from the ad set enum list."
+  },
+  {
+    "id": "optimization_goal.odax_mapping",
+    "kind": "optimization_goal_enum",
+    "applies_to": {},
+    "allowed": [
+      "REPLIES",
+      "SOCIAL_IMPRESSIONS",
+      "TWO_SECOND_CONTINUOUS_VIDEO_VIEWS"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/reference/ad-campaign-group/#odax-mapping",
+    "checked_date": "2026-10-11",
+    "note": "Optimization goals used in the Objective Mapping / billing events tables but absent from the ad set enum list."
+  },
+  {
+    "id": "billing_event.billing_events_page",
+    "kind": "billing_event_enum",
+    "applies_to": {},
+    "allowed": [
+      "TWO_SECOND_CONTINUOUS_VIDEO_VIEWS"
+    ],
+    "status": "ga",
+    "source_url": "https://developers.facebook.com/docs/marketing-api/bidding/overview/billing-events#opt_bids",
+    "checked_date": "2026-10-11",
+    "note": "Billing event listed in the Optimization goal and billing events table but absent from the ad set enum list."
+  }
+]

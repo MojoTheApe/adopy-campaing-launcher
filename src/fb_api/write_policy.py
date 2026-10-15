@@ -70,7 +70,7 @@ OPT_OUT = "OPT_OUT"
 #: Отдельного документированного ключа «text generation» там нет — не гадаем.
 DOF_FEATURES = frozenset({"text_optimizations"})
 
-_PATH_RE = re.compile(r"^/(act_\d{5,})/([a-z]+)$")
+_PATH_RE = re.compile(r"/(act_\d{5,})/([a-z]+)\Z")
 
 
 class WriteRefused(ValueError):
@@ -184,7 +184,7 @@ def check(act: str, method: str, path: str, params: dict | None,
     """
     if method != "POST":
         raise WriteRefused(f"write refused: method {method!r} (only POST; never DELETE)")
-    m = _PATH_RE.match(path or "")
+    m = _PATH_RE.fullmatch(path or "")
     if not m:
         raise WriteRefused("write refused: path must be /act_<id>/<edge>")
     if m.group(1) != act:
@@ -401,3 +401,73 @@ def check_form_create(page_id: str, method: str, path: str, params: dict | None,
         if not (isinstance(content, list) and content and all(isinstance(x, str) and x.strip() for x in content)):
             raise WriteRefused("write refused: context_card.content must be a list of texts")
     return FORM_EDGE
+
+
+# ───────────────────── правка существующего объекта (ACL-1800) ─────────────────────
+#
+# Отдельный, узкий список — НЕ часть политики создания выше. Человек включает и
+# выключает кампании, меняет бюджет и ставку из дешборда; робот сам ничего не
+# включает. Разрешено: POST на id УЖЕ существующего объекта (никогда на ребро,
+# никогда не создание) ровно с одним из трёх полей. Ничего больше, никогда DELETE.
+
+#: Поля, которые можно менять у существующего объекта.
+OBJECT_FIELDS = frozenset({"status", "daily_budget", "bid_amount"})
+#: Допустимые значения `status` (в отличие от создания, ACTIVE тут можно —
+#: но только по команде человека; решение о подтверждении — выше, в `commands`).
+OBJECT_STATUSES = frozenset({"ACTIVE", "PAUSED"})
+#: Сумма — целое число мелких единиц валюты, не больше 15 знаков.
+_AMOUNT_RE = re.compile(r"[1-9][0-9]{0,14}", re.ASCII)
+_OBJECT_PATH_RE = re.compile(r"/([1-9][0-9]{4,})\Z", re.ASCII)
+_MAX_AMOUNT = 10 ** 15
+
+
+def policy_for_commands(act: str) -> dict:
+    """Политика правок для помощника страницы: без рёбер создания вовсе.
+
+    Помощник с такой политикой отказывает любому пути, кроме `/<id объекта>`;
+    а помощник создателя (`policy_for_page`) отказывает пути объекта.
+    """
+    return {
+        "act": act,
+        "edges": {},
+        "paused_required": [],
+        "files": {},
+        "forbidden": sorted(FORBIDDEN_ANYWHERE),
+        "json_keys": [],
+        "opt_out_keys": [],
+        "dof_features": [],
+        "object_update": {"fields": sorted(OBJECT_FIELDS), "statuses": sorted(OBJECT_STATUSES)},
+    }
+
+
+def amount_ok(value: Any) -> bool:
+    """Положительное целое в мелких единицах: int или строка из цифр; не bool, не float."""
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return 0 < value < _MAX_AMOUNT
+    return isinstance(value, str) and _AMOUNT_RE.fullmatch(value) is not None
+
+
+def check_object_update(method: str, path: str, params: dict | None,
+                        files: dict | None = None) -> str:
+    """Проверить правку существующего объекта. Возвращает имя поля; иначе `WriteRefused`."""
+    if method != "POST":
+        raise WriteRefused(f"write refused: method {method!r} (only POST; never DELETE)")
+    if not _OBJECT_PATH_RE.fullmatch(path or ""):
+        raise WriteRefused("write refused: path must be the id of an existing object "
+                           "(no edges, no creation)")
+    if files:
+        raise WriteRefused("write refused: no files in an object update")
+    params = dict(params or {})
+    if len(params) != 1:
+        raise WriteRefused("write refused: exactly one field per update")
+    (key, value), = params.items()
+    if key in FORBIDDEN_ANYWHERE or key not in OBJECT_FIELDS:
+        raise WriteRefused(f"write refused: field {key!r} is not allowed in an object update")
+    if key == "status":
+        if not isinstance(value, str) or value not in OBJECT_STATUSES:
+            raise WriteRefused("write refused: status may only be ACTIVE or PAUSED")
+    elif not amount_ok(value):
+        raise WriteRefused(f"write refused: {key} must be a positive whole number in minor units")
+    return key
