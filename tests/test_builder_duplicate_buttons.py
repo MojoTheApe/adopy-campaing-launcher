@@ -52,9 +52,12 @@ def page(browser):
     ctx.close()
 
 
-def _open_first(p):
+def _open_first(p, level="campaign"):
     add(p)
     p.locator(".cbd-camp-row").first.click()
+    # ACL-1769: форма в правой колонке показывает один раздел за раз.
+    if level != "campaign":
+        p.locator(f".cbd-seg [data-level='{level}']").click()
 
 
 def _slot(p):
@@ -62,7 +65,7 @@ def _slot(p):
 
 
 def test_an_ad_has_a_visible_duplicate_and_the_add_button_reads_plus_ad(page):
-    _open_first(page)
+    _open_first(page, "ad")
     row = _slot(page).locator(".cb-ad-row").first
     dup = row.locator(".cb-dup-ad-btn")
     assert dup.inner_text() == "Duplicate"
@@ -77,7 +80,8 @@ def test_duplicate_campaign_sits_under_the_ads_and_opens_the_copy(page):
     _open_first(page)
     slot = _slot(page)
     assert slot.locator(".cb-slot-header .cb-dup-slot-btn").count() == 0, "значок в шапке вернулся"
-    btn = slot.locator(".cb-ads-section ~ .cb-dup-slot-btn, .cb-slot-main .cb-dup-slot-btn")
+    # ACL-1769: кнопка теперь в разделе Campaign, а не под объявлениями.
+    btn = slot.locator(".cb-lvl-campaign .cb-dup-slot-btn")
     assert btn.count() == 1 and btn.inner_text() == "⧉ Duplicate campaign"
     rows_before = page.locator(".cbd-camp-row").count()
     btn.click()
@@ -91,7 +95,8 @@ def test_no_repeated_buttons_in_the_drawer(page):
     add_campaign = page.locator(".cbd-host .cb-add-btn")
     assert add_campaign.count() == 0 or not add_campaign.first.is_visible(), \
         "«+ Add Campaign» в ящике рядом с «+ Campaign»"
-    assert page.locator(".cbd-add[data-act='add-here']").first.is_visible(), "«+ Campaign» пропал"
+    # ACL-1769: «+» стоит в строке аккаунта.
+    assert page.locator("[data-act='add-here']").first.is_visible(), "«+» у аккаунта пропал"
 
 
 def test_the_country_page_keeps_add_campaign():
