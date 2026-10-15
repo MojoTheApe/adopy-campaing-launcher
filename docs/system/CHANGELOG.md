@@ -1,5 +1,13 @@
 # System history
 
+## Check plan: "A or B" terms are split again when Meta refuses the work lookups - ACL-1933
+
+- Fixes an ACL-1920 regression. When Meta refused the work positions / work employers lookups, a
+  term like "Alpari Group or Plus500" was reported as "could not be checked there" and blocked
+  Publish, even though both parts are ordinary interests. Such a term is now split into its parts
+  as before: if every part resolves, the split is offered for one-time confirmation; if a part could
+  only be found through a refused lookup, the term stays unknown with that part's reason.
+
 ## Videos over 200 MB upload in chunks through the Graph API - ACL-1891
 
 A video up to 1536 MB can now be published PAUSED through the API path. Files over 200 MB use Meta's resumable upload (start, transfer in chunks of at most 8 MB, finish); the server reads only chunk-sized slices from disk, so memory stays flat. A failed chunk resumes from the offset Meta reports; an unknown result is reconciled by readback on the title tag and never uploads the video twice, and a re-run reuses the finished video. Chunk calls are counted in the call estimate, and a plan that cannot fit the 250-call ceiling is refused up front. The closed write policy gained exactly the three upload phases in both layers (Python and page helper), strictly validated. The `Media within Meta limits` rule now allows video up to 1536 MB. Details and the live-check list: `docs/system/PROJECT.md`, ACL-1891 ([issue](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/891)).

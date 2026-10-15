@@ -487,7 +487,9 @@ class TermResolver:
             note = f"Meta refused the {blind} lookup, so '{term}' could not be checked there"
             if not ranked:
                 # Могло найтись только через отказанный поиск: не «не найдено», а «не проверено».
-                return {"term": term, "state": "unknown", "picks": [], "candidates": [], "reason": note}
+                # blind: «A or B» всё равно разбиваем (ACL-1933) - части могут найтись целиком.
+                return {"term": term, "state": "unknown", "picks": [], "candidates": [], "reason": note,
+                        "blind": True}
             stale = f"{stale}; {note}" if stale else note
         return {"term": term, "state": "unresolved", "picks": [], "candidates": ranked, "reason": stale}
 
@@ -506,7 +508,7 @@ class TermResolver:
         self._skip_acc = set()
         res = self._find(term)
         parts = split_term(term)
-        if res["state"] == "unresolved" and parts:
+        if parts and (res["state"] == "unresolved" or res.get("blind")):
             subs = [self._find(p) if norm(p) != key else res for p in parts]
             if any(s["state"] == "unknown" for s in subs):
                 why = next((s["reason"] for s in subs if s["state"] == "unknown" and s.get("reason")),

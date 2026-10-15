@@ -226,3 +226,24 @@ def test_warnings_are_per_draft_but_the_no_retry_memory_is_shared(tmp_path):
     new = c.attempts[len(asked):]
     for t in OPTIONAL:
         assert t not in new, f"{t} asked again"
+
+
+# ───────────────────────────── ACL-1933: «A or B» при отказе в поиске работы ─────────────────────────────
+
+WORK = ["adworkposition", "adworkemployer"]
+
+
+def test_a_split_term_resolves_through_its_parts_when_work_lookups_are_refused(tmp_path):
+    c = RefusingSearch(refuse=WORK, interests={"Alpari Group": [{"id": "1", "name": "Alpari Group"}],
+                                               "Plus500": [{"id": "2", "name": "Plus500"}]})
+    res = _one(_resolver(c, tmp_path), "Alpari Group or Plus500")
+    assert res["state"] == "pending" and res.get("split") is True and res["picks"] == []
+    assert res["suggested"]["type"] == tr.SPLIT and res["suggested"]["name"] == "Alpari Group + Plus500"
+    assert {(p["type"], p["id"]) for p in res["suggested"]["picks"]} == {("interests", "1"), ("interests", "2")}
+
+
+def test_a_split_part_that_only_a_refused_lookup_could_find_makes_the_term_unknown_with_its_reason(tmp_path):
+    c = RefusingSearch(refuse=WORK, interests={"Plus500": [{"id": "2", "name": "Plus500"}]})
+    res = _one(_resolver(c, tmp_path), "Marketing Manager or Plus500")
+    assert res["state"] == "unknown" and res["picks"] == []
+    assert "'Marketing Manager' could not be checked" in res["reason"]
