@@ -562,7 +562,7 @@ def test_mutating_the_gate_makes_its_test_fail(tmp_path, old, new, label):
 def test_the_publish_buttons_are_wrapped_by_the_gate_and_the_originals_are_untouched():
     page = TPL.read_text(encoding="utf-8")
     assert "window.cbPreflightGate([{ form: form, slots: slots }], function () { origOne(form); });" in page
-    assert "window.cbPreflightGate(items, function () { origAll(onProgress, picked); });" in page
+    assert "window.cbPreflightGate(items, function () { origAll(onProgress, picked, onlyKeys); });" in page
     assert "origAll = window.cbPublishAll, origOne = window.cbPublish" in page
     assert page.index("window.cbPublish = function(form) {") < page.index("origAll = window.cbPublishAll")
     # серверные проверки идут только по кнопке и перед Publish: ни таймера, ни события ввода
