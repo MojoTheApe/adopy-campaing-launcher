@@ -9152,9 +9152,11 @@
         "worktree": "C:\\wk-1819p",
         "id": "560cb9234762481d9a2500cdb4de9e38",
         "issue": 819,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-15T07:19:05+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 821,
+        "report": "# Fix of the two CI failures on ACL-1819 (PR 821), head 7cde3c4c\n- tests/test_acl1819_preflight.py:582: the backslash path is test data for the name function (it must take the basename of Windows paths), so the line now carries `# linux-ok: ...`. test_no_unmarked_test_file_uses_windows_only_apis passes.\n- src/web/templates/report.html:5704 (cbPreflight.creativeNumber): the Cyrillic x in the size regex is now the escape `[x\\u0445\\xd7]`, same behaviour; Python AdDraft parity regex keeps the same set. test_no_russian_text_reaches_the_screen passes.\n- Tests run locally: the two guard tests plus tests/test_acl1819_preflight.py: 80 passed.\n\n## Merge notes from the previous refresh (head a957986b)\n- Merged origin/main (080df2d8) into the branch. Conflicts: (1) src/fb_api/creator.py resolve_pixel: main (final 1775/1769 form) wins. (2) report.html pfAsk: kept 1819's cbPreflightWarnHtml lines plus main's `if (mine)` line. preflight_rules.json needed no regeneration.\n- cbPublishAll fix: the 1819 wrapper took only (onProgress, picked), so 1826's Retry call cbPublishAll(showQueue, picked, keys) lost its onlyKeys and would retry every form. The wrapper now accepts onlyKeys, skips other forms when building gate items and passes onlyKeys to the original, so Retry goes through the same pre-flight gate. The 1819 source-text test was updated to the new call text.\n- Aligned 1766 wording: test_page_not_on_the_account now expects main's message \"... is not among the pages this ad account can advertise from (N found)\" instead of \"cannot advertise\".\n- Earlier tests (not browser): test_acl1819_preflight, test_acl1775_*, test_acl1761_*, test_acl1826_*, test_acl1604_preflight: 460 passed. Node preflight_gate_harness: ok."
       }
     },
     "tasks": {
