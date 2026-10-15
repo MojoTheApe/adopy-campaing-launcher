@@ -17335,7 +17335,7 @@
             "session": "acl_delivery"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-B71E",
         "coordinator": "Coordinator-DLV15",
         "handoff": {
@@ -17353,7 +17353,8 @@
           "report": "# ACL-1923 final factual process handoff\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/941\n\n- Worker: Worker-B71E, actual session `acl_delivery`; Coordinator-DLV15.\n- Fresh claim: `43a1c516803741cd99083c85dedb1894`, verified In Progress on\n  2026-10-15 at 22:44:43 UTC using exact current no-stage config and pinned e775.\n  The earlier unused stopped parent claim is retained and was not resumed.\n- Original branch/worktree: `codex/acl-1923-delivery-flow`,\n  `/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-delivery-flow`.\n- Exact base: `7d1ad46c14ddd2e08e507e33248af50af42df026`.\n- Final head: `1006c31edb6df71af4444a670d1ec9492414cccf`.\n- Final tree: `6bf82e2bdb173d34a064d14b6d2525403ddd3b8d`.\n- Frozen full Issue process scope:\n  `b0101848e5d32a0f9893c621b441512adc87b90efc670f3efd927d592d734386`.\n  Full original requirements/history remain, followed by the verified original\n  acceptance and immutable source/activation/package/native receipt proof.\n  Snapshots: `/tmp/acl-1923-frozen-issue.json`,\n  `/tmp/acl-1923-frozen-body.md`.\n\nOnly three normal repository Markdown files changed: POST_MAIN_DELIVERY.md,\nPROCESS_INSTRUCTIONS.md and CHANGELOG.md. The former records actual activation,\npreserved history and scoped published delivery; the diagram references the active\ntemporary route; the history entry distinguishes the original source and actual\noperational completion. No code/config/CI/runtime/system or contract change.\nMaster/Tracker companions are already merged, verified and normally completed.\n\nActual operational proof existed before this claim: migration applied at\n22:29:04 UTC, maintained resume at 22:30:13 UTC, immutable release at 22:38:46 UTC,\npublished-package Windows verification at 22:41:29 UTC, exact scoped receipt at\n22:42:07 UTC, fresh maintained board at 22:42:27 UTC. The first automatic wakeup\nstopped with temporary exit75 while cutover maintenance was held; the successful\n38817558595 run was agent-dispatched recovery under the unchanged 11:47:43 UTC\nrequest, without another human approval. Neither isolated proof nor this report\nasserts employee rollout or live advertising/Multilogin acceptance.\n\nValidation:\n\n- 32 existing process-route regressions passed.\n- Instruction checker: 17 files, 63 local Markdown links, all passed.\n- Secret scan and diff checks passed; actual pinned Master draft structure valid.\n- Complete pinned immutable proof: exactly three mode100644 Markdown paths,\n  diff digest `8a59151f51be97299fdbdf7454e3cfef7b5d5a6d7d63c5cdf7ef81b0c63ed80b`;\n  `/tmp/acl-1923-process-proof.json`. Both CI and installer selectors return\n  `process-instructions-only`. Product/installer jobs are intentionally skipped\n  by this already-adopted proof; no new release authority is created.\n- Native CI38819534246 passed tooling, Process instructions and ACL verification.\n- Native descriptor38819534662, tracker-link38819534799 and installer aggregate\n  38819534431 passed on the same head. The ready event may start only a fresh\n  standalone linkage check, which must also pass before admission.\n\nThe Issue body/title/non-status labels and source are frozen before independent\nreview. Further check/handoff updates belong in comments. This report attests\nimplementation/self-check, not an independent verdict. A genuine Reviewer N61D\nmust acquire the source lane, review the complete original parent scope and\nexact head/base/tree, record actual approval and admit the one-task process PR.\nRoot owns normal `check-merge`, actual main merge and reviewed `merged` completion;\nthe implementing Worker must not self-review or merge. No direct final label,\nnon-code completion shortcut, redundant package cycle or status-only completion."
         },
         "pr": 941,
-        "queued_at": "2026-10-15T22:50:49+00:00"
+        "queued_at": "2026-10-15T22:50:49+00:00",
+        "reviewer": "Reviewer-N61D"
       },
       "313": {
         "implementers": [],
@@ -22099,8 +22100,7 @@
       920,
       816,
       309,
-      827,
-      923
+      827
     ],
     "review": null,
     "history": [
@@ -45706,6 +45706,13 @@
         "issue": 923,
         "pr": 941,
         "actor": "Worker-B71E"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-15T22:51:49+00:00",
+        "pr": 941,
+        "lane": "55c7cfe569ec42e3882475a0bb4b9275",
+        "actor": "Reviewer-N61D"
       }
     ],
     "policy": {
@@ -50094,7 +50101,21 @@
       "started_at": "2026-10-15T11:47:02+00:00",
       "ineligible": {}
     },
-    "source_reviews": {},
+    "source_reviews": {
+      "941": {
+        "id": "55c7cfe569ec42e3882475a0bb4b9275",
+        "pr": 941,
+        "issues": [
+          923
+        ],
+        "actor": "Reviewer-N61D",
+        "session": "review_acl",
+        "coordinator": "Coordinator-DLV15",
+        "started_at": "2026-10-15T22:51:49+00:00",
+        "state": "reviewing",
+        "route": "process"
+      }
+    },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
   },
   "maintenance_history": [
