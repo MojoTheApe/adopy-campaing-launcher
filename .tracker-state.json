@@ -9131,6 +9131,18 @@
         "state": "implementing",
         "started_at": "2026-10-15T06:24:37+00:00",
         "from_status": "status:todo"
+      },
+      "799": {
+        "actor": "Worker-RN1799",
+        "session": "wrn1799-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1799-country-workbench",
+        "worktree": "C:\\wk-rn1799",
+        "id": "f534b8b04e314798bd66e1bc27c3c69c",
+        "issue": 799,
+        "state": "implementing",
+        "started_at": "2026-10-15T06:30:48+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -12851,10 +12863,14 @@
           {
             "actor": "Worker-RM1799",
             "session": "wrm1799-20261015"
+          },
+          {
+            "actor": "Worker-RN1799",
+            "session": "wrn1799-20261015"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-RM1799",
+        "state": "implementing",
+        "worker": "Worker-RN1799",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
           "actor": "Worker-RM1799",
@@ -12874,13 +12890,6 @@
         "queued_at": "2026-10-15T04:26:35+00:00",
         "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e677f638 (ACL-1812 warm sessions, ACL-1826, ACL-1775 Instant Forms, ACL-1815 rules evidence; PR 919 -> 922). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
         "return_operation": {
-          "id": "1c8396f8dfeb464c93c786677e36dd67",
-          "actor": "Coordinator-C0930A",
-          "session": "coord_c0930a_1009",
-          "report": "# Return for a dependency refresh\n\nMain now also contains batch e677f638 (ACL-1812 warm sessions, ACL-1826, ACL-1775 Instant Forms, ACL-1815 rules evidence; PR 919 -> 922). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
-        },
-        "reviewer": "Reviewer-R1799M",
-        "return": {
           "id": "1c8396f8dfeb464c93c786677e36dd67",
           "actor": "Coordinator-C0930A",
           "session": "coord_c0930a_1009",
@@ -15963,6 +15972,10 @@
       "Reviewer-RRN819": {
         "session": "rrn819-20261015",
         "role": "Reviewer"
+      },
+      "Worker-RN1799": {
+        "session": "wrn1799-20261015",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -37856,6 +37869,13 @@
           "report": "# Return for a dependency refresh\n\nMain now also contains batch e677f638 (ACL-1812 warm sessions, ACL-1826, ACL-1775 Instant Forms, ACL-1815 rules evidence; PR 919 -> 922). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-15T06:30:48+00:00",
+        "issue": 799,
+        "claim": "f534b8b04e314798bd66e1bc27c3c69c",
+        "actor": "Worker-RN1799"
       }
     ],
     "policy": {
