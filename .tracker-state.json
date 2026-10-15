@@ -14566,7 +14566,7 @@
       },
       "516": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       }
     },
     "actors": {
@@ -38401,6 +38401,12 @@
         "event": "archived",
         "at": "2026-10-15T07:41:31+00:00",
         "issue": 432,
+        "reason": "Closed in the Playwright backlog cleanup 2026-10-15: we are moving campaign creation and account reads to the Meta API (ACL-1760/1761/1883), so this Ads Manager UI/Playwright-only work is no longer relevant. Restore if the UI path comes back."
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-15T07:43:25+00:00",
+        "issue": 516,
         "reason": "Closed in the Playwright backlog cleanup 2026-10-15: we are moving campaign creation and account reads to the Meta API (ACL-1760/1761/1883), so this Ads Manager UI/Playwright-only work is no longer relevant. Restore if the UI path comes back."
       }
     ],
