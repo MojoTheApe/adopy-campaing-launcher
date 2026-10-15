@@ -41806,7 +41806,9 @@
         "session": "rv1015h-644",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-15T07:10:33+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "Not reviewable as is: PR #644 targets the old stage branch (v1 flow) and is 333 commits behind main; src/web/profile_slots.py changed heavily on main. The owner-requested feature (an already-open Multilogin profile needs no new memory) is still missing on main. Needs a port onto current main as a new PR with base main, then hand off again.",
+        "keep_lane": false
       }
     }
   }
