@@ -14817,7 +14817,7 @@
             "session": "acl_delivery"
           }
         ],
-        "state": "approved",
+        "state": "returning_approval",
         "worker": "Worker-B71E",
         "coordinator": "Coordinator-DLV15",
         "handoff": {
@@ -14836,7 +14836,19 @@
         },
         "pr": 925,
         "queued_at": "2026-10-15T08:18:01+00:00",
-        "reviewer": "Reviewer-N61D"
+        "reviewer": "Reviewer-N61D",
+        "return_operation": {
+          "id": "8a44bd5cb1e44da29fbd5e9273ec77ad",
+          "actor": "Coordinator-DLV15",
+          "session": "delivery_flow_root",
+          "report": "Owner requested continuing the already authorized ACL delivery-flow activation on2026-10-15. Source PR925 remains Approved at82fd869c against old main080df2d8, but actual main advanced to3ee7c6d9c7a394ecec9f0889805fadb188b3aab7 and GitHub now reports conflicts. Preserve the full task924 scope, source branch, prior successful CI/independent review as history and all unrelated owners. Return only our own approved source to its actual author for current-main reconciliation, affected checks, hosted CI and fresh independent approval. Do not edit the frozen source as Coordinator or reuse old-base approval for changed content. Initial admission still uses the actual old Stage policy."
+        },
+        "return": {
+          "id": "8a44bd5cb1e44da29fbd5e9273ec77ad",
+          "actor": "Coordinator-DLV15",
+          "session": "delivery_flow_root",
+          "report": "Owner requested continuing the already authorized ACL delivery-flow activation on2026-10-15. Source PR925 remains Approved at82fd869c against old main080df2d8, but actual main advanced to3ee7c6d9c7a394ecec9f0889805fadb188b3aab7 and GitHub now reports conflicts. Preserve the full task924 scope, source branch, prior successful CI/independent review as history and all unrelated owners. Return only our own approved source to its actual author for current-main reconciliation, affected checks, hosted CI and fresh independent approval. Do not edit the frozen source as Coordinator or reuse old-base approval for changed content. Initial admission still uses the actual old Stage policy."
+        }
       },
       "45": {
         "implementers": [],
@@ -16781,6 +16793,10 @@
       "Reviewer-RV1015R": {
         "session": "rv1015r-887",
         "role": "Reviewer"
+      },
+      "Coordinator-DLV15": {
+        "session": "delivery_flow_root",
+        "role": "Coordinator"
       }
     },
     "completed": {
