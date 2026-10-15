@@ -14501,7 +14501,7 @@
             "session": "wk_w1886m_1014"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-W1886M",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -14520,7 +14520,7 @@
         },
         "pr": 887,
         "queued_at": "2026-10-14T09:56:34+00:00",
-        "review_report": "# ACL-1886 / PR887 review return - refresh branch only\n\nContent review of head 8f3b07ac5e86e6a29f1a53da89477b88f54d4660 (tree 7ce8602fb78ee5e8603e33a727c85ab407b9ff2f, base 7cee2857d4b374bc564c5ca84b9f6ede69f96430): approved, no blocking findings. Affected tests 159 passed; current-head GitHub checks green.\n\nReturn reason is ONLY the baseline: record-review refused with \"Source review must use the current main baseline\". Main is now df6c2e8ac491aa1d03b10ba87641d1d785685c92. The 4 newer commits (ACL-1892 process tooling: delivery-check.yml, .workflow/**, AGENTS.md, delivery.json, docs/repository/*, scripts/tracker_ci_evidence.py, tracker/engine.json, two process tests) do not overlap the PR's 8 files. Please merge/refresh current main into the branch, re-run affected checks, and hand off again; the reviewer will re-review only the delta.\n\nOptional non-blocking nits: add a blank line before the new \"## Safe operation context for Graph read failures\" heading in docs/system/CHANGELOG.md; reduce the 3 blank lines after _read_context in src/fb_api/graph.py to 2. Optionally name account_spend_api._failure in the PROJECT.md limitation.",
+        "review_report": "# Return for a main refresh\n\nMain moved to 3ee7c6d9 (batch with ACL-1819, 1799, 1814; promotion PR 928). The source approval is stale against it. Required: merge current main into the branch (merge, no rebase; a trial merge is clean), re-run the affected tests, hand off again for a delta review. No scope change.",
         "reviewer": "Reviewer-R1886M",
         "return_operation": {
           "id": "2ed7c113f8e34d4bb109745d97e2c68b",
@@ -40364,6 +40364,18 @@
         "at": "2026-10-15T10:13:16+00:00",
         "issue": 163,
         "reason": "Owner decision 2026-10-15: not scheduled, remove from backlog. Evidence log serve_9199_1405.log no longer exists."
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-15T10:13:39+00:00",
+        "issue": 886,
+        "operation": {
+          "id": "2ed7c113f8e34d4bb109745d97e2c68b",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "report": "# Return for a main refresh\n\nMain moved to 3ee7c6d9 (batch with ACL-1819, 1799, 1814; promotion PR 928). The source approval is stale against it. Required: merge current main into the branch (merge, no rebase; a trial merge is clean), re-run the affected tests, hand off again for a delta review. No scope change."
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -40776,50 +40788,6 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-14T07:17:24+00:00"
-      },
-      "886": {
-        "issue": 886,
-        "pr": 887,
-        "branch": "codex/acl-1886-graph-error-context",
-        "head_sha": "d2e9a26a3c3a25cb3371f0be8a1f34d328ba7f9d",
-        "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-        "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-        "scope": "291706aa97fea07f175753abc951ee231d86a7ea2d52cd679f94cf2db3f7bf9d",
-        "review": {
-          "kind": "independent-review",
-          "implementer": "Worker-W1886M",
-          "reviewer": "Reviewer-R1886M",
-          "review_session": "rev_r1886m_1014",
-          "execution_lane": "2b781db97eb347d4a8728baaabf1758b",
-          "head_sha": "d2e9a26a3c3a25cb3371f0be8a1f34d328ba7f9d",
-          "base_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-          "tree_sha": "d139c733118cfc23538926229ffe92195f8b1381",
-          "verdict": "approved",
-          "report": "# ACL-1886 / PR887 independent source review - 8f3b07ac\n\nReviewer-R1886M / rev_r1886m_1014 (Coordinator-M1011A), not the author (Worker-SR1012). Lane a0e02e10f98a4486bb617a65f75b0759 obtained by review-takeover from stopped Reviewer-RS1012 lane c86db5aa (idle ~12h, no review recorded; owner reassignment 2026-10-14).\n\nExact head 8f3b07ac5e86e6a29f1a53da89477b88f54d4660, tree 7ce8602fb78ee5e8603e33a727c85ab407b9ff2f, reviewed base 7cee2857d4b374bc564c5ca84b9f6ede69f96430. NOTE: main is now df6c2e8ac491aa1d03b10ba87641d1d785685c92 (4 newer commits, ACL-1892 process tooling: delivery-check.yml, .workflow/**, AGENTS.md, delivery.json, docs/repository/*, scripts/tracker_ci_evidence.py, tracker/engine.json, two process tests). They do not overlap any of the PR's 8 files (src/fb_api/graph.py, tests, fixture, bench catalogue, docs/system). PR reported MERGEABLE.\n\nReviewed full issue 886 body, git diff 7cee2857..HEAD (8 files, +262/-1), all callers of GraphError/GraphClient.get/get_all in src (only inside graph.py; meta_campaign_agent uses separate MetaGraphError).\n\nFindings: 0 blocking.\n- _read_context copies no request data: fixed method GET, closed operation set, search_type only from a 3-literal allowlist; exact path matches, re.fullmatch with ASCII [0-9]{1,32}; non-str or >128-char paths and unhashable type values fail closed to unknown.\n- details.update(_read_context) runs after error_details, so response fields cannot spoof method/operation/search_type (tested in reply, endpoint and error objects).\n- Policy/rate/checkpoint/190 reacquire/pagination/pacing/budget code untouched; tests assert unchanged request counts and stop semantics.\n- Fixture is anonymized (generic Graph10 error, host, credentials mode). Docs state live permission cause unknown and that callers replacing exception text need their own integration (outer account_spend_api._failure is documented in the issue as not covered).\nNon-blocking nits: docs do not name account_spend_api._failure explicitly; missing blank line before the new CHANGELOG heading; extra blank lines after _read_context.\n\nTests run (affected only): tests/test_acl1886_graph_error_context.py tests/test_acl1756_fb_api.py tests/test_the_api_stop_is_asked_first.py tests/test_bench_catalogue.py -> 159 passed. Current-head GitHub checks all pass (linux 3.13 shards 1-3, windows 3.13, tooling, process, ACL verification, descriptor, installer classify/verification, tracker-link); installer build jobs skipping by classification.\n\nVerdict: approved. Does not claim the live permission cause is fixed or explained.\n\n## Delta re-review (v2) - head d2e9a26a3c3a25cb3371f0be8a1f34d328ba7f9d\n\nReviewer-R1886M / rev_r1886m_1014, new lane 2b781db97eb347d4a8728baaabf1758b. Head d2e9a26a3c3a25cb3371f0be8a1f34d328ba7f9d, tree d139c733118cfc23538926229ffe92195f8b1381, base/current main df6c2e8ac491aa1d03b10ba87641d1d785685c92 (verified unchanged just before recording). Author Worker-W1886M refreshed the branch: merge 20726b2a (parents 8f3b07ac and df6c2e8a; `git show --cc` shows no hand-resolved hunks) plus one spacing-nit commit.\n- `git diff df6c2e8a d2e9a26a --stat` is exactly the 8 PR files (+262/-1). Production graph.py is the previously reviewed 23-line addition with one blank line removed.\n- `git diff 8f3b07ac d2e9a26a -- src tests docs/system` shows only: the 2 spacing nits (blank line before the CHANGELOG heading, one blank line removed after _read_context) plus two test-file hunks (test_acl_ci_workflows.py, test_master_adoption.py) that come from main ACL-1892 and are not in the PR diff against main.\n- Affected tests re-run (graph error context, acl1756 fb_api, api-stop-first, bench catalogue): 159 passed.\n- Current-head GitHub checks all pass (ACL verification, tooling, installer classify/verification, process, descriptor, linux 3.13 shards 1-3, tracker-link, windows 3.13); installer build jobs skipping by classification.\nVerdict unchanged: approved, no blocking findings.\n",
-          "main_sha": "df6c2e8ac491aa1d03b10ba87641d1d785685c92",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "issues": [
-            886
-          ],
-          "recorded_at": "2026-10-14T10:18:36+00:00",
-          "issue_scopes": {
-            "886": "291706aa97fea07f175753abc951ee231d86a7ea2d52cd679f94cf2db3f7bf9d"
-          }
-        },
-        "lane": {
-          "id": "2b781db97eb347d4a8728baaabf1758b",
-          "pr": 887,
-          "issues": [
-            886
-          ],
-          "actor": "Reviewer-R1886M",
-          "session": "rev_r1886m_1014",
-          "coordinator": "Coordinator-M1011A",
-          "started_at": "2026-10-14T10:01:32+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-14T10:18:59+00:00"
       },
       "783": {
         "issue": 783,
