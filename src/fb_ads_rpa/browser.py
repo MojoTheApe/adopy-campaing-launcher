@@ -1873,7 +1873,10 @@ class MultiloginDirectCDPProvider:
         Раньше у них были свои, с разными аргументами, и они расходились:
         дешборд говорил «закрыт», RPA — «запущен», и человеку выходил голый
         `RuntimeError`. Оба написания папки (длинное и 8.3) проверяются
-        здесь же; папка не найдена (`""`) — ищем по id профиля.
+        здесь же; папка не найдена (`""`) — ищем по id профиля. Если Mimic
+        запущен с папкой 8.3 (`PROFIL~1`), id в его командной строке может не
+        быть — тогда профиль найдёт уже отказ MLX «can't lock» при запуске
+        (`MLX_LOCK_NO_RESTART`), с тем же текстом для человека.
         """
         if not user_data_dir:
             # Пустая строка совпала бы с любой командной строкой Mimic.
@@ -2204,8 +2207,16 @@ class ReopenCancelled(RuntimeError):
     """Stop нажат, пока ждали освобождения профиля: профиль не поднят (ACL-1606)."""
 
 
+#: ACL-1184: `where` отказа запуска без перезапуска, когда Multilogin держит профиль.
+MLX_LOCK_NO_RESTART = "mlx_lock_no_restart"
+
+
 def _start_still_held(exc: BaseException) -> bool:
     """Запуск отказан, потому что Multilogin ещё держит профиль (ACL-1606)."""
+    if (isinstance(exc, profile_trouble.ProfileStop) and exc.code == profile_trouble.OPEN_BY_HAND
+            and exc.detail == MLX_LOCK_NO_RESTART):
+        # ACL-1184: запуск без перезапуска отказывает этой остановкой, а не текстом MLX.
+        return True
     msg = str(exc).lower()
     return any(mark in msg for mark in (
         "already running", "profile_already_running", "browser process is running",
@@ -2366,10 +2377,9 @@ class MultiloginAttachOnlyProvider:
                     or "profile_already_running" in msg
                 )
                 if lock_conflict and not allow_restart:
-                    raise RuntimeError(
-                        f"{account_label}: profile is already running; no stop or restart was performed. "
-                        "Close it in Multilogin Desktop before opening it with automation."
-                    ) from exc
+                    # ACL-1184: тот же отказ «открыт руками», что и в `open`, — не голый
+                    # RuntimeError: дешборд показывает по нему `hand_message()`.
+                    raise _open_by_hand(profile_id, account_label, MLX_LOCK_NO_RESTART) from exc
                 if lock_conflict and not _robot_profile(profile_id, udd):
                     # ACL-1320: MLX держит профиль, а робот его не поднимал —
                     # значит, открыт руками. Не останавливаем.
@@ -2493,7 +2503,9 @@ class MultiloginAttachOnlyProvider:
             if not allow_restart:
                 # ACL-1184: не голый RuntimeError, а остановка «открыт руками» —
                 # дешборд показывает по ней `hand_message()` с выходом.
-                raise _open_by_hand(profile_id, account_label, "no_restart")
+                raise _open_by_hand(profile_id, account_label,
+                                    "no_restart; robot profile" if _robot_profile(profile_id, udd)
+                                    else "no_restart")
             if not _robot_profile(profile_id, udd):
                 if reopen_by_hand:
                     return self._reopen_hand_opened(entry, account_label, profile_id, udd,

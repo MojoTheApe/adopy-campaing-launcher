@@ -602,6 +602,8 @@ def start_read(
 
             # ACL-1826: вход в прокси (ERR_INVALID_AUTH_CREDENTIALS) читается одной фразой.
             text, code = _mlx.humanize(exc, "", account)
+            if _hand_refusal(exc, account):   # ACL-1184
+                text, code = hand_message(), HAND_OPEN_CODE
             done = SpendReading(
                 account=account, date_from=date_from, date_to=date_to,
                 state="failed", error=text or f"{type(exc).__name__}: {exc}", error_code=code,
@@ -1359,7 +1361,11 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
             # ACL-1812 (B1-bis): и кнопка «open profile» руками открытое окно не трогает.
             return False, CodedMessage(hand_message(), HAND_OPEN_CODE)
     except Exception as exc:
-        return False, f"Could not check open profiles: {exc}. Nothing was launched."
+        if udd is not None:
+            return False, f"Could not check open profiles: {exc}. Nothing was launched."
+        # Без папки до ACL-1184 проверки не было вовсе: сбой проверки не мешает
+        # запуску, а окно, открытое руками, остановит сам запуск (`open`).
+        log.warning("%s: could not check open profiles (%s); starting through Multilogin", who, exc)
 
     # ACL-1812 (B1-bis): обе кнопки («open profile» на строке и Connect) идут через общий журнал.
     from src.fb_api import stop_log as _stop_log

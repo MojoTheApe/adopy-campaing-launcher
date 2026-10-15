@@ -153,3 +153,58 @@ def test_read_when_the_checks_disagree_shows_the_way_out(world):
     assert str(refused.value) == sp.hand_message()
     assert refused.value.code == sp.HAND_OPEN_CODE
     assert world.ev == []
+
+
+# ── Multilogin держит профиль, а проверка процессов его не видит ─────────────
+#
+# Ревью ACL-1184 (HIGH): Mimic с папкой 8.3 может не нести id профиля в
+# командной строке, и без найденной папки проверка процессов промолчит. Тогда
+# профиль находит отказ MLX «can't lock» при запуске — и это тот же отказ
+# «открыт руками», а не голый RuntimeError.
+
+@pytest.fixture
+def mlx_holds_it(world, monkeypatch):
+    import types
+
+    import src.meta_campaign_agent.multilogin_config as cfg_mod
+    import src.meta_campaign_agent.multilogin_launcher as launcher_mod
+
+    class Launcher:
+        def __init__(self, ml):
+            pass
+
+        def start_profile(self, folder_id, profile_id, headless=False):
+            world.ev.append("start")
+            raise launcher_mod.MultiloginLauncherError("Multilogin: can't lock profile")
+
+        def stop_profile(self, *a, **k):
+            world.ev.append("stop")
+
+    monkeypatch.setattr(launcher_mod, "MultiloginLauncher", Launcher)
+    monkeypatch.setattr(cfg_mod, "get_multilogin_instance", lambda *a, **k: SimpleNamespace())
+    monkeypatch.setattr(world.prov, "_start_via_mlx_api",
+                        types.MethodType(br.MultiloginAttachOnlyProvider._start_via_mlx_api, world.prov))
+    monkeypatch.setattr(sp, "_mlx_profile_dir", lambda *a, **kw: None)
+    world.running = [False]
+    return world
+
+
+def test_connect_when_multilogin_holds_the_profile_shows_the_way_out(mlx_holds_it):
+    _assert_hand_message(*sp.open_profile_for_automation(PID, "folder", "A", "FacebookDoc19"))
+    assert mlx_holds_it.ev == ["start"], "the profile was stopped after MLX refused the start"
+
+
+def test_read_when_multilogin_holds_the_profile_shows_the_way_out(mlx_holds_it):
+    with pytest.raises(sp.ProfileNotAttachable) as refused:
+        with sp.opening_closed_profile(sp._ReadOpen("FacebookDoc19")):
+            sp._attach_only(_entry(), "FacebookDoc19")
+    assert str(refused.value) == sp.hand_message()
+    assert refused.value.code == sp.HAND_OPEN_CODE
+    assert mlx_holds_it.ev == ["start"]
+
+
+def test_the_reopen_retry_still_recognises_multilogin_holding_the_profile():
+    """ACL-1606: повтор запуска после мягкой остановки узнаёт новую остановку."""
+    held = br._open_by_hand(PID, "FacebookDoc19", br.MLX_LOCK_NO_RESTART)
+    assert br._start_still_held(held) is True
+    assert br._start_still_held(br._open_by_hand(PID, "FacebookDoc19", "no_restart")) is False
