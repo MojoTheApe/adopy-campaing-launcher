@@ -3564,20 +3564,20 @@
       "803": {
         "kind": "independent-review",
         "verdict": "approved",
-        "reviewer": "Reviewer-R1799L",
-        "implementer": "Worker-S1799K",
-        "review_session": "r1799l-20261015",
-        "execution_lane": "b8efe268899f4703950473f96933f289",
-        "head_sha": "3c9521c3dbea616f77c5e09ea2b77d3c15d47d65",
-        "base_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
-        "tree_sha": "e10dac971c558c0099f4a4d7594b1144b919579d",
-        "report": "Independent re-review of ACL-1799 / PR 803 at head 3c9521c3 against main a4e38b7c. Reviewer-R1799L implemented none of it. Previous review R1799J found one blocker: active() returned the removed adIdx, breaking the Workbench Use flow. Delta 253bcac8..3c9521c3 is exactly one line in src/web/templates/report.html: adIndex: adIdx -> adIndex: 0 in the drawer active() return; applyCreative already falls back to the first card. Verification: tests/test_acl1799_country_workbench.py 22 passed; node tests/cw_harness.cjs ok. CI on head: Linux 1-3 (shard 3 with the 1799 browser tests), Windows tests, installer, descriptor, process instructions all pass; tracker-link failed only because the task was not in Review and passed after review-acquire rerun. No live calls. Findings: no blocking issues.",
-        "main_sha": "a4e38b7c3cc5093d404ca326e417b47cf4b1d2a6",
+        "reviewer": "Reviewer-R1799M",
+        "implementer": "Worker-RM1799",
+        "review_session": "r1799m-20261015",
+        "execution_lane": "dd4849377fd54398b984ce15da47ba1d",
+        "head_sha": "9259d774c7c0c8491207d3ce83eaafb23f00f62c",
+        "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+        "tree_sha": "3c280a104854b227518c885c990209ceb7cd65ff",
+        "report": "Independent re-review of ACL-1799 / PR 803 at refreshed head 9259d774 (merge of main 0850aa39 into approved 3c9521c3). Reviewer-R1799M implemented none of it (handoff worker Worker-RM1799). Verified: diff of main..head touches only the 8 ACL-1799 files; the 619 changed lines of src/web/templates/report.html are identical to the approved 3c9521c3 diff against its old base, so the single style-block conflict kept both ACL-1797 tokens and 1799 cw-styles; adIndex: 0 is kept in the drawer active() return. Tests in a detached worktree: 1799, 1797, 1761, 1798 inventory tests 100 passed (not browser). Mutation adIndex: 0 -> adIdx is caught by 4 failing tests. Secret scan clean. No live calls. Findings: no blocking issues.",
+        "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
         "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
         "issues": [
           799
         ],
-        "recorded_at": "2026-10-15T04:10:27+00:00",
+        "recorded_at": "2026-10-15T05:31:00+00:00",
         "issue_scopes": {
           "799": "0b2f9e9baae64d82925ec94ddc2a28bcd01ffc31eadb8ce886535456b06792e3"
         }
