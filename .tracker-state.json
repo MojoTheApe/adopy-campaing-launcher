@@ -39421,7 +39421,9 @@
         "session": "r1826n-20261015",
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-15T04:19:44+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "ACL-1826 / PR 828 at b5d66a63: code and the last fix (4e2812a3..b5d66a63: report.html window guard, window stub in test_review_ui_regressions, anchor update in test_acl1800) are correct; no weakening; 90 tests pass in a detached worktree, acl_scan_secrets clean, gh pr checks 828: 16/16 pass. RETURNED ONLY BECAUSE main moved: origin/main is now 0850aa39 (merge-base with the head is still a4e38b7c; 1797 and 1800 landed, incl. 7efcc856 which is the same window guard). PR 828 is CONFLICTING / DIRTY. git merge-tree origin/main head gives conflicts in docs/system/CHANGELOG.md and src/web/templates/_campaign_table.html (report.html, acm_commands.js and test_acl1800_account_scoped_table.py auto-merge). Fix: merge origin/main into the branch, resolve those two files (keep main's 1800 table structure and re-apply the 1826 session-lost change; CHANGELOG keep both entries), rerun the three tests, push; then request re-review. No other findings.",
+        "keep_lane": false
       }
     }
   }
