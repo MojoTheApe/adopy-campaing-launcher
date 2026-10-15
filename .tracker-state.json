@@ -35761,6 +35761,30 @@
           "history": [],
           "report": "# Batch f15e647d cancelled at assembly\n\nMerging the frozen tips: ACL-1800 merged cleanly; ACL-1775 conflicts with ACL-1800 (src/fb_api/token_capture.py, docs/system/CHANGELOG.md) and with ACL-1797 (src/web/templates/report.html). No conflict resolution in the batch branch. New batch: ACL-1800 + ACL-1797 (they merge cleanly together); ACL-1775 stays approved and will be refreshed against main afterwards."
         }
+      },
+      {
+        "event": "intake-cancelled",
+        "at": "2026-10-15T03:43:25+00:00",
+        "intake": {
+          "id": "f7e34cccec4841418ac905c41d2b43b3",
+          "actor": "Coordinator-C1014I",
+          "session": "coord-c1014i-20261014",
+          "state": "cancelled",
+          "issues": [
+            800,
+            775,
+            797
+          ],
+          "remaining": [
+            800,
+            775,
+            797
+          ],
+          "batches": [],
+          "started_at": "2026-10-15T03:41:37+00:00",
+          "ineligible": {},
+          "report": "# Batch f15e647d cancelled at assembly\n\nMerging the frozen tips: ACL-1800 merged cleanly; ACL-1775 conflicts with ACL-1800 (src/fb_api/token_capture.py, docs/system/CHANGELOG.md) and with ACL-1797 (src/web/templates/report.html). No conflict resolution in the batch branch. New batch: ACL-1800 + ACL-1797 (they merge cleanly together); ACL-1775 stays approved and will be refreshed against main afterwards."
+        }
       }
     ],
     "policy": {
@@ -38901,7 +38925,7 @@
       "id": "f7e34cccec4841418ac905c41d2b43b3",
       "actor": "Coordinator-C1014I",
       "session": "coord-c1014i-20261014",
-      "state": "running",
+      "state": "cancelled",
       "issues": [
         800,
         775,
@@ -38914,7 +38938,8 @@
       ],
       "batches": [],
       "started_at": "2026-10-15T03:41:37+00:00",
-      "ineligible": {}
+      "ineligible": {},
+      "report": "# Batch f15e647d cancelled at assembly\n\nMerging the frozen tips: ACL-1800 merged cleanly; ACL-1775 conflicts with ACL-1800 (src/fb_api/token_capture.py, docs/system/CHANGELOG.md) and with ACL-1797 (src/web/templates/report.html). No conflict resolution in the batch branch. New batch: ACL-1800 + ACL-1797 (they merge cleanly together); ACL-1775 stays approved and will be refreshed against main afterwards."
     },
     "source_reviews": {}
   }
