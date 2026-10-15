@@ -8958,9 +8958,11 @@
         "worktree": "C:\\wk-1814m",
         "id": "617cca1ebacc40f78f575a604fba5c67",
         "issue": 814,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-15T05:25:05+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 817,
+        "report": "Replaced the inline msvcrt/fcntl lock in src/analysis_agent/rules/store.py with config.paths.machine_file_lock (timeout mapped to RulesStoreError; RLock and reentrancy kept). Tests: test_shared_file_locks, test_rules_store, test_goals - 113 passed."
       }
     },
     "tasks": {
