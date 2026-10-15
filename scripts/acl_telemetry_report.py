@@ -46,9 +46,8 @@ except Exception:
 
 from src.fb_ads_rpa import telemetry_sync  # noqa: E402
 
-DEFAULT_VAULT = os.path.join(
-    os.path.expanduser("~"), "Desktop", "Obsidian", "Kuwait Forms", "дешборд"
-)
+from config import paths  # noqa: E402
+
 NOTE_NAME = "RPA — Сводка телеметрии (генерируется).md"
 
 
@@ -202,7 +201,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--local", action="store_true", help="use this machine's JSONL, not the sheet")
     ap.add_argument("--days", type=int, default=7, help="window for the 'recent' half")
-    ap.add_argument("--vault", default=os.environ.get("ACL_OBSIDIAN_DIR", DEFAULT_VAULT))
+    ap.add_argument("--vault", default=None,
+                    help="Obsidian folder (default: ACL_OBSIDIAN_DIR or the known locations)")
     ap.add_argument("--no-write", action="store_true", help="print, do not touch Obsidian")
     args = ap.parse_args()
 
@@ -219,7 +219,13 @@ def main() -> int:
         print(text)
         return 0
 
-    target = Path(args.vault) / NOTE_NAME
+    vault = args.vault or paths.get_obsidian_dashboard_dir()
+    if not vault:
+        print(f"{paths.OBSIDIAN_MISSING_WARNING}. Вывод ниже.\n", file=sys.stderr)
+        print(text)
+        return 1
+
+    target = Path(vault) / NOTE_NAME
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text, encoding="utf-8")
