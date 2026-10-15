@@ -8949,20 +8949,6 @@
         "state": "implementing",
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
-      },
-      "814": {
-        "actor": "Worker-S1814M",
-        "session": "ws1814m-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1814-rules-store",
-        "worktree": "C:\\wk-1814m",
-        "id": "617cca1ebacc40f78f575a604fba5c67",
-        "issue": 814,
-        "state": "handoff",
-        "started_at": "2026-10-15T05:25:05+00:00",
-        "from_status": "status:todo",
-        "pr": 817,
-        "report": "Replaced the inline msvcrt/fcntl lock in src/analysis_agent/rules/store.py with config.paths.machine_file_lock (timeout mapped to RulesStoreError; RLock and reentrancy kept). Tests: test_shared_file_locks, test_rules_store, test_goals - 113 passed."
       }
     },
     "tasks": {
@@ -12875,25 +12861,25 @@
             "session": "ws1814m-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1814M",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-RM1814",
-          "session": "wrm1814-20261015",
+          "actor": "Worker-S1814M",
+          "session": "ws1814m-20261015",
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1814-rules-store",
-          "worktree": "C:\\wk-rm1814",
-          "id": "1b0e30d7170b484db48c6ea93dbdc92c",
+          "worktree": "C:\\wk-1814m",
+          "id": "617cca1ebacc40f78f575a604fba5c67",
           "issue": 814,
           "state": "handoff",
-          "started_at": "2026-10-15T04:27:12+00:00",
+          "started_at": "2026-10-15T05:25:05+00:00",
           "from_status": "status:todo",
           "pr": 817,
-          "report": "# ACL-1814 refresh (merge origin/main)\n\nMerged origin/main into codex/acl-1814-rules-store (previous head 760d20d3, new head 2aa08ff0). No conflicts; 1800 final from main wins (diff vs main is only the rules store, goals.py, tests). act_9999999999 is gone: scripts/acl_scan_secrets.py is clean.\n\nTests (not browser): test_rules_store.py, test_goals.py, test_acl1800_campaign_commands.py passed."
+          "report": "Replaced the inline msvcrt/fcntl lock in src/analysis_agent/rules/store.py with config.paths.machine_file_lock (timeout mapped to RulesStoreError; RLock and reentrancy kept). Tests: test_shared_file_locks, test_rules_store, test_goals - 113 passed."
         },
         "pr": 817,
-        "queued_at": "2026-10-15T04:29:35+00:00",
+        "queued_at": "2026-10-15T05:27:10+00:00",
         "review_report": "Windows CI (run 38681684978) fails: tests/test_shared_file_locks.py::test_no_inline_os_file_locks_remain_in_src. src/analysis_agent/rules/store.py lines 130-142 use inline msvcrt.locking/LK_NBLCK and fcntl.flock/LOCK_EX; must use config.paths.machine_file_lock. Returned for fix."
       },
       "815": {
@@ -18354,7 +18340,8 @@
       775,
       815,
       826,
-      812
+      812,
+      814
     ],
     "review": null,
     "history": [
@@ -36601,6 +36588,13 @@
         "at": "2026-10-15T05:25:05+00:00",
         "issue": 814,
         "claim": "617cca1ebacc40f78f575a604fba5c67",
+        "actor": "Worker-S1814M"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-15T05:27:10+00:00",
+        "issue": 814,
+        "pr": 817,
         "actor": "Worker-S1814M"
       }
     ],
