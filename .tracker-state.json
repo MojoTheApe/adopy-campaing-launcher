@@ -8845,20 +8845,6 @@
         "state": "implementing",
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
-      },
-      "826": {
-        "actor": "Worker-S1826M",
-        "session": "ws1826m-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1826-mlx-session-lost",
-        "worktree": "C:\\wk-1826m",
-        "id": "b52403ba5b3349539a19f7865a6de291",
-        "issue": 826,
-        "state": "handoff",
-        "started_at": "2026-10-15T03:46:05+00:00",
-        "from_status": "status:todo",
-        "pr": 828,
-        "report": "# Return 826 r1826l\n\nHead: b5d66a63 (on top of 4e2812a3), pushed to codex/acl-1826-mlx-session-lost.\n\nDefect: CI shard 1, test_poll_resumes_and_updates_all_copies_and_status: ReferenceError window is not defined (report.html slice evaluated in Node without window). Unguarded top-level mount `if (typeof document !== 'undefined' && window.AMAP_CAMPAIGN_TABLE)`.\n\nFix (same as ACL-1800 7efcc856): added `typeof window !== 'undefined'` to that condition in src/web/templates/report.html (browser behaviour unchanged); the poll test ctx stubs `window:{addEventListener(){}}`; test_acl1800_account_scoped_table.py anchor string updated to the new condition.\n\nTests: before fix test_review_ui_regressions.py failed (1 failed, 6 passed). After: test_review_ui_regressions + test_acl1800_account_scoped_table + test_acl1826_mlx_session_lost: 90 passed. scripts/acl_scan_secrets.py: clean. CI not awaited."
       }
     },
     "tasks": {
@@ -12977,25 +12963,25 @@
             "session": "ws1826m-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1826M",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
-          "actor": "Worker-S1826K",
-          "session": "ws1826k-20261015",
+          "actor": "Worker-S1826M",
+          "session": "ws1826m-20261015",
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1826-mlx-session-lost",
-          "worktree": "C:\\wk-1826k",
-          "id": "a9b121ebe3a64f90aca6b572fd28a034",
+          "worktree": "C:\\wk-1826m",
+          "id": "b52403ba5b3349539a19f7865a6de291",
           "issue": 826,
           "state": "handoff",
-          "started_at": "2026-10-14T23:44:51+00:00",
+          "started_at": "2026-10-15T03:46:05+00:00",
           "from_status": "status:todo",
           "pr": 828,
-          "report": "# Return 826 r1826j: fixed\n\nPR 828, branch codex/acl-1826-mlx-session-lost.\nFinding: acl_scan_secrets flagged test_acl1826_mlx_session_lost.py:388 and :404 (workspace ids that looked real).\nFix: replaced with the scanner's allowlisted placeholder UUIDs (RFC 4122 examples); the tests only need two distinct values.\nChecks: scripts/acl_scan_secrets.py on the whole branch: clean (rc=0), including tests/test_acl1800_campaign_commands.py.\nTests: tests/test_acl1826_mlx_session_lost.py -k \"not browser\": 37 passed."
+          "report": "# Return 826 r1826l\n\nHead: b5d66a63 (on top of 4e2812a3), pushed to codex/acl-1826-mlx-session-lost.\n\nDefect: CI shard 1, test_poll_resumes_and_updates_all_copies_and_status: ReferenceError window is not defined (report.html slice evaluated in Node without window). Unguarded top-level mount `if (typeof document !== 'undefined' && window.AMAP_CAMPAIGN_TABLE)`.\n\nFix (same as ACL-1800 7efcc856): added `typeof window !== 'undefined'` to that condition in src/web/templates/report.html (browser behaviour unchanged); the poll test ctx stubs `window:{addEventListener(){}}`; test_acl1800_account_scoped_table.py anchor string updated to the new condition.\n\nTests: before fix test_review_ui_regressions.py failed (1 failed, 6 passed). After: test_review_ui_regressions + test_acl1800_account_scoped_table + test_acl1826_mlx_session_lost: 90 passed. scripts/acl_scan_secrets.py: clean. CI not awaited."
         },
         "pr": 828,
-        "queued_at": "2026-10-14T23:50:19+00:00",
+        "queued_at": "2026-10-15T03:48:37+00:00",
         "review_report": "Independent source review of ACL-1826 / PR 828 at head 4e2812a3. Reviewer-R1826L implemented nothing. Returned for fixes: CI is red.\n\nVerified OK:\n- Delta b5e3088c..4e2812a3 is exactly two placeholder workspace-id substitutions in tests/test_acl1826_mlx_session_lost.py (lines 388, 404). Nothing else changed.\n- scripts/acl_scan_secrets.py exits 0 on the head (detached worktree).\n- tests/test_acl1826_mlx_session_lost.py -k \"not browser\": 37 passed.\n- CI: tracker-link, Windows tests, process instructions, descriptor, tooling, build inputs pass (tracker-link failed once on timing, passed on rerun).\n\nBlocking:\n1. Linux shard 1 (3.11 and 3.13) fails tests/test_review_ui_regressions.py::test_poll_resumes_and_updates_all_copies_and_status with \"ReferenceError: window is not defined\" (evalmachine line 1331). Run https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38656365826. The ACL-1826 page code reads `window` in a block that this Node harness evaluates without a window. Fix: a `typeof window` guard, as ACL-1800 did (commit 7efcc856, PR 802). Windows did not catch this.\n2. Installer job \"Build, install, repair, and uninstall\" (run 38656365921) failed with \"INSTALLER: cancelled\" -- a cancellation/timeout-type failure, not a test failure. Rerun after the fix; confirm it is not caused by the PR."
       },
       "767": {
@@ -18140,7 +18126,8 @@
       907,
       891,
       814,
-      799
+      799,
+      826
     ],
     "review": null,
     "history": [
@@ -35944,6 +35931,13 @@
         "at": "2026-10-15T03:46:05+00:00",
         "issue": 826,
         "claim": "b52403ba5b3349539a19f7865a6de291",
+        "actor": "Worker-S1826M"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-15T03:48:37+00:00",
+        "issue": 826,
+        "pr": 828,
         "actor": "Worker-S1826M"
       }
     ],
