@@ -13587,7 +13587,7 @@
             "session": "design_audit_d7k413_20261013"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-D7K413",
         "coordinator": "Coordinator-D7K413",
         "handoff": {
@@ -13606,7 +13606,8 @@
         },
         "pr": 843,
         "queued_at": "2026-10-13T08:14:27+00:00",
-        "review_report": "# ACL-1839 / PR843 source review return\n\nChanges required: refresh the source against current main before approval.\n\nIndependent review verified PR843 head 145a30ba116b599a010c61160e5be2ac519ed00c retains base e8e59f8376458f2f73089c3f2a8d454837ff033f, while official main is now 3327465fcbd46ccff9b64eb7c574ff5b84b99b80. Earlier source review and CI establish the old baseline only.\n\nThe actual author must take a fresh implementation claim for ACL-1839, include current main on the retained source branch, resolve any conflicts under that author ownership, run actual affected checks and obtain fresh source CI plus independent exact-head/base/scope review. Preserve the existing bounded layout and accessibility scope, original Worker and source PR. No production regression was found in the previously reviewed patch; this return concerns stale admission evidence.\n\nThis Reviewer made no source edits. No source approval, merge, stage entry, package publication or installation is claimed."
+        "review_report": "# ACL-1839 / PR843 source review return\n\nChanges required: refresh the source against current main before approval.\n\nIndependent review verified PR843 head 145a30ba116b599a010c61160e5be2ac519ed00c retains base e8e59f8376458f2f73089c3f2a8d454837ff033f, while official main is now 3327465fcbd46ccff9b64eb7c574ff5b84b99b80. Earlier source review and CI establish the old baseline only.\n\nThe actual author must take a fresh implementation claim for ACL-1839, include current main on the retained source branch, resolve any conflicts under that author ownership, run actual affected checks and obtain fresh source CI plus independent exact-head/base/scope review. Preserve the existing bounded layout and accessibility scope, original Worker and source PR. No production regression was found in the previously reviewed patch; this return concerns stale admission evidence.\n\nThis Reviewer made no source edits. No source approval, merge, stage entry, package publication or installation is claimed.",
+        "reviewer": "Reviewer-RV1015F"
       },
       "840": {
         "implementers": [
@@ -15978,6 +15979,10 @@
       },
       "Reviewer-RV1015C": {
         "session": "rv1015c-821",
+        "role": "Reviewer"
+      },
+      "Reviewer-RV1015F": {
+        "session": "rv1015f-843",
         "role": "Reviewer"
       }
     },
@@ -18658,7 +18663,6 @@
       767,
       771,
       768,
-      839,
       845,
       840,
       841,
@@ -37979,6 +37983,13 @@
           "report": "# Return for a dependency refresh\n\nACL-1902 is stacked on ACL-1899 (PR 900), which sits on 1776/1819. Current main 080df2d8 is not in this branch and the PR conflicts with main. Required: after ACL-1899 is refreshed, merge its new head into this branch (merge, no rebase), resolve conflicts keeping main's behaviour, re-run the affected tests, hand off again for fresh review.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-15T06:54:54+00:00",
+        "pr": 843,
+        "lane": "183206fbc32c4ee9939ed895ca158bfb",
+        "actor": "Reviewer-RV1015F"
       }
     ],
     "policy": {
@@ -41622,6 +41633,18 @@
         "session": "rv1015c-821",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-15T06:51:17+00:00",
+        "state": "reviewing"
+      },
+      "843": {
+        "id": "183206fbc32c4ee9939ed895ca158bfb",
+        "pr": 843,
+        "issues": [
+          839
+        ],
+        "actor": "Reviewer-RV1015F",
+        "session": "rv1015f-843",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-15T06:54:54+00:00",
         "state": "reviewing"
       }
     }
