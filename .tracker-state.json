@@ -9373,20 +9373,6 @@
         "state": "implementing",
         "started_at": "2026-10-15T10:14:14+00:00",
         "from_status": "status:todo"
-      },
-      "776": {
-        "actor": "Worker-RG1776",
-        "session": "wrg1776-20261015",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1776-create-forms",
-        "worktree": "C:\\wk-rf1776",
-        "id": "8e5d859343c040a597da644a2bc471b3",
-        "issue": 776,
-        "state": "handoff",
-        "started_at": "2026-10-15T10:15:59+00:00",
-        "from_status": "status:todo",
-        "pr": 831,
-        "report": "# ACL-776 refresh r2 handoff\n\n- Claim: 8e5d859343c040a597da644a2bc471b3 (ACL-1776, Worker-RG1776, session wrg1776-20261015, coordinator Coordinator-M1011A)\n- Branch: codex/acl-1776-create-forms, worktree C:\\wk-rf1776\n- Previous head: f475cdb8\n- New head: 271113df (pushed to work, ff from f475cdb8)\n- Merge: `git merge --no-edit work/main` into the branch, clean, no conflicts. Main 3ee7c6d9 is an ancestor of HEAD (verified).\n- Tests (`-k \"not browser\"`): 868 passed, 0 failed, 2 deselected, 109 warnings.\n  Files: test_acl1776_create_forms, test_acl1819_preflight, test_acl1761_api_create, test_acl1761_parity, test_acl1756_fb_api, test_acl1800_campaign_commands, test_acl1775_*, test_acl_test_platform, test_screens_are_in_english."
       }
     },
     "tasks": {
@@ -13540,25 +13526,25 @@
             "session": "wrg1776-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RG1776",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-RF1776",
-          "session": "wrf1776-20261015",
+          "actor": "Worker-RG1776",
+          "session": "wrg1776-20261015",
           "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1776-create-forms",
           "worktree": "C:\\wk-rf1776",
-          "id": "6abbc7d2636d4830813a63a0cd9c0317",
+          "id": "8e5d859343c040a597da644a2bc471b3",
           "issue": 776,
           "state": "handoff",
-          "started_at": "2026-10-15T06:56:36+00:00",
+          "started_at": "2026-10-15T10:15:59+00:00",
           "from_status": "status:todo",
           "pr": 831,
-          "report": "# Handoff ACL-1776 (dependency refresh)\n\nNew head: 979b592ac6ecccff816f6452a67525b58fc50dff (single merge commit of work/codex/acl-1819-preflight-audit a957986b into eb48c8c1). Contains main 080df2d8 and a957986b.\n\nConflicts (all additive, both sides kept):\n- src/fb_api/creator.py: 1819's _source() helper kept; plan_from_draft keeps 1776's template_loader signature.\n- src/fb_api/write_policy.py: 1776's form-create chain (check_form_create) and 1819/1800's object-update policy (check_object_update, policy_for_commands) both kept.\n- src/fb_api/token_capture.py (4 hunks): page-helper write(): 1776 form branch first (needs WRITE.form_create, which the commands helper does not have), then 1800 object-update logic; InPageGraph.__init__ takes both write_page and allow_object_updates; policy = policy_for_commands if object_updates else policy_for_page(act, write_page); write check order: form_page -> object_updates -> act chain.\n\nTests (venv C:\\fb_agents\\.venv, -k \"not browser\"): test_acl1776_create_forms, test_acl1819_preflight, test_acl1756_fb_api, test_acl1756_page_helper_node, test_acl1761_api_create, test_acl1761_parity, test_acl1761_hang_logout, test_acl1775_builder_forms, test_acl1775_instant_forms, test_acl1800_campaign_commands: 815 passed, 0 failed, 4 deselected (browser).\n\n## Update\nNew head: f475cdb884aa0417f06a5288368cf8dcb6fac49b (second merge of 1819 head 7cde3c4c, no conflicts). Tests: 917 passed, 0 failed, 4 deselected (browser) - previous set plus test_acl_test_platform and test_screens_are_in_english guards."
+          "report": "# ACL-776 refresh r2 handoff\n\n- Claim: 8e5d859343c040a597da644a2bc471b3 (ACL-1776, Worker-RG1776, session wrg1776-20261015, coordinator Coordinator-M1011A)\n- Branch: codex/acl-1776-create-forms, worktree C:\\wk-rf1776\n- Previous head: f475cdb8\n- New head: 271113df (pushed to work, ff from f475cdb8)\n- Merge: `git merge --no-edit work/main` into the branch, clean, no conflicts. Main 3ee7c6d9 is an ancestor of HEAD (verified).\n- Tests (`-k \"not browser\"`): 868 passed, 0 failed, 2 deselected, 109 warnings.\n  Files: test_acl1776_create_forms, test_acl1819_preflight, test_acl1761_api_create, test_acl1761_parity, test_acl1756_fb_api, test_acl1800_campaign_commands, test_acl1775_*, test_acl_test_platform, test_screens_are_in_english."
         },
         "pr": 831,
-        "queued_at": "2026-10-15T07:54:56+00:00",
+        "queued_at": "2026-10-15T10:22:39+00:00",
         "review_report": "# Return for a main refresh\n\nMain moved to 3ee7c6d9 (batch with ACL-1819, 1799, 1814; promotion PR 928). The source approval is stale against it. Required: merge current main into the branch (merge, no rebase; a trial merge is clean), re-run the affected tests, hand off again for a delta review. No scope change.",
         "return_operation": {
           "id": "5eec063186c046aebe1f8205a473fea5",
@@ -19496,7 +19482,8 @@
       907,
       891,
       855,
-      920
+      920,
+      776
     ],
     "review": null,
     "history": [
@@ -40443,6 +40430,13 @@
         "pr": 863,
         "lane": "945056de957d475fa85e398ac0d511d8",
         "actor": "Reviewer-R1853B"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-15T10:22:39+00:00",
+        "issue": 776,
+        "pr": 831,
+        "actor": "Worker-RG1776"
       }
     ],
     "policy": {
