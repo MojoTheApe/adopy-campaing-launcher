@@ -12671,7 +12671,7 @@
             "session": "wrm1799-20261015"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-RM1799",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12696,7 +12696,8 @@
           "actor": "Coordinator-C0930A",
           "session": "coord_c0930a_1009",
           "report": "# Return for a dependency refresh\n\nMain now also contains batch e76699ef (ACL-1800 campaign commands, ACL-1797 design system; PR 917 -> 918). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
-        }
+        },
+        "reviewer": "Reviewer-R1799M"
       },
       "786": {
         "implementers": [
@@ -15685,6 +15686,10 @@
       "Reviewer-R1826P": {
         "session": "r1826p-20261015",
         "role": "Reviewer"
+      },
+      "Reviewer-R1799M": {
+        "session": "r1799m-20261015",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -18341,7 +18346,6 @@
       903,
       907,
       891,
-      799,
       775,
       815,
       812,
@@ -36607,6 +36611,13 @@
         "pr": 828,
         "lane": "83e30a41e3544b5489cf989c9486a08d",
         "actor": "Reviewer-R1826P"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-15T05:28:17+00:00",
+        "pr": 803,
+        "lane": "dd4849377fd54398b984ce15da47ba1d",
+        "actor": "Reviewer-R1799M"
       }
     ],
     "policy": {
@@ -39853,6 +39864,18 @@
         "session": "r1826p-20261015",
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-15T05:27:49+00:00",
+        "state": "reviewing"
+      },
+      "803": {
+        "id": "dd4849377fd54398b984ce15da47ba1d",
+        "pr": 803,
+        "issues": [
+          799
+        ],
+        "actor": "Reviewer-R1799M",
+        "session": "r1799m-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-15T05:28:17+00:00",
         "state": "reviewing"
       }
     }
