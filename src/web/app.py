@@ -2199,6 +2199,8 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
         asset_val = _abbrev_asset((form.get(f"camp_{idx}_asset") or "").strip())
         budget    = (form.get(f"camp_{idx}_budget") or "").strip()
         name      = (form.get(f"camp_{idx}_name") or "").strip()
+        # ACL-1775: место конверсии набора; нет поля (RPA, старая страница) - сайт.
+        destination = (form.get(f"camp_{idx}_destination") or "website").strip().lower()
 
         try:
             ad_count = int(form.get(f"camp_{idx}_ad_count") or 1)
@@ -2247,6 +2249,15 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
             # (и записанные из них задания) остаются прежними.
             if copy2:
                 slot["copy2"] = copy2
+            # ACL-1775: Instant Form. Ключи есть только у слотов с формой; значения
+            # другого назначения (сайта) не уходят вовсе, а у сайтовых слотов
+            # лишних ключей нет - прежние черновики не меняются ни байтом.
+            if destination != "website":
+                # Незнакомое назначение не превращается в сайт молча: уходит как есть,
+                # и план откажет вслух ("Unknown conversion location").
+                slot["destination"] = destination
+            if destination == "instant_form":
+                slot["lead_form_id"] = (form.get(f"camp_{idx}_ad_{a_idx}_form_id") or "").strip()
             slots.append(slot)
     # Return the ISO code, not the raw form value ("Costa Rica"). Confirmed
     # live 2026-07-30: the full name leaked into draft.country, where both
@@ -5152,11 +5163,47 @@ async def rpa_website_lab_disconnect() -> JSONResponse:
     return JSONResponse(result)
 
 
+INSTANT_FORM_RPA_ERROR = ("Instant Forms are available only with the Graph API backend "
+                          "(ACL_FB_BACKEND=api). Switch the ad set back to Website or use the API backend.")
+
+
+def _instant_form_refusal(slots: list[dict]) -> JSONResponse | None:
+    """ACL-1775: слот с Instant Form при RPA-бэкенде - отказ вслух, а не молча сайтом."""
+    from src.web import publish_api
+
+    if publish_api.api_enabled():
+        return None
+    if any(s.get("destination", "website") != "website" for s in slots):
+        return JSONResponse({"error": INSTANT_FORM_RPA_ERROR}, status_code=409)
+    return None
+
+
+@app.post("/api/page-forms")
+async def api_page_forms(request: Request) -> JSONResponse:
+    """ACL-1775: формы Страницы аккаунта для выбора в билдере. Только по нажатию человека.
+
+    Чтение без права записи; ни опроса, ни расписания. Только при `ACL_FB_BACKEND=api`.
+    """
+    from src.web import page_forms, publish_api
+
+    form = await request.form()
+    account = (form.get("account_label") or form.get("account") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    if not publish_api.api_enabled():
+        return JSONResponse({"ok": False, "error": "Instant Forms need the Graph API backend (ACL_FB_BACKEND=api)."},
+                            status_code=409)
+    return JSONResponse(await asyncio.to_thread(page_forms.read_forms, account))
+
+
 @app.post("/preview-publish")
 async def preview_publish(request: Request) -> JSONResponse:
     """Dry-run: convert form slots → PublishJob plan, return JSON (no Meta API calls)."""
     form = await request.form()
     country, account_label, slots = _parse_build_upload_form(form)
+    refused = _instant_form_refusal(slots)
+    if refused is not None:
+        return refused
     if not country:
         return JSONResponse({"error": "Country not set — check form."}, status_code=400)
     if not account_label:
@@ -5192,6 +5239,9 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
     """
     form = await request.form()
     country, account_label, slots = _parse_build_upload_form(form)
+    refused = _instant_form_refusal(slots)
+    if refused is not None:
+        return refused
     via_ml = (form.get("via_multilogin") or "1").strip() not in ("0", "false", "no")
     activate = (form.get("activate") or "0").strip() in ("1", "true", "yes")
     dry_run = (form.get("dry_run") or "0").strip() in ("1", "true", "yes")
@@ -5491,6 +5541,13 @@ async def build_upload(request: Request) -> Response:
     """Build Upload FB xlsx from campaign builder slots for one account."""
     form = await request.form()
     country, account_label, slots = _parse_build_upload_form(form)
+    if any(s.get("destination") == "instant_form" for s in slots):
+        # ACL-1775: таблица Upload FB формы не умеет - не собирать сайтовую молча.
+        return await _in_report_pool(
+            _render_report, request,
+            upload_errors={(form.get("country") or "").strip() or country:
+                           {account_label: ["Instant Forms cannot be exported to Upload FB; use Publish with the API backend."]}},
+        )
 
     # The parser returns the country CODE ("MX"), which the RPA needs — without
     # it the audience Language step was silently skipped. But the template looks

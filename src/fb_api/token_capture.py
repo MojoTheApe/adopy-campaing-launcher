@@ -211,6 +211,30 @@ _HELPER_JS = r"""
     return true;
   }
 
+  // ACL-1775: единственное место, где разрешён lead_gen_form_id (зеркало
+  // write_policy._without_lead_form). Возвращает копию без ключа, null — отказ,
+  // исходный объект — формы нет. Ключ в другом месте остаётся и ловится statusOk.
+  function withoutLeadForm(edge, checked, onAd) {
+    const LF = WRITE.lead_form;
+    if (!LF || edge !== LF.edge) return checked;
+    const spec = checked.object_story_spec;
+    if (!spec || typeof spec !== 'object' || Array.isArray(spec)) return checked;
+    for (const fmt of LF.formats) {
+      const data = spec[fmt];
+      const cta = data && typeof data === 'object' ? data.call_to_action : null;
+      const value = cta && typeof cta === 'object' ? cta.value : null;
+      if (!value || typeof value !== 'object' || Array.isArray(value) || !(LF.key in value)) continue;
+      if (!onAd) return null;
+      const form = value[LF.key];
+      if (typeof form !== 'string' || !new RegExp(LF.id_re).test(form)) return null;
+      if (Object.keys(value).length !== 1) return null;
+      const copy = JSON.parse(JSON.stringify(checked));
+      delete copy.object_story_spec[fmt].call_to_action.value[LF.key];
+      return copy;
+    }
+    return checked;
+  }
+
   async function write(spec) {
     const refused = (why) => ({ error: 'write_refused', why: why });
     if (!WRITE) return { error: 'read_only' };
@@ -283,7 +307,9 @@ _HELPER_JS = r"""
       if (ck.length !== 1 || ck[0] !== 'creative_id'
           || (typeof c.creative_id !== 'string' && typeof c.creative_id !== 'number')) return refused('creative');
     }
-    if (!statusOk(checked)) return refused('status');
+    const walked = withoutLeadForm(edge, checked, spec.on_ad === true);
+    if (walked === null) return refused('lead_form');
+    if (!statusOk(walked)) return refused('status');
     want = WRITE.files[edge] || null;
     files = spec.files || {};
     const fk = Object.keys(files);
@@ -697,7 +723,7 @@ class InPageGraph:
         raise CdpError("staging failed")  # недостижимо
 
     def write(self, path: str, params: dict | None = None, *, files: dict | None = None,
-              filename: str = "", timeout: float = 120.0) -> dict:
+              filename: str = "", timeout: float = 120.0, on_ad: bool = False) -> dict:
         """POST в разрешённое ребро. РОВНО один раз; сбой после отправки — `call_unknown`.
 
         `files` — {поле: bytes}. Файл складывается в помощник прямо перед
@@ -714,10 +740,13 @@ class InPageGraph:
         if self.object_updates:
             _wp.check_object_update("POST", path, params, files)
         else:
-            _wp.check(self.write_act, "POST", path, params, files)
+            _wp.check(self.write_act, "POST", path, params, files, on_ad=on_ad)
         spec: dict[str, Any] = {"method": "POST", "path": path, "params": params or {}, "files": {},
                                 "filename": filename, "host": self.graph_host,
                                 "credentials": self.credentials}
+        if on_ad:
+            # ACL-1775: набор плана ON_AD — вторая линия политики пропустит форму в креативе.
+            spec["on_ad"] = True
         if files:
             (field_name, data), = files.items()
             if not isinstance(data, (bytes, bytearray)):
