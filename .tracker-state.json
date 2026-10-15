@@ -12610,7 +12610,7 @@
             "session": "ws1799k-20261015"
           }
         ],
-        "state": "approved",
+        "state": "returning_approval",
         "worker": "Worker-S1799K",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12631,12 +12631,18 @@
         "queued_at": "2026-10-15T03:40:08+00:00",
         "review_report": "Independent re-review of ACL-1799 / PR 803 at head 253bcac8e676b9bcaee2ac7c5cfeeb0f537c2369 against main a4e38b7c. Verdict: RETURNED, one blocking defect, red CI.\n\nWhat is fine: the merge commit d0ca3389 equals an independent merge-tree of origin/main and the old approved head d3c4cb0a (no extra hunks, no markers). The 1778 header, 1769 stacked cards, 1766 page/pixel labels are all intact. The fix commit's change to applyCreative (pick the card by index) is correct in itself. Local non-browser tests: 216 passed; cw_harness ok.\n\nBLOCKING: the 1769 change removed the `adIdx` variable (the Ad dropdown state) from the builder-drawer script, but Country Workbench still reads it in `active()` of the drawer's public API, src/web/templates/report.html line 6720: `adIndex: adIdx`. `adIdx` is no longer defined anywhere in that scope, so every call to `window.<drawer>.active()` throws `ReferenceError: adIdx is not defined`. That function is how the workbench \"Use\" finds the selected draft, so the whole \"Use\" flow is broken on this head. The fix commit patched the consumer (applyCreative) but not this producer.\n\nCI proves it: run 38652391782, linux shard 3, 4 failed + 4 errors, all tests/test_acl1799_workbench_browser.py (test_use_target_goes_to_the_selected_draft_and_not_to_the_last_one, test_selecting_the_other_draft_moves_the_destination, test_landing_is_noted_not_written_into_a_field_that_does_not_exist, test_an_asset_mismatch_is_confirmed_before_use): \"ReferenceError: adIdx is not defined\" / pageerror. Windows and the other shards pass; ACL verification fails as a consequence. The non-browser tests do not cover this path, so the worker's 181-passed run could not see it.\n\nTo fix: stop reading adIdx in active(). With stacked cards there is no selected ad; return adIndex: 0 (or drop the field and let applyCreative default to the first card, or put the ad index in the call that targets a specific card). Keep applyCreative's rows[a.adIndex || 0]. Then run tests/test_acl1799_workbench_browser.py locally (browser) and confirm CI on the new head: all green incl. Linux shard 3.\n\ntracker-link on this PR also failed only because the task was in the returned state; it will pass after the task is back in Review (rerun then).",
         "return_operation": {
-          "id": "c77332b6e397471b83fab1dfe1f3be8f",
+          "id": "13ca577b927a4e838fb75ff8e53a4b1b",
           "actor": "Coordinator-C0930A",
           "session": "coord_c0930a_1009",
-          "report": "# Return for a dependency refresh\n\nMain now contains ACL-1760, ACL-1761 and batch 152fbc7b (ACL-1798, 1766, 1778, 1769; PR 915 -> 916). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review. No other finding was examined in this return."
+          "report": "# Return for a dependency refresh\n\nMain now also contains batch e76699ef (ACL-1800 campaign commands, ACL-1797 design system; PR 917 -> 918). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
         },
-        "reviewer": "Reviewer-R1799L"
+        "reviewer": "Reviewer-R1799L",
+        "return": {
+          "id": "13ca577b927a4e838fb75ff8e53a4b1b",
+          "actor": "Coordinator-C0930A",
+          "session": "coord_c0930a_1009",
+          "report": "# Return for a dependency refresh\n\nMain now also contains batch e76699ef (ACL-1800 campaign commands, ACL-1797 design system; PR 917 -> 918). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
+        }
       },
       "786": {
         "implementers": [
