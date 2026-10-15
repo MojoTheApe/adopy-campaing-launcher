@@ -3724,9 +3724,26 @@
       "source_sha": "f740a50aa9cef295b43cc78d2108217611ec783e",
       "main_tree": "e1ff679ef9e1f9079fafd7ab737392854e0eacc4",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "testing",
+      "state": "passed",
       "recorded_at": "2026-10-15T06:15:51+00:00",
-      "batch_id": "e677f638b7ad4190887362ffb391ec98"
+      "batch_id": "e677f638b7ad4190887362ffb391ec98",
+      "verification": {
+        "kind": "stage-verification",
+        "target": "ACL isolated Windows stage installation",
+        "result": "passed",
+        "source_sha": "f740a50aa9cef295b43cc78d2108217611ec783e",
+        "tree_sha": "503e92e7f6cf31505d335adfb68a77e547077d63",
+        "checks": [
+          "Actual permanent stage commit/tree and merge parents verified against the frozen batch e677f638 (ACL-1812, ACL-1826, ACL-1775, ACL-1815) and the independently reviewed integration.",
+          "Stage CI runs 38691285932, 38691285813, 38691285911 succeeded with explicit same-tree reuse of full green runs 38688568337, 38688568394.",
+          "Previous actual package installs and starts with isolated data",
+          "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
+          "Updated installed application restarts with preserved machine/workspace/creative data",
+          "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts"
+        ],
+        "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/919#issuecomment-6185815367"
+      },
+      "verified_at": "2026-10-15T06:17:24+00:00"
     },
     "tasks": {
       "248": {
