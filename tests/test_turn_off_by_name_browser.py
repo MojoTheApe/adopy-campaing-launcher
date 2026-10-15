@@ -286,6 +286,7 @@ def test_a_busy_profile_is_refused_before_the_browser(store, monkeypatch):
     assert asked == ["p1"]
     assert out.state == "failed" and out.error == sp.PROFILE_BUSY_ERROR
     assert sp.turn_off_history()[0]["error"] == sp.PROFILE_BUSY_ERROR
+    assert out.matched_by == "name", "the journal must say this was a by-name refusal"
 
 
 def test_an_unanswerable_busy_check_counts_as_busy(store, monkeypatch):

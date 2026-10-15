@@ -3687,7 +3687,8 @@ def turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
             busy = True
     if busy:
         out = TurnOffResult(account=account, level=level, object_id=str(object_id),
-                            name=expected_name, error=PROFILE_BUSY_ERROR, at=_now())
+                            name=expected_name, error=PROFILE_BUSY_ERROR, at=_now(),
+                            matched_by="name" if match == "name" and not str(object_id).strip() else "")
     else:
         try:
             out = _turn_off(account, level, object_id, parent_id=parent_id,

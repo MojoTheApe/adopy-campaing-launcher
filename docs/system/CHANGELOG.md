@@ -1,5 +1,20 @@
 # System history
 
+## Dashboard: turn a campaign off by exact name on tables without ids - ACL-1379
+
+- Accounts whose Ads Manager campaign table has no row ids (Doc19/20/21 since 18.09) get the Off
+  button back for a campaign that is the only one with its name. The robot refuses and presses nothing
+  unless the table has no row ids, confirms the campaign level, shows as many rows as its own "Results
+  from N campaigns" count, has exactly one row with that exact name, and the page data does not list
+  the name under two ids. The row and its switch are re-checked right before the click, and the row
+  must read off after the click and again after a reload.
+- Names are compared the way the reader cleans them (ACL-1395): Meta's trailing "Unpublished edits",
+  "In draft", "In review", "Draft" are dropped on both sides; "X" and "X Draft" are two matches.
+- Ads on id-less accounts stay disabled: their campaign cannot be confirmed from the row.
+- Behaviour change for every turn-off (with or without ids): while a publish job is queued or running
+  on the same Multilogin profile, turn-off is refused with "The robot is building campaigns in this
+  profile — wait for it to finish." (HTTP 409). If the busy check itself fails, it counts as busy.
+
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
 Add a durable authorized release workflow using the maintained installer publisher
