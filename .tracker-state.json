@@ -8854,9 +8854,11 @@
         "worktree": "C:\\wk-1799k",
         "id": "50134ffa14aa4dd88dc6623b36798f90",
         "issue": 799,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-14T23:56:35+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 803,
+        "report": "# ACL-1799 return fix (Worker-S1799K)\n\nFix: report.html builder drawer active() returned adIndex: adIdx, but 1769 removed adIdx, so every call threw ReferenceError and the Workbench Use flow broke. The drawer tracks no focused card, so active() now returns adIndex: 0 (first card; applyCreative already falls back to rows[0]). No other adIdx leftovers (line 12517 is an unrelated dataset attribute).\n\nTests: tests/test_acl1799_country_workbench.py 22 passed; node tests/cw_harness.cjs ok. Browser tests not run locally (free RAM 4.4 GB < 6 GB); CI to verify, coordinator watches it."
       }
     },
     "tasks": {
