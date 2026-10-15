@@ -1,5 +1,24 @@
 # System history
 
+## Dashboard: dialogs that look like the platform - ACL-141
+
+- The dashboard no longer calls the browser's `alert`, `confirm` or `prompt` (the grey
+  "127.0.0.1:9193 says" box). One in-page `<dialog>` in `templates/_acl_dialog.js`, inlined into
+  `report.html` (so offline page tests that stub every request still have it), gives
+  `aclAlert`, `aclConfirm` and `aclPrompt`. They return promises; a second call waits until the
+  first dialog is closed.
+- Each dialog has a title, body text, a primary and a quiet button, and takes the shared `dialog`,
+  button and field styles. Escape cancels (confirm = no, prompt = nothing entered). Focus goes to
+  the field (text selected), to the primary button, or to Cancel for destructive actions, which
+  also get a red primary button. Focus returns to where it was when the dialog closes.
+- Prompts (connecting an account: name, ad account number) have a labelled field and Enter
+  submits. Every confirmation keeps its old meaning: cancelling does exactly what cancelling did.
+- Failures that belong to one button or field are a red line next to it (`aclInlineError`,
+  `role="alert"`), replaced by the next error and cleared on the next try: Refresh, Update, the
+  date calendar, opening a profile, profile search and saving a profile to an account, the goal form,
+  "Nothing is being assembled yet". Errors without a place on the page stay a dialog, now the
+  dashboard's own.
+
 ## Builder: pre-flight audit card that blocks Publish - ACL-1819
 
 - Every check is defined once in `src/fb_api/preflight_rules.py` (id, label, severity, field, hint,

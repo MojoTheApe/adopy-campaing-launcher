@@ -178,13 +178,19 @@ def test_landing_is_noted_not_written_into_a_field_that_does_not_exist(page):
 def test_an_asset_mismatch_is_confirmed_before_use(page):
     _campaigns(page, 1)
     _pick(page, 0)
-    page.evaluate("""() => { window.__asked = []; window.confirm = (m) => { window.__asked.push(m); return false; };
+    page.evaluate("""() => {
       const slot = cbTree.active().slot; slot.querySelector('[name$="_asset"]').value = 'Gamma'; }""")
     page.locator(f"{PANEL} .cw-chip", has_text="Alpha").click()
     page.locator(f"{PANEL} .cw-tab", has_text="Targets").click()
     _click_use(page, "Use target")
-    asked = page.evaluate("window.__asked")
-    assert asked and "Gamma" in asked[0] and "Alpha" in asked[0]
+    # ACL-141: вопрос — окно страницы; отказ — его Cancel.
+    dlg = page.locator("dialog.acl-dlg")
+    dlg.wait_for()
+    asked = dlg.inner_text()
+    assert "Gamma" in asked and "Alpha" in asked, asked
+    dlg.locator(".acl-dlg-quiet").click()
+    page.wait_for_function("!document.querySelector('dialog.acl-dlg')")
+    assert "Cancelled" in page.locator(f"{PANEL} .cw-dest-status").inner_text()
     assert _targeting(page, 0) == "", "отказ в подтверждении всё равно записал улику"
 
 

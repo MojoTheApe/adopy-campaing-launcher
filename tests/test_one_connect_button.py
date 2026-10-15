@@ -43,6 +43,7 @@ var SENT = [];
 function amapSend(payload) { SENT.push(payload); }
 var PROMPTS = %s;
 window.prompt = function () { return PROMPTS.length ? PROMPTS.shift() : null; };
+window.aclPrompt = function () { return Promise.resolve(window.prompt()); };
 %s
 </script></body></html>""" % (json.dumps(prompts), script)
     return html
