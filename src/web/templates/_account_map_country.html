@@ -18,6 +18,15 @@
                 title="Read campaigns, ad sets and ads of every connected account in {{ mc.country }} for the period on screen — one at a time">Read campaigns in {{ mc.country }}</button>
         {%- endif %}
       </div>
+      {#- ACL-1800: дерево аккаунтов. Тулбар и вкладки страны стоят над списком аккаунтов; строка аккаунта — родитель,
+          под ней раскрывается таблица её кампаний (создаётся JS при первом показе блока, `amapCampaignMount`).
+          Вкладки ведут в разделы этой же страны, если они есть на странице. Раскрытие ничего не читает у Meta. -#}
+      {%- if campaign_table_api is defined and campaign_table_api() %}
+      <section class="hc hc-scoped amap-campaigns" data-country="{{ mc.country | e }}" aria-label="Campaigns in {{ mc.country | e }}">
+        <nav class="hc-tabs" data-hc-tabs aria-label="{{ mc.country | e }} workspace sections"></nav>
+        <div class="hc-mount" data-hc-mount></div>
+      </section>
+      {%- endif %}
       <table class="amap-grid" data-country-name="{{ mc.country | e }}">
         {#- Колонок и долей поровну, в сумме ровно 100%. Когда-то доль было на
             одну меньше: ширины сложились без последней, и колонка с кнопками
@@ -246,15 +255,7 @@ screenshot: {{ sr.shot }}{% endif %}">{{ sr.error | truncate(40, True, '…') }}
         </tbody>
       </table>
       {%- if campaign_table_api is defined and campaign_table_api() %}
-      {#- ACL-1800: одна командная таблица кампаний на страну — под списком аккаунтов. Вкладки
-          (Campaigns · Winning setups · Landings · Targets · Creatives · Buyers) и сама таблица
-          создаются JS при первом показе блока (`amapCampaignMount`): вкладки ведут в разделы
-          этой же страны, если они есть на странице; таблица читает только локальный снимок,
-          Meta не трогает. -#}
-      <section class="hc hc-scoped amap-campaigns" data-country="{{ mc.country | e }}" aria-label="Campaigns in {{ mc.country | e }}">
-        <nav class="hc-tabs" data-hc-tabs aria-label="{{ mc.country | e }} workspace sections"></nav>
-        <div class="hc-mount" data-hc-mount></div>
-      </section>
+      <section class="hc hc-after" data-hc-after></section>
       {%- endif %}
       {% set blank = mc.rows | rejectattr('has_data') | list | length %}
       {% if blank %}

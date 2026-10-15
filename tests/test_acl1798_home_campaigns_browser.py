@@ -39,12 +39,14 @@ REPORT = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding
 #: Монтирование таблицы страны и кнопка «Read campaigns in <Country>» — из настоящего шаблона страницы.
 MOUNT_JS = REPORT[REPORT.index("function amapCampaignSlug("): REPORT.index("function amapPollSpend(")]
 ACCOUNTS = ["Acc", "Fresh"]
+#: Настоящие правила карты аккаунтов из report.html: проверяем, что они не протекают во вложенные таблицы кампаний.
+AMAP_CSS = REPORT[REPORT.index("    .amap table { width: 100%"): REPORT.index("    .amap-caret-off {")]
 
 
 def account_row(account):
     """Строка списка аккаунтов страны (ячейка с аккаунтом, спенд, кнопка чтения)."""
     return (f'<tr><td class="amap-acc"><span class="amap-caret-off">·</span>{account}</td>'
-            f'<td class="num amap-live" data-account="{account}">$0.00</td><td><button class="amap-btn amap-read">Read spend</button></td></tr>')
+            f'<td class="num amap-live" data-account="{account}">$0.00</td><td class="amap-actions"><button class="amap-btn amap-read">Read spend</button></td></tr>')
 
 
 class Site:
@@ -52,6 +54,7 @@ class Site:
 
     def __init__(self, web, monkeypatch):
         self.web, self.requests, self.fail_children, self.reads = web, [], 0, []
+        self.warm, self.warm_posts = None, []
         monkeypatch.setattr(web, "_inventory_bi", lambda a, c, f, t, s: ({"campaigns": {}, "ads": {}}, ""))
         # цель и бенчмарк — из настроек машины; в тесте их нет, и таблица должна сказать об этом тире с причиной
         monkeypatch.setattr(web, "_inventory_goal_context", lambda c: {
@@ -63,16 +66,18 @@ class Site:
 
         comp = templates.env.get_template("_campaign_table.html").render()
         rows = "".join(account_row(a) for a in ACCOUNTS)
-        return (f"<!doctype html><html data-theme='{theme}'><head><meta charset='utf-8'><style>"
-                ".amap table.amap-grid td, .amap table.amap-grid th {overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}"
-                ".amap td.amap-acc {white-space: normal;}"
+        return (f"<!doctype html><html data-theme='{theme}'><head><meta charset='utf-8'><style>:root {{--muted:#606c80; --border:#dfe3ea; --bg-subtle:#f7f8fa; --bg-hover:#eef0f4; --text:#202a39; --accent:#2563eb; --bad:#b42318; --good:#216e4e; --warn:#855812; --field-border:#c6cfdc;}}"
+                ":root[data-theme='dark'] {{--muted:#a4b3c8; --border:#354459; --bg-subtle:#202b39; --bg-hover:#263446; --text:#edf2fa; --bad:#ffb4aa; --good:#8ad1ad; --warn:#e5bd78; --field-border:#4b5e76;}}"
+                "body {{background: var(--bg-subtle); color: var(--text); font-family: system-ui, sans-serif;}}"
+                + AMAP_CSS +
                 "</style></head><body style='margin:24px'>" + comp +
                 '<div class="amap"><details class="amap-country" data-country="Kuwait" open>'
                 '<div class="amap-toolbar"><button type="button" class="amap-btn amap-read-campaigns" onclick="amapReadCampaigns(this)">'
                 'Read campaigns in Kuwait</button></div>'
-                f'<table class="amap-grid"><tbody>{rows}</tbody></table>'
                 '<section class="hc hc-scoped amap-campaigns" data-country="Kuwait"><nav class="hc-tabs" data-hc-tabs></nav>'
                 '<div class="hc-mount" data-hc-mount></div></section>'
+                f'<table class="amap-grid"><thead><tr><th>Account</th><th class="num">Spend</th><th></th></tr></thead><tbody>{rows}</tbody></table>'
+                '<section class="hc hc-after" data-hc-after></section>'
                 "</details></div>"
                 "<script>window.AMAP_CAMPAIGN_TABLE = true; function amapPeriod() { return {from: '" + D + "', to: '" + D + "', span: ''}; }\n" + MOUNT_JS + "</script>"
                 "</body></html>")
@@ -83,6 +88,16 @@ class Site:
         self.requests.append((req.method, u.path))
         if u.path == "/":
             return route.fulfill(status=200, content_type="text/html", body=self.html())
+        if u.path.startswith("/warm/") and getattr(self, "warm", None):
+            W = self.warm
+            if u.path == "/warm/state":
+                body = {"available": True, "actions": True, "accounts": W["accounts"]}
+            elif u.path == "/warm/open":
+                self.warm_posts.append(req.post_data)
+                return route.fulfill(status=202, content_type="application/json", body=json.dumps({"job_id": "j1", "state": "running"}))
+            else:
+                body = {"state": "done", "results": W["results"]}
+            return route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
         w = self.web
         fn = {"/campaign-inventory/status": w.campaign_inventory_status,
               "/campaign-inventory/tree": w.campaign_inventory_tree,
@@ -97,7 +112,18 @@ class Site:
         return route.fulfill(status=resp.status_code, content_type="application/json", body=resp.body.decode())
 
 
-TABLE = '[data-hc="table"]'
+TABLE = '.hc-table'
+
+
+def row_of(account):
+    return f'tr:has(td[data-account="{account}"])'
+
+
+def open_acc(pg, account):
+    """Раскрыть аккаунт кликом по самой строке (не по кнопке): под ней появляется таблица его кампаний."""
+    pg.click(f'{row_of(account)} td.amap-acc', position={"x": 8, "y": 8})
+    pg.wait_for_selector(f'{row_of(account)} + tr.hc-acct-child:not([hidden])')
+
 
 
 @pytest.fixture
@@ -125,6 +151,7 @@ def page(site):
         pg.on("pageerror", lambda e: errors.append(str(e)))
         pg.errors = errors
         goto(pg, "http://acl.test/")
+        open_acc(pg, "Acc")
         pg.wait_for_selector(TABLE + " tbody tr", timeout=10000)
         yield pg
         browser.close()
@@ -133,7 +160,7 @@ def page(site):
 def test_one_shared_scroll_sticky_header_and_no_page_overflow(page):
     page.select_option("[data-hc=preset]", "all")
     info = page.evaluate("""() => {
-      const sc = document.querySelector('[data-hc=scroll]'), t = document.querySelector('[data-hc=table]');
+      const sc = document.querySelector('.hc-scroll'), t = document.querySelector('.hc-table');
       const inner = [...t.querySelectorAll('*')].filter(e => ['auto','scroll'].includes(getComputedStyle(e).overflowX) && e !== sc);
       return {doc: document.documentElement.scrollWidth, win: innerWidth, scrollW: sc.scrollWidth, clientW: sc.clientWidth,
               inner: inner.length, headPos: getComputedStyle(t.querySelector('thead th')).position,
@@ -143,20 +170,20 @@ def test_one_shared_scroll_sticky_header_and_no_page_overflow(page):
     assert info["scrollW"] > info["clientW"] and info["inner"] == 0
     assert info["headPos"] == "sticky" and info["pinned"] == "sticky"
     # верхняя полоса двигает тот же контейнер
-    page.evaluate("document.querySelector('[data-hc=top]').scrollLeft = 300")
+    page.evaluate("document.querySelector('.hc-top').scrollLeft = 300")
     page.wait_for_timeout(100)
-    assert page.evaluate("document.querySelector('[data-hc=scroll]').scrollLeft") == 300
+    assert page.evaluate("document.querySelector('.hc-scroll').scrollLeft") == 300
     assert page.errors == []
 
 
 def test_expand_shows_children_and_columns_stay_aligned(page):
-    before = page.evaluate("[...document.querySelectorAll('[data-hc=table] thead tr.hc-heads th')].map(t => Math.round(t.getBoundingClientRect().left))")
+    before = page.evaluate("[...document.querySelectorAll('.hc-table thead tr.hc-heads th')].map(t => Math.round(t.getBoundingClientRect().left))")
     page.click('[data-exp="campaign:1"]')
     page.wait_for_selector('tr[data-key="adset:11"]')
     assert page.locator('tr[data-key="adset:12"]').count() == 1
     page.click('[data-exp="adset:11"]')
     page.wait_for_selector('tr[data-key="ad:111"]')
-    after = page.evaluate("[...document.querySelectorAll('[data-hc=table] thead tr.hc-heads th')].map(t => Math.round(t.getBoundingClientRect().left))")
+    after = page.evaluate("[...document.querySelectorAll('.hc-table thead tr.hc-heads th')].map(t => Math.round(t.getBoundingClientRect().left))")
     assert before == after
     # у ячеек всех уровней одни и те же колонки: левые края метрик строки объявления и кампании совпадают
     lefts = page.evaluate("""() => ['campaign:1','adset:11','ad:111'].map(k =>
@@ -185,10 +212,11 @@ def test_partial_not_read_states_are_distinct(page, site, monkeypatch):
     snap.problems = ["adsets were not read: Meta rate limit reached"]
     ci.put_result(snap)
     page.reload()
-    page.wait_for_selector("[data-hc=table] tbody tr")
+    open_acc(page, "Acc")
+    page.wait_for_selector(".hc-table tbody tr")
     page.click('[data-exp="campaign:1"]')
     page.wait_for_selector("text=were not read")
-    assert "not the same as having none" in page.inner_text("[data-hc=table]")
+    assert "not the same as having none" in page.inner_text(".hc-table")
 
 
 def test_unknown_values_are_dashes_not_zeros(page):
@@ -224,37 +252,61 @@ def test_commands_are_disabled_with_reason_and_send_nothing(page, site):
 
 def test_column_preset_and_visibility_persist(page):
     page.select_option("[data-hc=preset]", "bi")
-    assert page.locator("[data-hc=table] thead th", has_text="CPA (FTD)").count() == 1
-    assert page.locator("[data-hc=table] thead th", has_text="Impressions").count() == 0
+    assert page.locator(".hc-table thead th", has_text="CPA (FTD)").count() == 1
+    assert page.locator(".hc-table thead th", has_text="Impressions").count() == 0
     page.reload()
-    page.wait_for_selector("[data-hc=table] tbody tr")
+    open_acc(page, "Acc")
+    page.wait_for_selector(".hc-table tbody tr")
     assert page.input_value("[data-hc=preset]") == "bi"
     page.click("[data-hc=cols] > summary")
     page.uncheck('[data-col="b_cr"]')
     assert page.input_value("[data-hc=preset]") == "custom"
     page.reload()
-    page.wait_for_selector("[data-hc=table] tbody tr")
-    assert page.locator("[data-hc=table] thead th", has_text="CR lead").count() == 0
+    open_acc(page, "Acc")
+    page.wait_for_selector(".hc-table tbody tr")
+    assert page.locator(".hc-table thead th", has_text="CR lead").count() == 0
     assert page.input_value("[data-hc=preset]") == "custom"
 
 
-def test_unread_account_says_so_and_has_its_own_read_button(page):
-    text = page.inner_text(TABLE)
-    assert "Not read yet" in text and "press Read campaigns" in text             # Fresh: снимка нет, прежний список не рисуется
+def test_unread_account_says_so_and_has_its_own_read_button_on_its_row(page):
+    open_acc(page, "Fresh")
+    text = page.inner_text(f'{row_of("Fresh")} + tr.hc-acct-child')
+    assert "Not read yet" in text and "press Read campaigns" in text             # снимка нет, прежний список не рисуется
     assert "IN THE ACCOUNT" not in text.upper()
-    assert page.locator('[data-read="Fresh"]').count() == 1 and page.locator('[data-read="Acc"]').count() == 1
-    assert page.locator("[data-read-country]").count() == 0                       # кнопка страны — в заголовке страны, не в таблице
+    assert page.locator(f'{row_of("Fresh")} button.hc-rc').count() == 1 and page.locator(f'{row_of("Acc")} button.hc-rc').count() == 1
+    assert "Campaigns: not read yet" in page.inner_text(f'{row_of("Fresh")} .hc-snap')
+    assert page.locator("[data-read-country]").count() == 0
 
 
-def test_one_table_per_country_and_no_home_section(page):
-    """Секции на Home нет; таблица одна, аккаунты страны стоят в ней полосами."""
+def test_one_tree_the_account_row_is_the_parent_and_there_is_no_separate_table(page):
+    """Секции на Home и отдельной таблицы нет; под строкой аккаунта — её кампании и только они."""
     assert page.locator("#hc-root, #hc-title").count() == 0
-    assert page.locator("[data-hc=table]").count() == 1
-    assert page.locator("[data-hc=table] tr.hc-band").count() == 2
-    accounts = page.evaluate("[...new Set([...document.querySelectorAll('[data-hc=table] tbody tr[data-account]')].map(r => r.dataset.account))]")
-    assert accounts == ["Acc"]                                                    # у Fresh снимка нет — строк кампаний нет
+    assert page.locator(".hc-table:visible").count() == 1                         # раскрыт один аккаунт — одна видимая таблица
+    assert page.locator(".hc-table tr.hc-band").count() == 0                      # полос аккаунтов внутри таблицы нет
+    accounts = page.evaluate("[...new Set([...document.querySelectorAll('.hc-table tbody tr[data-account]')].map(r => r.dataset.account))]")
+    assert accounts == ["Acc"]
+    assert page.evaluate("document.querySelector('tr.hc-acct-child').previousElementSibling.querySelector('td.amap-live').dataset.account") == "Acc"
+    assert page.get_attribute(f'{row_of("Acc")}', "aria-expanded") == "true" and page.get_attribute(f'{row_of("Fresh")}', "aria-expanded") == "false"
     tabs = page.locator(".hc-tabs .hc-tab").all_inner_texts()
     assert tabs == ["Campaigns", "Winning setups", "Landings", "Targets", "Creatives", "Buyers"]
+
+
+def test_clicking_the_row_toggles_but_buttons_and_keys_behave(page, site):
+    before = len(site.requests)
+    acc = page.locator(f'{row_of("Acc")}')
+    page.click(f'{row_of("Acc")} td.amap-acc', position={"x": 8, "y": 8})        # второй клик по строке сворачивает
+    page.wait_for_selector(f'{row_of("Acc")} + tr.hc-acct-child[hidden]', state="attached")
+    assert acc.get_attribute("aria-expanded") == "false"
+    page.click(f'{row_of("Acc")} .amap-caret')                                   # стрелка раскрывает
+    assert acc.get_attribute("aria-expanded") == "true"
+    page.click(f'{row_of("Acc")} button.amap-read', force=True)                  # свои кнопки строки не раскрывают и не сворачивают
+    assert acc.get_attribute("aria-expanded") == "true"
+    acc.focus()
+    page.keyboard.press("Enter")
+    assert acc.get_attribute("aria-expanded") == "false"
+    page.keyboard.press("Space")
+    assert acc.get_attribute("aria-expanded") == "true"
+    assert not [r for r in site.requests[before:] if r[0] != "GET"]               # раскрытие ничего не читает
 
 
 def test_showing_the_block_never_reads_meta(page, site):
@@ -299,7 +351,7 @@ def test_rpa_backend_shows_the_notice_and_does_nothing(site, monkeypatch):
 
 def _pinned(page):
     return page.evaluate("""() => {
-      const t = document.querySelector('[data-hc=table]');
+      const t = document.querySelector('.hc-table');
       const w = e => Math.round(e.getBoundingClientRect().width);
       const rows = ['campaign:1', 'adset:11', 'ad:111'].map(k => t.querySelector('tr[data-key="' + k + '"]'));
       return {head: w(t.querySelector('thead tr.hc-heads th.p3')),
@@ -336,7 +388,8 @@ def test_dragging_the_pinned_boundary_widens_every_row_and_is_remembered(page):
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
     # запомнено: после перезагрузки ширина та же
     page.reload()
-    page.wait_for_selector("[data-hc=table] tbody tr")
+    open_acc(page, "Acc")
+    page.wait_for_selector(".hc-table tbody tr")
     assert _pinned(page)["head"] == after["head"]
     # клавиатура и двойной щелчок
     page.focus(".hc-resize")
@@ -384,6 +437,7 @@ def test_a_failed_command_is_one_compact_sub_row_and_never_blows_the_row_up(page
     page.evaluate("document.querySelector('[data-hc=preset]').value = 'all'")
     page.add_script_tag(url="http://acl.test/static/acm_commands.js")
     page.wait_for_function("!!window.acmCommands")
+    open_acc(page, "Fresh")
     _inject_error(page)
     row = page.locator('tr[data-key="campaign:1"]')
     sub = page.locator('tr[data-msg="row:campaign:1"]')
@@ -392,7 +446,7 @@ def test_a_failed_command_is_one_compact_sub_row_and_never_blows_the_row_up(page
     status = row.locator("td.p2")
     assert "WinError" not in status.inner_text() and "Multilogin" not in status.inner_text()
     assert status.locator(".hc-mk.bad").count() == 1 and "Multilogin" in status.locator(".hc-mk").get_attribute("title")
-    table_w = page.evaluate("document.querySelector('[data-hc=table]').getBoundingClientRect().width")
+    table_w = page.evaluate("document.querySelector('.hc-table').getBoundingClientRect().width")
     assert page.evaluate("document.querySelector('tr[data-msg=\"row:campaign:1\"] td').getBoundingClientRect().width") >= table_w - 2   # на всю ширину
     assert page.evaluate("document.querySelector('tr[data-msg=\"row:campaign:1\"]').previousElementSibling.dataset.key") == "campaign:1"
     text = sub.locator(".hc-rm-text")
@@ -428,31 +482,31 @@ def test_a_failed_command_is_one_compact_sub_row_and_never_blows_the_row_up(page
 
 # ───────────────────────── выравнивание шапки таблицы страны (ACL-1800) ─────────────────────────
 
-def test_the_header_area_lines_up_with_the_grid_and_the_page_does_not_overflow(page):
+def test_the_toolbar_lines_up_and_the_expanded_tree_does_not_overflow_the_page(page):
     import os
     from pathlib import Path
 
     left = page.evaluate("""() => {
       const L = sel => { const e = document.querySelector(sel); return e ? Math.round(e.getBoundingClientRect().left * 10) / 10 : null; };
+      const R = sel => { const e = document.querySelector(sel); return e ? Math.round(e.getBoundingClientRect().right * 10) / 10 : null; };
       const textLeft = sel => { const e = document.querySelector(sel); const r = document.createRange(); r.selectNodeContents(e); return Math.round(r.getBoundingClientRect().left * 10) / 10; };
-      return {frame: L('[data-hc=frame]'), toolbar: L('.hc-toolbar'), tabs: textLeft('.hc-tabs .hc-tab'), title: textLeft('.hc-title'),
-              count: textLeft('[data-hc=count]'), batch: L('.hc-batchbar'), hint: textLeft('.hc-hint-line span'), foot: L('[data-hc=foot]'),
-              section: L('.amap-campaigns'), accounts: L('table.amap-grid'), doc: document.documentElement.scrollWidth, win: innerWidth,
-              checkbox: L('[data-hc=table] tbody input[type=checkbox]')};
+      return {toolbar: L('.hc-toolbar'), tabs: textLeft('.hc-tabs .hc-tab'), section: L('.amap-campaigns'), grid: L('table.amap-grid'), gridR: R('table.amap-grid'),
+              frame: L('.hc-frame'), frameR: R('.hc-frame'), doc: document.documentElement.scrollWidth, win: innerWidth};
     }""")
-    for k in ("toolbar", "tabs", "title", "count", "batch", "hint", "foot"):
-        assert abs(left[k] - left["frame"]) <= 2, (k, left)          # весь блок начинается там же, где сетка
-    assert left["frame"] - left["section"] >= 8                       # и это — внутренний отступ, а не край рамки
-    assert left["doc"] <= left["win"]                                 # страница не ползёт вширь при 1280
-    assert page.evaluate("getComputedStyle(document.querySelector('[data-hc=table] thead th')).position") == "sticky"
+    assert abs(left["toolbar"] - left["tabs"]) <= 2 and left["toolbar"] - left["section"] >= 8
+    assert left["frame"] >= left["grid"] - 1 and left["frameR"] <= left["gridR"] + 1      # таблица кампаний лежит внутри списка аккаунтов
+    assert left["doc"] <= left["win"]
+    assert page.evaluate("getComputedStyle(document.querySelector('.hc-table thead th')).position") == "sticky"
     page.select_option("[data-hc=preset]", "all")
-    assert page.evaluate("const s = document.querySelector('[data-hc=scroll]'); s.scrollWidth > s.clientWidth")   # общая горизонтальная прокрутка на месте
+    assert page.evaluate("const s = document.querySelector('.hc-scroll'); s.scrollWidth > s.clientWidth")   # прокрутка внутри раскрытого аккаунта
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
     shots = os.environ.get("ACL_SHOTS_DIR", "")
     if shots:
         page.select_option("[data-hc=preset]", "optimization")
+        open_acc(page, "Fresh")
         for theme in ("light", "dark"):
             page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", theme)
-            page.locator(".amap").screenshot(path=str(Path(shots) / f"header-aligned-{theme}.png"))
+            page.locator(".amap").screenshot(path=str(Path(shots) / f"account-tree-{theme}.png"))
         page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", "light")
 
 
@@ -476,10 +530,10 @@ def test_scrolled_right_there_is_no_overlay_and_only_pinned_cells_are_sticky(pag
     page.mouse.move(2, 2)
     for theme in ("light", "dark"):
         page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", theme)
-        page.evaluate("const s = document.querySelector('[data-hc=scroll]'); s.scrollLeft = s.scrollWidth")
+        page.evaluate("const s = document.querySelector('.hc-scroll'); s.scrollLeft = s.scrollWidth")
         page.wait_for_timeout(250)
         info = page.evaluate("""() => {
-          const sc = document.querySelector('[data-hc=scroll]'), fr = document.querySelector('[data-hc=frame]');
+          const sc = document.querySelector('.hc-scroll'), fr = document.querySelector('.hc-frame');
           const allowedPinned = e => e.matches('thead th, td.p0, td.p1, td.p2, td.p3');
           const sticky = [...sc.querySelectorAll('*')].filter(e => ['sticky', 'absolute', 'fixed'].includes(getComputedStyle(e).position));
           const other = sticky.filter(e => !allowedPinned(e) && !e.matches('.hc-band-in, .hc-rm-raw, .hc-resize, thead th > span'));
@@ -510,3 +564,32 @@ def test_scrolled_right_there_is_no_overlay_and_only_pinned_cells_are_sticky(pag
         if shots:
             page.locator(".amap-campaigns").screenshot(path=str(Path(shots) / f"scrolled-right-{theme}.png"))
     page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", "light")
+
+
+def test_profile_chip_and_open_profile_button_with_and_without_the_warm_api(site, monkeypatch):
+    """Чип состояния и «Open profile» на строке аккаунта — только когда есть API тёплых сессий (ACL-1812); открытие — только по нажатию."""
+    with sync_playwright() as pw:
+        browser = launch_chromium(pw)
+        for with_api in (False, True):
+            site.warm = ({"accounts": {"Acc": {"state": "closed", "text": "Closed", "title": "Not running"},
+                                       "Fresh": {"state": "by_hand", "text": "Opened by hand", "title": "by hand"}},
+                          "results": {"Acc": {"state": "ok", "ok": True}}} if with_api else None)
+            pg = browser.new_page(viewport={"width": 1280, "height": 900})
+            pg.route("http://acl.test/**", site.handle)
+            goto(pg, "http://acl.test/")
+            pg.wait_for_selector(row_of("Acc"))
+            pg.wait_for_timeout(500)
+            if not with_api:
+                assert pg.locator(".amap-pstate:visible").count() == 0 and pg.locator(".hc-ro:visible").count() == 0
+                assert pg.locator(f'{row_of("Acc")} button.hc-rc').count() == 1
+            else:
+                assert pg.locator(f'{row_of("Acc")} .amap-pstate').inner_text() == "Closed"
+                assert pg.locator(f'{row_of("Fresh")} .amap-pstate').inner_text() == "Opened by hand"
+                assert pg.locator(f'{row_of("Fresh")} .hc-ro').is_disabled() and not pg.locator(f'{row_of("Acc")} .hc-ro').is_disabled()
+                assert site.warm_posts == []                                  # само по себе ничего не открывается
+                pg.click(f'{row_of("Acc")} .hc-ro')
+                pg.wait_for_function("() => !document.querySelector('.hc-ro').textContent.includes('Opening')", timeout=15000)
+                assert site.warm_posts == ['{"accounts":["Acc"]}']
+                assert pg.get_attribute(row_of("Acc"), "aria-expanded") == "false"      # кнопка строку не раскрыла
+            pg.close()
+        browser.close()
