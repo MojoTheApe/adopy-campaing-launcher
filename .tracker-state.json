@@ -8903,9 +8903,11 @@
         "worktree": "C:\\wk-rm1799",
         "id": "66e4099a33fe4b1e941f206f1cfb9af7",
         "issue": 799,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-15T04:23:56+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 803,
+        "report": "# ACL-1799 refresh (merge origin/main 0850aa39)\n\nMerged origin/main into codex/acl-1799-country-workbench (approved head 3c9521c3, merge commit 9259d774). One conflict, src/web/templates/report.html, in the style block: kept both the ACL-1797 shell/primitives plus adopy-tokens style and the ACL-1799 cw-styles block. active() adIndex: 0 fix preserved.\n\nTests: tests/test_acl1799_country_workbench.py, test_acl1797_design_system.py, test_acl1761_country_resolve.py (not browser): 43 passed. scripts/acl_scan_secrets.py: clean."
       },
       "775": {
         "actor": "Worker-RL1775",
