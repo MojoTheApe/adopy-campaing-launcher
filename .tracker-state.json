@@ -13013,7 +13013,7 @@
             "session": "ws1826m-20261015"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-S1826M",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -13032,7 +13032,7 @@
         },
         "pr": 828,
         "queued_at": "2026-10-15T03:48:37+00:00",
-        "review_report": "Independent source review of ACL-1826 / PR 828 at head 4e2812a3. Reviewer-R1826L implemented nothing. Returned for fixes: CI is red.\n\nVerified OK:\n- Delta b5e3088c..4e2812a3 is exactly two placeholder workspace-id substitutions in tests/test_acl1826_mlx_session_lost.py (lines 388, 404). Nothing else changed.\n- scripts/acl_scan_secrets.py exits 0 on the head (detached worktree).\n- tests/test_acl1826_mlx_session_lost.py -k \"not browser\": 37 passed.\n- CI: tracker-link, Windows tests, process instructions, descriptor, tooling, build inputs pass (tracker-link failed once on timing, passed on rerun).\n\nBlocking:\n1. Linux shard 1 (3.11 and 3.13) fails tests/test_review_ui_regressions.py::test_poll_resumes_and_updates_all_copies_and_status with \"ReferenceError: window is not defined\" (evalmachine line 1331). Run https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38656365826. The ACL-1826 page code reads `window` in a block that this Node harness evaluates without a window. Fix: a `typeof window` guard, as ACL-1800 did (commit 7efcc856, PR 802). Windows did not catch this.\n2. Installer job \"Build, install, repair, and uninstall\" (run 38656365921) failed with \"INSTALLER: cancelled\" -- a cancellation/timeout-type failure, not a test failure. Rerun after the fix; confirm it is not caused by the PR.",
+        "review_report": "ACL-1826 / PR 828 at b5d66a63: code and the last fix (4e2812a3..b5d66a63: report.html window guard, window stub in test_review_ui_regressions, anchor update in test_acl1800) are correct; no weakening; 90 tests pass in a detached worktree, acl_scan_secrets clean, gh pr checks 828: 16/16 pass. RETURNED ONLY BECAUSE main moved: origin/main is now 0850aa39 (merge-base with the head is still a4e38b7c; 1797 and 1800 landed, incl. 7efcc856 which is the same window guard). PR 828 is CONFLICTING / DIRTY. git merge-tree origin/main head gives conflicts in docs/system/CHANGELOG.md and src/web/templates/_campaign_table.html (report.html, acm_commands.js and test_acl1800_account_scoped_table.py auto-merge). Fix: merge origin/main into the branch, resolve those two files (keep main's 1800 table structure and re-apply the 1826 session-lost change; CHANGELOG keep both entries), rerun the three tests, push; then request re-review. No other findings.",
         "reviewer": "Reviewer-R1826N"
       },
       "767": {
@@ -36107,6 +36107,24 @@
         "pr": 828,
         "lane": "f25cefb8b68946f598b49c15178e8f26",
         "actor": "Reviewer-R1826N"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-15T04:20:32+00:00",
+        "review": {
+          "id": "f25cefb8b68946f598b49c15178e8f26",
+          "pr": 828,
+          "issues": [
+            826
+          ],
+          "actor": "Reviewer-R1826N",
+          "session": "r1826n-20261015",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-15T04:19:44+00:00",
+          "state": "returning",
+          "report": "ACL-1826 / PR 828 at b5d66a63: code and the last fix (4e2812a3..b5d66a63: report.html window guard, window stub in test_review_ui_regressions, anchor update in test_acl1800) are correct; no weakening; 90 tests pass in a detached worktree, acl_scan_secrets clean, gh pr checks 828: 16/16 pass. RETURNED ONLY BECAUSE main moved: origin/main is now 0850aa39 (merge-base with the head is still a4e38b7c; 1797 and 1800 landed, incl. 7efcc856 which is the same window guard). PR 828 is CONFLICTING / DIRTY. git merge-tree origin/main head gives conflicts in docs/system/CHANGELOG.md and src/web/templates/_campaign_table.html (report.html, acm_commands.js and test_acl1800_account_scoped_table.py auto-merge). Fix: merge origin/main into the branch, resolve those two files (keep main's 1800 table structure and re-apply the 1826 session-lost change; CHANGELOG keep both entries), rerun the three tests, push; then request re-review. No other findings.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -39410,21 +39428,6 @@
       "started_at": "2026-10-15T03:44:03+00:00",
       "ineligible": {}
     },
-    "source_reviews": {
-      "828": {
-        "id": "f25cefb8b68946f598b49c15178e8f26",
-        "pr": 828,
-        "issues": [
-          826
-        ],
-        "actor": "Reviewer-R1826N",
-        "session": "r1826n-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "started_at": "2026-10-15T04:19:44+00:00",
-        "state": "returning",
-        "report": "ACL-1826 / PR 828 at b5d66a63: code and the last fix (4e2812a3..b5d66a63: report.html window guard, window stub in test_review_ui_regressions, anchor update in test_acl1800) are correct; no weakening; 90 tests pass in a detached worktree, acl_scan_secrets clean, gh pr checks 828: 16/16 pass. RETURNED ONLY BECAUSE main moved: origin/main is now 0850aa39 (merge-base with the head is still a4e38b7c; 1797 and 1800 landed, incl. 7efcc856 which is the same window guard). PR 828 is CONFLICTING / DIRTY. git merge-tree origin/main head gives conflicts in docs/system/CHANGELOG.md and src/web/templates/_campaign_table.html (report.html, acm_commands.js and test_acl1800_account_scoped_table.py auto-merge). Fix: merge origin/main into the branch, resolve those two files (keep main's 1800 table structure and re-apply the 1826 session-lost change; CHANGELOG keep both entries), rerun the three tests, push; then request re-review. No other findings.",
-        "keep_lane": false
-      }
-    }
+    "source_reviews": {}
   }
 }
