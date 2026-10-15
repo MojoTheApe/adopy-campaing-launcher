@@ -196,7 +196,7 @@ def classify_local(config, repository, base_sha, head_sha):
 def idle(shared, config):
     section = rules.execution_state(shared, config)
     stage = shared.get('delivery_workflow', {}).get('stage', {})
-    return not (stage and stage.get('state') != 'promoted' or section and
+    return not (rules.pending_delivery(shared, config) or stage and stage.get('state') != 'promoted' or section and
                 (section.get('integration') or section.get('intake') and section['intake'].get('state') == 'running'))
 
 
