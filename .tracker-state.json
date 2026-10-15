@@ -13103,7 +13103,7 @@
             "session": "wrn1799-20261015"
           }
         ],
-        "state": "stage",
+        "state": "merged",
         "worker": "Worker-RN1799",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -13129,7 +13129,8 @@
           "session": "coord_c0930a_1009",
           "report": "# Return for a dependency refresh\n\nMain now also contains batch e677f638 (ACL-1812 warm sessions, ACL-1826, ACL-1775 Instant Forms, ACL-1815 rules evidence; PR 919 -> 922). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
         },
-        "reviewer": "Reviewer-RV1015E"
+        "reviewer": "Reviewer-RV1015E",
+        "batch_id": "b2772e6f3da0420895f57066ce4339ff"
       },
       "786": {
         "implementers": [
@@ -13306,7 +13307,7 @@
             "session": "wrn1814-20261015"
           }
         ],
-        "state": "stage",
+        "state": "merged",
         "worker": "Worker-RN1814",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -13326,7 +13327,8 @@
         "pr": 817,
         "queued_at": "2026-10-15T06:35:38+00:00",
         "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e677f638 (ACL-1812 warm sessions, ACL-1826, ACL-1775 Instant Forms, ACL-1815 rules evidence; PR 919 -> 922). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
-        "reviewer": "Reviewer-RV1015D"
+        "reviewer": "Reviewer-RV1015D",
+        "batch_id": "b2772e6f3da0420895f57066ce4339ff"
       },
       "815": {
         "implementers": [
@@ -13381,7 +13383,7 @@
             "session": "ws1819p-20261015"
           }
         ],
-        "state": "stage",
+        "state": "merged",
         "worker": "Worker-S1819P",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -13401,7 +13403,8 @@
         "pr": 821,
         "queued_at": "2026-10-15T07:27:30+00:00",
         "review_report": "# Review of PR 821 / ACL-1819 at a957986b: returned, two blocking CI failures in this PR's own files\n\nContent review is clean (details below). Head contains current main (080df2d8). The PR cannot be approved because required CI is red on two guard tests that fail only because of lines this PR added.\n\n## Blocking\n1. tests/test_acl1819_preflight.py:582 - tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis fails (windows tests, linux shard 2, tooling job). The line `(r\"C:\\files\\2403_square.JPG\", \"Text E\")` is flagged [backslash-path]. Fix: add a `# linux-ok: <why, it is only data for the name function>` comment on that line (or mark the file windows_only, but the first is right: the case is data).\n2. src/web/templates/report.html:5704 (in cbPreflight.creativeNumber) - tests/test_screens_are_in_english.py::test_no_russian_text_reaches_the_screen fails (linux shard 1). The regex `/\\d{3,4}\\s*[x\u0445\u00d7]\\s*\\d{3,4}/gi` contains a Cyrillic \"\u0445\" (U+0445) and the guard rejects any Cyrillic in the template outside its ALLOWED patterns. Fix: write the character as an escape (`[x\\u0445\\xd7]`) so the source has no Cyrillic; the behaviour (Cyrillic x as a size separator, as in the server's AdDraft.ad_name) stays the same. Check the Python side keeps the same character set so JS/Python parity holds.\nOther red checks (Process instructions, ACL verification) are aggregates of these two. tracker-link failed at 06:43 because the issue was not yet in Review at that moment (label status:review is on #819 now); it should re-run green. Re-run all after the fix.\n\n## Checked and fine\n- Scope vs Issue #819: shared rule table (preflight_rules.py plus exported JSON, drift test passes), card with error/warning/ok/unknown, \"errors: N\" badge in the tree, click focuses the field, all listed client and server checks present, gate on Publish and Publish all, warnings in the confirm, RPA shows client checks only and the RPA publish path is untouched.\n- No Meta writes: audit runs only inside plan_only (client without write right), server_verdicts makes reads only; Graph stop kinds skip the audit; audit failure is logged and does not break the plan. Server checks are not run on keystroke or timer, only on Check and right before Publish; stale verdicts are shown as \"Edited since the last check\". Gate fails closed (missing tree, rules or state, failed fetch all block). Retry (ACL-1826 onlyKeys) goes through the same gate; CB_PF_RUNNING is reset before done().\n- creator.py refactor (resolve_page / resolve_pixel / resolve_page_pixel wrapper) keeps behaviour of main's final 1775/1769 form. Unknown currency gives \"unknown\" (non blocking), not an invented minimum; stated in PR and CHANGELOG. CHANGELOG entry present, user-facing text English, no secrets or ids in the diff, `Tracker issues: ACL-1819` in the PR body.\n\n## Tests run (affected only, local, Windows)\n- tests/test_acl1819_preflight.py, test_acl1761_parity.py, test_web_drill.py: 131 passed.\n- test_acl1819_preflight_browser.py, test_acl1775_builder_forms.py, test_acl1775_instant_forms.py, test_acl1826_mlx_session_lost.py, test_acl1604_preflight.py, test_the_builder_tree.py, test_acl1761_plan_check.py, test_acl1761_existing_check.py, test_builder_publish_selected_browser.py: 205 passed.\n- The two guard tests above were NOT in my set and are what CI caught.",
-        "reviewer": "Reviewer-R1819Q"
+        "reviewer": "Reviewer-R1819Q",
+        "batch_id": "b2772e6f3da0420895f57066ce4339ff"
       },
       "816": {
         "implementers": [
@@ -19319,6 +19322,36 @@
         "coordinator": "Coordinator-C1014I",
         "state": "reviewing",
         "started_at": "2026-10-15T06:07:25+00:00"
+      },
+      "928": {
+        "id": "ceb4bcb079e644348335d635edbb25f5",
+        "batch_id": "b2772e6f3da0420895f57066ce4339ff",
+        "pr": 926,
+        "issues": [
+          819,
+          799,
+          814
+        ],
+        "actor": "Reviewer-R926B",
+        "session": "r926b-20261015",
+        "coordinator": "Coordinator-C1014I",
+        "state": "reviewing",
+        "started_at": "2026-10-15T09:24:26+00:00"
+      },
+      "926": {
+        "id": "ceb4bcb079e644348335d635edbb25f5",
+        "batch_id": "b2772e6f3da0420895f57066ce4339ff",
+        "pr": 926,
+        "issues": [
+          819,
+          799,
+          814
+        ],
+        "actor": "Reviewer-R926B",
+        "session": "r926b-20261015",
+        "coordinator": "Coordinator-C1014I",
+        "state": "reviewing",
+        "started_at": "2026-10-15T09:24:26+00:00"
       }
     },
     "review_queue": [
@@ -19339,21 +19372,7 @@
       891,
       855
     ],
-    "review": {
-      "id": "ceb4bcb079e644348335d635edbb25f5",
-      "batch_id": "b2772e6f3da0420895f57066ce4339ff",
-      "pr": 926,
-      "issues": [
-        819,
-        799,
-        814
-      ],
-      "actor": "Reviewer-R926B",
-      "session": "r926b-20261015",
-      "coordinator": "Coordinator-C1014I",
-      "state": "reviewing",
-      "started_at": "2026-10-15T09:24:26+00:00"
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -39972,6 +39991,181 @@
         "issue": 855,
         "pr": 927,
         "actor": "Worker-W1855A"
+      },
+      {
+        "event": "batch-integrated",
+        "at": "2026-10-15T10:01:23+00:00",
+        "batch": {
+          "id": "b2772e6f3da0420895f57066ce4339ff",
+          "actor": "Coordinator-C1014I",
+          "session": "coord-c1014i-20261014",
+          "state": "merged",
+          "issues": [
+            819,
+            799,
+            814
+          ],
+          "members": [
+            {
+              "issue": 819,
+              "pr": 821,
+              "branch": "codex/acl-1819-preflight-audit",
+              "head_sha": "7cde3c4c124627802275f3e18dd5e6a8eb43a3c4",
+              "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+              "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "427543ed85c18a99f5702966cfbabaa5ac03e03fc15edfa01bd94026edfe89ee",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-R1819Q",
+                "implementer": "Worker-S1819P",
+                "review_session": "r1819q-20261015",
+                "execution_lane": "dae6f1124fc7418faff9c2cbf6ac3bd3",
+                "head_sha": "7cde3c4c124627802275f3e18dd5e6a8eb43a3c4",
+                "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+                "tree_sha": "8159e6d665f412b899c113518c19cbc3ee0effb7",
+                "report": "Independent review of ACL-1819 / PR 821 at head 7cde3c4c (main 080df2d8). Reviewer-R1819Q implemented none of it. Verified: one rule table with Python/JS parity tests and in-sync JSON; server verdicts read-only; errors block Publish, warnings only in the confirm; Publish all, publish selected, single Publish and 1826 Retry (onlyKeys) and queue resend all go through cbPreflightGate, fail-closed; English escaped UI; aligned 1766 wording matches main creator.py. Tests in a detached worktree: 1819+1826 115 passed, 1775 96 passed, preflight_gate_harness ok (not browser). Mutations: gate bypass in the wrapper caught (1 failed); dropping onlyKeys from the original call caught by a source-text test; dropping the wrapper form filter not caught but only widens the gate. CI all green incl. tracker-link. Non-blocking: wrapper Retry covered by source-text assertion rather than the 1826 behavioural harness. No live calls. No blocking issues.",
+                "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  819
+                ],
+                "recorded_at": "2026-10-15T08:19:20+00:00",
+                "issue_scopes": {
+                  "819": "427543ed85c18a99f5702966cfbabaa5ac03e03fc15edfa01bd94026edfe89ee"
+                }
+              },
+              "lane": {
+                "id": "dae6f1124fc7418faff9c2cbf6ac3bd3",
+                "pr": 821,
+                "issues": [
+                  819
+                ],
+                "actor": "Reviewer-R1819Q",
+                "session": "r1819q-20261015",
+                "coordinator": "Coordinator-C0930A",
+                "started_at": "2026-10-15T07:52:58+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-15T08:19:42+00:00"
+            },
+            {
+              "issue": 799,
+              "pr": 803,
+              "branch": "codex/acl-1799-country-workbench",
+              "head_sha": "df6317d94f1927e32f8f33cb30eb38daa8ca052e",
+              "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+              "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "0b2f9e9baae64d82925ec94ddc2a28bcd01ffc31eadb8ce886535456b06792e3",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-RV1015E",
+                "review_session": "rv1015e-803",
+                "execution_lane": "f79f080df19d47879b418a7a0687c25d",
+                "implementer": "Worker-RN1799",
+                "head_sha": "df6317d94f1927e32f8f33cb30eb38daa8ca052e",
+                "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+                "tree_sha": "a9d481c3b7b922a37b13816db4e3ed6bf0acf6c8",
+                "report": "Read full diff vs main 080df2d8 (head contains main). Scope matches Issue 799: new country_workbench.py (weighted CPL/CPA/CR, peers exclude selected buyer, insufficient cohorts, no-CM rows separate), creative_identity keeps pack+version while split_ad_title is untouched, goal/benchmark/peer in three separate cells, Use targets cbTree.active() (read-only accessor, verified findCampaign/openId/BORROWED and all called builder globals exist), mismatch confirm, no implicit last-campaign insert, all old views kept with ids; CSS is one cw- prefixed block on page tokens; English UI; workbench build wrapped so a failure falls back to old sections. Checked layout against the Codex reference: Country>Asset>tabs structure, You vs Others strip and builder reuse match; differences (4-tile strip vs 6 KPIs, Campaigns default tab, no sidebar asset tree) are listed as deferred in the PR or follow the Issue text, non-blocking. Ran tests/test_acl1799_country_workbench.py and tests/test_acl1799_workbench_browser.py: 31 passed. CI green (linux 1-3, windows, verification); tracker-link was stale-red from before the handoff and passes after rerun. Not claimed: live check on real workbook data and real builder drafts, landing field (not in builder, noted as provenance only), perf on very large workbooks.",
+                "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  799
+                ],
+                "recorded_at": "2026-10-15T08:00:14+00:00",
+                "issue_scopes": {
+                  "799": "0b2f9e9baae64d82925ec94ddc2a28bcd01ffc31eadb8ce886535456b06792e3"
+                }
+              },
+              "lane": {
+                "id": "f79f080df19d47879b418a7a0687c25d",
+                "pr": 803,
+                "issues": [
+                  799
+                ],
+                "actor": "Reviewer-RV1015E",
+                "session": "rv1015e-803",
+                "coordinator": "Coordinator-M1011A",
+                "started_at": "2026-10-15T06:58:33+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-15T08:00:50+00:00"
+            },
+            {
+              "issue": 814,
+              "pr": 817,
+              "branch": "codex/acl-1814-rules-store",
+              "head_sha": "1dfb66b0aa4340ad944e23a6cb9505ad548a54fe",
+              "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+              "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "ddf654cfd53e9c3cee7a9f3b3e7909f8802691e132619aa679643291c868c722",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-RV1015D",
+                "review_session": "rv1015d-817",
+                "execution_lane": "bc56f6fbb4054a23a0166c43623aff41",
+                "implementer": "Worker-RN1814",
+                "head_sha": "1dfb66b0aa4340ad944e23a6cb9505ad548a54fe",
+                "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+                "tree_sha": "5c168dd1a7045dd8605720ee5be7964932fef25f",
+                "report": "Scope matches issue 814 (T1 backend only: rules/model.py, rules/store.py, optional per-asset goals in web/goals.py; no UI, no Meta calls). Read the full diff: versioned immutable rule versions, grant hashes revoked on strategy/scope/target/evidence/conditions/action/caps edits, duplicate is Disabled with no grant, set_mode cannot grant Automatic, target resolution override > asset goal > country goal > 'No target', atomic JSON with .bak, fsynced JSONL with torn-tail repair, cross-process lock via config.paths.machine_file_lock, schema_version guard, Automatic hard-locked off. Ran tests/test_rules_store.py + tests/test_goals.py: 103 passed. PR head contains current main 080df2d8; CI green (linux x3, windows, tracker-link after rerun). Non-blocking notes: _read_json_src treats a transient OSError on read as corrupt and renames the file aside (unlikely race on Windows); last_action_for keys on rec['id'] while other journals use object_id (settle in T5). No live checks claimed.",
+                "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  814
+                ],
+                "recorded_at": "2026-10-15T08:14:46+00:00",
+                "issue_scopes": {
+                  "814": "ddf654cfd53e9c3cee7a9f3b3e7909f8802691e132619aa679643291c868c722"
+                }
+              },
+              "lane": {
+                "id": "bc56f6fbb4054a23a0166c43623aff41",
+                "pr": 817,
+                "issues": [
+                  814
+                ],
+                "actor": "Reviewer-RV1015D",
+                "session": "rv1015d-817",
+                "coordinator": "Coordinator-M1011A",
+                "started_at": "2026-10-15T06:59:41+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-15T08:15:58+00:00"
+            }
+          ],
+          "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+          "branch": "codex/batch-b2772e6f3da0420895f57066ce4339ff",
+          "intake": "a85c69b3d13f477c8440ae4c0c09854c",
+          "started_at": "2026-10-15T08:43:35+00:00",
+          "pr": 926,
+          "entered_stage": true,
+          "history": [],
+          "review": {
+            "id": "ceb4bcb079e644348335d635edbb25f5",
+            "batch_id": "b2772e6f3da0420895f57066ce4339ff",
+            "pr": 926,
+            "issues": [
+              819,
+              799,
+              814
+            ],
+            "actor": "Reviewer-R926B",
+            "session": "r926b-20261015",
+            "coordinator": "Coordinator-C1014I",
+            "state": "reviewing",
+            "started_at": "2026-10-15T09:24:26+00:00"
+          },
+          "main_prs": [
+            928
+          ],
+          "finished_at": "2026-10-15T10:01:23+00:00"
+        }
       }
     ],
     "policy": {
@@ -43942,176 +44136,194 @@
         "finished_at": "2026-10-15T06:24:50+00:00",
         "closing_sources": false,
         "sources_closed": true
-      }
-    },
-    "integration": {
-      "id": "b2772e6f3da0420895f57066ce4339ff",
-      "actor": "Coordinator-C1014I",
-      "session": "coord-c1014i-20261014",
-      "state": "stage",
-      "issues": [
-        819,
-        799,
-        814
-      ],
-      "members": [
-        {
-          "issue": 819,
-          "pr": 821,
-          "branch": "codex/acl-1819-preflight-audit",
-          "head_sha": "7cde3c4c124627802275f3e18dd5e6a8eb43a3c4",
-          "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
-          "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "427543ed85c18a99f5702966cfbabaa5ac03e03fc15edfa01bd94026edfe89ee",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-R1819Q",
-            "implementer": "Worker-S1819P",
-            "review_session": "r1819q-20261015",
-            "execution_lane": "dae6f1124fc7418faff9c2cbf6ac3bd3",
+      },
+      "b2772e6f3da0420895f57066ce4339ff": {
+        "id": "b2772e6f3da0420895f57066ce4339ff",
+        "actor": "Coordinator-C1014I",
+        "session": "coord-c1014i-20261014",
+        "state": "merged",
+        "issues": [
+          819,
+          799,
+          814
+        ],
+        "members": [
+          {
+            "issue": 819,
+            "pr": 821,
+            "branch": "codex/acl-1819-preflight-audit",
             "head_sha": "7cde3c4c124627802275f3e18dd5e6a8eb43a3c4",
             "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
-            "tree_sha": "8159e6d665f412b899c113518c19cbc3ee0effb7",
-            "report": "Independent review of ACL-1819 / PR 821 at head 7cde3c4c (main 080df2d8). Reviewer-R1819Q implemented none of it. Verified: one rule table with Python/JS parity tests and in-sync JSON; server verdicts read-only; errors block Publish, warnings only in the confirm; Publish all, publish selected, single Publish and 1826 Retry (onlyKeys) and queue resend all go through cbPreflightGate, fail-closed; English escaped UI; aligned 1766 wording matches main creator.py. Tests in a detached worktree: 1819+1826 115 passed, 1775 96 passed, preflight_gate_harness ok (not browser). Mutations: gate bypass in the wrapper caught (1 failed); dropping onlyKeys from the original call caught by a source-text test; dropping the wrapper form filter not caught but only widens the gate. CI all green incl. tracker-link. Non-blocking: wrapper Retry covered by source-text assertion rather than the 1826 behavioural harness. No live calls. No blocking issues.",
             "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
             "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              819
-            ],
-            "recorded_at": "2026-10-15T08:19:20+00:00",
-            "issue_scopes": {
-              "819": "427543ed85c18a99f5702966cfbabaa5ac03e03fc15edfa01bd94026edfe89ee"
-            }
+            "scope": "427543ed85c18a99f5702966cfbabaa5ac03e03fc15edfa01bd94026edfe89ee",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-R1819Q",
+              "implementer": "Worker-S1819P",
+              "review_session": "r1819q-20261015",
+              "execution_lane": "dae6f1124fc7418faff9c2cbf6ac3bd3",
+              "head_sha": "7cde3c4c124627802275f3e18dd5e6a8eb43a3c4",
+              "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+              "tree_sha": "8159e6d665f412b899c113518c19cbc3ee0effb7",
+              "report": "Independent review of ACL-1819 / PR 821 at head 7cde3c4c (main 080df2d8). Reviewer-R1819Q implemented none of it. Verified: one rule table with Python/JS parity tests and in-sync JSON; server verdicts read-only; errors block Publish, warnings only in the confirm; Publish all, publish selected, single Publish and 1826 Retry (onlyKeys) and queue resend all go through cbPreflightGate, fail-closed; English escaped UI; aligned 1766 wording matches main creator.py. Tests in a detached worktree: 1819+1826 115 passed, 1775 96 passed, preflight_gate_harness ok (not browser). Mutations: gate bypass in the wrapper caught (1 failed); dropping onlyKeys from the original call caught by a source-text test; dropping the wrapper form filter not caught but only widens the gate. CI all green incl. tracker-link. Non-blocking: wrapper Retry covered by source-text assertion rather than the 1826 behavioural harness. No live calls. No blocking issues.",
+              "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                819
+              ],
+              "recorded_at": "2026-10-15T08:19:20+00:00",
+              "issue_scopes": {
+                "819": "427543ed85c18a99f5702966cfbabaa5ac03e03fc15edfa01bd94026edfe89ee"
+              }
+            },
+            "lane": {
+              "id": "dae6f1124fc7418faff9c2cbf6ac3bd3",
+              "pr": 821,
+              "issues": [
+                819
+              ],
+              "actor": "Reviewer-R1819Q",
+              "session": "r1819q-20261015",
+              "coordinator": "Coordinator-C0930A",
+              "started_at": "2026-10-15T07:52:58+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-15T08:19:42+00:00"
           },
-          "lane": {
-            "id": "dae6f1124fc7418faff9c2cbf6ac3bd3",
-            "pr": 821,
-            "issues": [
-              819
-            ],
-            "actor": "Reviewer-R1819Q",
-            "session": "r1819q-20261015",
-            "coordinator": "Coordinator-C0930A",
-            "started_at": "2026-10-15T07:52:58+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-15T08:19:42+00:00"
-        },
-        {
-          "issue": 799,
-          "pr": 803,
-          "branch": "codex/acl-1799-country-workbench",
-          "head_sha": "df6317d94f1927e32f8f33cb30eb38daa8ca052e",
-          "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
-          "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "0b2f9e9baae64d82925ec94ddc2a28bcd01ffc31eadb8ce886535456b06792e3",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-RV1015E",
-            "review_session": "rv1015e-803",
-            "execution_lane": "f79f080df19d47879b418a7a0687c25d",
-            "implementer": "Worker-RN1799",
+          {
+            "issue": 799,
+            "pr": 803,
+            "branch": "codex/acl-1799-country-workbench",
             "head_sha": "df6317d94f1927e32f8f33cb30eb38daa8ca052e",
             "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
-            "tree_sha": "a9d481c3b7b922a37b13816db4e3ed6bf0acf6c8",
-            "report": "Read full diff vs main 080df2d8 (head contains main). Scope matches Issue 799: new country_workbench.py (weighted CPL/CPA/CR, peers exclude selected buyer, insufficient cohorts, no-CM rows separate), creative_identity keeps pack+version while split_ad_title is untouched, goal/benchmark/peer in three separate cells, Use targets cbTree.active() (read-only accessor, verified findCampaign/openId/BORROWED and all called builder globals exist), mismatch confirm, no implicit last-campaign insert, all old views kept with ids; CSS is one cw- prefixed block on page tokens; English UI; workbench build wrapped so a failure falls back to old sections. Checked layout against the Codex reference: Country>Asset>tabs structure, You vs Others strip and builder reuse match; differences (4-tile strip vs 6 KPIs, Campaigns default tab, no sidebar asset tree) are listed as deferred in the PR or follow the Issue text, non-blocking. Ran tests/test_acl1799_country_workbench.py and tests/test_acl1799_workbench_browser.py: 31 passed. CI green (linux 1-3, windows, verification); tracker-link was stale-red from before the handoff and passes after rerun. Not claimed: live check on real workbook data and real builder drafts, landing field (not in builder, noted as provenance only), perf on very large workbooks.",
             "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
             "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              799
-            ],
-            "recorded_at": "2026-10-15T08:00:14+00:00",
-            "issue_scopes": {
-              "799": "0b2f9e9baae64d82925ec94ddc2a28bcd01ffc31eadb8ce886535456b06792e3"
-            }
+            "scope": "0b2f9e9baae64d82925ec94ddc2a28bcd01ffc31eadb8ce886535456b06792e3",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-RV1015E",
+              "review_session": "rv1015e-803",
+              "execution_lane": "f79f080df19d47879b418a7a0687c25d",
+              "implementer": "Worker-RN1799",
+              "head_sha": "df6317d94f1927e32f8f33cb30eb38daa8ca052e",
+              "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+              "tree_sha": "a9d481c3b7b922a37b13816db4e3ed6bf0acf6c8",
+              "report": "Read full diff vs main 080df2d8 (head contains main). Scope matches Issue 799: new country_workbench.py (weighted CPL/CPA/CR, peers exclude selected buyer, insufficient cohorts, no-CM rows separate), creative_identity keeps pack+version while split_ad_title is untouched, goal/benchmark/peer in three separate cells, Use targets cbTree.active() (read-only accessor, verified findCampaign/openId/BORROWED and all called builder globals exist), mismatch confirm, no implicit last-campaign insert, all old views kept with ids; CSS is one cw- prefixed block on page tokens; English UI; workbench build wrapped so a failure falls back to old sections. Checked layout against the Codex reference: Country>Asset>tabs structure, You vs Others strip and builder reuse match; differences (4-tile strip vs 6 KPIs, Campaigns default tab, no sidebar asset tree) are listed as deferred in the PR or follow the Issue text, non-blocking. Ran tests/test_acl1799_country_workbench.py and tests/test_acl1799_workbench_browser.py: 31 passed. CI green (linux 1-3, windows, verification); tracker-link was stale-red from before the handoff and passes after rerun. Not claimed: live check on real workbook data and real builder drafts, landing field (not in builder, noted as provenance only), perf on very large workbooks.",
+              "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                799
+              ],
+              "recorded_at": "2026-10-15T08:00:14+00:00",
+              "issue_scopes": {
+                "799": "0b2f9e9baae64d82925ec94ddc2a28bcd01ffc31eadb8ce886535456b06792e3"
+              }
+            },
+            "lane": {
+              "id": "f79f080df19d47879b418a7a0687c25d",
+              "pr": 803,
+              "issues": [
+                799
+              ],
+              "actor": "Reviewer-RV1015E",
+              "session": "rv1015e-803",
+              "coordinator": "Coordinator-M1011A",
+              "started_at": "2026-10-15T06:58:33+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-15T08:00:50+00:00"
           },
-          "lane": {
-            "id": "f79f080df19d47879b418a7a0687c25d",
-            "pr": 803,
-            "issues": [
-              799
-            ],
-            "actor": "Reviewer-RV1015E",
-            "session": "rv1015e-803",
-            "coordinator": "Coordinator-M1011A",
-            "started_at": "2026-10-15T06:58:33+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-15T08:00:50+00:00"
-        },
-        {
-          "issue": 814,
-          "pr": 817,
-          "branch": "codex/acl-1814-rules-store",
-          "head_sha": "1dfb66b0aa4340ad944e23a6cb9505ad548a54fe",
-          "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
-          "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "scope": "ddf654cfd53e9c3cee7a9f3b3e7909f8802691e132619aa679643291c868c722",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-RV1015D",
-            "review_session": "rv1015d-817",
-            "execution_lane": "bc56f6fbb4054a23a0166c43623aff41",
-            "implementer": "Worker-RN1814",
+          {
+            "issue": 814,
+            "pr": 817,
+            "branch": "codex/acl-1814-rules-store",
             "head_sha": "1dfb66b0aa4340ad944e23a6cb9505ad548a54fe",
             "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
-            "tree_sha": "5c168dd1a7045dd8605720ee5be7964932fef25f",
-            "report": "Scope matches issue 814 (T1 backend only: rules/model.py, rules/store.py, optional per-asset goals in web/goals.py; no UI, no Meta calls). Read the full diff: versioned immutable rule versions, grant hashes revoked on strategy/scope/target/evidence/conditions/action/caps edits, duplicate is Disabled with no grant, set_mode cannot grant Automatic, target resolution override > asset goal > country goal > 'No target', atomic JSON with .bak, fsynced JSONL with torn-tail repair, cross-process lock via config.paths.machine_file_lock, schema_version guard, Automatic hard-locked off. Ran tests/test_rules_store.py + tests/test_goals.py: 103 passed. PR head contains current main 080df2d8; CI green (linux x3, windows, tracker-link after rerun). Non-blocking notes: _read_json_src treats a transient OSError on read as corrupt and renames the file aside (unlikely race on Windows); last_action_for keys on rec['id'] while other journals use object_id (settle in T5). No live checks claimed.",
             "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
             "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-            "issues": [
-              814
-            ],
-            "recorded_at": "2026-10-15T08:14:46+00:00",
-            "issue_scopes": {
-              "814": "ddf654cfd53e9c3cee7a9f3b3e7909f8802691e132619aa679643291c868c722"
-            }
-          },
-          "lane": {
-            "id": "bc56f6fbb4054a23a0166c43623aff41",
-            "pr": 817,
-            "issues": [
-              814
-            ],
-            "actor": "Reviewer-RV1015D",
-            "session": "rv1015d-817",
-            "coordinator": "Coordinator-M1011A",
-            "started_at": "2026-10-15T06:59:41+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-15T08:15:58+00:00"
-        }
-      ],
-      "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
-      "branch": "codex/batch-b2772e6f3da0420895f57066ce4339ff",
-      "intake": "a85c69b3d13f477c8440ae4c0c09854c",
-      "started_at": "2026-10-15T08:43:35+00:00",
-      "pr": 926,
-      "entered_stage": true,
-      "history": []
+            "scope": "ddf654cfd53e9c3cee7a9f3b3e7909f8802691e132619aa679643291c868c722",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-RV1015D",
+              "review_session": "rv1015d-817",
+              "execution_lane": "bc56f6fbb4054a23a0166c43623aff41",
+              "implementer": "Worker-RN1814",
+              "head_sha": "1dfb66b0aa4340ad944e23a6cb9505ad548a54fe",
+              "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+              "tree_sha": "5c168dd1a7045dd8605720ee5be7964932fef25f",
+              "report": "Scope matches issue 814 (T1 backend only: rules/model.py, rules/store.py, optional per-asset goals in web/goals.py; no UI, no Meta calls). Read the full diff: versioned immutable rule versions, grant hashes revoked on strategy/scope/target/evidence/conditions/action/caps edits, duplicate is Disabled with no grant, set_mode cannot grant Automatic, target resolution override > asset goal > country goal > 'No target', atomic JSON with .bak, fsynced JSONL with torn-tail repair, cross-process lock via config.paths.machine_file_lock, schema_version guard, Automatic hard-locked off. Ran tests/test_rules_store.py + tests/test_goals.py: 103 passed. PR head contains current main 080df2d8; CI green (linux x3, windows, tracker-link after rerun). Non-blocking notes: _read_json_src treats a transient OSError on read as corrupt and renames the file aside (unlikely race on Windows); last_action_for keys on rec['id'] while other journals use object_id (settle in T5). No live checks claimed.",
+              "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "issues": [
+                814
+              ],
+              "recorded_at": "2026-10-15T08:14:46+00:00",
+              "issue_scopes": {
+                "814": "ddf654cfd53e9c3cee7a9f3b3e7909f8802691e132619aa679643291c868c722"
+              }
+            },
+            "lane": {
+              "id": "bc56f6fbb4054a23a0166c43623aff41",
+              "pr": 817,
+              "issues": [
+                814
+              ],
+              "actor": "Reviewer-RV1015D",
+              "session": "rv1015d-817",
+              "coordinator": "Coordinator-M1011A",
+              "started_at": "2026-10-15T06:59:41+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-15T08:15:58+00:00"
+          }
+        ],
+        "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
+        "branch": "codex/batch-b2772e6f3da0420895f57066ce4339ff",
+        "intake": "a85c69b3d13f477c8440ae4c0c09854c",
+        "started_at": "2026-10-15T08:43:35+00:00",
+        "pr": 926,
+        "entered_stage": true,
+        "history": [],
+        "review": {
+          "id": "ceb4bcb079e644348335d635edbb25f5",
+          "batch_id": "b2772e6f3da0420895f57066ce4339ff",
+          "pr": 926,
+          "issues": [
+            819,
+            799,
+            814
+          ],
+          "actor": "Reviewer-R926B",
+          "session": "r926b-20261015",
+          "coordinator": "Coordinator-C1014I",
+          "state": "reviewing",
+          "started_at": "2026-10-15T09:24:26+00:00"
+        },
+        "main_prs": [
+          928
+        ],
+        "finished_at": "2026-10-15T10:01:23+00:00"
+      }
     },
+    "integration": null,
     "intake": {
       "id": "a85c69b3d13f477c8440ae4c0c09854c",
       "actor": "Coordinator-C1014I",
       "session": "coord-c1014i-20261014",
-      "state": "running",
+      "state": "finished",
       "issues": [
         819,
         799,
         814
       ],
-      "remaining": [
-        819,
-        799,
-        814
+      "remaining": [],
+      "batches": [
+        "b2772e6f3da0420895f57066ce4339ff"
       ],
-      "batches": [],
       "started_at": "2026-10-15T08:23:18+00:00",
       "ineligible": {}
     },
