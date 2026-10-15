@@ -9131,6 +9131,18 @@
         "state": "implementing",
         "started_at": "2026-10-15T06:24:37+00:00",
         "from_status": "status:todo"
+      },
+      "819": {
+        "actor": "Worker-RN1819",
+        "session": "wrn1819-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1819-preflight-audit",
+        "worktree": "C:\\wk-rn1819",
+        "id": "3f7660e12413401584f621636e056793",
+        "issue": 819,
+        "state": "implementing",
+        "started_at": "2026-10-15T06:36:01+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -13123,10 +13135,14 @@
           {
             "actor": "Worker-S1819A",
             "session": "run_s1819a_1012"
+          },
+          {
+            "actor": "Worker-RN1819",
+            "session": "wrn1819-20261015"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-S1819A",
+        "state": "implementing",
+        "worker": "Worker-RN1819",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
           "actor": "Worker-S1819A",
@@ -13144,7 +13160,6 @@
         },
         "pr": 821,
         "queued_at": "2026-10-12T08:26:53+00:00",
-        "reviewer": "Reviewer-RRN819",
         "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e677f638 (ACL-1812 warm sessions, ACL-1826, ACL-1775 Instant Forms, ACL-1815 rules evidence; PR 919 -> 922). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
       },
       "816": {
@@ -15970,6 +15985,10 @@
       },
       "Worker-RN1814": {
         "session": "wrn1814-20261015",
+        "role": "Worker"
+      },
+      "Worker-RN1819": {
+        "session": "wrn1819-20261015",
         "role": "Worker"
       }
     },
@@ -37894,6 +37913,13 @@
         "issue": 814,
         "pr": 817,
         "actor": "Worker-RN1814"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-15T06:36:01+00:00",
+        "issue": 819,
+        "claim": "3f7660e12413401584f621636e056793",
+        "actor": "Worker-RN1819"
       }
     ],
     "policy": {
