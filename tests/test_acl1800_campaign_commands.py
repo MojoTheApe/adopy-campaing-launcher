@@ -599,7 +599,7 @@ def test_client_that_cannot_write_cannot_execute(world):
 
 
 def test_object_of_another_account_is_refused(world):
-    world.meta.objs[CAMP_A]["account_id"] = "9999999999"
+    world.meta.objs[CAMP_A]["account_id"] = "1234567890123456"
     with pytest.raises(cmd.CommandRefused):
         world.preview("set_status", "ACTIVE", [t("campaign", CAMP_A)])
     assert world.meta.posts == []
@@ -717,7 +717,7 @@ def test_session_for_another_account_is_refused_before_any_write(world):
 
     @contextmanager
     def other(account, commands):
-        yield SimpleNamespace(client=make_client(world.meta, commands=True), act="act_9999999999")
+        yield SimpleNamespace(client=make_client(world.meta, commands=True), act="act_1234567890123456")
 
     cmd.execute(world.store, other, revision_id=pv["revision_id"], idempotency_key="idem-key-0001",
                 spawn=lambda fn: fn())
@@ -1011,7 +1011,7 @@ def _node_run(write_policy, script=_NODE, name="__acl_graph_cmd_test"):
         fh.write(text)
         path = fh.name
     try:
-        done = subprocess.run([node, path], capture_output=True, text=True, timeout=60)
+        done = subprocess.run([node, path], capture_output=True, text=True, encoding="utf-8", timeout=60)
     finally:
         Path(path).unlink(missing_ok=True)
     assert done.returncode == 0, done.stderr
@@ -1149,7 +1149,7 @@ def test_acm_commands_helper_in_node():
         fh.write(text)
         path = fh.name
     try:
-        done = subprocess.run([node, path], capture_output=True, text=True, timeout=60)
+        done = subprocess.run([node, path], capture_output=True, text=True, encoding="utf-8", timeout=60)
     finally:
         Path(path).unlink(missing_ok=True)
     assert done.returncode == 0, done.stderr

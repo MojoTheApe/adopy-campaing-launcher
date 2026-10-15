@@ -24,7 +24,10 @@ normal reviewed-Merged receipt completes the instruction-only task without an
 application installer or runtime delivery claim. Review-return, author reclaim,
 fresh head/base/scope approval and normal Merged recording still apply.
 
-The single review lane is held through the direct main merge. A staged or active
+The task's source review lane is held through the direct main merge. Under the
+prepared schema-3 policy it consumes one of five source slots; each held process
+lane blocks new intake/batch creation. Live activation follows
+[SOURCE_REVIEWS.md](SOURCE_REVIEWS.md). A staged or active
 integration candidate blocks the shortcut: changing main underneath its frozen
 baseline is not a permitted convenience. After a completed process merge, stage
 may lag only by those already-admitted instruction changes. The pinned engine's

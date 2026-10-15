@@ -26,7 +26,7 @@ from src.analysis_agent import account_spend_api as api  # noqa: E402
 from src.analysis_agent import campaign_inventory as ci  # noqa: E402
 from src.fb_api import graph as g  # noqa: E402
 
-TEMPLATE = ROOT / "src" / "web" / "templates" / "_home_campaigns.html"
+TEMPLATE = ROOT / "src" / "web" / "templates" / "_campaign_table.html"
 D = "2026-10-08"
 
 
@@ -688,31 +688,25 @@ def test_inventory_bi_without_countries_or_workbook_is_unavailable_not_zero(monk
 SRC = TEMPLATE.read_text(encoding="utf-8")
 
 
-def test_template_renders_and_embeds_the_account_seed():
+def test_component_renders_the_scoped_markup_and_no_home_section():
+    """ACL-1800 (решение владельца 12.10): отдельной секции «Campaigns» на Home нет —
+    шаблон отдаёт только компонент и шаблон разметки для строки аккаунта."""
     from src.web.app import templates
 
-    amap = SimpleNamespace(countries=[
-        SimpleNamespace(country="Kuwait", virtual=False, rows=[{"account": "KW_1"}, {"account": "KW_2"}]),
-        SimpleNamespace(country="Empty", virtual=False, rows=[]),
-        SimpleNamespace(country="Virt", virtual=True, rows=[{"account": "X"}]),
-    ])
-    html = templates.env.get_template("_home_campaigns.html").render(
-        amap=amap, pd={"date_from": D, "date_to": D, "span": ""})
-    m = re.search(r'<script type="application/json" id="hc-seed">(.*?)</script>', html, re.S)
-    assert json.loads(m.group(1)) == [{"country": "Kuwait", "accounts": ["KW_1", "KW_2"]}]
-    assert 'data-period-from="2026-10-08"' in html
+    html = templates.env.get_template("_campaign_table.html").render()
+    assert 'id="hc-root"' not in html and 'id="hc-title"' not in html and 'id="hc-seed"' not in html
+    assert '<template id="hc-scoped-tpl">' in html
     assert "Campaign inventory needs the API backend" in html          # блок отказа есть, скрыт до ответа статуса
+    assert "What was changed here" in html
+    assert 'data-hc="table"' not in html and 'data-hc="frame"' not in html and ' id="hc-table"' not in html   # таблицы рисуются под строками аккаунтов, id нет
 
 
 def test_command_controls_are_disabled_with_the_reason_and_carry_object_data():
-    # Duplicate, Copy и More по-прежнему нарисованы выключенными; причина — в title и aria-label
-    assert "var REASON = 'Coming in ACL-1800';" in SRC and "var REASON_COPY = 'ACL-1773';" in SRC
-    static = re.findall(r"<button[^>]*class=\"hc-cmd\"[^>]*>", SRC)
-    assert len(static) >= 1
-    for b in static:
-        assert " disabled " in b + " " and 'aria-disabled="true"' in b, b
-    assert "cmd('⧉', 'Duplicate here', REASON_COPY, 'duplicate')" in SRC
-    assert "cmd('⇉', 'Copy to accounts', REASON_COPY, 'copy')" in SRC
+    # Duplicate и Copy to… по-прежнему нарисованы выключенными (ACL-1773); причина — в title и aria-label
+    assert "var REASON_COPY = 'ACL-1773';" in SRC and "Coming in ACL-1800" not in SRC           # колонки More больше нет
+    assert "function dupCell(r)" in SRC
+    assert "one('duplicate', 'Duplicate here'" in SRC and "one('copy', 'Copy to accounts'" in SRC
+    assert 'class="hc-cmd hc-cmd-txt" disabled aria-disabled="true"' in SRC
     # Команды ACL-1800 (on/off, budget, bid): состояние решает помощник, без него — выключено с причиной
     assert "ACM.home.controlState" in SRC and "the command helper did not load" in SRC
     assert " name=" not in SRC.split("<script", 1)[0] and "onclick" not in SRC.lower()
@@ -723,8 +717,9 @@ def test_command_controls_are_disabled_with_the_reason_and_carry_object_data():
 
 def test_template_has_no_write_paths_and_one_post():
     posts = re.findall(r"method:\s*'(\w+)'", SRC)
-    assert posts == ["POST"]
-    assert re.findall(r"fetch\('([^']+)'", SRC) == ["/campaign-inventory/read"]
+    assert posts == ["POST", "POST"]                                # чтение описи и «Open profile» (по кнопке)
+    # Meta читает только /campaign-inventory/read; остальное — локальные маршруты профилей (ACL-1812), открытие — по кнопке
+    assert re.findall(r"fetch\('([^']+)'", SRC) == ["/warm/state?", "/warm/open", "/warm/job/", "/campaign-inventory/read"]
     assert not re.search(r"\b(PUT|PATCH|DELETE)\b", SRC)
     for verb in ("setInterval",):
         assert verb not in SRC                                      # ни таймеров, ни опроса по расписанию
@@ -738,10 +733,15 @@ def test_template_unknown_values_use_a_dash_and_numbers_never_default_to_zero():
         assert banned not in SRC
 
 
-def test_template_included_on_home_after_the_account_map():
+def test_home_has_no_standalone_campaigns_section():
+    """Компонент подключён на странице один раз и не рисует секцию; таблица — только под строкой аккаунта."""
     report = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
-    assert report.index('{% include "_account_map.html" %}</div>\n  {#- ACL-1798') < report.index('{% include "_home_campaigns.html" %}')
-    assert report.count('{% include "_home_campaigns.html" %}') == 1
+    assert report.count('{% include "_campaign_table.html" %}') == 1
+    assert "_home_campaigns" not in report
+    assert not (ROOT / "src" / "web" / "templates" / "_home_campaigns.html").exists()
+    rows = (ROOT / "src" / "web" / "templates" / "_account_map_country.html").read_text(encoding="utf-8")
+    assert "amapReadCampaigns(this)" in rows and 'class="hc hc-scoped amap-campaigns"' in rows
+    assert "hc-root" not in report and "hc-title" not in report
 
 
 def test_tokens_are_scoped_to_the_section_not_root():

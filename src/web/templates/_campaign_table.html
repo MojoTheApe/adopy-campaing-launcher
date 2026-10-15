@@ -1,0 +1,1346 @@
+{# Командная таблица кампаний: Campaign > Ad set > Ad (ACL-1798, команды — ACL-1800).
+
+   Живёт ТОЛЬКО под строкой аккаунта, в её раскрывающейся области (клик по строке, стрелка ▸, Enter/Space; карта
+   аккаунтов на Home и страница страны; `amapCampaignTree` в report.html). Отдельной
+   секции «Campaigns» на Home нет (решение владельца 12.10): кампании и аккаунты живут
+   внутри стран. Файл — компонент: стили, шаблон разметки `#hc-scoped-tpl` и `hcMount`.
+
+   Опись и Insights читает Graph API в профиле по кнопке «Read campaigns» аккаунта
+   (POST /campaign-inventory/read, как Read spend) или кнопке страны «Read campaigns in
+   <страна>»; раскрытие областей ничего не читает у Meta — только локальные GET по
+   сохранённому снимку. Команды (on/off, budget, bid) — ACL-1800: каждая идёт только по
+   щелчку человека через превью и подтверждение (`acmCommands.home`), состояние
+   переключателя берётся из подтверждённого чтения Meta, а не выставляется заранее.
+   Duplicate и Copy остаются выключенными (ACL-1773).
+
+   Токены Adopy объявлены на `.hc`, а не на `:root` (как у билдера, ACL-1769):
+   остальной дешборд перекрашивает отдельная задача. #}
+<style>
+  .hc {
+    --adopy-bg: #f4f5f7; --adopy-surface: #ffffff; --adopy-surface-subtle: #f7f8fa;
+    --adopy-surface-hover: #eef0f4; --adopy-border: #dfe3ea; --adopy-border-strong: #c6cfdc;
+    --adopy-control-border: #7c899d; --adopy-text: #202a39; --adopy-text-muted: #606c80;
+    --adopy-primary: #2563eb; --adopy-on-primary: #ffffff; --adopy-selected-bg: #edf3ff;
+    --adopy-selected-text: #245ace; --adopy-focus: #2563eb;
+    --adopy-success: #216e4e; --adopy-success-bg: #edf7f1;
+    --adopy-warning: #855812; --adopy-warning-bg: #fcf5e9;
+    --adopy-danger: #b42318; --adopy-danger-bg: #fff0ed;
+    --adopy-neutral-bg: #eef0f4; --adopy-switch-off: #606c80; --adopy-switch-thumb: #ffffff;
+    --adopy-shadow-sm: 0 1px 3px rgb(24 44 76 / 6%);
+    --adopy-radius-sm: 6px; --adopy-radius-md: 8px; --adopy-radius-lg: 10px; --adopy-radius-pill: 999px;
+    --adopy-row-campaign-min: 64px; --adopy-row-adset-min: 56px; --adopy-row-ad-min: 52px;
+    --adopy-cell-x: 12px; --adopy-z-sticky-cell: 10; --adopy-z-table-header: 20;
+    --adopy-font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    --hc-pin-w: 432px; --hc-inset: 0.75rem;
+  }
+  :root[data-theme="dark"] .hc {
+    --adopy-bg: #111720; --adopy-surface: #19222e; --adopy-surface-subtle: #202b39;
+    --adopy-surface-hover: #263446; --adopy-border: #354459; --adopy-border-strong: #4b5e76;
+    --adopy-control-border: #75869d; --adopy-text: #edf2fa; --adopy-text-muted: #a4b3c8;
+    --adopy-primary: #83aaff; --adopy-on-primary: #10233f; --adopy-selected-bg: #223957;
+    --adopy-selected-text: #a9c7ff; --adopy-focus: #83aaff;
+    --adopy-success: #8ad1ad; --adopy-success-bg: #1e3c32;
+    --adopy-warning: #e5bd78; --adopy-warning-bg: #3c3223;
+    --adopy-danger: #ffb4aa; --adopy-danger-bg: #462a2e;
+    --adopy-neutral-bg: #263446; --adopy-switch-off: #75869d; --adopy-switch-thumb: #10233f;
+    --adopy-shadow-sm: 0 1px 3px rgb(0 0 0 / 20%);
+  }
+  .hc {
+    margin-top: 1.5rem; min-width: 0; max-width: 100%; color: var(--adopy-text);
+    font-family: var(--adopy-font-sans); font-size: 0.875rem; line-height: 1.45;
+  }
+  .hc *, .hc *::before, .hc *::after { box-sizing: border-box; }
+  .hc-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 0.75rem; margin-bottom: 0.5rem; }
+  .hc-head h3 { margin: 0; font-size: 1rem; font-weight: 600; color: var(--adopy-text); }
+  .hc-sub { color: var(--adopy-text-muted); font-size: 0.75rem; }
+  .hc-needs {
+    padding: 0.75rem 1rem; border: 1px solid var(--adopy-border); border-radius: var(--adopy-radius-md);
+    background: var(--adopy-surface-subtle); color: var(--adopy-text); font-weight: 500;
+  }
+  .hc-needs small { display: block; margin-top: 0.25rem; color: var(--adopy-text-muted); font-weight: 400; }
+  .hc-toolbar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0.5rem 0;
+  }
+  .hc-toolbar select, .hc-toolbar input[type="search"] {
+    height: 32px; padding: 0 0.5rem; border: 1px solid var(--adopy-control-border);
+    border-radius: var(--adopy-radius-sm); background: var(--adopy-surface); color: var(--adopy-text);
+    font: inherit; font-size: 0.8125rem; max-width: 100%;
+  }
+  .hc-toolbar input[type="search"] { width: 14rem; }
+  .hc button {
+    font: inherit; font-size: 0.8125rem; color: var(--adopy-text); background: var(--adopy-surface);
+    border: 1px solid var(--adopy-control-border); border-radius: var(--adopy-radius-sm);
+    min-height: 32px; padding: 0 0.75rem; cursor: pointer;
+  }
+  .hc button:hover:not(:disabled) { background: var(--adopy-surface-hover); }
+  .hc button.hc-primary { background: var(--adopy-primary); border-color: var(--adopy-primary); color: var(--adopy-on-primary); }
+  .hc button.hc-primary:hover:not(:disabled) { background: var(--adopy-primary); filter: brightness(0.94); }
+  .hc button:disabled { cursor: not-allowed; opacity: 0.55; }
+  .hc :is(button, select, input, summary, .hc-scroll):focus-visible { outline: 2px solid var(--adopy-focus); outline-offset: 2px; }
+  .hc-spacer { flex: 1 1 auto; }
+  .hc-note { color: var(--adopy-text-muted); font-size: 0.75rem; }
+  .hc-cols { position: relative; }
+  .hc-cols > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; height: 32px; padding: 0 0.75rem;
+    border: 1px solid var(--adopy-control-border); border-radius: var(--adopy-radius-sm); background: var(--adopy-surface); font-size: 0.8125rem; }
+  .hc-cols > summary::-webkit-details-marker { display: none; }
+  .hc-cols-pop {
+    position: absolute; z-index: 100; right: 0; top: 36px; width: 17rem; max-height: 22rem; overflow: auto;
+    padding: 0.5rem 0.75rem; background: var(--adopy-surface); border: 1px solid var(--adopy-border-strong);
+    border-radius: var(--adopy-radius-md); box-shadow: 0 8px 28px rgb(24 44 76 / 14%);
+  }
+  .hc-cols-pop h4 { margin: 0.5rem 0 0.125rem; font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--adopy-text-muted); }
+  .hc-cols-pop label { display: flex; align-items: center; gap: 0.5rem; padding: 0.125rem 0; font-size: 0.8125rem; }
+
+  /* Один общий контейнер прокрутки на все уровни дерева; страница в ширину не растёт. */
+  .hc-frame { border: 1px solid var(--adopy-border); border-radius: var(--adopy-radius-lg); background: var(--adopy-surface);
+    box-shadow: var(--adopy-shadow-sm); min-width: 0; overflow: hidden; }
+  .hc-top { overflow-x: auto; overflow-y: hidden; height: 14px; border-bottom: 1px solid var(--adopy-border); }
+  .hc-top > div { height: 1px; }
+  .hc-scroll { position: relative; overflow: auto; max-height: min(70vh, 720px); min-width: 0; }
+  /* Тени «там есть ещё колонки» — только на двух краях: у правого края закреплённого блока (тень самих закреплённых ячеек,
+     она не может оказаться в другом месте) и у правого края видимой области (`::after` рамки). Никаких наложений
+     поверх прокручиваемых ячеек посередине; всё без событий мыши. */
+  .hc-frame { position: relative; }
+  .hc-frame[data-more-right="1"]::after { content: ""; position: absolute; top: 0; bottom: 0; right: 0; width: 14px; pointer-events: none; z-index: 30;
+    background: linear-gradient(to left, rgb(24 44 76 / 14%), transparent); }
+  .hc-frame[data-more-left="1"] .hc-table .p3 { box-shadow: 8px 0 8px -6px rgb(24 44 76 / 24%); }
+  :root[data-theme="dark"] .hc-frame[data-more-right="1"]::after { background: linear-gradient(to left, rgb(0 0 0 / 40%), transparent); }
+  :root[data-theme="dark"] .hc-frame[data-more-left="1"] .hc-table .p3 { box-shadow: 8px 0 8px -6px rgb(0 0 0 / 55%); }
+  /* Ни один предок не растёт вслед за широкой таблицей: прокручивается только `.hc-scroll`, страница — нет. */
+  .hc-scoped, .hc-scoped [data-hc="body"], .hc-mount, .hc-frame { min-width: 0; max-width: 100%; }
+  table.hc-table { border-collapse: separate; border-spacing: 0; table-layout: fixed; width: auto; margin: 0; font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums; background: var(--adopy-surface); }
+  .hc-table th, .hc-table td {
+    padding: 0 var(--adopy-cell-x); border: 0; border-bottom: 1px solid var(--adopy-border); background: var(--adopy-surface);
+    color: var(--adopy-text); text-align: left; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .hc-table thead th { position: sticky; z-index: var(--adopy-z-table-header); background: var(--adopy-surface-subtle);
+    font-weight: 600; font-size: 0.75rem; color: var(--adopy-text-muted); height: 34px; }
+  .hc-table thead tr.hc-groups th { top: 0; height: 30px; border-bottom: 1px solid var(--adopy-border-strong); text-transform: none; }
+  .hc-table thead tr.hc-heads th { top: 30px; }
+  .hc-table th.hc-grp { border-left: 1px solid var(--adopy-border-strong); color: var(--adopy-text); }
+  .hc-table th.hc-grp small { font-weight: 400; color: var(--adopy-text-muted); margin-left: 0.375rem; }
+  .hc-table .num { text-align: right; }
+  .hc-table .p0, .hc-table .p1, .hc-table .p2, .hc-table .p3 { position: sticky; z-index: var(--adopy-z-sticky-cell); }
+  .hc-table thead .p0, .hc-table thead .p1, .hc-table thead .p2, .hc-table thead .p3 { z-index: calc(var(--adopy-z-table-header) + 5); }
+  .hc-table .p0 { left: 0; } .hc-table .p0, .hc-table .p1 { padding: 0 4px; text-align: center; }
+  .hc-table .p2 { padding: 0 8px; }
+  .hc-table .p1 { left: 36px; } .hc-table .p2 { left: 64px; } .hc-table .p3 { left: 152px; border-right: 1px solid var(--adopy-border-strong); }
+  .hc-table tbody tr:hover > td { background: var(--adopy-surface-hover); }
+  .hc-table tr.hc-r-campaign > td { height: var(--adopy-row-campaign-min); }
+  .hc-table tr.hc-r-adset > td { height: var(--adopy-row-adset-min); background: var(--adopy-surface); }
+  .hc-table tr.hc-r-ad > td { height: var(--adopy-row-ad-min); }
+  .hc-table tr.hc-sel > td { background: var(--adopy-selected-bg); }
+  .hc-table td.hc-gl { border-left: 1px solid var(--adopy-border); }
+  .hc-msg td, .hc-rowmsg td { overflow: visible; }
+  .hc-table thead th.hc-pin-top { left: 0; z-index: calc(var(--adopy-z-table-header) + 6); border-right: 1px solid var(--adopy-border-strong); color: var(--adopy-text); }
+  .hc-band-in { position: sticky; left: 0; display: flex; align-items: center; gap: 0.5rem; padding: 0 var(--adopy-cell-x);
+    width: var(--hc-view-w, 900px); max-width: 100vw; overflow: hidden; }
+  .hc-band-in b { font-weight: 600; }
+  .hc-band-in .hc-spacer { flex: 1 1 0; }
+  .hc-band-in button { min-height: 26px; padding: 0 0.5rem; font-size: 0.75rem; }
+  .hc-msg td { height: 40px; color: var(--adopy-text-muted); background: var(--adopy-surface-subtle); padding: 0; }
+  .hc-msg .hc-band-in { white-space: normal; }
+  .hc-msg.hc-bad .hc-band-in { color: var(--adopy-danger); }
+  .hc-msg.hc-warn .hc-band-in { color: var(--adopy-warning); }
+  .hc-id { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+  .hc-name { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  /* Имя — до двух строк, дальше многоточие; полное имя — в title. Вторая строка (страна · аккаунт) — одна. */
+  .hc-name b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2; line-clamp: 2; white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }
+  .hc-table td.p3 { white-space: normal; }
+  .hc-name span { white-space: nowrap; }
+  .hc-name span { color: var(--adopy-text-muted); font-size: 0.6875rem; overflow: hidden; text-overflow: ellipsis; }
+  .hc-badge { flex: none; font-size: 0.625rem; font-weight: 600; padding: 1px 6px; border-radius: var(--adopy-radius-pill);
+    background: var(--adopy-neutral-bg); color: var(--adopy-text-muted); text-transform: uppercase; letter-spacing: 0.03em; }
+  .hc-resize { position: absolute; top: 0; right: 0; width: 9px; height: 100%; cursor: col-resize; touch-action: none; z-index: 6; }
+  .hc-resize::after { content: ""; position: absolute; right: 3px; top: 22%; bottom: 22%; width: 2px; border-radius: 1px; background: var(--adopy-border-strong); }
+  .hc-resize:hover::after, .hc-resize:focus-visible::after, .hc-resizing .hc-resize::after { background: var(--adopy-primary); width: 3px; }
+  .hc-resize:focus-visible { outline: 2px solid var(--adopy-focus); outline-offset: -2px; }
+  .hc-resizing, .hc-resizing * { user-select: none; cursor: col-resize !important; }
+  .hc-lv-adset .hc-id { padding-left: 16px; } .hc-lv-ad .hc-id { padding-left: 32px; }
+  .hc-exp { width: 24px; min-height: 24px !important; padding: 0 !important; border: 0 !important; background: transparent !important; color: var(--adopy-text-muted); }
+  .hc-exp[aria-expanded="true"]::before { content: "\25BE"; } .hc-exp[aria-expanded="false"]::before { content: "\25B8"; }
+  .hc-exp-none { display: inline-block; width: 24px; }
+  .hc-table input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--adopy-primary); }
+  .hc-switch { position: relative; width: 34px; height: 18px; min-height: 18px !important; padding: 0 !important; border-radius: var(--adopy-radius-pill) !important;
+    background: var(--adopy-switch-off) !important; border: 0 !important; vertical-align: middle; }
+  .hc-switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--adopy-switch-thumb); }
+  .hc-switch[aria-checked="true"] { background: var(--adopy-primary) !important; }
+  .hc-switch[aria-checked="true"]::after { left: 18px; }
+  .hc-status-txt { margin-left: 0.375rem; font-size: 0.75rem; color: var(--adopy-text-muted); }
+  .hc-pill { display: inline-block; padding: 1px 8px; border-radius: var(--adopy-radius-pill); font-size: 0.75rem; font-weight: 500; }
+  .hc-pill.ok { background: var(--adopy-success-bg); color: var(--adopy-success); }
+  .hc-pill.off { background: var(--adopy-neutral-bg); color: var(--adopy-text-muted); }
+  .hc-pill.warn { background: var(--adopy-warning-bg); color: var(--adopy-warning); }
+  .hc-pill.bad { background: var(--adopy-danger-bg); color: var(--adopy-danger); }
+  .hc-sub2 { display: block; font-size: 0.6875rem; color: var(--adopy-text-muted); }
+  .hc-na { color: var(--adopy-text-muted); }
+  .hc-cmd { min-width: 28px; padding: 0 0.375rem !important; min-height: 28px !important; }
+  .hc-cmd-note { font-size: 0.6875rem; color: var(--adopy-text-muted); }
+  .hc-batchbar { display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: center; padding: 0 0 0.5rem; }
+  .hc-batch { display: inline-flex; gap: 0.25rem; align-items: center; }
+  /* Маркер результата в ячейке Status — точка с подсказкой; сам текст — в строке `.hc-rowmsg` под строкой. */
+  .hc-mk { display: inline-block; width: 8px; height: 8px; margin-left: 0.375rem; border-radius: 50%; background: var(--adopy-text-muted); vertical-align: middle; cursor: help; }
+  .hc-mk.ok { background: var(--adopy-success); } .hc-mk.bad { background: var(--adopy-danger); } .hc-mk.warn { background: var(--adopy-warning); }
+  .hc-table tr.hc-rowmsg > td { height: 32px; padding: 0; background: var(--adopy-surface-subtle); }
+  .hc-rowmsg .hc-band-in { height: 32px; }
+  .hc-rowmsg .hc-ic { flex: none; width: 1.25em; text-align: center; color: var(--adopy-text-muted); }
+  .hc-rowmsg.ok .hc-ic, .hc-rowmsg.ok .hc-rm-text { color: var(--adopy-success); }
+  .hc-rowmsg.bad .hc-ic, .hc-rowmsg.bad .hc-rm-text { color: var(--adopy-danger); }
+  .hc-rowmsg.warn .hc-ic, .hc-rowmsg.warn .hc-rm-text { color: var(--adopy-warning); }
+  .hc-rm-text { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.75rem; }
+  .hc-rm-btn { flex: none; min-height: 22px !important; padding: 0 0.5rem !important; font-size: 0.6875rem !important; }
+  .hc-rm-raw { position: sticky; left: 0; width: min(var(--hc-view-w, 900px), 100vw); max-height: 9rem; overflow: auto; margin: 0; padding: 0.375rem var(--adopy-cell-x) 0.5rem;
+    white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; font: 0.6875rem/1.4 ui-monospace, Consolas, monospace; color: var(--adopy-text); border-top: 1px solid var(--adopy-border); background: var(--adopy-surface-subtle); }
+  .hc-switch[aria-busy="true"] { opacity: 0.6; cursor: progress; }
+  .hc-switch:not(:disabled), .hc-cmd:not(:disabled) { cursor: pointer; }
+  .hc-foot { padding: 0.5rem 0; color: var(--adopy-text-muted); font-size: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; }
+  @media (max-width: 760px) { .hc { --hc-pin-w: 330px; } .hc-toolbar input[type="search"] { width: 100%; } }
+  /* Таблица страны под списком аккаунтов (карта аккаунтов на Home и вкладка страны, ACL-1800). */
+  .hc.hc-scoped { margin: 0.5rem 0; padding: 0 var(--hc-inset) 0.5rem; white-space: normal; text-align: left; border: 1px solid var(--adopy-border);
+    border-radius: var(--adopy-radius-lg); background: var(--adopy-surface); }
+  /* Один левый край у всего блока: вкладки, заголовок, панели, подсказка и сама сетка стоят на отступе --hc-inset
+     (≈ отступ ячейки списка аккаунтов выше), поэтому текст шапки начинается там же, где первая колонка сетки. */
+  .hc-scoped [data-hc="body"], .hc-scoped [data-hc="needs"] { margin: 0.75rem 0 0.25rem; }
+  .hc-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 0 1.25rem; padding: 0; border-bottom: 1px solid var(--adopy-border); }
+  .hc-tab { padding: 0.625rem 0; font-size: 0.8125rem; color: var(--adopy-text-muted); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  a.hc-tab:hover { color: var(--adopy-text); }
+  .hc-tab[aria-current="page"] { color: var(--adopy-primary); border-bottom-color: var(--adopy-primary); font-weight: 600; }
+  .hc-tab.hc-tab-off { opacity: 0.55; cursor: not-allowed; }
+  .hc-head2 { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 0.5rem 1rem; margin-bottom: 0.5rem; }
+  .hc-title { margin: 0; font-size: 1.0625rem; font-weight: 600; color: var(--adopy-text); }
+  .hc-actions { display: inline-flex; gap: 0.5rem; }
+  .hc-divider { align-self: stretch; width: 1px; background: var(--adopy-border); margin: 0 0.25rem; }
+  .hc-hint-line { display: flex; justify-content: space-between; gap: 1rem; font-size: 0.6875rem; color: var(--adopy-text-muted); padding: 0.25rem 0 0.125rem; }
+  .hc-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 0.375rem; background: var(--adopy-text-muted); vertical-align: middle; }
+  .hc-dot.ok { background: var(--adopy-success); } .hc-dot.warn { background: var(--adopy-warning); } .hc-dot.bad { background: var(--adopy-danger); }
+  .hc-lbl { display: inline-block; margin-right: 0.375rem; font-size: 0.75rem; }
+  .hc-cmd-txt { font-size: 0.75rem !important; white-space: nowrap; }
+  .hc-chip { display: inline-block; padding: 1px 8px; border-radius: var(--adopy-radius-sm); font-size: 0.75rem; font-weight: 500; cursor: help; }
+  .hc-chip.alert { background: var(--adopy-warning-bg); color: var(--adopy-warning); }
+  .hc-chip.note { background: var(--adopy-neutral-bg); color: var(--adopy-text-muted); }
+  .hc-hint-ok { color: var(--adopy-success); font-weight: 500; } .hc-hint-warn { color: var(--adopy-warning); font-weight: 500; } .hc-hint-neutral { color: var(--adopy-text); }
+  .hc-table tr.hc-r-adset > td { background: var(--adopy-surface-subtle); }
+  .hc-pstate { flex: none; padding: 1px 8px; border: 1px solid var(--adopy-border-strong); border-radius: var(--adopy-radius-pill); font-size: 0.6875rem; color: var(--adopy-text-muted); cursor: help; }
+  .hc-pstate[data-state="warm"] { color: var(--adopy-success); border-color: currentColor; }
+  .hc-pstate[data-state="by_hand"], .hc-pstate[data-state="logged_out"] { color: var(--adopy-danger); border-color: currentColor; }
+  .hc-pstate[data-state="closing"] { color: var(--adopy-warning); border-color: currentColor; }
+  /* Дерево: строка аккаунта — родитель, под ней раскрывается таблица её кампаний (`.hc-embed` в `td` строки `.hc-acct-child`). */
+  /* Правила карты (`.amap table.amap-grid td`, их сила выше) протекают во вложенную таблицу: имя должно переноситься, и вторая строка последней ячейки не пропадает. */
+  .amap table.amap-grid .hc-embed .hc-table td.p3 { white-space: normal; }
+  .amap tbody .hc-acct-child tr:last-child td { border-bottom: 1px solid var(--adopy-border); }
+  .hc-acct-row { cursor: pointer; }
+  .hc-acct-row:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: -2px; }
+  .hc-acct-child > td { padding: 0 !important; background: var(--bg-subtle, #f7f8fa); white-space: normal; overflow: visible; }
+  .hc.hc-embed { margin: 0; padding: 0.5rem 0.75rem 0.75rem; }
+  .hc-embed .hc-frame { background: var(--adopy-surface); }
+  .hc-snap { display: block; font-size: 0.66rem; font-weight: 400; line-height: 1.3; color: var(--muted, #888); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hc-snap[data-tone="bad"] { color: var(--bad, #c0392b); }
+  .amap-pstate[hidden], .hc-ro[hidden] { display: none !important; }
+  .amap-pstate { display: inline-block; margin-left: 0.4rem; padding: 0 0.4rem; font-size: 0.66rem; font-weight: 400; white-space: nowrap; border: 1px solid var(--border-strong, #8886); border-radius: 999px; color: var(--muted, #888); cursor: help; vertical-align: middle; }
+  .amap-pstate[data-state="warm"] { color: var(--good, #2a9d4b); border-color: currentColor; }
+  .amap-pstate[data-state="by_hand"], .amap-pstate[data-state="logged_out"] { color: var(--bad, #c0392b); border-color: currentColor; }
+  .amap-pstate[data-state="closing"] { color: var(--warn, #b7791f); border-color: currentColor; }
+  .hc-hist { margin-top: 0.5rem; font-size: 0.8125rem; }
+  .hc-hist > summary { cursor: pointer; color: var(--adopy-primary); width: max-content; }
+  .hc-hist-body { padding: 0.375rem 0; color: var(--adopy-text-muted); }
+  .hc-hist-line { padding: 0.125rem 0; color: var(--adopy-text); }
+  .hc-hist-bad { color: var(--adopy-danger); }
+</style>
+
+{% macro hc_body() %}
+  <div class="hc-needs" data-hc="needs" hidden>Campaign inventory needs the API backend
+    <small>Switch this machine to <code>ACL_FB_BACKEND=api</code> to read campaigns. Nothing was read.</small></div>
+  <div data-hc="body" hidden>
+    <div class="hc-needs" data-hc="banner" role="alert" hidden></div>
+    <div class="hc-toolbar" role="toolbar" aria-label="Campaign tree controls">
+      <input type="search" data-hc="search" placeholder="Search campaigns, ad sets or ads" aria-label="Search names">
+      <select data-hc="delivery" aria-label="Delivery filter">
+        <option value="all">All delivery</option><option value="active">Enabled campaigns</option><option value="paused">Paused campaigns</option></select>
+      <span class="hc-divider" aria-hidden="true"></span>
+      <button type="button" data-jump="controls">Controls</button><button type="button" data-jump="bi">BI metrics</button>
+      <button type="button" data-jump="meta">Meta metrics</button><button type="button" data-jump="tracker">Tracking</button>
+      <span class="hc-divider" aria-hidden="true"></span>
+      <button type="button" data-hc="expand-all">Expand all</button><button type="button" data-hc="collapse-all">Collapse all</button>
+      <span class="hc-spacer"></span>
+      <span class="hc-note" data-hc="count" aria-live="polite"></span>
+      <span class="hc-note" data-hc="selcount" aria-live="polite"></span>
+      <label class="hc-note">Columns <select data-hc="preset" aria-label="Column preset">
+        <option value="optimization">Optimization</option><option value="meta">Meta delivery</option>
+        <option value="bi">BI funnel</option><option value="all">All metrics</option><option value="custom" hidden>Custom</option></select></label>
+      <details class="hc-cols" data-hc="cols"><summary>Manage columns</summary><div class="hc-cols-pop" data-hc="cols-pop"></div></details>
+      <span class="hc-batch" data-hc="batch" role="group" aria-label="Commands for the selected rows">
+        <button type="button" data-batch="on">Switch on</button>
+        <button type="button" data-batch="off">Switch off</button>
+        <button type="button" data-batch="budget">Set budget…</button>
+        <button type="button" data-batch="bid">Set bid…</button>
+      </span>
+      <span class="hc-note" data-hc="batch-note" aria-live="polite"></span>
+    </div>
+  </div>
+{% endmacro %}
+
+{% macro hc_after() %}
+  <div class="hc-foot" data-hc="foot"></div>
+  <details class="hc-hist" data-hc="history"><summary>What was changed here</summary>
+    <div class="hc-hist-body" data-hc="history-body">Open to read the record.</div></details>
+{% endmacro %}
+
+{#- Разметка таблицы страны; `amapCampaignMount` клонирует её в блок страны. Id в ней нет: таблиц на странице много. -#}
+<template id="hc-scoped-tpl">
+  {{ hc_body() }}
+</template>
+<template id="hc-after-tpl">
+  {{ hc_after() }}
+</template>
+
+<script src="/static/acm_commands.js"></script>
+<script>
+(function () {
+  'use strict';
+  /* Компонент один на страницу, экземпляр на страну: таблица под списком аккаунтов страны
+     (`hcMount`): одна таблица на страну, внутри — её аккаунты. */
+  if (window.hcMount) return;
+  var instances = [], queueBusy = false;
+  /* ACL-1826: коды, после которых сервер пропускает остальные старты слота в пачке. */
+  var BATCH_STOPS = {mlx_session_lost: 1, mlx_token_expired: 1, mlx_token_workspace: 1};
+
+  /* Общая очередь чтений: jobs = [{inst, account}], по одному, человек нажал — человек и спросил. */
+  async function queueRun(jobs, progress) {
+    if (queueBusy || !jobs.length) return;
+    queueBusy = true;
+    instances.forEach(function (i) { i.setReadBusy(true); });
+    /* ACL-1826: одна пачка на нажатие. Потеряна общая сессия Multilogin слота B — остальные
+       B-аккаунты пропускает сервер с той же причиной, слот A идёт дальше; над таблицей одна
+       строка и Retry, который перечитывает только пропущенных. */
+    var batch = 'rc-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8), stopped = [];
+    instances.forEach(function (i) { i.banner(null); });
+    try {
+      for (var i = 0; i < jobs.length; i++) {
+        if (progress) progress(i + 1, jobs.length);
+        var stop = await jobs[i].inst.readOne(jobs[i].account, batch);
+        if (stop) stopped.push({job: jobs[i], text: stop.text});
+      }
+    } finally {
+      queueBusy = false;
+      instances.forEach(function (i) { i.setReadBusy(false); });
+    }
+    if (stopped.length) {
+      stopped[0].job.inst.banner(stopped[0].text + ' (' + stopped.length + ' account' + (stopped.length === 1 ? '' : 's') + ' not read) ',
+        function () { return queueRun(stopped.map(function (x) { return x.job; }), progress); });
+    }
+  }
+  var REASON_COPY = 'ACL-1773';
+  var STORE_KEY = 'acl.hc.cols.v2';
+  var DASH = '—';
+  /* Закреплённый блок: выбор 36 + стрелка 28 + переключатель 88 + имя. Ширину всего блока
+     (по умолчанию 432) тянут за ручку в шапке имени; запоминается общим ключом на все таблицы стран. */
+  var PIN_DEFAULT = 432, PIN_FIXED = 152, PIN_MIN = 240, PIN_KEEP = 160, PIN_KEY = 'acl.hc.pinw.v1';
+  function loadPin() {
+    try {
+      var v = Number(localStorage.getItem(PIN_KEY));
+      return v >= PIN_MIN && v <= 4000 ? Math.round(v) : PIN_DEFAULT;
+    } catch (e) { return PIN_DEFAULT; }   // хранилище закрыто — работаем без памяти
+  }
+
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+      return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c];
+    });
+  }
+
+  function mount(root, opts) {
+  opts = opts || {};
+  var api = null;
+  var pinW = loadPin(), resizing = null;
+  /* Дерево аккаунтов: строки аккаунтов — родители, под каждой раскрывается её таблица кампаний. Узлы строк
+     (стрелка, строка снимка, кнопки, рамка прокрутки, таблица) создаёт страница и отдаёт в `opts.rows`;
+     компонент только пишет в них. Тулбар — в `root`, подвал и журнал — в `opts.after`. */
+  var handles = opts.rows || {};
+  function el(name) {
+    var sel = '[data-hc="' + name + '"]';
+    return root.querySelector(sel) || (opts.after ? opts.after.querySelector(sel) : null);
+  }
+
+  var seed = opts.seed || [];     // [{country, accounts: [один аккаунт]}]
+  var period = { from: root.dataset.periodFrom || '', to: root.dataset.periodTo || '', span: root.dataset.periodSpan || '' };
+  if (!period.to) period.to = period.from;
+  var periodOk = !!period.from && period.span !== 'all';
+
+  /* ── состояние ── */
+  var S = {
+    countries: seed,                 // [{country, accounts:[]}]
+    accountCountries: {},            // account -> [country, ...]
+    summaries: {},                   // account -> сводка снимка
+    fetchedAt: {},                   // account -> Date.now() получения сводки
+    rows: {},                        // account -> строки кампаний | null
+    treeErr: {},                     // account -> текст ошибки локального GET
+    bi: {},                          // account -> сводка BI
+    kids: {},                        // 'level:id' -> {state, rows, note}
+    expanded: {}, selected: {}, details: {}, acctOpen: {},
+    running: {}, busy: queueBusy,
+    avail: null,                     // ответ /campaign-commands/availability (null — ещё не знаем)
+    notes: {},                       // key -> {text, tone}: итог последней команды по строке
+    q: '', delivery: 'all',
+    ctx: {},                         // account -> {goal_cpa, benchmark_cpa, …} из My Goals и benchmarks
+    warm: {available: false, actions: false, accounts: {}},   // ACL-1812: состояние профилей; нет API — чип и кнопка скрыты
+    warmBusy: {}, warmMsg: {}
+  };
+  var ACM = window.acmCommands && window.acmCommands.home ? window.acmCommands : null;
+  seed.forEach(function (c) {
+    c.accounts.forEach(function (a) {
+      (S.accountCountries[a] = S.accountCountries[a] || []).indexOf(c.country) < 0 && S.accountCountries[a].push(c.country);
+    });
+  });
+
+  /* ── форматирование: неизвестное — тире, не ноль ── */
+  function na(why) { return '<span class="hc-na" title="' + esc(why || 'Not available') + '">' + DASH + '</span>'; }
+  function money(v, cur) {
+    if (v == null) return null;
+    cur = (cur || '').toUpperCase();
+    if (/^[A-Z]{3}$/.test(cur)) {
+      try { return new Intl.NumberFormat('en-US', {style: 'currency', currency: cur}).format(v); } catch (e) { /* ниже */ }
+    }
+    return (cur ? cur + ' ' : '') + v.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  }
+  function int(v) { return v == null ? null : Math.round(v).toLocaleString('en-US'); }
+  function dec(v, d) { return v == null ? null : v.toLocaleString('en-US', {minimumFractionDigits: d, maximumFractionDigits: d}); }
+  function numCell(text, why) { return '<td class="num">' + (text == null ? na(why) : esc(text)) + '</td>'; }
+
+  function metaWhy(m) {
+    if (m.state === 'not_read') return 'Insights for this level were not read';
+    if (m.state === 'no_row') return 'Meta returned no Insights row for this period (no delivery, or not returned)';
+    if (m.state === 'partial_unknown') return 'The Insights list was cut at the page limit; this row may be missing';
+    return 'Not available';
+  }
+  function metaCell(fn, d) {
+    return function (r) {
+      var m = r.meta || {};
+      if (m.state !== 'ok') return numCell(null, metaWhy(m));
+      var v = m[d];
+      return numCell(v == null ? null : fn(v, r.currency), v == null ? 'Meta did not report this value' : '');
+    };
+  }
+  function biWhy(b) {
+    if (b.match === 'partial') return 'BI matched only ' + b.coverage + ' ad sets of this campaign; not shown as a total';
+    return 'No exact name match in the stats workbook for this account (workbook rows without a match stay evidence only)';
+  }
+  function biCell(d, fn) {
+    return function (r) {
+      var b = r.bi || {};
+      if (b.match !== 'name' && b.match !== 'ad_sets') return numCell(null, biWhy(b));
+      var v = b[d];
+      if (d === 'cpa' && v == null && b.zero_ftd) return '<td class="num"><span class="hc-na" title="Spend with zero first deposits">' + DASH + ' · 0 FTDs</span></td>';
+      return numCell(v == null ? null : fn(v), v == null ? 'Zero denominator' : '');
+    };
+  }
+  function usd(v) { return '$' + v.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+
+  function age(sum, fetched) {
+    if (!sum || sum.age_s == null) return null;
+    var s = sum.age_s + Math.floor((Date.now() - (fetched || Date.now())) / 1000);
+    if (s < 90) return 'just now';
+    if (s < 3600) return Math.round(s / 60) + ' min ago';
+    if (s < 86400) return Math.round(s / 3600) + ' h ago';
+    return Math.round(s / 86400) + ' d ago';
+  }
+
+  /* ── колонки ── */
+  /* Управления объекта несут его id, уровень и аккаунт: ACL-1800 подключит команды
+     по этим data-атрибутам, а не по позиции строки. Сейчас все выключены. */
+  function objAttrs(r, action) {
+    return ' data-object-id="' + esc(r.id) + '" data-level="' + esc(r.level) + '" data-account="' + esc(r.account) + '" data-action="' + esc(action) + '"';
+  }
+  /* Команды ACL-1800: состояние кнопки решает `acmCommands.home.controlState`; нет помощника
+     или команды выключены (rpa, не loopback) — кнопка выключена с причиной. */
+  function ctl(r, action) {
+    if (!ACM) return {enabled: false, reason: 'Commands unavailable: the command helper did not load'};
+    return ACM.home.controlState(r, action, S.avail);
+  }
+  function cmdButton(r, action, glyph, label, st) {
+    var why = st.enabled ? label : st.reason;
+    return '<button type="button" class="hc-cmd"' + (st.enabled ? '' : ' disabled aria-disabled="true"') + objAttrs(r, action) +
+      ' aria-label="' + esc(label + (st.enabled ? '' : ' — ' + st.reason)) + '" title="' + esc(why) + '">' + glyph + '</button>';
+  }
+  /* ── совет и оповещения: только пересчёт цифр, которые уже есть на экране ──
+     Цель CPA и бенчмарк приходят с сервера вместе с описью (`context`: My Goals и
+     config/benchmarks), BI — из книги. Нет входа — тире с причиной, а не выдуманный совет.
+     Текст совета — подсказка человеку; никакой автоматики за ним нет. */
+  function ctxOf(r) { return S.ctx[r.account] || {}; }
+  function biFacts(r) {
+    var b = r.bi || {};
+    return (b.match === 'name' || b.match === 'ad_sets') ? b : null;
+  }
+  function hintOf(r) {
+    var c = ctxOf(r), b = biFacts(r);
+    if (r.status === 'off') return {none: 'Switched off — nothing to advise'};
+    if (r.status !== 'on') return {none: 'The configured status was not read'};
+    if (c.goal_cpa == null) return {none: c.goal_note || 'No CPA goal is set for this country in My Goals'};
+    if (!b) return {none: biWhy(r.bi || {})};
+    /* Неизвестное не превращается в ноль: нет суммы или счёта FTD — совета нет. */
+    if (b.spend == null || b.ftds == null) return {none: 'The workbook row has no spend or FTD count'};
+    var spend = b.spend, ftds = b.ftds;
+    var sub = ftds + ' FTD' + (ftds === 1 ? '' : 's') + ' · ' + usd(spend) + ' spend';
+    if (ftds > 0 && b.cpa != null) return b.cpa <= c.goal_cpa ? {label: 'Within CPA goal', tone: 'ok', sub: sub} : {label: 'CPA above goal', tone: 'warn', sub: sub};
+    if (ftds === 0 && spend >= c.goal_cpa) return {label: 'Spend above goal CPA, no FTDs', tone: 'warn', sub: sub};
+    return {label: 'Low volume · inspect', tone: 'neutral', sub: sub};
+  }
+  function alertsOf(r) {
+    var out = [], d = r.delivery || {}, c = ctxOf(r), b = biFacts(r);
+    if (r.status === 'on' && d.constraint) out.push({kind: 'alert', text: 'Switched on but not delivering: ' + d.constraint});
+    if (r.status === 'on' && b && c.benchmark_cpa != null && b.cpa != null && b.cpa > c.benchmark_cpa) out.push({kind: 'alert', text: 'CPA ' + usd(b.cpa) + ' is above the ' + usd(c.benchmark_cpa) + ' benchmark'});
+    if (r.status === 'on' && b && c.goal_cpa != null && b.ftds === 0 && b.spend != null && b.spend >= c.goal_cpa) out.push({kind: 'alert', text: 'Spent ' + usd(b.spend) + ', at least the goal CPA, with no FTDs'});
+    if ((r.bi || {}).match === 'partial') out.push({kind: 'note', text: 'Workbook rows match only part of this campaign'});
+    return out;
+  }
+  function countryOf(account) { return (S.accountCountries[account] || [])[0] || ''; }
+  function ctxCell(field, note) {
+    return function (r) {
+      var c = ctxOf(r), v = c[field];
+      return v == null ? '<td class="num">' + na(c[note] || (field === 'goal_cpa' ? 'No CPA goal is set for this country in My Goals' : 'No benchmark CPA is set for this country')) + '</td>'
+        : '<td class="num" title="' + esc(field === 'goal_cpa' ? 'CPA goal from My Goals' : 'Benchmark CPA (config/benchmarks)') + '">' + esc(usd(v)) + '</td>';
+    };
+  }
+  function trackerCell(why) { return function () { return '<td>' + na(why) + '</td>'; }; }
+  /* Текстовые кнопки «Duplicate» и «Copy to…» — одной колонкой, как в макете; обе выключены (ACL-1773). */
+  function dupCell(r) {
+    function one(action, label, text) {
+      return '<button type="button" class="hc-cmd hc-cmd-txt" disabled aria-disabled="true"' + objAttrs(r, action) + ' aria-label="' + esc(label + ' — ' + REASON_COPY) + '" title="' + esc(REASON_COPY) + '">' + text + '</button>';
+    }
+    return '<td class="hc-gl">' + one('duplicate', 'Duplicate here', '&#10697; Duplicate') + ' ' + one('copy', 'Copy to accounts', 'Copy to… &#8647;') + '</td>';
+  }
+  var COLS = [
+    {k: 'delivery', g: 'controls', h: 'Delivery', w: 150, cell: function (r) {
+      var d = r.delivery || {};
+      var sub = r.status === 'on' && d.constraint ? 'On · ' + esc(d.constraint)
+        : r.child_count != null ? (r.child_state === 'not_read' ? 'children not read' : r.child_count + (r.level === 'campaign' ? ' ad sets' : ' ads')) : '';
+      return '<td class="hc-gl"><span class="hc-dot ' + esc(d.tone) + '"></span><span title="Meta effective_status ' + esc(d.effective) + '">' + esc(d.label) + '</span>' +
+        (sub ? '<span class="hc-sub2">' + sub + '</span>' : '') + '</td>';
+    }},
+    {k: 'dup', g: 'controls', h: 'Duplicate', w: 216, cell: dupCell},
+    {k: 'bid', g: 'controls', h: 'Bid control', w: 190, cell: function (r) {
+      if (r.level === 'ad') return '<td class="hc-gl"><span class="hc-cmd-note">Managed by ad set</span></td>';
+      var st = ctl(r, 'bid-down');
+      var label = r.level === 'campaign' ? 'Ad set bids' : (r.bid_strategy || 'Bid');
+      var cur = r.bid_amount != null && r.level === 'adset' ? '<span class="hc-sub2">' + esc(money(r.bid_amount, r.currency)) + '</span>' : '';
+      return '<td class="hc-gl"><span class="hc-lbl">' + esc(label) + '</span>' + cmdButton(r, 'bid-down', '−', 'Bid minus', st) + ' ' + cmdButton(r, 'bid-up', '+', 'Bid plus', st) + cur + '</td>';
+    }},
+    {k: 'budgetcmd', g: 'controls', h: 'Budget', w: 170, cell: function (r) {
+      if (r.level === 'ad') return '<td class="hc-gl">' + na('Ads have no budget') + '</td>';
+      var b = r.budget || {kind: 'none'}, val = null, note = '', why = '';
+      if (b.kind === 'daily') { val = money(b.amount, r.currency) + ' / day'; note = r.level === 'campaign' ? 'Campaign budget' : 'Ad set budget'; }
+      else if (b.kind === 'lifetime') { val = money(b.amount, r.currency) + ' lifetime'; note = r.level === 'campaign' ? 'Campaign budget' : 'Ad set budget'; }
+      else if (b.kind === 'ad_sets') { val = 'Ad set budgets'; note = 'Across ad sets'; }
+      else if (b.kind === 'inherited') { val = 'Campaign budget'; note = 'Inherited'; }
+      else if (b.kind === 'unit_unknown') why = 'Budget is returned in minor units; this currency’s unit is not confirmed';
+      else why = 'No budget returned';
+      var st = ctl(r, 'budget');
+      var btn = st.openKids ? cmdButton(r, 'budget', '▾', st.label, st) : cmdButton(r, 'budget', '✎', 'Edit budget', st);
+      return '<td class="hc-gl">' + (val ? '<span class="hc-lbl">' + esc(val) + '</span>' : na(why)) + btn + (note ? '<span class="hc-sub2">' + esc(note) + '</span>' : '') + '</td>';
+    }},
+    {k: 'hint', g: 'controls', h: 'Optimization hint', w: 195, cell: function (r) {
+      var h = hintOf(r);
+      if (h.none) return '<td class="hc-gl">' + na(h.none) + '</td>';
+      return '<td class="hc-gl" title="Advisory text from the numbers on screen; nothing is changed automatically"><span class="hc-hint-' + esc(h.tone) + '">' + esc(h.label) + '</span><span class="hc-sub2">' + esc(h.sub) + '</span></td>';
+    }},
+    {k: 'alerts', g: 'controls', h: 'Alerts', w: 104, cell: function (r) {
+      var list = alertsOf(r);
+      if (!list.length) return '<td class="hc-gl">' + na('No alerts from the data on screen') + '</td>';
+      var al = list.filter(function (x) { return x.kind === 'alert'; }).length;
+      var txt = al ? al + ' alert' + (al === 1 ? '' : 's') : list.length + ' note' + (list.length === 1 ? '' : 's');
+      return '<td class="hc-gl"><span class="hc-chip ' + (al ? 'alert' : 'note') + '" title="' + esc(list.map(function (x) { return x.text; }).join('\n')) + '">' + esc(txt) + '</span></td>';
+    }},
+    {k: 'goal', g: 'controls', h: 'Goal CPA', w: 112, num: 1, cell: ctxCell('goal_cpa', 'goal_note')},
+    {k: 'bench', g: 'controls', h: 'Benchmark CPA', w: 124, num: 1, cell: ctxCell('benchmark_cpa', 'benchmark_note')},
+    {k: 'b_spend', g: 'bi', h: 'Spend', w: 104, num: 1, cell: biCell('spend', usd)},
+    {k: 'b_leads', g: 'bi', h: 'Leads', w: 84, num: 1, cell: biCell('leads', int)},
+    {k: 'b_ftds', g: 'bi', h: 'FTDs', w: 84, num: 1, cell: biCell('ftds', int)},
+    {k: 'b_dep', g: 'bi', h: 'Deposits (all)', w: 116, num: 1, cell: function () { return numCell(null, 'All-deposit counts are unavailable; FTDs remain explicit'); }},
+    {k: 'b_cpl', g: 'bi', h: 'CPL', w: 88, num: 1, cell: biCell('cpl', usd)},
+    {k: 'b_cpa', g: 'bi', h: 'CPA (FTD)', w: 104, num: 1, cell: biCell('cpa', usd)},
+    {k: 'b_cr', g: 'bi', h: 'CR lead→FTD', w: 108, num: 1, cell: biCell('cr', function (v) { return dec(v, 1) + '%'; })},
+    {k: 'b_match', g: 'bi', h: 'Match', w: 118, cell: function (r) {
+      var b = r.bi || {};
+      var t = b.match === 'name' ? 'Exact name' : b.match === 'ad_sets' ? 'Ad sets ' + b.coverage : b.match === 'partial' ? 'Partial ' + b.coverage : 'No exact match';
+      return '<td title="' + esc(b.match === 'none' || !b.match ? biWhy(b) : 'Joined by exact name within this account') + '">' + esc(t) + '</td>';
+    }},
+    {k: 'synced', g: 'meta', h: 'Last remote sync', w: 118, cell: function (r) {
+      var sum = S.summaries[r.account];
+      var a = age(sum, S.fetchedAt[r.account]);
+      return '<td title="' + esc(r.synced_at) + '">' + (a ? esc(a) : na('Read time unknown')) + '</td>';
+    }},
+    {k: 'm_spend', g: 'meta', h: 'Spend', w: 104, num: 1, cell: metaCell(money, 'spend')},
+    {k: 'm_reach', g: 'meta', h: 'Reach', w: 96, num: 1, cell: metaCell(function (v) { return int(v); }, 'reach')},
+    {k: 'm_impr', g: 'meta', h: 'Impressions', w: 108, num: 1, cell: metaCell(function (v) { return int(v); }, 'impressions')},
+    {k: 'm_freq', g: 'meta', h: 'Frequency', w: 96, num: 1, cell: metaCell(function (v) { return dec(v, 2); }, 'frequency')},
+    {k: 'm_clicks', g: 'meta', h: 'Clicks (all)', w: 100, num: 1, cell: metaCell(function (v) { return int(v); }, 'clicks')},
+    {k: 'm_ctr', g: 'meta', h: 'CTR (all)', w: 92, num: 1, cell: metaCell(function (v) { return dec(v, 2) + '%'; }, 'ctr')},
+    {k: 'm_cpm', g: 'meta', h: 'CPM', w: 92, num: 1, cell: metaCell(money, 'cpm')},
+    {k: 'm_cpc', g: 'meta', h: 'CPC (all)', w: 96, num: 1, cell: metaCell(money, 'cpc')},
+    {k: 'x_obj', g: 'meta', h: 'Objective', w: 140, cell: function (r) { return '<td>' + (r.objective ? esc(r.objective) : na('Only campaigns carry an objective')) + '</td>'; }},
+    {k: 'x_bid', g: 'meta', h: 'Bid strategy', w: 130, cell: function (r) { return '<td>' + (r.bid_strategy ? esc(r.bid_strategy) : na(r.level === 'ad' ? 'Managed by the ad set' : 'Meta did not return a bid strategy')) + '</td>'; }},
+    {k: 't_keitaro', g: 'tracker', h: 'Keitaro', w: 130, cell: trackerCell('Keitaro is not connected to this dashboard')},
+    {k: 't_place', g: 'tracker', h: 'Placements', w: 130, cell: trackerCell('Placement breakdowns are not read yet')},
+    {k: 't_dev', g: 'tracker', h: 'Devices', w: 120, cell: trackerCell('Device breakdowns are not read yet')},
+    {k: 't_land', g: 'tracker', h: 'Landing Variant', w: 140, cell: trackerCell('The landing variant is not joined to Meta objects yet')},
+    {k: 't_hist', g: 'tracker', h: 'History', w: 110, cell: trackerCell('Per-object history is not recorded; see “What was changed here” below')}
+  ];
+  var GROUPS = {controls: 'MANAGEMENT & DECISIONS', bi: 'BI · business outcomes', meta: 'META · delivery', tracker: 'TRACKER & CONTEXT'};
+  var CTRL = ['delivery', 'dup', 'bid', 'budgetcmd'], BI_ALL = ['b_spend', 'b_leads', 'b_ftds', 'b_dep', 'b_cpl', 'b_cpa', 'b_cr', 'b_match'];
+  var DECIDE = ['hint', 'alerts', 'goal', 'bench'];
+  var PRESETS = {
+    optimization: CTRL.concat(DECIDE, ['b_spend', 'b_leads', 'b_ftds', 'b_cpa', 'b_cr', 'b_match', 'm_spend', 'm_cpm', 'm_ctr']),
+    meta: CTRL.concat(['synced', 'm_spend', 'm_reach', 'm_impr', 'm_freq', 'm_clicks', 'm_ctr', 'm_cpm', 'm_cpc', 'x_obj', 'x_bid']),
+    bi: CTRL.concat(DECIDE, ['m_spend'], BI_ALL),
+    all: COLS.map(function (c) { return c.k; })
+  };
+  var colState = {preset: 'optimization', visible: PRESETS.optimization.slice()};
+  try {
+    var saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
+    if (saved && typeof saved.preset === 'string' && Array.isArray(saved.visible)) {
+      var known = COLS.map(function (c) { return c.k; });
+      colState = {preset: saved.preset, visible: saved.visible.filter(function (k) { return known.indexOf(k) >= 0; })};
+    }
+  } catch (e) { /* без памяти: хранилище закрыто или повреждено */ }
+  /* Раскладка колонок общая: сменили пресет в одной таблице — остальные следуют. */
+  function saveCols() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(colState)); } catch (e) { /* нет хранилища */ }
+    instances.forEach(function (i) { if (i !== api) i.setCols(colState); });
+  }
+  function visibleCols() { return COLS.filter(function (c) { return colState.visible.indexOf(c.k) >= 0; }); }
+
+  /* ── выборка строк под фильтры ── */
+  function scopeAccounts() {
+    var out = [];
+    S.countries.forEach(function (c) {
+      c.accounts.forEach(function (a) { out.push({country: c.country, account: a}); });
+    });
+    return out;
+  }
+  function qmatch(name) { return !S.q || String(name || '').toLowerCase().indexOf(S.q) >= 0; }
+  function hasMatchBelow(r) {
+    var k = S.kids[r.key];
+    if (!k || !k.rows) return false;
+    return k.rows.some(function (c) { return qmatch(c.name) || hasMatchBelow(c); });
+  }
+  function deliveryOk(r) { return S.delivery === 'all' || (S.delivery === 'active' ? r.status === 'on' : r.status === 'off'); }
+  function visible(r) { return deliveryOk(r) && (!S.q || qmatch(r.name) || hasMatchBelow(r)); }
+
+  /* ── разметка ── */
+  function biPeriodNote() { return period.from ? period.from + (period.to && period.to !== period.from ? ' → ' + period.to : '') : 'dates not selected'; }
+  function metaGroupNote() {
+    var cur = {}, per = {};
+    Object.keys(S.summaries).forEach(function (a) {
+      var s = S.summaries[a];
+      if (s && s.state && s.state !== 'idle') { if (s.currency) cur[s.currency] = 1; if (s.date_from) per[s.date_from + (s.date_to && s.date_to !== s.date_from ? ' → ' + s.date_to : '')] = 1; }
+    });
+    var c = Object.keys(cur), p = Object.keys(per);
+    return (p.length ? p.join(' / ') : 'not read') + ' · ' + (c.length ? (c.length > 1 ? 'mixed currencies' : c[0]) : 'currency unknown');
+  }
+  function headHtml(cols) {
+    var groups = [];
+    cols.forEach(function (c) {
+      var last = groups[groups.length - 1];
+      if (last && last.g === c.g) last.n++; else groups.push({g: c.g, n: 1});
+    });
+    var top = '<tr class="hc-groups"><th class="hc-pin-top" colspan="4">Account / campaign hierarchy</th>' + groups.map(function (g) {
+      var note = g.g === 'meta' ? metaGroupNote() : g.g === 'bi' ? biPeriodNote() + ' · $' : '';
+      return '<th class="hc-grp" data-g="' + esc(g.g) + '" colspan="' + g.n + '">' + esc(GROUPS[g.g]) + (note ? '<small>' + esc(note) + '</small>' : '') + '</th>';
+    }).join('') + '</tr>';
+    var heads = '<tr class="hc-heads"><th class="p0"><span style="position:absolute;left:-9999px">Select</span></th><th class="p1"><span style="position:absolute;left:-9999px">Expand</span></th><th class="p2">Status</th><th class="p3">Campaign / Ad set / Ad<span class="hc-resize" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize the name column. Arrow keys change the width, double-click resets it." aria-valuemin="' + PIN_MIN + '" aria-valuemax="' + pinMax() + '" aria-valuenow="' + effPin() + '" title="Drag to resize · double-click to reset"></span></th>' +
+      cols.map(function (c) { return '<th class="' + (c.num ? 'num' : '') + '">' + esc(c.h) + '</th>'; }).join('') + '</tr>';
+    return '<thead>' + top + heads + '</thead>';
+  }
+  /* Предел: не шире 60% видимой ширины таблицы и так, чтобы справа оставалось 160px прокручиваемых колонок. */
+  function viewWidth() {
+    var w = 0;
+    Object.keys(handles).forEach(function (a) { if (S.acctOpen[a] && handles[a].frame && handles[a].frame.clientWidth > w) w = handles[a].frame.clientWidth; });
+    return w;
+  }
+  function pinMax() {
+    var fw = viewWidth();
+    return fw ? Math.max(PIN_MIN, Math.min(Math.round(fw * 0.6), fw - PIN_KEEP)) : 900;
+  }
+  function clampPin(w) { return Math.max(PIN_MIN, Math.min(pinMax(), Math.round(w))); }
+  function effPin() { return clampPin(pinW); }
+  function colgroup(cols) {
+    return '<colgroup><col style="width:36px"><col style="width:28px"><col style="width:88px"><col style="width:' + (effPin() - PIN_FIXED) + 'px">' +
+      cols.map(function (c) { return '<col style="width:' + c.w + 'px">'; }).join('') + '</colgroup>';
+  }
+  /* Одна компактная строка на всю ширину таблицы под строкой: значок, короткое сообщение (одна строка,
+     многоточие) и «Details» с полным техническим текстом (экранируется, выделяется для копирования). */
+  var ICONS = {ok: '✓', bad: '⚠', warn: '⚠', busy: '…'};
+  function rowMsg(id, n, span) {
+    var open = !!S.details[id], tone = n.tone || 'busy';
+    var inner = '<span class="hc-ic" aria-hidden="true">' + (ICONS[tone] || '•') + '</span><span class="hc-rm-text" title="' + esc(n.text) + '" role="status">' + esc(n.text) + '</span>' +
+      (n.raw ? '<button type="button" class="hc-rm-btn" data-details="' + esc(id) + '" aria-expanded="' + open + '">Details</button>' : '');
+    return '<tr class="hc-rowmsg ' + esc(tone) + '" data-msg="' + esc(id) + '"><td colspan="' + span + '"><div class="hc-band-in">' + inner + '</div>' +
+      (n.raw && open ? '<div class="hc-rm-raw" tabindex="0">' + esc(n.raw) + '</div>' : '') + '</td></tr>';
+  }
+  /* Короткий текст и сырой — через общий словарь `acmCommands.explain`; без помощника — как есть. */
+  function noteFrom(text, tone, code) {
+    var A = window.acmCommands;   // помощник мог догрузиться после создания таблицы
+    return A && A.explain ? A.explain(text, tone, code) : {text: String(text), raw: null, tone: tone};
+  }
+  /* Причина про профиль, уже показанная в полосе аккаунта (чип состояния или ошибка последнего чтения), строка объекта не повторяет. */
+  var WARM_CAUSE = {by_hand: 'hand', closing: 'closing', logged_out: 'logged_out'};
+  function bandCause(account) {
+    var att = (S.summaries[account] || {}).attempt, A = window.acmCommands;
+    if (att && att.state === 'failed' && A && A.profileCause) { var c = A.profileCause(att.error, att.code); if (c) return c; }
+    var w = S.warm.available && S.warm.accounts[account];
+    return (w && WARM_CAUSE[w.state]) || '';
+  }
+  function dedupNote(n, account) {
+    if (n.cause && n.cause === bandCause(account)) return {text: 'Profile problem — see account above', raw: null, tone: n.tone, cause: n.cause};
+    return n;
+  }
+  function msg(cls, inner, span) {
+    return '<tr class="hc-msg ' + cls + '"><td colspan="' + span + '"><div class="hc-band-in">' + inner + '</div></td></tr>';
+  }
+
+  function rowHtml(r, cols) {
+    var lv = r.level, key = r.key, canOpen = lv !== 'ad';
+    var open = !!S.expanded[key], sel = !!S.selected[key];
+    var st = r.status;
+    /* Итог команды — не в узкой ячейке Status, а одной строкой под строкой объекта (`rowMsg`); здесь только маркер. */
+    var note = S.notes[key] ? '<span class="hc-mk ' + esc(S.notes[key].tone) + '" role="img" aria-label="' + esc(S.notes[key].text) + '" title="' + esc(S.notes[key].text) + '"></span>' : '';
+    var sw;
+    if (st === 'unknown') {
+      sw = '<span class="hc-status-txt" title="Meta status ' + esc(r.status_raw) + '">' + esc(r.status_raw || DASH) + '</span>' + note;
+    } else {
+      var sc = ctl(r, 'status');
+      sw = '<button type="button" class="hc-switch" role="switch" aria-checked="' + (st === 'on') + '"' + (sc.enabled ? '' : ' disabled aria-disabled="true"') +
+        (r.busy ? ' aria-busy="true"' : '') + objAttrs(r, 'status') + ' aria-label="Configured status: ' + (st === 'on' ? 'On' : 'Off') +
+        (sc.enabled ? '. Click to switch ' + (st === 'on' ? 'off' : 'on') : '. ' + esc(sc.reason)) + '" title="' +
+        esc(sc.enabled ? 'Switch ' + (st === 'on' ? 'off' : 'on') + ' (asks for confirmation)' : sc.reason) + '"></button><span class="hc-status-txt">' +
+        (st === 'on' ? 'On' : 'Off') + '</span>' + note;
+    }
+    var badge = lv === 'campaign' ? 'Campaign' : lv === 'adset' ? 'Ad set' : 'Ad';
+    var count = '';
+    if (r.child_count != null) count = r.child_state === 'not_read' ? ' · children not read' : ' · ' + r.child_count + (lv === 'campaign' ? ' ad sets' : ' ads') + (r.child_state === 'partial' ? ' (partial)' : '');
+    var ctx = (S.q && !qmatch(r.name) ? ' <span class="hc-badge" title="Shown because a loaded child matches">Parent context</span>' : '');
+    var html = '<tr class="hc-r-' + lv + ' hc-lv-' + lv + (sel ? ' hc-sel' : '') + '" data-key="' + esc(key) + '" data-object-id="' + esc(r.id) + '" data-level="' + esc(lv) + '" data-account="' + esc(r.account) + '" data-parent-id="' + esc(r.parent_id || '') + '">' +
+      '<td class="p0"><input type="checkbox" data-sel="' + esc(key) + '"' + (sel ? ' checked' : '') + ' aria-label="Select ' + esc(r.name) + '"></td>' +
+      '<td class="p1">' + (canOpen ? '<button type="button" class="hc-exp" data-exp="' + esc(key) + '" aria-expanded="' + open + '" aria-label="' + (open ? 'Collapse ' : 'Expand ') + esc(r.name) + '"></button>' : '<span class="hc-exp-none"></span>') + '</td>' +
+      '<td class="p2">' + sw + '</td>' +
+      '<td class="p3"><div class="hc-id"><span class="hc-badge">' + badge + '</span><span class="hc-name"><b title="' + esc(r.name + ' (id ' + r.id + ')') + '">' + esc(r.name || '(no name)') + ctx + '</b>' +
+      '<span>' + esc(countryOf(r.account)) + ' · ' + esc(r.account) + esc(count) + '</span></span></div></td>' +
+      cols.map(function (c) { return c.cell(r); }).join('') + '</tr>';
+    if (S.notes[key]) html += rowMsg('row:' + key, dedupNote(S.notes[key], r.account), 4 + cols.length);
+    if (open && canOpen) html += kidsHtml(r, cols);
+    return html;
+  }
+  function kidsHtml(r, cols) {
+    var span = 4 + cols.length, k = S.kids[r.key], noun = r.level === 'campaign' ? 'ad sets' : 'ads';
+    if (!k || k.state === 'loading') return msg('', 'Loading ' + noun + '…', span);
+    if (k.state === 'error') return msg('hc-bad', 'Could not load ' + noun + ': ' + esc(k.note) + ' <button type="button" data-retry="' + esc(r.key) + '">Retry</button>', span);
+    if (k.state === 'not_read') return msg('hc-warn', 'The ' + noun + ' of this ' + (r.level === 'campaign' ? 'campaign' : 'ad set') + ' were not read — ' + esc(k.note || 'Read campaigns again for this account') + '. This is not the same as having none.', span);
+    if (k.state === 'empty') return msg('', 'No ' + noun + ' in the saved inventory for this ' + (r.level === 'campaign' ? 'campaign' : 'ad set') + '.', span);
+    var out = (k.rows || []).filter(function (c) { return !S.q || qmatch(c.name) || qmatch(r.name) || hasMatchBelow(c); }).map(function (c) { return rowHtml(c, cols); }).join('');
+    if (k.state === 'partial') out += msg('hc-warn', 'Partial: ' + esc(k.note), span);
+    return out;
+  }
+
+  /* Строка аккаунта несёт своё: «Read campaigns», возраст снимка, одну строку статуса/ошибки и (если есть API
+     тёплых сессий) состояние профиля с «Open profile». Полоса аккаунта внутри таблицы кампаний убрана. */
+  function decorate(account, h) {
+    var sum = S.summaries[account] || {state: 'idle'}, att = sum.attempt, ag = age(sum, S.fetchedAt[account]);
+    var text, bad = false, title = '';
+    if (S.running[account]) text = 'Campaigns: reading…';
+    else if (att && att.state === 'failed') {
+      var ex = noteFrom(att.error || 'unknown reason', 'bad', att.code);
+      text = 'Campaigns: last read failed — ' + ex.text; bad = true; title = att.error || '';
+    } else if (sum.state === 'idle') text = 'Campaigns: not read yet';
+    else text = 'Campaigns: ' + (sum.counts ? sum.counts.campaigns + ' campaigns · ' + sum.counts.ads + ' ads' : sum.state) + (ag ? ' · read ' + ag : '');
+    if (h.snap) { h.snap.textContent = text; h.snap.title = title || text; h.snap.dataset.tone = bad ? 'bad' : ''; }
+    if (h.readBtn) {
+      h.readBtn.disabled = !!(S.busy || !periodOk || S.running[account]);
+      h.readBtn.textContent = S.running[account] ? 'Reading…' : 'Read campaigns';
+      h.readBtn.title = periodOk ? 'Read campaigns, ad sets, ads and Insights for the dates on screen (GET only)' : 'Select dates to read campaigns; Maximum is not supported';
+    }
+    var wi = S.warm.available ? S.warm.accounts[account] : null, shown = !!(wi && wi.state && wi.state !== 'unknown');
+    if (h.chip) {
+      h.chip.hidden = !shown;
+      if (shown) { h.chip.textContent = wi.text || wi.state; h.chip.title = wi.title || ''; h.chip.dataset.state = wi.state; }
+    }
+    if (h.openBtn) {
+      var can = shown && (wi.state === 'closed' || wi.state === 'open');
+      h.openBtn.hidden = !(shown && (can || wi.state === 'by_hand' || wi.state === 'closing'));
+      h.openBtn.disabled = !!(!can || !S.warm.actions || S.warmBusy[account] || S.busy);
+      h.openBtn.textContent = S.warmBusy[account] ? 'Opening…' : 'Open profile';
+      h.openBtn.title = !S.warm.actions ? 'Opening profiles needs the dashboard to listen on 127.0.0.1 only'
+        : shown && wi.state === 'by_hand' ? 'Close it in Multilogin first' : shown && wi.state === 'closing' ? 'Wait until it has closed'
+        : 'Open this profile with automation and keep it open (only when pressed)';
+    }
+  }
+  /* Раскрытие аккаунта ничего не читает у Meta: только показывает уже сохранённое. */
+  function toggleAccount(account) {
+    if (!handles[account]) return;
+    if (S.acctOpen[account]) delete S.acctOpen[account]; else S.acctOpen[account] = true;
+    render();
+  }
+  function onRowClick(account, ev) {
+    var t = ev.target, c = t && t.closest ? t.closest('button, a, input, select, textarea, [contenteditable], .amap-acct-note, .amap-note-pop') : null;
+    if (c && !(c.classList && c.classList.contains('amap-caret'))) return;      // свои кнопки, поля и заметка строки — не раскрывают
+    toggleAccount(account);
+  }
+  function onRowKey(account, ev) {
+    if (ev.target !== handles[account].row) return;                             // Enter/Space — только на самой строке в фокусе
+    if (ev.key === 'Enter' || ev.key === ' ' || ev.key === 'Spacebar') { ev.preventDefault(); toggleAccount(account); }
+  }
+
+  function accountMessage(a, cols) {
+    var sum = S.summaries[a.account] || {state: 'idle'}, span = 4 + cols.length, att = sum.attempt;
+    var out = '';
+    function one(id, tone, head, cause, code, tail) {
+      var ex = cause ? noteFrom(cause, 'bad', code) : {text: '', raw: null};
+      var line = head + (ex.text ? ' — ' + ex.text : '') + (tail || '');
+      return rowMsg(id, {text: line, raw: ex.raw || (cause && ex.text !== cause ? cause : null), tone: tone}, span);
+    }
+    if (S.running[a.account]) return msg('', 'Reading campaigns for ' + esc(a.account) + '… (one profile at a time)', span);
+    if (S.treeErr[a.account]) return one('acct:' + a.account + ':tree', 'bad', 'Could not load the saved inventory', S.treeErr[a.account], '');
+    if (att && att.state === 'failed') out += one('acct:' + a.account + ':read', 'bad', 'The last read failed (' + (att.at || '') + ')', att.error || 'unknown reason', att.code,
+      sum.state !== 'idle' ? ' — showing the earlier snapshot below' : '');
+    if (S.warmMsg[a.account]) out += rowMsg('acct:' + a.account + ':open', S.warmMsg[a.account], span);
+    if (sum.state === 'idle') return out || msg('', 'Not read yet — press Read campaigns. Nothing is shown until the account has been read.', span);
+    if (sum.state === 'empty') return out + msg('', 'The account was read and has no campaigns in the shown states.', span);
+    if (sum.state === 'partial') {
+      var why = (sum.problems || []).join('; ') || 'some levels were not read';
+      out += rowMsg('acct:' + a.account + ':partial', {text: 'Partial read', raw: why, tone: 'warn'}, span);
+    }
+    return out;
+  }
+
+  function openHandles() { return Object.keys(handles).filter(function (a) { return S.acctOpen[a]; }).map(function (a) { return handles[a]; }); }
+  var sharedLeft = 0;
+  function render() {
+    var cols = visibleCols(), shown = 0, total = 0, pin = effPin();
+    scopeAccounts().forEach(function (a) {
+      var rows = S.rows[a.account] || [], h = handles[a.account];
+      total += rows.length;
+      var vis = rows.filter(visible);
+      shown += vis.length;
+      if (!h) return;
+      decorate(a.account, h);
+      var open = !!S.acctOpen[a.account];
+      h.child.hidden = !open;
+      h.row.setAttribute('aria-expanded', open ? 'true' : 'false');
+      h.row.classList.toggle('amap-open', open);
+      if (!open) return;
+      var html = colgroup(cols) + (rows.length ? headHtml(cols) : '') + '<tbody>' + accountMessage(a, cols) + vis.map(function (r) { return rowHtml(r, cols); }).join('') + '</tbody>';
+      var topv = h.scroll.scrollTop;
+      /* table-layout: fixed работает только при заданной ширине: иначе закреплённые колонки расходятся с настоящими ширинами. */
+      h.table.style.width = rows.length ? (pin + cols.reduce(function (n, c) { return n + c.w; }, 0)) + 'px' : '100%';
+      h.table.innerHTML = html;
+      h.scroll.scrollTop = topv;
+      h.scroll.scrollLeft = sharedLeft; h.top.scrollLeft = sharedLeft;
+    });
+    root.style.setProperty('--hc-pin-w', pin + 'px');
+    var narrowed = S.q || S.delivery !== 'all';
+    if (el('foot')) el('foot').innerHTML = '<span>Showing ' + shown + (narrowed ? ' of ' + total : '') + ' campaigns. Reach and frequency are read per level from Meta and never summed up the tree.</span>' +
+      '<span>Status shows the configured on/off from Meta; Effective delivery is separate. The switch changes only after Meta confirms it.</span>';
+    var n = Object.keys(S.selected).length;
+    el('selcount').textContent = n ? n + ' selected' : '';
+    el('count').textContent = shown + ' campaign' + (shown === 1 ? '' : 's') + (narrowed ? ' of ' + total : '');
+    renderBatch();
+    syncTop();
+  }
+
+  /* ── верхняя прокрутка, тени краёв: у каждой раскрытой таблицы своя рамка, а прокрутка общая — колонки стоят одинаково ── */
+  var syncing = false;
+  function syncTop() {
+    openHandles().forEach(function (h) {
+      var sc = h.scroll;
+      h.topIn.style.width = sc.scrollWidth + 'px';
+      if (h.embed) h.embed.style.setProperty('--hc-view-w', Math.max(300, sc.clientWidth) + 'px');
+      h.frame.dataset.moreRight = sc.scrollLeft + sc.clientWidth < sc.scrollWidth - 2 ? '1' : '0';
+      h.frame.dataset.moreLeft = sc.scrollLeft > 2 ? '1' : '0';
+      h.top.style.display = sc.scrollWidth > sc.clientWidth + 2 ? '' : 'none';
+    });
+  }
+  function bindScroll(h) {
+    h.scroll.addEventListener('scroll', function () {
+      if (syncing) return;
+      syncing = true;
+      sharedLeft = this.scrollLeft;
+      openHandles().forEach(function (o) { if (o.scroll.scrollLeft !== sharedLeft) o.scroll.scrollLeft = sharedLeft; o.top.scrollLeft = sharedLeft; });
+      syncing = false;
+      syncTop();
+    });
+    h.top.addEventListener('scroll', function () {
+      if (syncing) return;
+      syncing = true;
+      sharedLeft = this.scrollLeft;
+      openHandles().forEach(function (o) { o.scroll.scrollLeft = sharedLeft; o.top.scrollLeft = sharedLeft; });
+      syncing = false;
+      syncTop();
+    });
+  }
+  window.addEventListener('resize', syncTop);
+
+  /* ── сеть: только локальные GET и POST «Read campaigns» ── */
+  function qs(extra, account) {
+    var p = [];
+    (S.accountCountries[account] || []).forEach(function (c) { p.push('country=' + encodeURIComponent(c)); });
+    if (period.span === 'all') p.push('span=all');
+    else { if (period.from) p.push('date_from=' + encodeURIComponent(period.from)); if (period.to) p.push('date_to=' + encodeURIComponent(period.to)); }
+    return extra.concat(p).join('&');
+  }
+  function getJson(url) {
+    return fetch(url, {credentials: 'same-origin'}).then(function (r) {
+      return r.json().then(function (j) { if (!r.ok || j.ok === false) throw new Error(j.error || ('HTTP ' + r.status)); return j; });
+    });
+  }
+  /* ── профили (ACL-1812): состояние и «Open profile». Локальный GET при показе и после действий; открытие — только по кнопке ── */
+  function warmState() {
+    var accounts = Object.keys(S.accountCountries), W = window.acmWarm;
+    if (W && typeof W.state === 'function') return Promise.resolve(W.state(accounts)).catch(function () { return null; });
+    var q = accounts.map(function (a) { return 'account=' + encodeURIComponent(a); }).join('&');
+    return fetch('/warm/state?' + q, {credentials: 'same-origin'}).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+  }
+  function loadWarm() {
+    return warmState().then(function (d) {
+      S.warm = d && d.available ? {available: true, actions: !!d.actions, accounts: d.accounts || {}} : {available: false, actions: false, accounts: {}};
+      render();
+    });
+  }
+  function warmPost(account) {
+    var W = window.acmWarm;
+    if (W && typeof W.open === 'function') return Promise.resolve(W.open([account]));
+    return fetch('/warm/open', {method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({accounts: [account]})})
+      .then(function (r) { return r.json().then(function (j) { return {status: r.status, body: j}; }); });
+  }
+  function warmPoll(account, jobId) {
+    return fetch('/warm/job/' + encodeURIComponent(jobId), {credentials: 'same-origin'}).then(function (r) { return r.json(); }).then(function (job) {
+      if (job.state === 'running') return new Promise(function (res) { setTimeout(res, 2000); }).then(function () { return warmPoll(account, jobId); });
+      return (job.results || {})[account] || {state: 'failed', message: 'No result'};
+    });
+  }
+  function warmOpen(account) {
+    if (S.warmBusy[account] || !S.warm.actions) return Promise.resolve();
+    S.warmBusy[account] = true; delete S.warmMsg[account]; render();
+    return warmPost(account).then(function (res) {
+      if (res && res.job_id) return warmPoll(account, res.job_id);     // acmWarm может вернуть итог сразу
+      if (res && res.body && res.body.job_id) return warmPoll(account, res.body.job_id);
+      var b = (res && res.body) || res || {};
+      return {state: 'failed', message: b.error || 'Could not start opening the profile', code: b.code || ''};
+    }).then(function (r) {
+      if (!(r.state === 'ok' || r.ok)) S.warmMsg[account] = noteFrom(r.message || 'Could not open the profile', 'bad', r.code);
+    }, function (e) {
+      S.warmMsg[account] = noteFrom(String(e && e.message || e), 'bad');
+    }).then(function () { delete S.warmBusy[account]; return loadWarm(); });
+  }
+  function loadTree(account) {
+    return getJson('/campaign-inventory/tree?' + qs(['account=' + encodeURIComponent(account)], account)).then(function (j) {
+      S.rows[account] = j.rows || [];
+      S.bi[account] = j.bi || null;
+      S.ctx[account] = j.context || {};
+      S.treeErr[account] = '';
+      if (j.summary) { S.summaries[account] = j.summary; S.fetchedAt[account] = Date.now(); }
+    }, function (e) { S.treeErr[account] = String(e && e.message || e); });
+  }
+  function loadKids(row) {
+    var level = row.level === 'campaign' ? 'adset' : 'ad';
+    S.kids[row.key] = {state: 'loading'};
+    render();
+    return getJson('/campaign-inventory/children?' + qs(['account=' + encodeURIComponent(row.account), 'level=' + level, 'parent=' + encodeURIComponent(row.id)], row.account)).then(function (j) {
+      S.kids[row.key] = {state: j.state, rows: j.rows || [], note: j.note || ''};
+    }, function (e) {
+      S.kids[row.key] = {state: 'error', note: String(e && e.message || e)};
+    }).then(render);
+  }
+  function findRow(key) {
+    var found = null;
+    function walk(rows) { (rows || []).forEach(function (r) { if (r.key === key) found = r; var k = S.kids[r.key]; if (k && k.rows) walk(k.rows); }); }
+    Object.keys(S.rows).forEach(function (a) { walk(S.rows[a]); });
+    return found;
+  }
+
+  function readOne(account, batch) {
+    var stop = null;
+    var body = new FormData();
+    body.append('account', account); body.append('date_from', period.from); body.append('date_to', period.to); body.append('span', period.span || '');
+    if (batch) body.append('batch', batch);
+    S.running[account] = true; render();
+    return fetch('/campaign-inventory/read', {method: 'POST', body: body, credentials: 'same-origin'}).then(function (r) {
+      return r.json().then(function (j) { if (!r.ok || !j.ok) { var e = new Error(j.error || ('HTTP ' + r.status)); e.code = j.code; throw e; } });
+    }).then(function () { return awaitDone(account); }).then(function () {
+      return refreshAccount(account).then(function () {
+        /* Тот же аккаунт открыт в другой области (он стоит в двух странах) — её данные устарели. */
+        instances.forEach(function (i) { if (i !== api && i.watches(account)) i.reload(account); });
+        var at = (S.summaries[account] || {}).attempt;
+        if (at && BATCH_STOPS[at.code]) stop = {account: account, text: at.error || ''};
+        loadWarm();
+      });
+    }).catch(function (e) {
+      if (e && e.code === 'needs_api_backend') { showNeedsApi(); return; }
+      if (e && BATCH_STOPS[e.code]) stop = {account: account, text: String(e.message || '')};
+      S.summaries[account] = Object.assign({}, S.summaries[account] || {state: 'idle'}, {attempt: {state: 'failed', at: '', error: String(e && e.message || e), code: e && e.code || ''}});
+    }).then(function () { delete S.running[account]; render(); return stop; });
+  }
+  /* Ждём конец чтения у СВОЕГО сервера (локальный статус задания); Meta это не трогает. */
+  function awaitDone(account) {
+    var tries = 0;
+    return new Promise(function (resolve, reject) {
+      (function poll() {
+        setTimeout(function () {
+          getJson('/campaign-inventory/status?account=' + encodeURIComponent(account)).then(function (j) {
+            if (j.needs_api) { var e = new Error(j.message); e.code = 'needs_api_backend'; return reject(e); }
+            if (j.running.indexOf(account) < 0) return resolve();
+            if (++tries > 240) return reject(new Error('No answer after twelve minutes — check the Adopy Campaign Manager window'));
+            poll();
+          }, reject);
+        }, tries === 0 ? 1500 : 3000);
+      })();
+    });
+  }
+  function refreshAccount(account) {
+    return getJson('/campaign-inventory/status?account=' + encodeURIComponent(account)).then(function (j) {
+      S.summaries[account] = (j.accounts || {})[account] || {state: 'idle'}; S.fetchedAt[account] = Date.now();
+      Object.keys(S.kids).forEach(function (k) { var r = findRow(k); if (r && r.account === account) delete S.kids[k]; });
+      return loadTree(account);
+    }).then(function () {
+      var pending = [];
+      Object.keys(S.expanded).forEach(function (k) { var r = findRow(k); if (r && r.account === account) pending.push(loadKids(r)); });
+      return Promise.all(pending);
+    });
+  }
+  /* Чтение аккаунта идёт через общую очередь страницы: «один профиль одновременно» —
+     правило всей страницы, а не одной таблицы, и кнопка страны ведёт несколько таблиц. */
+  function readQueue(accounts) {
+    if (!periodOk) return Promise.resolve();
+    return queueRun(accounts.map(function (a) { return {inst: api, account: a}; }));
+  }
+
+  function showNeedsApi() { el('needs').hidden = false; el('body').hidden = true; }
+
+  /* ── события ── */
+  /* ── команды (ACL-1800) ── */
+  function say(rows, text, tone) { rows.forEach(function (r) { S.notes[r.key] = {text: text, tone: tone}; }); }
+  function setBusy(rows, on) { rows.forEach(function (r) { r.busy = on; }); }
+
+  function runCommand(rows, command, value) {
+    var plan = ACM.home.batchPlan(rows, S.avail);
+    if (!plan.ok) { say(rows, plan.reason, 'warn'); render(); return Promise.resolve(); }
+    rows = plan.rows;                       // строки с идущей командой в пакет не входят
+    el('batch-note').textContent = plan.skippedBusy ? plan.skippedBusy + ' busy row(s) left out' : '';
+    setBusy(rows, true); say(rows, 'Previewing…', 'busy'); render();
+    return ACM.home.flow({account: plan.account, actor: ACM.home.actor(), command: command, value: value, targets: plan.targets}, {
+      onState: function (text) { say(rows, text, 'busy'); render(); }
+    }).then(function (res) {
+      /* Строку меняет только `settle`, и только подтверждённым чтением Meta; остальное — пометка. */
+      var notes = ACM.home.settle(rows, res);
+      rows.forEach(function (r) { if (notes[r.key]) S.notes[r.key] = noteFrom(notes[r.key].text, notes[r.key].tone); else delete S.notes[r.key]; });
+      if ((res.kind === 'failed' || res.kind === 'unknown' || res.kind === 'nothing') && res.message) el('batch-note').textContent = noteFrom(res.message, 'warn').text;
+    }, function (e) {
+      /* Сюда — только когда сервер НЕ принял запись (отказ превью/исполнения): ничего не отправлено. */
+      var nf = noteFrom('Not sent: ' + String(e && e.message || e), 'bad', e && e.code);
+      rows.forEach(function (r) { S.notes[r.key] = nf; });
+    }).then(function () { setBusy(rows, false); render(); });
+  }
+
+  function currencyOf(rows) { return (rows[0] && rows[0].currency) || ''; }
+
+  function editThenRun(rows, kind, dir) {
+    var one = rows.length === 1 ? rows[0] : null, cur = currencyOf(rows);
+    var budget = kind === 'budget';
+    var base = one ? (budget ? (one.budget && one.budget.kind === 'daily' ? one.budget.amount : null) : one.bid_amount) : null;
+    var prefill = base == null ? '' : (dir ? ACM.home.stepValue(base, dir, cur) : String(base));
+    return ACM.home.editValue({
+      title: budget ? 'Daily budget' : 'Bid', label: budget ? 'New daily budget' : 'New bid', currency: cur || '?',
+      value: prefill, hint: (one ? one.name + ' · ' : rows.length + ' objects · ') + (budget ? 'Daily budget, ' : (one ? one.bid_strategy + ', ' : '')) +
+        (base == null ? 'current value unknown' : 'now ' + base)
+    }).then(function (v) {
+      if (v == null) return;
+      return runCommand(rows, budget ? 'set_budget' : 'set_bid', v);
+    });
+  }
+
+  function onCommand(b) {
+    var row = findRow(b.dataset.level + ':' + b.dataset.objectId);
+    if (!row || !ACM) return;
+    var st = ctl(row, b.dataset.action);
+    if (!st.enabled) return;
+    var a = b.dataset.action;
+    if (a === 'status') { runCommand([row], 'set_status', ACM.home.statusTarget(row)); return; }
+    if (a === 'budget' && st.openKids) {
+      if (!S.expanded[row.key]) { S.expanded[row.key] = true; if (!S.kids[row.key] || S.kids[row.key].state === 'error') loadKids(row); else render(); }
+      return;
+    }
+    if (a === 'budget') { editThenRun([row], 'budget', 0); return; }
+    if (a === 'bid-down' || a === 'bid-up') { editThenRun([row], 'bid', a === 'bid-down' ? -1 : 1); }
+  }
+
+  function selectedRows() { return Object.keys(S.selected).map(findRow).filter(Boolean); }
+  function renderBatch() {
+    var rows = selectedRows(), plan = ACM ? ACM.home.batchPlan(rows, S.avail) : {ok: false, reason: 'Commands unavailable'};
+    var why = rows.length ? plan.reason : 'Select rows first';
+    Array.prototype.forEach.call(el('batch').querySelectorAll('button'), function (b) {
+      b.disabled = !plan.ok; b.title = plan.ok ? 'Review the change for ' + rows.length + ' selected' : (why || '');
+    });
+  }
+  el('batch').addEventListener('click', function (ev) {
+    var b = ev.target.closest ? ev.target.closest('[data-batch]') : null;
+    if (!b || b.disabled || !ACM) return;
+    var rows = selectedRows(), kind = b.dataset.batch;
+    if (kind === 'on') runCommand(rows, 'set_status', 'ACTIVE');
+    else if (kind === 'off') runCommand(rows, 'set_status', 'PAUSED');
+    else editThenRun(rows, kind, 0);
+  });
+
+  /* Ширина закреплённого блока: мышь (тянуть), клавиатура (стрелки, Home/End), двойной щелчок — сброс.
+     Живая подгонка меняет `<col>` и ширину таблицы без перерисовки; запоминается по отпусканию. */
+  function setPin(w, persist, quiet) {
+    pinW = Math.max(PIN_MIN, Math.round(w));
+    var eff = effPin();
+    root.style.setProperty('--hc-pin-w', eff + 'px');
+    openHandles().forEach(function (oh) {
+      var table = oh.table, cg = table.querySelector('colgroup');
+      if (cg && cg.children[3]) cg.children[3].style.width = (eff - PIN_FIXED) + 'px';
+      if ((S.rows[oh.account] || []).length) table.style.width = (eff + visibleCols().reduce(function (n, c) { return n + c.w; }, 0)) + 'px';
+      var hd = table.querySelector('.hc-resize');
+      if (hd) { hd.setAttribute('aria-valuenow', String(eff)); hd.setAttribute('aria-valuemax', String(pinMax())); }
+    });
+    syncTop();
+    if (persist) {
+      try { localStorage.setItem(PIN_KEY, String(pinW)); } catch (e) { /* нет хранилища */ }
+      instances.forEach(function (i) { if (i !== api) i.setPin(pinW, false); });
+    }
+  }
+  function onResizeDown(ev) {
+    var h = ev.target && ev.target.closest ? ev.target.closest('.hc-resize') : null;
+    if (!h || (ev.button != null && ev.button !== 0)) return;
+    ev.preventDefault();
+    resizing = {x: ev.clientX, w: effPin()};
+    root.classList.add('hc-resizing');
+    document.addEventListener('mousemove', onResizeMove);
+    document.addEventListener('mouseup', onResizeUp);
+  }
+  function onResizeMove(ev) { if (resizing) setPin(resizing.w + (ev.clientX - resizing.x), false); }
+  function onResizeUp() {
+    document.removeEventListener('mousemove', onResizeMove);
+    document.removeEventListener('mouseup', onResizeUp);
+    root.classList.remove('hc-resizing');
+    if (resizing) { resizing = null; setPin(pinW, true); }
+  }
+  var onDbl = function (ev) {
+    if (ev.target && ev.target.closest && ev.target.closest('.hc-resize')) { setPin(PIN_DEFAULT, true); }
+  };
+  var onKey = function (ev) {
+    var h = ev.target && ev.target.closest ? ev.target.closest('.hc-resize') : null;
+    if (!h) return;
+    var step = ev.shiftKey ? 64 : 16, cur = effPin(), next = null;
+    if (ev.key === 'ArrowRight') next = cur + step;
+    else if (ev.key === 'ArrowLeft') next = cur - step;
+    else if (ev.key === 'Home') next = PIN_MIN;
+    else if (ev.key === 'End') next = pinMax();
+    if (next == null) return;
+    ev.preventDefault();
+    setPin(clampPin(next), true);
+  };
+  var onTableClick = function (ev) {
+    var t = ev.target;
+    var cb = t.closest ? t.closest('button[data-action]') : null;
+    if (cb) { if (!cb.disabled) onCommand(cb); return; }
+    var b = t.closest ? t.closest('[data-exp],[data-retry],[data-details]') : null;
+    if (!b) return;
+    if (b.dataset.details) { var did = b.dataset.details; if (S.details[did]) delete S.details[did]; else S.details[did] = true; render(); return; }
+    var key = b.dataset.exp || b.dataset.retry, row = findRow(key);
+    if (!row) return;
+    if (b.dataset.retry) { loadKids(row); return; }
+    if (S.expanded[key]) { delete S.expanded[key]; render(); return; }
+    S.expanded[key] = true;
+    if (!S.kids[key] || S.kids[key].state === 'error') loadKids(row); else render();
+  };
+  var onTableChange = function (ev) {
+    var key = ev.target && ev.target.dataset ? ev.target.dataset.sel : '';
+    if (!key) return;
+    if (ev.target.checked) S.selected[key] = true; else delete S.selected[key];
+    render();
+  };
+  el('search').addEventListener('input', function () { S.q = this.value.trim().toLowerCase(); render(); });
+  el('delivery').addEventListener('change', function () { S.delivery = this.value; render(); });
+  el('collapse-all').addEventListener('click', function () { S.expanded = {}; S.acctOpen = {}; render(); });
+  el('expand-all').addEventListener('click', function () { expandAll(); });
+  /* «Controls / BI metrics / Meta metrics / Tracking»: прокрутить к группе колонок; скрытую — сначала показать. */
+  var JUMP = {controls: 'controls', bi: 'bi', meta: 'meta', tracker: 'tracker'};
+  root.querySelector('.hc-toolbar').addEventListener('click', function (ev) {
+    var b = ev.target.closest ? ev.target.closest('[data-jump]') : null;
+    if (b && JUMP[b.dataset.jump]) jumpGroup(JUMP[b.dataset.jump]);
+  });
+  function jumpGroup(g) {
+    var keys = COLS.filter(function (c) { return c.g === g; }).map(function (c) { return c.k; });
+    if (!keys.some(function (k) { return colState.visible.indexOf(k) >= 0; })) {
+      keys.forEach(function (k) { colState.visible.push(k); });
+      colState.preset = 'custom'; saveCols(); fillCols(); render();
+    }
+    if (!openHandles().length) {                       // нечего прокручивать: раскрыть первый аккаунт, у которого есть кампании
+      var first = Object.keys(handles).filter(function (a) { return (S.rows[a] || []).length; })[0];
+      if (!first) return;
+      S.acctOpen[first] = true; render();
+    }
+    var oh = openHandles()[0], th = oh && oh.table.querySelector('th.hc-grp[data-g="' + g + '"]');
+    if (th) oh.scroll.scrollLeft = Math.max(0, th.offsetLeft - effPin());
+  }
+  /* Развернуть всё: кампании, затем их ad sets. Дети читаются из сохранённого снимка (локальные GET), по четыре разом. */
+  function loadMany(rows) {
+    var need = rows.filter(function (r) { return r.level !== 'ad' && (!S.kids[r.key] || S.kids[r.key].state === 'error'); });
+    var i = 0;
+    function worker() { return i >= need.length ? Promise.resolve() : loadKids(need[i++]).then(worker); }
+    return Promise.all([worker(), worker(), worker(), worker()]);
+  }
+  function expandAll() {
+    var camps = [];
+    Object.keys(S.rows).forEach(function (a) { (S.rows[a] || []).forEach(function (r) { if (visible(r)) camps.push(r); }); });
+    Object.keys(handles).forEach(function (a) { S.acctOpen[a] = true; });
+    camps.forEach(function (r) { S.expanded[r.key] = true; });
+    render();
+    return loadMany(camps).then(function () {
+      var sets = [];
+      camps.forEach(function (r) {
+        var k = S.kids[r.key];
+        if (k && k.rows) k.rows.forEach(function (c) { S.expanded[c.key] = true; sets.push(c); });
+      });
+      return loadMany(sets);
+    }).then(render);
+  }
+  el('preset').addEventListener('change', function () {
+    if (this.value === 'custom') return;
+    colState = {preset: this.value, visible: PRESETS[this.value].slice()}; saveCols(); fillCols(); render();
+  });
+  function fillCols() {
+    var sel = el('preset');
+    var opt = sel.querySelector('option[value="custom"]');
+    opt.hidden = colState.preset !== 'custom';
+    sel.value = colState.preset;
+    var html = '', g = '';
+    COLS.forEach(function (c) {
+      if (c.g !== g) { g = c.g; html += '<h4>' + esc(GROUPS[g]) + '</h4>'; }
+      html += '<label><input type="checkbox" data-col="' + esc(c.k) + '"' + (colState.visible.indexOf(c.k) >= 0 ? ' checked' : '') + '> ' + esc(c.h) + '</label>';
+    });
+    el('cols-pop').innerHTML = '<div class="hc-note">The first four columns are always shown.</div>' + html;
+  }
+  el('cols-pop').addEventListener('change', function (ev) {
+    var k = ev.target && ev.target.dataset ? ev.target.dataset.col : '';
+    if (!k) return;
+    var at = colState.visible.indexOf(k);
+    if (ev.target.checked && at < 0) colState.visible.push(k);
+    if (!ev.target.checked && at >= 0) colState.visible.splice(at, 1);
+    colState.preset = 'custom'; saveCols(); fillCols(); render();
+  });
+
+  /* ── старт: сначала — есть ли бэкенд; без него больше ничего не делаем ── */
+  function init() {
+    if (!S.countries.length) { el('body').hidden = false; el('count').textContent = 'No accounts are placed in a country yet.'; return; }
+    var accounts = Object.keys(S.accountCountries);
+    var q = accounts.map(function (a) { return 'account=' + encodeURIComponent(a); }).join('&');
+    return getJson('/campaign-inventory/status?' + q).then(function (j) {
+      if (j.needs_api) { showNeedsApi(); return; }
+      S.summaries = j.accounts || {};
+      accounts.forEach(function (a) { S.fetchedAt[a] = Date.now(); if (j.running.indexOf(a) >= 0) S.running[a] = true; });
+      el('body').hidden = false;
+      fillCols(); render();
+      loadWarm();
+      (ACM ? ACM.home.availability() : Promise.resolve({available: false, reason: 'the command helper did not load'}))
+        .then(function (a) { S.avail = a; render(); });
+      /* Страницу перезагрузили во время чтения: дальше ждём его конец у своего сервера. */
+      accounts.filter(function (a) { return S.running[a]; }).forEach(function (a) {
+        awaitDone(a).then(function () { return refreshAccount(a); }).catch(function () { /* статус виден в полосе аккаунта */ })
+          .then(function () { delete S.running[a]; render(); });
+      });
+      var seen = accounts.filter(function (a) { return (S.summaries[a] || {}).state && S.summaries[a].state !== 'idle'; });
+      return Promise.all(seen.map(loadTree)).then(render);
+    }, function (e) {
+      el('body').hidden = false; fillCols();
+      el('count').textContent = 'Could not load the campaign inventory status: ' + String(e && e.message || e);
+    });
+  }
+
+  /* ── «What was changed here»: журнал команд и прежний журнал выключений этого аккаунта ── */
+  function historyWhen(at) { return String(at || '').slice(0, 16).replace('T', ' '); }
+  function loadHistory() {
+    var box = el('history-body'), accounts = Object.keys(S.accountCountries);
+    if (!box || !accounts.length) return;
+    box.textContent = 'reading…';
+    Promise.all(accounts.map(function (account) {
+      var q = '?account=' + encodeURIComponent(account);
+      return Promise.all([
+        getJson('/campaign-commands/history' + q).then(function (j) { return j.entries || []; }, function () { return null; }),
+        getJson('/account-spend/turn-off-history' + q).then(function (j) { return j.entries || []; }, function () { return null; })
+      ]).then(function (got) { return {account: account, cmds: got[0], offs: got[1]}; });
+    })).then(function (all) {
+      if (all.every(function (x) { return x.cmds === null && x.offs === null; })) { box.textContent = 'The record could not be read.'; return; }
+      var lines = [];
+      all.forEach(function (x) {
+        (x.cmds || []).forEach(function (o) {
+          var what = o.command === 'set_status' ? 'status → ' + (o.value === 'ACTIVE' ? 'On' : 'Off')
+            : o.command === 'set_budget' ? 'daily budget → ' + o.value + (o.currency ? ' ' + o.currency : '')
+            : 'bid → ' + o.value + (o.currency ? ' ' + o.currency : '');
+          lines.push({at: o.created_at || '', account: x.account, text: what + ' · ' + (o.summary || ''), state: o.state || '',
+            who: o.actor || '', bad: /^(Failed|Outcome)/.test(o.state || '')});
+        });
+        (x.offs || []).forEach(function (e) {
+          var ok = e.state === 'off' || e.state === 'already_off';
+          lines.push({at: e.at || '', account: x.account, text: (e.level || 'item') + ' ' + (e.name || e.object_id || '') + ' · turn off',
+            state: ok ? (e.state === 'off' ? 'turned off' : 'was already off') : 'not confirmed' + (e.error ? ' — ' + e.error : ''),
+            who: [e.requester, e.route].filter(Boolean).join(' · '), bad: !ok});
+        });
+      });
+      lines.sort(function (a, b) { return a.at < b.at ? 1 : a.at > b.at ? -1 : 0; });
+      if (!lines.length) { box.textContent = 'Nothing has been changed in this country from here.'; return; }
+      box.innerHTML = lines.slice(0, 60).map(function (l) {
+        return '<div class="hc-hist-line"><span class="hc-note">' + esc(historyWhen(l.at)) + '</span> <b>' + esc(l.account) + '</b> ' + esc(l.text) +
+          ' <span class="' + (l.bad ? 'hc-hist-bad' : 'hc-note') + '">' + esc(l.state) + '</span>' +
+          (l.who ? ' <span class="hc-note">' + esc(l.who) + '</span>' : '') + '</div>';
+      }).join('');
+    });
+  }
+  if (el('history')) el('history').addEventListener('toggle', function () { if (this.open) loadHistory(); });
+
+  /* Привязка к узлам дерева: строки аккаунтов и их таблицы. Раскрытие — только показ. */
+  Object.keys(handles).forEach(function (account) {
+    var h = handles[account];
+    h.account = account;
+    h.row.addEventListener('click', function (ev) { onRowClick(account, ev); });
+    h.row.addEventListener('keydown', function (ev) { onRowKey(account, ev); });
+    if (h.readBtn) h.readBtn.addEventListener('click', function () { if (!h.readBtn.disabled) readQueue([account]); });
+    if (h.openBtn) h.openBtn.addEventListener('click', function () { if (!h.openBtn.disabled) warmOpen(account); });
+    h.table.addEventListener('mousedown', onResizeDown);
+    h.table.addEventListener('dblclick', onDbl);
+    h.table.addEventListener('keydown', onKey);
+    h.table.addEventListener('click', onTableClick);
+    h.table.addEventListener('change', onTableChange);
+    bindScroll(h);
+  });
+
+  api = {
+    handles: handles, toggleAccount: toggleAccount,
+    state: S, render: render, init: init, syncTop: syncTop, loadHistory: loadHistory,
+    watches: function (a) { return !!S.accountCountries[a]; },
+    readOne: readOne,
+    banner: function (text, retry) {
+      var b = el('banner'); if (!b) return;
+      b.textContent = ''; b.hidden = !text; if (!text) return;
+      var sp = document.createElement('span'); sp.textContent = text;
+      var bt = document.createElement('button'); bt.type = 'button'; bt.textContent = 'Retry';
+      bt.addEventListener('click', function () { retry(); });
+      b.appendChild(sp); b.appendChild(bt);
+    },
+    accounts: function () { return Object.keys(S.accountCountries); },
+    readAll: function (progress) { return periodOk ? queueRun(Object.keys(S.accountCountries).map(function (a) { return {inst: api, account: a}; }), progress) : Promise.resolve(); },
+    periodOk: periodOk,
+    setReadBusy: function (on) { S.busy = on; render(); },
+    setPin: function (w, persist) { setPin(w, persist); },
+    pinWidth: function () { return effPin(); },
+    reload: function (a) { return refreshAccount(a).then(render); },
+    setCols: function (c) { colState = c; fillCols(); render(); }
+  };
+  instances.push(api);
+  return api;
+  }
+
+  window.hcMount = mount;
+  window.hcReadBusy = function () { return queueBusy; };
+})();
+</script>

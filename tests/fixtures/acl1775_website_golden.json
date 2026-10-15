@@ -1,0 +1,947 @@
+{
+ "error": "",
+ "plan": {
+  "ad_sets": [
+   {
+    "adlabels": [
+     {
+      "name": "acl-6902d60c5a04"
+     }
+    ],
+    "ads": [
+     {
+      "bytes": 10,
+      "creative": {
+       "link_data": {
+        "call_to_action": {
+         "type": "LEARN_MORE",
+         "value": {
+          "link": "https://example.invalid/l"
+         }
+        },
+        "description": "Desc",
+        "image_hash": "<uploaded image>",
+        "link": "https://example.invalid/l",
+        "message": "Body 0",
+        "name": "Head 0"
+       },
+       "page_id": "111"
+      },
+      "file": "1000_img.png",
+      "format": "image",
+      "library_name": "acl-4470b1b036851337.png",
+      "name": "1000 - Text0",
+      "status": "PAUSED"
+     },
+     {
+      "bytes": 10,
+      "creative": {
+       "page_id": "111",
+       "video_data": {
+        "call_to_action": {
+         "type": "LEARN_MORE",
+         "value": {
+          "link": "https://example.invalid/l"
+         }
+        },
+        "image_url": "<video thumbnail>",
+        "link_description": "Desc",
+        "message": "Body 1",
+        "title": "Head 1",
+        "video_id": "<uploaded video>"
+       }
+      },
+      "file": "1001_clip.mp4",
+      "format": "video",
+      "library_name": "acl-6902d60c5a04-74c4b9a63186",
+      "name": "1001 - Text1",
+      "status": "PAUSED"
+     }
+    ],
+    "billing_event": "IMPRESSIONS",
+    "campaign_id": "<campaign>",
+    "destination_type": "WEBSITE",
+    "name": "MX Leads 1",
+    "optimization_goal": "OFFSITE_CONVERSIONS",
+    "promoted_object": {
+     "custom_event_type": "LEAD",
+     "pixel_id": "222"
+    },
+    "status": "PAUSED",
+    "targeting": {
+     "age_max": 55,
+     "age_min": 25,
+     "device_platforms": [
+      "mobile",
+      "desktop"
+     ],
+     "facebook_positions": [
+      "feed",
+      "story",
+      "facebook_reels",
+      "instream_video"
+     ],
+     "flexible_spec": [
+      {
+       "interests": [
+        {
+         "id": "60",
+         "name": "Day trading"
+        },
+        {
+         "id": "61",
+         "name": "Swing trading"
+        }
+       ]
+      }
+     ],
+     "geo_locations": {
+      "countries": [
+       "MX"
+      ]
+     },
+     "instagram_positions": [
+      "stream",
+      "story",
+      "reels"
+     ],
+     "locales": [
+      23
+     ],
+     "publisher_platforms": [
+      "facebook",
+      "instagram"
+     ],
+     "targeting_automation": {
+      "advantage_audience": 0
+     }
+    }
+   }
+  ],
+  "campaign": {
+   "adlabels": [
+    {
+     "name": "acl-6902d60c5a04"
+    }
+   ],
+   "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+   "buying_type": "AUCTION",
+   "daily_budget": 2000,
+   "name": "MX Leads 1",
+   "objective": "OUTCOME_LEADS",
+   "special_ad_categories": [],
+   "status": "PAUSED"
+  },
+  "existing_campaign_id": "",
+  "summary": {
+   "ad_sets": [
+    {
+     "ads": [
+      {
+       "bytes": 10,
+       "cta": "LEARN_MORE",
+       "description": "Desc",
+       "file": "1000_img.png",
+       "format": "image",
+       "headline": "Head 0",
+       "index": 1,
+       "link": "https://example.invalid/l",
+       "name": "1000 - Text0",
+       "primary_text": "Body 0",
+       "status": "PAUSED"
+      },
+      {
+       "bytes": 10,
+       "cta": "LEARN_MORE",
+       "description": "Desc",
+       "file": "1001_clip.mp4",
+       "format": "video",
+       "headline": "Head 1",
+       "index": 2,
+       "link": "https://example.invalid/l",
+       "name": "1001 - Text1",
+       "primary_text": "Body 1",
+       "status": "PAUSED"
+      }
+     ],
+     "age": "25-55",
+     "countries": [
+      "MX"
+     ],
+     "creative_enhancements": "off: text_optimizations",
+     "interests": [
+      [
+       "Day trading",
+       "Swing trading"
+      ]
+     ],
+     "language": "Spanish",
+     "locales": [
+      23
+     ],
+     "name": "MX Leads 1",
+     "optimization": "OFFSITE_CONVERSIONS · LEAD on the website pixel",
+     "os": "All",
+     "placements": "manual: Facebook Feed, Facebook Stories, Facebook Reels, Facebook in-stream reels, Instagram feed, Instagram Stories, Instagram Reels · devices mobile/desktop",
+     "status": "PAUSED"
+    }
+   ],
+   "budget_minor": 2000,
+   "campaign": "MX Leads 1",
+   "currency": "USD",
+   "daily_budget": 20.0,
+   "existing": false,
+   "existing_differences": [],
+   "objective": "OUTCOME_LEADS",
+   "page_id": "111",
+   "page_source": "draft",
+   "pixel_id": "222",
+   "pixel_source": "account default",
+   "status": "PAUSED",
+   "tag": "acl-6902d60c5a04"
+  }
+ },
+ "plan_error": "",
+ "posts": [
+  [
+   "/act_1234567890/campaigns",
+   {
+    "adlabels": [
+     {
+      "name": "acl-6902d60c5a04"
+     }
+    ],
+    "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+    "buying_type": "AUCTION",
+    "daily_budget": 2000,
+    "name": "MX Leads 1",
+    "objective": "OUTCOME_LEADS",
+    "special_ad_categories": [],
+    "status": "PAUSED"
+   }
+  ],
+  [
+   "/act_1234567890/adsets",
+   {
+    "adlabels": [
+     {
+      "name": "acl-6902d60c5a04"
+     }
+    ],
+    "billing_event": "IMPRESSIONS",
+    "campaign_id": "101",
+    "destination_type": "WEBSITE",
+    "name": "MX Leads 1",
+    "optimization_goal": "OFFSITE_CONVERSIONS",
+    "promoted_object": {
+     "custom_event_type": "LEAD",
+     "pixel_id": "222"
+    },
+    "status": "PAUSED",
+    "targeting": {
+     "age_max": 55,
+     "age_min": 25,
+     "device_platforms": [
+      "mobile",
+      "desktop"
+     ],
+     "facebook_positions": [
+      "feed",
+      "story",
+      "facebook_reels",
+      "instream_video"
+     ],
+     "flexible_spec": [
+      {
+       "interests": [
+        {
+         "id": "60",
+         "name": "Day trading"
+        },
+        {
+         "id": "61",
+         "name": "Swing trading"
+        }
+       ]
+      }
+     ],
+     "geo_locations": {
+      "countries": [
+       "MX"
+      ]
+     },
+     "instagram_positions": [
+      "stream",
+      "story",
+      "reels"
+     ],
+     "locales": [
+      23
+     ],
+     "publisher_platforms": [
+      "facebook",
+      "instagram"
+     ],
+     "targeting_automation": {
+      "advantage_audience": 0
+     }
+    }
+   }
+  ],
+  [
+   "/act_1234567890/adimages",
+   {}
+  ],
+  [
+   "/act_1234567890/adcreatives",
+   {
+    "adlabels": [
+     {
+      "name": "acl-6902d60c5a04"
+     }
+    ],
+    "degrees_of_freedom_spec": {
+     "creative_features_spec": {
+      "text_optimizations": {
+       "enroll_status": "OPT_OUT"
+      }
+     }
+    },
+    "name": "1000 - Text0 #1 [acl-6902d60c5a04]",
+    "object_story_spec": {
+     "link_data": {
+      "call_to_action": {
+       "type": "LEARN_MORE",
+       "value": {
+        "link": "https://example.invalid/l"
+       }
+      },
+      "description": "Desc",
+      "image_hash": "4470b1b036851337f6a11facb26d3b88",
+      "link": "https://example.invalid/l",
+      "message": "Body 0",
+      "name": "Head 0"
+     },
+     "page_id": "111"
+    }
+   }
+  ],
+  [
+   "/act_1234567890/ads",
+   {
+    "adlabels": [
+     {
+      "name": "acl-6902d60c5a04"
+     }
+    ],
+    "adset_id": "102",
+    "creative": {
+     "creative_id": "103"
+    },
+    "name": "1000 - Text0",
+    "status": "PAUSED"
+   }
+  ],
+  [
+   "/act_1234567890/advideos",
+   {
+    "name": "acl-6902d60c5a04-74c4b9a63186",
+    "title": "acl-6902d60c5a04-74c4b9a63186"
+   }
+  ],
+  [
+   "/act_1234567890/adcreatives",
+   {
+    "adlabels": [
+     {
+      "name": "acl-6902d60c5a04"
+     }
+    ],
+    "degrees_of_freedom_spec": {
+     "creative_features_spec": {
+      "text_optimizations": {
+       "enroll_status": "OPT_OUT"
+      }
+     }
+    },
+    "name": "1001 - Text1 #2 [acl-6902d60c5a04]",
+    "object_story_spec": {
+     "page_id": "111",
+     "video_data": {
+      "call_to_action": {
+       "type": "LEARN_MORE",
+       "value": {
+        "link": "https://example.invalid/l"
+       }
+      },
+      "image_url": "https://example.invalid/t.jpg",
+      "link_description": "Desc",
+      "message": "Body 1",
+      "title": "Head 1",
+      "video_id": "105"
+     }
+    }
+   }
+  ],
+  [
+   "/act_1234567890/ads",
+   {
+    "adlabels": [
+     {
+      "name": "acl-6902d60c5a04"
+     }
+    ],
+    "adset_id": "102",
+    "creative": {
+     "creative_id": "106"
+    },
+    "name": "1001 - Text1",
+    "status": "PAUSED"
+   }
+  ]
+ ],
+ "readback_checks": [
+  {
+   "actual": "MX Leads 1",
+   "expected": "MX Leads 1",
+   "field": "name",
+   "not_read": false,
+   "object": "campaign",
+   "ok": true
+  },
+  {
+   "actual": "PAUSED",
+   "expected": "PAUSED",
+   "field": "status",
+   "not_read": false,
+   "object": "campaign",
+   "ok": true
+  },
+  {
+   "actual": "OUTCOME_LEADS",
+   "expected": "OUTCOME_LEADS",
+   "field": "objective",
+   "not_read": false,
+   "object": "campaign",
+   "ok": true
+  },
+  {
+   "actual": "2000",
+   "expected": "2000",
+   "field": "daily_budget",
+   "not_read": false,
+   "object": "campaign",
+   "ok": true
+  },
+  {
+   "actual": "LOWEST_COST_WITHOUT_CAP",
+   "expected": "LOWEST_COST_WITHOUT_CAP",
+   "field": "bid_strategy",
+   "not_read": false,
+   "object": "campaign",
+   "ok": true
+  },
+  {
+   "actual": "acl-6902d60c5a04",
+   "expected": "acl-6902d60c5a04",
+   "field": "tag",
+   "not_read": false,
+   "object": "campaign",
+   "ok": true
+  },
+  {
+   "actual": "MX Leads 1",
+   "expected": "MX Leads 1",
+   "field": "name",
+   "not_read": false,
+   "object": "ad set MX Leads 1",
+   "ok": true
+  },
+  {
+   "actual": "PAUSED",
+   "expected": "PAUSED",
+   "field": "status",
+   "not_read": false,
+   "object": "ad set MX Leads 1",
+   "ok": true
+  },
+  {
+   "actual": "101",
+   "expected": "101",
+   "field": "campaign_id",
+   "not_read": false,
+   "object": "ad set MX Leads 1",
+   "ok": true
+  },
+  {
+   "actual": "acl-6902d60c5a04",
+   "expected": "acl-6902d60c5a04",
+   "field": "tag",
+   "not_read": false,
+   "object": "ad set MX Leads 1",
+   "ok": true
+  },
+  {
+   "actual": "OFFSITE_CONVERSIONS",
+   "expected": "OFFSITE_CONVERSIONS",
+   "field": "optimization_goal",
+   "not_read": false,
+   "object": "ad set MX Leads 1",
+   "ok": true
+  },
+  {
+   "actual": "IMPRESSIONS",
+   "expected": "IMPRESSIONS",
+   "field": "billing_event",
+   "not_read": false,
+   "object": "ad set MX Leads 1",
+   "ok": true
+  },
+  {
+   "actual": "WEBSITE",
+   "expected": "WEBSITE",
+   "field": "destination_type",
+   "not_read": false,
+   "object": "ad set MX Leads 1",
+   "ok": true
+  },
+  {
+   "actual": "222",
+   "expected": "222",
+   "field": "pixel",
+   "not_read": false,
+   "object": "ad set MX Leads 1",
+   "ok": true
+  },
+  {
+   "actual": "LEAD",
+   "expected": "LEAD",
+   "field": "conversion_event",
+   "not_read": false,
+   "object": "ad set MX Leads 1",
+   "ok": true
+  },
+  {
+   "actual": "starts on activation, no end date",
+   "expected": "starts on activation, no end date",
+   "field": "schedule",
+   "not_read": false,
+   "object": "ad set MX Leads 1",
+   "ok": true
+  },
+  {
+   "actual": [
+    "MX"
+   ],
+   "expected": [
+    "MX"
+   ],
+   "field": "geo",
+   "not_read": false,
+   "object": "ad set MX Leads 1",
+   "ok": true
+  },
+  {
+   "actual": 25,
+   "expected": 25,
+   "field": "age_min",
+   "not_read": false,
+   "object": "ad set MX Leads 1",
+   "ok": true
+  },
+  {
+   "actual": 55,
+   "expected": 55,
+   "field": "age_max",
+   "not_read": false,
+   "object": "ad set MX Leads 1",
+   "ok": true
+  },
+  {
+   "actual": [
+    23
+   ],
+   "expected": [
+    23
+   ],
+   "field": "languages",
+   "not_read": false,
+   "object": "ad set MX Leads 1",
+   "ok": true
+  },
+  {
+   "actual": [
+    [
+     "60",
+     "61"
+    ]
+   ],
+   "expected": [
+    [
+     "60",
+     "61"
+    ]
+   ],
+   "field": "detailed_targeting",
+   "not_read": false,
+   "object": "ad set MX Leads 1",
+   "ok": true
+  },
+  {
+   "actual": [],
+   "expected": [],
+   "field": "os",
+   "not_read": false,
+   "object": "ad set MX Leads 1",
+   "ok": true
+  },
+  {
+   "actual": [
+    "facebook",
+    "instagram"
+   ],
+   "expected": [
+    "facebook",
+    "instagram"
+   ],
+   "field": "publisher_platforms",
+   "not_read": false,
+   "object": "ad set MX Leads 1",
+   "ok": true
+  },
+  {
+   "actual": [
+    "feed",
+    "story",
+    "facebook_reels",
+    "instream_video"
+   ],
+   "expected": [
+    "feed",
+    "story",
+    "facebook_reels",
+    "instream_video"
+   ],
+   "field": "facebook_positions",
+   "not_read": false,
+   "object": "ad set MX Leads 1",
+   "ok": true
+  },
+  {
+   "actual": [
+    "stream",
+    "story",
+    "reels"
+   ],
+   "expected": [
+    "stream",
+    "story",
+    "reels"
+   ],
+   "field": "instagram_positions",
+   "not_read": false,
+   "object": "ad set MX Leads 1",
+   "ok": true
+  },
+  {
+   "actual": [
+    "mobile",
+    "desktop"
+   ],
+   "expected": [
+    "mobile",
+    "desktop"
+   ],
+   "field": "devices",
+   "not_read": false,
+   "object": "ad set MX Leads 1",
+   "ok": true
+  },
+  {
+   "actual": 1,
+   "expected": 1,
+   "field": "count",
+   "not_read": false,
+   "object": "ad 1 (1000 - Text0)",
+   "ok": true
+  },
+  {
+   "actual": "104",
+   "expected": "104",
+   "field": "ad_id",
+   "not_read": false,
+   "object": "ad 1 (1000 - Text0)",
+   "ok": true
+  },
+  {
+   "actual": "PAUSED",
+   "expected": "PAUSED",
+   "field": "status",
+   "not_read": false,
+   "object": "ad 1 (1000 - Text0)",
+   "ok": true
+  },
+  {
+   "actual": "102",
+   "expected": "102",
+   "field": "adset_id",
+   "not_read": false,
+   "object": "ad 1 (1000 - Text0)",
+   "ok": true
+  },
+  {
+   "actual": "acl-6902d60c5a04",
+   "expected": "acl-6902d60c5a04",
+   "field": "tag",
+   "not_read": false,
+   "object": "ad 1 (1000 - Text0)",
+   "ok": true
+  },
+  {
+   "actual": "103",
+   "expected": "103",
+   "field": "creative_id",
+   "not_read": false,
+   "object": "ad 1 (1000 - Text0)",
+   "ok": true
+  },
+  {
+   "actual": "acl-6902d60c5a04",
+   "expected": "acl-6902d60c5a04",
+   "field": "tag",
+   "not_read": false,
+   "object": "ad 1 (1000 - Text0) creative",
+   "ok": true
+  },
+  {
+   "actual": "OPT_OUT",
+   "expected": "OPT_OUT",
+   "field": "enhancement text_optimizations",
+   "not_read": false,
+   "object": "ad 1 (1000 - Text0)",
+   "ok": true
+  },
+  {
+   "actual": "111",
+   "expected": "111",
+   "field": "page",
+   "not_read": false,
+   "object": "ad 1 (1000 - Text0)",
+   "ok": true
+  },
+  {
+   "actual": "image",
+   "expected": "image",
+   "field": "format",
+   "not_read": false,
+   "object": "ad 1 (1000 - Text0)",
+   "ok": true
+  },
+  {
+   "actual": "4470b1b036851337f6a11facb26d3b88",
+   "expected": "4470b1b036851337f6a11facb26d3b88",
+   "field": "image_hash",
+   "not_read": false,
+   "object": "ad 1 (1000 - Text0)",
+   "ok": true
+  },
+  {
+   "actual": "LEARN_MORE",
+   "expected": "LEARN_MORE",
+   "field": "call_to_action",
+   "not_read": false,
+   "object": "ad 1 (1000 - Text0)",
+   "ok": true
+  },
+  {
+   "actual": "https://example.invalid/l",
+   "expected": "https://example.invalid/l",
+   "field": "cta_link",
+   "not_read": false,
+   "object": "ad 1 (1000 - Text0)",
+   "ok": true
+  },
+  {
+   "actual": "https://example.invalid/l",
+   "expected": "https://example.invalid/l",
+   "field": "link",
+   "not_read": false,
+   "object": "ad 1 (1000 - Text0)",
+   "ok": true
+  },
+  {
+   "actual": "Head 0",
+   "expected": "Head 0",
+   "field": "headline",
+   "not_read": false,
+   "object": "ad 1 (1000 - Text0)",
+   "ok": true
+  },
+  {
+   "actual": "Body 0",
+   "expected": "Body 0",
+   "field": "primary_text",
+   "not_read": false,
+   "object": "ad 1 (1000 - Text0)",
+   "ok": true
+  },
+  {
+   "actual": "Desc",
+   "expected": "Desc",
+   "field": "description",
+   "not_read": false,
+   "object": "ad 1 (1000 - Text0)",
+   "ok": true
+  },
+  {
+   "actual": 1,
+   "expected": 1,
+   "field": "count",
+   "not_read": false,
+   "object": "ad 2 (1001 - Text1)",
+   "ok": true
+  },
+  {
+   "actual": "107",
+   "expected": "107",
+   "field": "ad_id",
+   "not_read": false,
+   "object": "ad 2 (1001 - Text1)",
+   "ok": true
+  },
+  {
+   "actual": "PAUSED",
+   "expected": "PAUSED",
+   "field": "status",
+   "not_read": false,
+   "object": "ad 2 (1001 - Text1)",
+   "ok": true
+  },
+  {
+   "actual": "102",
+   "expected": "102",
+   "field": "adset_id",
+   "not_read": false,
+   "object": "ad 2 (1001 - Text1)",
+   "ok": true
+  },
+  {
+   "actual": "acl-6902d60c5a04",
+   "expected": "acl-6902d60c5a04",
+   "field": "tag",
+   "not_read": false,
+   "object": "ad 2 (1001 - Text1)",
+   "ok": true
+  },
+  {
+   "actual": "106",
+   "expected": "106",
+   "field": "creative_id",
+   "not_read": false,
+   "object": "ad 2 (1001 - Text1)",
+   "ok": true
+  },
+  {
+   "actual": "acl-6902d60c5a04",
+   "expected": "acl-6902d60c5a04",
+   "field": "tag",
+   "not_read": false,
+   "object": "ad 2 (1001 - Text1) creative",
+   "ok": true
+  },
+  {
+   "actual": "OPT_OUT",
+   "expected": "OPT_OUT",
+   "field": "enhancement text_optimizations",
+   "not_read": false,
+   "object": "ad 2 (1001 - Text1)",
+   "ok": true
+  },
+  {
+   "actual": "111",
+   "expected": "111",
+   "field": "page",
+   "not_read": false,
+   "object": "ad 2 (1001 - Text1)",
+   "ok": true
+  },
+  {
+   "actual": "video",
+   "expected": "video",
+   "field": "format",
+   "not_read": false,
+   "object": "ad 2 (1001 - Text1)",
+   "ok": true
+  },
+  {
+   "actual": "105",
+   "expected": "105",
+   "field": "video_id",
+   "not_read": false,
+   "object": "ad 2 (1001 - Text1)",
+   "ok": true
+  },
+  {
+   "actual": "acl-6902d60c5a04-74c4b9a63186",
+   "expected": "acl-6902d60c5a04-74c4b9a63186",
+   "field": "video_file",
+   "not_read": false,
+   "object": "ad 2 (1001 - Text1)",
+   "ok": true
+  },
+  {
+   "actual": "LEARN_MORE",
+   "expected": "LEARN_MORE",
+   "field": "call_to_action",
+   "not_read": false,
+   "object": "ad 2 (1001 - Text1)",
+   "ok": true
+  },
+  {
+   "actual": "https://example.invalid/l",
+   "expected": "https://example.invalid/l",
+   "field": "link",
+   "not_read": false,
+   "object": "ad 2 (1001 - Text1)",
+   "ok": true
+  },
+  {
+   "actual": "Head 1",
+   "expected": "Head 1",
+   "field": "headline",
+   "not_read": false,
+   "object": "ad 2 (1001 - Text1)",
+   "ok": true
+  },
+  {
+   "actual": "Body 1",
+   "expected": "Body 1",
+   "field": "primary_text",
+   "not_read": false,
+   "object": "ad 2 (1001 - Text1)",
+   "ok": true
+  },
+  {
+   "actual": "Desc",
+   "expected": "Desc",
+   "field": "description",
+   "not_read": false,
+   "object": "ad 2 (1001 - Text1)",
+   "ok": true
+  }
+ ],
+ "steps": [
+  "preflight: targeting resolved",
+  "preflight: creatives read",
+  "campaign: created PAUSED, tag kept",
+  "ad set 'MX Leads 1': created PAUSED, tag kept",
+  "ad 1: image uploaded",
+  "ad 1: creative created",
+  "ad 1: created PAUSED",
+  "ad 2: video uploaded",
+  "ad 2: video processed",
+  "ad 2: creative created",
+  "ad 2: created PAUSED",
+  "readback: all fields match"
+ ]
+}

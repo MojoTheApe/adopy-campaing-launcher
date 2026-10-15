@@ -101,7 +101,8 @@ def report_ready(my_cm: Optional[str] = None) -> bool:
 
 
 def get_cached_report(
-    *, force_rebuild: bool = False, my_cm: Optional[str] = None
+    *, force_rebuild: bool = False, my_cm: Optional[str] = None,
+    progress: Callable[[str], None] | None = None,
 ) -> Tuple[Dict[str, Any], pd.DataFrame, List[str]]:
     """Return the latest (report, df, warnings).
 
@@ -133,14 +134,14 @@ def get_cached_report(
             if hit is not None:
                 return hit
         _BUILDS_STARTED[0] += 1
-        return _build_locked(expected_key, cm_key)
+        return _build_locked(expected_key, cm_key, progress=progress)
 
 
 # Сколько сборок начато — см. force_rebuild выше.
 _BUILDS_STARTED = [0]
 
 
-def _build_locked(expected_key, cm_key: str):
+def _build_locked(expected_key, cm_key: str, *, progress=None):
     reused_df = None
     if (
         expected_key is not None
@@ -149,7 +150,10 @@ def _build_locked(expected_key, cm_key: str):
     ):
         reused_df = _CACHE["excel_df"]
 
-    report, df, warnings = load_morning_report(enriched_df=reused_df, my_cm=cm_key or None)
+    options = {"progress": progress} if progress is not None else {}
+    report, df, warnings = load_morning_report(
+        enriched_df=reused_df, my_cm=cm_key or None, **options
+    )
     # Refresh can change values or account rows without changing the DF length.
     # Derived period reports must belong to this exact rebuild.
     report["_cache_revision"] = next(_REVISIONS)
@@ -202,7 +206,25 @@ def _notify_new_workbook(key: Any) -> None:
 # это время сервер не отвечал ни на что — даже на /health. Теперь страница
 # сразу отдаёт «цифры загружаются», а сборка идёт здесь, в своём потоке.
 _WARM_LOCK = threading.Lock()
-_WARM: Dict[str, Any] = {"thread": None, "error": None, "token": None}
+_WARM: Dict[str, Any] = {"thread": None, "error": None, "token": None, "stage": None}
+
+
+def background_progress_callback() -> Callable[[str], None]:
+    """Bind progress to the owning background job, including its pool workers.
+
+    A callback from a foreground build or an earlier finished job cannot update
+    the active loading screen. No file reads or report work happen under this lock.
+    """
+    owner = threading.current_thread()
+
+    def update(stage: str) -> None:
+        if stage not in ("reading", "processing", "preparing"):
+            return
+        with _WARM_LOCK:
+            if _WARM["thread"] is owner:
+                _WARM["stage"] = stage
+
+    return update
 
 
 def start_background_build(job: Callable[[], Any], *, token: Any = None) -> bool:
@@ -218,6 +240,7 @@ def start_background_build(job: Callable[[], Any], *, token: Any = None) -> bool
             return False
         _WARM["error"] = None
         _WARM["token"] = token
+        _WARM["stage"] = None
 
         def run() -> None:
             try:
@@ -244,6 +267,7 @@ def background_build_state() -> Dict[str, Any]:
             "building": thread is not None and thread.is_alive(),
             "error": _WARM["error"],
             "token": _WARM["token"],
+            "stage": _WARM["stage"],
         }
 
 

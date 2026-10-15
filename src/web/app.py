@@ -51,6 +51,7 @@ from src.fb_ads_rpa.rpa_publisher import RpaPublisher
 from src.web.publish_jobs import DuplicateJobError, get_job, start_job, cancel_job
 from src.web.cache import (
     background_build_state,
+    background_progress_callback,
     cache_built_at,
     cache_clear,
     forget_background_error,
@@ -336,6 +337,16 @@ def _build_goals_view(report: dict, seed_countries: list[str] | None = None) -> 
         "pct": min(100, round(total_deposits / total_target * 100)) if total_target else None,
         "team_lead": goals_store.is_team_lead(),
     }
+
+
+def _workbench_goals(goals_view: dict) -> dict:
+    """{страна (casefold): {ftd, cpa, cr}} — цели из My Goals; пустое поле = цели нет."""
+    out: dict[str, dict] = {}
+    for row in (goals_view or {}).get("rows", []):
+        name = (row.get("country") or "").strip().casefold()
+        if name:
+            out[name] = {"ftd": row.get("ftd") or None, "cpa": row.get("cpa"), "cr": row.get("cr")}
+    return out
 
 
 def _workbook_dates(df) -> list[str]:
@@ -703,7 +714,7 @@ def _build_account_map_view(
                 # account_name_rules.json), а не угадано по хвосту
                 "workbook_alias_exact": alias_exact,
                 # страны, под которыми числа этого аккаунта лежат на самом деле
-                "elsewhere": {} if excel.get("has_data") else _elsewhere(country_name, label),
+                "elsewhere": {} if excel.get("has_data") else _elsewhere(country_name, alias or label),
                 # состояние кабинета — без периода: спенд отвечает «сколько за
                 # эти дни», состояние — «что с ним сейчас»
                 "status": _account_status(label),
@@ -768,9 +779,9 @@ def _build_account_map_view(
             "country": country_name,
             "key": stored,
             "rows": rows,
-            "spend": sum(r["spend"] or 0 for r in rows),
-            "leads": sum(r["leads"] or 0 for r in rows),
-            "deposits": sum(r["deposits"] or 0 for r in rows),
+            "spend": sum(r["spend"] or 0 for r in _rows_counted_once(rows)),
+            "leads": sum(r["leads"] or 0 for r in _rows_counted_once(rows)),
+            "deposits": sum(r["deposits"] or 0 for r in _rows_counted_once(rows)),
             "live_read": live_read,
             "live_sums": [
                 {"currency": c, "spend": s} for c, s in sorted(live_sums.items())
@@ -1333,6 +1344,19 @@ from urllib.parse import quote as _url_quote
 
 templates.env.filters["agg_qs"] = _aggregate_key_to_query
 templates.env.filters["anchor_slug"] = _anchor_slug
+
+
+def _campaign_table_api() -> bool:
+    """Какой список кампаний рисовать у аккаунта (ACL-1800): `api` — таблица страны, `rpa` — прежний список из Read spend.
+
+    Читается при каждом рендере, чтобы смена `ACL_FB_BACKEND` не требовала ничего, кроме перезапуска, и тест мог её переключать.
+    """
+    from src.analysis_agent import campaign_inventory as _ci
+
+    return _ci.backend_ready()
+
+
+templates.env.globals["campaign_table_api"] = _campaign_table_api
 templates.env.filters["fmt_usd"] = fmt_usd
 templates.env.filters["fmt_currency"] = fmt_currency
 templates.env.filters["fmt_summary_amount"] = fmt_summary_amount
@@ -1911,6 +1935,7 @@ def _render_report(
                 alias_map[alias] = label
         account_alias_map[cid] = alias_map
 
+    goals_view = _build_goals_view(report, goal_seed)
     return templates.TemplateResponse(
         "report.html",
         {
@@ -1931,11 +1956,22 @@ def _render_report(
             "account_map": _account_map_view,
             "sidebar_countries": _sidebar_countries(report, _account_map_view),
             "period": {"date_from": date_from, "date_to": date_to, "span": span},
-            "goals": _build_goals_view(report, goal_seed),
+            "goals": goals_view,
+            # ACL-1799: цель страны (My Goals) для Country Workbench — отдельным
+            # числом, не смешанным с порогом из benchmarks и результатом пиров.
+            "cw_goals": _workbench_goals(goals_view),
             # ACL-1761: кнопка «Check plan (no writes)» в билдере — только при api.
             "fb_backend": _fb_backend(),
+            # ACL-1819: общая таблица правил pre-flight audit (та же, что у сервера).
+            "preflight_rules_json": _preflight_rules(),
         },
     )
+
+
+def _preflight_rules() -> dict:
+    from src.fb_api import preflight_rules
+
+    return preflight_rules.export_rules()
 
 
 def _fb_backend() -> str:
@@ -1973,6 +2009,47 @@ def _account_tail(name: str) -> str:
     return core[-3:].upper() if len(core) >= 3 else ""
 
 
+#: ACL-1824: id рекламного кабинета в конце подписи — не короче 8 цифр.
+#: Короткий числовой хвост (`Acme_123`) — часть имени, а не id кабинета.
+_ID_SUFFIX_MIN_DIGITS = 8
+_ID_SUFFIX_RE = re.compile(r"^(?P<alias>.+?)_(?P<digits>\d{%d,})$" % _ID_SUFFIX_MIN_DIGITS)
+
+
+def _rows_counted_once(rows: list) -> list:
+    """Строки страны для итогов: один алиас книги — один раз.
+
+    ACL-1824: `Facebook_5265_<id>` и `Facebook_5265` оба сводятся к одному
+    алиасу книги и показывают одни и те же числа. Строки остаются обе, а в
+    итог страны идёт только одна — предпочтительно та, что названа алиасом.
+    """
+    seen: dict = {}
+    for r in rows:
+        if not r.get("has_data"):
+            continue
+        key = _account_key(r.get("workbook_alias") or r.get("account"))
+        cur = seen.get(key)
+        if cur is None or (cur.get("workbook_alias") and not r.get("workbook_alias")):
+            seen[key] = r
+    keep = {id(r) for r in seen.values()}
+    return [r for r in rows if not r.get("has_data") or id(r) in keep]
+
+
+def _alias_without_id_suffix(label: str, known) -> str:
+    """Имя из книги для подписи `<имя>_<id кабинета>` — или пусто.
+
+    Берётся только единственное имя: два разных алиаса в книге — это не
+    «выберем первое», а отказ, как и у хвостовой догадки.
+    """
+    m = _ID_SUFFIX_RE.match((label or "").strip())
+    if not m:
+        return ""
+    want = _account_key(m.group("alias"))
+    if not want:
+        return ""
+    hits = {str(a).strip() for a in known if _account_key(a) == want}
+    return next(iter(hits)) if len(hits) == 1 else ""
+
+
 def _alias_by_tail(label: str, known: dict) -> str:
     """Имя из книги для подключённого аккаунта — или пусто.
 
@@ -1998,7 +2075,11 @@ def _alias_by_tail(label: str, known: dict) -> str:
         a for a in known
         if _account_tail(a) == tail and a.casefold() != (label or "").casefold()
     ]
-    return hits[0] if len(hits) == 1 else ""
+    if hits:
+        return hits[0] if len(hits) == 1 else ""
+    # ACL-1824: суффикс id — только последняя попытка; прежнее совпадение
+    # по хвосту и отказ при его неоднозначности сохраняют приоритет.
+    return _alias_without_id_suffix(label, known)
 
 
 #: ACL-1729: индекс алиасов книги по странам — один слот на одну книгу.
@@ -2149,6 +2230,8 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
         asset_val = _abbrev_asset((form.get(f"camp_{idx}_asset") or "").strip())
         budget    = (form.get(f"camp_{idx}_budget") or "").strip()
         name      = (form.get(f"camp_{idx}_name") or "").strip()
+        # ACL-1775: место конверсии набора; нет поля (RPA, старая страница) - сайт.
+        destination = (form.get(f"camp_{idx}_destination") or "website").strip().lower()
 
         try:
             ad_count = int(form.get(f"camp_{idx}_ad_count") or 1)
@@ -2197,6 +2280,15 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
             # (и записанные из них задания) остаются прежними.
             if copy2:
                 slot["copy2"] = copy2
+            # ACL-1775: Instant Form. Ключи есть только у слотов с формой; значения
+            # другого назначения (сайта) не уходят вовсе, а у сайтовых слотов
+            # лишних ключей нет - прежние черновики не меняются ни байтом.
+            if destination != "website":
+                # Незнакомое назначение не превращается в сайт молча: уходит как есть,
+                # и план откажет вслух ("Unknown conversion location").
+                slot["destination"] = destination
+            if destination == "instant_form":
+                slot["lead_form_id"] = (form.get(f"camp_{idx}_ad_{a_idx}_form_id") or "").strip()
             slots.append(slot)
     # Return the ISO code, not the raw form value ("Costa Rica"). Confirmed
     # live 2026-07-30: the full name leaked into draft.country, where both
@@ -2226,17 +2318,22 @@ def _page_ready(date_from: str, date_to: str, span: str) -> bool:
         return False
 
 
-def _warm_page(date_from: str, date_to: str, span: str) -> None:
+def _warm_page(date_from: str, date_to: str, span: str, my_cm: str) -> None:
     """Фоновая сборка ровно того, что нужно странице: отчёт и её период."""
-    report, df, _warnings = get_cached_report()
+    progress = background_progress_callback()
+    report, df, _warnings = get_cached_report(my_cm=my_cm, progress=progress)
+    progress("preparing")
     date_from, date_to = resolve_period(df, date_from.strip(), date_to.strip(), span.strip())
     report_for_period(report, df, date_from, date_to)
 
 
 def _start_warm(date_from: str, date_to: str, span: str) -> None:
+    from src.web.buyer import get_selected_cm
+
+    my_cm = get_selected_cm()
     start_background_build(
-        functools.partial(_warm_page, date_from, date_to, span),
-        token=(date_from, date_to, span),
+        functools.partial(_warm_page, date_from, date_to, span, my_cm),
+        token=(date_from, date_to, span, my_cm),
     )
 
 
@@ -2264,16 +2361,25 @@ async def report_status(date_from: str = "", date_to: str = "", span: str = "") 
     Отвечает сразу — ничего не собирает и не ждёт. Если ни готово, ни идёт
     (например, сборку начал другой период), запускает фоновую сборку сам.
     """
+    from src.web.buyer import get_selected_cm
+
+    token = (date_from, date_to, span, get_selected_cm())
     ready = _page_ready(date_from, date_to, span)
     state = background_build_state()
-    if not ready and not state["building"] and not state["error"]:
+    own_build = state["token"] == token
+    error = state["error"] if own_build else None
+    if not ready and not state["building"] and not error:
         _start_warm(date_from, date_to, span)
         state = background_build_state()
+        own_build = state["token"] == token
+        error = state["error"] if own_build else None
     return JSONResponse({
         "ready": ready,
         "building": state["building"],
-        "error": state["error"],
+        "error": error,
         "built_at": cache_built_at(),
+        "stage": "ready" if ready else state["stage"] if own_build else None,
+        "waiting": not ready and state["building"] and not own_build,
     })
 
 
@@ -3615,6 +3721,24 @@ def _split_plan(account: str, date_from: str, date_to: str, *,
     return {"needed": bool(why), "why": why}
 
 
+def _mlx_batch_refusal(form, account: str) -> JSONResponse | None:
+    """ACL-1826: пачка уже потеряла общую сессию Multilogin слота — этот старт пропускаем.
+
+    Страница шлёт `batch` (один id на нажатие Read all / Publish all). Без него
+    поведение прежнее: одиночные нажатия не пропускаются.
+    """
+    batch = str(form.get("batch") or "").strip()
+    if not batch:
+        return None
+    from src.fb_api import mlx_session
+
+    skip = mlx_session.refusal(batch, mlx_session.instance_of(account), account)
+    if not skip:
+        return None
+    return JSONResponse({"ok": False, "error": skip["message"], "code": skip["code"], "skipped": True},
+                        status_code=409)
+
+
 @app.post("/account-spend/read")
 async def account_spend_read(request: Request) -> JSONResponse:
     """Прочитать спенд с аккаунта. Только по нажатию человека.
@@ -3628,6 +3752,9 @@ async def account_spend_read(request: Request) -> JSONResponse:
     account = (form.get("account") or "").strip()
     if not account:
         return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    skipped = _mlx_batch_refusal(form, account)
+    if skipped is not None:
+        return skipped
     # Период приходит с экрана: число, снятое не за тот отрезок, который
     # показан рядом, выглядело бы расхождением источников, а было бы ответом
     # на другой вопрос.
@@ -3696,6 +3823,9 @@ async def account_spend_read_countries(request: Request) -> JSONResponse:
     account = (form.get("account") or "").strip()
     if not account:
         return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    skipped = _mlx_batch_refusal(form, account)
+    if skipped is not None:
+        return skipped
     try:
         date_from, date_to = _spend_period(
             str(form.get("date_from") or ""), str(form.get("date_to") or ""),
@@ -4107,6 +4237,46 @@ def _inventory_bi(account: str, countries: list[str], date_from: str, date_to: s
     return merge_attribution(parts), ""
 
 
+def _inventory_goal_context(countries: list[str]) -> dict:
+    """Цель CPA (My Goals) и бенчмарк CPA страны — вход для колонок Goal/Benchmark CPA и подсказок.
+
+    Только чтение локальных настроек, Meta и книгу не трогает. Нет значения — `None` и
+    причина словами: таблица пишет её рядом с тире, а не выдумывает число.
+    """
+    country = next((c.strip() for c in countries if c and c.strip()), "")
+    out: dict = {"country": country, "goal_cpa": None, "goal_ftd": None, "benchmark_cpa": None,
+                 "goal_note": "", "benchmark_note": ""}
+    if not country:
+        out["goal_note"] = out["benchmark_note"] = "This account is not placed in a country"
+        return out
+    try:
+        from src.web import goals as goals_store
+        from src.web.buyer import default_cm
+
+        who = (os.environ.get("MY_CM_NAME") or default_cm() or "").strip()
+        goal = next((g for g in goals_store.for_cm(who, []) if (g.get("country") or "").strip().casefold()
+                     == country.casefold()), None)
+        cpa = float(goal.get("cpa") or 0) if goal else 0.0
+        if cpa > 0:
+            out["goal_cpa"] = cpa
+            out["goal_ftd"] = int(goal.get("ftd") or 0) or None
+        else:
+            out["goal_note"] = f"No CPA goal is set for {country} in My Goals"
+    except Exception:  # noqa: BLE001 — цели не должны ронять опись
+        out["goal_note"] = "My Goals could not be read"
+    try:
+        from config.benchmarks import get_benchmark
+
+        cap = get_benchmark(country).get("max_cpa")
+        if cap is not None and float(cap) > 0:
+            out["benchmark_cpa"] = float(cap)
+        else:
+            out["benchmark_note"] = f"No benchmark CPA is set for {country}"
+    except Exception:  # noqa: BLE001
+        out["benchmark_note"] = "The benchmark could not be read"
+    return out
+
+
 def _inventory_context(request: Request, account: str):
     """Снимок аккаунта, BI и сводка соединения — для маршрутов описи (без Meta)."""
     from src.analysis_agent import campaign_inventory as ci
@@ -4135,6 +4305,9 @@ async def campaign_inventory_read(request: Request) -> JSONResponse:
     account = (form.get("account") or "").strip()
     if not account:
         return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    skipped = _mlx_batch_refusal(form, account)
+    if skipped is not None:
+        return skipped
     try:
         date_from, date_to = _spend_period(str(form.get("date_from") or ""), str(form.get("date_to") or ""),
                                            str(form.get("span") or ""))
@@ -4187,6 +4360,7 @@ def campaign_inventory_tree(request: Request) -> JSONResponse:
         "has_snapshot": True,
         "summary": ci.summary(snap, ci.get_attempt(account)),
         "bi": bi_summary,
+        "context": _inventory_goal_context(request.query_params.getlist("country")),
         "rows": ci.campaign_rows(snap, joined),
     })
 
@@ -5020,11 +5194,47 @@ async def rpa_website_lab_disconnect() -> JSONResponse:
     return JSONResponse(result)
 
 
+INSTANT_FORM_RPA_ERROR = ("Instant Forms are available only with the Graph API backend "
+                          "(ACL_FB_BACKEND=api). Switch the ad set back to Website or use the API backend.")
+
+
+def _instant_form_refusal(slots: list[dict]) -> JSONResponse | None:
+    """ACL-1775: слот с Instant Form при RPA-бэкенде - отказ вслух, а не молча сайтом."""
+    from src.web import publish_api
+
+    if publish_api.api_enabled():
+        return None
+    if any(s.get("destination", "website") != "website" for s in slots):
+        return JSONResponse({"error": INSTANT_FORM_RPA_ERROR}, status_code=409)
+    return None
+
+
+@app.post("/api/page-forms")
+async def api_page_forms(request: Request) -> JSONResponse:
+    """ACL-1775: формы Страницы аккаунта для выбора в билдере. Только по нажатию человека.
+
+    Чтение без права записи; ни опроса, ни расписания. Только при `ACL_FB_BACKEND=api`.
+    """
+    from src.web import page_forms, publish_api
+
+    form = await request.form()
+    account = (form.get("account_label") or form.get("account") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    if not publish_api.api_enabled():
+        return JSONResponse({"ok": False, "error": "Instant Forms need the Graph API backend (ACL_FB_BACKEND=api)."},
+                            status_code=409)
+    return JSONResponse(await asyncio.to_thread(page_forms.read_forms, account))
+
+
 @app.post("/preview-publish")
 async def preview_publish(request: Request) -> JSONResponse:
     """Dry-run: convert form slots → PublishJob plan, return JSON (no Meta API calls)."""
     form = await request.form()
     country, account_label, slots = _parse_build_upload_form(form)
+    refused = _instant_form_refusal(slots)
+    if refused is not None:
+        return refused
     if not country:
         return JSONResponse({"error": "Country not set — check form."}, status_code=400)
     if not account_label:
@@ -5060,6 +5270,9 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
     """
     form = await request.form()
     country, account_label, slots = _parse_build_upload_form(form)
+    refused = _instant_form_refusal(slots)
+    if refused is not None:
+        return refused
     via_ml = (form.get("via_multilogin") or "1").strip() not in ("0", "false", "no")
     activate = (form.get("activate") or "0").strip() in ("1", "true", "yes")
     dry_run = (form.get("dry_run") or "0").strip() in ("1", "true", "yes")
@@ -5077,6 +5290,10 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
         )
     if not country or not account_label or not slots:
         return JSONResponse({"error": "Missing country, account or slots."}, status_code=400)
+    skipped = _mlx_batch_refusal(form, account_label)
+    if skipped is not None:
+        body = json.loads(skipped.body)
+        return JSONResponse({"error": body["error"], "code": body["code"], "skipped": True}, status_code=409)
 
     def launch() -> tuple[str, int]:
         # Черновики собираются из библиотек и книги — не в цикле событий:
@@ -5159,6 +5376,20 @@ async def campaign_commands_availability() -> JSONResponse:
     return JSONResponse(campaign_commands.availability())
 
 
+@app.get("/campaign-commands/history")
+async def campaign_commands_history(request: Request) -> JSONResponse:
+    """Журнал команд аккаунта; объявлен до `/campaign-commands/{op_id}`."""
+    from src.web import campaign_commands
+
+    try:
+        limit = int(request.query_params.get("limit") or 20)
+    except ValueError:
+        limit = 20
+    data, code = await asyncio.to_thread(
+        campaign_commands.account_history, request.query_params.get("account") or "", limit)
+    return JSONResponse(data, status_code=code)
+
+
 @app.get("/campaign-commands/{op_id}")
 async def campaign_commands_status(op_id: str) -> JSONResponse:
     from src.web import campaign_commands
@@ -5191,6 +5422,43 @@ async def rules_evaluate_now(request: Request) -> JSONResponse:
 
     body = await _campaign_commands_body(request)
     data, code = await asyncio.to_thread(rules_api.evaluate_now, body)
+    return JSONResponse(data, status_code=code)
+
+
+# ACL-1812: тёплые сессии. Состояние строк — только реестр и процессы на машине
+# (ни одного вызова к Meta); запуск и закрытие профилей — по клику человека.
+@app.get("/warm/state")
+async def warm_state(request: Request) -> JSONResponse:
+    from src.web import warm_api
+
+    labels = request.query_params.getlist("account")
+    return JSONResponse(await asyncio.to_thread(warm_api.state, labels))
+
+
+@app.post("/warm/open")
+async def warm_open(request: Request) -> JSONResponse:
+    from src.web import warm_api
+
+    body = await _campaign_commands_body(request)
+    data, code = await asyncio.to_thread(warm_api.start_open, body.get("accounts"))
+    return JSONResponse(data, status_code=code)
+
+
+@app.get("/warm/job/{job_id}")
+async def warm_job(job_id: str) -> JSONResponse:
+    from src.web import warm_api
+
+    data, code = warm_api.job_status(job_id)
+    return JSONResponse(data, status_code=code)
+
+
+@app.post("/warm/close")
+async def warm_close(request: Request) -> JSONResponse:
+    from src.web import warm_api
+
+    body = await _campaign_commands_body(request)
+    data, code = await asyncio.to_thread(warm_api.close_profiles, body.get("accounts"),
+                                         body.get("confirm") is True)
     return JSONResponse(data, status_code=code)
 
 
@@ -5323,6 +5591,13 @@ async def build_upload(request: Request) -> Response:
     """Build Upload FB xlsx from campaign builder slots for one account."""
     form = await request.form()
     country, account_label, slots = _parse_build_upload_form(form)
+    if any(s.get("destination") == "instant_form" for s in slots):
+        # ACL-1775: таблица Upload FB формы не умеет - не собирать сайтовую молча.
+        return await _in_report_pool(
+            _render_report, request,
+            upload_errors={(form.get("country") or "").strip() or country:
+                           {account_label: ["Instant Forms cannot be exported to Upload FB; use Publish with the API backend."]}},
+        )
 
     # The parser returns the country CODE ("MX"), which the RPA needs — without
     # it the audience Language step was silently skipped. But the template looks
