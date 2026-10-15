@@ -26,6 +26,12 @@ const lstart = html.indexOf('window.cbLayout = (function () {');
 assert(lstart > 0, 'window.cbLayout не найден в шаблоне');
 const layoutCode = html.slice(lstart, html.indexOf(tail, lstart) + tail.length);
 
+// ACL-1819: правила pre-flight audit — чистая страница-часть и таблица с сервера.
+const pstart = html.indexOf('window.cbPreflight = (function () {');
+assert(pstart > 0, 'window.cbPreflight не найден в шаблоне');
+const preflightCode = html.slice(pstart, html.indexOf(tail, pstart) + tail.length);
+const RULES = JSON.parse(fs.readFileSync(require('path').join(__dirname, '..', 'src', 'fb_api', 'preflight_rules.json'), 'utf8'));
+
 // ── поддельный DOM ────────────────────────────────────────────────────
 // Селекторы поддерживаются ровно те, что дерево использует; встретив
 // незнакомый, стуб ругается, а не возвращает молча null.
@@ -168,7 +174,8 @@ function boot(spec, opts = {}) {
     Array, Object, String, JSON, Math, clearTimeout() {},
   };
   sandbox.window.window = sandbox.window;
-  vm.runInNewContext(layoutCode + ';\n' + code, sandbox);
+  sandbox.window.CB_PREFLIGHT_RULES = RULES;
+  vm.runInNewContext([layoutCode, preflightCode, code].join(';' + String.fromCharCode(10)), sandbox);
   return { api: sandbox.window.cbTree, body: bodyNode, foot: footNode, panel: panelNode, editor: editorNode,
            stored, p, counts, confirms, alerts, sent, timers, sandbox, document };
 }
@@ -444,3 +451,25 @@ assert.equal(t.panel.dataset.namesOnly, '0', 'выбор кампании ост
 assert.equal(t.stored['acl.builder.names-only'], '0');
 assert.ok(t.editor.children.some((c) => c.matches('.cbd-host')), 'кампания не открылась');
 console.log('ok (names only exits on select)');
+
+// ── ACL-1819: карточка pre-flight audit, значок в дереве и Publish ─────────
+t = boot(SPEC);
+id = /data-camp="([^"]+)"/.exec(t.body.innerHTML)[1];
+t.api.open(id);
+let pfCard = t.editor.children.find((c) => c.matches('.cbd-pf'));
+assert.ok(pfCard && !pfCard.hidden, 'карточка Pre-flight audit не показана у выбранной кампании');
+assert.ok(/Pre-flight audit/.test(pfCard.innerHTML) && /errors: \d+/.test(pfCard.innerHTML), 'нет заголовка или значка errors: N');
+assert.ok(/Account checks need the API backend/.test(pfCard.innerHTML), 'под RPA нет подписи про серверные проверки');
+assert.ok(!/data-act="pf-check"/.test(pfCard.innerHTML), 'кнопка Check под RPA не нужна');
+assert.ok(/data-act="pf-focus"[^>]*data-rule="link_https"/.test(pfCard.innerHTML), 'строка не открывает поле по клику');
+assert.ok(/cbd-pf-error/.test(pfCard.innerHTML) && /cbd-pf-sign/.test(pfCard.innerHTML), 'нет знака ошибки');
+// Фейковая кампания пуста (нет ссылки, файла, текста): Publish all держится выключенным и говорит почему.
+const pfGate = t.api.gateState();
+assert.equal(pfGate.blocked, true, 'кампания с ошибками не блокирует Publish');
+assert.ok(/^Publish is off: /.test(pfGate.reason), pfGate.reason);
+assert.equal(t.sandbox.window.CB_PF_GATE.blocked, true);
+// Закрыли — карточки нет.
+t.api.close();
+pfCard = t.editor.children.find((c) => c.matches('.cbd-pf'));
+assert.ok(pfCard && pfCard.hidden, 'карточка осталась после закрытия кампании');
+console.log('ok (pre-flight audit)');
