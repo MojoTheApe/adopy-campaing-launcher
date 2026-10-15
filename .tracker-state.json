@@ -9131,6 +9131,18 @@
         "state": "implementing",
         "started_at": "2026-10-15T06:24:37+00:00",
         "from_status": "status:todo"
+      },
+      "814": {
+        "actor": "Worker-RN1814",
+        "session": "wrn1814-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1814-rules-store",
+        "worktree": "C:\\wk-rn1814",
+        "id": "6ff69cfad4854e84a43a1b0c9a78f161",
+        "issue": 814,
+        "state": "implementing",
+        "started_at": "2026-10-15T06:33:31+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -13053,10 +13065,14 @@
           {
             "actor": "Worker-S1814P",
             "session": "ws1814p-20261015"
+          },
+          {
+            "actor": "Worker-RN1814",
+            "session": "wrn1814-20261015"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-S1814P",
+        "state": "implementing",
+        "worker": "Worker-RN1814",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
           "actor": "Worker-S1814P",
@@ -13074,8 +13090,7 @@
         },
         "pr": 817,
         "queued_at": "2026-10-15T05:58:11+00:00",
-        "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e677f638 (ACL-1812 warm sessions, ACL-1826, ACL-1775 Instant Forms, ACL-1815 rules evidence; PR 919 -> 922). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
-        "reviewer": "Reviewer-RRN814"
+        "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e677f638 (ACL-1812 warm sessions, ACL-1826, ACL-1775 Instant Forms, ACL-1815 rules evidence; PR 919 -> 922). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
       },
       "815": {
         "implementers": [
@@ -15963,6 +15978,10 @@
       },
       "Worker-RN1799": {
         "session": "wrn1799-20261015",
+        "role": "Worker"
+      },
+      "Worker-RN1814": {
+        "session": "wrn1814-20261015",
         "role": "Worker"
       }
     },
@@ -37872,6 +37891,13 @@
         "issue": 799,
         "pr": 803,
         "actor": "Worker-RN1799"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-15T06:33:31+00:00",
+        "issue": 814,
+        "claim": "6ff69cfad4854e84a43a1b0c9a78f161",
+        "actor": "Worker-RN1814"
       }
     ],
     "policy": {
