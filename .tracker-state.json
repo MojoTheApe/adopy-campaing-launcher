@@ -8958,9 +8958,11 @@
         "worktree": "C:\\wk-rl1826",
         "id": "3f8d591b5b1449faba5004259b1493c3",
         "issue": 826,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-15T04:31:29+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 828,
+        "report": "# ACL-1826 refresh handoff\nMerged origin/main (0850aa39) into codex/acl-1826-mlx-session-lost; head 285aca31.\nConflicts and resolution:\n- src/web/templates/_campaign_table.html: kept main's ACL-1800 toolbar (Expand/Collapse all and count live in the toolbar; the branch's duplicate hc-head2 header dropped) and re-applied the 1826 session-lost banner (data-hc=banner) above it; in the batch-read handler kept both the BATCH_STOPS stop capture (Retry/banner behaviour) and main's loadWarm().\n- docs/system/CHANGELOG.md: the branch carried no ACL-1826 entry of its own, only copies of main entries; took main's file (all entries present once).\nTests (-k \"not browser\"): test_acl1826_mlx_session_lost, test_review_ui_regressions, test_acl1800_* (account_scoped_table, account_tree, campaign_commands, home_wiring), test_acl1761_*: 560 passed. scripts/acl_scan_secrets.py clean."
       }
     },
     "tasks": {
