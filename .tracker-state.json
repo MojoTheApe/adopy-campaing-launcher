@@ -3930,6 +3930,83 @@
         "issue_scopes": {
           "924": "2acaba4989b48e6ea0bc48ef413906389861ffc4af049327f27ceed55ebbdcf5"
         }
+      },
+      "941": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-N61D",
+        "implementer": "Worker-B71E",
+        "review_session": "review_acl",
+        "execution_lane": "55c7cfe569ec42e3882475a0bb4b9275",
+        "head_sha": "1006c31edb6df71af4444a670d1ec9492414cccf",
+        "base_sha": "7d1ad46c14ddd2e08e507e33248af50af42df026",
+        "tree_sha": "6bf82e2bdb173d34a064d14b6d2525403ddd3b8d",
+        "report": "# ACL-1923 / PR941 final independent process and original-outcome review\n\nActual non-implementing Reviewer: `Reviewer-N61D`, session `review_acl`. Actual source implementer: Worker-B71E/session acl_delivery, using its new genuine parent claim after the original operational outcome was fulfilled. Reviewer made no implementation, source or Issue/checklist edits, release/deployment operations or policy changes.\n\nReviewed PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/941\n\n- Exact head: `1006c31edb6df71af4444a670d1ec9492414cccf`.\n- Exact main/base: `7d1ad46c14ddd2e08e507e33248af50af42df026`.\n- Exact head tree: `6bf82e2bdb173d34a064d14b6d2525403ddd3b8d`.\n- Complete frozen parent scope: `b0101848e5d32a0f9893c621b441512adc87b90efc670f3efd927d592d734386`.\n- Genuine fresh source lane: `55c7cfe569ec42e3882475a0bb4b9275`, acquired at `2026-10-15T22:51:49Z`; explicit route `process`. The prior integration lane is not reused. This source lane stays held through direct-main merge and normal reviewed Merged handoff; it must not enter Approved/batch.\n\n## Scope, readiness and complete source\n\nReread the entire frozen original parent Issue923, its original requirements/constraints/criteria, retained stopped-claim/source-split history and complete factual fulfillment append. Independently confirmed actual live title/body/non-status scope equals the frozen Issue, ready open PR, exact head/base, genuine queued Worker handoff and absence of the implementation claim before acquiring review. Original operational criteria are preserved; this report does not reclassify missing product/runtime work into documentation completion. Only the owned initiative classification was removed after actual operational fulfillment, preserving classification and history.\n\nRead the entire three-file immutable diff: `docs/repository/POST_MAIN_DELIVERY.md`, `docs/repository/PROCESS_INSTRUCTIONS.md`, `docs/repository/CHANGELOG.md`. No code, JSON/config, automation, runtime/system, pin or deployed-service changes are present. All dated historical boundaries, permanent Stage/master history, preservation and deferred employee/live-pilot boundaries remain. The current normal-work diagram now points to the genuinely activated temporary route, and the documented return-to-Stage procedure remains a separately reviewed policy operation. Shared Master/Tracker contract implementation is already merged; this final factual source introduces no additional shared contract or consumer migration.\n\nThe clean pinned canonical immutable classifier independently passed exactly these three normal Markdown files, base/head/tree above, manifest diff SHA-256 `8a59151f51be97299fdbdf7454e3cfef7b5d5a6d7d63c5cdf7ef81b0c63ed80b`. Independent instruction checking passed 17 files / 63 local Markdown links; clean diff checks passed. The author reports 32 existing process regressions, scanner and selected-Master draft validation passed; successful unchanged coverage was inspected rather than blindly repeated. Independently refreshed real native tooling, descriptor, both current tracker-link checks and Process instructions: all completed successfully on exact1006/base7d with ready PR. The ready-event linkage initially failed while the Issue still showed In Progress; only that failed job retried after the genuine Review handoff, with no source/scope edit. Its actual latest success was confirmed rather than substituted with historical green linkage.\n\n## Independent verification of every original operational criterion\n\n1. **Supported no-Stage route and board after real activation \u2014 passed.** Independently inspected the actual policy apply record at `2026-10-15T22:29:04Z`, old policy302d13ab\u2026 to new policy1bd91869\u2026, actual main7d. Re-ran the complete maintained before/after comparison: only allowed additive reconciliation/audit and current-policy marker differ; all 128 original legacy pending receipts remain byte-equivalent/unfinished, 74 historical entries, 18 Review handoffs, seven stale Approved proofs, original request, aliases/modules and 5/5/5 capacity remain retained. Both 482-item Issue inventories are exactly equal. Recomputed maintained fresh-board digest `052cf49a24173af614dde25c2bef9c70d910efe2179a66f5dede3702e9e3a293` successfully; its workflow has no Stage and no queued maintenance pause. Independent current canonical state confirms no maintenance, new policy and no pending authorized delivery/integration. Permanent Stage/history and master compatibility were preserved. Bounded reviewed migration operators did not repin consumers, exports or the e775 service.\n2. **One authorized integration through actual verified delivery \u2014 passed.** Actual old-policy source PR925/combined Stage PR931/main PR940 integration and genuine retained source/combined acceptance were independently reviewed earlier in this actual Reviewer run. The original one-task batch retained its exact authorization across the audited transition. Independently verified first native automatic run38813566631 was `workflow_run` on exact main7d, failed with actual exit75 during owned cutover maintenance and had no successful publisher. Independently verified successful continuation38817558595 was `workflow_dispatch`, exact official main7d, completed success. The final source accurately describes this as the Coordinator agent's one-time adoption recovery under unchanged original authorization, without a second human approval; it does not pretend the successful dispatch itself was automatic. Future automatic main-CI wakeup and exact request guards remain implemented.\n3. **Truthful scoped success; failed/missing evidence cannot create Delivered \u2014 passed.** Independent official release lookup confirms stable non-draft/non-prerelease release414340904, `acl-release-2026-10-15.940`, published `22:38:46Z` with all four installer/hash/manifest/signature assets. The actual native published report SHA-256 is `ab4cdd91a42a0afed44d6f75ddbbf1ba1689ad7cb3c868ecbf852951c3151a89`: result passed, exact source7d/tree da457106, five actual published download/install/update/restart/recovery/data checks, update=`updated`, recovery=`rolled_back`, both signatures valid. Actual previous stable package is Oct8b/source48bb8ee4, not an orphan tag. Official native Verify job116709133359 succeeded at22:41:29 on exact7d/run38817558595; official recorder job116710079574 succeeded at22:42:12. Fresh canonical native receipt independently confirms only Issue924 verified at22:42:07 against original stable target, exact main SHA, exact native job and installer SHA-256 `8e317993c5dd4131929cfaf9ac20fd7ae0a4f48ebd58912b66f6254a3d034286`. Maintained board and model show task924 complete/verified and its batch Delivered1/1. Original pending history remained unfinished; failure guards, absent/wrong native proof and safe retry cases were meaningfully checked in source/shared tests and prior independent review.\n4. **Applicable checks, independent review and maintained guidance \u2014 passed for the original operational implementation and current factual source.** Source/shared changes had actual required native checks, exact independent reviews and actual merged-main checks. Real isolated actual Stage Windows verification preceded unchanged main. Actual full published-package acceptance then passed before this final parent claim. The parent factual source is exactly eligible process Markdown and correctly skips a redundant installer/product cycle while retaining tooling, descriptor, linkage and Process instructions. It updates required repository history, active route and detailed return procedure. Every current required process gate has independently confirmed success; immediate admission and the actual process merge remain the final handoff operations.\n5. **Source integration, service/policy activation and delivery recorded separately \u2014 passed.** The final diff links actual source PR925, Stage PR931, main PR940, shared Master/Tracker/operator revisions, separate [activation record](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/923#issuecomment-6203646936), [scoped delivery record](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/924#issuecomment-6203812879), [continuation](https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38817558595) and [published release](https://github.com/MojoTheApe/acl-releases/releases/tag/acl-release-2026-10-15.940). Source/service activation/published behavior are distinguishable and actually established. Consumer/service e775 and Mastera3f561 pins remain unchanged. No employee rollout, live advertising/Multilogin operation or bulk historical completion is claimed. Source924's preserved unchecked original source checkboxes leave an informational model warning; its actual independent source acceptance and real native delivery receipt were verified, and this report does not hide or edit that historical scope.\n\n## Verdict and handoff\n\n**Approved: no remaining actionable finding in the complete original parent outcome or this exact three-file factual source.** This is a genuine independent full-business-outcome review plus complete immutable diff review, not document-only substitution for missing delivery. Record exact independent review under the actual fresh process lane above; root must run current `check-pr`/`check-merge` after every latest required native gate passes, merge the exact reviewed content directly into main and perform normal reviewed Merged handoff while retaining this lane. No Approved/batch, raw status change, forbidden non-code completion or redundant package cycle is authorized for this eligible process handoff. Parent completion is established only after that admitted actual merge/receipt is read back.\n",
+        "checks": [
+          "Complete original parent Issue923 and fulfilled criteria independently reviewed; live frozen scopeb010 matches entire frozen body",
+          "Full3file immutable process diff read; canonical eligible classifier and 17file/63link checker independently passed",
+          "Actual complete482Issue and state migration comparisons independently passed;128legacy pending/74historical/18handoffs/7Approved preserved; freshboard digest verified",
+          "Actual official stable release/current+previous signed published Windows report/nativeacceptancejob/native recorder and task924verified receipt independently confirmed",
+          "First automatic workflow_run exit75 and separate successful workflow_dispatch recovery distinction independently verified",
+          "Exact ready1006/base7d native tooling/descriptor/bothcurrenttrackerlink/Processinstructions completedSUCCESS; current checkmerge remains mandatory before actual directmain merge"
+        ],
+        "main_sha": "7d1ad46c14ddd2e08e507e33248af50af42df026",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          923
+        ],
+        "recorded_at": "2026-10-15T22:54:11+00:00",
+        "process_policy": "9276adda3c40d4e03e471c96c3a1a4d055b82bd73f282d3b523f329781e3bca5",
+        "process_proof": {
+          "base_sha": "7d1ad46c14ddd2e08e507e33248af50af42df026",
+          "head_sha": "1006c31edb6df71af4444a670d1ec9492414cccf",
+          "tree_sha": "6bf82e2bdb173d34a064d14b6d2525403ddd3b8d",
+          "files": [
+            {
+              "path": "docs/repository/CHANGELOG.md",
+              "before": {
+                "sha": "e0e40d993a84f53feaabb67ba34d4e225a10cf59",
+                "mode": "100644",
+                "type": "blob"
+              },
+              "after": {
+                "sha": "6d9a6d9a61bebdd0e75195e6f30a56306d07dea0",
+                "mode": "100644",
+                "type": "blob"
+              }
+            },
+            {
+              "path": "docs/repository/POST_MAIN_DELIVERY.md",
+              "before": {
+                "sha": "3aa25f4084268fd0dbc0bc3ca11914fca2498a7b",
+                "mode": "100644",
+                "type": "blob"
+              },
+              "after": {
+                "sha": "37b5ca047ec6a09263e7d66436a9e1da21419429",
+                "mode": "100644",
+                "type": "blob"
+              }
+            },
+            {
+              "path": "docs/repository/PROCESS_INSTRUCTIONS.md",
+              "before": {
+                "sha": "f70a3655dfc44de9ee77a9217ad6d0b021da9b2f",
+                "mode": "100644",
+                "type": "blob"
+              },
+              "after": {
+                "sha": "2970a90f649dcdbbaaefe994c0b31a619c8b8e0d",
+                "mode": "100644",
+                "type": "blob"
+              }
+            }
+          ],
+          "diff_sha256": "8a59151f51be97299fdbdf7454e3cfef7b5d5a6d7d63c5cdf7ef81b0c63ed80b"
+        },
+        "issue_scopes": {
+          "923": "b0101848e5d32a0f9893c621b441512adc87b90efc670f3efd927d592d734386"
+        }
       }
     },
     "stage": {
