@@ -15,6 +15,37 @@
   Graph API reads and the warm open/close/checkout lifecycle (ACL-1760/1761/1812) still
   take no lease across a session; that is the follow-up #862.
 
+## Builder: pre-flight audit card that blocks Publish - ACL-1819
+
+- Every check is defined once in `src/fb_api/preflight_rules.py` (id, label, severity, field, hint,
+  client or server side). The same table is exported to `preflight_rules.json` and rendered into the
+  page (`window.CB_PREFLIGHT_RULES`); a test fails if the file drifts from the table.
+- The editor has a "Pre-flight audit" card for the selected campaign (red cross = error, orange "!" =
+  warning, green tick = ok, grey "?" = not checked) with an "errors: N" badge, the same badge in the
+  campaign tree, and a click on a line focuses its field.
+- Client checks run instantly on edit and never touch the network: country, link (https, well formed),
+  tracking parameters (warning), media chosen, primary text, headline, headline over 40 and primary text
+  over 125 characters (warnings), CTA allowed for the objective, daily budget, age 18-65 with min <= max,
+  unique ad names, Instant Form chosen.
+- Account checks come from the read-only `/publish-plan` (the creator's own functions, no POST): account
+  ACTIVE, Page on the account, pixel (website) or ACTIVE form (Instant Form), country / language /
+  interests resolved with exact matches, media readable, file type and size, video length (over 60 s is a
+  warning), vertical 9:16 file (warning), daily budget against Meta's minimum, existing campaign with
+  other settings. They are cached per campaign draft revision and refreshed only by the "Check" button
+  and right before Publish - never on a keystroke and never on a timer. After an edit they show
+  "Edited since the last check".
+- Minimum daily budget: Meta does not publish a per-currency table. Only USD 1.00 (impressions billing)
+  is listed; any other account currency is "unknown" (it does not block). Extend `MIN_DAILY_BUDGET`
+  from Ads Manager when a currency is confirmed.
+- Gate: Publish and Publish all stay disabled while any selected campaign has an error, and the reason
+  is shown under the button. Warnings never block and are listed in the confirm dialog. Under
+  `ACL_FB_BACKEND=rpa` only client checks run (the card says "Account checks need the API backend")
+  and the RPA publish itself is unchanged; the gate looks at client errors only.
+- The gate fails closed: if the audit state or rule table is missing, Publish is blocked with
+  "Pre-flight audit unavailable — reload the page". Retry of an unanswered submission goes through the
+  same gate. Client ad names follow the server's naming (creative number from the file name plus the
+  text), and the vertical-crop check honours the video's `tkhd` rotation.
+
 ## Builder: Instant Forms - use an existing form of the Page (API backend) - ACL-1775
 
 - The ad set has a real "Conversion location": Website (the default, unchanged) or Instant Form.
