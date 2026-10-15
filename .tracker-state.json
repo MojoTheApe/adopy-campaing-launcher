@@ -39735,7 +39735,8 @@
         "main_prs": [
           918
         ],
-        "finished_at": "2026-10-15T04:29:09+00:00"
+        "finished_at": "2026-10-15T04:29:09+00:00",
+        "closing_sources": true
       }
     },
     "integration": null,
