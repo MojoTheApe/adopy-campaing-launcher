@@ -13413,7 +13413,7 @@
             "session": "run_s1816a_1012"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1816A",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -13431,7 +13431,8 @@
           "report": "# ACL-1816 handoff\n\nPR #820, head 9751ca4, stacked on #818 (T2) + #817 (T1) -> #802. CI blocked.\n\nDone: evaluate.py (S1-S4, S5 unsupported), arbiter.py, gather.py, engine.py (one worker thread, event triggers, no timers), rule_evaluations.jsonl, deduplicated Suggest proposals, GET /rules/evaluations, POST /rules/evaluate-now, goals.upsert keeps assets.\n\nTests: tests/test_acl1816_rules_evaluate.py 56 passed, plus goals/T1/T2/inventory/commands suites 375 passed. Mutation checks (pause suppresses scale, not_in_workbook blocked) both caught.\n\nNotes: Stale BI / Not reconciled are labels for Observe/Suggest and blockers only with mode=automatic (design 4.2). current_names has no Observe/Suggest source (no re-read); T5 must pass it before a write. Browser tests were not run."
         },
         "pr": 820,
-        "queued_at": "2026-10-12T08:16:12+00:00"
+        "queued_at": "2026-10-12T08:16:12+00:00",
+        "reviewer": "Reviewer-RRS816"
       },
       "822": {
         "implementers": [
@@ -16657,6 +16658,10 @@
       "Worker-W1855A": {
         "session": "821e4a97-45d7-466a-b9ea-56309769a6f1",
         "role": "Worker"
+      },
+      "Reviewer-RRS816": {
+        "session": "rrs816-20261015",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -19358,7 +19363,6 @@
       406,
       433,
       526,
-      816,
       822,
       827,
       767,
@@ -40171,6 +40175,13 @@
         "event": "included-sources-closed",
         "at": "2026-10-15T10:06:07+00:00",
         "batch_id": "b2772e6f3da0420895f57066ce4339ff"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-15T10:07:48+00:00",
+        "pr": 820,
+        "lane": "84ec4dda15364ebb9a8414ac07d3cd42",
+        "actor": "Reviewer-RRS816"
       }
     ],
     "policy": {
@@ -44334,6 +44345,19 @@
       "started_at": "2026-10-15T08:23:18+00:00",
       "ineligible": {}
     },
-    "source_reviews": {}
+    "source_reviews": {
+      "820": {
+        "id": "84ec4dda15364ebb9a8414ac07d3cd42",
+        "pr": 820,
+        "issues": [
+          816
+        ],
+        "actor": "Reviewer-RRS816",
+        "session": "rrs816-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-15T10:07:48+00:00",
+        "state": "reviewing"
+      }
+    }
   }
 }
