@@ -9096,18 +9096,6 @@
   },
   "execution": {
     "claims": {
-      "899": {
-        "actor": "Worker-V1899A",
-        "session": "w1899a-20261014",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1899-video-upload-progress",
-        "worktree": "C:\\wk-1899",
-        "id": "bbdb63d6cd7b48e2aa3cffc723021004",
-        "issue": 899,
-        "state": "implementing",
-        "started_at": "2026-10-14T11:34:31+00:00",
-        "from_status": "status:idea"
-      },
       "920": {
         "actor": "Worker-S1920A",
         "session": "s1920a-20261015",
@@ -9130,6 +9118,18 @@
         "issue": 924,
         "state": "implementing",
         "started_at": "2026-10-15T07:18:32+00:00",
+        "from_status": "status:idea"
+      },
+      "899": {
+        "actor": "Worker-RF1899",
+        "session": "wrf1899-20261015",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1899-video-upload-progress",
+        "worktree": "C:\\wk-1899",
+        "id": "754b79aef795439c9419ed21961d13c5",
+        "issue": 899,
+        "state": "implementing",
+        "started_at": "2026-10-15T07:56:05+00:00",
         "from_status": "status:idea"
       }
     },
@@ -14307,10 +14307,14 @@
           {
             "actor": "Worker-V1899A",
             "session": "w1899a-20261014"
+          },
+          {
+            "actor": "Worker-RF1899",
+            "session": "wrf1899-20261015"
           }
         ],
         "state": "implementing",
-        "worker": "Worker-V1899A",
+        "worker": "Worker-RF1899",
         "coordinator": "Coordinator-M1011A"
       },
       "902": {
@@ -16178,6 +16182,10 @@
       "Reviewer-R1819Q": {
         "session": "r1819q-20261015",
         "role": "Reviewer"
+      },
+      "Worker-RF1899": {
+        "session": "wrf1899-20261015",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -38469,6 +38477,25 @@
         "issue": 776,
         "pr": 831,
         "actor": "Worker-RF1776"
+      },
+      {
+        "event": "takeover",
+        "at": "2026-10-15T07:56:05+00:00",
+        "issue": 899,
+        "previous": {
+          "actor": "Worker-V1899A",
+          "session": "w1899a-20261014",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "work/acl-1899-video-upload-progress",
+          "worktree": "C:\\wk-1899",
+          "id": "bbdb63d6cd7b48e2aa3cffc723021004",
+          "issue": 899,
+          "state": "implementing",
+          "started_at": "2026-10-14T11:34:31+00:00",
+          "from_status": "status:idea"
+        },
+        "claim": "754b79aef795439c9419ed21961d13c5",
+        "reason": "Worker-V1899A run ended 2026-10-14 without handoff; owner asked to ship 1899 to main"
       }
     ],
     "policy": {
