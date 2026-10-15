@@ -3623,7 +3623,7 @@
       "source_sha": "79813fbf8af32989d5466cd201bbf6fab6ab069a",
       "main_tree": "618ed14c6847d30cc5d8ea66248b90b9f864a9a7",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "passed",
+      "state": "promoted",
       "recorded_at": "2026-10-15T04:14:58+00:00",
       "batch_id": "e76699eff67645bd910712ebbcde5107",
       "verification": {
@@ -5429,6 +5429,30 @@
         ],
         "state": "pending",
         "recorded_at": "2026-10-14T22:50:56+00:00"
+      },
+      "797": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 918,
+            "merge_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+            "tree_sha": "e1ff679ef9e1f9079fafd7ab737392854e0eacc4"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-10-15T04:28:51+00:00"
+      },
+      "800": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 918,
+            "merge_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+            "tree_sha": "e1ff679ef9e1f9079fafd7ab737392854e0eacc4"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-10-15T04:28:51+00:00"
       }
     },
     "promotions": {
@@ -8779,6 +8803,37 @@
           "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/915#issuecomment-6180166501"
         },
         "verified_at": "2026-10-14T22:45:10+00:00"
+      },
+      "918": {
+        "pr": 917,
+        "issues": [
+          800,
+          797
+        ],
+        "tree_sha": "e1ff679ef9e1f9079fafd7ab737392854e0eacc4",
+        "source_sha": "79813fbf8af32989d5466cd201bbf6fab6ab069a",
+        "main_tree": "618ed14c6847d30cc5d8ea66248b90b9f864a9a7",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "state": "passed",
+        "recorded_at": "2026-10-15T04:14:58+00:00",
+        "batch_id": "e76699eff67645bd910712ebbcde5107",
+        "verification": {
+          "kind": "stage-verification",
+          "target": "ACL isolated Windows stage installation",
+          "result": "passed",
+          "source_sha": "79813fbf8af32989d5466cd201bbf6fab6ab069a",
+          "tree_sha": "e1ff679ef9e1f9079fafd7ab737392854e0eacc4",
+          "checks": [
+            "Actual permanent stage commit/tree and merge parents verified against the frozen batch e76699ef (ACL-1800, ACL-1797) and the independently reviewed integration.",
+            "Stage CI runs 38680423499, 38680423577, 38680423534 succeeded with explicit same-tree reuse of full green runs 38677914039, 38677914047.",
+            "Previous actual package installs and starts with isolated data",
+            "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
+            "Updated installed application restarts with preserved machine/workspace/creative data",
+            "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts"
+          ],
+          "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/917#issuecomment-6184279028"
+        },
+        "verified_at": "2026-10-15T04:16:13+00:00"
       }
     },
     "acceptances": {
