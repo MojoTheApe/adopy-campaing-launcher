@@ -26,6 +26,12 @@ const lstart = html.indexOf('window.cbLayout = (function () {');
 assert(lstart > 0, 'window.cbLayout не найден в шаблоне');
 const layoutCode = html.slice(lstart, html.indexOf(tail, lstart) + tail.length);
 
+// ACL-1819: правила pre-flight audit — чистая страница-часть и таблица с сервера.
+const pstart = html.indexOf('window.cbPreflight = (function () {');
+assert(pstart > 0, 'window.cbPreflight не найден в шаблоне');
+const preflightCode = html.slice(pstart, html.indexOf(tail, pstart) + tail.length);
+const RULES = JSON.parse(fs.readFileSync(require('path').join(__dirname, '..', 'src', 'fb_api', 'preflight_rules.json'), 'utf8'));
+
 // ── поддельный DOM ────────────────────────────────────────────────────
 // Селекторы поддерживаются ровно те, что дерево использует; встретив
 // незнакомый, стуб ругается, а не возвращает молча null.
@@ -168,7 +174,8 @@ function boot(spec, opts = {}) {
     Array, Object, String, JSON, Math, clearTimeout() {},
   };
   sandbox.window.window = sandbox.window;
-  vm.runInNewContext(layoutCode + ';\n' + code, sandbox);
+  sandbox.window.CB_PREFLIGHT_RULES = RULES;
+  vm.runInNewContext([layoutCode, preflightCode, code].join(';' + String.fromCharCode(10)), sandbox);
   return { api: sandbox.window.cbTree, body: bodyNode, foot: footNode, panel: panelNode, editor: editorNode,
            stored, p, counts, confirms, alerts, sent, timers, sandbox, document };
 }
@@ -392,20 +399,23 @@ assert.equal(t.stored['acl.builder.level'], 'adset', 'уровень не зап
 assert.ok(/data-future="adsets"[^>]*title="Multiple ad sets — coming in ACL-1768"/.test(head.innerHTML), '«+ Ad set» не выключен с задачей');
 assert.ok(/data-future="copyAdset"/.test(head.innerHTML) && (head.innerHTML.match(/ disabled /g) || []).length >= 2);
 
-// Ad: выбор объявления прячет остальные строки, но не убирает их из формы.
+// Ad: выбора объявления нет, все карточки набора идут одним списком (владелец, 13.10).
 clickAct(t, 'level', { level: 'ad' });
 head = t.editor.children.find((c) => c.matches('.cbd-ed-head'));
-assert.equal((head.innerHTML.match(/<option /g) || []).length, 2, 'в выборе не два объявления');
-const rows = t.p.forms[0].querySelectorAll('.cb-slot')[0].querySelectorAll('.cb-ad-row');
-assert.deepEqual(rows.map((r) => r.classList.contains('cbd-ad-off')), [false, true]);
-t.editor.fire('change', { target: { classList: { contains: (c) => c === 'cbd-ed-ad' }, value: '1' } });
-assert.deepEqual(rows.map((r) => r.classList.contains('cbd-ad-off')), [true, false], 'выбор объявления не сработал');
-assert.equal(rows.length, 2, 'строка объявления выброшена из формы');
-// Добавили объявление — открыто новое.
+assert.ok(!head.innerHTML.includes('cbd-ed-ad') && !head.innerHTML.includes('<select'), 'выбор объявления остался');
+assert.ok(!head.innerHTML.includes('<option '), 'в шапке остался список объявлений');
 const slotNode = t.p.forms[0].querySelectorAll('.cb-slot')[0];
+const rows = slotNode.querySelectorAll('.cb-ad-row');
+assert.equal(rows.length, 2, 'строка объявления выброшена из формы');
+assert.deepEqual(rows.map((r) => r.classList.contains('cbd-ad-off')), [false, false], 'карточка скрыта');
+// Добавили объявление — карточка в списке, ни одна не скрыта.
 slotNode.appendChild(el('div', { classes: ['cb-ad-row'] }));
 t.api.refreshEditor();
-assert.equal(slotNode.querySelectorAll('.cb-ad-row')[2].classList.contains('cbd-ad-off'), false, 'новое объявление не открыто');
+assert.deepEqual(slotNode.querySelectorAll('.cb-ad-row').map((r) => r.classList.contains('cbd-ad-off')), [false, false, false], 'после добавления часть карточек скрыта');
+// Убрали объявление — остальные на месте и видны.
+slotNode.querySelectorAll('.cb-ad-row')[1].remove();
+t.api.refreshEditor();
+assert.deepEqual(slotNode.querySelectorAll('.cb-ad-row').map((r) => r.classList.contains('cbd-ad-off')), [false, false]);
 
 // Мусорный уровень — кампания; запомненный уровень поднимается при загрузке.
 t.api.setLevel('nonsense');
@@ -441,3 +451,25 @@ assert.equal(t.panel.dataset.namesOnly, '0', 'выбор кампании ост
 assert.equal(t.stored['acl.builder.names-only'], '0');
 assert.ok(t.editor.children.some((c) => c.matches('.cbd-host')), 'кампания не открылась');
 console.log('ok (names only exits on select)');
+
+// ── ACL-1819: карточка pre-flight audit, значок в дереве и Publish ─────────
+t = boot(SPEC);
+id = /data-camp="([^"]+)"/.exec(t.body.innerHTML)[1];
+t.api.open(id);
+let pfCard = t.editor.children.find((c) => c.matches('.cbd-pf'));
+assert.ok(pfCard && !pfCard.hidden, 'карточка Pre-flight audit не показана у выбранной кампании');
+assert.ok(/Pre-flight audit/.test(pfCard.innerHTML) && /errors: \d+/.test(pfCard.innerHTML), 'нет заголовка или значка errors: N');
+assert.ok(/Account checks need the API backend/.test(pfCard.innerHTML), 'под RPA нет подписи про серверные проверки');
+assert.ok(!/data-act="pf-check"/.test(pfCard.innerHTML), 'кнопка Check под RPA не нужна');
+assert.ok(/data-act="pf-focus"[^>]*data-rule="link_https"/.test(pfCard.innerHTML), 'строка не открывает поле по клику');
+assert.ok(/cbd-pf-error/.test(pfCard.innerHTML) && /cbd-pf-sign/.test(pfCard.innerHTML), 'нет знака ошибки');
+// Фейковая кампания пуста (нет ссылки, файла, текста): Publish all держится выключенным и говорит почему.
+const pfGate = t.api.gateState();
+assert.equal(pfGate.blocked, true, 'кампания с ошибками не блокирует Publish');
+assert.ok(/^Publish is off: /.test(pfGate.reason), pfGate.reason);
+assert.equal(t.sandbox.window.CB_PF_GATE.blocked, true);
+// Закрыли — карточки нет.
+t.api.close();
+pfCard = t.editor.children.find((c) => c.matches('.cbd-pf'));
+assert.ok(pfCard && pfCard.hidden, 'карточка осталась после закрытия кампании');
+console.log('ok (pre-flight audit)');

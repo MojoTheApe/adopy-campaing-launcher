@@ -184,6 +184,9 @@ def main() -> None:
     if not args.no_browser:
         _schedule_browser_open(url)
 
+    # ACL-1800: команды над кампаниями отвечают только на loopback — адрес привязки
+    # запоминаем для приложения (процесс --reload наследует окружение).
+    os.environ["ACL_BIND_HOST"] = args.host
     uvicorn.run(
         "src.web.app:app",
         host=args.host,

@@ -107,7 +107,8 @@ def test_the_campaign_name_has_an_optional_override_field():
 
 def test_every_control_without_a_backend_is_disabled_and_names_its_task():
     out = json.loads(_run("--future"))
-    assert set(out) >= {"adsets", "copyAdset", "forms", "texts", "placements", "gender", "languages", "cta", "copyTo"}
+    assert set(out) >= {"adsets", "copyAdset", "texts", "placements", "gender", "languages", "cta", "copyTo"}
+    assert "forms" not in out, "ACL-1775: Instant Forms - настоящий выбор, а не заглушка"
     for key, v in out.items():
         for kind in ("button", "select"):
             assert " disabled " in v[kind] and " name=" not in v[kind], key
@@ -116,7 +117,7 @@ def test_every_control_without_a_backend_is_disabled_and_names_its_task():
     page = _page()
     used = set(re.findall(r"\b(?:future|futureHtml)\('([A-Za-z]+)'", page))
     assert used <= set(out), f"страница ссылается на ключи вне таблицы: {used - set(out)}"
-    assert used >= {"adsets", "copyAdset", "forms", "texts", "placements", "media", "gender", "languages", "cta", "copyTo"}
+    assert used >= {"adsets", "copyAdset", "texts", "placements", "media", "gender", "languages", "cta", "copyTo"}
 
 
 def test_old_drafts_load_without_the_new_field():
@@ -178,7 +179,7 @@ def test_the_api_backend_second_text_note_matches_the_creator_rule(tmp_path):
     message = _problems(tmp_path, body2="Second text")
     assert "Primary text 2 is not supported by the API backend" in message
     page = _page()
-    assert "a second primary text is not supported yet (ACL-1774)" in page
+    assert "Primary text 2 is not supported by the API backend yet (ACL-1774). Leave it empty." in page
     sync = page[page.index("function syncHost(found)"):]
     sync = sync[: sync.index("function paintEditor")]
     assert "window.ACL_FB_BACKEND === 'api'" in sync
@@ -191,7 +192,9 @@ def test_the_ui_shows_only_what_the_creator_sends():
 
     page = _page()
     assert cr.CTA_TYPE == "LEARN_MORE" and "'cta', 'select', 'Learn more'" in page
-    assert cr.DESTINATION == "WEBSITE" and "'forms', 'select', 'Website'" in page
+    # ACL-1775: выбор Website / Instant Form - настоящий, значения те, что шлёт создатель
+    assert cr.DESTINATION == "WEBSITE" and cr.DEST_WEBSITE == "website" and cr.DEST_FORM == "instant_form"
+    assert 'value="website" selected>Website<' in page and 'value="instant_form">Instant Form<' in page
     assert cr.PAUSED == "PAUSED" and "PAUSED campaigns" in page
     assert cr.SUPPORTED_OBJECTIVES == frozenset({"leads"})
     assert cr.OBJECTIVE == "OUTCOME_LEADS"
@@ -239,3 +242,18 @@ console.log(JSON.stringify({{ marked, refreshed: refreshed.length }}));
     assert "SLOT .cb-creative-search" in sels and 'SLOT [name$="_budget"]' in sels
     assert all(m[1] == "cb-field-error" for m in out["marked"])
     assert out["refreshed"] >= 1, "редактор не узнал об ошибке (вкладка уровня не пометится)"
+
+
+def test_ad_tab_is_a_stack_of_cards_without_an_ad_dropdown():
+    """Правка владельца 13.10: выбора Ad / Ad 2 нет, карточки идут списком.
+    Подпись «Primary text 1» проверяется и без браузера (раньше её держал
+    только браузерный тест)."""
+    page = _page()
+    assert "cbd-ed-ad" not in page and "cbd-ad-off" not in page and "adNames" not in page
+    assert "Object to edit" in page, "вкладки Campaign / Ad set / Ad пропали"
+    row = page[page.index("function buildAdRowHTML"):]
+    row = re.sub(r"/\*.*?\*/", "", row[: row.index("function ", 30)], flags=re.S)
+    row = re.sub(r"^\s*//.*$", "", row, flags=re.M)
+    assert '<span class="cb-label">Primary text 1' in row and "Primary text 2" in row and "Ad Title" not in row
+    for name in ("copy", "copy2", "creative_file"):
+        assert "name=\"' + pfx + '" + name + "\"" in row, "имя поля camp_N_ad_M_" + name + " изменилось"

@@ -52,6 +52,8 @@
     // ACL-1761: создатель кампаний через Graph API — «Check plan (no writes)» и
     // «PAUSED campaigns» вместо «drafts». Раньше любого кода билдера.
     try { window.ACL_FB_BACKEND = {{ (fb_backend or 'rpa') | tojson }}; } catch(e) {}
+    // ACL-1819: таблица правил pre-flight audit — одна на сервер и страницу.
+    try { window.CB_PREFLIGHT_RULES = {{ (preflight_rules_json or {}) | tojson }}; } catch(e) {}
     function aclEscHtml(value) {
       return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
         return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
@@ -2345,6 +2347,9 @@
       color: var(--warn, var(--muted)); font-size: var(--adopy-text-sm);
       padding-top: 0.4rem; line-height: 1.4;
     }
+    /* Командная таблица кампаний страны (`_campaign_table.html`, ACL-1800) стоит под списком аккаунтов;
+       старые стили списка «in the account» убраны вместе с ним. */
+    .amap-campaigns { max-width: 100%; min-width: 0; }
     .amap-btn {
       background: none; border: 1px solid var(--field-border);
       color: var(--muted); border-radius: var(--radius-sm);
@@ -2355,7 +2360,7 @@
     .amap-btn.danger:hover { border-color: var(--bad); color: var(--bad); }
     /* Read all (ACL-353): панелька над таблицей страны; сама кнопка — тот же
        amap-btn, ей ничего особенного не нужно. */
-    .amap-toolbar { display: flex; justify-content: flex-end; padding: 0.35rem 0.85rem 0; }
+    .amap-toolbar { display: flex; justify-content: flex-end; gap: 0.4rem; padding: 0.35rem 0.85rem 0; }
     .amap-x {
       background: none; border: 0; color: var(--border-strong);
       cursor: pointer; font-size: 0.9rem; line-height: 1; padding: 0 0.2rem;
@@ -3330,13 +3335,6 @@
     .cbd-seg button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
     .cbd-seg .cbd-lv-bad::after { content: " !"; color: var(--bad); font-weight: 700; }
     .cbd-ed-pick { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; }
-    .cbd-ed-pick label { color: var(--muted); font-size: var(--adopy-text-sm); }
-    .cbd-ed-pick select {
-      min-height: var(--adopy-control-sm); padding: 0.2rem 0.4rem;
-      font: inherit; font-size: var(--adopy-text-body);
-      background: var(--field-bg); color: var(--text);
-      border: 1px solid var(--field-border); border-radius: var(--radius-sm);
-    }
     .cbd-ed-empty {
       color: var(--muted); font-size: var(--adopy-text-body); line-height: 1.6;
       text-align: center; padding: var(--space-xl) var(--space-md);
@@ -3344,12 +3342,61 @@
     .cbd-ed-empty[hidden] { display: none; }
     .cbd-col-edit .cbd-host { border-top: 0; }
 
+    /* Pre-flight audit (ACL-1819): карточка под формой выбранной кампании. */
+    .cbd-pf {
+      margin: var(--space-md); padding: var(--space-md);
+      background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius-md);
+    }
+    .cbd-pf[hidden] { display: none; }
+    .cbd-pf-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); margin-bottom: var(--space-sm); }
+    .cbd-pf-title { margin: 0; font-size: var(--adopy-text-body); font-weight: 700; color: var(--text); }
+    .cbd-pf-badge {
+      padding: 0.1rem 0.6rem; border-radius: 999px; border: 1px solid currentColor;
+      font-size: var(--adopy-text-sm); font-weight: 700; white-space: nowrap;
+    }
+    .cbd-pf-badge.cbd-pf-bad { color: var(--bad); background: var(--bad-soft); }
+    .cbd-pf-badge.cbd-pf-warn { color: var(--warn); background: var(--warn-soft); }
+    .cbd-pf-badge.cbd-pf-ok { color: var(--good); background: var(--good-soft); }
+    .cbd-pf-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.1rem; }
+    .cbd-pf-line {
+      display: flex; align-items: flex-start; gap: var(--space-sm); width: 100%;
+      padding: 0.3rem 0.25rem; background: none; border: 0; border-radius: var(--radius-sm);
+      color: var(--text); font: inherit; font-size: var(--adopy-text-body); text-align: left; cursor: pointer;
+    }
+    .cbd-pf-line:hover { background: var(--bg-hover); }
+    .cbd-pf-line:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+    .cbd-pf-sign {
+      flex: none; width: 1.15rem; height: 1.15rem; margin-top: 0.1rem; border-radius: 50%;
+      border: 1.5px solid currentColor; display: inline-flex; align-items: center; justify-content: center;
+      font-size: 0.7rem; font-weight: 700; line-height: 1;
+    }
+    .cbd-pf-error .cbd-pf-sign { color: var(--bad); }
+    .cbd-pf-warning .cbd-pf-sign { color: var(--warn); }
+    .cbd-pf-ok .cbd-pf-sign { color: var(--good); }
+    .cbd-pf-unknown .cbd-pf-sign { color: var(--muted); border-style: dashed; }
+    .cbd-pf-text { flex: 1; min-width: 0; line-height: 1.4; }
+    .cbd-pf-hint { color: var(--muted); }
+    /* Статус словом: цвет — не единственный носитель (красный и зелёный путают). */
+    .cbd-pf-state { flex: none; color: var(--muted); font-size: var(--adopy-text-sm); }
+    .cbd-pf-error .cbd-pf-state { color: var(--bad); font-weight: 700; }
+    .cbd-pf-foot { display: flex; align-items: center; gap: var(--space-sm); margin-top: var(--space-sm); flex-wrap: wrap; }
+    .cbd-pf-when { color: var(--muted); font-size: var(--adopy-text-sm); }
+    .cbd-pf-tree { color: var(--bad); font-weight: 700; white-space: nowrap; margin-left: var(--space-xs); }
+    .cbd-gate-reason + .cbd-publish-all[disabled] {
+      cursor: not-allowed; opacity: 1; background: var(--bg-hover); color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .cbd-pf-tree[hidden] { display: none; }
+    .cbd-gate-reason {
+      margin-bottom: var(--space-xs); padding: 0.3rem 0.5rem; border-radius: var(--radius-sm);
+      background: var(--bad-soft); color: var(--bad); font-size: var(--adopy-text-sm); line-height: 1.4;
+    }
+
     /* Уровни редактора: форма одна, показывается нужный раздел. Правила
        только для формы в ящике — на странице страны разделы видны все. */
     .cbd-host[data-level="campaign"] .cb-lvl:not(.cb-lvl-campaign),
     .cbd-host[data-level="adset"] .cb-lvl:not(.cb-lvl-adset),
     .cbd-host[data-level="ad"] .cb-lvl:not(.cb-lvl-ad) { display: none; }
-    .cbd-host .cb-ad-row.cbd-ad-off { display: none; }
     /* Настройка аккаунта (ссылка, поля карты) — контекст кампании, не набора и не объявления. */
     .cbd-host[data-level="adset"] .cb-preflight, .cbd-host[data-level="ad"] .cb-preflight { display: none; }
     .cbd-host .cb-lvl { padding-top: var(--space-xs); }
@@ -3383,7 +3430,18 @@
       color: var(--muted); font: inherit; font-size: var(--adopy-text-sm); padding: 0.25rem 0.5rem;
     }
     .cb-lvl-actions { display: flex; flex-wrap: wrap; gap: var(--space-sm); margin-top: var(--space-sm); }
+    .cb-headline-line { color: var(--muted); font-size: var(--adopy-text-sm); margin-top: 0.2rem; overflow-wrap: anywhere; }
+    .cb-headline-line[hidden] { display: none; }
     .cb-api-note { color: var(--warn); font-size: var(--adopy-text-sm); margin-top: 0.15rem; }
+    /* ACL-1775: выбор формы Страницы в объявлении */
+    .cb-form-wrap { min-width: 0; }
+    .cb-form-wrap[hidden], .cb-form-only[hidden] { display: none; }
+    .cb-form-line { display: flex; gap: var(--space-sm); align-items: center; flex-wrap: wrap; }
+    .cb-form-line .cb-form-select { flex: 1 1 12rem; min-width: 0; }
+    .cb-form-refresh { background: none; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+      color: var(--text); font: inherit; font-size: var(--adopy-text-sm); padding: 0.2rem 0.5rem; cursor: pointer; }
+    .cb-form-refresh:disabled { opacity: 0.6; cursor: progress; }
+    .cb-form-note { color: var(--muted); font-size: var(--adopy-text-sm); margin-top: 0.15rem; overflow-wrap: anywhere; }
 
     /* Подвал: выбор «страна / аккаунт» и «новая страна» в две колонки, чтобы
        высота подвала не съедала редактор на невысоком окне. */
@@ -3496,7 +3554,11 @@
     dialog::backdrop { background: var(--adopy-scrim); }
     /* Числа в таблицах и карточках: цифры одной ширины, колонки не прыгают. */
     td.num, th.num, .kpi, .home-kpi, [class*="-kpi"], time { font-variant-numeric: tabular-nums lining-nums; }
-  </style>
+</style>
+  {#- ACL-1797: токены Adopy подключены один раз, прямо в страницу (без запроса:
+      работает и без сети, и до первой отрисовки); значения — только в
+      adopy-tokens.css рядом с шаблонами. -#}
+  <style id="adopy-tokens">{% autoescape false %}{% include "adopy-tokens.css" %}{% endautoescape %}</style>
   <style id="cw-styles">
     /* ── ACL-1799: Country Workbench ─────────────────────────────────────
        ОДИН блок стилей этого вида. Каждый селектор начинается с `.cw-`, чтобы
@@ -3697,10 +3759,6 @@
     .rh-foot { display: flex; justify-content: space-between; align-items: center; gap: var(--adopy-space-3); margin-top: var(--adopy-space-3); }
     .rh-open { font-size: var(--adopy-text-table); color: var(--adopy-link); }
   </style>
-  {#- ACL-1797: токены Adopy подключены один раз, прямо в страницу (без запроса:
-      работает и без сети, и до первой отрисовки); значения — только в
-      adopy-tokens.css рядом с шаблонами. -#}
-  <style id="adopy-tokens">{% autoescape false %}{% include "adopy-tokens.css" %}{% endautoescape %}</style>
 </head>
 <body>
 {# Имена аккаунтов Multilogin. Значение приходит из app.py, но шаблон
@@ -4076,6 +4134,8 @@ async function dashRefresh(ev) {
       (not account_map.date_from and not account_map.date_to)) %}
 {#- ACL-1652: шесть метрик (заголовки и ячейки) — из одного места. -#}
 {% import "_metrics.html" as mx %}
+{#- ACL-1800: командная таблица кампаний — компонент для областей под строками аккаунтов (стили, шаблон, hcMount). Секции на Home у неё нет. -#}
+{% if campaign_table_api is defined and campaign_table_api() %}{% include "_campaign_table.html" %}{% endif %}
 {% if account_map %}
 {% for day in account_map.dates or [] %}
 {% if (not account_map.date_from or day >= account_map.date_from)
@@ -5540,6 +5600,7 @@ window.cbKeep = (function () {
     var hint = slot.querySelector('.cb-targeting-hint');
     if (hint) hint.textContent = data.hint || '';
     slot._cbdPick = data.picked === true;
+    if (window.cbSyncDestination) window.cbSyncDestination(slot);
     if (window.cbUpdateName) window.cbUpdateName(slot);
   }
 
@@ -5677,7 +5738,6 @@ window.cbLayout = (function () {
   var FUTURE = {
     adsets:     { task: 'ACL-1768', what: 'Multiple ad sets' },
     copyAdset:  { task: 'ACL-1768', what: 'Copy ad set' },
-    forms:      { task: 'ACL-1775', what: 'Instant Forms' },
     texts:      { task: 'ACL-1774', what: 'Up to 5 primary texts' },
     placements: { task: 'ACL-1772', what: 'Placement editor' },
     media:      { task: 'ACL-1772', what: 'Separate Stories / Reels file' },
@@ -5742,12 +5802,13 @@ window.cbLayout = (function () {
      creator.plan_from_draft), а здесь только куда её показать. */
   var ROUTES = [
     [/primary text 2/i, '.cb-text2-search', 'ad'],
-    [/text|copy|headline/i, '.cb-adtitle-search', 'ad', 'primary text 2'],
+    [/ad titles?|ad texts?|text|copy|headline/i, '.cb-adtitle-search', 'ad', 'primary text 2'],
     [/creative|file|image|video/i, '.cb-creative-search', 'ad'],
     [/would all be named|names must differ/i, '.cb-creative-search, .cb-adtitle-search', 'ad'],
     [/budget/i, '[name$="_budget"]', 'campaign'],
     [/detailed targeting|interest|target/i, '.cb-targeting-search', 'adset'],
     [/language/i, '[name$="_language"]', 'adset'],
+    [/instant form|page's forms|lead ads terms/i, '.cb-form-select', 'ad'],
     [/tracking link/i, 'input[name="tracking_link"]', 'form']
   ];
 
@@ -5769,6 +5830,37 @@ window.cbLayout = (function () {
     return bits.join(' · ');
   }
 
+  /* ACL-1775: место конверсии набора и выбор формы Страницы. Правила форм
+     (чья форма, какой статус годен) решает сервер; здесь только то, что
+     показать. Годна только форма ACTIVE, как src/fb_api/forms.py (USABLE_STATUS). */
+  var DESTINATIONS = { website: 'Website', instant_form: 'Instant Form' };
+  var USABLE_FORM_STATUS = 'ACTIVE';
+
+  function destination(v) { return v === 'instant_form' ? 'instant_form' : 'website'; }
+
+  function formOptions(forms, current) {
+    var out = [], seen = {};
+    (forms || []).forEach(function (f) {
+      if (!f || !f.id) return;
+      if (String(f.status || '').trim().toUpperCase() !== USABLE_FORM_STATUS) return;
+      seen[String(f.id)] = true;
+      out.push({ id: String(f.id), label: (f.name || f.id) + ' · ' + f.id });
+    });
+    var cur = String(current == null ? '' : current);
+    /* Сохранённая форма, которой нет в загруженном списке, не пропадает молча. */
+    if (cur && !seen[cur]) out.push({ id: cur, label: cur + ' (not in the loaded list)', missing: true });
+    return out;
+  }
+
+  function formsStatus(entry) {
+    if (!entry) return 'Press "Refresh forms" to read the forms of the Page';
+    if (entry.ok && (entry.forms || []).length) {
+      var n = entry.forms.length;
+      return n + (n === 1 ? ' form' : ' forms') + ' of the Page';
+    }
+    return String(entry.message || 'The forms could not be read');
+  }
+
   function parseList(raw) {
     try {
       var v = JSON.parse(raw || '[]');
@@ -5777,12 +5869,162 @@ window.cbLayout = (function () {
   }
 
   return {
-    LEVELS: LEVELS, LEVEL_LABEL: LEVEL_LABEL, FUTURE: FUTURE,
+    LEVELS: LEVELS, LEVEL_LABEL: LEVEL_LABEL, FUTURE: FUTURE, DESTINATIONS: DESTINATIONS,
+    destination: destination, formOptions: formOptions, formsStatus: formsStatus,
     level: level, futureTip: futureTip, futureHtml: futureHtml, effectiveName: effectiveName,
     accountState: accountState, clampAd: clampAd, routes: routes, campMeta: campMeta, parseList: parseList
   };
 })();
 </script>
+
+<script>
+/* Pre-flight audit (ACL-1819): чистые функции, без DOM.
+ *
+ * Таблица правил приходит с сервера (`window.CB_PREFLIGHT_RULES`, источник —
+ * src/fb_api/preflight_rules.py): подписи, подсказки, серьёзность, поле и сторона.
+ * Клиентские правила считаются здесь, мгновенно и на каждую правку; зеркало на
+ * Python — `evaluate_client` в том же файле, их сверяет тест паритета на одних
+ * и тех же фикстурах. Серверные правила здесь НЕ считаются: их вердикты приходят
+ * от /publish-plan и только накладываются на строки. Блокирует только `error`.
+ */
+window.cbPreflight = (function () {
+  function table() { return (window.CB_PREFLIGHT_RULES && window.CB_PREFLIGHT_RULES.rules) || []; }
+  function consts() { return (window.CB_PREFLIGHT_RULES && window.CB_PREFLIGHT_RULES.consts) || {}; }
+  function s(v) { return String(v == null ? '' : v).trim(); }
+  function v(rule, status, detail, ads) { return { rule: rule, status: status, detail: detail || '', ads: ads || [] }; }
+
+  function applies(rule, dest) { return rule.applies === 'always' || rule.applies === dest; }
+
+  function perAd(rule, inp, bad, status) {
+    var ads = [];
+    (inp.ads || []).forEach(function (ad, i) { if (bad(ad)) ads.push(i + 1); });
+    return v(rule, ads.length ? (status || 'error') : 'ok', ads.length ? 'Ad ' + ads.join(', ') : '', ads);
+  }
+
+  /* Клиентские вердикты в порядке таблицы (зеркало evaluate_client). */
+  function evaluate(inp, rules) {
+    rules = rules || table();
+    var C = consts();
+    var dest = s(inp.destination) === 'instant_form' ? 'instant_form' : 'website';
+    var link = s(inp.link);
+    var linkRe = new RegExp(C.link_re || '^$', 'i'), trackRe = new RegExp(C.track_re || '^$');
+    var linkOk = linkRe.test(link);
+    var out = [];
+    rules.forEach(function (rule) {
+      if (rule.side !== 'client' || !applies(rule, dest)) return;
+      var id = rule.id, ads = inp.ads || [];
+      if (id === 'form_chosen') out.push(perAd(id, inp, function (a) { return !s(a.form_id); }));
+      else if (id === 'country_set') out.push(v(id, s(inp.country) ? 'ok' : 'error'));
+      else if (id === 'link_https') out.push(!link ? v(id, 'error', 'empty') : !linkOk ? v(id, 'error', 'not_https') : v(id, 'ok'));
+      else if (id === 'link_tracking') out.push(!linkOk ? v(id, 'unknown', 'no_valid_link') : v(id, trackRe.test(link) ? 'ok' : 'warning'));
+      else if (id === 'media_chosen') out.push(perAd(id, inp, function (a) { return !s(a.file); }));
+      else if (id === 'primary_text') out.push(perAd(id, inp, function (a) { return !s(a.body); }));
+      else if (id === 'headline') out.push(perAd(id, inp, function (a) { return !s(a.headline); }));
+      else if (id === 'headline_len') out.push(perAd(id, inp, function (a) { return s(a.headline).length > C.max_headline; }, 'warning'));
+      else if (id === 'primary_len') out.push(perAd(id, inp, function (a) { return s(a.body).length > C.max_primary_visible; }, 'warning'));
+      else if (id === 'cta_allowed') {
+        var allowed = (C.allowed_cta || {})[s(inp.objective).toLowerCase() || C.default_objective] || [];
+        out.push(perAd(id, inp, function (a) { return allowed.indexOf(s(a.cta) || 'LEARN_MORE') === -1; }));
+      } else if (id === 'budget_set') {
+        var b = inp.budget, n = Number(b);
+        out.push(v(id, b !== null && b !== undefined && b !== '' && isFinite(n) && n > 0 ? 'ok' : 'error'));
+      } else if (id === 'age_range') {
+        var lo = parseInt(inp.age_min, 10), hi = parseInt(inp.age_max, 10);
+        var good = isFinite(lo) && isFinite(hi) && lo >= C.age_min && lo <= C.age_max
+          && hi >= C.age_min && hi <= C.age_max && lo <= hi;
+        out.push(v(id, good ? 'ok' : 'error'));
+      } else if (id === 'ad_names_unique') {
+        var names = ads.map(function (a) { return s(a.name); }), bad = [];
+        names.forEach(function (nm, i) {
+          if (nm && names.filter(function (x) { return x === nm; }).length > 1) bad.push(i + 1);
+        });
+        out.push(v(id, bad.length ? 'error' : 'ok', bad.length ? 'Ad ' + bad.join(', ') : '', bad));
+      }
+    });
+    return out;
+  }
+
+  /* Строки карточки: клиентские вердикты + серверные, в порядке таблицы.
+     opts: backend ('api'|'rpa'), server (вердикты или null), stale (правка после
+     проверки), planError (ошибка плана без вердиктов), accountAudit. */
+  function lines(inp, opts, rules) {
+    rules = rules || table();
+    opts = opts || {};
+    var dest = s(inp.destination) === 'instant_form' ? 'instant_form' : 'website';
+    var client = {}, server = {}, out = [];
+    evaluate(inp, rules).forEach(function (x) { client[x.rule] = x; });
+    var serverOn = opts.backend === 'api';
+    var fresh = serverOn && opts.server && !opts.stale;
+    if (fresh) opts.server.forEach(function (x) { server[x.rule] = x; });
+    if (fresh && opts.accountAudit) server.account_active = opts.accountAudit;
+    rules.forEach(function (rule) {
+      if (!applies(rule, dest)) return;
+      var got = rule.side === 'client' ? client[rule.id] : server[rule.id];
+      if (rule.side === 'server' && !serverOn) return;     // RPA: серверных строк нет
+      if (!got) {
+        var why = opts.server && opts.stale ? 'Edited since the last check: press Check'
+          : fresh ? 'Not checked' : 'Not checked yet: press Check';
+        got = v(rule.id, 'unknown', why);
+      }
+      out.push({ rule: rule.id, label: rule.label, hint: rule.hint, status: got.status, detail: got.detail,
+                 ads: got.ads || [], field: rule.field, side: rule.side, severity: rule.severity });
+    });
+    if (fresh && opts.planError && !out.some(function (x) { return x.status === 'error' && x.side === 'server'; })) {
+      out.push({ rule: 'plan_error', label: 'Plan check', hint: '', status: 'error', detail: opts.planError,
+                 ads: [], field: { sel: '', level: 'campaign' }, side: 'server', severity: 'error' });
+    }
+    return capSeverity(out);
+  }
+
+  /* Имя объявления, как его строит сервер (AdDraft.ad_name): номер креатива из имени
+     файла без расширения (четыре цифры, не размер кадра), вариант-число в начале имени,
+     затем « - текст». Одно и то же имя у «2046 1.jpg» и «2046 1.mp4». */
+  function creativeNumber(file) {
+    var stem = String(file || '').split(/[\\/]/).pop();
+    if (stem.indexOf('.') !== -1) stem = stem.slice(0, stem.lastIndexOf('.'));
+    stem = stem.replace(/\d{3,4}\s*[x\u0445\xd7]\s*\d{3,4}/gi, ' ');
+    var m = /(?<!\d)(\d{4})(?!\d)/.exec(stem);
+    return m ? m[1] : '';
+  }
+  function fileVariant(file) {
+    var base = String(file || '').split(/[\\/]/).pop().trim();
+    var m = /^(\d{1,2})(?=[_\-\s])/.exec(base);
+    return m ? String(parseInt(m[1], 10)) : '';
+  }
+  function adName(file, copy) {
+    var creative = creativeNumber(file), text = s(copy);
+    if (creative && file && creative === creativeNumber(file)) {
+      var variant = fileVariant(file);
+      if (variant) creative = creative + ' ' + variant;
+    }
+    return creative && text ? creative + ' - ' + text : (text || creative);
+  }
+
+  function count(ls) {
+    var n = { error: 0, warning: 0, ok: 0, unknown: 0 };
+    ls.forEach(function (x) { n[x.status] = (n[x.status] || 0) + 1; });
+    return n;
+  }
+  /* Гейт Publish: любое `error`; `warning` и `unknown` не блокируют. */
+  function blocks(ls) { return ls.some(function (x) { return x.status === 'error'; }); }
+
+  /* Правило с серьёзностью warning не может стать error, что бы ни прислал сервер. */
+  function capSeverity(ls) {
+    return ls.map(function (x) {
+      return x.severity === 'warning' && x.status === 'error' ? Object.assign({}, x, { status: 'warning' }) : x;
+    });
+  }
+
+  function lineText(x) {
+    var detail = x.detail && !/^(empty|not_https|no_valid_link)$/.test(x.detail) ? x.detail : '';
+    return x.status === 'ok' ? x.label : x.label + (detail ? ' (' + detail + ')' : '');
+  }
+
+  return { adName: adName, evaluate: evaluate, lines: lines, count: count, blocks: blocks, capSeverity: capSeverity,
+           lineText: lineText, table: table };
+})();
+</script>
+
 
 <script>
 /* Дерево в ящике: страна → аккаунт → кампания → объявление.
@@ -5823,7 +6065,6 @@ window.cbTree = (function () {
   var level = L.level(store(LEVEL_KEY));
   var namesOnly = store(NAMES_KEY) === '1';
   var folded = L.parseList(store(FOLD_KEY));
-  var adIdx = 0, lastAdFor = '', lastAdCount = 0;
 
   var openId = '';
   try { openId = localStorage.getItem(OPEN_KEY) || ''; } catch (e) { openId = ''; }
@@ -6059,6 +6300,7 @@ window.cbTree = (function () {
     var btn = foot.querySelector('.cbd-publish-all');
     if (btn) btn.textContent = publishLabel(t);
     refreshAccountStates();
+    refreshAudit();
   }
 
   /* Значок аккаунта (идёт ли сборка, настроен ли) обновляется на месте, как и
@@ -6125,7 +6367,8 @@ window.cbTree = (function () {
           : '<span class="cbd-camp-name cbd-camp-name-empty">Untitled campaign</span>')
       /* Под именем — то, что «Names only» прячет: счётчик объявлений и бюджет. */
       + '<span class="cbd-camp-sub"><span class="cbd-camp-ads">' + c.ads + (c.ads === 1 ? ' ad' : ' ads') + '</span>'
-      + '<span class="cbd-camp-meta">' + aclEscHtml(meta) + '</span></span>'
+      + '<span class="cbd-camp-meta">' + aclEscHtml(meta) + '</span>'
+      + '<span class="cbd-pf-tree" hidden></span></span>'
       + '</span>'
       + '</button>'
       + '<button type="button" class="cbd-camp-drop" data-act="drop"'
@@ -6366,13 +6609,6 @@ window.cbTree = (function () {
     return false;
   }
 
-  function adNames(slot) {
-    var rows = slot.querySelectorAll('.cb-ad-row');
-    var out = [];
-    for (var i = 0; i < rows.length; i += 1) out.push('Ad ' + (i + 1));
-    return out;
-  }
-
   function headHtml(found) {
     var c = found.camp, slot = c.slot;
     var seg = L.LEVELS.map(function (lv) {
@@ -6383,14 +6619,9 @@ window.cbTree = (function () {
         + L.LEVEL_LABEL[lv] + '</button>';
     }).join('');
     var pick = '';
-    if (level === 'ad') {
-      pick = '<div class="cbd-ed-pick"><label for="cbd-ed-ad">Ad</label>'
-        + '<select id="cbd-ed-ad" class="cbd-ed-ad">'
-        + adNames(slot).map(function (n, i) {
-            return '<option value="' + i + '"' + (i === adIdx ? ' selected' : '') + '>' + n + '</option>';
-          }).join('')
-        + '</select></div>';
-    } else if (level === 'adset') {
+    /* Вкладка Ad без выбора объявления: все карточки набора идут одним
+       вертикальным списком (владелец, 13.10), добавление и копия видны сразу. */
+    if (level === 'adset') {
       /* Сегодня у кампании один набор объявлений; несколько — ACL-1768. */
       pick = '<div class="cbd-ed-pick"><span class="cbd-ed-fixed">Ad set 1 · the only ad set of this campaign</span>'
         + L.futureHtml('adsets', 'button', '+ Ad set') + L.futureHtml('copyAdset', 'button', 'Copy ad set') + '</div>';
@@ -6404,14 +6635,9 @@ window.cbTree = (function () {
   function syncHost(found) {
     host.dataset.level = level;
     var rows = found.camp.slot.querySelectorAll('.cb-ad-row');
-    if (lastAdFor !== openId) { adIdx = 0; lastAdFor = openId; lastAdCount = rows.length; }
-    /* Добавили объявление — открыть его: ради него и нажимали «+ Ad». */
-    if (rows.length > lastAdCount) adIdx = rows.length - 1;
-    lastAdCount = rows.length;
-    adIdx = L.clampAd(rows.length, adIdx);
     var api = window.ACL_FB_BACKEND === 'api';
+    if (window.cbSyncDestination) window.cbSyncDestination(found.camp.slot);
     for (var i = 0; i < rows.length; i += 1) {
-      rows[i].classList.toggle('cbd-ad-off', i !== adIdx);
       /* Создатель по API второй основной текст не принимает: пустое поле
          выключено с причиной, непустое остаётся рабочим (иначе набранное
          молча пропало бы из отправки) и проверка покажет ошибку на нём. */
@@ -6422,7 +6648,246 @@ window.cbTree = (function () {
         if (t2.disabled) t2.title = 'API backend: a second primary text is not supported yet (ACL-1774)';
       }
       if (note) note.hidden = !api;
+      /* Заголовок выбранной записи — под Primary text 1, только для чтения. */
+      var line = rows[i].querySelector('[data-headline]');
+      var pick = rows[i].querySelector('.cb-adtitle-sel-wrap input[type="hidden"]');
+      if (line) {
+        var entry = pick && pick.value && window.cbAdLibraryEntry ? window.cbAdLibraryEntry(pick.value) : null;
+        line.hidden = !entry;
+        /* Только при изменении: запись в textContent — мутация формы, её слушает
+           наблюдатель дерева, и безусловная запись зациклила бы страницу. */
+        var want = entry ? 'Headline: ' + (entry.headline || entry.ad_title) + ', from the ad-title library' : '';
+        if (line.textContent !== want) line.textContent = want;
+      }
     }
+  }
+
+  /* ── Pre-flight audit (ACL-1819) ───────────────────────────────────────
+     Правила — в cbPreflight (таблица с сервера). Здесь только DOM: собрать вход
+     аудита с карточки, нарисовать карточку и значки, пустить к полю по клику и
+     держать Publish выключенным, пока у выбранной кампании есть ошибка.
+     Клиентские строки считаются на каждую правку и сети не касаются. Серверные
+     (кабинет Meta) — только то, что принёс /publish-plan: оно лежит на форме
+     (`form._pfAudit`) под ревизией черновика и обновляется кнопкой Check и перед
+     Publish — не на нажатие клавиши и не по таймеру. */
+  var edAudit = document.createElement('section');
+  edAudit.className = 'cbd-pf';
+  edAudit.setAttribute('aria-label', 'Pre-flight audit');
+  edAudit.hidden = true;
+  editor.appendChild(edAudit);
+  var lastAudit = '';
+
+  function pfApi() { return window.ACL_FB_BACKEND === 'api'; }
+
+  /* Ревизия черновика кампании: её поля и поля формы аккаунта (ссылка, страна).
+     Правка соседней кампании ревизию этой не меняет. */
+  function pfRev(slot) {
+    var form = slot.closest ? slot.closest('form') : null;
+    if (!form) return '';
+    var mine = new RegExp('^camp_' + slot.dataset.idx + '_'), out = [];
+    new FormData(form).forEach(function (value, key) {
+      if (key === 'camp_count') return;
+      if (/^camp_\d+_/.test(key)) {
+        if (!mine.test(key)) return;           // чужая кампания ревизию не меняет
+        key = key.replace(mine, 'camp_x_');    // и номер карточки в ней не участвует
+      }
+      out.push([key, typeof value === 'string' ? value : '']);
+    });
+    return JSON.stringify(out);
+  }
+  window.cbPfRev = pfRev;
+
+  /* Вход аудита с карточки (то, что понимает evaluate_client / cbPreflight.evaluate). */
+  function auditInput(slot) {
+    var form = slot.closest ? slot.closest('form') : null;
+    function val(root, sel) { var el = root && root.querySelector(sel); return el ? String(el.value || '') : ''; }
+    var destEl = slot.querySelector('.cb-destination');
+    var age = parseInt(val(slot, '[name$="_age"]'), 10);
+    var budget = val(slot, '[name$="_budget"]').trim();
+    var ads = [];
+    slot.querySelectorAll('.cb-ad-row').forEach(function (row) {
+      var file = val(row, 'input[type="hidden"][name$="_creative_file"]').trim();
+      var copy = val(row, 'input[type="hidden"][name$="_copy"]').trim();
+      var entry = copy && window.cbAdLibraryEntry ? window.cbAdLibraryEntry(copy) : null;
+      ads.push({
+        /* Имя — как у сервера (AdDraft.ad_name): номер креатива из файла и текст. */
+        name: window.cbPreflight.adName(file, copy),
+        file: file, body: entry ? String(entry.body || '') : '',
+        headline: entry ? String(entry.headline || entry.ad_title || '') : '',
+        form_id: val(row, 'input[type="hidden"][name$="_form_id"]').trim(), cta: 'LEARN_MORE'
+      });
+    });
+    return {
+      destination: L.destination(destEl ? destEl.value : 'website'), objective: 'leads',
+      link: val(form, 'input[name="tracking_link"]'), country: val(form, '[name="country"]'),
+      budget: budget === '' ? null : budget, age_min: age, age_max: age, ads: ads
+    };
+  }
+
+  /* Строки карточки кампании: клиентские + серверные, что лежит на форме. */
+  function auditLines(slot) {
+    var form = slot.closest ? slot.closest('form') : null;
+    var store = form && form._pfAudit, name = slotName(slot);
+    var opts = { backend: pfApi() ? 'api' : 'rpa', server: null, stale: false };
+    var hit = store && store.byName[name];
+    if (pfApi() && hit) {
+      opts.server = hit.audit || [];
+      opts.planError = hit.error || '';
+      opts.accountAudit = hit.accountAudit || null;
+      opts.stale = hit.rev !== pfRev(slot);
+    }
+    return window.cbPreflight.lines(auditInput(slot), opts);
+  }
+
+  function auditCounts(slot) { return window.cbPreflight.count(auditLines(slot)); }
+
+  var PF_SIGN = { error: '✗', warning: '!', ok: '✓', unknown: '?' };
+
+  function auditCardHtml(c) {
+    var ls = auditLines(c.slot), n = window.cbPreflight.count(ls);
+    var form = c.slot.closest('form'), busy = !!(form && form._pfBusy);
+    var badge = n.error
+      ? '<span class="cbd-pf-badge cbd-pf-bad">errors: ' + n.error + '</span>'
+      : n.warning ? '<span class="cbd-pf-badge cbd-pf-warn">warnings: ' + n.warning + '</span>'
+      : '<span class="cbd-pf-badge cbd-pf-ok">no errors</span>';
+    var items = ls.map(function (x) {
+      var detail = x.detail && !/^(empty|not_https|no_valid_link)$/.test(x.detail) ? x.detail : '';
+      /* Что дописать серым после названия: подсказка, как исправить. У клиентской
+         строки «Ad 2» — какие объявления; у серверной detail — сама причина от Meta/создателя;
+         у непроверенной — только почему не проверено. */
+      var tail = x.status === 'ok' ? ''
+        : x.status === 'unknown' ? detail
+        : x.side === 'server' && detail ? detail
+        : (detail ? detail + ': ' : '') + x.hint;
+      return '<li><button type="button" class="cbd-pf-line cbd-pf-' + x.status + '" data-act="pf-focus"'
+        + ' data-rule="' + aclEscHtml(x.rule) + '" data-side="' + x.side + '"'
+        + ' title="' + aclEscHtml(x.status === 'ok' ? x.label : (x.hint || x.label)) + '">'
+        + '<span class="cbd-pf-sign" aria-hidden="true">' + PF_SIGN[x.status] + '</span>'
+        + '<span class="cbd-pf-text"><span class="cbd-pf-label">' + aclEscHtml(x.label) + '</span>'
+        + (tail ? ' <span class="cbd-pf-hint">— ' + aclEscHtml(tail) + '</span>' : '')
+        + '</span><span class="cbd-pf-state">' + ({ error: 'error', warning: 'warning', ok: 'ok', unknown: 'not checked' }[x.status]) + '</span>'
+        + '</button></li>';
+    }).join('');
+    var foot;
+    if (pfApi()) {
+      var store = form && form._pfAudit, hit = store && store.byName[slotName(c.slot)];
+      var when = hit ? (hit.rev !== pfRev(c.slot) ? 'Edited since the last check' : 'Checked ' + new Date(hit.at).toLocaleTimeString()) : 'Account checks have not run yet';
+      foot = '<div class="cbd-pf-foot"><button type="button" class="cbd-add cbd-pf-check" data-act="pf-check"'
+        + (busy ? ' disabled' : '') + ' title="Reads the ad account through the Graph API; nothing is created">'
+        + (busy ? 'Checking…' : 'Check') + '</button><span class="cbd-pf-when" aria-live="polite">' + aclEscHtml(busy ? 'Reading the ad account…' : when) + '</span></div>';
+    } else {
+      foot = '<div class="cbd-pf-foot"><span class="cbd-pf-when cbd-pf-note">Account checks need the API backend</span></div>';
+    }
+    return '<div class="cbd-pf-head"><h3 class="cbd-pf-title">Pre-flight audit</h3>' + badge + '</div>'
+      + '<ul class="cbd-pf-list">' + items + '</ul>' + foot;
+  }
+
+  /* Значок «errors: N» у кампании в дереве и состояние Publish. */
+  function refreshAudit() {
+    body.querySelectorAll('.cbd-camp[data-camp]').forEach(function (card) {
+      var hit = findCampaign(card.dataset.camp);
+      var el = card.querySelector('.cbd-pf-tree');
+      if (!hit || !el) return;
+      var n = auditCounts(hit.camp.slot);
+      var text = n.error ? 'errors: ' + n.error : '';
+      if (el.textContent !== text) el.textContent = text;
+      el.hidden = !n.error;
+      el.title = n.error ? 'Pre-flight audit: ' + n.error + ' error(s) block Publish' : '';
+    });
+    applyGate();
+  }
+
+  /* Что мешает Publish: кампании с ошибкой среди тех, что уйдут. */
+  function gateState() {
+    var t = ticks();
+    var target = t.some ? t.on : t.all, bad = [];
+    target.forEach(function (slot) {
+      var ls = auditLines(slot);
+      if (window.cbPreflight.blocks(ls)) {
+        bad.push({ slot: slot, name: slotName(slot) || 'Untitled campaign',
+                   labels: ls.filter(function (x) { return x.status === 'error'; }).map(function (x) { return x.label; }) });
+      }
+    });
+    var reason = '';
+    if (bad.length) {
+      var first = bad[0];
+      reason = 'Publish is off: ' + (bad.length === 1 ? '"' + first.name + '" has' : bad.length + ' campaigns have')
+        + ' errors in the pre-flight audit' + (bad.length === 1 ? ' (' + first.labels.slice(0, 3).join(', ')
+        + (first.labels.length > 3 ? ', …' : '') + ')' : '') + '.';
+    }
+    return { blocked: bad.length > 0, bad: bad, reason: reason };
+  }
+
+  function applyGate() {
+    var g = gateState();
+    window.CB_PF_GATE = g;
+    var btn = foot.querySelector('.cbd-publish-all');
+    var note = foot.querySelector('.cbd-gate-reason');
+    if (btn) {
+      var uncertain = !!(window.CB_QUEUE && window.CB_QUEUE.uncertain);
+      btn.disabled = uncertain || g.blocked;
+      btn.title = g.blocked ? g.reason : '';
+      if (g.blocked && !note) {
+        note = document.createElement('div');
+        note.className = 'cbd-gate-reason';
+        note.setAttribute('role', 'status');
+        btn.parentNode.insertBefore(note, btn);
+      }
+      if (note) { if (g.blocked) { if (note.textContent !== g.reason) note.textContent = g.reason; } else note.remove(); }
+    }
+    /* Publish самой формы в ящике: выключаем только когда выбранная кампания с ошибкой. */
+    if (BORROWED) {
+      var pb = BORROWED.form.querySelector('.cb-publish-btn');
+      var open = openId ? findCampaign(openId) : null;
+      if (pb && open) {
+        var mineBlocked = window.cbPreflight.blocks(auditLines(open.camp.slot));
+        if (mineBlocked) { pb.disabled = true; pb.title = 'Pre-flight audit has errors: fix them first'; }
+        else if (pb.title === 'Pre-flight audit has errors: fix them first') {
+          pb.title = ''; pb.disabled = false;
+        }
+      }
+    }
+  }
+
+  /* Клик по строке: открыть нужный раздел и поставить фокус в поле. */
+  function focusRule(rule, adNo) {
+    var found = openId ? findCampaign(openId) : null;
+    if (!found) return;
+    var ls = auditLines(found.camp.slot);
+    var line = ls.filter(function (x) { return x.rule === rule; })[0];
+    if (!line || !line.field || !line.field.sel) return;
+    if (line.field.level === 'ad' && line.ads && line.ads.length) adIdx = L.clampAd(found.camp.slot.querySelectorAll('.cb-ad-row').length, line.ads[0] - 1);
+    setLevel(line.field.level);
+    var slot = found.camp.slot, root = slot, el = null;
+    if (line.field.level === 'ad') root = slot.querySelectorAll('.cb-ad-row')[adIdx] || slot;
+    el = root.querySelector(line.field.sel) || (BORROWED ? BORROWED.form.querySelector(line.field.sel) : null);
+    if (!el) return;
+    if (window.cbHighlightField) window.cbHighlightField(el);
+    if (el.focus) el.focus();
+  }
+
+  function runCheck(slot) {
+    var form = slot.closest('form');
+    if (!form || !window.cbPreflightRun) return;
+    window.cbPreflightRun(form, [slot]);
+  }
+
+  edAudit.addEventListener('click', function (e) {
+    var hit = e.target.closest ? e.target.closest('[data-act]') : null;
+    if (!hit) return;
+    if (hit.dataset.act === 'pf-focus') focusRule(hit.dataset.rule);
+    else if (hit.dataset.act === 'pf-check') {
+      var found = openId ? findCampaign(openId) : null;
+      if (found) runCheck(found.camp.slot);
+    }
+  });
+
+  function paintAudit(found) {
+    if (!found) { edAudit.hidden = true; lastAudit = ''; return; }
+    edAudit.hidden = false;
+    if (host.nextSibling !== edAudit) editor.appendChild(edAudit);
+    var html = auditCardHtml(found.camp);
+    if (html !== lastAudit) { edAudit.innerHTML = html; lastAudit = html; }
   }
 
   function paintEditor() {
@@ -6432,6 +6897,7 @@ window.cbTree = (function () {
       edHead.hidden = true;
       edEmpty.hidden = false;
       lastHead = '';
+      paintAudit(null);
       return;
     }
     edEmpty.hidden = true;
@@ -6440,6 +6906,8 @@ window.cbTree = (function () {
     syncHost(found);
     var html = headHtml(found);
     if (html !== lastHead) { edHead.innerHTML = html; lastHead = html; }
+    paintAudit(found);
+    refreshAudit();
   }
 
   function setLevel(next) {
@@ -6450,11 +6918,6 @@ window.cbTree = (function () {
     if (again && again.focus) again.focus();
   }
 
-  editor.addEventListener('change', function (e) {
-    if (!e.target.classList || !e.target.classList.contains('cbd-ed-ad')) return;
-    adIdx = parseInt(e.target.value, 10) || 0;
-    paintEditor();
-  });
   editor.addEventListener('scroll', function () { cbdPlaceDropdowns(); });
 
   /* Дублирование кампании живёт в её карточке (ACL-1459). Ящик отвечает за
@@ -6551,6 +7014,7 @@ window.cbTree = (function () {
      Аккаунтов может быть пять, каждый — минуты. Очередь видна: иначе
      «нажал и жду» отличается от «нажал, и ничего не произошло» только
      терпением. */
+  var AMLX_STOPS = {mlx_session_lost: 1, mlx_token_expired: 1, mlx_token_workspace: 1};
   function showQueue(p) {
     var box = foot.querySelector('.cbd-queue');
     var btn = foot.querySelector('.cbd-publish-all');
@@ -6573,7 +7037,7 @@ window.cbTree = (function () {
 
     // ACL-1355: идущая сборка кнопку не держит — остальные аккаунты
     // докладываются в неё; держит только потерянный статус.
-    if (btn) btn.disabled = !!(window.CB_QUEUE && window.CB_QUEUE.uncertain);
+    if (btn) btn.disabled = !!(window.CB_QUEUE && window.CB_QUEUE.uncertain) || !!(window.CB_PF_GATE && window.CB_PF_GATE.blocked);
     if (p.done) {
       var ok = (p.report || []).filter(function (r) { return r.state === 'ok'; }).length;
       lines.unshift('<div class="cbd-q-head">Done — ' + ok + ' of ' + p.of + ' accounts</div>');
@@ -6616,7 +7080,19 @@ window.cbTree = (function () {
         + (p.stage === 'checking' ? 'checking' : 'building the draft')
         + ' <span class="cbd-q-why">' + p.at + ' of ' + p.of + '</span></div>');
     }
+    // ACL-1826: потеряна общая сессия Multilogin слота B — у каждого пропущенного аккаунта своя
+    // строка, а над ними одна на пачку и Retry только для пропущенных.
+    var lost = (p.report || []).filter(function (r) { return r.code && AMLX_STOPS[r.code]; });
+    if (lost.length) {
+      lines.unshift('<div class="cbd-q-line cbd-q-bad" role="alert">' + aclEscHtml(lost[0].why || '')
+        + ' (' + lost.length + ' account' + (lost.length === 1 ? '' : 's') + ' not sent) '
+        + '<button type="button" class="cbd-q-retry" data-cb-stop-retry="1">Retry</button></div>');
+    }
     box.innerHTML = lines.join('');
+    var stopRetry = box.querySelector('[data-cb-stop-retry]');
+    if (stopRetry) stopRetry.addEventListener('click', function () {
+      window.cbPublishAll(showQueue, selectedForPublish(), lost.map(function (r) { return r.key; }));
+    });
     box.querySelectorAll('[data-cb-retry]').forEach(function (b) {
       b.addEventListener('click', function () {
         if (window.CB_QUEUE && window.CB_QUEUE.retry) window.CB_QUEUE.retry(b.getAttribute('data-cb-retry'));
@@ -6825,6 +7301,15 @@ window.cbTree = (function () {
   body.addEventListener('scroll', cbdPlaceDropdowns);
   window.addEventListener('resize', cbdPlaceDropdowns);
   host.addEventListener('input', cbdPlaceDropdowns);
+  /* ACL-1819: набор текста DOM не мутирует (меняется value), а карточка pre-flight
+     audit должна ответить на правку сразу. Только клиентские правила: сеть не трогаем. */
+  var auditTimer = null;
+  function auditSoon() {
+    if (auditTimer) clearTimeout(auditTimer);
+    auditTimer = setTimeout(function () { auditTimer = null; if (openId) paintEditor(); }, 60);
+  }
+  host.addEventListener('input', auditSoon);
+  host.addEventListener('change', auditSoon);
 
   /* Строка кампании обновляется на месте — без перерисовки дерева.
      Перерисовка вынимает форму из документа и возвращает обратно, а это
@@ -6899,6 +7384,9 @@ window.cbTree = (function () {
     readiness: readiness,
     refresh: refreshOpenRow,
     refreshEditor: paintEditor,
+    refreshAudit: refreshAudit,
+    auditLines: auditLines,
+    gateState: gateState,
     setLevel: setLevel,
     level: function () { return level; },
     showQueue: showQueue,
@@ -6914,7 +7402,7 @@ window.cbTree = (function () {
       var f = (openId && BORROWED) ? findCampaign(openId) : null;
       if (!f) return null;
       return { id: openId, name: f.camp.name || '', account: f.account.account, country: f.group.country,
-        countryName: f.group.countryName, slot: f.camp.slot, adIndex: adIdx, level: level };
+        countryName: f.group.countryName, slot: f.camp.slot, adIndex: 0, level: level };
     }
   };
 })();
@@ -8028,6 +8516,8 @@ function amapApply(from, to, span) {
    вырезают исходник кусками от неё, и Jinja-выражение в куске ломало бы им
    разбор. */
 window.AMAP_SHOW_COPY_FOR_GROUP = {{ SHOW_COPY_FOR_GROUP | tojson }};
+/* ACL-1800: какой список кампаний у строки аккаунта — таблица страны (api) или прежний список из чтения спенда (rpa). */
+window.AMAP_CAMPAIGN_TABLE = {{ (campaign_table_api() if campaign_table_api is defined else false) | tojson }};
 var AMAP_OPEN_KEY = 'acl.amap.open';
 
 function amapOpenList() {
@@ -8191,7 +8681,7 @@ function amapSplitDone(btn) {
   btn.title = 'Read spend again';
 }
 
-function amapRunSplit(account, btn, per) {
+function amapRunSplit(account, btn, per, batch) {
   /* Возвращает обещание с 'ok' или 'failed'. Обещание нужно очереди
      Read all: аккаунты идут друг за другом, и следующий профиль нельзя
      открывать, пока в этом ещё строится отчёт (правило «один профиль
@@ -8203,6 +8693,8 @@ function amapRunSplit(account, btn, per) {
   body.append('date_from', per.from);
   body.append('date_to', per.to);
   body.append('span', per.span || '');
+  /* ACL-1826: отдельная кнопка тоже шлёт id пачки (свою, если не из Read all). */
+  body.append('batch', batch || 'rs-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
   return fetch('/account-spend/read-countries', { method: 'POST', body: body, credentials: 'same-origin' })
     .then(function (r) { return r.json(); })
     .then(function (j) {
@@ -9123,6 +9615,9 @@ function amapTreeNotRead(row, s, problem) {
 }
 
 function amapPaintTree(row, s) {
+  /* ACL-1800: под `ACL_FB_BACKEND=api` строка аккаунта не рисует прежний список «in the account» —
+     вместо него таблица кампаний страны (`_campaign_table.html`). Под rpa (по умолчанию) всё как было. */
+  if (window.AMAP_CAMPAIGN_TABLE) return;
   /* Прежний блок снимается всегда: устаревшее состояние живого аккаунта —
      худшее, что здесь можно оставить на экране. Раскрытость при этом
      запоминается: перечитал человек аккаунт с открытым деревом — оно и
@@ -9585,6 +10080,154 @@ document.addEventListener('click', function (e) {
   amapTurnOffDisarm();
 });
 
+/* ── Кампании страны: одна командная таблица под списком аккаунтов (ACL-1800) ─────
+   Компонент `_campaign_table.html` (`hcMount`) стоит в блоке каждой страны — и в карте
+   аккаунтов на Home, и на странице страны. Это та же таблица Campaign > Ad set > Ad с
+   командами и подтверждением; аккаунты страны стоят в ней полосами, у каждой своя
+   кнопка «Read campaigns». Прежний список «in the account», который рисовался из
+   чтения спенда, убран: отдельной секции кампаний на Home тоже нет.
+
+   Таблица создаётся при первом показе блока страны и читает только локальный снимок
+   (GET своего сервера). Мета читается только нажатием «Read campaigns» — в строке
+   аккаунта внутри таблицы или в заголовке страны («Read campaigns in <страна>»). */
+/* Вкладки над таблицей: Campaigns (эта) и разделы той же страны, которые есть на странице
+   (панель `view-country-<slug>-<раздел>`); нет раздела — вкладка выключена и говорит почему.
+   Слаг считается так же, как `anchor_slug` на сервере. */
+function amapCampaignSlug(country) {
+  return String(country || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'unknown';
+}
+function amapCampaignTabs(host) {
+  var nav = host.querySelector('[data-hc-tabs]');
+  if (!nav) return;
+  var slug = amapCampaignSlug(host.dataset.country);
+  var tabs = [['Campaigns', 'manage'], ['Winning setups', 'assets'], ['Landings', 'landings'],
+              ['Targets', 'targeting'], ['Creatives', 'creatives'], ['Buyers', '']];
+  nav.innerHTML = '';
+  tabs.forEach(function (t) {
+    var has = t[1] && document.getElementById('view-country-' + slug + '-' + t[1]);
+    var el = document.createElement(has ? 'a' : 'span');
+    el.className = 'hc-tab' + (has ? '' : ' hc-tab-off');
+    el.textContent = t[0];
+    if (has) { el.href = '#country-' + slug + '-' + t[1]; if (t[1] === 'manage') el.setAttribute('aria-current', 'page'); }
+    else el.title = t[1] ? 'This section has no data for ' + host.dataset.country + ' on this page' : 'Buyer comparison is not part of this build';
+    nav.appendChild(el);
+  });
+}
+
+/* Дерево аккаунтов страны: строка аккаунта — родитель, под ней раскрывается таблица её кампаний.
+   Страница создаёт узлы (стрелка, строка снимка, кнопки, рамка прокрутки, таблица) и отдаёт компоненту;
+   под rpa ничего этого нет. Раскрытие строки ничего не читает у Meta. */
+function amapCampaignTree(grid, accounts) {
+  var handles = {};
+  var warmOwn = !window.__aclWarmSessions;      // чип и «Open/Close» от ACL-1812 уже в строке — второй не рисуем
+  function btn(cls, text) { var b = document.createElement('button'); b.type = 'button'; b.className = cls; b.textContent = text; return b; }
+  grid.querySelectorAll('td.amap-live[data-account]').forEach(function (cell) {
+    var a = cell.dataset.account, row = cell.closest('tr');
+    if (!row || accounts.indexOf(a) < 0 || handles[a]) return;
+    var acc = row.querySelector('td.amap-acc');
+    if (!acc) return;
+    var caret = btn('amap-caret', '▸');
+    caret.tabIndex = -1;
+    caret.setAttribute('aria-label', 'Show campaigns of ' + a);
+    var off = acc.querySelector('.amap-caret-off');
+    if (off) off.replaceWith(caret); else acc.insertBefore(caret, acc.firstChild);
+    var chip = null, openBtn = null;
+    if (warmOwn) {
+      chip = document.createElement('span'); chip.className = 'amap-pstate'; chip.hidden = true;
+      acc.appendChild(chip);
+    }
+    var snap = document.createElement('small'); snap.className = 'hc-snap';
+    acc.appendChild(snap);
+    var act = row.querySelector('td.amap-actions') || row.lastElementChild;
+    var readBtn = btn('amap-btn hc-rc', 'Read campaigns');
+    act.appendChild(readBtn);
+    if (warmOwn) { openBtn = btn('amap-btn hc-ro', 'Open profile'); openBtn.hidden = true; act.appendChild(openBtn); }
+    var child = document.createElement('tr');
+    child.className = 'hc-acct-child'; child.hidden = true;
+    var td = document.createElement('td');
+    td.colSpan = row.children.length;
+    td.innerHTML = '<div class="hc hc-embed"><div class="hc-frame"><div class="hc-top" aria-hidden="true"><div></div></div>' +
+      '<div class="hc-scroll" tabindex="0" role="region"><table class="hc-table"></table></div></div></div>';
+    child.appendChild(td);
+    row.parentNode.insertBefore(child, row.nextSibling);
+    row.classList.add('hc-acct-row');
+    row.tabIndex = 0;
+    row.setAttribute('aria-expanded', 'false');
+    var scroll = td.querySelector('.hc-scroll');
+    scroll.setAttribute('aria-label', 'Campaigns of ' + a + ', scrolls horizontally');
+    handles[a] = {row: row, caret: caret, snap: snap, readBtn: readBtn, chip: chip, openBtn: openBtn, child: child,
+                  embed: td.querySelector('.hc-embed'), frame: td.querySelector('.hc-frame'), scroll: scroll,
+                  top: td.querySelector('.hc-top'), topIn: td.querySelector('.hc-top > div'), table: td.querySelector('table')};
+  });
+  return handles;
+}
+
+function amapCampaignMount(host) {
+  if (host._hc) return host._hc;
+  amapCampaignTabs(host);
+  var mount = host.querySelector('[data-hc-mount]');
+  var tpl = document.getElementById('hc-scoped-tpl'), tplAfter = document.getElementById('hc-after-tpl');
+  if (!mount || !tpl || typeof window.hcMount !== 'function') {
+    if (mount) mount.textContent = 'The campaign table is not available on this page. Reload the dashboard.';
+    return null;
+  }
+  mount.appendChild(tpl.content.cloneNode(true));
+  var scope = host.parentNode || document;
+  var after = scope.querySelector('[data-hc-after]');
+  if (after && tplAfter && !after.firstChild) after.appendChild(tplAfter.content.cloneNode(true));
+  var per = typeof amapPeriod === 'function' ? amapPeriod() : {};
+  host.dataset.periodFrom = per.from || '';
+  host.dataset.periodTo = per.to || '';
+  host.dataset.periodSpan = per.span || '';
+  var seen = {}, accounts = [];
+  scope.querySelectorAll('table.amap-grid td.amap-live[data-account]').forEach(function (c) {
+    var a = c.dataset.account;
+    if (a && !seen[a]) { seen[a] = true; accounts.push(a); }
+  });
+  var grid = scope.querySelector('table.amap-grid');
+  host._hc = window.hcMount(host, {seed: [{country: host.dataset.country || '', accounts: accounts}],
+                                   rows: grid ? amapCampaignTree(grid, accounts) : {}, after: after});
+  host._hc.ready = host._hc.init();
+  return host._hc;
+}
+
+/* Таблицы страны, которые сейчас видны, а ещё не созданы, — создать; созданным — поправить ширины. */
+function amapCampaignMountVisible() {
+  document.querySelectorAll('.amap-campaigns').forEach(function (host) {
+    if (host.offsetParent === null) return;           // свёрнутый блок или скрытая вкладка: читать пока нечем
+    if (!host._hc) amapCampaignMount(host);
+    else if (host._hc.syncTop) host._hc.syncTop();
+  });
+}
+if (typeof window !== 'undefined' && typeof document !== 'undefined' && window.AMAP_CAMPAIGN_TABLE) {
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', amapCampaignMountVisible);
+  else amapCampaignMountVisible();
+  /* `toggle` не всплывает — слушаем на погружении (так же, как раньше слушали ширины дерева). */
+  document.addEventListener('toggle', function () { setTimeout(amapCampaignMountVisible, 0); }, true);
+  document.addEventListener('acl:viewchange', function () { setTimeout(amapCampaignMountVisible, 0); });
+}
+
+/* «Read campaigns in <Country>»: аккаунты страны по очереди, одним нажатием. */
+function amapReadCampaigns(btn) {
+  var per = typeof amapPeriod === 'function' ? amapPeriod() : {};
+  if (!per.from || per.span === 'all') {
+    btn.title = 'Select dates to read campaigns; Maximum is not supported';
+    return;
+  }
+  var scope = btn.closest('details.amap-country') || btn.closest('.amap');
+  var host = scope && scope.querySelector('.amap-campaigns');
+  var inst = host && amapCampaignMount(host);
+  if (!inst || (typeof window.hcReadBusy === 'function' && window.hcReadBusy())) return;
+  var label = btn.textContent;
+  btn.disabled = true;
+  Promise.resolve(inst.ready).then(function () {
+    return inst.readAll(function (n, of) { btn.textContent = 'Reading campaigns ' + n + ' of ' + of + '…'; });
+  }).then(function () {}, function () {}).then(function () {
+    btn.textContent = label;
+    btn.disabled = false;
+  });
+}
+
 function amapPollSpend(account, cell, btn, tries, per, pressed) {
   /* `pressed` — человек нажал кнопку в этот раз. Без него дочитанный спенд
      не тянет за собой пострановое чтение: оно создаёт в кабинете отчёт, а
@@ -9725,15 +10368,32 @@ async function amapReadAll(btn) {
     jobs.push({account: account, btn: b, cell: cell});
   });
   if (!jobs.length) { btn.title = 'No connected accounts to read here'; return; }
+  await amapRunJobs(btn, scope, jobs, per);
+}
+
+/* ACL-1826: одна пачка = одно нажатие Read all (или Retry). Если общая сессия
+   Multilogin слота B потеряна, сервер пропускает остальные B-аккаунты пачки с
+   той же причиной (слот A идёт дальше), а страница показывает ОДНУ строку над
+   таблицей и кнопку Retry, которая перечитывает только пропущенные. */
+var AMAP_BATCH_STOPS = {mlx_session_lost: 1, mlx_token_expired: 1, mlx_token_workspace: 1};
+async function amapRunJobs(btn, scope, jobs, per) {
   amapReadAllBusy = true;
   amapReadAllControls(true);
+  var old = scope.querySelector(':scope > .amap-batch-banner');
+  if (old) old.remove();
+  var batch = 'ra-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   var label = btn.textContent;
-  var okCount = 0, failCount = 0;
+  var okCount = 0, failCount = 0, stopped = [], stopText = '';
   try {
     for (var i = 0; i < jobs.length; i++) {
       btn.textContent = 'Reading spend ' + (i + 1) + ' of ' + jobs.length + '…';
-      var state = await amapQueueRead(jobs[i], per);
+      jobs[i].code = '';
+      var state = await amapQueueRead(jobs[i], per, batch);
       if (state === 'ok') okCount++; else failCount++;
+      if (state !== 'ok' && AMAP_BATCH_STOPS[jobs[i].code]) {
+        stopped.push(jobs[i]);
+        stopText = jobs[i].message || stopText;
+      }
     }
     btn.title = okCount + ' read, ' + failCount + ' failed (spend)';
   } finally {
@@ -9741,6 +10401,31 @@ async function amapReadAll(btn) {
     amapReadAllControls(false);
     btn.textContent = label;
   }
+  if (stopped.length) amapBatchBanner(btn, scope, stopped, per, stopText);
+}
+
+function amapBatchBanner(btn, scope, stopped, per, text) {
+  var bar = document.createElement('div');
+  bar.className = 'amap-batch-banner';
+  bar.setAttribute('role', 'alert');
+  bar.style.cssText = 'margin:6px 0;padding:8px 10px;border:1px solid var(--bad);border-radius:4px;'
+    + 'background:rgba(220,38,38,0.1);font-size:0.8rem';
+  var span = document.createElement('span');
+  span.textContent = (text || 'Multilogin needs attention.') + ' (' + stopped.length + ' account'
+    + (stopped.length === 1 ? '' : 's') + ' not read)';
+  var retry = document.createElement('button');
+  retry.type = 'button';
+  retry.className = 'amap-batch-retry';
+  retry.textContent = 'Retry';
+  retry.style.marginLeft = '10px';
+  retry.addEventListener('click', function () {
+    if (amapReadAllBusy) return;
+    bar.remove();
+    amapRunJobs(btn, scope, stopped, per);   // только пропущенные, новая пачка
+  });
+  bar.appendChild(span);
+  bar.appendChild(retry);
+  scope.insertBefore(bar, scope.firstChild);
 }
 
 // A stalled HTTP request must not leave the manual queue locked forever.
@@ -9750,14 +10435,18 @@ async function amapReadJson(url, options) {
   try {
     var r = await fetch(url, Object.assign({}, options, {signal: controller.signal}));
     var j = await r.json();
-    if (!r.ok || !j.ok) throw new Error(j.error || 'Could not read account spend');
+    if (!r.ok || !j.ok) {
+      var err = new Error(j.error || 'Could not read account spend');
+      err.code = j.code || '';
+      throw err;
+    }
     return j;
   } finally {
     clearTimeout(timeout);
   }
 }
 
-async function amapQueueRead(job, per) {
+async function amapQueueRead(job, per, batch) {
   try {
     var extra = job.btn.parentNode && job.btn.parentNode.querySelector('.amap-openprof');
     if (extra) extra.remove();
@@ -9767,6 +10456,7 @@ async function amapQueueRead(job, per) {
     body.append('date_from', per.from);
     body.append('date_to', per.to);
     body.append('span', per.span || '');
+    if (batch) body.append('batch', batch);
     // The server joins an existing read for this account and exact period.
     await amapReadJson('/account-spend/read', {method: 'POST', body: body, credentials: 'same-origin'});
     var done = await amapAwaitReading(job.account, per, 0);
@@ -9778,12 +10468,15 @@ async function amapQueueRead(job, per) {
     if (done.state === 'ok' && done.plan && done.plan.needed) {
       // Ответ разбивки нарочно не возвращается: упавшая разбивка не делает
       // прочитанный спенд неудачей и не портит счёт «N read, M failed».
-      await amapRunSplit(job.account, job.btn, per);
+      await amapRunSplit(job.account, job.btn, per, batch);
     }
+    if (done.state !== 'ok') { job.code = done.code || ''; job.message = done.message || ''; }
     return done.state;
   } catch (e) {
     var message = e && e.name === 'AbortError' ? 'Read request timed out — check the Adopy Campaign Manager window' : String(e && e.message || e);
-    amapApplyReading(job.account, {state: 'failed', error: message});
+    job.code = (e && e.code) || '';
+    job.message = job.code ? message : '';
+    amapApplyReading(job.account, {state: 'failed', error: message, error_code: job.code});
     return 'failed';
   }
 }
@@ -9800,7 +10493,8 @@ async function amapAwaitReading(account, per, tries) {
     var s = j.reading || {};
     amapApplyReading(account, s, j.split, j.waiting);
     if (s.state !== 'running') {
-      return {state: s.state === 'ok' ? 'ok' : 'failed', plan: j.plan || null};
+      return {state: s.state === 'ok' ? 'ok' : 'failed', plan: j.plan || null,
+              code: s.error_code || '', message: s.error || ''};
     }
   }
   throw new Error('no answer after six minutes — check the Adopy Campaign Manager window');
@@ -11633,12 +12327,110 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   // превью показывает одну постоянную кнопку.
   var CB_PREVIEW_CTA = 'Learn More';
 
-  // ── Creatives from folder (loaded once) ──────────────────────────────
+  // ── Creatives from folder ────────────────────────────────────────────
+  // ACL-1651: список больше не «загружается один раз». Файл, положенный в папку
+  // после открытия страницы, раньше находился только после перезагрузки.
+  // Обновляем при фокусе в поиске (не чаще раза в 10 с), один раз при промахе
+  // поиска и при возврате в окно (тот же троттлинг). Старый список остаётся,
+  // пока не придёт новый, а запрос идёт в фоне — набор текста не блокируется.
   var CREATIVES = [];  // [{filename, rel_path, folder, type}]
-  fetch('/api/creatives')
-    .then(function(r){ return r.json(); })
-    .then(function(d){ CREATIVES = d.files || []; cbpRenderAll(); })
-    .catch(function(){});
+  var CB_CREATIVES_THROTTLE_MS = 10000;
+  var CB_CREATIVES_MISS_THROTTLE_MS = 2000;  // промах: свой, короткий порог
+  var _cbMissLatched = false;  // защёлка: один запрос на серию промахов
+  var _cbCreativesInflight = null;
+  var _cbCreativesMissPending = null;
+  var _cbCreativesLastAt = 0;
+  var _cbCreativesSig = '';
+  window.CB_CREATIVES_REFRESH_COUNT = 0;  // счётчик запросов (для тестов)
+
+  // minGapMs — минимальный интервал с прошлого запроса; 0 = без троттлинга.
+  window.cbRefreshCreatives = function(minGapMs) {
+    if (_cbCreativesInflight) return _cbCreativesInflight;
+    var now = Date.now();
+    if (_cbCreativesLastAt && now - _cbCreativesLastAt < minGapMs) {
+      return Promise.resolve(false);
+    }
+    _cbCreativesLastAt = now;
+    window.CB_CREATIVES_REFRESH_COUNT++;
+    _cbCreativesInflight = fetch('/api/creatives', {cache: 'no-store'})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        // Ответ с ошибкой (папка недоступна) не затирает рабочий список.
+        if (d.error && !(d.files || []).length && CREATIVES.length) return false;
+        var files = d.files || [];
+        var sig = JSON.stringify(files.map(function(f){ return cbCreativeSig(f); }));
+        var changed = sig !== _cbCreativesSig;
+        _cbCreativesSig = sig;
+        var prev = CREATIVES;
+        CREATIVES = files;
+        if (changed) cbpRenderChangedSlots(prev, files);
+        return changed;
+      })
+      .catch(function(){ return false; })
+      .then(function(changed){ _cbCreativesInflight = null; return changed; });
+    return _cbCreativesInflight;
+  };
+  // Хук для тестов: «состарить» последний запрос, не ожидая 10 секунд.
+  window.cbCreativesAge = function(ms) { _cbCreativesLastAt = Date.now() - ms; };
+  window.cbRefreshCreatives(0);
+
+  // A miss consumes its one refresh only when a request can actually start.
+  // Wait out the short gap in the background, coalescing repeated misses.
+  function cbRefreshCreativesOnMiss() {
+    if (_cbCreativesMissPending) return _cbCreativesMissPending;
+    function refreshWhenReady() {
+      if (_cbCreativesInflight) return _cbCreativesInflight.then(refreshWhenReady);
+      var wait = CB_CREATIVES_MISS_THROTTLE_MS - (Date.now() - _cbCreativesLastAt);
+      if (wait > 0) {
+        return new Promise(function(resolve) { setTimeout(resolve, wait); }).then(refreshWhenReady);
+      }
+      return window.cbRefreshCreatives(CB_CREATIVES_MISS_THROTTLE_MS);
+    }
+    _cbCreativesMissPending = Promise.resolve().then(refreshWhenReady).then(function(changed) {
+      _cbCreativesMissPending = null;
+      return changed;
+    });
+    return _cbCreativesMissPending;
+  }
+
+  function cbCreativeSig(f) {
+    return f ? [f.rel_path, f.type, f.size_bytes, f.story_label, f.square_file] : null;
+  }
+
+  // Карточки перерисовываем только там, где изменился выбранный файл:
+  // иначе играющее превью-видео перезапускается от чужого файла в папке.
+  function cbpRenderChangedSlots(prev, next) {
+    function find(list, v) {
+      return list.find(function(f) { return f.filename === v || f.rel_path === v; });
+    }
+    document.querySelectorAll('.cb-slot').forEach(function(slot) {
+      var dirty = false;
+      slot.querySelectorAll('.cb-ad-row').forEach(function(row) {
+        var hid = row.querySelector('input[type="hidden"][name$="_creative_file"]');
+        var box = row.querySelector('.cb-creative-search');
+        var v = ((hid && hid.value) || (box && box.value) || '').trim();
+        if (v && JSON.stringify(cbCreativeSig(find(prev, v))) !== JSON.stringify(cbCreativeSig(find(next, v)))) dirty = true;
+      });
+      if (dirty) cbRenderPreviews(slot);
+    });
+  }
+
+  // Возврат из Проводника: окно снова в фокусе, а папка могла измениться.
+  window.addEventListener('focus', function() {
+    window.cbRefreshCreatives(CB_CREATIVES_THROTTLE_MS).then(cbCreativesRedraw);
+  });
+
+  // Перерисовать открытый выпадающий список по новому списку файлов.
+  function cbCreativesRedraw(changed) {
+    if (!changed) return;
+    var a = document.activeElement;
+    if (a && a.classList && a.classList.contains('cb-creative-search')) {
+      // Закрытый список не открываем: пользователь мог выбрать файл или уйти.
+      var wrap = a.closest('.cb-creative-sel-wrap');
+      var dd = wrap && wrap.querySelector('.cb-sel-dropdown');
+      if (dd && !dd.hidden) cbCreativeSearch(a, true);
+    }
+  }
 
   // Вес файла рядом с его именем — видно при выборе, а не через десять минут
   // загрузки. 10 сентября в одной папке лежали креативы от 30 КБ до 1.5 ГБ, и
@@ -11660,7 +12452,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
          + (heavy ? ';font-weight:600' : '') + '">' + text + '</span>';
   };
 
-  window.cbCreativeSearch = function(input) {
+  window.cbCreativeSearch = function(input, noRefresh) {
     var wrap = input.closest('.cb-creative-sel-wrap');
     if (!wrap) return;
     var dropdown = wrap.querySelector('.cb-sel-dropdown');
@@ -11680,7 +12472,21 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
 
     if (!matches.length && !query) {
       dropdown.hidden = true;
+      _cbMissLatched = false;
       return;
+    }
+    if (matches.length) _cbMissLatched = false;  // попадание сбрасывает защёлку
+
+    // Промах поиска: возможно, файл только что положили в папку. Один фоновый
+    // запрос, затем повторный поиск; старое «No files found» не мигает.
+    // Защёлка: первый промах серии обновляет список, следующие символы — нет,
+    // пока запрос не станет попаданием или поле не потеряет фокус.
+    if (!matches.length && query && !noRefresh && !_cbMissLatched) {
+      _cbMissLatched = true;
+      cbRefreshCreativesOnMiss().then(function(changed) {
+        // Список мог закрыться или фокус уйти, пока шёл запрос.
+        if (changed && document.activeElement === input && !dropdown.hidden) cbCreativeSearch(input, true);
+      });
     }
 
     // Detect duplicate basenames so we can store rel_path for disambiguation
@@ -11728,15 +12534,26 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   // show matching results, not require re-typing first — cbCreativeSearch()
   // otherwise only ever fires on oninput. focusin bubbles (plain focus
   // doesn't), so this works via delegation for dynamically-added ad rows too.
+  document.addEventListener('focusout', function(e) {
+    if (e.target.classList && e.target.classList.contains('cb-creative-search')) _cbMissLatched = false;
+  });
   document.addEventListener('focusin', function(e) {
-    if (e.target.classList && e.target.classList.contains('cb-creative-search') && e.target.value) {
-      cbCreativeSearch(e.target);
+    if (e.target.classList && e.target.classList.contains('cb-creative-search')) {
+      // ACL-1651: фокус в поиске обновляет список (не чаще раза в 10 с).
+      window.cbRefreshCreatives(CB_CREATIVES_THROTTLE_MS).then(cbCreativesRedraw);
+      if (e.target.value) cbCreativeSearch(e.target);
     }
   });
 
   // ── Ad Title: the local library is shared with RPA draft enrichment.
   var AD_TITLES = [];  // [{ad_title, headline, body, description, asset, language}]
   var AD_TITLES_ERROR = '', adTitlesVersion = 0;
+  /* ACL-1769: заголовок записи библиотеки для строки под «Primary text 1».
+     Пусто — записи нет (библиотека не загружена или имя набрано не из списка). */
+  window.cbAdLibraryEntry = function (name) {
+    var hit = AD_TITLES.filter(function (t) { return t.ad_title === name; });
+    return hit.length === 1 ? hit[0] : null;
+  };
   function replaceAdTitles(rows) {
     AD_TITLES = rows.map(function(t) {
       return {ad_title:t.ad_title || t.name, headline:t.headline, body:t.body,
@@ -11744,6 +12561,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     });
     AD_TITLES_ERROR = '';
     cbpRenderAll();
+    // ACL-1819: строки pre-flight audit берут текст и заголовок из библиотеки.
+    if (window.cbTree && window.cbTree.refreshEditor) window.cbTree.refreshEditor();
   }
   function reloadAdTitles() {
     var version = ++adTitlesVersion;
@@ -12337,6 +13156,111 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     return window.cbLayout ? window.cbLayout.futureHtml(key, kind, text, extra) : '';
   }
 
+  /* ACL-1775: Instant Forms. Список форм Страницы читается ТОЛЬКО по нажатию
+     «Refresh forms» (одно чтение на нажатие, ни опроса, ни таймера) и лежит в
+     window.cbForms по аккаунту. */
+  window.cbForms = window.cbForms || {};
+
+  function formAccount(el) {
+    var f = el.closest ? el.closest('form') : null;
+    var a = f ? f.querySelector('[name="account_label"]') : null;
+    return a ? String(a.value || '').trim() : '';
+  }
+
+  /* Свериться с данными: запись в DOM только при изменении (форму слушает наблюдатель). */
+  window.cbFillFormSelects = function (root) {
+    var L = window.cbLayout;
+    if (!L || !root) return;
+    root.querySelectorAll('.cb-ad-row').forEach(function (row) {
+      var sel = row.querySelector('.cb-form-select');
+      var hid = row.querySelector('input[name$="_form_id"]');
+      if (!sel || !hid) return;
+      var entry = window.cbForms[formAccount(row)] || null;
+      var opts = L.formOptions(entry && entry.forms, hid.value);
+      var sig = JSON.stringify([opts, hid.value]);
+      if (sel.dataset.sig !== sig) {
+        var html = '<option value="">— select a form —</option>';
+        opts.forEach(function (o) {
+          html += '<option value="' + aclEscHtml(o.id) + '">' + aclEscHtml(o.label) + '</option>';
+        });
+        sel.innerHTML = html;
+        sel.value = hid.value;
+        sel.dataset.sig = sig;
+      }
+      var note = row.querySelector('[data-form-note]');
+      var text = L.formsStatus(entry);
+      if (note && note.textContent !== text) note.textContent = text;
+    });
+  };
+
+  /* Место конверсии набора -> что видно и что уходит на сервер. */
+  window.cbSyncDestination = function (slot) {
+    var L = window.cbLayout;
+    var sel = slot && slot.querySelector ? slot.querySelector('.cb-destination') : null;
+    if (!L || !sel) return;
+    var api = window.ACL_FB_BACKEND === 'api';
+    var instant = L.destination(sel.value) === 'instant_form';
+    /* RPA: Instant Form не выбрать; уже выбранное остаётся рабочим, чтобы
+       проверка сказала об этом вслух, а не молча вернула сайт. */
+    var opt = sel.querySelector('option[value="instant_form"]');
+    if (opt && opt.disabled !== !api) opt.disabled = !api;
+    var off = !api && !instant;
+    if (sel.disabled !== off) sel.disabled = off;
+    var tip = off ? 'API backend only: Instant Forms are created through the Graph API' : '';
+    if (sel.title !== tip) sel.title = tip;
+    var note = slot.querySelector('[data-forms-api-only]');
+    if (note && note.hidden === !api) note.hidden = api;
+    slot.querySelectorAll('.cb-ad-row').forEach(function (row) {
+      row.querySelectorAll('.cb-form-only').forEach(function (el) {
+        if (el.hidden === instant) el.hidden = !instant;
+      });
+      var hid = row.querySelector('input[name$="_form_id"]');
+      if (hid && hid.disabled === instant) hid.disabled = !instant;
+    });
+    window.cbFillFormSelects(slot);
+  };
+
+  window.cbDestinationChanged = function (sel) {
+    var slot = sel.closest('.cb-slot');
+    if (slot) window.cbSyncDestination(slot);
+  };
+
+  window.cbFormChosen = function (sel) {
+    var row = sel.closest('.cb-ad-row');
+    var hid = row ? row.querySelector('input[name$="_form_id"]') : null;
+    if (!hid) return;
+    hid.value = sel.value;
+    hid.dispatchEvent(new Event('input', { bubbles: true }));
+    window.cbFillFormSelects(row.closest('.cb-slot'));
+  };
+
+  window.cbRefreshForms = function (btn) {
+    var row = btn.closest('.cb-ad-row');
+    var account = row ? formAccount(row) : '';
+    var note = row ? row.querySelector('[data-form-note]') : null;
+    if (!account || btn.disabled) return;
+    btn.disabled = true;
+    if (note) note.textContent = 'Reading the forms of the Page from Meta…';
+    var body = new FormData();
+    body.append('account_label', account);
+    function done(entry) {
+      window.cbForms[account] = entry;
+      btn.disabled = false;
+      document.querySelectorAll('.cb-slot').forEach(function (s) {
+        if (formAccount(s) === account) window.cbFillFormSelects(s);
+      });
+    }
+    fetch('/api/page-forms', { method: 'POST', body: body })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d || {} }; }); })
+      .then(function (x) {
+        done(x.d.state ? x.d : { state: 'failed', ok: false, forms: [],
+          message: x.d.error || 'The forms could not be read' });
+      })
+      .catch(function () {
+        done({ state: 'failed', ok: false, forms: [], message: 'The dashboard did not answer; try again' });
+      });
+  };
+
   // ── Ad row HTML builder ───────────────────────────────────────────────
   function buildAdRowHTML(cIdx, aIdx) {
     var pfx = 'camp_' + cIdx + '_ad_' + aIdx + '_';
@@ -12358,11 +13282,16 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<div class="cb-sel-dropdown" hidden></div>' +
       '<input type="hidden" name="' + pfx + 'creative_file" value="">' +
       '</div>' +
-      '<span class="cb-label">Ad Title</span>' +
+      /* ACL-1769: прежний «Ad Title» — это выбор записи библиотеки, из которой
+         в черновик идёт основной текст (body), заголовок (headline) и описание.
+         Подписан по главному, что он даёт: «Primary text 1». Имя поля `copy`
+         не менялось. Заголовок записи показан строкой ниже, чтобы он не прятался. */
+      '<span class="cb-label">Primary text 1</span>' +
       '<div class="cb-sel-wrap cb-adtitle-sel-wrap">' +
-      '<input type="text" class="cb-sel-text cb-adtitle-search" placeholder="— type to search ad title —" autocomplete="off" value="" oninput="cbAdTitleSearch(this)">' +
+      '<input type="text" class="cb-sel-text cb-adtitle-search" placeholder="— type to search primary text —" autocomplete="off" value="" oninput="cbAdTitleSearch(this)" title="Pick a text from the ad-title library: it gives the primary text, the headline and the description">' +
       '<div class="cb-sel-dropdown" hidden></div>' +
       '<input type="hidden" name="' + pfx + 'copy" value="">' +
+      '<div class="cb-headline-line" data-headline hidden></div>' +
       '</div>' +
       // ACL-1344: на месте прежнего «CTA (preview only)» — необязательный
       // второй вариант основного текста. Выбирается так же, как Ad Title, из
@@ -12377,9 +13306,21 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
          бэкенде API поле гасится, пока пусто, и подпись говорит почему.
          Набранное не теряется: непустое поле остаётся рабочим, а проверка
          покажет ошибку на нём. Гасит cbTree.syncHost. */
-      '<div class="cb-api-note" data-api-only hidden>API backend: a second primary text is not supported yet (ACL-1774). Leave it empty, or publish with RPA.</div>' +
+      '<div class="cb-api-note" data-api-only hidden>Primary text 2 is not supported by the API backend yet (ACL-1774). Leave it empty.</div>' +
       '</div>' +
-      '<span class="cb-label">Text options</span>' + future('texts', 'button', '+ Text option') +
+      /* ACL-1775: форма Страницы - только при Instant Form (cbSyncDestination). Скрытое
+         поле `form_id` хранит выбор и уходит на сервер лишь у такого набора; у сайтового
+         оно выключено, но значение живёт дальше. */
+      '<span class="cb-label cb-form-only" hidden>Instant Form</span>' +
+      '<div class="cb-form-wrap cb-form-only" hidden>' +
+      '<div class="cb-form-line">' +
+      '<select class="cb-input cb-select cb-form-select" onchange="cbFormChosen(this)" aria-label="Instant Form of the Page"></select>' +
+      '<button type="button" class="cb-form-refresh" onclick="cbRefreshForms(this)" title="Read the forms of the Page from Meta now">Refresh forms</button>' +
+      '</div>' +
+      '<input type="hidden" name="' + pfx + 'form_id" value="" disabled>' +
+      '<div class="cb-form-note" data-form-note></div>' +
+      '</div>' +
+      '<span class="cb-label">More primary texts</span>' + future('texts', 'button', '+ Primary text 3–5') +
       '<span class="cb-label">CTA</span>' + future('cta', 'select', 'Learn more', 'Every ad uses Learn more today') +
       '<span class="cb-label">Stories / Reels file</span>' + future('media', 'button', 'Choose a vertical file') +
       '</div></div>';
@@ -12398,6 +13339,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     if (newRow) initAllSelects(newRow);
     cbUpdateAdCount(slot);
     cbUpdateAdLabels(slot);
+    window.cbSyncDestination(slot);
   };
 
   window.cbRemoveAd = function(btn) {
@@ -12445,6 +13387,10 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       var thNew = newTitle.querySelector('input[type=hidden]');
       if (thSrc && thNew) thNew.value = thSrc.value;
     }
+    // ACL-1775: выбранная форма Страницы едет в копию.
+    var srcForm = srcRow.querySelector('input[name$="_form_id"]');
+    var newForm = newRow.querySelector('input[name$="_form_id"]');
+    if (srcForm && newForm) newForm.value = srcForm.value;
     // ACL-1344: второй вариант основного текста едет в копию вместе с первым.
     var srcText2 = srcRow.querySelector('.cb-text2-sel-wrap');
     var newText2 = newRow.querySelector('.cb-text2-sel-wrap');
@@ -12475,6 +13421,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     cbRenumberAds(slot);
     cbUpdateAdCount(slot);
     cbUpdateAdLabels(slot);
+    window.cbSyncDestination(slot);
   };
 
   // "⧉" on each campaign slot's header duplicates THAT slot (targeting/
@@ -12576,6 +13523,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     // renumber names and labels for the whole form, not just the new slot.
     cbRenumber(form);
     cbUpdateCount(form);
+    window.cbSyncDestination(newSlot);
   };
 
   function cbRenumberAds(slot) {
@@ -12726,7 +13674,16 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '</div>' +
       '<span class="cb-label">Gender</span>' + future('gender', 'select', 'All') +
       '<span class="cb-label">Several languages</span>' + future('languages', 'button', 'Choose languages') +
-      '<span class="cb-label">Conversion location</span>' + future('forms', 'select', 'Website', 'Website is the only destination today') +
+      /* ACL-1775: Website / Instant Form. При бэкенде RPA выключено с причиной
+         (cbSyncDestination); без `name` оно не уходит, а значение сайта - умолчание сервера. */
+      '<span class="cb-label">Conversion location</span>' +
+      '<div class="cb-dest-wrap">' +
+      '<select name="camp_' + idx + '_destination" class="cb-input cb-select cb-destination" onchange="cbDestinationChanged(this)" aria-label="Conversion location">' +
+      '<option value="website" selected>Website</option>' +
+      '<option value="instant_form">Instant Form</option>' +
+      '</select>' +
+      '<div class="cb-api-note" data-forms-api-only hidden>Instant Form works only with the API backend.</div>' +
+      '</div>' +
       '<span class="cb-label">Placements</span>' + future('placements', 'button', 'Configure placements', 'Today every ad set gets the same fixed manual Facebook and Instagram list') +
       '</div>' +
       '</section>' +
@@ -12951,6 +13908,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
         cbLanguageChanged(langInput);   // пустой сразу подсвечен, а не после правки
       }
       cbUpdateName(newSlot);
+      window.cbSyncDestination(newSlot);
     }
     cbUpdateCount(form);
   };
@@ -13530,7 +14488,7 @@ function cbFormDataSkipping(form, skip, snapshot) {
   return { body: out, kept: kept };
 }
 
-window.cbPublishAll = function (onProgress, picked) {
+window.cbPublishAll = function (onProgress, picked, onlyKeys) {
   if (cbQueueUncertain()) return;
   // ACL-1360: отмечена часть кампаний — едут только они, по заданию на
   // аккаунт. `picked` — отмеченные карточки; пусто — прежний «Publish all».
@@ -13546,6 +14504,8 @@ window.cbPublishAll = function (onProgress, picked) {
     if (!slots.length) return;
     var mine = only ? cbPickedIn(form, only) : null;
     if (mine && !mine.length) return;
+    // ACL-1826: Retry пропущенных — только их формы.
+    if (onlyKeys && onlyKeys.indexOf(cbFormKey(form)) < 0) return;
     if (cbAccountBusy(cbFormKey(form))) { running.push(cbFormTitle(form)); return; }
     forms.push(form);
     campaigns += mine ? mine.length : slots.length;
@@ -13587,7 +14547,8 @@ window.cbPublishAll = function (onProgress, picked) {
   _safeConfirm(cbApiMode()
       ? (only ? 'Create the selected campaigns as PAUSED campaigns?' : 'Create every campaign as a PAUSED campaign?')
       : (only ? 'Build the selected campaigns as drafts?' : 'Build every campaign as a draft?'),
-    pfHtml + (only ? 'Campaigns: <strong>' + campaigns + '</strong> · ' : '')
+    (typeof window.cbPreflightWarnHtml === 'function' ? window.cbPreflightWarnHtml() : '')
+    + pfHtml + (only ? 'Campaigns: <strong>' + campaigns + '</strong> · ' : '')
     + 'Accounts: <strong>' + forms.length + '</strong><br>'
     + (only
       ? '<div class="cb-selected-list" style="font-size:var(--adopy-text-body);line-height:1.5">' + listed.join('<br>') + '</div>'
@@ -13622,6 +14583,133 @@ window.cbPublishAll = function (onProgress, picked) {
   };
   if (typeof window.cbPreflightFetch === 'function') window.cbPreflightFetch(forms.map(cbFormAccount)).then(pfAsk);
   else pfAsk(null);
+};
+
+/* ── ACL-1819: серверные проверки pre-flight audit ──────────────────────
+ * Вердикты аккаунта (страница, пиксель, таргетинг, файлы, бюджет, существующие
+ * объекты) приходят от /publish-plan (dry_run, ни одной записи) и лежат на форме
+ * аккаунта под ревизией черновика кампании (`cbPfRev`). Запрос идёт ТОЛЬКО по
+ * кнопке «Check» и перед Publish — не на нажатие клавиши и не по таймеру. */
+function cbPfRefresh() {
+  if (window.cbTree && window.cbTree.refreshEditor) window.cbTree.refreshEditor();
+}
+
+function cbPfName(slot) { return String((slot.querySelector('.cb-name-hidden') || {}).value || ''); }
+
+function cbPfStore(form, data, revs) {
+  var a = form._pfAudit || (form._pfAudit = { byName: Object.create(null) });
+  var byName = Object.create(null), now = Date.now();
+  ((data && data.results) || []).forEach(function (r) { byName[String(r.campaign_name || '')] = r; });
+  Object.keys(revs).forEach(function (name) {
+    var r = byName[name];
+    a.byName[name] = {
+      audit: r ? (r.audit || []) : [],   // нет ключа — плана не было (ошибка черновика)
+      error: r ? (r.error || '') : ((data && data.error) || 'This campaign was not checked'),
+      accountAudit: (data && data.account_audit) || null,
+      rev: revs[name], at: now
+    };
+  });
+}
+
+window.cbPreflightRun = function (form, slots) {
+  var list = slots && slots.length ? slots : Array.prototype.slice.call(form.querySelectorAll('.cb-slot'));
+  var revs = Object.create(null);
+  list.forEach(function (slot) { revs[cbPfName(slot)] = window.cbPfRev(slot); });
+  var fd = cbPlanFormData(form, slots && slots.length ? list : null);
+  form._pfBusy = true;
+  cbPfRefresh();
+  return fetch('/publish-plan', { method: 'POST', body: fd })
+    .then(function (r) { return r.json().catch(function () { return { error: 'The server did not answer' }; }); })
+    .catch(function () { return { error: 'The server did not answer' }; })
+    .then(function (data) {
+      cbPfStore(form, data || {}, revs);
+      form._pfBusy = false;
+      cbPfRefresh();
+      return data;
+    });
+};
+
+/* Свежи ли серверные вердикты кампании: есть и ревизия та же. */
+function cbPfFresh(slot) {
+  var form = slot.closest('form'), a = form && form._pfAudit, hit = a && a.byName[cbPfName(slot)];
+  return !!(hit && hit.rev === window.cbPfRev(slot));
+}
+
+/* Предупреждения (не блокируют) — в окно подтверждения. Читается один раз. */
+window.cbPreflightWarnHtml = function () {
+  var html = window.CB_PF_WARN || '';
+  window.CB_PF_WARN = '';
+  return html;
+};
+
+function cbPfWarnings(slots) {
+  var rows = [];
+  slots.forEach(function (slot) {
+    window.cbTree.auditLines(slot).forEach(function (x) {
+      if (x.status !== 'warning') return;
+      var detail = x.detail && !/^(empty|not_https|no_valid_link)$/.test(x.detail) ? ' (' + x.detail + ')' : '';
+      rows.push('<li><strong>' + aclEscHtml(cbPfName(slot) || 'Untitled campaign') + '</strong>: '
+        + aclEscHtml(x.label) + aclEscHtml(detail) + (x.hint ? ' — ' + aclEscHtml(x.hint) : '') + '</li>');
+    });
+  });
+  return rows.length
+    ? '<div class="cb-warn-block">⚠ Pre-flight warnings (they do not block):<ul style="margin:0.2rem 0 0 1.1rem">'
+      + rows.join('') + '</ul></div>'
+    : '';
+}
+
+var CB_PF_UNAVAILABLE = 'Pre-flight audit unavailable — reload the page';
+function cbPfUnavailable() {
+  window.CB_PF_GATE = { blocked: true, bad: [], reason: CB_PF_UNAVAILABLE };
+  window.alert(CB_PF_UNAVAILABLE);
+}
+
+/* Ворота Publish: клиентские ошибки блокируют сразу; при API — серверные проверки
+ * обновляются перед отправкой (кроме свежих), и ошибка из них блокирует тоже.
+ * items: [{form, slots}]. proceed() вызывается, только если ошибок нет. */
+window.cbPreflightGate = function (items, proceed) {
+  var tree = window.cbTree;
+  /* Ворота закрыты по умолчанию: нет дерева, правил или карточки — Publish не идёт. */
+  var rules = window.cbPreflight && window.cbPreflight.table ? window.cbPreflight.table() : [];
+  if (!tree || !tree.auditLines || !window.cbPreflight || !rules.length) { cbPfUnavailable(); return; }
+  var slots = [];
+  items.forEach(function (it) { slots = slots.concat(it.slots); });
+  function blocked() {
+    try {
+      return slots.filter(function (slot) { return window.cbPreflight.blocks(tree.auditLines(slot)); });
+    } catch (err) {
+      return null;                         // состояние аудита не читается — тоже запрет
+    }
+  }
+  function stop(bad) {
+    tree.refreshAudit();
+    var id = bad[0] && bad[0].dataset.cbdId;
+    if (id) tree.open(id);
+  }
+  var bad = blocked();
+  if (!bad) { cbPfUnavailable(); return; }
+  if (bad.length) { stop(bad); return; }
+  function done() {
+    var again = blocked();
+    if (!again) { cbPfUnavailable(); return; }
+    if (again.length) { stop(again); return; }
+    window.CB_PF_WARN = cbPfWarnings(slots);
+    proceed();
+  }
+  if (!cbApiMode()) { done(); return; }
+  var pending = [];
+  items.forEach(function (it) {
+    var stale = it.slots.filter(function (slot) { return !cbPfFresh(slot); });
+    if (stale.length) pending.push({ form: it.form, slots: stale });
+  });
+  if (!pending.length) { done(); return; }
+  if (window.CB_PF_RUNNING) return;       // проверка уже идёт: второе нажатие её не дублирует
+  window.CB_PF_RUNNING = true;
+  var btn = document.querySelector('.cbd-publish-all');
+  if (btn) { btn.disabled = true; btn.title = 'Checking the plan before publishing…'; }
+  var jobs = pending.map(function (p) { return window.cbPreflightRun(p.form, p.slots); });
+  Promise.all(jobs).then(function () { window.CB_PF_RUNNING = false; tree.refreshAudit(); done(); },
+    function () { window.CB_PF_RUNNING = false; tree.refreshAudit(); });
 };
 
 /* ── ACL-1761: «Check plan (no writes)» ─────────────────────────────────
@@ -13681,8 +14769,10 @@ function cbPlanHtml(data) {
       h += '</ul>A publish would stop before writing anything. Delete or rename the old campaign in Ads Manager, or rename the campaign in the builder.</div>';
     }
     if (s) {
+      var allForms = (s.ad_sets || []).length && (s.ad_sets || []).every(function (x) { return x.destination === 'Instant Form'; });
       h += '<div class="cbd-plan-meta" style="font-size:var(--adopy-text-sm);color:var(--muted)">page '
-        + aclEscHtml(s.page_id || '—') + ' · pixel ' + aclEscHtml(s.pixel_id || '—')
+        + aclEscHtml(s.page_id || '—') + (s.page_source ? ' (' + aclEscHtml(s.page_source) + ')' : '')
+        + (allForms ? '' : ' · pixel ' + aclEscHtml(s.pixel_id || '—') + (s.pixel_source ? ' (' + aclEscHtml(s.pixel_source) + ')' : ''))
         + ' · ' + aclEscHtml(s.objective || '') + '</div>';
       (s.ad_sets || []).forEach(function (a) {
         var interests = (a.interests || []).map(function (g) { return g.join(', '); }).join(' AND ');
@@ -13690,12 +14780,15 @@ function cbPlanHtml(data) {
           + aclEscHtml(a.name) + '</strong> · ' + aclEscHtml((a.countries || []).join(', '))
           + ' · age ' + aclEscHtml(a.age) + ' · language ' + aclEscHtml(a.language || 'any')
           + ' · interests ' + aclEscHtml(interests || 'none') + ' · placements '
-          + aclEscHtml(a.placements || '') + '</div><ol class="cbd-plan-ads" style="font-size:var(--adopy-text-sm);margin:0.1rem 0 0 1rem">';
+          + aclEscHtml(a.placements || '') + (a.destination ? ' · ' + aclEscHtml(a.destination) : '')
+          + '</div><ol class="cbd-plan-ads" style="font-size:var(--adopy-text-sm);margin:0.1rem 0 0 1rem">';
         (a.ads || []).forEach(function (ad) {
           h += '<li><strong>' + aclEscHtml(ad.name) + '</strong> · ' + aclEscHtml(ad.format) + ' '
             + aclEscHtml(ad.file) + '<br>headline: ' + aclEscHtml(ad.headline) + ' · text: '
             + aclEscHtml(ad.primary_text) + (ad.description ? ' · description: '
-            + aclEscHtml(ad.description) : '') + '<br>link ' + aclEscHtml(ad.link)
+            + aclEscHtml(ad.description) : '')
+            + (ad.form_id ? '<br>Instant Form ' + aclEscHtml(ad.form_name || '?') + ' (' + aclEscHtml(ad.form_id) + ')'
+                          : '<br>link ' + aclEscHtml(ad.link))
             + ' · CTA ' + aclEscHtml(ad.cta) + '</li>';
         });
         h += '</ol>';
@@ -13756,8 +14849,9 @@ window.cbCheckPlan = function (picked, out, btn) {
   var parts = new Array(forms.length);
   var left = forms.length;
   forms.forEach(function (x, i) {
-    fetch('/publish-plan', { method: 'POST', body: cbPlanFormData(x.form, x.only) })
-      .then(function (r) { return r.json(); })
+    // ACL-1819: тот же запрос кладёт вердикты в карточку pre-flight audit (cbPreflightRun).
+    (window.cbPreflightRun ? window.cbPreflightRun(x.form, x.only)
+      : fetch('/publish-plan', { method: 'POST', body: cbPlanFormData(x.form, x.only) }).then(function (r) { return r.json(); }))
       .catch(function () { return { account: cbFormTitle(x.form), error: 'The server did not answer' }; })
       .then(function (data) {
         if (!data.account) data.account = cbFormTitle(x.form);
@@ -13879,7 +14973,10 @@ function cbPostPublish(fd) {
 }
 
 function cbNewRun(notify) {
-  var batch = { active: true, uncertain: false, progress: null };
+  // ACL-1826: id пачки уходит с каждой отправкой — потеряна общая сессия Multilogin слота B,
+  // сервер пропускает остальные B-аккаунты пачки с той же причиной.
+  var batch = { active: true, uncertain: false, progress: null,
+                id: 'pa-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8) };
   var entries = [];        // {form, key, account, country, label, only, sent, panel, state, live, jobId}
   var report = [];
   var settled = 0;         // сколько строк дошли до конца (или отпали)
@@ -13987,6 +15084,7 @@ function cbNewRun(notify) {
       e.panel.style.display = 'block';
       e.panel.innerHTML = '<div class="cb-status-title">Building the campaign (draft)…</div>';
     }
+    fd.set('batch', batch.id);
     cbPostPublish(fd)
       .then(function (data) {
         if (window.CB_QUEUE !== batch || e.state === 'settled') return;
@@ -13998,7 +15096,7 @@ function cbNewRun(notify) {
         }
         if (data.error) {
           if (e.panel) e.panel.innerHTML = '<span class="cb-status-fatal">Error: ' + aclEscHtml(data.error) + '</span>';
-          settle(e, { account: e.label, state: 'bad', why: data.error, skipped: skipped });
+          settle(e, { account: e.label, state: 'bad', why: data.error, skipped: skipped, code: data.code || '', key: e.key });
           return;
         }
         if (!data.job_id) throw new Error('Server did not identify the job; outcome unknown');
@@ -14028,7 +15126,17 @@ function cbNewRun(notify) {
     e.state = 'retry';
     e.resend = function () {
       if (window.CB_QUEUE !== batch || e.state !== 'retry') return false;
-      post(e, fd, skipped, sentNames);
+      // ACL-1819: повтор отправки проходит те же ворота pre-flight audit, что и Publish;
+      // нет ворот — нет повтора.
+      if (typeof window.cbPreflightGate !== 'function' || !e.form) {
+        window.alert('Pre-flight audit unavailable — reload the page');
+        return false;
+      }
+      var all = Array.prototype.slice.call(e.form.querySelectorAll('.cb-slot'));
+      var slots = e.sent && e.sent.length ? e.sent : (Array.isArray(e.only) && e.only.length ? e.only : all);
+      window.cbPreflightGate([{ form: e.form, slots: slots }], function () {
+        if (window.CB_QUEUE === batch && e.state === 'retry') post(e, fd, skipped, sentNames);
+      });
       return true;
     };
     e.dismiss = function () {
@@ -14498,6 +15606,10 @@ window.rpaWebsiteLabStep = function(step, btn) {
 window.cbTrackingWarning = function(form) {
   var input = form.querySelector('input[name="tracking_link"]');
   if (!input) return null;
+  /* ACL-1775: у Instant Form своей ссылки нет - предупреждать не о чем, пока в
+     аккаунте нет ни одного сайтового набора. */
+  var dests = form.querySelectorAll('.cb-destination');
+  if (dests.length && Array.prototype.every.call(dests, function (d) { return d.value === 'instant_form'; })) return null;
   var typed = (input.value || '').trim();
   var acc = ((form.querySelector('[name="account_label"]') || {}).value || '').trim();
   var pf = (typeof ACCOUNT_PREFLIGHT !== 'undefined' && ACCOUNT_PREFLIGHT[acc]) || {};
@@ -14686,6 +15798,8 @@ window.cbPublish = function(form) {
   var pfAsk = function (pf) {
   var mine = (((pf && pf.accounts) || []).filter(function (x) { return x && x.ready === false; }))[0];
   var anyway = false;
+  // ACL-1819: предупреждения pre-flight audit (не блокируют) — в окне подтверждения.
+  if (typeof window.cbPreflightWarnHtml === 'function') bodyHtml = window.cbPreflightWarnHtml() + bodyHtml;
   if (mine) bodyHtml = '<div class="cb-preflight" style="border:1px solid var(--bad);border-radius:4px;padding:0.4rem 0.6rem;margin:0.5rem 0;font-size:var(--adopy-text-table)">'
     + '<strong style="color:var(--bad)">Not ready</strong> — ' + aclEscHtml(mine.account) + ' — '
     + aclEscHtml((mine.reasons || []).map(function (r) {
@@ -14721,6 +15835,37 @@ function _doCbPublish(form) {
   var got = run.direct(form, cbCollectFormData(form));
   if (got.skipped.length) cbSayAlreadyBuilding(got.skipped);
 }
+
+/* ACL-1819: ворота pre-flight audit вокруг обеих кнопок Publish. Обёртка стоит ПОСЛЕ
+ * определений, чтобы сами функции публикации остались прежними (RPA-путь не тронут):
+ * ворота решают только «пускать ли», а что и как публиковать — как было. */
+(function () {
+  var origAll = window.cbPublishAll, origOne = window.cbPublish;
+  function slotsOf(form) { return Array.prototype.slice.call(form.querySelectorAll('.cb-slot')); }
+  if (typeof origAll === 'function') {
+    window.cbPublishAll = function (onProgress, picked, onlyKeys) {
+      var only = picked && picked.length ? picked : null, items = [];
+      document.querySelectorAll('form.open-account-form').forEach(function (form) {
+        var all = slotsOf(form);
+        if (!all.length) return;
+        // ACL-1826: Retry пропущенных идёт через те же ворота, но только по своим формам.
+        if (onlyKeys && onlyKeys.indexOf(cbFormKey(form)) < 0) return;
+        var mine = only ? cbPickedIn(form, only) : all;
+        if (mine.length) items.push({ form: form, slots: mine });
+      });
+      window.cbPreflightGate(items, function () { origAll(onProgress, picked, onlyKeys); });
+    };
+  }
+  if (typeof origOne === 'function') {
+    window.cbPublish = function (form) {
+      var all = slotsOf(form);
+      var shown = form.classList.contains('cb-in-drawer') ? all.filter(function (s) { return !s.hidden; })[0] : null;
+      var ticked = shown ? [] : all.filter(function (s) { return !!s._cbdPick; });
+      var slots = shown ? [shown] : (ticked.length && ticked.length !== all.length ? ticked : all);
+      window.cbPreflightGate([{ form: form, slots: slots }], function () { origOne(form); });
+    };
+  }
+})();
 
 // ACL-1437: часть `r.error`, которой нет в списке проблем ('' — нечего
 // добавить). Абзац «DO NOT PUBLISH AS IS … Check the draft in Ads Manager
@@ -14850,7 +15995,7 @@ function cbApiReadbackHtml(r) {
     (rb.checks || []).forEach(function(c) {
       h += '<tr' + (c.ok ? '' : ' style="color:var(--bad)"') + '><td>' + aclEscHtml(c.object)
         + '</td><td>' + aclEscHtml(c.field) + '</td><td>' + aclEscHtml(JSON.stringify(c.expected))
-        + '</td><td>' + aclEscHtml(JSON.stringify(c.actual)) + '</td><td>' + (c.ok ? '✓' : '✗')
+        + '</td><td>' + (c.not_read ? 'Not read' : aclEscHtml(JSON.stringify(c.actual))) + '</td><td>' + (c.ok ? '✓' : '✗')
         + '</td></tr>';
     });
     h += '</table></details>';
@@ -16664,9 +17809,8 @@ window.cwWorkbench = (function () {
 
   function applyCreative(a, ev) {
     var rows = a.slot.querySelectorAll('.cb-ad-row');
-    var row = null;
-    Array.prototype.forEach.call(rows, function (r) { if (!row && !r.classList.contains('cbd-ad-off')) row = r; });
-    if (!row) row = rows[a.adIndex || 0] || rows[0];
+    // 1769: карточки объявлений стоят стопкой, скрытых нет — берём нужную по номеру.
+    var row = rows[a.adIndex || 0] || rows[0];
     if (!row) return { done: false, text: 'This draft has no ad to put a creative on.' };
     var msgs = [], done = true;
 
@@ -16930,5 +18074,7 @@ window.cwWorkbench = (function () {
   window.addEventListener('resize', function () { if (!pop.hidden) place(); });
 })();
 </script>
+{#- ACL-1812: состояние тёплых профилей в строках аккаунтов; всё остальное рисует сам файл. -#}
+<script src="/static/warm_sessions.js"></script>
 </body>
 </html>

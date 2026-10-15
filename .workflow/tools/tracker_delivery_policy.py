@@ -4,6 +4,7 @@ Copied beside the standalone PR checker by export-template. No write operations,
 model invocation, installation or deployment takes place in this module.
 """
 import base64
+import datetime
 import hashlib
 import json
 import re
@@ -57,21 +58,38 @@ def execution_policy(config):
         return None
     fields = {'schema_version', 'implementation_limit', 'review_limit'}
     version = value.get('schema_version') if isinstance(value, dict) else None
-    if (not isinstance(value, dict) or set(value) != fields | ({'batch_limit'} if version == 2 else set())
-            or type(version) is not int or version not in (1, 2)
+    if (not isinstance(value, dict) or set(value) != fields | ({'batch_limit'} if version in (2, 3) else set())
+            or type(version) is not int or version not in (1, 2, 3)
             or type(value['implementation_limit']) is not int or not 1 <= value['implementation_limit'] <= 16
-            or type(value['review_limit']) is not int or value['review_limit'] != 1):
-        raise ValueError('Execution policy needs schema_version 1 or 2, implementation_limit 1..16 and review_limit 1')
+            or type(value['review_limit']) is not int or not 1 <= value['review_limit'] <= (5 if version == 3 else 1)):
+        raise ValueError('Execution policy needs schema_version 1..3, implementation_limit 1..16; review_limit is 1 (v1/v2) or 1..5 (v3)')
     if not policy(config):
         raise ValueError('Parallel execution requires the independent-review delivery policy')
-    if version == 2 and (type(value['batch_limit']) is not int or not 1 <= value['batch_limit'] <= 16
+    if version in (2, 3) and (type(value['batch_limit']) is not int or not 1 <= value['batch_limit'] <= (5 if version == 3 else 16)
                          or not policy(config)['staging']['enabled']):
-        raise ValueError('Approved batches require staging and batch_limit 1..16')
+        raise ValueError('Approved batches require staging and batch_limit 1..16 (v2) or 1..5 (v3)')
     return value
 
 
 def batch_mode(config):
-    return bool(execution_policy(config) and execution_policy(config)['schema_version'] == 2)
+    return bool(execution_policy(config) and execution_policy(config)['schema_version'] in (2, 3))
+
+
+def review_lanes(section):
+    """Current source lanes and the separately bounded integration lane."""
+    if not section:
+        return []
+    return list(section.get('source_reviews', {}).values()) + ([section['review']] if section.get('review') else [])
+
+
+def review_lane(section, *, pr=None, claim=None, issue=None):
+    matches = [lane for lane in review_lanes(section)
+               if (pr is None or lane.get('pr') == pr)
+               and (claim is None or lane.get('id') == claim)
+               and (issue is None or issue in lane.get('issues', []))]
+    if len(matches) > 1:
+        raise ValueError('Conflicting review owners; inspect shared state')
+    return matches[0] if matches else None
 
 
 def dependencies(body, repo):
@@ -93,11 +111,11 @@ def accepted_scope_digest(issue):
 def execution_state(state, config):
     value = execution_policy(config)
     if not value:
-        if state.get('schema_version') == 2:
+        if state_schema(state) == 2:
             raise ValueError('Shared execution state requires the adopted execution policy; restore the pinned config')
         return None
     section = state.get('execution')
-    if (state.get('schema_version') != 2 or not isinstance(section, dict)
+    if (state_schema(state) != 2 or not isinstance(section, dict)
             or section.get('policy') != value):
         raise ValueError('Run execution migrate while the repository is idle to adopt this execution policy')
     for key in ('claims', 'tasks', 'actors', 'completed'):
@@ -109,12 +127,31 @@ def execution_state(state, config):
         raise ValueError('Invalid review lane')
     if state.get('active') or len(section['claims']) > value['implementation_limit']:
         raise ValueError('Conflicting execution owners; inspect shared state')
-    if value['schema_version'] == 2:
+    if value['schema_version'] in (2, 3):
         if not isinstance(section.get('approvals'), dict) or not isinstance(section.get('batches'), dict):
             raise ValueError('Invalid approval/batch state')
         for key in ('integration', 'intake'):
             if section.get(key) is not None and not isinstance(section[key], dict):
                 raise ValueError('Invalid batch ownership: ' + key)
+    if value['schema_version'] == 3:
+        lanes = section.get('source_reviews')
+        if not isinstance(lanes, dict) or len(lanes) > value['review_limit']:
+            raise ValueError('Invalid source review capacity')
+        seen = {key: set() for key in ('id', 'actor', 'session', 'pr', 'issue')}
+        for key, lane in lanes.items():
+            if (not isinstance(lane, dict) or key != str(lane.get('pr')) or lane.get('batch_id')
+                    or len(lane.get('issues', [])) != 1):
+                raise ValueError('Invalid source review lane')
+        if section.get('review') and not section['review'].get('batch_id'):
+            raise ValueError('Schema 3 reserves review for the single integration lane')
+        for lane in review_lanes(section):
+            for key in seen:
+                values = lane.get('issues', []) if key == 'issue' else [lane.get(key)]
+                if any(v is None or v in seen[key] for v in values):
+                    raise ValueError('Conflicting review owners; each lane needs a distinct run and task')
+                seen[key].update(values)
+    elif section.get('source_reviews'):
+        raise ValueError('Source review pools require explicit execution schema 3')
     return section
 
 
@@ -142,9 +179,56 @@ def read_full_state(request, repo):
     root = 'repos/' + repo
     row = request(root + '/contents/.tracker-state.json?ref=tracker-state')
     state = json.loads(file_bytes(request, root, row))
-    if state.get('schema_version') not in (1, 2):
+    if state_schema(state) not in (1, 2):
         raise ValueError('Invalid tracker state')
     return state
+
+
+def state_schema(state):
+    """Validate the maintenance fence before exposing its retained state format.
+
+    Older engines reject outer schema 3. No old writer can read a held fence and
+    obtain a fresh SHA for a write that silently ignores maintenance.
+    """
+    version = state.get('schema_version')
+    held = state.get('maintenance')
+    if type(version) is not int or version not in (1, 2, 3):
+        raise ValueError('Unsupported shared state protocol')
+    if version != 3:
+        if held is not None:
+            raise ValueError('Maintenance requires the fenced shared state protocol')
+        return version
+    if (not isinstance(held, dict) or held.get('schema_version') != 1
+            or type(held.get('schema_version')) is not int or held.get('state') != 'held'
+            or type(held.get('base_schema_version')) is not int or held['base_schema_version'] not in (1, 2)
+            or not isinstance(held.get('id'), str) or not re.fullmatch(r'[0-9a-f]{32}', held['id'])
+            or not isinstance(held.get('actor'), str) or not re.fullmatch(r'Maintainer-[A-Za-z0-9]{4,32}', held['actor'])
+            or not isinstance(held.get('session'), str) or not re.fullmatch(r'[A-Za-z0-9_-]{4,100}', held['session'])
+            or any(not isinstance(held.get(k), str) or not held[k].strip() for k in ('reserved_at', 'report'))):
+        raise ValueError('Invalid held maintenance owner/protocol')
+    if not isinstance(state.get('maintenance_history'), list):
+        raise ValueError('Invalid maintenance history')
+    try:
+        if not re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:Z|\+00:00)', held['reserved_at']):
+            raise ValueError('Invalid timestamp')
+        datetime.datetime.fromisoformat(held['reserved_at'].replace('Z', '+00:00'))
+    except ValueError:
+        raise ValueError('Invalid maintenance reservation timestamp') from None
+    return held['base_schema_version']
+
+
+def admission_open(state):
+    state_schema(state)
+    if state.get('maintenance'):
+        raise ValueError('Maintenance holds new admission; resume an existing owner or inspect maintenance show')
+
+
+def set_state_schema(state, version):
+    state_schema(state)
+    if state.get('maintenance'):
+        state['maintenance']['base_schema_version'] = version
+    else:
+        state['schema_version'] = version
 
 
 def read_state(request, repo):
