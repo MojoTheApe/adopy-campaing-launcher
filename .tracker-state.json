@@ -35785,6 +35785,27 @@
           "ineligible": {},
           "report": "# Batch f15e647d cancelled at assembly\n\nMerging the frozen tips: ACL-1800 merged cleanly; ACL-1775 conflicts with ACL-1800 (src/fb_api/token_capture.py, docs/system/CHANGELOG.md) and with ACL-1797 (src/web/templates/report.html). No conflict resolution in the batch branch. New batch: ACL-1800 + ACL-1797 (they merge cleanly together); ACL-1775 stays approved and will be refreshed against main afterwards."
         }
+      },
+      {
+        "event": "intake-frozen",
+        "at": "2026-10-15T03:44:03+00:00",
+        "intake": {
+          "id": "4d96961a854a4159a53e67a7ab144142",
+          "actor": "Coordinator-C1014I",
+          "session": "coord-c1014i-20261014",
+          "state": "running",
+          "issues": [
+            800,
+            797
+          ],
+          "remaining": [
+            800,
+            797
+          ],
+          "batches": [],
+          "started_at": "2026-10-15T03:44:03+00:00",
+          "ineligible": {}
+        }
       }
     ],
     "policy": {
@@ -38922,24 +38943,21 @@
     },
     "integration": null,
     "intake": {
-      "id": "f7e34cccec4841418ac905c41d2b43b3",
+      "id": "4d96961a854a4159a53e67a7ab144142",
       "actor": "Coordinator-C1014I",
       "session": "coord-c1014i-20261014",
-      "state": "cancelled",
+      "state": "running",
       "issues": [
         800,
-        775,
         797
       ],
       "remaining": [
         800,
-        775,
         797
       ],
       "batches": [],
-      "started_at": "2026-10-15T03:41:37+00:00",
-      "ineligible": {},
-      "report": "# Batch f15e647d cancelled at assembly\n\nMerging the frozen tips: ACL-1800 merged cleanly; ACL-1775 conflicts with ACL-1800 (src/fb_api/token_capture.py, docs/system/CHANGELOG.md) and with ACL-1797 (src/web/templates/report.html). No conflict resolution in the batch branch. New batch: ACL-1800 + ACL-1797 (they merge cleanly together); ACL-1775 stays approved and will be refreshed against main afterwards."
+      "started_at": "2026-10-15T03:44:03+00:00",
+      "ineligible": {}
     },
     "source_reviews": {}
   }
