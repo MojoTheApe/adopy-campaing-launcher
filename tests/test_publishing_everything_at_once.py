@@ -68,8 +68,10 @@ def test_accounts_are_sent_at_once_and_each_is_watched():
     block = _block()
     assert "cbPollJob(" in block, "за работой перестали следить"
     assert "function _runPublishQueue" in block
-    queue = block[block.index("function _runPublishQueue"):]
-    assert "submit(i + 1);" in queue, "следующий аккаунт снова ждёт конца предыдущего"
+    run = block[block.index("function cbNewRun"):]
+    # ACL-1355: следующий аккаунт проверяется сразу после отправки этого.
+    assert re.search(r"submit\(e, payload\.body, skipped\);\s*pump\(\);", run), (
+        "следующий аккаунт снова ждёт конца предыдущего")
     assert "One account at a time" not in block, "подтверждение обещает очередь, которой больше нет"
 
 
@@ -80,7 +82,7 @@ def test_the_owner_is_asked_once_and_told_what_will_happen():
     ask = ask[: ask.index("function _runPublishQueue")]
     assert "_safeConfirm(" in ask
     assert "Draft" in ask and "never clicks Publish" in ask, "в вопросе не сказано, что это черновик"
-    assert "Не блокируйте экран" in ask, (
+    assert "Do not lock the screen" in ask, (
         "пропало предупреждение о заблокированном экране — на нём загрузка креативов встаёт"
     )
 

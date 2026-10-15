@@ -37,6 +37,35 @@ if str(_PROJ_ROOT) not in sys.path:
 # ради тестов. Ставится на уровне модуля, до импорта тестовых модулей:
 # фикстура успела бы сработать позже первого `init()`.
 os.environ["ACL_SENTRY_DSN"] = ""
+# ACL-1447: итог кампании — тоже штатным выключателем. Тесты, подменяющие
+# `acl_sentry.init` двойником, иначе ловили бы ещё и итог из фонового потока
+# («чистая кампания — ни одного события»). Тесты итога включают его сами.
+os.environ["ACL_SENTRY_RUN_SUMMARY"] = "0"
+
+# Тесты не пишут в живую командную библиотеку (ACL-1397).
+#
+# `team_library` включается, когда заданы ACL_LIBRARY_REPO и ACL_LIBRARY_TOKEN,
+# а машинный `%LOCALAPPDATA%\ACL\.env` на рабочей машине их содержит: любой
+# `load_env()` во время прогона подтянул бы живую библиотеку. Раньше защита
+# держалась только на том, что прогон запускали с пустыми переменными руками.
+# При параллельном прогоне (pytest-xdist) этот файл заново исполняет каждый
+# процесс-воркер, так что пустые значения есть в каждом из них. Пустая строка,
+# а не удаление: `load_dotenv` не перезаписывает уже заданную переменную.
+# Тест, которому нужна настроенная библиотека, ставит синтетику через
+# monkeypatch — позже, и действует его значение.
+for _name in ("ACL_LIBRARY_REPO", "ACL_LIBRARY_TOKEN", "ACL_LIBRARY_BRANCH"):
+    os.environ[_name] = ""
+
+
+# Маркер файлов, которым нужен Windows (ACL-1582). Это метка отбора для CI
+# (scripts/acl_test_platform.py), а не пропуск: на Linux такие файлы просто не
+# попадают в задание. Причина обязательна — её требует guard
+# (tests/test_acl_test_platform.py).
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "windows_only(reason): the test file needs Windows; CI runs it only in the Windows job (ACL-1582)",
+    )
 
 
 # Тесты не пишут в живую машинную папку ACL (ревью v3 PR #314).
@@ -76,6 +105,59 @@ def _telemetry_off_the_live_journal(tmp_path_factory, monkeypatch):
         return
     monkeypatch.setattr(run_telemetry, "TELEMETRY_PATH",
                         tmp_path_factory.mktemp("telemetry") / "rpa_telemetry.jsonl")
+    yield
+
+
+# Тесты не закрывают окна профилей этой машины (ACL-1388/1562).
+#
+# Окно профиля, открытое руками, робот закрывает сам и сразу — мягкой
+# остановкой через MLX API (ACL-1562). Тест, который доходит до этой ветки
+# без своих заглушек, позвал бы Multilogin живой машины. Выключатель —
+# штатный (`FB_RPA_REOPEN_HAND_WINDOW=0`, прежнее поведение: всегда стоп);
+# тесты ACL-1388/1562 включают его сами.
+@pytest.fixture(autouse=True)
+def _hand_window_reopen_off(monkeypatch):
+    monkeypatch.setenv("FB_RPA_REOPEN_HAND_WINDOW", "0")
+    yield
+
+
+# Тесты не закрывают профили Multilogin в конце задания (ACL-1444).
+#
+# Чистое задание закрывает профиль через MLX API. Тест, который доходит до
+# конца задания с настоящим провайдером без своих заглушек, мог бы позвать
+# MLX живой машины. Выключатель — штатный (`FB_RPA_KEEP_PROFILES_OPEN=1`,
+# прежнее поведение); тесты ACL-1444 снимают его сами.
+@pytest.fixture(autouse=True)
+def _finished_profiles_stay_open(monkeypatch):
+    monkeypatch.setenv("FB_RPA_KEEP_PROFILES_OPEN", "1")
+    yield
+
+
+# Тесты не читают настоящую память машины через очередь профилей (ACL-1603).
+#
+# С ACL-1603 даже первый профиль ждёт «профиль + запас» (6,5 ГБ свободных), и
+# задание, прошедшее через глобальную `publish_jobs._slots` с настоящим
+# `read_memory`, на занятом CI-раннере ждало бы вечно (Windows-набор упёрся в
+# 30 минут). Подставная память — много; тесту нужна своя — он ставит
+# `ProfileSlots(memory=...)` или `monkeypatch.setattr(pj._slots, "_memory", ...)`
+# позже этой фикстуры. Сам `profile_slots.read_memory` не трогаем: тесты
+# настоящей пробы проверяют именно его.
+@pytest.fixture(autouse=True)
+def _slot_queue_never_reads_the_host_memory(monkeypatch):
+    try:
+        from src.web import profile_slots as ps
+        from src.web import publish_jobs as pj
+    except Exception:
+        yield
+        return
+
+    def plenty():
+        return ps.MemoryReading(total_mb=64 * 1024, available_mb=48 * 1024)
+
+    monkeypatch.setitem(ps.ProfileSlots.__init__.__kwdefaults__, "memory", plenty)
+    # Свежая очередь на каждый тест: окна, оставленные прошлым тестом
+    # (`keep`), не должны занимать места следующему.
+    monkeypatch.setattr(pj, "_slots", ps.ProfileSlots(memory=plenty))
     yield
 
 
@@ -194,3 +276,53 @@ def _row(country, alias, cm, offer, device, interest, age, ad_title,
         "TextSegment": ad_title.split()[0].lower() if ad_title else "",
         "Offer": offer,
     }
+
+
+# Браузерные тесты страницы отдают скрипты `/static/*.js` с диска (ACL-1800).
+#
+# Шаблоны подключают помощников как `<script src="/static/….js">` (сейчас
+# `acm_commands.js` в таблице Home). Заглушки маршрутов Playwright в десятках
+# тестов отвечают на любой запрос не-документа JSON-ом, и браузер исполнял бы
+# JSON как скрипт («Unexpected token ':'»). Эта прослойка стоит перед каждой
+# заглушкой `Page.route` / `BrowserContext.route`: скрипт под `src/web/static/`
+# отдаётся как есть, всё остальное идёт в заглушку теста. Заглушки, которые
+# уже отвечают на `/static/…` сами (и берут маршрут раньше), прослойку не ломают.
+@pytest.fixture(autouse=True)
+def _static_scripts_come_from_disk(monkeypatch):
+    try:
+        from playwright.sync_api import BrowserContext, Page
+    except Exception:
+        yield
+        return
+    from urllib.parse import urlsplit
+
+    static = _PROJ_ROOT / "src" / "web" / "static"
+
+    def wrap(handler):
+        if not callable(handler):
+            return handler
+
+        def serve_or_stub(route, *rest):
+            try:
+                path = urlsplit(route.request.url).path
+            except Exception:
+                path = ""
+            if path.startswith("/static/") and path.endswith(".js"):
+                target = (static / path[len("/static/"):]).resolve()
+                if static.resolve() in target.parents and target.is_file():
+                    return route.fulfill(status=200, content_type="application/javascript",
+                                         body=target.read_text(encoding="utf-8"))
+            return handler(route, *rest)
+
+        serve_or_stub.__wrapped__ = handler
+        return serve_or_stub
+
+    for cls in (Page, BrowserContext):
+        original = cls.route
+
+        def patched(self, url, handler, *args, _orig=original, **kwargs):
+            return _orig(self, url, wrap(handler), *args, **kwargs)
+
+        patched.static_wrap = wrap       # для test_static_scripts_from_disk
+        monkeypatch.setattr(cls, "route", patched)
+    yield

@@ -87,6 +87,7 @@
     "todo",
     "in_progress",
     "review",
+    "approved",
     "stage",
     "merged"
   ],
@@ -479,5 +480,19 @@
         "issue_sha256": "430ad30bb76e6d1b548da791c7af3d4a25914afa8c6d3c515d68169ac382399c"
       }
     }
+  },
+  "execution_policy": {
+    "schema_version": 3,
+    "implementation_limit": 5,
+    "review_limit": 5,
+    "batch_limit": 5
+  },
+  "process_instructions": {
+    "schema_version": 1,
+    "required_checks": [
+      "descriptor",
+      "tracker-link",
+      "Process instructions"
+    ]
   }
 }

@@ -155,6 +155,10 @@ def test_the_single_screen_editor_is_recognised_by_its_address():
 
 
 def test_the_flow_stops_in_the_single_screen_editor_before_the_name(flow, monkeypatch):
+    """ACL-1327: робот теперь проходит новый редактор
+    (test_the_single_screen_editor_flow.py); прежняя остановка до имени
+    осталась откатом FB_RPA_SIMPLE_CREATE=0."""
+    monkeypatch.setenv("FB_RPA_SIMPLE_CREATE", "0")
     monkeypatch.setattr(md, "_open_campaign", lambda *a, **k: "")
     flow["page"].url = SIMPLE_CREATE
     shots: list = []

@@ -372,29 +372,13 @@ _sync_readers: dict[str, Callable[[], str]] = {}
 def _sync_transaction(kind: str):
     # Serialize GET -> local apply with writes, including a second dashboard
     # process. Registry locks are distinct and acquired only inside this lock.
+    # ACL-1512: the shared machine lock (ACL-1495) — bounded wait with EDEADLK
+    # retried instead of LK_LOCK's 10 x 1 s, and no first-write race on the file.
     from config import paths
     with _pull_lock:
         path = Path(paths.get_local_config_dir()) / f"team_library_{kind}.lock"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a+b") as handle:
-            if handle.tell() == 0:
-                handle.write(b"0")
-                handle.flush()
-            handle.seek(0)
-            if os.name == "nt":
-                import msvcrt
-                msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
-            else:
-                import fcntl
-                fcntl.flock(handle, fcntl.LOCK_EX)
-            try:
-                yield
-            finally:
-                handle.seek(0)
-                if os.name == "nt":
-                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-                else:
-                    fcntl.flock(handle, fcntl.LOCK_UN)
+        with paths.machine_file_lock(path):
+            yield
 
 
 def on_update(kind: str, apply: Callable[[dict], None], read_sync: Callable[[], str]) -> None:

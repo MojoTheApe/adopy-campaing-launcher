@@ -1,33 +1,7 @@
 {
-  "schema_version": 2,
   "project": {
     "name": "Adopy Campaign Launcher",
     "repository": "https://github.com/MojoTheApe/adopy-campaing-launcher"
-  },
-  "standard": {
-    "repository": "https://github.com/MojoTheApe/master-repo",
-    "revision": "e1473c428872757519355af1a7753cf3a0ce0f12",
-    "version": "1.0.0"
-  },
-  "profile": "package",
-  "adoption": "draft",
-  "workflow": {
-    "staging": true,
-    "main_branch": "main",
-    "stage_branch": "stage",
-    "required_checks": [
-      "descriptor",
-      "tracker-link",
-      "ACL verification",
-      "Installer verification"
-    ]
-  },
-  "tracker": {
-    "repository": "MojoTheApe/task-tracker",
-    "revision": "5f211d3095a392a16c2c01a65eb02ff8719a7243",
-    "workspace_id": "acl",
-    "registration": "verified",
-    "verification": "Existing acl board verified server-side on 2026-09-21 after Task Tracker PR #64 deployment 0dadc889e18b027c8ca98b888407d492848f2f19: 160 identities, seven columns, 74 bounded historical completions, all six fresh snapshots, preserved authentication and restricted HTTP access. Browser verification excluded by owner. See docs/repository/ADOPTION.md and ACL-1248."
   },
   "checks": [
     "python scripts/acl_scan_secrets.py",
@@ -47,13 +21,8 @@
       "verify": "docs/runtime/DELIVERY.md; published immutable release plus verified Windows installation/update and recovery, before record-delivery."
     }
   },
-  "delivery": {
-    "procedure": "docs/runtime/DELIVERY.md; existing annotated acl-release tag, validated release manifest and Windows installer/updater. No automatic production or employee rollout during adoption.",
-    "authorization": "Authorized source work includes review and merge after gates. Preserve separately scoped release and live-pilot authorization; previous CI exceptions cover only their recorded candidates.",
-    "rollback": "Existing Windows updater restores the previous installed version and shortcuts on verified failure. Preserve machine configuration and newer data; docs/runtime/DELIVERY.md.",
-    "backup": "Preserve %LOCALAPPDATA%/ACL and user workbooks/creatives; isolated stage uses its own directories. Retain compatible recovery material before authorized runtime changes."
-  },
   "completion": "verified-stable-package",
+  "profile": "package",
   "exceptions": [
     {
       "scope": "Unreleased standard",
@@ -70,5 +39,50 @@
       "reason": "Existing source installations still fetch master. Retain it only as the guarded compatibility channel described in the cutover runbook; main is the development integration branch after activation.",
       "reference": "docs/repository/ADOPTION.md"
     }
-  ]
+  ],
+  "standard": {
+    "repository": "https://github.com/MojoTheApe/master-repo",
+    "revision": "eca8a857d9f7f81160bf248f9f9e3109a21ade49",
+    "version": "1.0.0"
+  },
+  "adoption": "draft",
+  "workflow": {
+    "staging": true,
+    "main_branch": "main",
+    "stage_branch": "stage",
+    "required_checks": [
+      "descriptor",
+      "tracker-link",
+      "ACL verification",
+      "Installer verification"
+    ],
+    "execution": {
+      "schema_version": 3,
+      "implementation_limit": 5,
+      "review_limit": 5,
+      "batch_limit": 5
+    },
+    "process_instructions": {
+      "schema_version": 1,
+      "required_checks": [
+        "descriptor",
+        "tracker-link",
+        "Process instructions"
+      ]
+    }
+  },
+  "tracker": {
+    "repository": "MojoTheApe/task-tracker",
+    "workspace_id": "acl",
+    "revision": "0d1fad44f5fdbef64b061324e9a1292fb77fb725",
+    "verification": "Existing acl board verified server-side on 2026-09-21 after Task Tracker PR #64 deployment 0dadc889e18b027c8ca98b888407d492848f2f19: 160 identities, seven columns, 74 bounded historical completions, all six fresh snapshots, preserved authentication and restricted HTTP access. Browser verification excluded by owner. See docs/repository/ADOPTION.md and ACL-1248.",
+    "registration": "verified"
+  },
+  "schema_version": 2,
+  "delivery": {
+    "procedure": "docs/runtime/DELIVERY.md; existing annotated acl-release tag, validated release manifest and Windows installer/updater. No automatic production or employee rollout during adoption.",
+    "authorization": "Authorized source work includes review and merge after gates. Preserve separately scoped release and live-pilot authorization; previous CI exceptions cover only their recorded candidates.",
+    "rollback": "Existing Windows updater restores the previous installed version and shortcuts on verified failure. Preserve machine configuration and newer data; docs/runtime/DELIVERY.md.",
+    "backup": "Preserve %LOCALAPPDATA%/ACL and user workbooks/creatives; isolated stage uses its own directories. Retain compatible recovery material before authorized runtime changes."
+  }
 }

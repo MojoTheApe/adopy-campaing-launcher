@@ -130,20 +130,44 @@ def test_existing_ids_and_modules_are_preserved():
     new = json.loads((ROOT / 'tracker/config.json').read_text())
     assert new['project'] == dict(old['project'], base_branch='main')
     assert new['modules'] == old['modules']
-    assert new['workflow'] == old['workflow'][:-1] + ['stage', 'merged']
+    assert new['workflow'] == old['workflow'][:-1] + ['approved', 'stage', 'merged']
+    assert new['execution_policy'] == {'schema_version':3, 'implementation_limit':5, 'review_limit':5, 'batch_limit':5}
+
+
+def test_five_review_policy_keeps_descriptor_engine_and_delivery_contract_consistent():
+    from scripts import tracker_delivery_policy as rules
+    config = json.loads((ROOT / 'tracker/config.json').read_text())
+    descriptor = json.loads((ROOT / 'delivery.json').read_text())
+    lock = json.loads((ROOT / 'tracker/engine.json').read_text())
+    assert descriptor['workflow']['execution'] == rules.execution_policy(config)
+    assert lock['revision'] == descriptor['tracker']['revision']
+    assert 'ci_evidence_policy' not in config  # Exported support cannot opt ACL into the native V1 protocol.
+    action = yaml.safe_load((ROOT / '.github/workflows/delivery-check.yml').read_text())
+    steps = action['jobs']['descriptor']['steps']
+    assert any(step.get('uses') == 'MojoTheApe/master-repo@' + descriptor['standard']['revision'] for step in steps)
+    assert rules.fingerprint(config) == '302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21'
 
 
 @pytest.mark.parametrize('workflow,success_fields', [
-    ('ci.yml', ['TESTS']), ('windows-installer.yml', ['INPUTS', 'INSTALLER'])])
-@pytest.mark.skipif(sys.platform == 'win32', reason='Ubuntu job shell contract is tested in the Ubuntu tooling job')
+    ('ci.yml', ['LINUX_TESTS', 'WINDOWS_TESTS']), ('windows-installer.yml', ['INPUTS', 'INSTALLER'])])
+@pytest.mark.skipif(sys.platform == 'win32', reason='Ubuntu job shell contract is tested in the Ubuntu tooling job')  # linux-ok: Linux-only
 def test_ci_admission_runs_fail_closed(workflow, success_fields):
     import os
     data = yaml.safe_load((ROOT / '.github/workflows' / workflow).read_text())
     script = data['jobs']['admission']['steps'][0]['run']
-    success = {'SCOPE': 'success', 'WINDOWS': 'true', **{k: 'success' for k in success_fields}}
-    metadata = {'SCOPE': 'success', 'WINDOWS': 'false', **{k: 'skipped' for k in success_fields}}
+    # ACL-1649: ci.yml decides Linux and Windows separately (LINUX output next to WINDOWS).
+    flags = {'LINUX': 'true', 'PROCESS_INSTRUCTIONS': 'success'} if workflow == 'ci.yml' else {}
+    off = {'LINUX': 'false', 'PROCESS_INSTRUCTIONS': 'success'} if workflow == 'ci.yml' else {}
+    success = {'SCOPE': 'success', 'WINDOWS': 'true', **flags, **{k: 'success' for k in success_fields}}
+    metadata = {'SCOPE': 'success', 'WINDOWS': 'false', **off, **{k: 'skipped' for k in success_fields}}
     cases = [(success, True), (metadata, True), (dict(success, SCOPE='failure'), False),
              (dict(success, WINDOWS=''), False)]
+    if workflow == 'ci.yml':
+        only_linux = dict(success, WINDOWS='false', WINDOWS_TESTS='skipped')   # PR into main: 3.11 only
+        cases += [(only_linux, True), (dict(success, LINUX=''), False), (dict(success, LINUX='garbage'), False),
+                  (dict(metadata, LINUX_TESTS='success'), False), (dict(metadata, LINUX_TESTS='failure'), False),
+                  (dict(only_linux, WINDOWS_TESTS='failure'), False), (dict(only_linux, LINUX_TESTS='failure'), False)]
+        cases += [(dict(success, LINUX='false'), False)]        # Linux declared off but its job ran green: mismatch
     for field in success_fields:
         for failed in ['failure', 'cancelled', 'skipped']:
             cases.append((dict(success, **{field: failed}), False))

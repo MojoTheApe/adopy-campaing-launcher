@@ -75,8 +75,105 @@ def normalise_step(label: str) -> tuple[str, bool | None]:
 #: Что похоже на номер кабинета, id профиля или иной опознавательный знак.
 #: Контекст отказа уезжает в общую таблицу телеметрии, которую читает вся
 #: компания, — идентификаторы туда не едут.
+#:
+#: ACL-1342 S09: список имён секретов — раньше здесь ловилось только
+#: `key=value` для `access_token`/`token`/`password`/`authorization`/
+#: `fb_dtsg`/`lsd`, и то не для всех: `client_secret=`, `api_key=`,
+#: `proxy_pass=` не совпадали (в списке не было ни "secret", ни "key", ни
+#: точного "proxy_pass"), а `"password":"..."` — JSON- и python-repr-форма
+#: с двоеточием вместо `=` — не совпадала вовсе, для любого из имён.
+#:
+#: PR #343, ревью: `re.I` снимает регистр букв, но не разницу между
+#: `refresh_token` и `refreshToken` — camelCase-варианты (обычные для
+#: JS-объектов на странице Facebook/сторонних SDK) физически не совпадали
+#: ни с одним паттерном. `_flex_key()` делает подчёркивание между частями
+#: составного имени необязательным — один шаблон ловит snake_case И
+#: camelCase/PascalCase сразу, без отдельного списка вариантов на каждое имя.
+#:
+#: PR #343, ревью раунд 2: необязательным было только `_`, и целиком утекали
+#: имена через дефис, точку и пробел (`REFRESH-TOKEN`, `refresh.token`,
+#: `refresh token`) — а это как раз имена HTTP-заголовков: `x-api-key`,
+#: `X-Api-Key`, `X-Refresh-Token`. Разделитель между частями теперь любой из
+#: `[-_. ]` или никакой.
+_KEY_SEP = r"[-_. ]?"
+
+
+def _flex_key(name: str) -> str:
+    return name.replace("_", _KEY_SEP)
+
+
+_SECRET_KEY_NAMES = (
+    "refresh_token", "access_token", "token", "client_secret", "api_key",
+    "proxy_password", "proxy_pass", "passwd", "password", "authorization",
+    "fb_dtsg", "lsd",
+)
+_SECRET_KEYS = "(?:" + "|".join(_flex_key(k) for k in _SECRET_KEY_NAMES) + ")"
+
+#: Для «голой» формы `key: value` / `key=value` без кавычек "authorization"
+#: исключён: заголовок обычно пишется как "Authorization: Bearer <токен>", и
+#: с двоеточием в общем списке это разобралось бы как key="authorization",
+#: value="Bearer" — отдельное слово "Bearer" вместо всего токена, который сам
+#: по себе прячет паттерн `Bearer` ниже. Через `=` ("authorization=...")
+#: поведение осталось прежним — этот случай ловится отдельно.
+_SECRET_KEYS_BARE = "(?:" + "|".join(
+    _flex_key(k) for k in _SECRET_KEY_NAMES if k != "authorization"
+) + ")"
+
+#: Секретное имя сверяется по ОКОНЧАНИЮ ключа: `x-api-key`, `X_Refresh_Token`,
+#: `xApiKey`, `csrf_token` — префикс может быть любым.
+#:
+#: В кавычках (`"x-api-key": …`) ключ целиком стоит между кавычками, поэтому
+#: префикс — ограниченная (≤ 40) ленивая серия символов имени перед секретным
+#: окончанием: на каждой кавычке не больше 41 попытки, без вложенных
+#: квантификаторов — линейно.
+_QUOTED_KEY_PREFIX = r"[A-Za-z0-9_.\- ]{0,40}?"
+#: Без кавычек префикс не захватывается, а начало имени требуется на границе:
+#: либо перед ним не буква/цифра (`X-Api-Key`, `x_api_key` — `_` здесь тоже
+#: граница, в отличие от `\b`), либо это «горб» camelCase (`xApiKey`,
+#: `csrfToken`: строчная/цифра, затем заглавная; сверяется с учётом регистра
+#: через `(?-i:…)`, иначе `re.I` превратил бы проверку в «любые две буквы» и
+#: `monkeyapikey` резалось бы посередине).
+_BARE_KEY_START = r"(?:(?<![A-Za-z0-9])|(?-i:(?<=[a-z0-9])(?=[A-Z])))"
+
+#: Значение в кавычках после «голого» ключа. Закрывающая кавычка
+#: необязательна и перевод строки внутрь не входит — см. `_QUOTED_VALUE`.
+_BARE_VALUE = r'("(?:[^"\\\n]|\\.)*"?|\'(?:[^\'\\\n]|\\.)*\'?|[^\s,;&"\'<>\)\]\}]{1,16384})'
+
+#: Значение в кавычках для JSON/repr-формы (группа 4 — открывающая кавычка).
+#:
+#: PR #343, ревью раунд 2 — катастрофический бэктрекинг. Прежнее
+#: `(?:\\.|(?!\4).)*` было неоднозначным: обратный слэш подходил под ОБЕ
+#: альтернативы (`\\.` брал пару `\x`, `(?!\4).` — один `\`), так что n пар
+#: разбирались 2^n способами, и без закрывающей кавычки движок перебирал их
+#: все. Замер: обрезанный `{'token': '` + JSON-экранированный путь Windows на
+#: 120 символов — 35.7 с; 100 КБ `\a\a…` — больше двух минут. Реальный
+#: спусковой крючок — `page_capture.scrub_html()`: он режет HTML по потолку
+#: ДО `scrub()`, и разрез внутри `"lsd":"https:\/\/…` вешал поток робота.
+#:
+#: Теперь альтернативы взаимоисключающие: первая требует `\`, вторая его
+#: исключает (`[^\\\n]`) — разбор единственный, время линейное. Перевод строки
+#: значение не пересекает (как у прежнего `.`), так что незакрытое значение не
+#: съедает остаток многострочного текста.
+#:
+#: Закрывающая кавычка (группа 6) необязательна: если значение обрезано —
+#: именно тот случай из `scrub_html()` — до фикса регэксп просто не находил
+#: совпадения, и начало секрета уезжало открытым текстом. Теперь прячется
+#: всё до конца строки/текста.
+_QUOTED_VALUE = r'((?:\\.|(?!\4)[^\\\n])*)(\4)?'
+
 _SCRUB = (
-    (re.compile(r"((?:access_token|token|password|authorization|fb_dtsg|lsd)=)[^&\s\"'<>]{1,16384}", re.I), r"\1<hidden>"),
+    # JSON / python-repr словарь: "key":"value" или 'key': 'value' — с любыми
+    # пробелами вокруг двоеточия, кавычки ключа и значения не обязаны
+    # совпадать друг с другом. Экранированная кавычка (`\"`) внутри значения
+    # поглощается парой `\\.` и не закрывает его раньше времени.
+    (re.compile(rf'(["\'])({_QUOTED_KEY_PREFIX}{_SECRET_KEYS})\1(\s*:\s*)(["\']){_QUOTED_VALUE}', re.I),
+     lambda m: f"{m.group(1)}{m.group(2)}{m.group(1)}{m.group(3)}{m.group(4)}<hidden>{m.group(6) or ''}"),
+    # key=value / key: value без кавычек вокруг имени, внутри произвольного
+    # текста лога — то, что раньше проверял единственный `(...)=` паттерн.
+    (re.compile(rf'{_BARE_KEY_START}({_SECRET_KEYS_BARE})(\s*[:=]\s*){_BARE_VALUE}', re.I),
+     lambda m: f"{m.group(1)}{m.group(2)}<hidden>"),
+    (re.compile(rf'{_BARE_KEY_START}(authorization)(\s*=\s*){_BARE_VALUE}', re.I),
+     lambda m: f"{m.group(1)}{m.group(2)}<hidden>"),
     (re.compile(r"\bBearer [A-Za-z0-9._~+/-]{1,16384}", re.I), "Bearer <hidden>"),
     (re.compile(r"(act=)(?:act_)?\d{6,}"), r"\1<hidden>"),
     (re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b"), "<uuid>"),
@@ -92,10 +189,50 @@ def scrub(text: str) -> str:
     return out
 
 
+#: ACL-1342 S09: та же расширенная граница, что и в _SECRET_KEYS — диагностика
+#: приходит и настоящим словарём (не только строкой из логов), и по ключу
+#: словаря значение не пройдёт через `scrub()` (в самом значении имени ключа
+#: обычно нет, скрести регуляркой там нечего).
+#:
+#: PR #343, ревью: тот же camelCase-разрыв, что и в _SECRET_KEYS, но здесь
+#: ключ — настоящий ключ Python-словаря, а не текст в строке, так что
+#: `_flex_key()`/regex не применить — сравнение сделано побуквенно: обе
+#: стороны (имя из словаря и имя из списка) сравниваются без подчёркиваний,
+#: так что `refreshToken`, `refresh_token` и `REFRESH_TOKEN` бьют в одну и
+#: ту же запись.
+#:
+#: PR #343, ревью раунд 2: разделителями бывают и `-`, `.`, пробел
+#: (`X-Api-Key`, `refresh-token`, `refresh.token`), а у заголовков — префикс
+#: (`x-api-key`). Имя нормализуется без `[-_. ]`, и секретом считается и
+#: точное совпадение, и совпадение по окончанию. Для совпадения только по
+#: окончанию значение прячется, если это не флаг/число/None: `has_token: True`
+#: — диагностика («есть ли токен»), а не сам токен, и в Sentry должен остаться.
+_SECRET_DICT_KEYS = {
+    "token", "access_token", "refresh_token", "password", "passwd",
+    "client_secret", "api_key", "apikey", "proxy_pass", "proxy_password",
+    "authorization", "fb_dtsg", "lsd",
+}
+_KEY_NORM_DROP = re.compile(r"[-_. ]")
+_SECRET_DICT_KEYS_NORM = {_KEY_NORM_DROP.sub("", k) for k in _SECRET_DICT_KEYS}
+
+
+def _norm_key(key: object) -> str:
+    return _KEY_NORM_DROP.sub("", str(key).lower())
+
+
+def _hides_dict_value(key: object, item: object) -> bool:
+    norm = _norm_key(key)
+    if norm in _SECRET_DICT_KEYS_NORM:
+        return True
+    if isinstance(item, (bool, int, float)) or item is None:
+        return False
+    return any(norm.endswith(name) for name in _SECRET_DICT_KEYS_NORM)
+
+
 def scrub_diag(value):
     """Explicit step diagnostics share the same export boundary as page context."""
     if isinstance(value, dict):
-        return {key: ("<hidden>" if str(key).lower() in {"token", "access_token", "password", "authorization", "fb_dtsg", "lsd"} else scrub_diag(item))
+        return {key: ("<hidden>" if _hides_dict_value(key, item) else scrub_diag(item))
                 for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [scrub_diag(item) for item in value]
@@ -370,6 +507,75 @@ def current_campaign() -> str:
     return _current_state().get("campaign") or ""
 
 
+# ── ACL-1614: тишина задания и брошенные задания ────────────────────────────
+#
+# Когда последняя строка телеметрии задания — по ней `publish_jobs` видит, что
+# робот застрял (`step_stuck`), и в чём именно (последний шаг). Брошенное по
+# сроку отмены задание больше ничего не пишет: проснувшийся позже поток не
+# должен дописывать строки в уже закрытое задание.
+_clock = time.monotonic
+_LAST_BY_JOB: dict[str, tuple[float, str]] = {}
+#: ACL-1702: задание → номер его прогона (сторож пишет из своего потока, где
+#: номера прогона нет: он в ContextVar потока задания).
+_RUN_BY_JOB: dict[str, str] = {}
+#: ACL-1702: строки сторожа задания — тишину задания они не сбрасывают.
+WATCHER_STEPS = frozenset({"step_stuck", "tab_unblocked", "tab_unblock_skipped"})
+_ABANDONED: set[str] = set()
+_JOBS_LOCK = threading.Lock()
+_JOBS_MAX = 256
+
+
+def clock() -> float:
+    return _clock()
+
+
+def last_activity(job_id: str) -> tuple[float, str] | None:
+    """(время по `clock()`, шаг) последней строки задания — или None."""
+    with _JOBS_LOCK:
+        return _LAST_BY_JOB.get(str(job_id))
+
+
+def last_run_id(job_id: str) -> str:
+    """Номер прогона последней строки задания (ACL-1702) — или ""."""
+    with _JOBS_LOCK:
+        return _RUN_BY_JOB.get(str(job_id), "")
+
+
+def abandon_job(job_id: str) -> None:
+    """Задание брошено: строки его потока больше не пишутся."""
+    with _JOBS_LOCK:
+        _ABANDONED.add(str(job_id))
+        while len(_ABANDONED) > _JOBS_MAX:
+            _ABANDONED.pop()
+
+
+def forget_job(job_id: str) -> None:
+    with _JOBS_LOCK:
+        _LAST_BY_JOB.pop(str(job_id), None)
+        _RUN_BY_JOB.pop(str(job_id), None)
+
+
+def beat() -> None:
+    """Задание живо без новой строки: время последней активности, шаг прежний."""
+    job = current_job_id()
+    if not job:
+        return
+    with _JOBS_LOCK:
+        seen = _LAST_BY_JOB.get(job)
+        _LAST_BY_JOB[job] = (_clock(), seen[1] if seen else "")
+
+
+def _touch_job(job_id: str, step: str, run_id: str = "") -> None:
+    with _JOBS_LOCK:
+        _LAST_BY_JOB[job_id] = (_clock(), step)
+        while len(_LAST_BY_JOB) > _JOBS_MAX:
+            _LAST_BY_JOB.pop(next(iter(_LAST_BY_JOB)))
+        if run_id:
+            _RUN_BY_JOB[job_id] = run_id
+            while len(_RUN_BY_JOB) > _JOBS_MAX:
+                _RUN_BY_JOB.pop(next(iter(_RUN_BY_JOB)))
+
+
 def record(
     step: str,
     ok: bool | None = None,
@@ -382,6 +588,18 @@ def record(
     path: Path | None = None,
 ) -> None:
     """Append one record. Never raises — telemetry must not break a run."""
+    # ACL-1614: брошенное задание (поток завис, Stop истёк по сроку) молчит.
+    try:
+        _job = current_job_id()
+        if _job:
+            if _job in _ABANDONED:
+                return
+            # Сама `step_stuck` тишину не сбрасывает: сигнал один на простой.
+            # ACL-1702: и строки сторожа вкладки (`WATCHER_STEPS`) тоже.
+            if step not in WATCHER_STEPS:
+                _touch_job(_job, step, run_id or current_run_id())
+    except Exception:
+        pass
     try:
         p = path or TELEMETRY_PATH
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -431,6 +649,13 @@ def record(
             _remember_failure(run_id or current_run_id(), step, _why_of(note, diag), diag)
         except Exception:
             pass
+    # ACL-1447: шаги прогона копятся и в памяти — из них строится итог
+    # кампании для Sentry (`run_summary`), без чтения журнала с диска.
+    try:
+        _remember_step(run_id or current_run_id(), step, ok, duration_s,
+                       _why_of(note, diag) if ok is not True else "")
+    except Exception:
+        pass
 
 
 #: Последний отказ каждого шага в каждом прогоне: (run_id, step) -> {why, diag}.
@@ -465,6 +690,44 @@ def last_failure(step: str, run_id: str = "") -> dict[str, Any] | None:
     with _FAILURES_LOCK:
         found = _FAILURES.get(key)
         return dict(found) if found else None
+
+
+#: Шаги каждого прогона по порядку (ACL-1447): run_id -> [{step, ok, duration_s, why}].
+#: Ограничено и по числу прогонов, и по шагам в прогоне — процесс дешборда
+#: живёт сутками, а итог кампании — не журнал.
+_STEPS: "OrderedDict[str, list[dict[str, Any]]]" = OrderedDict()
+_STEPS_LOCK = threading.Lock()
+_STEPS_MAX_RUNS = 64
+_STEPS_MAX_PER_RUN = 400
+
+
+def _remember_step(run_id: str, step: str, ok: bool | None,
+                   duration_s: float | None, why: str) -> None:
+    if not run_id:
+        return
+    row: dict[str, Any] = {"step": step or "", "ok": ok}
+    if duration_s is not None:
+        row["duration_s"] = round(float(duration_s), 1)
+    if why:
+        row["why"] = str(why)[:300]
+    with _STEPS_LOCK:
+        rows = _STEPS.pop(run_id, None) or []
+        if len(rows) < _STEPS_MAX_PER_RUN:
+            rows.append(row)
+        _STEPS[run_id] = rows
+        while len(_STEPS) > _STEPS_MAX_RUNS:
+            _STEPS.popitem(last=False)
+
+
+def run_steps(run_id: str = "") -> list[dict[str, Any]]:
+    """Шаги прогона `run_id` (по умолчанию — текущего) в порядке записи.
+
+    `why` — причина как её записал шаг, ещё НЕ вычищенная: вычищает тот, кто
+    отправляет (`run_summary`).
+    """
+    key = run_id or current_run_id()
+    with _STEPS_LOCK:
+        return [dict(r) for r in _STEPS.get(key, [])]
 
 
 @contextmanager

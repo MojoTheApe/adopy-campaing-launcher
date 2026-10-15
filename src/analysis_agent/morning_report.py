@@ -8,6 +8,7 @@ The result is a plain dict — no external rendering dependencies.
 """
 from __future__ import annotations
 
+import logging
 import os
 import re
 import sys
@@ -28,6 +29,7 @@ from src.analysis_agent.analyze_fb_stats import (
     enrich_structure,
     split_ad_title,
 )
+from src.creative_variant import apply_backfill as apply_variant_backfill
 from src.analysis_agent.gsheet_accounts import (
     format_account_status_todo_cell,
     is_omitted_from_account_statuses_table,
@@ -450,7 +452,11 @@ def build_trend(
     def _agg(sub: pd.DataFrame) -> pd.DataFrame:
         return (
             sub.groupby(combo_cols, dropna=False)
-            .agg(Deposits=("# FTDs", "sum"), Spend=("$ Spend", "sum"))
+            .agg(
+                Deposits=("# FTDs", "sum"),
+                Leads=("# Leads", "sum"),
+                Spend=("$ Spend", "sum"),
+            )
             .reset_index()
         )
 
@@ -458,11 +464,15 @@ def build_trend(
     overall = _agg(df_c)
 
     merged = overall.merge(
-        recent.rename(columns={"Deposits": "RecentDep", "Spend": "RecentSpend"}),
+        recent.rename(columns={
+            "Deposits": "RecentDep", "Spend": "RecentSpend", "Leads": "RecentLeads",
+        }),
         on=combo_cols,
         how="left",
     )
     merged["RecentDep"] = merged["RecentDep"].fillna(0).astype(int)
+    merged["RecentLeads"] = merged["RecentLeads"].fillna(0)
+    merged["RecentSpend"] = merged["RecentSpend"].fillna(0.0)
 
     def _row_to_dict(r) -> Dict[str, Any]:
         full_creative = _display_value(r.get("Creative"))
@@ -473,6 +483,12 @@ def build_trend(
             "creative": full_creative[:40],  # display: truncated to 40 chars
             "deposits_total": _safe_int(r.get("Deposits")),
             "deposits_recent": _safe_int(r.get("RecentDep")),
+            # ACL-1652: все шесть метрик за период и за последние дни. Счётчики,
+            # а не готовые CPL/CPA/CR: их считает metric_columns.ratios.
+            "spend_total": _safe_float(r.get("Spend")),
+            "leads_total": _safe_int(r.get("Leads")),
+            "spend_recent": _safe_float(r.get("RecentSpend")),
+            "leads_recent": _safe_int(r.get("RecentLeads")),
             "aggregate_key": {
                 "section": "trend",
                 "country": country,
@@ -738,10 +754,43 @@ def build_creative_breakdown(
     if top_n is not None:
         grouped = grouped.head(top_n)
 
+    # ACL-1593: строки группы разбираются по варианту креатива. Суммы считаются
+    # теми же агрегатами из тех же строк, поэтому по вариантам они складываются
+    # в итог группы.
+    has_variant_col = "VariantId" in df_c.columns
+    variants_by_group: Dict[tuple, List[Dict[str, Any]]] = {}
+    if has_variant_col:
+        df_c["_VariantId"] = df_c["VariantId"].fillna("").astype(str).str.strip()
+        vgrouped = (
+            df_c.groupby(["_CreativeId", "_TextName", "_VariantId"], dropna=False)
+            .agg(Deposits=("# FTDs", "sum"), Leads=("# Leads", "sum"), Spend=("$ Spend", "sum"))
+            .reset_index()
+        )
+        for _, vr in vgrouped.iterrows():
+            gkey = (vr["_CreativeId"], vr["_TextName"])
+            deposits = _safe_int(vr.get("Deposits"))
+            spend = _safe_float(vr.get("Spend"))
+            variant = str(vr.get("_VariantId") or "")
+            cid = str(vr["_CreativeId"] or "").strip()
+            variants_by_group.setdefault(gkey, []).append(
+                {
+                    "variant": variant,
+                    "label": f"{cid} · {variant or 'no variant'}",
+                    "deposits": deposits,
+                    "leads": _safe_int(vr.get("Leads")),
+                    "spend": spend,
+                    "cpa": (spend / deposits) if deposits else _safe_float(None),
+                }
+            )
+        for lst in variants_by_group.values():
+            # Числа по возрастанию, «без варианта» — последним.
+            lst.sort(key=lambda v: (v["variant"] == "", int(v["variant"] or 0)))
+
     rows = []
     for _, r in grouped.iterrows():
         creative_id = str(r.get("_CreativeId") or "").strip()
         text_name = str(r.get("_TextName") or "").strip()
+        variants = variants_by_group.get((r.get("_CreativeId"), r.get("_TextName")), [])
         titles = list(r.get("Titles") or [])
         title = " · ".join(titles) if titles else "(no title)"
         rows.append(
@@ -753,6 +802,8 @@ def build_creative_breakdown(
                 "leads": _safe_int(r.get("Leads")),
                 "spend": _safe_float(r.get("Spend")),
                 "cpa": _safe_float(r.get("CPA")),
+                "variants": variants,
+                "has_variants": any(v["variant"] for v in variants),
                 # The drill needs the pair, not a single cell, now that one row
                 # can cover several spellings of the same ad.
                 "aggregate_key": {
@@ -1976,8 +2027,18 @@ def build_country_section(
     cm_comparison = build_cm_comparison(df, country, my_cm)
     my_totals = _my_cm_totals(cm_comparison)
 
+    # ACL-1799: Country Workbench. Новый вид не должен ронять отчёт: если срез
+    # не собрался, страна остаётся с прежними разделами.
+    try:
+        from src.analysis_agent.country_workbench import build_country_workbench
+        workbench = build_country_workbench(df, country, my_cm)
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger(__name__).warning("country workbench %s: %s", country, exc)
+        workbench = {}
+
     return {
         "country": country,
+        "workbench": workbench,
         "cm_comparison": cm_comparison,
         "my_totals": my_totals,
         "my_spend": my_totals["spend"],
@@ -2089,7 +2150,7 @@ def build_morning_report(
         if missing:
             raise ValueError(f"Missing columns in Excel: {missing}")
         df = compute_metrics(df_raw)
-        df = enrich_structure(df)
+        df = apply_variant_backfill(enrich_structure(df))
 
     combos = aggregate_combos(df)
 

@@ -168,6 +168,13 @@ class UpdateChannelTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             build_manifest.build_update_channel({"ACL_RELEASES_REPO": "adopy/acl-releases"})
 
+    def test_signature_enforcement_is_opt_in_per_build(self):
+        self.assertNotIn("signatures", build_manifest.build_update_channel({}))
+        for value in ("true", "1", "enforce"):
+            self.assertEqual(build_manifest.build_update_channel(
+                {"ACL_ENFORCE_RELEASE_SIGNATURES": value})["signatures"], "enforce")
+        self.assertNotIn("signatures", build_manifest.build_update_channel({"ACL_ENFORCE_RELEASE_SIGNATURES": "no"}))
+
 
 if __name__ == "__main__":
     unittest.main()

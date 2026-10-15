@@ -30,7 +30,13 @@ from src.web import profile_slots as ps  # noqa: E402
 from src.web import publish_jobs as pj  # noqa: E402
 
 GB = 1024
-S = ps.SlotSettings()   # умолчания: потолок 4, профиль 1,5 ГБ, запас 1,5 ГБ
+# Правило очереди считается здесь при профиле 1,5 ГБ (так было до ACL-1424);
+# оценка 3,5 ГБ и замер профилей — test_profile_slots_adaptive_memory.py.
+OLD_PROFILE_MB = int(1.5 * GB)
+# До ACL-1603 потолок был 4, запас 1,5 ГБ: механику очереди проверяем на них,
+# новые умолчания (2 / 3 ГБ / 3,5 ГБ) — в test_acl1603_stable_slots.py.
+OLD = dict(ceiling=4, reserve_mb=int(1.5 * GB), profile_floor_mb=int(1.5 * GB))
+S = ps.SlotSettings(profile_mb=OLD_PROFILE_MB, **OLD)   # потолок 4, профиль 1,5 ГБ, запас 1,5 ГБ
 
 
 def mem(available_gb: float, total_gb: float = 16) -> ps.MemoryReading:
@@ -39,9 +45,12 @@ def mem(available_gb: float, total_gb: float = 16) -> ps.MemoryReading:
 
 # ── правило ──────────────────────────────────────────────────────────────
 
-def test_the_first_profile_always_starts_even_with_no_memory_left():
-    d = ps.decide(0, 0, mem(0.2), S)
-    assert d["allow"] and d["reason"] == "floor" and d["limit"] == 1
+def test_the_first_profile_waits_for_the_reserve_too():
+    """ACL-1603 (ревью F2): «пол в один профиль» больше не пускает при любой памяти."""
+    low = ps.decide(0, 0, mem(0.2), S)
+    assert low["allow"] is False and low["reason"] == "below_reserve"
+    ok = ps.decide(0, 0, mem(3.0), S)           # 1,5 + 1,5
+    assert ok["allow"] and ok["reason"] == "memory_ok"
 
 
 def test_another_profile_starts_only_with_room_for_it_and_the_reserve():
@@ -87,10 +96,13 @@ def test_the_limit_shown_is_what_memory_allows_now():
 # ── настройки машины ─────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("raw,expected", [
-    ("", None), ("auto", None), ("0", None), ("3", 3), (" 2 ", 2), ("-4", 1), ("many", None),
+    ("", ps.DEFAULT_CEILING), ("auto", ps.DEFAULT_CEILING), ("0", ps.DEFAULT_CEILING),
+    ("3", 3), (" 2 ", 2), ("-4", 1), ("many", ps.DEFAULT_CEILING),
 ])
-def test_the_override_is_read_from_the_machine_env(raw, expected):
-    assert ps.load_settings({"ACL_MAX_PARALLEL_PROFILES": raw}).override == expected
+def test_the_legacy_manual_number_is_now_only_the_cap(raw, expected):
+    """ACL-1603: ручное число больше не отменяет память — это потолок."""
+    got = ps.load_settings({"ACL_MAX_PARALLEL_PROFILES": raw})
+    assert got.override is None and got.ceiling == expected
 
 
 def test_tuning_values_are_read_and_garbage_falls_back_to_defaults():
@@ -102,10 +114,10 @@ def test_tuning_values_are_read_and_garbage_falls_back_to_defaults():
 
 
 def test_a_setting_changed_while_running_applies_to_the_next_decision(monkeypatch):
-    monkeypatch.setenv("ACL_MAX_PARALLEL_PROFILES", "1")
-    assert ps.load_settings().override == 1
-    monkeypatch.setenv("ACL_MAX_PARALLEL_PROFILES", "3")
-    assert ps.load_settings().override == 3
+    monkeypatch.setenv("ACL_MAX_PROFILES", "1")
+    assert ps.load_settings().ceiling == 1
+    monkeypatch.setenv("ACL_MAX_PROFILES", "3")
+    assert ps.load_settings().ceiling == 3
 
 
 def test_the_real_memory_probe_answers_on_this_machine():
@@ -121,14 +133,25 @@ class Machine:
     def __init__(self, available_gb: float, settings: ps.SlotSettings | None = None):
         self.available_gb = available_gb
         self.now = 1000.0
-        self.settings = settings or ps.SlotSettings(warmup_s=0)
+        self.settings = settings or ps.SlotSettings(warmup_s=0, profile_mb=OLD_PROFILE_MB, **OLD)
+
+    _queue = None
 
     def memory(self):
-        return None if self.available_gb is None else mem(self.available_gb)
+        if self.available_gb is None:
+            return None
+        # ACL-1603: первый профиль тоже ждёт запаса; пока ничего не идёт, у
+        # подставной машины памяти вдоволь (тесты проверяют следующие профили).
+        if self._queue is not None and not self._queue._running:
+            return mem(max(self.available_gb, 64))
+        return mem(self.available_gb)
 
     def slots(self, tick_s: float = 0.05) -> ps.ProfileSlots:
-        return ps.ProfileSlots(memory=self.memory, settings=lambda: self.settings,
-                               clock=lambda: self.now, tick_s=tick_s)
+        # Замер профилей подставной: «не нашли» — решает оценка из настроек.
+        probe = ps.ProfileUsage(lambda profiles: {}, clock=lambda: self.now, background=False)
+        self._queue = ps.ProfileSlots(memory=self.memory, settings=lambda: self.settings,
+                                      clock=lambda: self.now, tick_s=tick_s, usage=probe)
+        return self._queue
 
 
 class Job:
@@ -207,12 +230,16 @@ def test_freed_memory_starts_the_next_one_without_any_job_finishing():
     a.finish(); b.finish()
 
 
-def test_the_first_profile_starts_on_a_machine_with_no_free_memory():
+def test_the_first_profile_waits_on_a_machine_with_no_free_memory_and_starts_when_it_frees():
     m = Machine(available_gb=0.1)
-    slots = m.slots()
+    slots = ps.ProfileSlots(memory=lambda: mem(m.available_gb), settings=lambda: m.settings,
+                            clock=lambda: m.now, tick_s=0.05,
+                            usage=ps.ProfileUsage(lambda p: {}, clock=lambda: m.now, background=False))
     a = Job(slots, "a", "P1")
+    time.sleep(0.15)
+    assert not a.started and a.waits[0]["reason"] == "below_reserve"
+    m.available_gb = 8
     assert _until(lambda: a.started)
-    assert a.grant["decision"]["reason"] == "floor"
     a.finish()
 
 
@@ -315,7 +342,7 @@ def test_a_cancelled_waiting_job_leaves_the_queue_at_once():
 
 
 def test_a_just_started_profile_holds_back_the_next_until_it_has_warmed_up():
-    m = Machine(available_gb=3.5, settings=ps.SlotSettings(warmup_s=90))
+    m = Machine(available_gb=3.5, settings=ps.SlotSettings(warmup_s=90, profile_mb=OLD_PROFILE_MB, **OLD))
     slots = m.slots()
     a = Job(slots, "a", "P1")
     b = Job(slots, "b", "P2")
@@ -348,6 +375,8 @@ def runner(monkeypatch):
     def fake_rpa(job_id, slots_, *, account_label, **kw):
         entered[account_label].set()
         release[account_label].wait(timeout=5)
+        with pj._jobs_lock:
+            pj._jobs[job_id]["profile_closed"] = True    # чистый прогон закрыл профиль
         pj._finish(job_id)
 
     monkeypatch.setattr(pj, "_run_rpa", fake_rpa)
@@ -449,7 +478,9 @@ def test_the_slots_endpoint_says_how_many_run_at_once(monkeypatch):
     from src.web.app import app
 
     machine = Machine(available_gb=5.0, settings=ps.SlotSettings())
-    monkeypatch.setattr(pj, "_slots", machine.slots())
+    monkeypatch.setattr(pj, "_slots", ps.ProfileSlots(
+        memory=lambda: mem(5.0), settings=lambda: machine.settings, tick_s=0.05,
+        usage=ps.ProfileUsage(lambda p: {}, background=False)))
 
     async def get():
         transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
@@ -460,5 +491,5 @@ def test_the_slots_endpoint_says_how_many_run_at_once(monkeypatch):
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["mode"] == "auto" and body["running"] == [] and body["waiting"] == []
-    assert body["next"]["reason"] == "floor" and body["next"]["available_mb"] == 5 * GB
-    assert body["settings"]["ceiling"] == 4
+    assert body["next"]["reason"] == "memory_low" and body["next"]["available_mb"] == 5 * GB
+    assert body["settings"]["ceiling"] == ps.DEFAULT_CEILING == 2

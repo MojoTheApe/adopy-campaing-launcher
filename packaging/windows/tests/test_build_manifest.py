@@ -25,7 +25,7 @@ class BuildManifestTests(unittest.TestCase):
 
         baseline = json.loads((PACKAGING_DIR / "baseline.json").read_text(encoding="utf-8"))
         self.assertEqual(payload["version"], "0.1.0-test")
-        self.assertEqual(payload["product"], "Adopy Campaign Launcher")
+        self.assertEqual(payload["product"], "Adopy Campaign Manager")
         self.assertEqual(payload["core_baseline_sha"], "f" * 40)
         self.assertEqual(payload["integration_base_sha"], baseline["baseline_sha"])
         self.assertEqual(payload["installer_source_sha"], "f" * 40)

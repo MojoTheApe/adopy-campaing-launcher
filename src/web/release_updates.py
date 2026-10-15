@@ -9,8 +9,13 @@ What happens here:
 
 * **check** — at most once a day (and on demand) read ``release.json`` of the
   latest release; offer it when its version differs from the running one;
+* **trust** — ``release.json`` must carry a publisher signature
+  (``release.json.sig``) that verifies with a key pinned in this client
+  (``release_signing``, ACL-1357). Staged: today a missing signature is
+  reported and tolerated, a present-but-wrong one is refused; enforcement
+  refuses both;
 * **download** — fetch the installer into ``%LOCALAPPDATA%\\ACL\\updates`` and
-  accept it only if size and SHA-256 match ``release.json``;
+  accept it only if size and SHA-256 match the (signed) ``release.json``;
 * **hand-off** — start ``ACL.exe --apply-update`` (``packaging/windows/updater.py``)
   and let the server exit: the helper installs silently, starts the new version
   and, if it does not come up healthy, starts the previous one again.
@@ -39,6 +44,7 @@ from pathlib import Path
 from typing import Any
 
 from config.paths import get_local_config_dir, _atomic_write
+from src.web import release_signing
 
 API = "https://api.github.com"
 CHECK_EVERY_SECONDS = 24 * 3600
@@ -52,6 +58,10 @@ MAX_INSTALLER_BYTES = 2 * 1024 * 1024 * 1024
 
 class UpdateError(RuntimeError):
     """Something the manager can be told in one sentence."""
+
+
+class UntrustedRelease(UpdateError):
+    """The release failed the publisher-signature check (ACL-1357)."""
 
 
 @dataclass(frozen=True)
@@ -188,14 +198,47 @@ def parse_release(raw: bytes) -> dict:
         raise UpdateError("The published release.json is not valid; nothing was installed.") from exc
 
 
+def verify_signature(release: dict, raw_manifest: bytes, ch: Channel) -> dict[str, str]:
+    """Check the publisher signature of release.json; raise UpdateError if refused.
+
+    The signature is checked over the exact downloaded bytes before anything in
+    them is believed — including the installer SHA-256 the download relies on.
+    """
+    signature = None
+    for asset in release.get("assets") or []:
+        if (isinstance(asset, dict) and asset.get("name") == release_signing.SIGNATURE_ASSET
+                and isinstance(asset.get("url"), str)):
+            signature = _request(asset["url"], ch, accept="application/octet-stream", limit=4096)
+            break
+    verdict = release_signing.verify_manifest(raw_manifest, signature)
+    current = release_signing.mode(_bundle_channel())
+    release_signing.report(verdict, current, str(release.get("tag_name") or ""))
+    allowed, message = release_signing.decide(verdict, current)
+    if not allowed:
+        raise UntrustedRelease(message)
+    return {"status": verdict.status, "mode": current, "key_id": verdict.key_id, "note": message}
+
+
 def fetch_latest(ch: Channel) -> tuple[dict, dict]:
     """(release.json, GitHub release object) of the latest published release."""
     release = json.loads(_request(f"{API}/repos/{ch.repo}/releases/latest", ch,
                                   accept="application/vnd.github+json"))
     if not isinstance(release, dict) or not isinstance(release.get("assets"), list):
         raise UpdateError("The GitHub release response is invalid.")
-    manifest = parse_release(_request(_asset(release, "release.json")["url"], ch,
-                                      accept="application/octet-stream"))
+    raw = _request(_asset(release, "release.json")["url"], ch, accept="application/octet-stream")
+    trust = verify_signature(release, raw, ch)
+    manifest = parse_release(raw)
+    # Подписанный release.json другого выпуска, подложенный в этот, — тоже подмена.
+    # Для подписанного манифеста tag обязателен: подпись без привязки к выпуску
+    # позволила бы переложить старый подписанный release.json в новый релиз.
+    tag = release.get("tag_name")
+    if trust["status"] == release_signing.VALID:
+        if not isinstance(tag, str) or not tag or manifest.get("tag") != tag:
+            raise UntrustedRelease(
+                "The published release.json belongs to a different release; nothing was installed.")
+    elif isinstance(tag, str) and tag and manifest.get("tag") and manifest["tag"] != tag:
+        raise UntrustedRelease("The published release.json belongs to a different release; nothing was installed.")
+    release["_acl_signature"] = trust
     return manifest, release
 
 
@@ -238,8 +281,13 @@ def _check(*, force: bool = False, now: float | None = None) -> dict[str, Any]:
         fresh = now - float(state.get("checked_at", 0) or 0) < CHECK_EVERY_SECONDS
         if force or not fresh or state.get("installed") != current["version"]:
             try:
-                manifest, _ = fetch_latest(ch)
-                state = {"repo": ch.repo, "checked_at": now, "installed": current["version"], "release": manifest, "error": ""}
+                manifest, release = fetch_latest(ch)
+                state = {"repo": ch.repo, "checked_at": now, "installed": current["version"], "release": manifest,
+                         "signature": release.get("_acl_signature") or {}, "error": ""}
+            except UntrustedRelease as exc:
+                # Отвергнутый выпуск не остаётся в кэше «доступным»: иначе кнопка
+                # предлагала бы то, что проверка подписи только что отклонила.
+                state = {"repo": ch.repo, "checked_at": now, "installed": current["version"], "error": str(exc)}
             except (UpdateError, ValueError, TypeError, KeyError, OSError) as exc:
                 state = {**state, "repo": ch.repo, "checked_at": now, "installed": current["version"], "error": str(exc)}
             _write_json(_state_path(), state)
@@ -248,8 +296,8 @@ def _check(*, force: bool = False, now: float | None = None) -> dict[str, Any]:
         return {**base, "ok": False, "note": state.get("error") or "No release information yet."}
     manifest = parse_release(json.dumps(manifest).encode("utf-8"))
     if not is_newer(manifest["version"], current["version"]):
-        return {**base, "note": "ACL is up to date."}
-    return {**base, "available": True,
+        return {**base, "note": "ACM is up to date."}
+    return {**base, "available": True, "signature": state.get("signature") or {},
             "candidate": {"tag": manifest.get("tag", ""), "version": manifest["version"],
                           "published_at": manifest.get("published_at", "")},
             "fixed": manifest.get("fixed", []),
@@ -290,7 +338,7 @@ def download(ch: Channel | None = None) -> tuple[Path, dict]:
         raise UpdateError("Updates are not configured in this build.")
     manifest, release = fetch_latest(ch)
     if not is_newer(manifest["version"], installed_version()):
-        raise UpdateError("ACL is already on this release or a newer version.")
+        raise UpdateError("ACM is already on this release or a newer version.")
     inst = manifest["installer"]
     target = updates_dir() / inst["name"]
     if target.is_file() and target.stat().st_size == inst["size"] and _sha256(target) == inst["sha256"]:
@@ -329,4 +377,4 @@ def start_helper(setup: Path, manifest: dict) -> None:
                          env={**os.environ, "PYINSTALLER_RESET_ENVIRONMENT": "1"})
     except OSError as exc:
         pending.unlink(missing_ok=True)
-        raise UpdateError("The update helper could not start. ACL is still running.") from exc
+        raise UpdateError("The update helper could not start. ACM is still running.") from exc

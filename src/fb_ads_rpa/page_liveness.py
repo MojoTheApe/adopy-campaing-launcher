@@ -83,6 +83,14 @@ def tab_gone(page) -> bool:
         return True
     if _marked(page):
         return True
+    # ACL-1702: вкладку разблокировал сторож (зависла в одном вызове дольше
+    # порога) — для работы кампании её больше нет, итог `tab_hung:<шаг>`.
+    # Метку `_acl_gone` не ставим: вкладка могла выжить (terminate/reload), и
+    # следующая кампания задания снимет отметку и пойдёт по ней.
+    from src.fb_ads_rpa import tab_watchdog
+
+    if tab_watchdog.page_marked_hung(page):
+        return True
     try:
         if page.is_closed() is True:
             mark_gone(page)
@@ -136,6 +144,10 @@ def answers(page, timeout_s: float = 5.0) -> bool | None:
     отпускает GIL). Ушедшую вкладку не спрашиваем вовсе, а «закрыто» в ответе
     помечает её ушедшей — следующий вопрос не пойдёт к драйверу.
     """
+    # ACL-1614: после Stop вкладку не спрашиваем — проверка живости тоже ожидание.
+    from src.fb_ads_rpa import job_cancel
+
+    job_cancel.check()
     if tab_gone(page):
         return None
     try:

@@ -23,6 +23,10 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[2]
 ARTIFACTS = ROOT / "packaging/windows/.artifacts"
+# ACL-1581: the whole green update step takes at most 137 s, so a helper that is still
+# running after this is hung. Keep the CI step limit (windows-installer.yml) above
+# earlier work + stop-server (30 s) + this wait + cleanup (30 s); a test checks it.
+HELPER_WAIT_SECONDS = 150
 
 
 def run(args, *, timeout=180, expected=0, env=None):
@@ -167,7 +171,7 @@ def main():
                                    "--expect-version", expected_version, "--previous-exe", str(previous)], env=env)
         try:
             run([previous, "--stop-server"], env=env, timeout=30)
-            if helper.wait(timeout=360) != expected_code:
+            if helper.wait(timeout=HELPER_WAIT_SECONDS) != expected_code:
                 raise RuntimeError("Actual update helper returned an unexpected result")
         finally:
             if helper.poll() is None:

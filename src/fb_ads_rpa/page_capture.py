@@ -86,6 +86,60 @@ _EMAIL = re.compile(r"[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}\.[A-Za-z]{2,24
 
 _taken: dict[str, int] = {}
 
+#: Снимки со своей квотой (ACL-1426: шаги мастера креатива). Считаются
+#: отдельно от `_taken`, чтобы не съедать MAX_PER_RUN настоящих отказов;
+#: ключ — (прогон, квота).
+_quota_taken: dict[tuple[str, str], int] = {}
+
+#: Мастер креатива «Set up your creative» — отдельным блоком (ACL-1348).
+#:
+#: Страница редактора весит больше MAX_HTML_BYTES, а портал мастера лежит в
+#: самом хвосте документа: в снимках отказа `ad2_creative_upload` 25.09
+#: (956d0d184138, 08ca37a0b941) страница обрезана на 3,98 МБ, и от мастера не
+#: осталось ни строки. Целиком он попадал только в блок медиатеки
+#: (`library_pick_selected`) — то есть лишь когда робот уже дошёл до Media;
+#: при отказе на пути к Media мастера в снимке не было. Блок сохраняется
+#: целиком и вычищается так же, как страница (`scrub_html`).
+#:
+#: Ищем открытый `role=dialog` с тремя и больше подписями шагов, а если мастер
+#: без этой роли (так бывало с 03.08) — предка подписи «Media», в котором есть
+#: три подписи шагов и кнопка Next/Cancel/Done.
+CREATIVE_WIZARD_BLOCK_JS = r"""(() => {
+  const names = ['Creative setup', 'Media', 'Trim', 'Crop', 'Text', 'Image generation',
+                 'Creative generation', 'Enhancements', 'Translation'];
+  const norm = (s) => (s || '').replace(/[​-‍﻿]/g, '').replace(/\s+/g, ' ').trim();
+  const hits = (el) => { const t = norm(el.textContent); return names.filter(n => t.includes(n)).length; };
+  const box = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const dialog = [...document.querySelectorAll('[role=dialog]')].find(d => box(d) && hits(d) >= 3);
+  if (dialog) return dialog;
+  const nav = ['Next', 'Cancel', 'Done'];
+  const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let t = w.nextNode(); t; t = w.nextNode()) {
+    if (norm(t.nodeValue) !== 'Media') continue;
+    for (let n = t.parentElement, i = 0; n && n !== document.body && i < 15; n = n.parentElement, i++) {
+      if (hits(n) >= 3 && box(n) && [...n.querySelectorAll('[role=button],button')]
+          .some(b => nav.includes(norm(b.textContent)))) return n;
+    }
+  }
+  return null;
+})()"""
+
+#: Шаг → блоки, которые снимаются при его отказе сами, без участия вызывающего.
+_STEP_BLOCKS: tuple[tuple[re.Pattern[str], dict[str, str]], ...] = (
+    # `ad_creative_media_step` снимает сам `upload_ad_creative`, пока мастер
+    # ещё открыт: к строке `fail_ad2_creative_upload` его уже закрыли.
+    (re.compile(r"^ad\d*_creative_(?:upload|media_step)$"), {"creative_wizard": CREATIVE_WIZARD_BLOCK_JS}),
+)
+
+
+def blocks_for_step(step: str) -> dict[str, str]:
+    """Блоки, положенные шагу `step` по умолчанию (см. `_STEP_BLOCKS`)."""
+    found: dict[str, str] = {}
+    for pattern, blocks in _STEP_BLOCKS:
+        if pattern.match(step or ""):
+            found.update(blocks)
+    return found
+
 
 def success_captures_enabled() -> bool:
     """Снимать ли страницу и PNG на УДАЧНОМ шаге. По умолчанию — нет.
@@ -167,6 +221,10 @@ def capture(
     diag: dict[str, Any] | None = None,
     timeout_ms: int = 5000,
     blocks: dict[str, str] | None = None,
+    quota: str = "",
+    quota_max: int = 0,
+    page_html: bool = True,
+    remember: bool = True,
 ) -> str:
     """Снять страницу упавшего шага. Возвращает путь к папке снимка или "".
 
@@ -174,6 +232,14 @@ def capture(
     элемент сохраняется в `block_<имя>.html` целиком: страница Ads Manager
     больше MAX_HTML_BYTES и обрезается, а проверка по снимку должна видеть
     нужный блок полностью, а не кусок до обрезки (ревью ACL-1219/1171/1192).
+
+    ACL-1426 — пассивные снимки (шаги мастера креатива):
+
+    * `quota`/`quota_max` — свой счёт на прогон вместо MAX_PER_RUN, лимит
+      отказов они не трогают;
+    * `page_html=False` — страница целиком пишется, только если ни один блок
+      не нашёлся (она весит 4 МБ и режется раньше портала мастера);
+    * `remember=False` — раздел для Sentry не запоминается: это не отказ.
 
     Пустая строка — обычный ответ, а не сбой: снимков за прогон может быть
     больше положенного, страница может быть уже закрыта. Ни то, ни другое не
@@ -192,13 +258,21 @@ def capture(
             except Exception:
                 pass
         key = run_id or "no_run"
-        if _taken.get(key, 0) >= MAX_PER_RUN:
+        if quota:
+            if _quota_taken.get((key, quota), 0) >= max(0, quota_max):
+                return ""
+        elif _taken.get(key, 0) >= MAX_PER_RUN:
             return ""
 
+        def _page_text() -> str | None:
+            try:
+                return "<html>" + page.locator("html").inner_html(timeout=timeout_ms) + "</html>"
+            except Exception:
+                return None
+
         started = time.time()
-        try:
-            html = "<html>" + page.locator("html").inner_html(timeout=timeout_ms) + "</html>"
-        except Exception:
+        html = _page_text() if page_html else ""
+        if html is None:
             return ""
 
         # ACL-1325: раздел упавшего шага — в память, для события Sentry. Что
@@ -206,18 +280,25 @@ def capture(
         # сюда приходят из `_stall_evidence`, с вкладки, у которой уже был
         # stall. Поэтому снятие раздела ограничено по времени
         # (SECTION_EVAL_TIMEOUT_S, ревью PR #328, F5).
-        try:
-            remember_section(page, step=step, run_id=run_id, campaign=campaign)
-        except Exception:
-            pass
+        if remember:
+            try:
+                remember_section(page, step=step, run_id=run_id, campaign=campaign)
+            except Exception:
+                pass
 
-        body, truncated = scrub_html(html)
-        folder = _root() / _safe(key) / f"{_taken.get(key, 0):02d}_{_safe(step)}"
+        # Номер папки — общий для прогона: снимки с квотой идут в тот же ряд.
+        index = _taken.get(key, 0) + sum(n for (k, _q), n in _quota_taken.items() if k == key)
+        folder = _root() / _safe(key) / f"{index:02d}_{_safe(step)}"
         folder.mkdir(parents=True, exist_ok=True)
-        (folder / "page.html").write_text(body, encoding="utf-8")
+        truncated = False
+        body_bytes = 0
+        if page_html:
+            body, truncated = scrub_html(html)
+            (folder / "page.html").write_text(body, encoding="utf-8")
+            body_bytes = len(body.encode("utf-8", "replace"))
 
         saved_blocks: dict[str, Any] = {}
-        for name, js in (blocks or {}).items():
+        for name, js in {**blocks_for_step(step), **(blocks or {})}.items():
             try:
                 outer = page.evaluate(
                     "(expr) => { const el = (new Function('return (' + expr + ')'))();"
@@ -235,6 +316,14 @@ def capture(
             saved_blocks[name] = {"found": True, "bytes": len(block_body.encode("utf-8", "replace")),
                                   "truncated": block_cut}
 
+        if not page_html and not any(b.get("found") for b in saved_blocks.values()):
+            # Блока нет — тогда хоть страница, чтобы снимок не был пустым.
+            html = _page_text()
+            if html:
+                body, truncated = scrub_html(html)
+                (folder / "page.html").write_text(body, encoding="utf-8")
+                body_bytes = len(body.encode("utf-8", "replace"))
+
         try:
             url = scrub(str(getattr(page, "url", "") or ""))
         except Exception:
@@ -248,7 +337,7 @@ def capture(
                     "url": url,
                     "diag": diag or {},
                     "ts": datetime.now(timezone.utc).isoformat(),
-                    "html_bytes": len(body.encode("utf-8", "replace")),
+                    "html_bytes": body_bytes,
                     # Обрезанная разметка, поданная как полная, — это селектор,
                     # написанный по тому, чего на странице нет.
                     "html_truncated": truncated,
@@ -264,8 +353,11 @@ def capture(
             encoding="utf-8",
         )
 
-        _taken[key] = _taken.get(key, 0) + 1
-        if _taken[key] == 1:
+        if quota:
+            _quota_taken[(key, quota)] = _quota_taken.get((key, quota), 0) + 1
+        else:
+            _taken[key] = _taken.get(key, 0) + 1
+        if index == 0:
             prune()
         return str(folder)
     except Exception:
@@ -364,6 +456,18 @@ def section_titles_for(step: str) -> tuple[str, ...]:
     return ()
 
 
+#: Шаги, у которых раздел для Sentry — дерево редактора и открытое меню, а
+#: не карточка (ACL-1353: список объявлений и меню «Create ad» нового
+#: редактора). Без этого запасной путь брал карточку с фокусом — «Ad
+#: creative» после текста объявления (событие 149854712, 28.09).
+_TREE_STEPS = re.compile(r"more_ads")
+
+
+def section_is_tree(step: str) -> bool:
+    """Раздел шага — дерево редактора и открытое меню."""
+    return bool(_TREE_STEPS.search((step or "").strip().lower()))
+
+
 #: Атрибуты, которые переживают вычистку (плюс все aria-*). Всё остальное
 #: (class, style, href, src, value, data-* кроме data-surface, обработчики)
 #: снимается.
@@ -454,6 +558,19 @@ _SECTION_JS = r"""
     taken.add(card);
     parts.push({name: title, html: strip(card, cfg.maxChars)});
   }
+  if (cfg.tree) {
+    // ACL-1353: дерево редактора (список объявлений) и открытое меню его
+    // строки — раньше карточки с фокусом.
+    const tree = document.getElementById('campaign_structure_tree_root')
+      || document.querySelector('[data-surface="/am/editor_drawer"]');
+    if (tree) { taken.add(tree); parts.push({name: 'editor tree', html: strip(tree, cfg.maxChars)}); }
+    for (const m of document.querySelectorAll('[role=menu]')) {
+      if (taken.has(m) || !shown(m)) continue;
+      taken.add(m);
+      parts.push({name: 'menu', html: strip(m, cfg.maxChars)});
+      break;
+    }
+  }
   let listMode = false;
   if (!parts.length) {
     // Шаг не узнан или его карточки нет: наименьший раздел редактора вокруг
@@ -521,8 +638,9 @@ def _eval_bounded(page, js: str, arg: Any, timeout_s: float = SECTION_EVAL_TIMEO
     return got.get("v") if isinstance(got, dict) else None
 
 
-def _snapshot_take(page, titles: tuple[str, ...]) -> list[dict[str, str]]:
+def _snapshot_take(page, titles: tuple[str, ...], *, tree: bool = False) -> list[dict[str, str]]:
     parts = _eval_bounded(page, _SECTION_JS, {
+        "tree": bool(tree),
         "titles": list(titles),
         "sections": list(SECTION_TITLES),
         "keep": list(_KEEP_ATTRS),
@@ -547,7 +665,7 @@ def remember_section(page, *, step: str, run_id: str = "", campaign: str = "") -
         return False
     try:
         started = time.time()
-        parts = _snapshot_take(page, section_titles_for(step))
+        parts = _snapshot_take(page, section_titles_for(step), tree=section_is_tree(step))
         if not parts:
             return False
         entry = {

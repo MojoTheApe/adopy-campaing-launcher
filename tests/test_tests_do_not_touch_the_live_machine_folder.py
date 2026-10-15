@@ -16,8 +16,9 @@ sys.path.insert(0, str(ROOT))
 
 from config import paths  # noqa: E402
 
-LIVE = Path(os.environ.get("LOCALAPPDATA", "") or Path.home() / ".config") / (
-    "ACL" if os.environ.get("LOCALAPPDATA") else "acl")
+# linux-ok: повторяет запасной путь config.paths (~/.config/acl вне Windows), годится для обеих ОС
+LIVE = Path(os.environ.get("LOCALAPPDATA", "") or Path.home() / ".config") / (  # linux-ok: см. выше
+    "ACL" if os.environ.get("LOCALAPPDATA") else "acl")  # linux-ok: см. выше
 
 
 def test_the_machine_folder_is_temporary():

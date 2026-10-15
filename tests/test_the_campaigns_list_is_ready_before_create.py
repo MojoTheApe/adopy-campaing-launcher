@@ -35,9 +35,11 @@ class _Page:
         self.gotos: list[str] = []
         self.waits: list[tuple] = []
         self.context = object()
+        self.url = ""
 
     def goto(self, url, **kw):
         self.gotos.append(url)
+        self.url = url  # ACL-1697: адрес открытого кабинета сверяется после перехода
 
     def reload(self, **kw):
         self.reloads += 1

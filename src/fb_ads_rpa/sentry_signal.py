@@ -56,6 +56,11 @@ _RELATED: tuple[tuple[re.Pattern[str], tuple[str, ...]], ...] = (
     (re.compile(r"^conversion_website$"), ("conversion_website_pick",)),
     (re.compile(r"^further_limit_reach_radio$"), ("pick_further_limit_radio",)),
     (re.compile(r"^ad\d*_create$"), ("create_additional_ad",)),
+    # ACL-1348 (PYTHON-14 `ad2_creative_upload: silent`): причину пишут
+    # помощники. Запасной путь — для строк шага без своей причины (прогоны
+    # старых версий); с ACL-1348 поток пишет причину в строку шага сам, и
+    # она выигрывает: строка помощника общая для всех объявлений кампании.
+    (re.compile(r"^ad\d*_creative_upload$"), ("ad_creative_upload", "ad_creative_reuse")),
 )
 
 
@@ -153,6 +158,32 @@ def draft_names(draft: Any) -> list[str]:
     except Exception:
         pass
     return [n for n in names if n]
+
+
+def report_step_stuck(step: str, idle_s: float, *, job: str = "", account: str = "",
+                      campaign: str = "") -> str:
+    """Задание молчит дольше порога — одно событие на простой (ACL-1614)."""
+    try:
+        from src import acl_sentry
+
+        return acl_sentry.report_step_stuck(step, idle_s, job=job, account=account,
+                                            campaign=campaign) or ""
+    except Exception:
+        return ""
+
+
+def report_tab_unblocked(step: str, method: str, stuck_s: float, *, ok: bool, job: str = "",
+                         account: str = "", campaign: str = "", api: str = "", where: str = "",
+                         tried: list | None = None) -> str:
+    """Сторож разблокировал зависшую вкладку — одно событие (ACL-1702)."""
+    try:
+        from src import acl_sentry
+
+        return acl_sentry.report_tab_unblocked(step, method, stuck_s, ok=ok, job=job, account=account,
+                                               campaign=campaign, api=api, where=where,
+                                               tried=tried) or ""
+    except Exception:
+        return ""
 
 
 def report_campaign_stop(

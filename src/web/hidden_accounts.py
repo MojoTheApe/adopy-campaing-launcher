@@ -14,42 +14,24 @@
 from __future__ import annotations
 
 import json
-import os
 from typing import Iterable
 from pathlib import Path
 from contextlib import contextmanager
 import threading
 
-from config.paths import get_hidden_accounts_path, _atomic_write
+from config.paths import get_hidden_accounts_path, _atomic_write, machine_file_lock
 
 _lock = threading.RLock()
 
 
 @contextmanager
 def _transaction():
-    # Same machine-local transaction pattern as targeting_registry.
+    # Тот же машинный замок, что у targeting_registry (ACL-1495): ждёт с
+    # пределом, EDEADLK не смертелен, файл замка не пишется.
     with _lock:
-        path = Path(get_hidden_accounts_path()).with_suffix(".lock")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a+b") as file:
-            if file.tell() == 0:
-                file.write(b"0")
-                file.flush()
-            file.seek(0)
-            if os.name == "nt":
-                import msvcrt
-                msvcrt.locking(file.fileno(), msvcrt.LK_LOCK, 1)
-            else:
-                import fcntl
-                fcntl.flock(file, fcntl.LOCK_EX)
-            try:
-                yield
-            finally:
-                file.seek(0)
-                if os.name == "nt":
-                    msvcrt.locking(file.fileno(), msvcrt.LK_UNLCK, 1)
-                else:
-                    fcntl.flock(file, fcntl.LOCK_UN)
+        lock_path = Path(get_hidden_accounts_path()).with_suffix(".lock")
+        with machine_file_lock(lock_path):
+            yield
 
 
 def _key(label: str) -> str:

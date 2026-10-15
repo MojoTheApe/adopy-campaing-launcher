@@ -1,16 +1,22 @@
 name: Delivery setup (draft adoption)
 on:
+  # ACL-1649: a branch push with an open PR ran this twice (push + pull_request); the PR run covers it.
   push:
+    branches: [master, main, stage]
   pull_request:
 permissions:
   contents: read
+concurrency:
+  group: delivery-setup-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   descriptor:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - uses: MojoTheApe/master-repo@e1473c428872757519355af1a7753cf3a0ce0f12
+      - uses: MojoTheApe/master-repo@eca8a857d9f7f81160bf248f9f9e3109a21ade49
         with:
           allow-draft: 'true'

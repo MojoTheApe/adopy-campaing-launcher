@@ -21,9 +21,10 @@ def browser():
         b.close()
 
 
-def _page(browser, *, alive=False, token_saved=True):
+def _page(browser, *, alive=False, token_saved=True, workspaces=None):
     report = (TPL / 'report.html').read_text(encoding='utf-8')
-    styles = '\n'.join(re.findall(r'<style[^>]*>(.*?)</style>', report, re.S))
+    from _design_tokens import tokens_css  # ACL-1797: палитра — отдельный файл
+    styles = tokens_css() + '\n'.join(re.findall(r'<style[^>]*>(.*?)</style>', report, re.S))
     script = report[report.index('var _mlxCache ='):report.index('\nfunction amapHint')]
     shared = report[report.index('<template id="amap-ml-signin-template">'):report.index('</body>')]
     env = Environment(loader=FileSystemLoader(str(TPL)), autoescape=True)
@@ -39,7 +40,7 @@ def _page(browser, *, alive=False, token_saved=True):
     html = f'<style>{styles}</style>{blocks}{shared}<script>var ACL_MLX_LABELS = {{A:"Inhouse",B:"Agency"}};{script}</script>'
     ctx = browser.new_context()
     page = ctx.new_page()
-    state = {'alive': {'A':alive,'B':False}, 'calls':[], 'token_saved':token_saved}
+    state = {'alive': {'A':alive,'B':False}, 'calls':[], 'token_saved':token_saved, 'workspaces':workspaces}
     errors = []
     page.on('pageerror', lambda e: errors.append(str(e)))
     def route(r):
@@ -52,6 +53,11 @@ def _page(browser, *, alive=False, token_saved=True):
         if url.path == '/multilogin-token-status':
             inst = parse_qs(url.query)['instance'][0]
             body = {'ok':True,'alive':state['alive'][inst],'has_token':state['alive'][inst]}
+        elif (url.path == '/multilogin-signin' and state['workspaces']
+              and not data.get('workspace_id')):
+            # ACL-1441: несколько пространств — сервер просит выбрать.
+            body = {'ok':True,'choose_workspace':True,'token_saved':False,'token_error':'',
+                    'workspaces':state['workspaces']}
         elif url.path in ('/multilogin-signin','/multilogin-save-token'):
             saved = state['token_saved'] or url.path.endswith('save-token')
             state['alive'][data['instance']] = saved
@@ -169,3 +175,34 @@ def test_token_change_invalidates_every_search_query_for_that_instance(browser):
         assert not errors
     finally:
         ctx.close()
+
+
+def test_several_workspaces_show_a_picker_and_continue_with_the_choice(browser):
+    """ACL-1441: токен выдаётся там, где профили, — пространство выбирает человек."""
+    workspaces = [
+        {'workspace_id':'ws-own','name':'own@example.test','role':'owner','automation':False},
+        {'workspace_id':'ws-kld','name':'Team KLD','role':'user','automation':True},
+        {'workspace_id':'ws-inh','name':'Team Inhouse','role':'manager','automation':True},
+    ]
+    ctx,p,s,errors = _page(browser, workspaces=workspaces)
+    try:
+        p.locator('.amap-ml-open').first.click()
+        p.locator('.amap-ml-email').fill('tester@example.test')
+        p.locator('.amap-ml-pass').fill('synthetic-password')
+        p.locator('.amap-ml-signin').get_by_role('button', name='Connect', exact=True).click()
+        p.wait_for_selector('.amap-ml-ws select')
+        options = p.locator('.amap-ml-ws option').all_inner_texts()
+        assert options == ['own@example.test — owner · no automation',
+                           'Team KLD — user', 'Team Inhouse — manager']
+        assert p.locator('.amap-ml-ws select').input_value() == 'ws-kld', 'not the one without automation'
+        assert 'choose the one with your profiles' in p.locator('.amap-msg').first.inner_text()
+        assert p.locator('.amap-ml-pass').input_value() == 'synthetic-password', 'kept only until the choice'
+        p.locator('.amap-ml-ws select').select_option('ws-inh')
+        p.get_by_role('button', name='Continue', exact=True).click()
+        p.wait_for_function("document.querySelectorAll('.amap-ml-signin').length === 0")
+        signins = [d for path,d in s['calls'] if path == '/multilogin-signin']
+        assert 'workspace_id' not in signins[0]
+        assert signins[1]['workspace_id'] == 'ws-inh' and signins[1]['instance'] == 'A'
+        assert p.locator('input[type=password]').count() == 0
+        assert not errors
+    finally: ctx.close()

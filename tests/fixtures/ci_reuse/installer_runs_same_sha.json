@@ -1,0 +1,49 @@
+{
+    "total_count": 2,
+    "workflow_runs": [
+        {
+            "conclusion": "success",
+            "event": "pull_request",
+            "head_branch": "stage",
+            "head_commit": {
+                "id": "884aec15fdf818f9c52cfd185051039d545e5db2",
+                "tree_id": "d58bc80df84d097c15dbb9bd9b60fef2db994579"
+            },
+            "head_repository": {
+                "full_name": "MojoTheApe/adopy-campaing-launcher"
+            },
+            "head_sha": "884aec15fdf818f9c52cfd185051039d545e5db2",
+            "html_url": "https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/37198596396",
+            "id": 37198596396,
+            "name": "Windows installer",
+            "path": ".github/workflows/windows-installer.yml",
+            "repository": {
+                "full_name": "MojoTheApe/adopy-campaing-launcher"
+            },
+            "run_attempt": 1,
+            "status": "completed"
+        },
+        {
+            "conclusion": "success",
+            "event": "push",
+            "head_branch": "stage",
+            "head_commit": {
+                "id": "884aec15fdf818f9c52cfd185051039d545e5db2",
+                "tree_id": "d58bc80df84d097c15dbb9bd9b60fef2db994579"
+            },
+            "head_repository": {
+                "full_name": "MojoTheApe/adopy-campaing-launcher"
+            },
+            "head_sha": "884aec15fdf818f9c52cfd185051039d545e5db2",
+            "html_url": "https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/37197547099",
+            "id": 37197547099,
+            "name": "Windows installer",
+            "path": ".github/workflows/windows-installer.yml",
+            "repository": {
+                "full_name": "MojoTheApe/adopy-campaing-launcher"
+            },
+            "run_attempt": 1,
+            "status": "completed"
+        }
+    ]
+}

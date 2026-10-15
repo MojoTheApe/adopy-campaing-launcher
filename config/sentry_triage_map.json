@@ -9,6 +9,16 @@
     {"step": "profile_open_by_hand", "reason": "*", "task": "ACL-1320", "note": "profile open by hand - buyer action, not code"},
     {"step": "profile_restart_failed", "reason": "*", "task": "ACL-1320", "note": "MLX restart of an unresponsive profile failed"},
     {"step": "profile_unresponsive", "reason": "*", "task": "ACL-1320", "note": "profile browser did not answer"},
-    {"step": "account_blocked", "reason": "*", "task": "ACL-1313", "note": "Meta restricted the ad account - buyer action, not code"}
+    {"step": "account_blocked", "reason": "*", "task": "ACL-1313", "note": "Meta restricted the ad account - buyer action, not code"},
+    {"step": "ad_copy", "reason": "no-creative", "task": "ACL-1348", "note": "ad text skipped because the ad's media did not attach - see the ad's creative_upload event"},
+    {"step": "ad_creative_upload", "reason": "silent", "task": "ACL-1348", "note": "upload refused without a reason (releases before ACL-1348)"},
+    {"step": "ad_creative_upload", "reason": "media-picker-loading", "task": "ACL-1559", "note": "wizard on its Media step, Meta's media picker never left 'Loading...'"},
+    {"step": "ad_creative_upload", "reason": "media-step-*", "task": "ACL-1348", "note": "creative wizard's Media step locked / covered / not reachable"},
+    {"step": "ad_creative_upload", "reason": "upload-button-missing", "task": "ACL-1348", "note": "wizard open, no Upload button on the Media step"},
+    {"step": "ad_creative_upload", "reason": "wizard-not-opened", "task": "ACL-1348", "note": "Set up creative did not open the creative wizard"},
+    {"step": "ad_creative_upload", "reason": "same-file-already-*", "task": "ACL-1348", "note": "same file refused for a later ad of the run"},
+    {"step": "foreign_window", "reason": "*", "task": "ACL-1573", "note": "a Meta window the robot did not open stood over a step (title in the event); add it to the registry in src/fb_ads_rpa/foreign_windows.py (KNOWN)"},
+    {"step": "*", "reason": "unknown-window", "task": "ACL-1573", "note": "step stopped: an unknown Meta window could not be closed safely (Unknown Meta window blocked the step: <title>)"},
+    {"step": "relay_selftest", "reason": "*", "task": "ACL-1330", "note": "synthetic self-test of the Sentry -> cloud routine trigger (docs/system/SENTRY_ROUTINE_SETUP.md) - not a robot failure, keep this row"}
   ]
 }

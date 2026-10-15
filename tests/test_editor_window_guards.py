@@ -17,7 +17,9 @@ from src.fb_ads_rpa import browser as br, meta_dom as dom, retry_policy, run_tel
 ])
 def test_guard_requires_measured_viewport(monkeypatch, before, after, expected, recovers):
     page = MagicMock()
-    readings = iter([{'inner': before}, {'inner': after}])
+    # ACL-1727: узкое окно после восстановления ещё раз увеличивается и измеряется
+    readings = iter([{'inner': before}, {'inner': after}, {'inner': after}])
+    monkeypatch.setattr(br, '_enlarge_small_window', MagicMock(return_value=None))
     monkeypatch.setattr(rt, 'window_state', lambda _: next(readings))
     recovery = MagicMock()
     monkeypatch.setattr(br, '_ensure_wide_window', recovery)
@@ -117,8 +119,13 @@ def test_attach_records_measured_bounds_after_resizing(monkeypatch):
     connection = br._connect_playwright(cdp_url='synthetic', provider='synthetic',
                                        debug_port=None, ws_endpoint=None)
     assert connection.page is page
-    record.assert_called_once_with('window_bounds', None,
-                                   diag={'section': 'attach', 'after': {'inner': [1280, 700]}})
+    record.assert_called_once()
+    args, kwargs = record.call_args
+    assert args == ('window_bounds', None)
+    assert kwargs['diag']['section'] == 'attach'
+    assert kwargs['diag']['after'] == {'inner': [1280, 700]}
+    # ACL-1402: видимость вкладки и окна профиля — в той же строке.
+    assert 'hidden' in kwargs['diag']['visibility']
     # Avoid leaving the synthetic object as the current thread's Playwright.
     br._pw_tls.playwright = None
 
@@ -172,3 +179,116 @@ def test_the_window_can_be_parked_on_a_chosen_screen(monkeypatch):
 
     monkeypatch.setenv("FB_RPA_WINDOW_LEFT", "не число")
     assert browser.window_home() == (None, None)
+
+
+class _FakeCdp:
+    """Окно в CDP: maximise / новая ширина дают ширину страницы `after_inner`."""
+
+    def __init__(self, state='normal', after_inner=1700, left=100, top=50, width=854):
+        self.state, self.after_inner, self.calls = state, after_inner, []
+        self.left, self.top, self.width = left, top, width
+        self.inner = 1117
+        self.detached = False
+
+    def send(self, method, params=None):
+        if method == 'Browser.getWindowForTarget':
+            return {'windowId': 7, 'bounds': {'windowState': self.state, 'width': self.width,
+                                              'height': 502, 'left': self.left, 'top': self.top}}
+        self.calls.append((method, params))
+        b = (params or {}).get('bounds') or {}
+        if b.get('windowState'):
+            self.state = b['windowState']
+        for k in ('left', 'top', 'width'):
+            if k in b:
+                setattr(self, k, b[k])
+        if b.get('windowState') == 'maximized' or b.get('width', 0) > 900:
+            self.inner = self.after_inner
+        return {}
+
+    def detach(self):
+        self.detached = True
+
+
+def _enlarge_case(monkeypatch, cdp, offscreen=False, dpr_after=0.75):
+    page = MagicMock()
+    page.context.new_cdp_session.return_value = cdp
+    dprs = iter([0.75, dpr_after, dpr_after, dpr_after])
+    page.evaluate.side_effect = lambda *_a: [next(dprs), cdp.inner]
+    monkeypatch.setattr(br.time, 'sleep', lambda *_: None)
+    monkeypatch.setattr(br, '_ensure_wide_window', MagicMock())
+    monkeypatch.setattr(br, '_restore_offscreen', MagicMock(return_value=True))
+    monkeypatch.setattr(br, '_OFFSCREEN', {id(page.context): {}} if offscreen else {})
+    monkeypatch.setattr(br, '_SCALE_REVERTED', set())
+    monkeypatch.setattr(br, '_PARK_SPOTS', set())
+    monkeypatch.setattr(rt, 'window_state', lambda _: {'inner': [cdp.inner, 542], 'minimized': False})
+    record = MagicMock()
+    monkeypatch.setattr(rt, 'record', record)
+    return page, record
+
+
+def test_a_restored_small_window_is_enlarged_and_the_run_continues(monkeypatch):
+    cdp = _FakeCdp(after_inner=1700)
+    page, record = _enlarge_case(monkeypatch, cdp)
+    assert br.ensure_editor_window(page, 'ad') is True
+    assert ('Browser.setWindowBounds', {'windowId': 7, 'bounds': {'windowState': 'maximized'}}) in cdp.calls
+    event = next(c for c in record.call_args_list if c.args[0] == 'window_bounds')
+    assert event.args[1] is True
+    assert event.kwargs['diag']['enlarged'] is True
+    assert event.kwargs['diag']['enlarged_to']['state'] == 'maximized'
+    assert not any(c.args[0] == 'window_too_small' for c in record.call_args_list)
+    assert cdp.detached
+
+
+def test_window_still_small_after_enlarging_stops_with_window_too_small(monkeypatch):
+    cdp = _FakeCdp(after_inner=1000)
+    page, record = _enlarge_case(monkeypatch, cdp)
+    assert br.ensure_editor_window(page, 'ad') is False
+    assert any(c.args[0] == 'window_too_small' for c in record.call_args_list)
+
+
+def test_a_window_in_offscreen_registry_but_on_screen_is_maximised(monkeypatch):
+    """4db2039f760d: контекст в `_OFFSCREEN`, а окно вернулось на экран."""
+    cdp = _FakeCdp(after_inner=1700, left=100, top=50)
+    page, _ = _enlarge_case(monkeypatch, cdp, offscreen=True)
+    assert br.ensure_editor_window(page, 'ad') is True
+    assert [p['bounds'] for _m, p in cdp.calls] == [{'windowState': 'maximized'}]
+
+
+def test_a_parked_window_grows_proportionally_and_stays_off_screen(monkeypatch):
+    cdp = _FakeCdp(after_inner=1700, left=-(854 + 400), top=0)
+    page, _ = _enlarge_case(monkeypatch, cdp, offscreen=True)
+    assert br.ensure_editor_window(page, 'ad') is True
+    bounds = [p['bounds'] for _m, p in cdp.calls]
+    assert all(b.get('windowState') != 'maximized' for b in bounds)
+    grown = bounds[-1]
+    assert grown['width'] == int(854 * br.MIN_EDITOR_WIDTH / 1117) + 40
+    assert grown['left'] + grown['width'] <= 0
+
+
+@pytest.mark.parametrize('state', ['maximized', 'fullscreen'])
+def test_an_already_maximised_small_window_is_not_toggled(monkeypatch, state):
+    cdp = _FakeCdp(state=state, after_inner=1700)
+    page, record = _enlarge_case(monkeypatch, cdp)
+    assert br.ensure_editor_window(page, 'ad') is False
+    assert cdp.calls == []
+    assert any(c.args[0] == 'window_too_small' for c in record.call_args_list)
+
+
+def test_a_mimic_scale_drop_is_undone_and_not_repeated(monkeypatch):
+    cdp = _FakeCdp(after_inner=1700)
+    page, record = _enlarge_case(monkeypatch, cdp, dpr_after=0.4)
+    assert br.ensure_editor_window(page, 'ad') is False
+    states = [p['bounds'].get('windowState') for _m, p in cdp.calls]
+    assert states[:2] == ['maximized', 'normal']
+    assert id(page.context) in br._SCALE_REVERTED
+    cdp.calls.clear()
+    assert br._enlarge_small_window(page) is None
+    assert cdp.calls == []
+
+
+def test_a_wide_enough_window_is_not_touched(monkeypatch):
+    cdp = _FakeCdp()
+    cdp.inner = 1500
+    page, _ = _enlarge_case(monkeypatch, cdp)
+    assert br.ensure_editor_window(page, 'ad') is True
+    assert cdp.calls == []

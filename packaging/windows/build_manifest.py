@@ -43,7 +43,7 @@ def build_payload(version: str, built_at_utc: str | None = None) -> dict[str, ob
     source_sha = _git_sha()
     return {
         "schema": 1,
-        "product": "Adopy Campaign Launcher",
+        "product": "Adopy Campaign Manager",
         "version": version,
         "channel": "windows-preview",
         "core_baseline_sha": source_sha if baseline.get("runtime_policy") == "integrated" else baseline["baseline_sha"],
@@ -81,7 +81,12 @@ def build_update_channel(env: dict[str, str] | None = None) -> dict[str, object]
     token = (env.get("ACL_UPDATE_TOKEN") or "").strip()
     if bool(repo) != bool(token):
         raise ValueError("ACL_RELEASES_REPO and ACL_UPDATE_TOKEN must be set together")
-    return {"schema": 1, "repo": repo, "token": token}
+    channel: dict[str, object] = {"schema": 1, "repo": repo, "token": token}
+    # ACL-1357: сборка, которой велено отказывать в неподписанных выпусках.
+    # Поле только ужесточает проверку; без него клиент в режиме warn.
+    if (env.get("ACL_ENFORCE_RELEASE_SIGNATURES") or "").strip().lower() in {"1", "true", "enforce"}:
+        channel["signatures"] = "enforce"
+    return channel
 
 
 def main() -> int:

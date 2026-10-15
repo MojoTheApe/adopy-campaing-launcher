@@ -1,3 +1,5 @@
+# ACL-1747: explicit v2 batch/stage/promotion requires the installer; one-task
+# approval sources retain affected-input selection. Reuse requires the same tested tree.
 name: Windows installer
 
 on:
@@ -12,23 +14,41 @@ on:
 permissions:
   contents: read
 
+# ACL-1581: as in ci.yml, only a PR's superseded run is cancelled; every push and
+# manual run has its own group and always finishes.
 concurrency:
-  group: acl-installer-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: acl-installer-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('{0}-{1}', github.ref, github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   scope:
     name: Classify installer changes
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # ACL-1565: only this job reads earlier runs of the workflow, to reuse a full
+    # green run of the exact same git tree (scripts/acl_ci_reuse.py).
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+      checks: read
     outputs:
       windows: ${{ steps.scope.outputs.windows }}
+      reused_from: ${{ steps.scope.outputs.reused_from }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      # ACL-1747 v2: individual approval sources retain affected-input selection;
+      # combined batch/actual stage/promotion requires the full installer workflow.
+      # Reuse accepts only applicable successful jobs of the exact tested Git tree;
+      # manual/release paths always run and uncertainty falls back to full checks.
+      # ACL-1750: proven instruction-only sources into already-opted-in main skip
+      # installer jobs; policy adoption itself and mixed/unknown files do not.
       - id: scope
-        run: python3 scripts/acl_ci_scope.py
+        run: python3 scripts/acl_ci_scope.py --workflow windows-installer.yml
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
   phase-1-isolation:
     name: Verify build inputs
     needs: scope
@@ -68,7 +88,14 @@ jobs:
     name: Build, install, repair, and uninstall
     needs: phase-1-isolation
     runs-on: windows-latest
-    timeout-minutes: 45
+    # ACL-1491: a green run takes ~12 min (2026-10-02: 736 s). One run hung
+    # for 50 min before someone cancelled it. ACL-1581: two runs hung for the
+    # full 30 min on 2026-10-04, so the job now stops at 20 min. Limits come
+    # from the last 91 green runs (2026-10-03..05): job p95 774 s, max 810 s,
+    # sum of step p95 884 s. Each step limit is at least 1.5x its p95, the job
+    # limit at least 1.3x the sum of step p95 and 1.5x the job p95, so a hang
+    # fails on the step that hung (tests/test_acl_ci_workflows.py checks this).
+    timeout-minutes: 20
     env:
       ACL_NO_TELEMETRY: "1"
       PYTHONIOENCODING: utf-8
@@ -89,6 +116,7 @@ jobs:
           cache-dependency-path: requirements.txt
 
       - name: Install runtime and packager
+        timeout-minutes: 3
         run: python -m pip install -r requirements.txt PyInstaller==6.22.2
 
       - name: Test setup with runtime dependencies
@@ -97,28 +125,36 @@ jobs:
           python -m unittest discover -s packaging/windows/tests -p "test_setup_wizard.py" -v
 
       - name: Build previous isolated test package from the candidate source
+        timeout-minutes: 7
         shell: pwsh
         run: |
           ./packaging/windows/build.ps1 -Version "$env:ACL_TEST_PREVIOUS_VERSION"
           ./packaging/windows/build_installer.ps1 -Version "$env:ACL_TEST_PREVIOUS_VERSION"
 
       - name: Build onedir bundle
+        timeout-minutes: 3
         shell: pwsh
         run: ./packaging/windows/build.ps1 -Version "$env:ACL_PACKAGE_VERSION"
 
       - name: Test the packaged executable
+        timeout-minutes: 2
         shell: pwsh
         run: ./packaging/windows/test_bundle.ps1
 
       - name: Build per-user Windows installer
+        timeout-minutes: 5
         shell: pwsh
         run: ./packaging/windows/build_installer.ps1 -Version "$env:ACL_PACKAGE_VERSION"
 
       - name: Test install, launch, repair, and uninstall
+        timeout-minutes: 3
         shell: pwsh
         run: ./packaging/windows/test_installer.ps1 -Version "$env:ACL_PACKAGE_VERSION"
 
       - name: Test real package update, restart, and recovery
+        # test_update_cycle.py waits up to 360 s (+30 s stop-server) and cleans up in
+        # `finally`; the step must outlive that so the cleanup can run.
+        timeout-minutes: 7
         shell: pwsh
         run: |
           python packaging/windows/test_update_cycle.py --old-version "$env:ACL_TEST_PREVIOUS_VERSION" --version "$env:ACL_PACKAGE_VERSION"
@@ -159,15 +195,18 @@ jobs:
     if: ${{ always() }}
     needs: [scope, phase-1-isolation, phase-2-packaging-spike]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Require every applicable packaging check
         env:
           SCOPE: ${{ needs.scope.result }}
           WINDOWS: ${{ needs.scope.outputs.windows }}
+          REUSED: ${{ needs.scope.outputs.reused_from }}
           INPUTS: ${{ needs.phase-1-isolation.result }}
           INSTALLER: ${{ needs.phase-2-packaging-spike.result }}
         run: |
           test "$SCOPE" = success
+          if test -n "$REUSED"; then echo "Reused full results of run $REUSED (same tree)"; fi
           if test "$WINDOWS" = false; then
             test "$INPUTS" = skipped
             test "$INSTALLER" = skipped

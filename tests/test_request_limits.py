@@ -226,7 +226,7 @@ def test_a_route_that_swallows_the_overflow_still_answers_413():
 def test_builder_routes_get_the_higher_limit_other_routes_do_not():
     limiter = RequestBodyLimit(lambda *a: None, route_max_body=request_limits.ROUTE_MAX_BODY)
 
-    for path in ("/build-upload", "/preview-publish", "/publish-jobs", "/publish-jobs/"):
+    for path in ("/build-upload", "/preview-publish", "/publish-jobs", "/publish-jobs/", "/publish-plan", "/api/page-forms"):
         assert limiter.limit_for(path) == BUILDER_MAX_BODY
     for path in ("/report-problem", "/account-links", "/publish-jobs/abc/cancel", "/"):
         assert limiter.limit_for(path) == DEFAULT_MAX_BODY

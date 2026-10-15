@@ -7,17 +7,32 @@
 // проходит на пустоте.
 const assert = require('assert');
 
-const SEL = /^([a-z]*)((?:\.[-\w]+)*)(?:\[([-\w]+)(?:="([^"]*)")?\])?$/;
+const SEL = /^([a-z]*)((?:\.[-\w]+)*)((?:\[[-\w]+(?:[$^*]?="[^"]*")?\])*)$/;
+const ATTR = /\[([-\w]+)(?:([$^*]?)="([^"]*)")?\]/g;
 
 function parseSel(sel) {
   const m = SEL.exec(sel.trim());
   assert.ok(m, 'стуб не знает такого селектора: ' + sel);
+  // ACL-1819: несколько атрибутов и операторы $= ^= *= (как в настоящих селекторах страницы).
+  const attrs = [...(m[3] || '').matchAll(ATTR)].map((x) => ({ attr: x[1], op: x[2] || '', value: x[3] }));
   return {
     tag: m[1] || '',
     classes: (m[2] || '').split('.').filter(Boolean),
-    attr: m[3] || '',
-    value: m[4],
+    attr: attrs.length ? attrs[0].attr : '',
+    value: attrs.length ? attrs[0].value : undefined,
+    attrs,
   };
+}
+
+function attrMatches(node, a) {
+  const key = a.attr.replace(/^data-/, '').replace(/-(\w)/g, (_, c) => c.toUpperCase());
+  const data = a.attr.startsWith('data-');
+  const got = data ? node.dataset[key] : node[a.attr];
+  if (got === undefined) return false;
+  if (a.value === undefined) return true;
+  const g = String(got);
+  return a.op === '$' ? g.endsWith(a.value) : a.op === '^' ? g.startsWith(a.value)
+    : a.op === '*' ? g.includes(a.value) : g === a.value;
 }
 
 function el(tag, opts = {}) {
@@ -41,15 +56,7 @@ function el(tag, opts = {}) {
       const s = parseSel(sel);
       if (s.tag && s.tag !== node.tag) return false;
       if (!s.classes.every((c) => node._classes.has(c))) return false;
-      if (s.attr) {
-        const key = s.attr.replace(/^data-/, '').replace(/-(\w)/g, (_, c) => c.toUpperCase());
-        const has = s.attr.startsWith('data-') ? node.dataset[key] !== undefined : node[s.attr] !== undefined;
-        if (!has) return false;
-        if (s.value !== undefined) {
-          const got = s.attr.startsWith('data-') ? node.dataset[key] : node[s.attr];
-          if (String(got) !== s.value) return false;
-        }
-      }
+      if (!s.attrs.every((a) => attrMatches(node, a))) return false;
       return true;
     },
     querySelectorAll(sel) {
@@ -79,6 +86,10 @@ function el(tag, opts = {}) {
       return child;
     },
     remove() { if (node.parentNode) node.parentNode.removeChild(node); },
+    // ACL-1819: атрибуты без разбора, как в настоящем DOM — просто значение по имени.
+    setAttribute(k, v) { (node._attrs = node._attrs || {})[k] = String(v); },
+    getAttribute(k) { return node._attrs && k in node._attrs ? node._attrs[k] : null; },
+    removeAttribute(k) { if (node._attrs) delete node._attrs[k]; },
     addEventListener(name, fn) { (node._on = node._on || {})[name] = (node._on[name] || []).concat(fn); },
     fire(name, e) { ((node._on || {})[name] || []).forEach((fn) => fn(e)); },
     closest(sel) {
@@ -98,6 +109,12 @@ function el(tag, opts = {}) {
   Object.defineProperty(node, 'className', {
     get: () => [...node._classes].join(' '),
     set: (v) => { node._classes = new Set(String(v).split(/\s+/).filter(Boolean)); },
+  });
+  Object.defineProperty(node, 'nextSibling', {
+    get: () => {
+      const sibs = node.parentNode ? node.parentNode.children : [];
+      return sibs[sibs.indexOf(node) + 1] || null;
+    },
   });
   (opts.children || []).forEach((c) => node.appendChild(c));
   return node;

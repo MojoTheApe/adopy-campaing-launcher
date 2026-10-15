@@ -37,8 +37,8 @@ def test_the_three_cases_are_told_apart():
     сохранена — текущая сборка использует её, Save сохраняет для следующих.
     """
     js = _js()
-    assert "Трекинговой ссылки нет" in js
-    assert "не сохранена" in js
+    assert "No tracking link" in js
+    assert "not saved" in js
     assert "Jira" in js
 
 
@@ -46,7 +46,7 @@ def test_an_unsaved_link_is_the_most_deceptive_case():
     """Форма определяет текущую сборку; Save нужен для следующих."""
     js = _js()
     block = js[js.index("typed !== saved"): js.index("link_status === 'jira'")]
-    assert "В этой сборке будет использована" in block
+    assert "This build will use" in block
     assert "+ typed" in block
 
 
@@ -85,7 +85,7 @@ def test_the_warning_is_read_before_the_details():
 def test_the_confirm_button_says_what_will_happen():
     """«Publish → draft» на кампании без ссылки — не вся правда."""
     js = _js()
-    assert "Собрать с предупреждением" in js
+    assert "Build anyway" in js
 
 
 def test_the_warning_style_is_not_an_error_style():

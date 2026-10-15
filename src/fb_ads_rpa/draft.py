@@ -5,6 +5,9 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.creative_variant import file_variant as _file_variant
+from src.fb_ads_rpa import failure_policy as _failure_policy
+
 # Dimensions, not creative numbers: "1080x1080", "1080x1920", and the same
 # with a Cyrillic "х" — which really occurs in the folder
 # ("text5_img2_1080х1920.png"), so both letters have to be stripped.
@@ -37,9 +40,15 @@ class AdDraft:
     ad_title: str = ""
     ad_body: str = ""
     ad_link_description: str = ""
+    # ACL-1344: необязательный второй вариант основного текста — запись
+    # библиотеки текстов (как `copy_name`), из неё берётся только body.
+    copy2_name: str = ""
+    ad_body2: str = ""
+    # ACL-1775: id существующей формы Страницы (только Instant Form, только API-бэкенд).
+    lead_form_id: str = ""
 
     def ad_name(self) -> str:
-        """Name for the ad in Ads Manager: "<creative> - <text>".
+        """Name for the ad in Ads Manager: "<creative> [<variant>] - <text>".
 
         The stats sheet stores both halves in one Ad Title cell in exactly
         this shape ("2046 1 - Text6"), and the dashboard splits it back
@@ -53,13 +62,20 @@ class AdDraft:
         creative = (self.creative_id or "").strip()
         if not creative and self.creative_filename:
             creative = _creative_number(self.creative_filename)
+        # ACL-1593: ведущее число файла — вариант («1_es_2403_post.mp4» →
+        # «2403 1»). Только когда номер имени совпадает с креативом объявления:
+        # свободный текст в creative_id число из файла не получает.
+        if creative and self.creative_filename and creative == _creative_number(self.creative_filename):
+            variant = _file_variant(self.creative_filename)
+            if variant:
+                creative = f"{creative} {variant}"
         text = (self.copy_name or "").strip()
         if creative and text:
             return f"{creative} - {text}"
         return text or creative
 
     def to_preview_dict(self) -> dict[str, Any]:
-        return {
+        out = {
             "creative_type": self.creative_type,
             "creative_id": self.creative_id,
             "creative_file": self.creative_filename or "—",
@@ -68,6 +84,13 @@ class AdDraft:
             "ad_title": self.ad_title or "—",
             "ad_body": (self.ad_body or "")[:80],
         }
+        if self.copy2_name:
+            # ACL-1344: второй текст — только у объявлений, где он выбран.
+            out["copy2_name"] = self.copy2_name
+            out["ad_body2"] = (self.ad_body2 or "")[:80]
+        if self.lead_form_id:
+            out["lead_form_id"] = self.lead_form_id
+        return out
 
 
 @dataclass
@@ -79,9 +102,11 @@ class AdSetDraft:
     age_max: int = 65
     daily_budget: float | None = None
     ads: list[AdDraft] = field(default_factory=list)
+    # ACL-1775: "website" (как всегда) или "instant_form" (только API-бэкенд).
+    destination: str = "website"
 
     def to_preview_dict(self) -> dict[str, Any]:
-        return {
+        out = {
             "name": self.name,
             "targeting": self.targeting_label or "—",
             "os": self.os,
@@ -89,6 +114,9 @@ class AdSetDraft:
             "daily_budget": self.daily_budget,
             "ads": [a.to_preview_dict() for a in self.ads],
         }
+        if self.destination != "website":
+            out["destination"] = self.destination
+        return out
 
 
 @dataclass
@@ -158,6 +186,9 @@ class RpaPublishResult:
     # merely imperfect. Separate from `warnings` because the operator needs to
     # know which of the two they are looking at without reading the text.
     blocking_failures: list[str] = field(default_factory=list)
+    # Telemetry run id of this campaign (ACL-1437): shown under "Technical
+    # details" so a card can be matched to rpa_telemetry.jsonl.
+    run_id: str | None = None
 
     @property
     def publishable(self) -> bool:
@@ -180,6 +211,12 @@ class RpaPublishResult:
             "publishable": self.publishable,
             "warnings": self.warnings,
             "blocking_failures": self.blocking_failures,
+            # ACL-1437: the same failures as a short readable list (title,
+            # impact, action per step). `error` keeps the old plain text for
+            # older readers and Sentry.
+            "problems": _failure_policy.problems(
+                list(self.blocking_failures) + list(self.warnings)),
+            "run_id": self.run_id,
             "campaign_id": self.campaign_id,
             "adset_id": self.adset_id,
             "creative_id": None,

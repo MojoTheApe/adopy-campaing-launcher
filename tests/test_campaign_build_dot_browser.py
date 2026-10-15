@@ -321,6 +321,18 @@ def test_a_queued_job_shows_a_still_ring_with_its_place_in_line(ui):
     assert animation(p, a) == 'cbd-build-pulse'
 
 
+def test_a_job_held_by_low_memory_says_how_much_is_free_and_what_a_profile_uses(ui):
+    """ACL-1424: причина ожидания — свободная память и вес профиля."""
+    p, state = ui
+    a, b = publish_demo(p)
+    held = queued([camp(a), camp(b)])
+    held['queue'].update(hold='memory_low', available_mb=int(5.4 * 1024), profile_mb=int(3.5 * 1024),
+                         reserve_mb=3 * 1024, need_mb=int(6.5 * 1024))
+    show(p, state, held)
+    expect(dot(p, a)).to_have_class('cbd-ind cbd-ind-build-wait')
+    expect(dot(p, a)).to_have_attribute('title', 'Waiting for memory: 5.4 GB free, needs 6.5 GB (profile ~3.5 GB + 3 GB reserve)')
+
+
 def test_the_publish_all_list_says_queued_and_then_building(ui):
     p, state = ui
     publish_demo(p)

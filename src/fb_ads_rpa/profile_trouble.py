@@ -35,10 +35,13 @@ NETWORK = "profile_network"
 RESTART_FAILED = "profile_restart_failed"
 OPEN_BY_HAND = "profile_open_by_hand"
 SIMPLE_CREATE = "simple_create_layout"
+LEAD_TERMS = "lead_terms_not_accepted"
+WRONG_AD_ACCOUNT = "wrong_ad_account"
 
 #: Что сказать человеку — английский, это видно в дешборде.
 MESSAGES = {
-    LOGGED_OUT: "Log in to Facebook in this Multilogin profile, close it, then publish again",
+    LOGGED_OUT: "Logged out of Facebook - the profile window is brought to the front: log in in it, "
+                "then press Publish again",
     NETWORK: "The profile's proxy/network is not working — check the proxy in Multilogin",
     RESTART_FAILED: "Restarting the Multilogin profile failed, so it may be closed now — "
                     "open it in Multilogin, check that it loads Ads Manager, close it, "
@@ -51,8 +54,20 @@ MESSAGES = {
     # ACL-1320, решение координатора 26.09: новый одно-экранный редактор Meta
     # включается на весь кабинет — следующая кампания того же аккаунта упрётся
     # в него же и оставит ещё один недособранный черновик. Останавливаем аккаунт.
-    SIMPLE_CREATE: "Meta opened its new single-screen campaign editor for this account; "
-                   "the robot does not support it yet (ACL-1327)",
+    # ACL-1327: робот этот редактор проходит; остановка осталась для его
+    # разметки, которой робот не знает (нет раздела группы / объявления), и
+    # для отката FB_RPA_SIMPLE_CREATE=0.
+    SIMPLE_CREATE: "Meta opened its new single-screen campaign editor for this account, and the "
+                   "robot could not find its Ad set / Ad sections - check the draft in Ads Manager",
+    # ACL-1327: условия Lead Ads страницы не приняты («Please read and accept
+    # Meta's Lead Ads Terms…») — принимает человек в Meta, робот «Accept» не
+    # жмёт. Страница у кампаний аккаунта одна — следующая упрётся в то же.
+    LEAD_TERMS: "Lead Generation terms are not accepted on the Page (Meta's Lead Ads Terms) - "
+                "open the Page's lead ads terms in Meta, accept them, then publish again",
+    # ACL-1697: Ads Manager открыл не тот рекламный кабинет, что в черновике.
+    WRONG_AD_ACCOUNT: "This profile's Facebook user has no access to that ad account, or Meta opened "
+                      "another one. Check the ad account id on the Accounts page and that the "
+                      "account is visible in this profile",
 }
 
 #: Остановки, после которых остальные кампании задания этого аккаунта не

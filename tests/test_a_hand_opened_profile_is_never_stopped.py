@@ -15,6 +15,10 @@ Multilogin saves the session), then press Publish again.», окно не тро
 Перезапуск через MLX API остаётся только для профилей, которые робот сам
 поднимал раньше (или к которым цеплялся по порту автоматизации). Простой
 браузер — никогда.
+
+ACL-1388/1562: теперь робот такое окно мягко закрывает и поднимает сам и
+сразу; эти тесты идут с машинным выключателем `FB_RPA_REOPEN_HAND_WINDOW=0`
+(tests/conftest.py) и проверяют прежний стоп, к которому он возвращает.
 """
 from __future__ import annotations
 
@@ -200,7 +204,10 @@ def test_the_dashboard_tells_the_buyer_to_close_the_window():
     assert publish_progress._BLOCKERS[pt.OPEN_BY_HAND] == MESSAGE
     html = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
     assert "the window may restart" not in html
-    assert "close its window first" in html
+    # ACL-1562: подсказка Publish больше не просит закрывать окно руками —
+    # робот закрывает его сам через Multilogin.
+    assert "a window opened by hand is closed through Multilogin" in html
+    assert "the robot will not close it for you" not in html
     src = (ROOT / "src" / "fb_ads_rpa" / "rpa_publisher.py").read_text(encoding="utf-8")
     assert "restarting the profile itself when it has no debug port" not in src
 

@@ -17,6 +17,22 @@
   их читает вся компания; отправлять то же самое в чужой сервис было бы
   странно. Тексты исключений проходят через тот же вычиститель
   (`run_telemetry.scrub`) — в них попадают адреса Ads Manager с `act=`.
+
+  **Имена — решение владельца 01.10 (ACL-1447).** Раньше имена аккаунтов и
+  кампаний считались той же чувствительной частью и в разделе страницы
+  заменялись заглушками (ACL-1325). Теперь отображаемое имя аккаунта
+  («FacebookDoc19») и имя кампании отправляются — в итоге кампании
+  (`report_run_summary`) и тегами `account` / `campaign`: без них итог по
+  машине байера не сопоставить с его кампаниями. Номера кабинетов и
+  профилей, адреса Ads Manager, токены и почта по-прежнему вычищаются.
+  Вычищенный раздел страницы (`sentry_signal`) остаётся с заглушками —
+  решение про итог его не меняет.
+
+  Каждое событие несёт тег `manager` — имя менеджера машины
+  (`ACL_MACHINE_LABEL`, иначе `MY_CM_NAME`; мастер установки и настройки
+  дешборда пишут первое). Тег ставится в `before_send`, а не один раз при
+  `init`, — иначе имя, исправленное в настройках, доехало бы только после
+  перезапуска.
 * **Постоянного профайлера.** В присланном примере стояли стопроцентные
   трассировка и профилирование. На машине байера уже крутятся Multilogin,
   Chrome и дешборд, а замер 30.07 показал, чем оборачивается лишняя нагрузка
@@ -69,7 +85,59 @@ def _scrub_deep(value: Any) -> Any:
     return scrub_diag(value)
 
 
+def manager_label() -> str:
+    """Имя менеджера этой машины (ACL-1447): `ACL_MACHINE_LABEL`, иначе
+    `MY_CM_NAME` — имя, под которым он входит в дешборд. Пусто — не задано."""
+    for key in ("ACL_MACHINE_LABEL", "MY_CM_NAME"):
+        value = (os.environ.get(key) or "").strip()
+        if value:
+            return value[:200]
+    return ""
+
+
+#: Теги машины, снятые при `init` (ACL-1447, ревью PR #450). Ставятся в
+#: `before_send`, а не только `set_tag` при `init`: `set_tag` пишет в scope
+#: того потока, что звал `init`, а итог кампании уходит из нового потока,
+#: чей scope форкается от потока задания — без тегов. Тогда все итоги, кроме
+#: первого, приходили без `machine` и складывались в «unknown».
+_machine_tags: dict[str, str] = {}
+
+
+def _set_event_tag(event: dict, key: str, value: str, *, override: bool = True) -> None:
+    tags = event.get("tags")
+    if isinstance(tags, dict):
+        if override or not tags.get(key):
+            tags[key] = value
+    elif isinstance(tags, list):
+        has = [t for t in tags if isinstance(t, (list, tuple)) and t and t[0] == key]
+        if has and not override and any(len(t) > 1 and t[1] for t in has):
+            return
+        event["tags"] = [t for t in tags if not (isinstance(t, (list, tuple)) and t and t[0] == key)]
+        event["tags"].append([key, value])
+    else:
+        event["tags"] = {key: value}
+
+
+def _tag_manager(event: dict) -> None:
+    _set_event_tag(event, "manager", manager_label() or "unset")
+
+
+def _tag_machine(event: dict) -> None:
+    # Тег, уже стоящий на событии, не перебиваем — он точнее нашего снимка.
+    for key, value in _machine_tags.items():
+        if value:
+            _set_event_tag(event, key, value, override=False)
+
+
 def _before_send(event: dict, _hint: dict) -> dict | None:
+    try:
+        _tag_manager(event)
+    except Exception:
+        pass  # без тега событие всё равно ценно
+    try:
+        _tag_machine(event)
+    except Exception:
+        pass
     try:
         return _scrub_deep(event)
     except Exception:
@@ -122,9 +190,20 @@ def init() -> bool:
         # «выход», а мы держим окно ради отчёта — это про нас же плохо.
         shutdown_timeout=3,
     )
-    sentry_sdk.set_tag("machine", machine_label)
+    _machine_tags.clear()
+    _machine_tags["machine"] = str(machine_label or "")
     if machine_id:
-        sentry_sdk.set_tag("machine_id", machine_id)
+        _machine_tags["machine_id"] = str(machine_id)
+    # Глобальный scope виден всем потокам; `before_send` — страховка.
+    try:
+        global_scope = sentry_sdk.get_global_scope()
+        for key, value in _machine_tags.items():
+            if value:
+                global_scope.set_tag(key, value)
+    except Exception:
+        for key, value in _machine_tags.items():
+            if value:
+                sentry_sdk.set_tag(key, value)
     _started = True
     return True
 
@@ -155,6 +234,60 @@ def report_job_exception(exc: BaseException, *, job: str = "", account: str = ""
         if job:
             scope.set_context("run", {"job": str(job).replace("-", "")})
         return sentry_sdk.capture_exception(exc) or ""
+
+
+def report_step_stuck(step: str, idle_s: float, *, job: str = "", account: str = "",
+                      campaign: str = "") -> str:
+    """Робот не писал шагов дольше порога (ACL-1614, сигнал «завис»).
+
+    Отпечаток — по шагу, на котором встали: одно и то же зависание на одном
+    шаге у разных заданий складывается в один тикет, а не в событие на каждое.
+    """
+    if not init():
+        return ""
+    import sentry_sdk
+
+    step = str(step or "unknown")
+    with sentry_sdk.new_scope() as scope:
+        scope.fingerprint = ["acl-step-stuck", step]
+        scope.set_tag("failure_kind", "step_stuck")
+        scope.set_tag("step", step)
+        if account:
+            scope.set_tag("account", account_tag(account))
+        ctx = {"idle_s": round(float(idle_s), 1), "campaign": campaign}
+        if job:
+            ctx["job"] = str(job).replace("-", "")
+        scope.set_context("run", ctx)
+        return sentry_sdk.capture_message(f"step_stuck: {step}", level="error") or ""
+
+
+def report_tab_unblocked(step: str, method: str, stuck_s: float, *, ok: bool, job: str = "",
+                         account: str = "", campaign: str = "", api: str = "", where: str = "",
+                         tried: list | None = None) -> str:
+    """Сторож разблокировал зависшую вкладку (ACL-1702) — одно событие на случай.
+
+    Отпечаток — по шагу и месту вызова: одно и то же зависание у разных
+    заданий складывается в один тикет.
+    """
+    if not init():
+        return ""
+    import sentry_sdk
+
+    step = str(step or "unknown")
+    with sentry_sdk.new_scope() as scope:
+        scope.fingerprint = ["acl-tab-unblocked", step, str(where or "")]
+        scope.set_tag("failure_kind", "tab_hung")
+        scope.set_tag("step", step)
+        scope.set_tag("unblock_method", method or "none")
+        scope.set_tag("unblock_ok", "yes" if ok else "no")
+        if account:
+            scope.set_tag("account", account_tag(account))
+        ctx = {"stuck_s": round(float(stuck_s), 1), "campaign": campaign, "api": api,
+               "where": where, "tried": list(tried or [])}
+        if job:
+            ctx["job"] = str(job).replace("-", "")
+        scope.set_context("run", ctx)
+        return sentry_sdk.capture_message(f"tab_unblocked: {step}", level="error") or ""
 
 
 def account_tag(account: str) -> str:
@@ -410,6 +543,70 @@ def failure_reason(failure: str, why: str = "") -> str:
             if kind != "other":
                 return kind
     return "other" if (detail or why) else "silent"
+
+
+#: Вид итога → уровень события. Не error: итог — не отказ, алертов не плодит.
+_SUMMARY_LEVELS = {"clean": "info", "warnings": "info",
+                   "do-not-publish": "warning", "stopped": "warning"}
+
+
+def report_run_summary(summary: dict, *, attachment: dict | None = None) -> str:
+    """Итог одной кампании (ACL-1447) — собирает `run_summary.build`.
+
+    Отпечаток — только вид итога: четыре тикета на весь парк машин, события
+    внутри них. Имена аккаунта и кампании — тегами (решение владельца 01.10,
+    см. докстроку модуля); всё событие проходит тот же `before_send`.
+    ACL-1554: `attachment` — строки телеметрии прогона
+    (`run_summary.telemetry_attachment`), уже вычищенные и ограниченные.
+    """
+    if not init():
+        return ""
+    import sentry_sdk
+
+    result = str(summary.get("result") or "unknown")
+    with sentry_sdk.new_scope() as scope:
+        scope.fingerprint = ["acl-run-summary", result]
+        scope.set_tag("kind", "run_summary")
+        scope.set_tag("result", result)
+        scope.set_tag("editor", str(summary.get("editor") or "unknown"))
+        if summary.get("account"):
+            scope.set_tag("account", str(summary["account"])[:200])
+        if summary.get("campaign"):
+            scope.set_tag("campaign", str(summary["campaign"])[:200])
+        ctx = dict(summary)
+        if ctx.get("run_id"):
+            ctx["run_id"] = str(ctx["run_id"]).replace("-", "")
+        if attachment and not _attach_telemetry(scope, attachment):
+            ctx["telemetry_attachment"] = "error"
+        scope.set_context("run_summary", ctx)
+        return sentry_sdk.capture_message(
+            f"Run summary: {result}", level=_SUMMARY_LEVELS.get(result, "info")
+        ) or ""
+
+
+def _attach_telemetry(scope, attachment: dict) -> bool:
+    """Приложить строки телеметрии прогона (ACL-1554). Вернуть, приложилось ли.
+
+    Как и у `_attach_section`: `before_send` вложения не видит, поэтому
+    второй потолок стоит здесь, и не приложилось — итог уходит без вложения.
+    Только `.jsonl`: скриншот сюда не пролезет даже по ошибке.
+    """
+    try:
+        from src.fb_ads_rpa.run_summary import TELEMETRY_MAX_BYTES
+
+        payload = attachment.get("bytes") or b""
+        filename = str(attachment.get("filename") or "")
+        if (not isinstance(payload, (bytes, bytearray)) or not payload
+                or len(payload) > TELEMETRY_MAX_BYTES or not filename.endswith(".jsonl")):
+            return False
+        scope.add_attachment(
+            bytes=bytes(payload),
+            filename=filename,
+            content_type=str(attachment.get("content_type") or "application/x-ndjson"),
+        )
+        return True
+    except Exception:
+        return False
 
 
 def report_problem(text: str, *, context: dict | None = None) -> str:

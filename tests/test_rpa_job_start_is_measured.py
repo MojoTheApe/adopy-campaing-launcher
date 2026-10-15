@@ -193,6 +193,8 @@ def test_the_first_navigation_is_measured(rows, monkeypatch):
 
     monkeypatch.setattr(amf, "pause_after_navigation", lambda: None)
     page = MagicMock()
+    # ACL-1697: открытый кабинет читается из адреса страницы.
+    page.url = "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=123"
     flow = amf.AdsManagerFlow(page)
     draft = MagicMock(ad_account_id="act_123")
     draft.name = "Campaign A"

@@ -178,7 +178,7 @@ def enrich_campaign_drafts(
         if any(getattr(a, "targeting_label", "") for d in drafts for a in d.ad_sets):
             library_states.append(("Targeting", _pull_unless_just_pulled(
                 "targets", targeting_registry.pull, info)))
-        if any(ad.copy_name for d in drafts for a in d.ad_sets for ad in a.ads):
+        if any(ad.copy_name or ad.copy2_name for d in drafts for a in d.ad_sets for ad in a.ads):
             library_states.append(("Ad texts", _pull_unless_just_pulled(
                 "ad_texts", ad_text_registry.pull, info)))
 
@@ -189,7 +189,12 @@ def enrich_campaign_drafts(
                 draft.warnings.append(f"{label}: team library unavailable; using the saved copy from {stamp}. "
                                       + state.get("error", ""))
         draft.ad_account_id = entry.ad_account_id if entry else None
-        draft.page_id = (entry.page_id if entry else None)
+        # ACL-1766: что уже в черновике, то и берём; карта — следующий источник.
+        # Источник запоминаем для «Check plan»; RPA эти поля не читает.
+        draft.page_source = "draft" if draft.page_id else ("map" if entry and entry.page_id else "")
+        draft.pixel_source = "draft" if draft.pixel_id else ("map" if entry and getattr(entry, "pixel_id", None) else "")
+        draft.page_id = draft.page_id or (entry.page_id if entry else None)
+        draft.pixel_id = draft.pixel_id or ((getattr(entry, "pixel_id", None) or "") if entry else "")
         # Что набрано в билдере, то и берём. Раньше строка ниже перетирала
         # ссылку значением из книги безусловно: человек вписывал её в форму,
         # видел «Link empty» и не мог понять, куда она делась.
@@ -288,9 +293,38 @@ def enrich_campaign_drafts(
                             f"ad text {ad.copy_name!r} has no body — check it in Ad titles"
                         )
 
+                # ACL-1344: второй вариант основного текста — body другой записи
+                # той же библиотеки. Нет записи — ошибка до открытия браузера,
+                # как у первого текста; пустой или повтор первого — предупреждение,
+                # и объявление идёт с одним текстом, как раньше.
+                if ad.copy2_name:
+                    from src.analysis_agent.ad_text_registry import AdTextError
+                    try:
+                        copy2 = lookup_ad_copy_by_title(ad.copy2_name)
+                    except AdTextError as exc:
+                        draft.errors.append(f"Primary text 2 {ad.copy2_name!r}: {exc}")
+                        continue
+                    ad.ad_body2 = (copy2.get("body") or "").strip()
+                    if ad.ad_body2 and not ad.ad_body:
+                        # Ревью PR #346: без основного текста второй вариант
+                        # некуда добавить — говорим об этом до браузера.
+                        draft.warnings.append(
+                            f"Primary text 2 {ad.copy2_name!r} needs an Ad Title with a primary text — ignored"
+                        )
+                        ad.ad_body2 = ""
+                    elif not ad.ad_body2:
+                        draft.warnings.append(
+                            f"Primary text 2 {ad.copy2_name!r} has no body — the ad gets one primary text"
+                        )
+                    elif ad.ad_body and "".join(ad.ad_body2.split()) == "".join(ad.ad_body.split()):
+                        draft.warnings.append(
+                            f"Primary text 2 {ad.copy2_name!r} repeats the first primary text — ignored"
+                        )
+                        ad.ad_body2 = ""
+
                 if ad.creative_filename and not preview_mode:
                     try:
-                        ad.creative_path = str(find_creative_file(root, ad.creative_filename))
+                        ad.creative_path = str(find_creative_file(root, ad.creative_filename, fresh=True))
                     except (CreativeNotFoundError, AmbiguousCreativeError, FileNotFoundError) as exc:
                         draft.errors.append(str(exc))
                 elif ad.creative_filename:

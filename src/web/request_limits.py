@@ -47,7 +47,13 @@ DEFAULT_MAX_BODY = 1 * MiB
 BUILDER_MAX_BODY = 16 * MiB
 
 #: Маршруты, которые принимают форму билдера целиком.
-BUILDER_ROUTES = frozenset({"/build-upload", "/preview-publish", "/publish-jobs"})
+BUILDER_ROUTES = frozenset({
+    "/build-upload",
+    "/preview-publish",
+    "/publish-jobs",
+    "/publish-plan",      # ACL-1760: проверка плана через Graph API
+    "/api/page-forms",    # формы страницы под слоты билдера
+})
 
 #: Предел тела по маршруту; всё, чего здесь нет, живёт с DEFAULT_MAX_BODY.
 ROUTE_MAX_BODY: dict[str, int] = {path: BUILDER_MAX_BODY for path in BUILDER_ROUTES}

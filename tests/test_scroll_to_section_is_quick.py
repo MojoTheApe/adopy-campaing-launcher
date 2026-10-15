@@ -10,7 +10,6 @@
 """
 from __future__ import annotations
 
-import os
 import sys
 import time
 from pathlib import Path
@@ -22,14 +21,22 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from src.fb_ads_rpa import meta_dom as md  # noqa: E402
+from tests._retry_once import launch_chromium  # noqa: E402
 
 _TALL = "<div style='height:3000px'></div>"
+
+# Прежний вариант ждал отсутствующий заголовок 5 с (и столько же стоит
+# `scroll_into_view_if_needed` на невидимом). ACL-1491: время пути «только
+# текст» сравниваем не с абсолютными 2.5 с, а с тем же вызовом, когда
+# заголовок есть, — разница должна быть много меньше этих 5 с. Нагрузка
+# раннера замедляет оба замера одинаково, а лишнее ожидание — нет.
+HEADING_WAIT_S = 5.0
 
 
 @pytest.fixture(scope="module")
 def browser():
     with sync_playwright() as pw:
-        b = pw.chromium.launch(executable_path=os.environ.get("ACL_BROWSER_EXECUTABLE") or None)
+        b = launch_chromium(pw)
         try:
             yield b
         finally:
@@ -53,19 +60,35 @@ def _in_view(page, sel):
         " return r.top >= 0 && r.bottom <= innerHeight; }", sel)
 
 
+def _timed_scroll(page, body, *labels):
+    page.set_content(f"<body>{body}</body>")
+    t0 = time.perf_counter()
+    assert md.scroll_to_section(page, *labels) is True
+    return time.perf_counter() - t0
+
+
+def _heading_reference(page, *labels):
+    """Тот же вызов, когда первый же способ (заголовок) находит раздел сразу.
+
+    Первый вызов на свежей вкладке — прогрев, его не считаем."""
+    body = f"{_TALL}<h2>{labels[0]}</h2>{_TALL}"
+    _timed_scroll(page, body, *labels)
+    return _timed_scroll(page, body, *labels)
+
+
 def test_a_text_only_section_is_reached_without_waiting_for_a_heading(page):
-    page.set_content(f"<body>{_TALL}<div id='t'>Conversion location</div>{_TALL}</body>")
-    t0 = time.time()
-    assert md.scroll_to_section(page, "Conversion location", "Ubicación de la conversión") is True
-    assert time.time() - t0 < 2.5, "ждали заголовок, которого нет"
+    labels = ("Conversion location", "Ubicación de la conversión")
+    ref = _heading_reference(page, *labels)
+    took = _timed_scroll(page, f"{_TALL}<div id='t'>Conversion location</div>{_TALL}", *labels)
+    assert took - ref < HEADING_WAIT_S / 2, f"ждали заголовок, которого нет: {took:.2f} с против {ref:.2f} с"
     assert _in_view(page, "#t")
 
 
 def test_the_second_label_is_found_without_waiting_for_the_first(page):
-    page.set_content(f"<body>{_TALL}<div id='t'>Ubicación de la conversión</div>{_TALL}</body>")
-    t0 = time.time()
-    assert md.scroll_to_section(page, "Conversion location", "Ubicación de la conversión") is True
-    assert time.time() - t0 < 2.5
+    labels = ("Conversion location", "Ubicación de la conversión")
+    ref = _heading_reference(page, *labels)
+    took = _timed_scroll(page, f"{_TALL}<div id='t'>Ubicación de la conversión</div>{_TALL}", *labels)
+    assert took - ref < HEADING_WAIT_S / 2, f"ждали первую подпись: {took:.2f} с против {ref:.2f} с"
     assert _in_view(page, "#t")
 
 

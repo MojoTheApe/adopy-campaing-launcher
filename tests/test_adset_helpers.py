@@ -55,7 +55,7 @@ def test_resolve_interest_alias_compound_slash_same_as_pipe():
 
 
 def test_resolve_interest_alias_compound_backslash_same_as_pipe():
-    result = resolve_interest_alias("Day\\SM")
+    result = resolve_interest_alias("Day\\SM")  # linux-ok: a label with a backslash as plain text
     assert result["matched"] is True
     assert result["code"] == "Day|SM"
 

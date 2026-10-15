@@ -1,0 +1,9 @@
+{
+  "name": "acl-sentry-relay",
+  "private": true,
+  "type": "module",
+  "description": "Sentry issue alert -> Claude Code routine /fire relay (ACL-1330). No dependencies.",
+  "scripts": {
+    "test": "node --test --test-reporter=tap worker.test.js"
+  }
+}

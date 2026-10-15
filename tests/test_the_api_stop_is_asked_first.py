@@ -194,7 +194,7 @@ def attach_provider(monkeypatch):
 def test_when_the_api_stops_the_profile_nothing_is_killed(attach_provider):
     fake = _Launcher(stop_ok=True)
     attach_provider["holder"]["launcher"] = fake
-    started = attach_provider["provider"]._start_via_mlx_api(_Entry(), "DQ501", PROFILE, r"C:\mlx\p")
+    started = attach_provider["provider"]._start_via_mlx_api(_Entry(), "DQ501", PROFILE, r"C:\mlx\p")  # linux-ok: a Windows path as opaque data, never touched on disk
     assert started.port == "58906"
     assert fake.stops == 1
     assert attach_provider["kills"] == []
@@ -204,7 +204,7 @@ def test_when_the_api_cannot_stop_the_kill_still_carries_the_run(attach_provider
     """Запасной путь остаётся: именно он вывез прогон 16.09."""
     fake = _Launcher(stop_ok=False)
     attach_provider["holder"]["launcher"] = fake
-    started = attach_provider["provider"]._start_via_mlx_api(_Entry(), "DQ501", PROFILE, r"C:\mlx\p")
+    started = attach_provider["provider"]._start_via_mlx_api(_Entry(), "DQ501", PROFILE, r"C:\mlx\p")  # linux-ok: a Windows path as opaque data, never touched on disk
     assert started.port == "58906"
     assert attach_provider["kills"] == [PROFILE]
 
@@ -213,7 +213,7 @@ def test_the_log_tells_the_stop_from_the_kill(attach_provider, caplog):
     fake = _Launcher(stop_ok=True)
     attach_provider["holder"]["launcher"] = fake
     with caplog.at_level(logging.INFO, logger="src.fb_ads_rpa.browser"):
-        attach_provider["provider"]._start_via_mlx_api(_Entry(), "DQ501", PROFILE, r"C:\mlx\p")
+        attach_provider["provider"]._start_via_mlx_api(_Entry(), "DQ501", PROFILE, r"C:\mlx\p")  # linux-ok: a Windows path as opaque data, never touched on disk
     assert any("stopped through the MLX API" in r.getMessage() for r in caplog.records)
     assert not any("killing Mimic" in r.getMessage() for r in caplog.records)
 
@@ -223,7 +223,7 @@ def test_a_read_never_kills_when_the_api_stop_fails(attach_provider):
     attach_provider["holder"]["launcher"] = fake
     with pytest.raises(RuntimeError, match="Nothing was closed"):
         attach_provider["provider"]._start_via_mlx_api(
-            _Entry(), "Example", PROFILE, r"C:\mlx\p", allow_kill=False)
+            _Entry(), "Example", PROFILE, r"C:\mlx\p", allow_kill=False)  # linux-ok: a Windows path as opaque data, never touched on disk
     assert fake.stops == 1 and fake.starts == 1
     assert attach_provider["kills"] == []
 
@@ -232,7 +232,7 @@ def test_a_read_can_restart_gracefully_without_kill_permission(attach_provider):
     fake = _Launcher(stop_ok=True)
     attach_provider["holder"]["launcher"] = fake
     started = attach_provider["provider"]._start_via_mlx_api(
-        _Entry(), "Example", PROFILE, r"C:\mlx\p", allow_kill=False)
+        _Entry(), "Example", PROFILE, r"C:\mlx\p", allow_kill=False)  # linux-ok: a Windows path as opaque data, never touched on disk
     assert started.port == "58906"
     assert fake.stops == 1 and fake.starts == 2
     assert attach_provider["kills"] == []
