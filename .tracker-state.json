@@ -8949,6 +8949,18 @@
         "state": "implementing",
         "started_at": "2026-10-14T12:25:13+00:00",
         "from_status": "status:backlog"
+      },
+      "812": {
+        "actor": "Worker-RL1812",
+        "session": "wrl1812-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1812-warm-sessions",
+        "worktree": "C:\\wk-rl1812",
+        "id": "e8e492b769644e9f90a657c763fb6a57",
+        "issue": 812,
+        "state": "implementing",
+        "started_at": "2026-10-15T04:35:42+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -12811,11 +12823,15 @@
           {
             "actor": "Worker-W1014F",
             "session": "w1014f-20261014"
+          },
+          {
+            "actor": "Worker-RL1812",
+            "session": "wrl1812-20261015"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-W1014F",
-        "coordinator": "Coordinator-T1014C",
+        "state": "implementing",
+        "worker": "Worker-RL1812",
+        "coordinator": "Coordinator-C0930A",
         "handoff": {
           "actor": "Worker-W1014F",
           "session": "w1014f-20261014",
@@ -12832,8 +12848,7 @@
         },
         "pr": 813,
         "queued_at": "2026-10-14T11:21:37+00:00",
-        "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e76699ef (ACL-1800 campaign commands, ACL-1797 design system; PR 917 -> 918). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
-        "reviewer": "Reviewer-RRK812"
+        "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e76699ef (ACL-1800 campaign commands, ACL-1797 design system; PR 917 -> 918). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
       },
       "814": {
         "implementers": [
@@ -15660,6 +15675,10 @@
       },
       "Worker-RL1826": {
         "session": "wrl1826-20261015",
+        "role": "Worker"
+      },
+      "Worker-RL1812": {
+        "session": "wrl1812-20261015",
         "role": "Worker"
       }
     },
@@ -36523,6 +36542,13 @@
         "issue": 826,
         "pr": 828,
         "actor": "Worker-RL1826"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-15T04:35:42+00:00",
+        "issue": 812,
+        "claim": "e8e492b769644e9f90a657c763fb6a57",
+        "actor": "Worker-RL1812"
       }
     ],
     "policy": {
