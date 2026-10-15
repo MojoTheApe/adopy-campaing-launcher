@@ -9140,9 +9140,11 @@
         "worktree": "C:\\wk-rn1814",
         "id": "6ff69cfad4854e84a43a1b0c9a78f161",
         "issue": 814,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-15T06:33:31+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 817,
+        "report": "# Refresh ACL-1814 (PR 817)\n- Merged origin/main (080df2d8) into codex/acl-1814-rules-store (was bed6d3f7); head 1dfb66b0. No conflicts (clean merge, not even CHANGELOG).\n- Tests: test_rules_store.py + test_goals.py + test_shared_file_locks.py: 115 passed. scripts/acl_scan_secrets.py: clean."
       }
     },
     "tasks": {
