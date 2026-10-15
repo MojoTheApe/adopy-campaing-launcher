@@ -9349,22 +9349,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "886": {
-        "actor": "Worker-RG1886",
-        "session": "wrg1886-20261015",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1886-graph-error-context",
-        "worktree": "C:\\wk-rg1886",
-        "id": "31a4a626a6864624abdb9a3fe9c92f3b",
-        "issue": 886,
-        "state": "handoff",
-        "started_at": "2026-10-15T10:37:23+00:00",
-        "from_status": "status:todo",
-        "pr": 887,
-        "report": "# ACL-886 handoff (r2): refresh onto new main\n\n- Issue: 886, PR: 887, branch: codex/acl-1886-graph-error-context, worktree: C:\\wk-rg1886\n- Claim id: 31a4a626a6864624abdb9a3fe9c92f3b\n- New head: 31ee38c9 (merge of work/main 3ee7c6d9 into the task branch; previous head d2e9a26a)\n- Merge: clean, no conflicts. 3ee7c6d9 is an ancestor of HEAD.\n- Tests (python -m pytest, -k \"not browser\"): tests/test_acl1886_graph_error_context.py, tests/test_acl_test_platform.py, tests/test_screens_are_in_english.py -> 139 passed, 0 failed.\n- Pushed: git push work HEAD:codex/acl-1886-graph-error-context (d2e9a26a..31ee38c9)."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -14488,25 +14473,25 @@
             "session": "wrg1886-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RG1886",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-W1886M",
-          "session": "wk_w1886m_1014",
+          "actor": "Worker-RG1886",
+          "session": "wrg1886-20261015",
           "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1886-graph-error-context",
-          "worktree": "C:\\acl-1886-refresh",
-          "id": "d6f3381c92694833a241a6507968e600",
+          "worktree": "C:\\wk-rg1886",
+          "id": "31a4a626a6864624abdb9a3fe9c92f3b",
           "issue": 886,
           "state": "handoff",
-          "started_at": "2026-10-14T09:52:30+00:00",
+          "started_at": "2026-10-15T10:37:23+00:00",
           "from_status": "status:todo",
           "pr": 887,
-          "report": "# ACL-1886 handoff (Worker-W1886M)\n\n- PR: #887, base main df6c2e8ac491aa1d03b10ba87641d1d785685c92\n- New head: d2e9a26a3c3a25cb3371f0be8a1f34d328ba7f9d (tree d139c733118cfc23538926229ffe92195f8b1381)\n- Previous head: 8f3b07ac5e86e6a29f1a53da89477b88f54d4660\n- Change: merge of current main (20726b2a, no conflicts, main-only content from ACL-1892) plus two spacing nits requested in review:\n  blank line before the ACL-1886 heading in docs/system/CHANGELOG.md; two blank lines after `_read_context` in src/fb_api/graph.py. No other code change.\n- Tests run: tests/test_acl1886_graph_error_context.py, test_acl1756_fb_api.py, test_the_api_stop_is_asked_first.py, test_bench_catalogue.py, test_acl_ci_workflows.py, test_master_adoption.py: 229 passed, 2 skipped.\n- scripts/acl_scan_secrets.py: clean. scripts/acl_smoke.py: OK. Full suite left to CI."
+          "report": "# ACL-886 handoff (r2): refresh onto new main\n\n- Issue: 886, PR: 887, branch: codex/acl-1886-graph-error-context, worktree: C:\\wk-rg1886\n- Claim id: 31a4a626a6864624abdb9a3fe9c92f3b\n- New head: 31ee38c9 (merge of work/main 3ee7c6d9 into the task branch; previous head d2e9a26a)\n- Merge: clean, no conflicts. 3ee7c6d9 is an ancestor of HEAD.\n- Tests (python -m pytest, -k \"not browser\"): tests/test_acl1886_graph_error_context.py, tests/test_acl_test_platform.py, tests/test_screens_are_in_english.py -> 139 passed, 0 failed.\n- Pushed: git push work HEAD:codex/acl-1886-graph-error-context (d2e9a26a..31ee38c9)."
         },
         "pr": 887,
-        "queued_at": "2026-10-14T09:56:34+00:00",
+        "queued_at": "2026-10-15T10:40:54+00:00",
         "review_report": "# Return for a main refresh\n\nMain moved to 3ee7c6d9 (batch with ACL-1819, 1799, 1814; promotion PR 928). The source approval is stale against it. Required: merge current main into the branch (merge, no rebase; a trial merge is clean), re-run the affected tests, hand off again for a delta review. No scope change.",
         "return_operation": {
           "id": "2ed7c113f8e34d4bb109745d97e2c68b",
@@ -19508,7 +19493,8 @@
       899,
       309,
       827,
-      902
+      902,
+      886
     ],
     "review": null,
     "history": [
@@ -40594,6 +40580,13 @@
             "approved_at": "2026-10-15T10:39:13+00:00"
           }
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-15T10:40:54+00:00",
+        "issue": 886,
+        "pr": 887,
+        "actor": "Worker-RG1886"
       }
     ],
     "policy": {
