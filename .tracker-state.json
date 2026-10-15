@@ -9131,6 +9131,18 @@
         "state": "implementing",
         "started_at": "2026-10-15T06:56:36+00:00",
         "from_status": "status:todo"
+      },
+      "924": {
+        "actor": "Worker-B71E",
+        "session": "acl_delivery",
+        "coordinator": "Coordinator-DLV15",
+        "branch": "codex/acl-1924-delivery-flow",
+        "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/repos/acl-delivery-source",
+        "id": "941dac02cdf44b4fb62ce2ac402c1e6a",
+        "issue": 924,
+        "state": "implementing",
+        "started_at": "2026-10-15T07:18:32+00:00",
+        "from_status": "status:idea"
       }
     },
     "tasks": {
@@ -14493,6 +14505,17 @@
       "139": {
         "implementers": [],
         "state": "archiving"
+      },
+      "924": {
+        "implementers": [
+          {
+            "actor": "Worker-B71E",
+            "session": "acl_delivery"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-B71E",
+        "coordinator": "Coordinator-DLV15"
       }
     },
     "actors": {
@@ -38224,6 +38247,13 @@
         "issue": 923,
         "actor": "Worker-B71E",
         "report": "No implementation edits were made under ACL-1923. Its full outcome is split into a source child and separately verified live activation; parent becomes initiative and retains all original criteria. Releasing this real Worker claim deliberately before claiming the source child. No other task, claim or review is changed."
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-15T07:18:32+00:00",
+        "issue": 924,
+        "claim": "941dac02cdf44b4fb62ce2ac402c1e6a",
+        "actor": "Worker-B71E"
       }
     ],
     "policy": {
