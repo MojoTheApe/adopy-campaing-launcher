@@ -189,7 +189,7 @@ def result_dict(outcome: Outcome, *, error: str = "") -> dict[str, Any]:
     error = error or outcome.error
     mismatches = outcome.mismatches
     blocking = [f"readback mismatch: {m['object']} {m['field']} — expected {m['expected']!r}, "
-                f"got {m['actual']!r}" for m in mismatches]
+                f"got {'Not read' if m.get('not_read') else repr(m['actual'])}" for m in mismatches]
     if created and error:
         blocking.append("not finished: " + error)
     readback_ok = bool(outcome.readback) and outcome.readback.get("ok") is True
