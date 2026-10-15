@@ -12,6 +12,8 @@
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -28,7 +30,12 @@ from tests.test_acl1800_campaign_commands import (  # noqa: E402
 # ───────────────────────── внедрение сбоев ─────────────────────────
 
 class _FaultyFile:
-    """Обёртка файла журнала: падает на write / flush в назначенный момент."""
+    """Обёртка файла журнала: падает на write / flush в назначенный момент.
+
+    Как и в жизни, после отказа flush байты всё равно могут лечь на диск при
+    close(): «flush»-случаи проверяют, что журнал не хуже правды, а ветку
+    «строка не легла» проверяет «append».
+    """
 
     def __init__(self, real, fail: str, partial: bool):
         self._real, self._fail, self._partial = real, fail, partial
@@ -176,7 +183,9 @@ def test_failure_saving_a_later_sending_record_stops_there(world, monkeypatch, k
     assert [p for p, _ in world.meta.posts] == [f"/{CAMP_A}"]        # второй объект не отправлен
     assert world.meta.objs[SET_BID]["status"] == "PAUSED"
     assert [a["result"] for a in done["affected"]] == ["saved", "not_sent"]   # частичный успех виден
-    assert done["state"] != cmd.SUCCEEDED
+    # однократный сбой — итог записан: Failed (1 из 2); стойкий — итог не лёг: «не проверено»
+    assert done["state"] == (cmd.UNKNOWN if persistent else cmd.FAILED)
+    assert "history could not be saved" in done["message"].lower()
     assert "history could not be saved" in done["affected"][1]["note"].lower()
 
 
@@ -331,3 +340,76 @@ def test_lost_answer_is_reconciled_by_reading_not_by_posting_again(world):
     again = cmd.execute(reborn, world.open_session, revision_id=pv["revision_id"],
                         idempotency_key="idem-key-0001", spawn=lambda fn: fn(), sleep=lambda s: None)
     assert again["state"] == cmd.UNKNOWN and len(world.meta.posts) == 1
+
+
+# ───────────────────────── доработки по ревью ─────────────────────────
+
+def test_a_line_torn_inside_a_multibyte_character_is_skipped(tmp_path):
+    """Диск кончился посреди «К»: хранилище всё равно поднимается и чинит прерванную операцию."""
+    path = tmp_path / "h.jsonl"
+    store = cmd.OperationStore(path)
+    op = {"op_id": "op_k", "state": cmd.RUNNING, "created_at": "x", "revision_id": "rev_k",
+          "idempotency_key": "idem-key-0007", "name": "Кампания",
+          "affected": [{"id": "1", "name": "Кампания", "result": "sending"}]}
+    store.add(op)
+    store.save(op)
+    torn = json.dumps(dict(op, state=cmd.VERIFYING), ensure_ascii=False).encode("utf-8")
+    cut = torn.index("К".encode("utf-8")) + 1
+    with path.open("ab") as fh:
+        fh.write(torn[:cut])                                    # половина символа и обрыв
+    got = cmd.OperationStore(path).get("op_k")
+    assert got["state"] == cmd.UNKNOWN and got["affected"][0]["result"] == "unknown"
+    assert cmd.OperationStore(path).by_key("idem-key-0007")["op_id"] == "op_k"
+
+
+def test_partial_success_has_the_exact_state_and_message(world, monkeypatch):
+    pv = world.preview("set_status", "ACTIVE", TWO)
+    Faults(world.store, monkeypatch, at={4})
+    world.execute(pv)
+    done = world.final(pv)
+    assert done["state"] == cmd.FAILED
+    assert done["message"].startswith(cmd.HISTORY_FAILED)
+    assert "1 of 2 saved" in done["message"]
+    assert "history_blocked" not in done
+
+
+def test_web_execute_answers_503_storage_and_sends_nothing(monkeypatch, tmp_path):
+    from src.web import campaign_commands as cc
+
+    monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("ACL_BIND_HOST", "127.0.0.1")
+    monkeypatch.setenv("ACL_FB_BACKEND", "api")
+    cmd._STORES.clear()
+    try:
+        w = World(tmp_path)
+        w.store = cmd.get_store()
+        monkeypatch.setattr(cc, "_sessions", lambda: w.open_session)
+        monkeypatch.setattr(cmd, "_spawn_thread", lambda fn: fn())
+        pv, code = cc.run_preview({"account": "Acc", "command": "set_status", "value": "ACTIVE",
+                                   "targets": [t("campaign", CAMP_A)]})
+        assert code == 200
+        Faults(w.store, monkeypatch, from_on=1)
+        data, code = cc.run_execute({"revision_id": pv["revision_id"], "idempotency_key": "idem-key-0001"})
+        assert code == 503 and data["code"] == "storage"
+        assert "history could not be saved" in data["error"].lower()
+        assert w.meta.posts == []
+    finally:
+        cmd._STORES.clear()
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="node is not installed")
+def test_page_shows_a_clear_storage_reason_not_the_generic_one():
+    script = (ROOT / "src/web/static/acm_commands.js").read_text(encoding="utf-8") + """
+const A = globalThis.acmCommands;
+const r = [
+  A.explain('Not sent: The operation history could not be saved on this computer (disk full or not writable). Nothing was sent.', 'bad', 'storage').text,
+  A.explain('Not sent: the operation history could not be saved on this computer (disk full or not writable).', 'bad', '').text,
+  A.friendly('anything', 'storage'),
+];
+console.log(JSON.stringify(r));
+"""
+    out = subprocess.run([shutil.which("node"), "-e", script], capture_output=True, text=True,
+                         encoding="utf-8", timeout=60)
+    assert out.returncode == 0, out.stderr
+    texts = json.loads(out.stdout)
+    assert len(set(texts)) == 1 and "change history" in texts[0]

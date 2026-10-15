@@ -126,13 +126,14 @@ class OperationStore:
         if not self.path.is_file():
             return
         try:
-            lines = self.path.read_text(encoding="utf-8").splitlines()
+            lines = self.path.read_bytes().split(b"\n")
         except OSError:
             return
         for line in lines:
             try:
-                op = json.loads(line)
-            except ValueError:
+                # строка, оборванная посреди символа (диск кончился), — пропускается (ACL-1855)
+                op = json.loads(line.decode("utf-8"))
+            except ValueError:   # UnicodeDecodeError тоже ValueError
                 continue
             if isinstance(op, dict) and op.get("op_id"):
                 self._ops[str(op["op_id"])] = op
@@ -686,6 +687,7 @@ def _run(store: OperationStore, op: dict, sess: Any, sleep: Callable[[float], No
 
     # 2) Одна запись на объект. Первая неудача — остальные не пробуем.
     stop_rest = False
+    history_blocked = False   # локально: флаг не попадает ни в журнал, ни в снимки
     for item in op["affected"]:
         if stop_rest:
             item["result"] = "not_attempted"
@@ -698,7 +700,7 @@ def _run(store: OperationStore, op: dict, sess: Any, sleep: Callable[[float], No
         except HistoryUnavailable:
             item["result"] = "not_sent"
             item["note"] = "Not sent: " + HISTORY_FAILED[0].lower() + HISTORY_FAILED[1:]
-            op["history_blocked"] = True
+            history_blocked = True
             stop_rest = True
             continue
         try:
@@ -748,7 +750,7 @@ def _run(store: OperationStore, op: dict, sess: Any, sleep: Callable[[float], No
         else:
             item["result"] = "mismatch"
             item["note"] = (f"Meta accepted the change but saved {_display(command, saved, currency)}")
-    _finalize(store, op)
+    _finalize(store, op, history_blocked=history_blocked)
 
 
 def _display(command: str, value: Any, currency: str) -> str:
@@ -775,9 +777,9 @@ def _conclude(op: dict) -> None:
         op["message"] = f"{done} of {total} saved; the rest were not changed or did not match."
 
 
-def _finalize(store: OperationStore, op: dict) -> None:
+def _finalize(store: OperationStore, op: dict, *, history_blocked: bool = False) -> None:
     _conclude(op)
-    if op.pop("history_blocked", False):
+    if history_blocked:
         op["message"] = HISTORY_FAILED + " " + op["message"]
     if store.try_save(op):
         return

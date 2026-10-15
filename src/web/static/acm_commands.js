@@ -471,6 +471,7 @@
     unresponsive: 'Ads Manager stopped answering — try again in a few minutes',
     permission: 'Multilogin refused to start this profile (permission) — another user may be signed in to the same Multilogin account',
     stale: 'Changed since the preview — review again',
+    storage: "Not sent — this computer couldn't save the change history (disk full?)",
     unknown: 'Something went wrong — see Details'
   };
   var OWN_TEXT_CODES = ['restart_cooldown', 'not_loopback', 'rpa_backend', 'rpa'];   // текст сервера уже человеческий (с оставшимся временем)
@@ -488,6 +489,8 @@
     if (/checkpoint/i.test(text)) return FRIENDLY.checkpoint;
     if (code === 'page_unresponsive' || /stopped answering|page[ _]unresponsive/i.test(text)) return FRIENDLY.unresponsive;
     if (code === 'stale' || /changed since|since the preview/i.test(text)) return FRIENDLY.stale;
+    // ACL-1855: журнал операций не записался — в Meta ничего не ушло
+    if (code === 'storage' || /history could not be saved/i.test(text)) return FRIENDLY.storage;
     if (/listens on this computer alone|\(127\.0\.0\.1\)/.test(text) || /ACL_FB_BACKEND=api/.test(text)) return text.replace(/^Not sent:\s*/, '');
     return null;
   }
