@@ -14473,7 +14473,7 @@
             "session": "wrg1886-20261015"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-RG1886",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -14498,7 +14498,8 @@
           "actor": "Coordinator-M1011A",
           "session": "coord-m1011a-20261015",
           "report": "# Return for a main refresh\n\nMain moved to 3ee7c6d9 (batch with ACL-1819, 1799, 1814; promotion PR 928). The source approval is stale against it. Required: merge current main into the branch (merge, no rebase; a trial merge is clean), re-run the affected tests, hand off again for a delta review. No scope change."
-        }
+        },
+        "reviewer": "Reviewer-RV1015R"
       },
       "888": {
         "implementers": [
@@ -16776,6 +16777,10 @@
       "Worker-RG1886": {
         "session": "wrg1886-20261015",
         "role": "Worker"
+      },
+      "Reviewer-RV1015R": {
+        "session": "rv1015r-887",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -19493,8 +19498,7 @@
       899,
       309,
       827,
-      902,
-      886
+      902
     ],
     "review": null,
     "history": [
@@ -40649,6 +40653,13 @@
             "approved_at": "2026-10-15T10:42:29+00:00"
           }
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-15T10:46:35+00:00",
+        "pr": 887,
+        "lane": "2e6b36e3c70f43058147e21b746e9a76",
+        "actor": "Reviewer-RV1015R"
       }
     ],
     "policy": {
@@ -44724,6 +44735,19 @@
       "started_at": "2026-10-15T08:23:18+00:00",
       "ineligible": {}
     },
-    "source_reviews": {}
+    "source_reviews": {
+      "887": {
+        "id": "2e6b36e3c70f43058147e21b746e9a76",
+        "pr": 887,
+        "issues": [
+          886
+        ],
+        "actor": "Reviewer-RV1015R",
+        "session": "rv1015r-887",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-15T10:46:35+00:00",
+        "state": "reviewing"
+      }
+    }
   }
 }
