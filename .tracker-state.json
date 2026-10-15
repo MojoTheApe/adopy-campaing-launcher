@@ -3941,7 +3941,7 @@
       "source_sha": "0d9201cf199ca52aeb3b9ce691a87b3ba0c10745",
       "main_tree": "51178fe84da2671e4244fc1f810512c44b657260",
       "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-      "state": "passed",
+      "state": "promoted",
       "recorded_at": "2026-10-15T21:32:36+00:00",
       "batch_id": "3bc5972db83a4bbeaf5f66bc508adadd",
       "verification": {
@@ -5856,6 +5856,18 @@
         ],
         "state": "pending",
         "recorded_at": "2026-10-15T10:00:37+00:00"
+      },
+      "924": {
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "sources": [
+          {
+            "pr": 940,
+            "merge_sha": "7d1ad46c14ddd2e08e507e33248af50af42df026",
+            "tree_sha": "da457106740ac89e01ab07052825f8a5cd0b3a97"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-10-15T22:00:05+00:00"
       }
     },
     "promotions": {
@@ -9302,6 +9314,37 @@
           "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/926#issuecomment-6189357007"
         },
         "verified_at": "2026-10-15T09:54:41+00:00"
+      },
+      "940": {
+        "pr": 931,
+        "issues": [
+          924
+        ],
+        "tree_sha": "da457106740ac89e01ab07052825f8a5cd0b3a97",
+        "source_sha": "0d9201cf199ca52aeb3b9ce691a87b3ba0c10745",
+        "main_tree": "51178fe84da2671e4244fc1f810512c44b657260",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "state": "passed",
+        "recorded_at": "2026-10-15T21:32:36+00:00",
+        "batch_id": "3bc5972db83a4bbeaf5f66bc508adadd",
+        "verification": {
+          "kind": "stage-verification",
+          "result": "passed",
+          "target": "ACL isolated Windows stage installation",
+          "source_sha": "0d9201cf199ca52aeb3b9ce691a87b3ba0c10745",
+          "tree_sha": "da457106740ac89e01ab07052825f8a5cd0b3a97",
+          "checks": [
+            "Stage CI38810617254 passed with retained native full-matrix proof for the exact tree",
+            "Stage Windows installer38810617339: every native job passed freshly",
+            "Previous actual package installs and starts with isolated data",
+            "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
+            "Updated installed application restarts with preserved machine/workspace/creative data",
+            "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts",
+            "Recovered application restarts and synthetic data remains byte-identical"
+          ],
+          "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/issues/924#issuecomment-6202996163"
+        },
+        "verified_at": "2026-10-15T21:49:28+00:00"
       }
     },
     "acceptances": {
