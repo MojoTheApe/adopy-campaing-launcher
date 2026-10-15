@@ -4,8 +4,9 @@ prompt браузера, и Playwright-событие 'dialog' о них не з
 capture_dialogs(page, sink) — то же, что раньше давал
 `page.on('dialog', lambda d: (sink.append(d.message), d.accept()))`:
 каждое окно страницы попадает в sink текстом «заголовок + пояснение» и
-закрывается основной кнопкой (OK / «да»). Для окна ввода answer(text)
-возвращает, что вписать; None — нажать Cancel. Вызывать до page.goto.
+закрывается основной кнопкой (OK / «да»). answer(text) — что ответить:
+False — Cancel; для окна ввода строка — что вписать, None — Cancel.
+Вызывать до page.goto.
 """
 
 _SCRIPT = """
@@ -20,7 +21,8 @@ _SCRIPT = """
     const field = dlg.querySelector('.acl-dlg-input');
     Promise.resolve(window.__aclDialogSeen(text)).then((answer) => {
       if (!dlg.isConnected) return;
-      if (field && answer === null) { dlg.querySelector('.acl-dlg-quiet').click(); return; }
+      const quiet = dlg.querySelector('.acl-dlg-quiet');
+      if (quiet && (answer === false || (field && answer === null))) { quiet.click(); return; }
       if (field && typeof answer === 'string') field.value = answer;
       dlg.querySelector('.acl-dlg-primary').click();
     });

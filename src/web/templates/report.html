@@ -15009,7 +15009,7 @@ function cbNewRun(notify) {
       // ACL-1819: повтор отправки проходит те же ворота pre-flight audit, что и Publish;
       // нет ворот — нет повтора.
       if (typeof window.cbPreflightGate !== 'function' || !e.form) {
-        aclAlert(CB_PF_UNAVAILABLE);
+        aclAlert('Pre-flight audit unavailable — reload the page');
         return false;
       }
       var all = Array.prototype.slice.call(e.form.querySelectorAll('.cb-slot'));
