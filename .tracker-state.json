@@ -39427,7 +39427,9 @@
         "session": "rrk812-20261015",
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-15T04:22:41+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "# Return for a dependency refresh\n\nMain now also contains batch e76699ef (ACL-1800 campaign commands, ACL-1797 design system; PR 917 -> 918). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
+        "keep_lane": false
       }
     }
   }
