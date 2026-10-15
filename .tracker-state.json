@@ -9373,6 +9373,18 @@
         "state": "implementing",
         "started_at": "2026-10-15T10:26:44+00:00",
         "from_status": "status:todo"
+      },
+      "902": {
+        "actor": "Worker-RG1902",
+        "session": "wrg1902-20261015",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1902-campaign-name-suffix",
+        "worktree": "C:\\acl-1902-name-suffix",
+        "id": "88b9a478600740828178e0fae2d1bad1",
+        "issue": 902,
+        "state": "implementing",
+        "started_at": "2026-10-15T10:32:11+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -14632,10 +14644,14 @@
           {
             "actor": "Worker-RF1902",
             "session": "wrf1902-20261015"
+          },
+          {
+            "actor": "Worker-RG1902",
+            "session": "wrg1902-20261015"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-RF1902",
+        "state": "implementing",
+        "worker": "Worker-RG1902",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-RF1902",
@@ -14654,14 +14670,7 @@
         "pr": 904,
         "queued_at": "2026-10-15T08:10:10+00:00",
         "review_report": "# Return for a main refresh\n\nMain moved to 3ee7c6d9 (batch with ACL-1819, 1799, 1814; promotion PR 928). The source approval is stale against it. Required: merge current main into the branch (merge, no rebase; a trial merge is clean), re-run the affected tests, hand off again for a delta review. No scope change.",
-        "reviewer": "Reviewer-RV1015M",
         "return_operation": {
-          "id": "396f1b2fdbad4b79a91950b1be6afb7e",
-          "actor": "Coordinator-M1011A",
-          "session": "coord-m1011a-20261015",
-          "report": "# Return for a main refresh\n\nMain moved to 3ee7c6d9 (batch with ACL-1819, 1799, 1814; promotion PR 928). The source approval is stale against it. Required: merge current main into the branch (merge, no rebase; a trial merge is clean), re-run the affected tests, hand off again for a delta review. No scope change."
-        },
-        "return": {
           "id": "396f1b2fdbad4b79a91950b1be6afb7e",
           "actor": "Coordinator-M1011A",
           "session": "coord-m1011a-20261015",
@@ -16783,6 +16792,10 @@
       "Reviewer-RV1015N": {
         "session": "rv1015n-831",
         "role": "Reviewer"
+      },
+      "Worker-RG1902": {
+        "session": "wrg1902-20261015",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -40486,6 +40499,13 @@
         "issue": 899,
         "pr": 900,
         "actor": "Worker-RG1899"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-15T10:32:11+00:00",
+        "issue": 902,
+        "claim": "88b9a478600740828178e0fae2d1bad1",
+        "actor": "Worker-RG1902"
       }
     ],
     "policy": {
