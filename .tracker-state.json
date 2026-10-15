@@ -37049,6 +37049,207 @@
           "started_at": "2026-10-15T05:43:00+00:00",
           "ineligible": {}
         }
+      },
+      {
+        "event": "batch-frozen",
+        "at": "2026-10-15T05:44:03+00:00",
+        "batch": {
+          "id": "e677f638b7ad4190887362ffb391ec98",
+          "actor": "Coordinator-C1014I",
+          "session": "coord-c1014i-20261014",
+          "state": "assembling",
+          "issues": [
+            812,
+            826,
+            775,
+            815
+          ],
+          "members": [
+            {
+              "issue": 812,
+              "pr": 813,
+              "branch": "codex/acl-1812-warm-sessions",
+              "head_sha": "55338399fdabecf46cc32b6597a98281d5ff417d",
+              "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+              "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "2e553f1df188893e8bb8852ea4e3436791fb85dae0c8bf2b5b56a7b8f66c4e1d",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-R1812P",
+                "implementer": "Worker-RL1812",
+                "review_session": "r1812p-20261015",
+                "execution_lane": "acf86f7aacc04ada948afc1bb84a090c",
+                "head_sha": "55338399fdabecf46cc32b6597a98281d5ff417d",
+                "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+                "tree_sha": "ba5e0e99b5639f8f7843df482cdc237be8efd449",
+                "report": "Independent review of ACL-1812 / PR 813 at head 55338399 against main 0850aa39 by Reviewer-R1812P, who implemented none of it (22 files, full diff read). Robot safety: profiles opened from the dashboard enter the warm registry and keep one reusable robot tab (lease release never closes it; a dead or hung tab is replaced exactly once). A shared file-locked stop log (stop_log.py) with a 3-minute restart cooldown (ACL_PROFILE_RESTART_COOLDOWN_S) is checked on every dashboard start path: fb_api.profile.open_profile, warm.open_one, account_spend._start_closed, open_profile_for_automation (row button and Connect), account_spend_api._open_gated; stops are recorded in _close_started, finish_job, the job panel Close profile (publish_jobs.close_profile, in a finally so a failed call still counts) and warm close/forget. Hand-opened profiles (open_by_hand, no debug port) are never auto-closed or restarted: warm.open_one, close_one and _verify_process refuse with English text, and the old reopening_by_hand path in account_spend and country_split is removed. Nothing polls live accounts: /warm/state reads only the registry and local processes, the JS refreshes on page load and a debounced htmx settle and polls only the local job every 2 s while it runs. The branch has no relaunch code and no browser.py change, so the DirectCDP proxy behaviour is untouched; profiles start through MLX start as before. RPA-publisher start/stop paths (browser.py) stay with ACL-1811 by design and are not in this diff. Messages are friendly English. Tests: 287 passed in the 1812 and read test files plus 707 passed in the combined 1812/1800/1761/spend set; CI is all green; acl_scan_secrets clean. Mutations, each failing at least one test: no cooldown in open_profile, in open_profile_for_automation, in _start_closed, in _open_gated, in warm.open_one; no stop record in the job panel Close profile; warm.open_one starting a hand-opened profile; _attach_only continuing on a hand-opened profile. Worktree restored after each. No live calls. Findings: no blocking issues.",
+                "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  812
+                ],
+                "recorded_at": "2026-10-15T05:40:30+00:00",
+                "issue_scopes": {
+                  "812": "2e553f1df188893e8bb8852ea4e3436791fb85dae0c8bf2b5b56a7b8f66c4e1d"
+                }
+              },
+              "lane": {
+                "id": "acf86f7aacc04ada948afc1bb84a090c",
+                "pr": 813,
+                "issues": [
+                  812
+                ],
+                "actor": "Reviewer-R1812P",
+                "session": "r1812p-20261015",
+                "coordinator": "Coordinator-C0930A",
+                "started_at": "2026-10-15T05:39:35+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-15T05:40:46+00:00"
+            },
+            {
+              "issue": 826,
+              "pr": 828,
+              "branch": "codex/acl-1826-mlx-session-lost",
+              "head_sha": "285aca312bfaa186a6a50cf9effd017f41f62606",
+              "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+              "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "a457f56dba1a2e4c45a91494b784d84346237bf0581f5065ea371183cac92e1c",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-R1826P",
+                "implementer": "Worker-RL1826",
+                "review_session": "r1826p-20261015",
+                "execution_lane": "83e30a41e3544b5489cf989c9486a08d",
+                "head_sha": "285aca312bfaa186a6a50cf9effd017f41f62606",
+                "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+                "tree_sha": "78fd44dc664bb1558723900a07a428d9cbef4167",
+                "report": "Independent re-review of ACL-1826 / PR 828 at head 285aca31 (merge of main 0850aa39 into the branch) by Reviewer-R1826P, who implemented none of it. Earlier review R1826N found the code correct; this pass checks the refresh. _campaign_table.html differs from main only by the 1826 additions: data-hc=banner inside body above main's 1800 toolbar (one banner element; banner(null) clears all instances at batch start and only the first stopped instance shows it, so it appears once), BATCH_STOPS stop capture, batch id and Retry; main's toolbar, loadWarm() and the single hc-head2 stay intact. Retry re-sends only the stopped forms (queueRun over stopped jobs, cbPublishAll onlyKeys, amapRunJobs on stopped) and is covered by tests/test_acl1826_mlx_session_lost.py including the node retry harness (37 passed, none skipped). The window guard in report.html is untouched versus main. CHANGELOG equals main. Tests on the head: 707 passed, 1 skipped (1826, 1800, 1761, review_ui_regressions, 1812, account_spend). scripts/acl_scan_secrets.py clean. Note for the batch: the branch stacks the ACL-1812 warm-session code (PR 813), so 826 carries 1812 into main. No live calls. Findings: no blocking issues.",
+                "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  826
+                ],
+                "recorded_at": "2026-10-15T05:29:42+00:00",
+                "issue_scopes": {
+                  "826": "a457f56dba1a2e4c45a91494b784d84346237bf0581f5065ea371183cac92e1c"
+                }
+              },
+              "lane": {
+                "id": "83e30a41e3544b5489cf989c9486a08d",
+                "pr": 828,
+                "issues": [
+                  826
+                ],
+                "actor": "Reviewer-R1826P",
+                "session": "r1826p-20261015",
+                "coordinator": "Coordinator-C0930A",
+                "started_at": "2026-10-15T05:27:49+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-15T05:32:52+00:00"
+            },
+            {
+              "issue": 775,
+              "pr": 809,
+              "branch": "codex/acl-1775-instant-forms",
+              "head_sha": "c56238119957d22eb66ce3812455a4abe70ea066",
+              "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+              "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "ceb045664960caec521fbc188384eaeb4a6ba049c145f62dde9e6d8e34e16091",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-R1775M",
+                "implementer": "Worker-RL1775",
+                "review_session": "r1775m-20261015",
+                "execution_lane": "c44cf644faa94bb3b393938e5c8f5e10",
+                "head_sha": "c56238119957d22eb66ce3812455a4abe70ea066",
+                "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+                "tree_sha": "388bdb0f041afa33aef4f6abfa7770b1fdbd331f",
+                "report": "Independent source review of ACL-1775 / PR 809 after the refresh onto main 0850aa39 (ACL-1800 object-update policy, ACL-1797 tokens merged); head c5623811, main is an ancestor. Reviewer-R1775M implemented none of it. Previous approval: Reviewer-R1775J at e2714db8.\n\nFocus: write safety of the merged policy. Read git diff e2714db8 c5623811 for src/fb_api/token_capture.py and src/fb_api/write_policy.py.\n- JS helper write(): ACL-1800 object-update branch intact (path /<id>=[1-9]\\d{4,}, exactly one key, field in OBJECT_FIELDS and not forbidden, status only ACTIVE/PAUSED, amount safe positive integer < 1e15, no files); creator helper refuses object paths and the commands helper refuses creation paths. The creation branch is the former code inside else, with 1775 withoutLeadForm(edge, checked, spec.on_ad===true) before statusOk; files/want assigned as in main.\n- lead_gen_form_id: allowed only in object_story_spec.<fmt>.call_to_action.value as the sole key, numeric id, and only with on_ad; elsewhere it stays in FORBIDDEN and is caught by statusOk. Python _without_lead_form mirrors it; check() uses fullmatch path, check_object_update() is separate; InPageGraph rejects allow_writes together with allow_object_updates, stage_file refused in update mode. Modes cannot be combined.\n- Python write(): object_updates -> check_object_update, else check(..., on_ad=on_ad). Parity holds.\n\nVerification (detached worktree at c5623811, PYTHONUTF8=1, node present so node matrices ran, not skipped):\n- test_acl1761_parity + test_acl1775_instant_forms + test_acl1775_builder_forms + test_acl1800_campaign_commands: 340 passed.\n- All test_acl1761_*, 1766*, 1775*, 1797*, 1800_account*, 1800_campaign_commands, 1800_home_wiring: 359 passed, 2 deselected. Golden website plan test passes.\n- Mutation 1: removed the on_ad requirement in the JS withoutLeadForm -> 2 failed. Mutation 2: removed the one-field check (pk.length !== 1) in the JS object-update branch -> 1 failed. Both reverted; worktree clean.\n- CI on head: all checks pass including tracker-link (green on the current check list); linux 1-3 and windows pass; two build jobs skipped as expected. Rerun of run 38681590041 was refused by GitHub as not retriable, tracker-link already passes in that run.\n- No live Meta or Multilogin calls.\n\nFindings: no blocking issues. Full local suite not run (CI covers it).",
+                "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  775
+                ],
+                "recorded_at": "2026-10-15T05:36:05+00:00",
+                "issue_scopes": {
+                  "775": "ceb045664960caec521fbc188384eaeb4a6ba049c145f62dde9e6d8e34e16091"
+                }
+              },
+              "lane": {
+                "id": "c44cf644faa94bb3b393938e5c8f5e10",
+                "pr": 809,
+                "issues": [
+                  775
+                ],
+                "actor": "Reviewer-R1775M",
+                "session": "r1775m-20261015",
+                "coordinator": "Coordinator-C0930A",
+                "started_at": "2026-10-15T05:28:53+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-15T05:36:37+00:00"
+            },
+            {
+              "issue": 815,
+              "pr": 818,
+              "branch": "codex/acl-1815-rules-evidence",
+              "head_sha": "ba1fc162c81a2fb3a97a1ee65f741f4758e7720d",
+              "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+              "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+              "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+              "scope": "d0edb4fa71627b40731aae36c0449abf03ea6a9660de369b26e0166980e748cb",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-R1815M",
+                "implementer": "Worker-RM1815",
+                "review_session": "r1815m-20261015",
+                "execution_lane": "44e41b202f884855b7c1fb98533e9a86",
+                "head_sha": "ba1fc162c81a2fb3a97a1ee65f741f4758e7720d",
+                "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+                "tree_sha": "61b647ecbf176785256d997ec96a5f2e7da4fd2d",
+                "report": "Independent review of ACL-1815 / PR 818 at head ba1fc162 against main 0850aa39. Reviewer-R1815M implemented none of it (handoff worker Worker-RM1815). Full diff vs main is 4 files: rules/evidence.py (new, pure: no network, file or profile access; only an env read for snapshot age), rules/__init__.py, campaign_inventory.py (adlabels and updated_time added to existing field lists, no new Meta calls; join_bi delegates to exact_name_join, whose logic is moved verbatim) and tests. BI join goes through exact_name_join in identity verdicts and every window; account alias trust goes through account_names.exact_alias/has_own_name (ACL-1824), tail-only matches are alias_heuristic and block Automatic. Maturity windows: stop-loss spend [start, through-D], FTD [start, through]; scale both [start, through-D] plus tail; D clamped 0..14. User-facing reason strings are English; Russian only in comments and docstrings. Tests: 1815, 1798 inventory and 1800 commands 293 passed (not browser). Mutation DEFAULT_MATURITY_DAYS 2 -> 5 is caught by 4 failing tests. scripts/acl_scan_secrets.py clean (the old 1800 file is gone). tracker-link run 38681970226 green. No live calls. Findings: no blocking issues.",
+                "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+                "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+                "issues": [
+                  815
+                ],
+                "recorded_at": "2026-10-15T05:34:11+00:00",
+                "issue_scopes": {
+                  "815": "d0edb4fa71627b40731aae36c0449abf03ea6a9660de369b26e0166980e748cb"
+                }
+              },
+              "lane": {
+                "id": "44e41b202f884855b7c1fb98533e9a86",
+                "pr": 818,
+                "issues": [
+                  815
+                ],
+                "actor": "Reviewer-R1815M",
+                "session": "r1815m-20261015",
+                "coordinator": "Coordinator-C0930A",
+                "started_at": "2026-10-15T05:32:22+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-15T05:34:36+00:00"
+            }
+          ],
+          "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+          "branch": "codex/batch-e677f638b7ad4190887362ffb391ec98",
+          "intake": "4ef8c2f10750455fa1e67cee957a42f6",
+          "started_at": "2026-10-15T05:44:03+00:00",
+          "pr": null,
+          "entered_stage": false,
+          "history": []
+        }
       }
     ],
     "policy": {
@@ -40487,7 +40688,203 @@
         "sources_closed": true
       }
     },
-    "integration": null,
+    "integration": {
+      "id": "e677f638b7ad4190887362ffb391ec98",
+      "actor": "Coordinator-C1014I",
+      "session": "coord-c1014i-20261014",
+      "state": "assembling",
+      "issues": [
+        812,
+        826,
+        775,
+        815
+      ],
+      "members": [
+        {
+          "issue": 812,
+          "pr": 813,
+          "branch": "codex/acl-1812-warm-sessions",
+          "head_sha": "55338399fdabecf46cc32b6597a98281d5ff417d",
+          "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+          "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "scope": "2e553f1df188893e8bb8852ea4e3436791fb85dae0c8bf2b5b56a7b8f66c4e1d",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-R1812P",
+            "implementer": "Worker-RL1812",
+            "review_session": "r1812p-20261015",
+            "execution_lane": "acf86f7aacc04ada948afc1bb84a090c",
+            "head_sha": "55338399fdabecf46cc32b6597a98281d5ff417d",
+            "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+            "tree_sha": "ba5e0e99b5639f8f7843df482cdc237be8efd449",
+            "report": "Independent review of ACL-1812 / PR 813 at head 55338399 against main 0850aa39 by Reviewer-R1812P, who implemented none of it (22 files, full diff read). Robot safety: profiles opened from the dashboard enter the warm registry and keep one reusable robot tab (lease release never closes it; a dead or hung tab is replaced exactly once). A shared file-locked stop log (stop_log.py) with a 3-minute restart cooldown (ACL_PROFILE_RESTART_COOLDOWN_S) is checked on every dashboard start path: fb_api.profile.open_profile, warm.open_one, account_spend._start_closed, open_profile_for_automation (row button and Connect), account_spend_api._open_gated; stops are recorded in _close_started, finish_job, the job panel Close profile (publish_jobs.close_profile, in a finally so a failed call still counts) and warm close/forget. Hand-opened profiles (open_by_hand, no debug port) are never auto-closed or restarted: warm.open_one, close_one and _verify_process refuse with English text, and the old reopening_by_hand path in account_spend and country_split is removed. Nothing polls live accounts: /warm/state reads only the registry and local processes, the JS refreshes on page load and a debounced htmx settle and polls only the local job every 2 s while it runs. The branch has no relaunch code and no browser.py change, so the DirectCDP proxy behaviour is untouched; profiles start through MLX start as before. RPA-publisher start/stop paths (browser.py) stay with ACL-1811 by design and are not in this diff. Messages are friendly English. Tests: 287 passed in the 1812 and read test files plus 707 passed in the combined 1812/1800/1761/spend set; CI is all green; acl_scan_secrets clean. Mutations, each failing at least one test: no cooldown in open_profile, in open_profile_for_automation, in _start_closed, in _open_gated, in warm.open_one; no stop record in the job panel Close profile; warm.open_one starting a hand-opened profile; _attach_only continuing on a hand-opened profile. Worktree restored after each. No live calls. Findings: no blocking issues.",
+            "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "issues": [
+              812
+            ],
+            "recorded_at": "2026-10-15T05:40:30+00:00",
+            "issue_scopes": {
+              "812": "2e553f1df188893e8bb8852ea4e3436791fb85dae0c8bf2b5b56a7b8f66c4e1d"
+            }
+          },
+          "lane": {
+            "id": "acf86f7aacc04ada948afc1bb84a090c",
+            "pr": 813,
+            "issues": [
+              812
+            ],
+            "actor": "Reviewer-R1812P",
+            "session": "r1812p-20261015",
+            "coordinator": "Coordinator-C0930A",
+            "started_at": "2026-10-15T05:39:35+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-15T05:40:46+00:00"
+        },
+        {
+          "issue": 826,
+          "pr": 828,
+          "branch": "codex/acl-1826-mlx-session-lost",
+          "head_sha": "285aca312bfaa186a6a50cf9effd017f41f62606",
+          "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+          "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "scope": "a457f56dba1a2e4c45a91494b784d84346237bf0581f5065ea371183cac92e1c",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-R1826P",
+            "implementer": "Worker-RL1826",
+            "review_session": "r1826p-20261015",
+            "execution_lane": "83e30a41e3544b5489cf989c9486a08d",
+            "head_sha": "285aca312bfaa186a6a50cf9effd017f41f62606",
+            "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+            "tree_sha": "78fd44dc664bb1558723900a07a428d9cbef4167",
+            "report": "Independent re-review of ACL-1826 / PR 828 at head 285aca31 (merge of main 0850aa39 into the branch) by Reviewer-R1826P, who implemented none of it. Earlier review R1826N found the code correct; this pass checks the refresh. _campaign_table.html differs from main only by the 1826 additions: data-hc=banner inside body above main's 1800 toolbar (one banner element; banner(null) clears all instances at batch start and only the first stopped instance shows it, so it appears once), BATCH_STOPS stop capture, batch id and Retry; main's toolbar, loadWarm() and the single hc-head2 stay intact. Retry re-sends only the stopped forms (queueRun over stopped jobs, cbPublishAll onlyKeys, amapRunJobs on stopped) and is covered by tests/test_acl1826_mlx_session_lost.py including the node retry harness (37 passed, none skipped). The window guard in report.html is untouched versus main. CHANGELOG equals main. Tests on the head: 707 passed, 1 skipped (1826, 1800, 1761, review_ui_regressions, 1812, account_spend). scripts/acl_scan_secrets.py clean. Note for the batch: the branch stacks the ACL-1812 warm-session code (PR 813), so 826 carries 1812 into main. No live calls. Findings: no blocking issues.",
+            "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "issues": [
+              826
+            ],
+            "recorded_at": "2026-10-15T05:29:42+00:00",
+            "issue_scopes": {
+              "826": "a457f56dba1a2e4c45a91494b784d84346237bf0581f5065ea371183cac92e1c"
+            }
+          },
+          "lane": {
+            "id": "83e30a41e3544b5489cf989c9486a08d",
+            "pr": 828,
+            "issues": [
+              826
+            ],
+            "actor": "Reviewer-R1826P",
+            "session": "r1826p-20261015",
+            "coordinator": "Coordinator-C0930A",
+            "started_at": "2026-10-15T05:27:49+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-15T05:32:52+00:00"
+        },
+        {
+          "issue": 775,
+          "pr": 809,
+          "branch": "codex/acl-1775-instant-forms",
+          "head_sha": "c56238119957d22eb66ce3812455a4abe70ea066",
+          "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+          "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "scope": "ceb045664960caec521fbc188384eaeb4a6ba049c145f62dde9e6d8e34e16091",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-R1775M",
+            "implementer": "Worker-RL1775",
+            "review_session": "r1775m-20261015",
+            "execution_lane": "c44cf644faa94bb3b393938e5c8f5e10",
+            "head_sha": "c56238119957d22eb66ce3812455a4abe70ea066",
+            "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+            "tree_sha": "388bdb0f041afa33aef4f6abfa7770b1fdbd331f",
+            "report": "Independent source review of ACL-1775 / PR 809 after the refresh onto main 0850aa39 (ACL-1800 object-update policy, ACL-1797 tokens merged); head c5623811, main is an ancestor. Reviewer-R1775M implemented none of it. Previous approval: Reviewer-R1775J at e2714db8.\n\nFocus: write safety of the merged policy. Read git diff e2714db8 c5623811 for src/fb_api/token_capture.py and src/fb_api/write_policy.py.\n- JS helper write(): ACL-1800 object-update branch intact (path /<id>=[1-9]\\d{4,}, exactly one key, field in OBJECT_FIELDS and not forbidden, status only ACTIVE/PAUSED, amount safe positive integer < 1e15, no files); creator helper refuses object paths and the commands helper refuses creation paths. The creation branch is the former code inside else, with 1775 withoutLeadForm(edge, checked, spec.on_ad===true) before statusOk; files/want assigned as in main.\n- lead_gen_form_id: allowed only in object_story_spec.<fmt>.call_to_action.value as the sole key, numeric id, and only with on_ad; elsewhere it stays in FORBIDDEN and is caught by statusOk. Python _without_lead_form mirrors it; check() uses fullmatch path, check_object_update() is separate; InPageGraph rejects allow_writes together with allow_object_updates, stage_file refused in update mode. Modes cannot be combined.\n- Python write(): object_updates -> check_object_update, else check(..., on_ad=on_ad). Parity holds.\n\nVerification (detached worktree at c5623811, PYTHONUTF8=1, node present so node matrices ran, not skipped):\n- test_acl1761_parity + test_acl1775_instant_forms + test_acl1775_builder_forms + test_acl1800_campaign_commands: 340 passed.\n- All test_acl1761_*, 1766*, 1775*, 1797*, 1800_account*, 1800_campaign_commands, 1800_home_wiring: 359 passed, 2 deselected. Golden website plan test passes.\n- Mutation 1: removed the on_ad requirement in the JS withoutLeadForm -> 2 failed. Mutation 2: removed the one-field check (pk.length !== 1) in the JS object-update branch -> 1 failed. Both reverted; worktree clean.\n- CI on head: all checks pass including tracker-link (green on the current check list); linux 1-3 and windows pass; two build jobs skipped as expected. Rerun of run 38681590041 was refused by GitHub as not retriable, tracker-link already passes in that run.\n- No live Meta or Multilogin calls.\n\nFindings: no blocking issues. Full local suite not run (CI covers it).",
+            "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "issues": [
+              775
+            ],
+            "recorded_at": "2026-10-15T05:36:05+00:00",
+            "issue_scopes": {
+              "775": "ceb045664960caec521fbc188384eaeb4a6ba049c145f62dde9e6d8e34e16091"
+            }
+          },
+          "lane": {
+            "id": "c44cf644faa94bb3b393938e5c8f5e10",
+            "pr": 809,
+            "issues": [
+              775
+            ],
+            "actor": "Reviewer-R1775M",
+            "session": "r1775m-20261015",
+            "coordinator": "Coordinator-C0930A",
+            "started_at": "2026-10-15T05:28:53+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-15T05:36:37+00:00"
+        },
+        {
+          "issue": 815,
+          "pr": 818,
+          "branch": "codex/acl-1815-rules-evidence",
+          "head_sha": "ba1fc162c81a2fb3a97a1ee65f741f4758e7720d",
+          "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+          "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+          "scope": "d0edb4fa71627b40731aae36c0449abf03ea6a9660de369b26e0166980e748cb",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-R1815M",
+            "implementer": "Worker-RM1815",
+            "review_session": "r1815m-20261015",
+            "execution_lane": "44e41b202f884855b7c1fb98533e9a86",
+            "head_sha": "ba1fc162c81a2fb3a97a1ee65f741f4758e7720d",
+            "base_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+            "tree_sha": "61b647ecbf176785256d997ec96a5f2e7da4fd2d",
+            "report": "Independent review of ACL-1815 / PR 818 at head ba1fc162 against main 0850aa39. Reviewer-R1815M implemented none of it (handoff worker Worker-RM1815). Full diff vs main is 4 files: rules/evidence.py (new, pure: no network, file or profile access; only an env read for snapshot age), rules/__init__.py, campaign_inventory.py (adlabels and updated_time added to existing field lists, no new Meta calls; join_bi delegates to exact_name_join, whose logic is moved verbatim) and tests. BI join goes through exact_name_join in identity verdicts and every window; account alias trust goes through account_names.exact_alias/has_own_name (ACL-1824), tail-only matches are alias_heuristic and block Automatic. Maturity windows: stop-loss spend [start, through-D], FTD [start, through]; scale both [start, through-D] plus tail; D clamped 0..14. User-facing reason strings are English; Russian only in comments and docstrings. Tests: 1815, 1798 inventory and 1800 commands 293 passed (not browser). Mutation DEFAULT_MATURITY_DAYS 2 -> 5 is caught by 4 failing tests. scripts/acl_scan_secrets.py clean (the old 1800 file is gone). tracker-link run 38681970226 green. No live calls. Findings: no blocking issues.",
+            "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "issues": [
+              815
+            ],
+            "recorded_at": "2026-10-15T05:34:11+00:00",
+            "issue_scopes": {
+              "815": "d0edb4fa71627b40731aae36c0449abf03ea6a9660de369b26e0166980e748cb"
+            }
+          },
+          "lane": {
+            "id": "44e41b202f884855b7c1fb98533e9a86",
+            "pr": 818,
+            "issues": [
+              815
+            ],
+            "actor": "Reviewer-R1815M",
+            "session": "r1815m-20261015",
+            "coordinator": "Coordinator-C0930A",
+            "started_at": "2026-10-15T05:32:22+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-15T05:34:36+00:00"
+        }
+      ],
+      "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+      "branch": "codex/batch-e677f638b7ad4190887362ffb391ec98",
+      "intake": "4ef8c2f10750455fa1e67cee957a42f6",
+      "started_at": "2026-10-15T05:44:03+00:00",
+      "pr": null,
+      "entered_stage": false,
+      "history": []
+    },
     "intake": {
       "id": "4ef8c2f10750455fa1e67cee957a42f6",
       "actor": "Coordinator-C1014I",
