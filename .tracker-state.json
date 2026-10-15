@@ -14460,7 +14460,7 @@
       },
       "341": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       }
     },
     "actors": {
@@ -38162,6 +38162,12 @@
           "report": "Not reviewable as is: PR #644 targets the old stage branch (v1 flow) and is 333 commits behind main; src/web/profile_slots.py changed heavily on main. The owner-requested feature (an already-open Multilogin profile needs no new memory) is still missing on main. Needs a port onto current main as a new PR with base main, then hand off again.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-15T07:12:30+00:00",
+        "issue": 341,
+        "reason": "Closed in the Playwright backlog cleanup 2026-10-15: we are moving campaign creation and account reads to the Meta API (ACL-1760/1761/1883), so this Ads Manager UI/Playwright-only work is no longer relevant. Restore if the UI path comes back."
       }
     ],
     "policy": {
