@@ -38423,7 +38423,9 @@
         "session": "r1826l-20261015",
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-14T23:55:10+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "Independent source review of ACL-1826 / PR 828 at head 4e2812a3. Reviewer-R1826L implemented nothing. Returned for fixes: CI is red.\n\nVerified OK:\n- Delta b5e3088c..4e2812a3 is exactly two placeholder workspace-id substitutions in tests/test_acl1826_mlx_session_lost.py (lines 388, 404). Nothing else changed.\n- scripts/acl_scan_secrets.py exits 0 on the head (detached worktree).\n- tests/test_acl1826_mlx_session_lost.py -k \"not browser\": 37 passed.\n- CI: tracker-link, Windows tests, process instructions, descriptor, tooling, build inputs pass (tracker-link failed once on timing, passed on rerun).\n\nBlocking:\n1. Linux shard 1 (3.11 and 3.13) fails tests/test_review_ui_regressions.py::test_poll_resumes_and_updates_all_copies_and_status with \"ReferenceError: window is not defined\" (evalmachine line 1331). Run https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38656365826. The ACL-1826 page code reads `window` in a block that this Node harness evaluates without a window. Fix: a `typeof window` guard, as ACL-1800 did (commit 7efcc856, PR 802). Windows did not catch this.\n2. Installer job \"Build, install, repair, and uninstall\" (run 38656365921) failed with \"INSTALLER: cancelled\" -- a cancellation/timeout-type failure, not a test failure. Rerun after the fix; confirm it is not caused by the PR.",
+        "keep_lane": false
       }
     }
   }
