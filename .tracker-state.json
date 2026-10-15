@@ -14822,7 +14822,7 @@
             "session": "acl_delivery"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-B71E",
         "coordinator": "Coordinator-DLV15",
         "handoff": {
@@ -14847,7 +14847,8 @@
           "session": "delivery_flow_root",
           "report": "Owner requested continuing the already authorized ACL delivery-flow activation on2026-10-15. Source PR925 remains Approved at82fd869c against old main080df2d8, but actual main advanced to3ee7c6d9c7a394ecec9f0889805fadb188b3aab7 and GitHub now reports conflicts. Preserve the full task924 scope, source branch, prior successful CI/independent review as history and all unrelated owners. Return only our own approved source to its actual author for current-main reconciliation, affected checks, hosted CI and fresh independent approval. Do not edit the frozen source as Coordinator or reuse old-base approval for changed content. Initial admission still uses the actual old Stage policy."
         },
-        "review_report": "Owner requested continuing the already authorized ACL delivery-flow activation on2026-10-15. Source PR925 remains Approved at82fd869c against old main080df2d8, but actual main advanced to3ee7c6d9c7a394ecec9f0889805fadb188b3aab7 and GitHub now reports conflicts. Preserve the full task924 scope, source branch, prior successful CI/independent review as history and all unrelated owners. Return only our own approved source to its actual author for current-main reconciliation, affected checks, hosted CI and fresh independent approval. Do not edit the frozen source as Coordinator or reuse old-base approval for changed content. Initial admission still uses the actual old Stage policy."
+        "review_report": "Owner requested continuing the already authorized ACL delivery-flow activation on2026-10-15. Source PR925 remains Approved at82fd869c against old main080df2d8, but actual main advanced to3ee7c6d9c7a394ecec9f0889805fadb188b3aab7 and GitHub now reports conflicts. Preserve the full task924 scope, source branch, prior successful CI/independent review as history and all unrelated owners. Return only our own approved source to its actual author for current-main reconciliation, affected checks, hosted CI and fresh independent approval. Do not edit the frozen source as Coordinator or reuse old-base approval for changed content. Initial admission still uses the actual old Stage policy.",
+        "reviewer": "Reviewer-N61D"
       },
       "45": {
         "implementers": [],
@@ -19516,8 +19517,7 @@
       816,
       309,
       827,
-      902,
-      924
+      902
     ],
     "review": null,
     "history": [
@@ -40712,6 +40712,13 @@
         "pr": 900,
         "lane": "b935e9a50ab2457381a5e31dacdb934e",
         "actor": "Reviewer-RV1015P"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-15T10:53:52+00:00",
+        "pr": 925,
+        "lane": "8f8a72ec6f1942378f7d9e222dfc6991",
+        "actor": "Reviewer-N61D"
       }
     ],
     "policy": {
@@ -44759,6 +44766,18 @@
         "session": "rv1015p-900",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-15T10:53:01+00:00",
+        "state": "reviewing"
+      },
+      "925": {
+        "id": "8f8a72ec6f1942378f7d9e222dfc6991",
+        "pr": 925,
+        "issues": [
+          924
+        ],
+        "actor": "Reviewer-N61D",
+        "session": "review_acl",
+        "coordinator": "Coordinator-DLV15",
+        "started_at": "2026-10-15T10:53:52+00:00",
         "state": "reviewing"
       }
     }
