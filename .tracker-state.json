@@ -6528,6 +6528,27 @@
           "workflow": ".github/workflows/complete-delivery.yml",
           "authorization_sha256": "3b42fcf36103d52dbdc92b0193c533f2475fe3c17730b71798a572ae6fab3ffd"
         }
+      },
+      "923": {
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "sources": [
+          {
+            "pr": 941,
+            "merge_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+            "tree_sha": "6bf82e2bdb173d34a064d14b6d2525403ddd3b8d"
+          }
+        ],
+        "state": "verified",
+        "recorded_at": "2026-10-15T22:59:21+00:00",
+        "process": true,
+        "verification": {
+          "route": "process",
+          "tree_sha": "6bf82e2bdb173d34a064d14b6d2525403ddd3b8d",
+          "main_sha": "7d1ad46c14ddd2e08e507e33248af50af42df026",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "process_policy": "9276adda3c40d4e03e471c96c3a1a4d055b82bd73f282d3b523f329781e3bca5"
+        },
+        "verified_at": "2026-10-15T22:59:21+00:00"
       }
     },
     "promotions": {
