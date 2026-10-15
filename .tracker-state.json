@@ -3674,6 +3674,42 @@
         "issue_scopes": {
           "812": "2e553f1df188893e8bb8852ea4e3436791fb85dae0c8bf2b5b56a7b8f66c4e1d"
         }
+      },
+      "919": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R919B",
+        "implementer": "Coordinator-C1014I",
+        "head_sha": "3fbd7649ea00094dddbd69928b09a98868b06f9a",
+        "base_sha": "79813fbf8af32989d5466cd201bbf6fab6ab069a",
+        "tree_sha": "503e92e7f6cf31505d335adfb68a77e547077d63",
+        "execution_lane": "cec28a01db264470aafd81b45c13cd34",
+        "review_session": "r919b-20261015",
+        "batch_id": "e677f638b7ad4190887362ffb391ec98",
+        "source_heads": [
+          "55338399fdabecf46cc32b6597a98281d5ff417d",
+          "285aca312bfaa186a6a50cf9effd017f41f62606",
+          "c56238119957d22eb66ce3812455a4abe70ea066",
+          "ba1fc162c81a2fb3a97a1ee65f741f4758e7720d"
+        ],
+        "scope": "Combined batch e677f638: ACL-812 (PR 813), ACL-826 (PR 828), ACL-775 (PR 809), ACL-815 (PR 818) into stage via PR 919; main 0850aa39 still current",
+        "findings": [],
+        "report": "Composition: first parent is main 0850aa39, exactly four merges in manifest order (55338399, 285aca31, c5623811, ba1fc162), no extra commits; each merge tree equals git merge-tree of its parents (no hidden edits); final diff against main has the same 47-file list as the union of the four sources. PR base stage (79813fbf) has the same tree as main (e1ff679e). Source approvals for all four heads on main 0850aa39 present in tracker state. CI on PR 919: 16 checks pass. Combined sanity in detached worktree at the head, PYTHONUTF8=1 pytest -k \"not browser\": 1812, 1826, 1775 (builder_forms, instant_forms), 1815, 1761 parity, 1800 campaign_commands and home_wiring: 523 passed, 1 deselected. No live calls. No blocking findings.",
+        "main_sha": "0850aa39884ddca49b4fb89d52136c5315066e46",
+        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "issues": [
+          812,
+          826,
+          775,
+          815
+        ],
+        "recorded_at": "2026-10-15T06:12:37+00:00",
+        "issue_scopes": {
+          "812": "2e553f1df188893e8bb8852ea4e3436791fb85dae0c8bf2b5b56a7b8f66c4e1d",
+          "826": "a457f56dba1a2e4c45a91494b784d84346237bf0581f5065ea371183cac92e1c",
+          "775": "ceb045664960caec521fbc188384eaeb4a6ba049c145f62dde9e6d8e34e16091",
+          "815": "d0edb4fa71627b40731aae36c0449abf03ea6a9660de369b26e0166980e748cb"
+        }
       }
     },
     "stage": {
