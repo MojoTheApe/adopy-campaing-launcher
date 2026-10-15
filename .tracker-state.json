@@ -9358,9 +9358,11 @@
         "worktree": "C:\\acl-1309-v2",
         "id": "f3bbd1b67c9249689796356aeb2c5270",
         "issue": 309,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-15T10:08:54+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 929,
+        "report": "ACL-1309 ready for review: PR #929 (base main), branch work/acl-1309-own-dashboard, supersedes #310.\nFixed the three #310 review defects: per-person sticky port (memory + %ProgramData%\\ACL\\ports registry, no overwrite of a neighbour's mark, race-safe), dual-stack [::] occupancy check, tests run the real launcher against real stub dashboards (each restored bug turns the suite red).\nPre-handoff Opus review: nothing blocking; its MEDIUM (first-launch race) fixed in bcaec120.\nTests: packaging/windows/tests + test_the_dashboard_says_whose_it_is + test_release_updates \u2014 113 passed locally; full suite in CI.\nNot verified: two real Windows accounts on one machine."
       },
       "827": {
         "actor": "Worker-RS1827",
