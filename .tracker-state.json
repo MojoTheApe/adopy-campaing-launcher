@@ -12857,7 +12857,7 @@
             "session": "wrm1814-20261015"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-RM1814",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -12876,7 +12876,7 @@
         },
         "pr": 817,
         "queued_at": "2026-10-15T04:29:35+00:00",
-        "review_report": "# Return for a dependency refresh\n\nMain now also contains batch e76699ef (ACL-1800 campaign commands, ACL-1797 design system; PR 917 -> 918). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
+        "review_report": "Windows CI (run 38681684978) fails: tests/test_shared_file_locks.py::test_no_inline_os_file_locks_remain_in_src. src/analysis_agent/rules/store.py lines 130-142 use inline msvcrt.locking/LK_NBLCK and fcntl.flock/LOCK_EX; must use config.paths.machine_file_lock. Returned for fix.",
         "reviewer": "Reviewer-RRM814"
       },
       "815": {
@@ -36556,6 +36556,24 @@
         "pr": 817,
         "lane": "0134b51f2be44c3aad7f627d06951d88",
         "actor": "Reviewer-RRM814"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-15T05:24:39+00:00",
+        "review": {
+          "id": "0134b51f2be44c3aad7f627d06951d88",
+          "pr": 817,
+          "issues": [
+            814
+          ],
+          "actor": "Reviewer-RRM814",
+          "session": "rrm814-20261015",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-15T05:24:14+00:00",
+          "state": "returning",
+          "report": "Windows CI (run 38681684978) fails: tests/test_shared_file_locks.py::test_no_inline_os_file_locks_remain_in_src. src/analysis_agent/rules/store.py lines 130-142 use inline msvcrt.locking/LK_NBLCK and fcntl.flock/LOCK_EX; must use config.paths.machine_file_lock. Returned for fix.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -39791,21 +39809,6 @@
       "started_at": "2026-10-15T03:44:03+00:00",
       "ineligible": {}
     },
-    "source_reviews": {
-      "817": {
-        "id": "0134b51f2be44c3aad7f627d06951d88",
-        "pr": 817,
-        "issues": [
-          814
-        ],
-        "actor": "Reviewer-RRM814",
-        "session": "rrm814-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "started_at": "2026-10-15T05:24:14+00:00",
-        "state": "returning",
-        "report": "Windows CI (run 38681684978) fails: tests/test_shared_file_locks.py::test_no_inline_os_file_locks_remain_in_src. src/analysis_agent/rules/store.py lines 130-142 use inline msvcrt.locking/LK_NBLCK and fcntl.flock/LOCK_EX; must use config.paths.machine_file_lock. Returned for fix.",
-        "keep_lane": false
-      }
-    }
+    "source_reviews": {}
   }
 }
