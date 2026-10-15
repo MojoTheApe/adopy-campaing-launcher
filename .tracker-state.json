@@ -9350,20 +9350,6 @@
   },
   "execution": {
     "claims": {
-      "853": {
-        "actor": "Worker-T1853A",
-        "session": "t1853a-20261015",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1853-profile-process-lease",
-        "worktree": "C:\\acl-1853",
-        "id": "30d0677551c44417870a375fc36e63b4",
-        "issue": 853,
-        "state": "handoff",
-        "started_at": "2026-10-15T09:28:57+00:00",
-        "from_status": "status:backlog",
-        "pr": 863,
-        "report": "# ACL-1853 source handoff (takeover)\n\nWorker-T1853A / t1853a-20261015; Coordinator-M1011A. Claim 30d0677551c44417870a375fc36e63b4.\nCodex Worker-N7Q4 stopped (usage limit). Prior head 9aaabdd6 was independently approved (RS1012) on old main 3327465f and returned only because main advanced.\nBranch codex/acl-1853-profile-process-lease, worktree C:\\acl-1853, head afe200905c65636a33daeb68d5b1bcf694c681cf, tree 6ca6d26169fbcf45eee2f8462919ed50de29c8eb, base main 3ee7c6d9c7a394ecec9f0889805fadb188b3aab7.\n\n## Changes since 9aaabdd6\n- 00c34974 merge main 080df2d8 (now incl. ACL-1760/1761/1800/1812/1826): account_spend.py (main removed _reopen_for_automation; on_lease_error kept), CHANGELOG union, four tests.\n- d000b0da: warm adopt lease refusal returns result code profile_lease instead of aborting open_many; account_spend_api clean message for empty profile_id and lease refusal; main-origin test fixtures given synthetic UUIDs.\n- e21f4818 (pre-handoff review findings): publish waiters cap 30 min, cancellable (reads 120 s); deferred close timer survives lease refusal; clean refusal text (no class prefix) in API country split / start_read / inventory; Close skips unresolvable unrelated job labels; spawn test timeouts 20 s.\n- afe20090 merge main 3ee7c6d9 (CHANGELOG only).\n- PROFILE_OWNERSHIP.md: merged API/warm paths not holding the lease across the full session are listed as #862 scope.\n\n## Verification\nTargeted tests: 1197+668 after merge; 551 after fixes (lease suite 43 incl. 5 new). Secret scan clean. Pre-handoff independent read-only review (Sonnet): APPROVE, 1 MEDIUM + 4 LOW, all fixed in e21f4818. No live profile/Meta operations."
-      },
       "309": {
         "actor": "Worker-W1015K",
         "session": "S63c25b6e",
@@ -14118,25 +14104,25 @@
             "session": "t1853a-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-T1853A",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-N7Q4",
-          "session": "architecture_audit_n7q4_20261013",
-          "coordinator": "Coordinator-CR1012",
+          "actor": "Worker-T1853A",
+          "session": "t1853a-20261015",
+          "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1853-profile-process-lease",
-          "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-1853-2026-10-13",
-          "id": "e880b87702ab42b6a3cd4368a402869d",
+          "worktree": "C:\\acl-1853",
+          "id": "30d0677551c44417870a375fc36e63b4",
           "issue": 853,
           "state": "handoff",
-          "started_at": "2026-10-13T08:53:40+00:00",
-          "from_status": "status:todo",
+          "started_at": "2026-10-15T09:28:57+00:00",
+          "from_status": "status:backlog",
           "pr": 863,
-          "report": "# ACL-1853 source handoff\n\nIssue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/853\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/863\nWorker-N7Q4 / architecture_audit_n7q4_20261013; Coordinator-CR1012.\nFresh claim after CI review-return: e880b87702ab42b6a3cd4368a402869d.\nWorktree: C:/Users/EvgeniSedin/Desktop/ACM-Worker-1853-2026-10-13.\nBranch: codex/acl-1853-profile-process-lease.\nBase main: 3327465fcbd46ccff9b64eb7c574ff5b84b99b80.\nSource head: 9aaabdd60e49da5ebbbde31d106ec9e902240893.\nTree: 739e1b0e8936b5b6c6a4422d5bd51330aae99b6c.\n\n## CI fixture repair on current base\n\nCI run 38369810907 on head 3710 failed 53 distinct Linux cases across all three\nshards (both supported Python versions); Windows passed. Independent review-return\ncompleted before this fresh author claim. All 53 failures were reproduced locally:\n45 failed / 283 passed in 56.59s, plus 8 failed / 69 passed in 28.08s.\n\nThese existing fixtures omitted physical profile IDs/maps or used label-shaped IDs.\nThey were refused by the intended guard before reaching their tested behavior.\nThirteen test files now supply explicit synthetic UUIDs and maps; one __new__ fake\nalso supplies the constructor's browser_provider_name. Production source, ownership\nrules and public outcomes are byte-identical to head 3710. AST comparison retained\nevery assertion; only two workbook expected profile-ID values changed to the same\nsynthetic UUID as their calls. No test bypasses the lease or unknown-ID refusal.\n\nVerification: targeted URL file 25/25 passed. A broader set selected from every\ndirect read/publish/open/close/queue/lease caller and every changed test file covered\n37 files: 1045 passed / 1 incomplete __new__ fixture failed in 120.03s. After fixing\nthat fixture's provider name, its complete 14-test file passed in 2.46s. All 53\noriginal failure cases are now covered by passing results. This is not represented\nas one atomic 1046-pass run. Successful unchanged sets were not repeated.\nPlatform classification: 100 passed in 25.05s. Final staged secret scan and diff\nchecks passed. Production imports are unchanged from the successful smoke below.\n\nSelection and raw logs are under output: profile-lease-caller-test-selection.txt,\nprofile-lease-ci-red-tests.txt, profile-lease-ci-shard3-red-tests.txt,\nprofile-lease-all-callers-tests.txt, profile-lease-reopened-final-tests.txt.\nRequired fresh full CI and independent review remain pending on head 9aaabdd6.\nCurrent automatic CI: https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38373909206 .\n\n## Earlier current-base refresh (head 3710)\n\nIndependent Reviewer returned the prior source normally because main advanced and\nthe PR conflicted. Fresh implementation claim acquired before edits. Main was merged\nwithout rewriting source history. The only conflict was CHANGELOG: both ACL-1853 and\nACL-1824 entries are retained. No profile-lease implementation changed in this refresh.\nCurrent main also supplies the inherited test logging-filter cleanup from ACL-1824.\n\nOn that exact tree: 179 tests passed in 42.03s across test_profile_process_lease,\ntest_acl1756_fb_api, test_the_api_stop_is_asked_first and test_dashboard_review.\nThis includes all 38 process/public-boundary tests and the pilot-to-routing-log\nregression sequence. Secret scanner, isolated import smoke and diff checks passed.\nRaw log: output/profile-lease-main-refresh-tests.txt. No live services or profiles.\n\nPrior exact head 70073 had an independent 38/38 process-suite pass and a successful\nGitHub Windows 3.13 job. Its manual CI run 38367237557 was cancelled as superseded;\nit is not current-tree evidence. Current PR CI and independent final review remain\nrequired. The old claim 8206cb103afc4597948ad14dc9d2b392 was released by its handoff.\n\n## Delivered source\n\nA small profile_lease module wraps the existing machine_file_lock OS primitive\nwith a thread-reentrant lease. Canonical physical Multilogin UUIDs share one lock\nacross configuration roots, ports and labels. Existing provider aliases normalize\nto the same UUID; Dolphin numeric IDs have a separate namespace. The coordination\nroot is the OS-user home, outside per-instance config. No lock files are deleted.\nIndependent Windows processes cannot enter the same profile together; process death\nreleases the OS lock. Waiting is bounded to 120 seconds with cancellation checks\nbetween 50ms attempts. Failure refuses entry, never falls back to a label lock.\n\nMain operations/RPA/read/country/publish-queue boundaries use it. Actual entries are\nchecked before open/attach/close; nested operations cannot switch to another profile\nafter a map change. Publish waiting cancellation/failure finishes with an honest\njob outcome and releases acquired memory slots. Public probe/open/SpendReading/\nCountrySplit refusal shapes are retained, country failed attempts replace cached\nsuccess, and turn-off refuses with a failed result plus its audit history record.\n\nOnly source/main scope: no user-profile, Meta or production configuration actions.\nNo changes to graph/CDP/token code or unmerged TEST sources. Same OS user on the\nsame Windows machine, independent processes/spawn and the same lease protocol.\nNo claim for older builds, different users, remote machines, external/manual control\nor inherited POSIX fork locks. Warm/API lifecycle ACL-1812 still needs explicit\nfull-session ownership integration; ACL-1187 live verification remains deferred.\nSystem documentation and changelog record these boundaries.\n\n## Earlier offline verification (before base refresh)\n\nWindows / Python3.14.3, C:/fb_agents/.venv/Scripts/python.exe. Every test uses fake\nproviders, synthetic IDs, isolated configs and isolated coordination directories.\nThe Windows sandbox blocked asyncio socketpair in ASGI tests; faulthandler identified\nstdlib socket.accept. Those test processes were stopped and offline checks rerun\nwith approved local loopback access, not live endpoints.\n\n- Initial dedicated process suite: 15 passed in14.91s, then expanded with boundary,\n  provider aliases, publish cancellation/slot outcomes and public error/history cases.\n- Independent reviewer WIP run of the expanded suite: 37 passed in39.38s; reviewer\n  separately verified six public refusal shapes, exactly one failed turn-off record,\n  and actual decorated RpaPublisher A-to-B map refusal before its body.\n- Affected older boundary/RPA/reading/queue/cancel suite: 464 passed,18 failed in101.38s;\n  remaining fake IDs/mappings and public refusal contracts repaired; targeted retry\n  of all18 failures: 18 passed in5.03s.\n- Expanded country/history/platform/provider suite including new process suite:\n  362 passed,18 failed in113.81s; all18 residual mapping setup failures repaired;\n  targeted retry: 18 passed in8.42s. No concurrency/cancellation assertions weakened.\n- Final oversized Dolphin-ID validation and old public refusal cases: 5 passed in1.71s.\n- Last country cached-success refusal regression plus three public error-shape cases:\n  4 passed in2.09s. These include the final source change after the independent WIP run.\n- scripts/acl_scan_secrets.py PASS after staging every new file; smoke PASS with\n  isolated ACL_CONFIG_DIR, library/Sentry disabled; git diff --cached --check PASS.\n- No local full-suite rerun, no package build and no live-profile verification.\n  Required full Linux/Windows source CI is pending; successful unchanged local sets\n  were not repeatedly rerun. Raw local logs remain under this worktree/output.\n\n## Remaining handoff\n\nFinal independent review on the exact committed head and current CI; then normal\nbatch combined review, stage verification, unchanged main promotion and delivery.\nThis Worker did not acquire the review lane or bypass admission. Source PR remains\nopen and is not merged. Integrating warm/API callers must carry this lease across\nsession lifetime, not release it when an open_profile descriptor is returned."
+          "report": "# ACL-1853 source handoff (takeover)\n\nWorker-T1853A / t1853a-20261015; Coordinator-M1011A. Claim 30d0677551c44417870a375fc36e63b4.\nCodex Worker-N7Q4 stopped (usage limit). Prior head 9aaabdd6 was independently approved (RS1012) on old main 3327465f and returned only because main advanced.\nBranch codex/acl-1853-profile-process-lease, worktree C:\\acl-1853, head afe200905c65636a33daeb68d5b1bcf694c681cf, tree 6ca6d26169fbcf45eee2f8462919ed50de29c8eb, base main 3ee7c6d9c7a394ecec9f0889805fadb188b3aab7.\n\n## Changes since 9aaabdd6\n- 00c34974 merge main 080df2d8 (now incl. ACL-1760/1761/1800/1812/1826): account_spend.py (main removed _reopen_for_automation; on_lease_error kept), CHANGELOG union, four tests.\n- d000b0da: warm adopt lease refusal returns result code profile_lease instead of aborting open_many; account_spend_api clean message for empty profile_id and lease refusal; main-origin test fixtures given synthetic UUIDs.\n- e21f4818 (pre-handoff review findings): publish waiters cap 30 min, cancellable (reads 120 s); deferred close timer survives lease refusal; clean refusal text (no class prefix) in API country split / start_read / inventory; Close skips unresolvable unrelated job labels; spawn test timeouts 20 s.\n- afe20090 merge main 3ee7c6d9 (CHANGELOG only).\n- PROFILE_OWNERSHIP.md: merged API/warm paths not holding the lease across the full session are listed as #862 scope.\n\n## Verification\nTargeted tests: 1197+668 after merge; 551 after fixes (lease suite 43 incl. 5 new). Secret scan clean. Pre-handoff independent read-only review (Sonnet): APPROVE, 1 MEDIUM + 4 LOW, all fixed in e21f4818. No live profile/Meta operations."
         },
         "pr": 863,
-        "queued_at": "2026-10-13T09:13:33+00:00",
+        "queued_at": "2026-10-15T10:17:52+00:00",
         "review_report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle.",
         "return_operation": {
           "id": "91201340047f423fa6a6747b1c5dc404",
@@ -19503,7 +19489,8 @@
       907,
       891,
       855,
-      920
+      920,
+      853
     ],
     "review": null,
     "history": [
@@ -40436,6 +40423,13 @@
         "issue": 920,
         "pr": 921,
         "actor": "Worker-S1920A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-15T10:17:52+00:00",
+        "issue": 853,
+        "pr": 863,
+        "actor": "Worker-T1853A"
       }
     ],
     "policy": {
