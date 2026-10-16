@@ -1,5 +1,11 @@
 # System history
 
+## Rebrand leftovers - ACL-1708
+
+- The account-unreachable error now says "Check the Adopy Campaign Manager window." (no visible "launcher" wording left in the dashboard; nothing compared against the old text).
+- Deleted `scripts/convert_favicon_to_ico.py`: it drew the old ACL mark, and the repo has no SVG renderer, so rebuilding from the kit SVGs would need a new dependency. `assets/dashboard.ico` and `favicon.ico` are the committed brand-kit files; nothing can regenerate the old mark.
+- `report.html` gets `<meta name="viewport">` so phones use the responsive layout.
+
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
 Add a durable authorized release workflow using the maintained installer publisher

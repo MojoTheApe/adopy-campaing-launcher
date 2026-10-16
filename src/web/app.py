@@ -3995,7 +3995,7 @@ async def account_spend_turn_off(request: Request) -> JSONResponse:
             requester=(os.environ.get("MY_CM_NAME") or "").strip(),
         )
     except Exception:
-        return JSONResponse({"ok": False, "error": "Could not reach the account. Check the launcher window."}, status_code=503)
+        return JSONResponse({"ok": False, "error": "Could not reach the account. Check the Adopy Campaign Manager window."}, status_code=503)
     return JSONResponse({"ok": True, "result": result.to_dict()})
 
 
