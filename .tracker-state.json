@@ -41561,9 +41561,11 @@
         "worktree": "C:\\acl-1356",
         "id": "b08a3785c6054e84a4b69df94315f489",
         "issue": 356,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-16T09:56:53+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 942,
+        "report": "ACL-1356 source PR #942 (head c5b2e72c), base main, includes current main.\nDone: fastapi 0.141.1 / starlette 1.7.0 / jinja2 3.1.6 pinned in requirements.txt (single pin source); RequestBodyLimit (1 MiB default, 16 MiB for 5 Builder routes, root_path-aware); read_form() limits on all 14 form parses; SafeStaticFiles refuses UNC/drive/absolute/../device names; 16 TemplateResponse calls request-first.\nChecks: affected local set 514 passed (Python 3.13, new pins); test_request_limits + builder tests 63 passed after review fixes. Pre-handoff read-only review (Opus): no blocking findings; LOW-2/LOW-4 fixed in c5b2e72c; LOW-1 (on_event deprecation), LOW-3/5/6 left as non-blocking notes.\nRemaining: independent review, full CI incl. Windows installer and Python 3.11, owner smoke check of live dashboard (large Builder publish, /static/logo.svg) after delivery."
       },
       "816": {
         "actor": "Worker-RS1816",
