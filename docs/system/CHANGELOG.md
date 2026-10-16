@@ -147,6 +147,15 @@ account map and account-reading controls stay available in both cases.
 - The account-unreachable error now says "Check the Adopy Campaign Manager window." (no visible "launcher" wording left in the dashboard; nothing compared against the old text).
 - Deleted `scripts/convert_favicon_to_ico.py`: it drew the old ACL mark, and the repo has no SVG renderer, so rebuilding from the kit SVGs would need a new dependency. `assets/dashboard.ico` and `favicon.ico` are the committed brand-kit files; nothing can regenerate the old mark.
 - `report.html` gets `<meta name="viewport">` so phones use the responsive layout.
+## Account map: read the ad account in-page, two clear removals - ACL-142
+
+- Connect now uses an in-page dialog with a "Read from the open account" button. The detected
+  account name and number are shown, editable, and an unedited read needs an explicit tick because
+  Ads Manager redirects to the profile's default ad account. The probe answer carries
+  `needs_confirmation`. Existing connection behavior and Multilogin naming are unchanged.
+- Country rows: `x` asks before taking the account out of that country; a separate "Remove from ACL"
+  deletes this computer's map row and all placements (`/account-map-remove`, `also_unlink`).
+  Shared sheet, history, Meta campaigns and Multilogin profiles are untouched.
 
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
