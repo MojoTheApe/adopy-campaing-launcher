@@ -1,0 +1,300 @@
+{
+  "schema": "acl-retrospective-visual-evidence-v1",
+  "created_at": "2026-10-16T08:26:58.114966+00:00",
+  "reviewer": "/root/audit_legacy128_a",
+  "artifact_count": 8,
+  "images": [
+    {
+      "file": "acl1361-before-synthetic-light-fields.png",
+      "local_path": "/Users/dmitry.o/Documents/ChatGPT/ACL/output/playwright/acceptance12-visual-audit/acl1361-before-synthetic-light-fields.png",
+      "sha256": "f22e70f50193b98388b64ba20f2ae7d90618982114205a53664e58863aeb0747",
+      "source_sha": "feae4e8893d9f6496395453b34244c5f2e9db809",
+      "source_template_sha256": "5d96148747ca955242515cea28704537aeb5ac2f86b06564c113e658846b4783",
+      "rendered_html_sha256": "513258d5278da050ec263843af693d483408b93e73c77fcc5bc9a08b1861b2b6",
+      "theme": "light",
+      "view": "fields",
+      "label": "acl1361-before",
+      "synthetic_data": true,
+      "page_errors": [],
+      "headings": [
+        {
+          "text": "Mexico+ Account",
+          "visible": true
+        },
+        {
+          "text": "Saudi Arabia+ Account",
+          "visible": true
+        }
+      ]
+    },
+    {
+      "file": "acl1361-before-synthetic-dark-fields.png",
+      "local_path": "/Users/dmitry.o/Documents/ChatGPT/ACL/output/playwright/acceptance12-visual-audit/acl1361-before-synthetic-dark-fields.png",
+      "sha256": "be0342a88f361b3a3343fdc1f0c76f91cd6730468066c9946d6acd87130679a3",
+      "source_sha": "feae4e8893d9f6496395453b34244c5f2e9db809",
+      "source_template_sha256": "5d96148747ca955242515cea28704537aeb5ac2f86b06564c113e658846b4783",
+      "rendered_html_sha256": "513258d5278da050ec263843af693d483408b93e73c77fcc5bc9a08b1861b2b6",
+      "theme": "dark",
+      "view": "fields",
+      "label": "acl1361-before",
+      "synthetic_data": true,
+      "page_errors": [],
+      "headings": [
+        {
+          "text": "Mexico+ Account",
+          "visible": true
+        },
+        {
+          "text": "Saudi Arabia+ Account",
+          "visible": true
+        }
+      ]
+    },
+    {
+      "file": "acl1361-after-synthetic-light-fields.png",
+      "local_path": "/Users/dmitry.o/Documents/ChatGPT/ACL/output/playwright/acceptance12-visual-audit/acl1361-after-synthetic-light-fields.png",
+      "sha256": "004930b7998700eea9ae6fb9d79b073b9f2846913edb18c48f09f49739cd553f",
+      "source_sha": "e45fb29dc5697bc89f01f59ac667c6d1778f505f",
+      "source_template_sha256": "5ad513c92b41fb24577237fcab6ced5736c4ffde82dfc93f21a951291a3bd442",
+      "rendered_html_sha256": "d6dea459100b3e83ab690853dd17b0cb96c32e6447d09e1417f33c01797d919f",
+      "theme": "light",
+      "view": "fields",
+      "label": "acl1361-after",
+      "synthetic_data": true,
+      "page_errors": [],
+      "headings": [
+        {
+          "text": "Mexico+ Account",
+          "visible": true
+        },
+        {
+          "text": "Saudi Arabia+ Account",
+          "visible": true
+        }
+      ]
+    },
+    {
+      "file": "acl1361-after-synthetic-dark-fields.png",
+      "local_path": "/Users/dmitry.o/Documents/ChatGPT/ACL/output/playwright/acceptance12-visual-audit/acl1361-after-synthetic-dark-fields.png",
+      "sha256": "dbe16e19a15084119b96c91d9a27d312c586aad02be740b75cfaaec9aeca11eb",
+      "source_sha": "e45fb29dc5697bc89f01f59ac667c6d1778f505f",
+      "source_template_sha256": "5ad513c92b41fb24577237fcab6ced5736c4ffde82dfc93f21a951291a3bd442",
+      "rendered_html_sha256": "d6dea459100b3e83ab690853dd17b0cb96c32e6447d09e1417f33c01797d919f",
+      "theme": "dark",
+      "view": "fields",
+      "label": "acl1361-after",
+      "synthetic_data": true,
+      "page_errors": [],
+      "headings": [
+        {
+          "text": "Mexico+ Account",
+          "visible": true
+        },
+        {
+          "text": "Saudi Arabia+ Account",
+          "visible": true
+        }
+      ]
+    },
+    {
+      "file": "installed-current-synthetic-light-overview.png",
+      "local_path": "/Users/dmitry.o/Documents/ChatGPT/ACL/output/playwright/acceptance12-visual-audit/installed-current-synthetic-light-overview.png",
+      "sha256": "42a7980b2d8fe90d78d18cfd11ec5e764e9c39497bba8df47a15b7ea1688fde5",
+      "source_sha": "7d1ad46c14ddd2e08e507e33248af50af42df026",
+      "source_template_sha256": "2b092d586d812ef64b09af14250e4bfef676898b1e0d46b035aeccb5ab8cb8bd",
+      "rendered_html_sha256": "c8c17ca439b6588cdfae6a43c3130dcd977b3def36ca163c44c6010ad2213f34",
+      "theme": "light",
+      "view": "overview",
+      "label": "installed-current",
+      "synthetic_data": true,
+      "page_errors": [],
+      "headings": [
+        {
+          "text": "Mexico+ Account",
+          "visible": true
+        },
+        {
+          "text": "Saudi Arabia+ Account",
+          "visible": true
+        }
+      ]
+    },
+    {
+      "file": "installed-current-synthetic-light-fields.png",
+      "local_path": "/Users/dmitry.o/Documents/ChatGPT/ACL/output/playwright/acceptance12-visual-audit/installed-current-synthetic-light-fields.png",
+      "sha256": "02780fd76bd6f73cca43fb647c34a50f9109592cbc86fb7be4ff7432d520c6d0",
+      "source_sha": "7d1ad46c14ddd2e08e507e33248af50af42df026",
+      "source_template_sha256": "2b092d586d812ef64b09af14250e4bfef676898b1e0d46b035aeccb5ab8cb8bd",
+      "rendered_html_sha256": "c8c17ca439b6588cdfae6a43c3130dcd977b3def36ca163c44c6010ad2213f34",
+      "theme": "light",
+      "view": "fields",
+      "label": "installed-current",
+      "synthetic_data": true,
+      "page_errors": [],
+      "headings": [
+        {
+          "text": "Mexico+ Account",
+          "visible": true
+        },
+        {
+          "text": "Saudi Arabia+ Account",
+          "visible": true
+        }
+      ]
+    },
+    {
+      "file": "installed-current-synthetic-dark-overview.png",
+      "local_path": "/Users/dmitry.o/Documents/ChatGPT/ACL/output/playwright/acceptance12-visual-audit/installed-current-synthetic-dark-overview.png",
+      "sha256": "ac02884bbc592034174ba929344cde4e33f17b42558ffde245fc0dd8125679e4",
+      "source_sha": "7d1ad46c14ddd2e08e507e33248af50af42df026",
+      "source_template_sha256": "2b092d586d812ef64b09af14250e4bfef676898b1e0d46b035aeccb5ab8cb8bd",
+      "rendered_html_sha256": "c8c17ca439b6588cdfae6a43c3130dcd977b3def36ca163c44c6010ad2213f34",
+      "theme": "dark",
+      "view": "overview",
+      "label": "installed-current",
+      "synthetic_data": true,
+      "page_errors": [],
+      "headings": [
+        {
+          "text": "Mexico+ Account",
+          "visible": true
+        },
+        {
+          "text": "Saudi Arabia+ Account",
+          "visible": true
+        }
+      ]
+    },
+    {
+      "file": "installed-current-synthetic-dark-fields.png",
+      "local_path": "/Users/dmitry.o/Documents/ChatGPT/ACL/output/playwright/acceptance12-visual-audit/installed-current-synthetic-dark-fields.png",
+      "sha256": "6df8697a13cbd60d797c35a9f0943729d3ccba991efbebe3df62c5c8d2e89931",
+      "source_sha": "7d1ad46c14ddd2e08e507e33248af50af42df026",
+      "source_template_sha256": "2b092d586d812ef64b09af14250e4bfef676898b1e0d46b035aeccb5ab8cb8bd",
+      "rendered_html_sha256": "c8c17ca439b6588cdfae6a43c3130dcd977b3def36ca163c44c6010ad2213f34",
+      "theme": "dark",
+      "view": "fields",
+      "label": "installed-current",
+      "synthetic_data": true,
+      "page_errors": [],
+      "headings": [
+        {
+          "text": "Mexico+ Account",
+          "visible": true
+        },
+        {
+          "text": "Saudi Arabia+ Account",
+          "visible": true
+        }
+      ]
+    }
+  ],
+  "fixture": "SYNTHETIC QA, Mexico and Saudi Arabia, SYNTHETIC-MX/SA-001, all data local. Real production Jinja templates and Builder JavaScript; no CSS substitution, no preflight bypass, no live operations.",
+  "capture": "Mac headless Chromium1680x1200, offline intercepted HTTP; retrospective capture, not original pre-merge evidence.",
+  "installed_release": {
+    "release": "acl-release-2026-10-15.940",
+    "source_sha": "7d1ad46c14ddd2e08e507e33248af50af42df026",
+    "installer_sha256": "8e317993c5dd4131929cfaf9ac20fd7ae0a4f48ebd58912b66f6254a3d034286",
+    "manifest_sha256": "95134b86501ca2e34b24f663e9cd23195e4d866dd76d8d194f5a31717b7d2ffa",
+    "signature_status": "valid",
+    "key_id": "428a74e4f8e6e616",
+    "native_run": 38817558595,
+    "native_job": 116709133359,
+    "native_job_conclusion": "success",
+    "report_sha256": "ab4cdd91a42a0afed44d6f75ddbbf1ba1689ad7cb3c868ecbf852951c3151a89",
+    "native_log_receipt_matches_original_evidence": true,
+    "source_to_main_diff": {
+      "ahead_by": 2,
+      "files": [
+        "docs/repository/CHANGELOG.md",
+        "docs/repository/POST_MAIN_DELIVERY.md",
+        "docs/repository/PROCESS_INSTRUCTIONS.md"
+      ],
+      "status": "ahead"
+    }
+  },
+  "contrast": {
+    "acl1361-before": {
+      "light": {
+        "field_count": 20,
+        "minimum_border_contrast": 1.1800570763235432,
+        "minimum_text_contrast": 15.475578047747426,
+        "all_field_borders_at_least_3": false,
+        "all_field_text_at_least_4_5": true,
+        "all_country_headings_at_least_4_5": true
+      },
+      "dark": {
+        "field_count": 20,
+        "minimum_border_contrast": 1.3371197992002195,
+        "minimum_text_contrast": 14.048993650238696,
+        "all_field_borders_at_least_3": false,
+        "all_field_text_at_least_4_5": true,
+        "all_country_headings_at_least_4_5": true
+      }
+    },
+    "acl1361-after": {
+      "light": {
+        "field_count": 20,
+        "minimum_border_contrast": 3.3204734769139588,
+        "minimum_text_contrast": 16.16466592905223,
+        "all_field_borders_at_least_3": true,
+        "all_field_text_at_least_4_5": true,
+        "all_country_headings_at_least_4_5": true
+      },
+      "dark": {
+        "field_count": 20,
+        "minimum_border_contrast": 3.5128570864818345,
+        "minimum_text_contrast": 10.65976587295858,
+        "all_field_borders_at_least_3": true,
+        "all_field_text_at_least_4_5": true,
+        "all_country_headings_at_least_4_5": true
+      }
+    },
+    "installed-current": {
+      "light": {
+        "field_count": 14,
+        "minimum_border_contrast": 3.2506229923075636,
+        "minimum_text_contrast": 14.465972933064698,
+        "all_field_borders_at_least_3": true,
+        "all_field_text_at_least_4_5": true,
+        "all_country_headings_at_least_4_5": true
+      },
+      "dark": {
+        "field_count": 14,
+        "minimum_border_contrast": 3.6074173879449596,
+        "minimum_text_contrast": 11.92128728265236,
+        "all_field_borders_at_least_3": true,
+        "all_field_text_at_least_4_5": true,
+        "all_country_headings_at_least_4_5": true
+      }
+    }
+  },
+  "country_heading_current_contrast": {
+    "light": 4.863910447883574,
+    "dark": 6.247375201313513
+  },
+  "focused_existing_tests": [
+    {
+      "source": "installed-current",
+      "command": "quick28-ui-venv/bin/python -m pytest -q tests/test_field_contrast.py",
+      "result": "passed",
+      "passed": 19,
+      "warnings": 3,
+      "seconds": 63.09
+    },
+    {
+      "source": "acl1361-after",
+      "command": "quick28-ui-venv/bin/python -m pytest -q tests/test_field_contrast.py",
+      "result": "passed",
+      "passed": 19,
+      "warnings": 1,
+      "seconds": 51.37
+    }
+  ],
+  "fullscope_audit_sha256": "a084f48aa04970adda8dc36f92998ee3827217c35ef316db9a5c96632659801d",
+  "original_source_prs": [
+    "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/362",
+    "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/661"
+  ],
+  "authority_note": "Explicit current owner acceptance must be recorded separately with a genuine message reference. No assertion of owner acceptance before the original merges. No change to original native CI batch [924]."
+}
