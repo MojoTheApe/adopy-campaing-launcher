@@ -22,8 +22,8 @@
     двадцать textarea для токена, двадцать копий инструкции — ради
     настройки, которая одна на машину (токен пишется в `.env`).
 
-    Вторая панель была предусловием первой: без живого токена кнопке
-    Reload неоткуда взять список профилей. Ничто на экране об этом не
+    Вторая панель была предусловием первой: без живого токена выбору
+    профиля неоткуда взять список профилей. Ничто на экране об этом не
     говорило, и владелец прочитал их как одно, разорванное пополам.
 
     Теперь: строка состояния всегда, поля входа — только когда токена
@@ -53,13 +53,16 @@
     <option value="A">{{ mlxn['A'] }}</option>
     <option value="B">{{ mlxn['B'] }}</option>
   </select>
-  {#- Отбор идёт по мере ввода. Список профилей тянется один раз на
-      инстанс и фильтруется на месте: так отклик мгновенный, а Multilogin
-      не дёргается на каждую букву. Кнопка осталась для перезагрузки
-      списка, когда профиль только что завели. -#}
-  <input type="text" class="amap-find" placeholder="last letters: X84" size="10"
+  {#- ACL-1151: один выбор — профиль. Поле пустое — под ним профили,
+      открытые на этой машине, с уже выведенными именем и кабинетом; набрал
+      часть имени — поиск по всему Multilogin выбранного аккаунта (так
+      находится и не запущенный профиль: Connect сам его откроет). Поля
+      «последние буквы» и кнопки Reload больше нет: список обновляется сам,
+      а имя и кабинет выводит сервер одним правилом для карты и вкладки
+      Accounts (`src/web/profile_connection.py`). -#}
+  <input type="text" class="amap-find" placeholder="pick a profile, or type part of its name" size="30"
+         aria-label="Multilogin profile"
          oninput="amapFilter(this)" onfocus="amapFilter(this)" autocomplete="off">
-  <button type="button" class="amap-btn" onclick="amapFind(this)" title="Reload the profile list from Multilogin">Reload</button>
   <span class="amap-msg"></span>
   <div class="amap-hits" hidden></div>
 

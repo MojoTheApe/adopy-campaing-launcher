@@ -28,7 +28,8 @@ def test_the_form_exists_as_one_piece():
     """Две копии разошлись бы: их правят в разное время и по разным поводам."""
     assert ADD.is_file(), "общего куска с формой нет"
     body = ADD.read_text(encoding="utf-8")
-    for control in ("amap-known", "amap-inst", "amap-find", "amapLink", "amapFind"):
+    # ACL-1151: кнопки Reload (`amapFind`) нет — выбор профиля сам себя обновляет.
+    for control in ("amap-known", "amap-inst", "amap-find", "amapLink", "amapFilter"):
         assert control in body, f"в форме нет {control}"
 
 
