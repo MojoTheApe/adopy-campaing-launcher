@@ -91,6 +91,17 @@ workspaces; an attach on a live run has not been observed yet.
   next record. Lost answers are still reconciled by reading, never by sending again; the same
   idempotency key after a restart writes nothing.
 
+## Account connection panel contains long metadata — ACL-1839
+
+- The shared country/Accounts/builder connection form wraps long Multilogin status
+  text and bounds input/select widths to their host. A synthetic 280 px host
+  previously grew to 975 px; the same rendered production partial now fits.
+- Hidden profile results stay out of layout even though the visible results use
+  flex. Account selection and profile search have accessible names; the existing
+  Add sibling lookup and workspace/filter handlers remain unchanged.
+- Real-Chromium layout regressions cover three hosts, both themes and 280/720/1040 px
+  with synthetic long values. This source change does not claim stable delivery.
+
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
 Add a durable authorized release workflow using the maintained installer publisher
