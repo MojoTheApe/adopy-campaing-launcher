@@ -31,16 +31,25 @@ def captured(monkeypatch):
     import sentry_sdk
     events = []
     class Scope:
-        def __init__(self): self.contexts = {}
-        def set_tag(self, *args): pass
+        def __init__(self): self.contexts, self.tags, self.fingerprint = {}, {}, None
+        def set_tag(self, key, val): self.tags[key] = val
         def set_context(self, key, val): self.contexts[key] = val
-    scope = Scope()
+    current = []
     @contextmanager
-    def new_scope(): yield scope
+    def new_scope():
+        # Свой scope на каждое событие, как у настоящего SDK: иначе отпечаток
+        # прошлого вызова «протёк» бы в следующий и тест ничего бы не доказал.
+        current.append(Scope())
+        yield current[-1]
     monkeypatch.setattr(acl_sentry, 'init', lambda: True)
     monkeypatch.setattr(sentry_sdk, 'new_scope', new_scope)
     def capture(message, **kwargs):
-        events.append(acl_sentry._before_send({'message': message, 'contexts': scope.contexts}, {}))
+        scope = current[-1]
+        # SDK переносит отпечаток scope в событие до before_send — значит, он
+        # проходит через вычиститель, и проверять его надо уже после.
+        event = {'message': message, 'contexts': scope.contexts,
+                 'tags': dict(scope.tags), 'fingerprint': scope.fingerprint}
+        events.append(acl_sentry._before_send(event, {}))
         return 'synthetic-event'
     monkeypatch.setattr(sentry_sdk, 'capture_message', capture)
     return events
@@ -52,6 +61,48 @@ def test_long_report_and_failure_reason_reach_the_event(captured):
     assert story in json.dumps(captured[-1])
     acl_sentry.report_step_failure('placements', 'timeout while opening synthetic category')
     assert 'timeout while opening synthetic category' in json.dumps(captured[-1])
+
+
+def test_each_manual_report_is_its_own_sentry_issue(captured):
+    """ACL-1273: Sentry уведомляет только о новых тикетах, а тикет = отпечаток."""
+    acl_sentry.report_problem('Publish button does nothing')
+    acl_sentry.report_problem('Placements step is stuck')
+    acl_sentry.report_problem('still broken')
+    acl_sentry.report_problem('still broken')
+    prints = [tuple(e['fingerprint']) for e in captured]
+    assert len(set(prints)) == 4, prints
+    for event, fp in zip(captured, prints):
+        assert fp[:2] == ('acl-report', 'manual')
+        # Номер пережил вычиститель целиком и совпадает с тегом обращения.
+        assert fp[2] == event['tags']['report_id']
+        assert fp[2].startswith('r') and len(fp[2]) == 33
+
+
+def test_report_id_survives_the_scrubber_even_when_all_digits(captured, monkeypatch):
+    class DigitsOnly:
+        hex = '1' * 32
+    monkeypatch.setattr(acl_sentry.uuid, 'uuid4', lambda: DigitsOnly())
+    acl_sentry.report_problem('synthetic report')
+    assert captured[-1]['fingerprint'] == ['acl-report', 'manual', 'r' + '1' * 32]
+
+
+def test_step_failures_still_group_by_step_and_reason(captured):
+    acl_sentry.report_step_failure('placements', 'timeout while opening synthetic category')
+    acl_sentry.report_step_failure('placements', 'timeout while opening another synthetic category')
+    first, second = captured[-2]['fingerprint'], captured[-1]['fingerprint']
+    assert first == second
+    assert first[:2] == ['acl-step', 'placements'] and len(first) == 3
+
+
+def test_report_keeps_its_tags_and_machine_context(captured, monkeypatch):
+    monkeypatch.setattr(acl_sentry, '_machine_tags', {'machine': 'synthetic-pc'})
+    failures = [{'step': 'placements', 'reason': 'timeout'}]
+    acl_sentry.report_problem('synthetic report', context={'where': 'builder', 'last_failures': failures})
+    event = captured[-1]
+    assert event['tags']['kind'] == 'report'
+    assert event['tags']['machine'] == 'synthetic-pc'
+    assert event['contexts']['acl']['last_failures'] == failures
+    assert event['contexts']['acl']['where'] == 'builder'
 
 
 def test_report_route_returns_queue_state_and_selected_dates(monkeypatch):
