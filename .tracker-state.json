@@ -41552,22 +41552,7 @@
     ]
   },
   "execution": {
-    "claims": {
-      "827": {
-        "actor": "Worker-RS1827",
-        "session": "wrs1827-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1827-design-parity-shell",
-        "worktree": "C:\\wk-rs1827",
-        "id": "270a5ecb8ced42858c9c35ea8f09897d",
-        "issue": 827,
-        "state": "handoff",
-        "started_at": "2026-10-16T10:08:12+00:00",
-        "from_status": "status:todo",
-        "pr": 829,
-        "report": "# ACL-1827 refresh handoff (Worker-RS1827)\nHead: 662abff0 on codex/acl-1827-design-parity-shell, merge of origin/main af0ade29 (ACL-1923/1924 no-stage delivery: process docs, workflows, delivery scripts). Merge only, no conflicts, no 1827 code changed since the reviewed de6dbfaf.\nTests: test_acl1827_shell_parity, test_header, test_screens_are_in_english (40 passed); test_acl1797_design_system, test_acl1799_country_workbench (incl. cw_harness), test_stage_badge, test_acl_test_platform (152 passed). scripts/acl_scan_secrets.py clean.\nFull suite not run locally."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -45845,7 +45830,7 @@
             "session": "wrs1827-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RS1827",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -45854,16 +45839,16 @@
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1827-design-parity-shell",
           "worktree": "C:\\wk-rs1827",
-          "id": "21dbc4a616a6421e9f97c978ebcedb35",
+          "id": "270a5ecb8ced42858c9c35ea8f09897d",
           "issue": 827,
           "state": "handoff",
-          "started_at": "2026-10-15T10:26:44+00:00",
+          "started_at": "2026-10-16T10:08:12+00:00",
           "from_status": "status:todo",
           "pr": 829,
-          "report": "# ACL-1827 refresh handoff (Worker-RS1827)\nHead: de6dbfaf on codex/acl-1827-design-parity-shell (merge of origin/main 3ee7c6d9, merge only).\nConflicts: src/web/templates/report.html, two hunks. (1) style block order: took main's adopy-tokens style (1797) in its place before cw-styles. (2) kept 1827's shell-1827 style block, dropped the older duplicate adopy-tokens include from the branch. Result vs origin/main differs only by the 6 files of 1827 (KPI row, sidebar, Robot health popover, country_workbench, app.py, robot_health.py, tests).\nMain's 1797/1799/1778 versions win; every data-view of main is still present in the sidebar (main has no Rules nav item), 1778 header intact.\nTests: test_acl1827_shell_parity, 1797 design system, 1799 country workbench, test_header, test_stage_badge, test_screens_are_in_english, test_acl_test_platform, account header click test: 194 passed. node tests/cw_harness.cjs: ok. Secret scan clean. Browser tests not run. CI not awaited."
+          "report": "# ACL-1827 refresh handoff (Worker-RS1827)\nHead: 662abff0 on codex/acl-1827-design-parity-shell, merge of origin/main af0ade29 (ACL-1923/1924 no-stage delivery: process docs, workflows, delivery scripts). Merge only, no conflicts, no 1827 code changed since the reviewed de6dbfaf.\nTests: test_acl1827_shell_parity, test_header, test_screens_are_in_english (40 passed); test_acl1797_design_system, test_acl1799_country_workbench (incl. cw_harness), test_stage_badge, test_acl_test_platform (152 passed). scripts/acl_scan_secrets.py clean.\nFull suite not run locally."
         },
         "pr": 829,
-        "queued_at": "2026-10-15T10:34:58+00:00",
+        "queued_at": "2026-10-16T10:17:44+00:00",
         "review_report": "# Return for a main refresh\n\nMain moved to af0ade29 (ACL-1923/1924: no-stage delivery route, process docs and workflows). Required: merge current main into the branch (merge, no rebase; it merges cleanly), re-run the affected tests, hand off again for fresh review."
       },
       "771": {
@@ -51890,7 +51875,8 @@
       309,
       379,
       356,
-      816
+      816,
+      827
     ],
     "review": null,
     "history": [
@@ -75745,6 +75731,13 @@
         "issue": 816,
         "pr": 820,
         "actor": "Worker-RS1816"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-16T10:17:44+00:00",
+        "issue": 827,
+        "pr": 829,
+        "actor": "Worker-RS1827"
       }
     ],
     "policy": {
