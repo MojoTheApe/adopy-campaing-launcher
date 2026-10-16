@@ -41628,9 +41628,11 @@
         "worktree": "C:\\acl-1788-c",
         "id": "867f984aed504a2c88e16f6dd5d6ab5b",
         "issue": 788,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-16T14:47:32+00:00",
-        "from_status": "status:backlog"
+        "from_status": "status:backlog",
+        "pr": 957,
+        "report": "Research ACL-1788: docs/research/ACL-1788-official-meta-access-by-account-category.md. Desk research only; no accounts, tokens or Meta API touched. Doc-only change; no code tests apply."
       }
     },
     "tasks": {
