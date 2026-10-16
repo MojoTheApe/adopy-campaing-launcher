@@ -135,7 +135,8 @@ def prepare(root, destination, actor, session, claim, *, apply=False, rebuild=Fa
         raise ValueError("Use a new isolated worktree path; existing work is preserved")
     ids = [config["project"].get("legacy_task_ids", {}).get(str(n),
            config["project"]["id_prefix"] + "-" + str(n + config["project"].get("id_offset", 0))) for n in batch["issues"]]
-    result = {"applied": False, "branch": batch["branch"], "base": "stage", "main_sha": batch["main_sha"],
+    target = config["delivery_policy"]["staging"]["branch"] if config["delivery_policy"]["staging"]["enabled"] else config["project"]["base_branch"]
+    result = {"applied": False, "branch": batch["branch"], "base": target, "main_sha": batch["main_sha"],
               "title": "[" + ", ".join(ids) + "] Integrate approved tasks",
               "body": "Tracker issues: " + ", ".join(ids) + "\nTracker batch: " + batch["id"] + "\n\n"
                       + "Frozen approved sources: " + ", ".join("#" + str(m["pr"]) for m in batch["members"])

@@ -85,6 +85,20 @@ def test_real_two_author_assembly_preserves_exact_source_commits(fixture):
     assert section.get("source_reviews") == original_owners
 
 
+def test_no_stage_uses_same_frozen_composition_and_targets_main(fixture):
+    root, _, section, _, assemble = fixture
+    path = root / "tracker/config.json"
+    config = json.loads(path.read_text())
+    config["delivery_policy"]["staging"]["enabled"] = False
+    config["delivery_policy"]["staging"]["target"] = "disabled"
+    path.write_text(json.dumps(config))
+    # Preview reads the selected policy without changing frozen source tips.
+    result = assemble()
+    assert result["base"] == "main"
+    assert result["main_sha"] == section["integration"]["main_sha"]
+    assert "Tracker batch: " + section["integration"]["id"] in result["body"]
+
+
 def test_held_integration_review_still_blocks_assembly(fixture):
     root, _, section, _, assemble = fixture
     section["review"] = {"id": "b" * 32, "batch_id": section["integration"]["id"]}
