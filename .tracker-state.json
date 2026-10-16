@@ -41552,7 +41552,20 @@
     ]
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "356": {
+        "actor": "Worker-M1356A",
+        "session": "cf9ad405-1356",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1356-starlette",
+        "worktree": "C:\\acl-1356",
+        "id": "b08a3785c6054e84a4b69df94315f489",
+        "issue": 356,
+        "state": "implementing",
+        "started_at": "2026-10-16T09:56:53+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -47312,6 +47325,17 @@
       "163": {
         "implementers": [],
         "state": "archived"
+      },
+      "356": {
+        "implementers": [
+          {
+            "actor": "Worker-M1356A",
+            "session": "cf9ad405-1356"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-M1356A",
+        "coordinator": "Coordinator-M1011A"
       }
     },
     "actors": {
@@ -49018,6 +49042,10 @@
       "Reviewer-RV1015Q": {
         "session": "rv1015q-904",
         "role": "Reviewer"
+      },
+      "Worker-M1356A": {
+        "session": "cf9ad405-1356",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -75405,6 +75433,13 @@
         "prs": [
           941
         ]
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-16T09:56:53+00:00",
+        "issue": 356,
+        "claim": "b08a3785c6054e84a4b69df94315f489",
+        "actor": "Worker-M1356A"
       }
     ],
     "policy": {
