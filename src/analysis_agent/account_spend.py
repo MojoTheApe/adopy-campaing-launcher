@@ -1236,6 +1236,10 @@ def read_ad_account(profile_id: str, folder_id: str = "", instance: str = "A") -
         out["act"] = act
         out["account_name"] = _ads_manager_account_name(page)
         out["ok"] = True
+        # ACL-142: Ads Manager без параметров открывает кабинет профиля ПО
+        # УМОЛЧАНИЮ. Прочитанное — предложение, а не выбор: экран обязан
+        # дать человеку подтвердить его или вписать другой номер.
+        out["needs_confirmation"] = True
         return out
     except Exception as exc:  # noqa: BLE001 — чтение не должно ронять сервер
         out["error"] = f"{type(exc).__name__}: {exc}"

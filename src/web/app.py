@@ -4794,6 +4794,12 @@ async def account_map_remove(request: Request) -> JSONResponse:
     existing in the company's sheet, keeps its history and its campaigns —
     this machine simply stops knowing how to reach it. Nothing here can or
     should delete a shared record.
+
+    ACL-142: with `also_unlink: true` the removed accounts are also taken out
+    of every country and asset they stand in on this machine ("Remove from
+    ACL"). Without it only the map row goes, which is what the Accounts tab
+    has always done. Taking an account out of ONE country is a different
+    action: `/account-links` with `unlink`.
     """
     import csv as _csv
 
@@ -4841,6 +4847,16 @@ async def account_map_remove(request: Request) -> JSONResponse:
             )
 
         write_csv_atomic(map_path, fieldnames, kept)
+
+        unlinked: list[dict] = []
+        if data.get("also_unlink") is True:
+            from src.web import account_links
+
+            for name in removed:
+                for kind in account_links.KINDS:
+                    for place in account_links.values_for(name, kind):
+                        if account_links.unlink(name, kind, place):
+                            unlinked.append({"account": name, "kind": kind, "value": place})
     except Exception as exc:  # noqa: BLE001
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
 
@@ -4848,7 +4864,8 @@ async def account_map_remove(request: Request) -> JSONResponse:
     # removed, and pretending otherwise would invite a confused retry.
     missing = sorted(set(wanted) - set(removed))
     return JSONResponse(
-        {"ok": True, "removed": removed, "missing": missing, "left": len(kept)}
+        {"ok": True, "removed": removed, "missing": missing, "left": len(kept),
+         "unlinked": unlinked}
     )
 
 
