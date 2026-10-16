@@ -41618,20 +41618,6 @@
         "state": "implementing",
         "started_at": "2026-10-16T10:27:01+00:00",
         "from_status": "status:todo"
-      },
-      "886": {
-        "actor": "Worker-RF1016W",
-        "session": "rf1016w-20261016",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1886-graph-error-context",
-        "worktree": "C:\\rf-886",
-        "id": "b568bc7a62a746c09a00a8b271ae76ed",
-        "issue": 886,
-        "state": "handoff",
-        "started_at": "2026-10-16T10:29:31+00:00",
-        "from_status": "status:todo",
-        "pr": 887,
-        "report": "Merged main af0ade29 into the previously approved head 31ee38c9; clean merge, no conflicts; no code change; 37 tests passed. Needs a delta review of the merge only."
       }
     },
     "tasks": {
@@ -46783,25 +46769,25 @@
             "session": "rf1016w-20261016"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RF1016W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-RG1886",
-          "session": "wrg1886-20261015",
+          "actor": "Worker-RF1016W",
+          "session": "rf1016w-20261016",
           "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1886-graph-error-context",
-          "worktree": "C:\\wk-rg1886",
-          "id": "31a4a626a6864624abdb9a3fe9c92f3b",
+          "worktree": "C:\\rf-886",
+          "id": "b568bc7a62a746c09a00a8b271ae76ed",
           "issue": 886,
           "state": "handoff",
-          "started_at": "2026-10-15T10:37:23+00:00",
+          "started_at": "2026-10-16T10:29:31+00:00",
           "from_status": "status:todo",
           "pr": 887,
-          "report": "# ACL-886 handoff (r2): refresh onto new main\n\n- Issue: 886, PR: 887, branch: codex/acl-1886-graph-error-context, worktree: C:\\wk-rg1886\n- Claim id: 31a4a626a6864624abdb9a3fe9c92f3b\n- New head: 31ee38c9 (merge of work/main 3ee7c6d9 into the task branch; previous head d2e9a26a)\n- Merge: clean, no conflicts. 3ee7c6d9 is an ancestor of HEAD.\n- Tests (python -m pytest, -k \"not browser\"): tests/test_acl1886_graph_error_context.py, tests/test_acl_test_platform.py, tests/test_screens_are_in_english.py -> 139 passed, 0 failed.\n- Pushed: git push work HEAD:codex/acl-1886-graph-error-context (d2e9a26a..31ee38c9)."
+          "report": "Merged main af0ade29 into the previously approved head 31ee38c9; clean merge, no conflicts; no code change; 37 tests passed. Needs a delta review of the merge only."
         },
         "pr": 887,
-        "queued_at": "2026-10-15T10:40:54+00:00",
+        "queued_at": "2026-10-16T10:31:48+00:00",
         "review_report": "Main moved to af0ade29 (ACL-1924 batch + ACL-1923 no-stage activation). The earlier approval used main 3ee7c6d9 and is no longer current under the new policy. Return to author for a main merge (CHANGELOG-only conflict), then fresh independent delta approval. Content unchanged.",
         "return_operation": {
           "id": "0ee59a7068dc42a9b5b7683727abb84c",
@@ -51974,7 +51960,8 @@
       356,
       776,
       899,
-      902
+      902,
+      886
     ],
     "review": null,
     "history": [
@@ -75936,6 +75923,13 @@
         "at": "2026-10-16T10:29:31+00:00",
         "issue": 886,
         "claim": "b568bc7a62a746c09a00a8b271ae76ed",
+        "actor": "Worker-RF1016W"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-16T10:31:48+00:00",
+        "issue": 886,
+        "pr": 887,
         "actor": "Worker-RF1016W"
       }
     ],
