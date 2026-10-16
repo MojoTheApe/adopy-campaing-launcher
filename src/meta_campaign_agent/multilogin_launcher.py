@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -9,6 +10,9 @@ import requests
 from src.meta_campaign_agent.multilogin_config import MultiloginInstanceConfig
 
 log = logging.getLogger(__name__)
+
+# ACL-1959: пауза перед повтором остановки после сбоя связи.
+_STOP_RETRY_PAUSE_S = 5.0
 
 
 class MultiloginLauncherError(RuntimeError):
@@ -228,6 +232,10 @@ class MultiloginLauncher:
                         log.warning("MLX stop at %s did not answer (%s)%s",
                                     url.split("/api/", 1)[-1], last_err,
                                     "; asking once more" if attempt + 1 < tries else "")
+                        if attempt + 1 < tries:
+                            # 16.10 не ответили подряд все три первых адреса —
+                            # лаунчер был недоступен, а не «без маршрута».
+                            time.sleep(_STOP_RETRY_PAUSE_S)
             if r is None:
                 if index == 0:
                     short = url.split("/api/", 1)[-1]

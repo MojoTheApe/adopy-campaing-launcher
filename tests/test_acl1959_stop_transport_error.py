@@ -68,15 +68,18 @@ def launcher(monkeypatch):
         return item
 
     monkeypatch.setattr(mod.requests, "get", fake_get)
+    pauses: list[float] = []
+    monkeypatch.setattr(mod.time, "sleep", pauses.append)
     cfg = MultiloginInstanceConfig(instance_id="A", automation_token="t",
                                    launcher_base_v2="https://launcher.mlx.yt:45001/api/v2")
-    return {"launcher": MultiloginLauncher(cfg), "asked": asked, "script": script}
+    return {"launcher": MultiloginLauncher(cfg), "asked": asked, "script": script, "pauses": pauses}
 
 
 def test_a_dropped_stop_is_asked_once_more_and_succeeds(launcher):
     launcher["script"][STOP] = [_dropped(), _Reply(200, {"status": {"http_code": 200}})]
     launcher["launcher"].stop_profile(PROFILE, folder_id=FOLDER)
     assert launcher["asked"] == [STOP, STOP]
+    assert len(launcher["pauses"]) == 1 and launcher["pauses"][0] > 0, "повтор — после паузы"
 
 
 def test_already_stopped_on_the_retry_is_done(launcher):
