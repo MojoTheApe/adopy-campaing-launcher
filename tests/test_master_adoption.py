@@ -130,7 +130,7 @@ def test_existing_ids_and_modules_are_preserved():
     new = json.loads((ROOT / 'tracker/config.json').read_text())
     assert new['project'] == dict(old['project'], base_branch='main')
     assert new['modules'] == old['modules']
-    assert new['workflow'] == old['workflow'][:-1] + ['approved', 'stage', 'merged']
+    assert new['workflow'] == old['workflow'][:-1] + ['approved', 'merged']
     assert new['execution_policy'] == {'schema_version':3, 'implementation_limit':5, 'review_limit':5, 'batch_limit':5}
 
 
@@ -145,7 +145,25 @@ def test_five_review_policy_keeps_descriptor_engine_and_delivery_contract_consis
     action = yaml.safe_load((ROOT / '.github/workflows/delivery-check.yml').read_text())
     steps = action['jobs']['descriptor']['steps']
     assert any(step.get('uses') == 'MojoTheApe/master-repo@' + descriptor['standard']['revision'] for step in steps)
-    assert rules.fingerprint(config) == '302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21'
+    assert not descriptor['workflow']['staging'] and not rules.policy(config)['staging']['enabled']
+    assert descriptor['workflow']['stage_branch'] == rules.policy(config)['staging']['branch'] == 'stage'
+    assert 'stage' not in config['workflow']
+
+
+def test_policy_candidate_cannot_select_its_own_new_admission_route(monkeypatch):
+    candidate = json.loads((ROOT / 'tracker/config.json').read_text())
+    base = copy.deepcopy(candidate)
+    base['delivery_policy']['staging']['enabled'] = True
+    base['workflow'].insert(-1, 'stage')
+    repo = candidate['project']['repository']
+    pr = {'base': {'sha': 'a' * 40, 'ref': 'stage'}}
+    def request(path):
+        if '/pulls/' in path: return pr
+        assert path == f'repos/{repo}/contents/tracker/config.json?ref=' + 'a' * 40
+        return {'content': base64.b64encode(json.dumps(base).encode()).decode(), 'encoding': 'base64'}
+    monkeypatch.setattr(acl_pr_check.shared, 'check', lambda request, config, number: config)
+    selected = acl_pr_check.check(request, 930)
+    assert selected == base and selected != candidate
 
 
 @pytest.mark.parametrize('workflow,success_fields', [
