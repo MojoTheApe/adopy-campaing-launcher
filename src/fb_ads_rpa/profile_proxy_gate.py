@@ -139,10 +139,15 @@ def ensure_profile_has_proxy(entry: Any, account_label: str, *,
         return held[1]
     tokens = [token] if token is not None else [_token_for(i) for i in _instances_for(entry)]
     cfg = ProxyConfig(known=False, reason="no MLX token")
+    reasons = []
     for tok in tokens:
         cfg = (fetch or fetch_proxy_config)(profile_id, tok)
         if cfg.known:
             break
+        reasons.append(cfg.reason)
+    if not cfg.known and len(reasons) > 1:
+        # Причина по каждому пространству: «не найден в A» важнее «нет токена B».
+        cfg = ProxyConfig(known=False, reason="; ".join(reasons))
     if not cfg.known:
         log.warning("%s: could not check the profile's proxy in Multilogin (%s); continuing",
                     account_label, cfg.reason)

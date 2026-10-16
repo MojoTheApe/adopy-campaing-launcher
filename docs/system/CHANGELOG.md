@@ -4,7 +4,8 @@
 
 Before the robot attaches to or starts a Multilogin profile (Ads Manager publish through
 every Multilogin provider, `attach_existing_only` spend reads, the "open profile" button,
-and Graph-API-in-profile `fb_api.profile.open_profile`: API publish, API spend, warm pool),
+Graph-API-in-profile `fb_api.profile.open_profile` (API publish, API spend), and the warm
+pool both when it opens or adopts a profile and at every checkout),
 it reads the profile's proxy configuration from the MLX API (`POST /profile/search` with `profile_ids`; works
 in both workspaces, while `/profile/metas` answers 501 in workspace B). A profile with
 no proxy stops the account with `profile_no_proxy` ("Add the proxy to the profile in

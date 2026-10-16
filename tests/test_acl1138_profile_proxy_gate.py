@@ -270,3 +270,37 @@ def test_publisher_shortcut_does_not_bypass_a_profile_stop():
     src = inspect.getsource(rpa_publisher.RpaPublisher._ensure_browser)
     shortcut = src[src.index("_open_multilogin_direct(entry, account_label)"):]
     assert shortcut.index("except profile_trouble.ProfileStop") < shortcut.index("trying normal chain")
+
+
+def test_warm_pool_does_not_adopt_or_start_a_no_proxy_profile(monkeypatch):
+    from src.fb_api import warm
+    from src.fb_ads_rpa import profile_proxy_gate as pg
+
+    monkeypatch.setattr(pg, "ensure_profile_has_proxy", _refuse)
+    reg = warm.WarmRegistry.__new__(warm.WarmRegistry)
+    reg._scan = lambda ids: (_ for _ in ()).throw(AssertionError("must not scan, adopt or start"))
+    res = reg.open_one("Doc1", SimpleNamespace(profile_id=PID, folder_id="f", multilogin_instance="B"))
+    assert res["ok"] is False and res["code"] == profile_trouble.NO_PROXY
+
+
+def test_warm_checkout_refuses_a_session_registered_before_the_gate(monkeypatch):
+    from src.fb_api import warm
+    from src.fb_ads_rpa import profile_proxy_gate as pg
+
+    monkeypatch.setattr(pg, "ensure_profile_has_proxy", _refuse)
+    reg = warm.WarmRegistry.__new__(warm.WarmRegistry)
+    sess = SimpleNamespace(profile_id=PID, owner=0,
+                           lock=SimpleNamespace(acquire=lambda: (_ for _ in ()).throw(AssertionError("no lock"))))
+    reg.session = lambda pid: sess
+    with pytest.raises(warm.WarmError) as exc:
+        reg.checkout(PID, account="Doc1", act="act_1", mode="read", make_graph=lambda t: None)
+    assert exc.value.code == profile_trouble.NO_PROXY
+
+
+def test_unknown_reasons_from_both_workspaces_are_kept(monkeypatch):
+    monkeypatch.setattr(gate, "_token_for", lambda inst: f"tok-{inst}")
+    answers = {"tok-A": "profile not found in this Multilogin workspace", "tok-B": "no MLX token"}
+    fetch = lambda pid, tok: gate.ProxyConfig(known=False, reason=answers[tok])
+    cfg = gate.ensure_profile_has_proxy(SimpleNamespace(profile_id=PID, multilogin_instance=""),
+                                        "Doc1", fetch=fetch)
+    assert "not found" in cfg.reason and "no MLX token" in cfg.reason
