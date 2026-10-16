@@ -4062,6 +4062,27 @@
         "issue_scopes": {
           "827": "fdf30ddff65f891825fc8a270531da766faed723eadbc1aa4b976e58374d588c"
         }
+      },
+      "951": {
+        "kind": "independent-review",
+        "implementer": "Worker-W144C",
+        "reviewer": "Reviewer-R144D",
+        "head_sha": "a339c1fef11c8667196e61181ad303f34966ccdf",
+        "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+        "tree_sha": "b986d6b70fddd7c238720638f2cf38f534d2feb5",
+        "verdict": "approved",
+        "execution_lane": "7017cec21c6c463aae5d1ff0300738c4",
+        "review_session": "r144d-20261016-951",
+        "report": "ACL-144 PR #951 independent review (Reviewer-R144D, r144d-20261016-951). Full diff origin/main...a339c1fe against Issue #73. _find_mlx_profile_dir resolves {ws}/{folder_id}/{id}, {ws}/{id}, {ws}/*/{id} by exact directory name only, never descends deeper, no rglob/glob/walk; unsafe ids ('', '.', '..', path separators) and missing root return None; OSError -> None. account_spend._mlx_profile_dir delegates (no duplicate). All callers (DirectCDP/Playwright open raise clear RuntimeError; attach-only raises unless allow_missing_dir; stop/close/campaign_open fall back to empty udd as before; click/codegen recorders and probe script return None) handle None. Real layout on this machine is profiles/{ws}/{folder}/{profile}: 76 real profiles all resolved to the identical path with and without folder_id, 1.45 s total for 152 lookups. Dropping the recursive fallback is within the Issue acceptance (unsupported layouts -> clear safe failure). Tests: 481 passed across 18 affected files (py 3.14). Non-blocking: test param 'a\b' is a backspace literal, so the backslash rejection branch is untested; folder_id is not sanitized (map-sourced, leaf still must equal profile_id, so identity is unaffected); fb_api.profile.find_profile_dir still rglobs (out of scope per changelog).",
+        "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          73
+        ],
+        "recorded_at": "2026-10-16T14:59:14+00:00",
+        "issue_scopes": {
+          "73": "3a25372ae9c718cc8f08a1c2cf0a72178f1d6ee782f7356fba460f6033aa2db0"
+        }
       }
     },
     "stage": {
