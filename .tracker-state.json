@@ -47690,7 +47690,7 @@
             "session": "w123c-20261016"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W123C",
         "coordinator": "Coordinator-C1016A",
         "handoff": {
@@ -47708,7 +47708,8 @@
           "report": "ACL-123: the account map row shows a plain-English next step under a disabled/restricted/review status, derived from the Meta disable_reason when the Graph read supplied it; page reads say the reason was not reported; unknown codes say the cause is unknown. Account name stays in the same row. Tests: tests/test_account_next_step.py (9 passed), plus test_account_spend and test_disabled_account_status passing. CI not run (startup_failure)."
         },
         "pr": 954,
-        "queued_at": "2026-10-16T14:39:06+00:00"
+        "queued_at": "2026-10-16T14:39:06+00:00",
+        "reviewer": "Reviewer-R123D"
       },
       "165": {
         "implementers": [
@@ -49542,6 +49543,10 @@
       "Worker-W123C": {
         "session": "w123c-20261016",
         "role": "Worker"
+      },
+      "Reviewer-R123D": {
+        "session": "r123d-20261016",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -52302,7 +52307,6 @@
       151,
       73,
       165,
-      29,
       19
     ],
     "review": null,
@@ -77166,6 +77170,13 @@
         "issue": 19,
         "pr": 955,
         "actor": "Worker-W106C"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-16T14:41:27+00:00",
+        "pr": 954,
+        "lane": "4843e56509d34730a6e2e4540adbad8a",
+        "actor": "Reviewer-R123D"
       }
     ],
     "policy": {
@@ -81829,6 +81840,18 @@
         "session": "r1853d-20261016",
         "coordinator": "Coordinator-C1016A",
         "started_at": "2026-10-16T11:18:25+00:00",
+        "state": "reviewing"
+      },
+      "954": {
+        "id": "4843e56509d34730a6e2e4540adbad8a",
+        "pr": 954,
+        "issues": [
+          29
+        ],
+        "actor": "Reviewer-R123D",
+        "session": "r123d-20261016",
+        "coordinator": "Coordinator-C1016A",
+        "started_at": "2026-10-16T14:41:27+00:00",
         "state": "reviewing"
       }
     },
