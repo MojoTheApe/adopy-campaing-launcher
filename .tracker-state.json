@@ -41620,20 +41620,6 @@
         "started_at": "2026-10-16T13:02:56+00:00",
         "from_status": "status:backlog"
       },
-      "273": {
-        "actor": "Worker-1273A",
-        "session": "d69b43c4-d6df-47bc-a94e-f83cd9b91368",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1273-manual-report-fingerprint",
-        "worktree": "C:\\acl-1273",
-        "id": "da2092480bb24f8a94f67903334ed2a6",
-        "issue": 273,
-        "state": "handoff",
-        "started_at": "2026-10-16T13:03:15+00:00",
-        "from_status": "status:backlog",
-        "pr": 948,
-        "report": "## Handoff \u2014 2026-10-16 (Worker-1273A)\n- PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/948, branch `work/acl-1273-manual-report-fingerprint`, head `15e175c3`, base main `af0ade29`.\n- Change: `report_problem()` fingerprint is now `[\"acl-report\", \"manual\", \"r\" + uuid4().hex]`, the same id is sent as tag `report_id`. Step-failure grouping unchanged. Form, route and scrubber unchanged.\n- Tests: new cases in `tests/test_report_delivery_review.py` (unique per call for different and identical text, all-digit id survives scrubbing, step failures still group, tags/context kept). Touched Sentry tests: 84 passed locally; full suite in CI.\n- Independent pre-review (read-only subagent): approve, nits only.\n- Remaining: live check after release \u2014 send two reports from the dashboard, confirm two new Sentry issues and the owner's notification, record the issue ids here; resolve old PYTHON-2. Owner-side: confirm an issue alert rule and team membership for project `python`."
-      },
       "151": {
         "actor": "Worker-W1151M",
         "session": "worker_acl1151_20261016",
@@ -47581,9 +47567,25 @@
             "session": "d69b43c4-d6df-47bc-a94e-f83cd9b91368"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-1273A",
-        "coordinator": "Coordinator-M1011A"
+        "coordinator": "Coordinator-M1011A",
+        "handoff": {
+          "actor": "Worker-1273A",
+          "session": "d69b43c4-d6df-47bc-a94e-f83cd9b91368",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "work/acl-1273-manual-report-fingerprint",
+          "worktree": "C:\\acl-1273",
+          "id": "da2092480bb24f8a94f67903334ed2a6",
+          "issue": 273,
+          "state": "handoff",
+          "started_at": "2026-10-16T13:03:15+00:00",
+          "from_status": "status:backlog",
+          "pr": 948,
+          "report": "## Handoff \u2014 2026-10-16 (Worker-1273A)\n- PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/948, branch `work/acl-1273-manual-report-fingerprint`, head `15e175c3`, base main `af0ade29`.\n- Change: `report_problem()` fingerprint is now `[\"acl-report\", \"manual\", \"r\" + uuid4().hex]`, the same id is sent as tag `report_id`. Step-failure grouping unchanged. Form, route and scrubber unchanged.\n- Tests: new cases in `tests/test_report_delivery_review.py` (unique per call for different and identical text, all-digit id survives scrubbing, step failures still group, tags/context kept). Touched Sentry tests: 84 passed locally; full suite in CI.\n- Independent pre-review (read-only subagent): approve, nits only.\n- Remaining: live check after release \u2014 send two reports from the dashboard, confirm two new Sentry issues and the owner's notification, record the issue ids here; resolve old PYTHON-2. Owner-side: confirm an issue alert rule and team membership for project `python`."
+        },
+        "pr": 948,
+        "queued_at": "2026-10-16T13:10:32+00:00"
       },
       "151": {
         "implementers": [
@@ -52139,7 +52141,8 @@
       356,
       71,
       839,
-      138
+      138,
+      273
     ],
     "review": null,
     "history": [
@@ -76918,6 +76921,13 @@
         "issue": 151,
         "claim": "39bb20b9dde844b98447a160e326acd1",
         "actor": "Worker-W1151M"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-16T13:10:32+00:00",
+        "issue": 273,
+        "pr": 948,
+        "actor": "Worker-1273A"
       }
     ],
     "policy": {
