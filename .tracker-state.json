@@ -48056,7 +48056,7 @@
       },
       "58": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       }
     },
     "actors": {
@@ -77754,6 +77754,12 @@
         "event": "archived",
         "at": "2026-10-16T20:49:16+00:00",
         "issue": 54,
+        "reason": "Backlog cleanup 2026-10-16: stale idea (undefined scope, untouched since September, premise predates the Graph API / new builder direction). Restore if it becomes relevant again."
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-16T20:49:44+00:00",
+        "issue": 58,
         "reason": "Backlog cleanup 2026-10-16: stale idea (undefined scope, untouched since September, premise predates the Graph API / new builder direction). Restore if it becomes relevant again."
       }
     ],
