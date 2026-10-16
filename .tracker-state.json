@@ -41628,9 +41628,11 @@
         "worktree": "C:\\acl-144-c",
         "id": "44b9be0a23a84f06904b59795e301dd6",
         "issue": 73,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-16T14:29:37+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 951,
+        "report": "# ACL-144 report\n\nPR #951, head a339c1fef11c8667196e61181ad303f34966ccdf.\n\nDesign: `browser._find_mlx_profile_dir(profile_id, folder_id=\"\")` resolves `profiles/{ws}/{folder_id}/{profile_id}` (and `{ws}/{profile_id}`) by directory name, at most two levels under a workspace. It is the single implementation; `account_spend._mlx_profile_dir` delegates to it. No recursive fallback: unknown layout, missing root or unsafe id returns None, and only an exact folder-name match is accepted, so another profile's folder is never chosen. Call sites are unchanged.\n\nFiles: src/fb_ads_rpa/browser.py, src/analysis_agent/account_spend.py, tests/test_a_profile_folder_is_found_by_address.py (new), docs/system/CHANGELOG.md.\n\nTests: test_a_profile_folder_is_found_by_address.py, test_account_spend.py, test_a_campaign_opens_within_two_minutes.py: 101 passed. The tests patch Path.rglob, Path.glob and os.walk to count (and fail on) recursive scans; none happen.\n\nCI: GitHub Actions startup_failure is expected; not waited for.\nNot changed: fb_api.profile.find_profile_dir still uses rglob (separate task)."
       }
     },
     "tasks": {
