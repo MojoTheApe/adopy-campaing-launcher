@@ -48108,7 +48108,7 @@
       },
       "464": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       }
     },
     "actors": {
@@ -77885,6 +77885,12 @@
         "at": "2026-10-16T20:54:44+00:00",
         "issue": 243,
         "reason": "Backlog cleanup 2026-10-16: stale idea; depends on a Sentry-to-issue Action and tickets.json that were never built. Reopen with a new design if wanted."
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-16T20:55:09+00:00",
+        "issue": 464,
+        "reason": "Backlog cleanup 2026-10-16: stale live check of profile auto-close after the RPA publish; moot after the Graph API move."
       }
     ],
     "policy": {
