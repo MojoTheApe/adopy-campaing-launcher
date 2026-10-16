@@ -1,5 +1,11 @@
 # System history
 
+## Account map: a disabled account says what to do next - ACL-123
+
+- `src/analysis_agent/account_next_step.py` maps the Meta `disable_reason` (read from the status text of the Graph read) to one plain-English next step. Page reads carry no reason, so they say the reason was not reported; an unrecognised code says the cause is unknown. Restricted and review states get a generic step. Nothing is diagnosed beyond what Meta reported and no automatic recovery is promised.
+- The step is shown under the status word on the account row (the account name stays in the same row), also after a live Read.
+
+
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
 Add a durable authorized release workflow using the maintained installer publisher
