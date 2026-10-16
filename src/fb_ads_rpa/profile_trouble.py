@@ -37,6 +37,7 @@ OPEN_BY_HAND = "profile_open_by_hand"
 SIMPLE_CREATE = "simple_create_layout"
 LEAD_TERMS = "lead_terms_not_accepted"
 WRONG_AD_ACCOUNT = "wrong_ad_account"
+NO_PROXY = "profile_no_proxy"
 
 #: Что сказать человеку — английский, это видно в дешборде.
 MESSAGES = {
@@ -68,6 +69,11 @@ MESSAGES = {
     WRONG_AD_ACCOUNT: "This profile's Facebook user has no access to that ad account, or Meta opened "
                       "another one. Check the ad account id on the Accounts page and that the "
                       "account is visible in this profile",
+    # ACL-1138: в Multilogin у профиля не задан прокси — он вышел бы в
+    # Facebook с настоящего IP этой машины. Профиль не открываем вовсе.
+    NO_PROXY: "This Multilogin profile has no proxy set, so it would reach Facebook from this "
+              "computer's own IP address. Add the proxy to the profile in Multilogin, "
+              "then press Publish again",
 }
 
 #: Остановки, после которых остальные кампании задания этого аккаунта не

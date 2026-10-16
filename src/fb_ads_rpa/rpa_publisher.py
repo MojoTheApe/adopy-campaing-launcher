@@ -335,6 +335,11 @@ class RpaPublisher:
             try:
                 self._conn = self._open_multilogin_direct(entry, account_label)
                 return self._conn
+            except profile_trouble.ProfileStop:
+                # ACL-1138: причина в профиле (например, нет прокси) — обычная
+                # цепочка упрётся в то же, обходить нельзя.
+                self._reset_browser(keep_browser_open=True)
+                raise
             except Exception as direct_exc:
                 log.warning("DirectCDP on running profile failed (%s); trying normal chain.", direct_exc)
                 self._reset_browser(keep_browser_open=True)

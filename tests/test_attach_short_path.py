@@ -250,7 +250,8 @@ def test_the_public_pair_exists_and_promises_what_it_says():
         for n in ast.walk(body)
         if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
     }
-    assert called == {"_try_attach_existing"}, (
+    # ACL-1138: гейт прокси только читает конфигурацию профиля в MLX API.
+    assert called == {"_try_attach_existing", "ensure_profile_has_proxy"}, (
         f"публичный путь делает что-то ещё: {sorted(called)}"
     )
 

@@ -63,6 +63,11 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   Meta, statistics and reports show the chosen name `NAME_2`. Each NAME_k has its own tag, so creatives
   are created again and a video may be uploaded again; an older partial campaign stays PAUSED and is
   left as is.
+  ACL-1138: before attaching to or starting a Multilogin profile, every Multilogin
+  provider, `attach_existing_only` and `fb_api.profile.open_profile` read the profile's proxy from the MLX API (`/profile/search` by id) and
+  stop the account with `profile_no_proxy` when none is configured. A failed check
+  does not block the run; `FB_RPA_PROXY_GATE=0` is the machine switch. The
+  browser's `--proxy-server` flag is only logged as evidence.
 - `src/creative_agent`, `src/knowledge_agent`: creative analysis and domain references.
 - `src/analysis_agent/team_library.py` and related library modules: shared targets/ad texts in
   the separately provisioned private team library; PR #244 replaced Google Sheets
