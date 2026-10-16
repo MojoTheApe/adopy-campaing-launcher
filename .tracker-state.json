@@ -41631,6 +41631,18 @@
         "state": "implementing",
         "started_at": "2026-10-16T14:42:38+00:00",
         "from_status": "status:backlog"
+      },
+      "787": {
+        "actor": "Worker-W1787C",
+        "session": "w1787c-20261016",
+        "coordinator": "Coordinator-C1016A",
+        "branch": "codex/acl-1787-ad-rules-research",
+        "worktree": "C:\\acl-1787-c",
+        "id": "cab384b4c05f4c11aae5b3a15a8368e9",
+        "issue": 787,
+        "state": "implementing",
+        "started_at": "2026-10-16T14:45:24+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -47765,6 +47777,17 @@
       "48": {
         "implementers": [],
         "state": "archived"
+      },
+      "787": {
+        "implementers": [
+          {
+            "actor": "Worker-W1787C",
+            "session": "w1787c-20261016"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W1787C",
+        "coordinator": "Coordinator-C1016A"
       }
     },
     "actors": {
@@ -49583,6 +49606,10 @@
       "Reviewer-R106D": {
         "session": "r106d-20261016",
         "role": "Reviewer"
+      },
+      "Worker-W1787C": {
+        "session": "w1787c-20261016",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -77232,6 +77259,13 @@
         "at": "2026-10-16T14:45:02+00:00",
         "issue": 48,
         "reason": "Obsolete: the Sheets 'publish my library' export no longer exists. ACL-1241 / PR #244 (2026-09-18) moved targets and ad texts to the private GitHub team library. team_library.put() already refuses changed destinations through a contents-API sha guard with conflict retries. Any residual per-file vs cross-file limit belongs to ACL-1241."
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-16T14:45:24+00:00",
+        "issue": 787,
+        "claim": "cab384b4c05f4c11aae5b3a15a8368e9",
+        "actor": "Worker-W1787C"
       }
     ],
     "policy": {
