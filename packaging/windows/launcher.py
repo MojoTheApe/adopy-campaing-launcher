@@ -3,19 +3,18 @@ from __future__ import annotations
 
 import json
 import os
-import socket
 import subprocess
 import sys
 import time
-import urllib.error
-import urllib.request
 import uuid
 import webbrowser
 from pathlib import Path
 from typing import Any
 
 
-DEFAULT_PORT = 9090
+import local_dashboard
+
+DEFAULT_PORT = local_dashboard.DEFAULT_PORT
 HEALTH_TIMEOUT_SECONDS = 60
 SERVER_MUTEX_NAME = r"Local\ACL-Campaign-Launcher-Server-v1"
 _MUTEX_HANDLE: int | None = None
@@ -115,29 +114,6 @@ def _configured_port(args: list[str]) -> int:
         return DEFAULT_PORT
 
 
-def _health_payload(port: int) -> dict[str, Any] | None:
-    try:
-        with urllib.request.urlopen(
-            f"http://127.0.0.1:{port}/health",
-            timeout=1.0,
-        ) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-        return payload if isinstance(payload, dict) else None
-    except (OSError, ValueError, urllib.error.URLError):
-        return None
-
-
-def _is_acl_healthy(port: int) -> bool:
-    payload = _health_payload(port)
-    return bool(payload and payload.get("app") == "ACL" and payload.get("ok") is True)
-
-
-def _port_is_in_use(port: int) -> bool:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.settimeout(0.5)
-        return sock.connect_ex(("127.0.0.1", port)) == 0
-
-
 def _acquire_server_mutex() -> bool:
     """Prevent two packaged ACL server processes from racing on Windows."""
     global _MUTEX_HANDLE
@@ -171,7 +147,11 @@ def _release_server_mutex() -> None:
 
 
 def _run_setup() -> bool:
-    if _port_is_in_use(DEFAULT_PORT) or not _acquire_server_mutex():
+    # Запрещает менять настройку только МОЙ работающий дешборд. Раньше хватало
+    # того, что 9090 занят кем угодно, — и второй человек на машине не мог
+    # настроить свою копию вовсе: «закройте дешборд», которого у него нет
+    # (ACL-1309).
+    if local_dashboard.find_own(_local_acl_dir()) is not None or not _acquire_server_mutex():
         _show_message("Setup unavailable", "Close the running ACL dashboard process before changing its settings.", error=True)
         return False
     try:
@@ -261,17 +241,26 @@ def _executable_command() -> list[str]:
 
 
 def _launch_normal(*, open_browser: bool = True) -> int:
-    port = DEFAULT_PORT
-    url = f"http://127.0.0.1:{port}/"
-    if _is_acl_healthy(port):
+    config_dir = _local_acl_dir()
+    # Открываем только свой дешборд. «На 9090 отвечает ACL» — это ещё не мой:
+    # на машине с двумя людьми второй попадал в дешборд первого, с чужими
+    # аккаунтами и без единого предупреждения (ACL-1309).
+    own = local_dashboard.find_own(config_dir)
+    if own is not None:
         if open_browser:
-            webbrowser.open(url)
+            webbrowser.open(f"http://127.0.0.1:{own[0]}/")
         return 0
-    if _port_is_in_use(port):
+    # Чужой ACL или посторонняя программа на порту — не наше дело и не повод
+    # падать: встаём рядом. Чужое не останавливаем никогда. Порт — свой,
+    # закреплённый за человеком, а не «первый свободный»: иначе кто раньше
+    # включил компьютер, тот и на 9090, и адрес меняется день ото дня.
+    port = local_dashboard.choose_port(config_dir)
+    if port is None:
+        first, last = local_dashboard.PORTS[0], local_dashboard.PORTS[-1]
         _show_message(
             "Adopy Campaign Manager cannot start",
-            f"Port {port} is already used by another application. The launcher did not stop it. "
-            "Close that application or contact support, then try again.",
+            f"Ports {first}-{last} are all used by other applications. The launcher did not stop any of them. "
+            "Close one of them or contact support, then try again.",
             error=True,
         )
         return 2
@@ -291,9 +280,14 @@ def _launch_normal(*, open_browser: bool = True) -> int:
 
     deadline = time.monotonic() + HEALTH_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
-        if _is_acl_healthy(port):
+        # Ждём СВОЙ дешборд, а не «какой-нибудь на этом порту». Второй запуск
+        # того же человека проигрывает мьютекс и выходит, а открыть надо
+        # победителя — он может оказаться на другом порту, если тот успел
+        # освободиться или заняться между двумя запусками.
+        own = local_dashboard.find_own(config_dir)
+        if own is not None:
             if open_browser:
-                webbrowser.open(url)
+                webbrowser.open(f"http://127.0.0.1:{own[0]}/")
             return 0
         if process.poll() not in (None, 0):
             break
@@ -394,7 +388,10 @@ def main() -> int:
         return _launch_normal(open_browser=False)
     if "--server" in args or "--no-browser" in args:
         return _run_server(args)
-    if not _is_acl_healthy(DEFAULT_PORT):
+    # Мастер пропускаем, только если работает МОЙ дешборд. Утром 24.09 на
+    # 9090 работал чужой — и свежая установка молча открыла его вместо
+    # мастера, со старой версией и чужими данными (ACL-1309).
+    if local_dashboard.find_own(_local_acl_dir()) is None:
         from setup_wizard import setup_is_complete
 
         if not setup_is_complete(_local_acl_dir()):

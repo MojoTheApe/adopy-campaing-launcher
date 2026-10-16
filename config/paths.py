@@ -83,6 +83,24 @@ def get_local_config_dir() -> str:
     return os.path.join(os.path.expanduser("~"), ".config", "acl")
 
 
+def config_identity(directory: str | os.PathLike | None = None) -> str:
+    """Чей это ACL: короткий отпечаток каталога настроек, а не сам путь.
+
+    На одной машине могут жить два человека — два пользователя Windows или
+    удалённый стол, — и у каждого свой %LOCALAPPDATA%, а порт общий. Лаунчер
+    видел на 9090 «какой-то ACL» и открывал его как свой: второй человек
+    молча попадал в дешборд первого, с чужими аккаунтами (ACL-1309, 24.09).
+
+    Отпечаток, а не путь: `/health` доступен любому процессу на машине, и
+    путь в нём выдал бы имя чужой учётной записи. Для сравнения «мой или
+    нет» хватает хэша.
+    """
+    import hashlib
+
+    path = os.path.normcase(os.path.realpath(str(directory or get_local_config_dir())))
+    return hashlib.sha256(path.encode("utf-8")).hexdigest()[:16]
+
+
 def get_obsidian_dashboard_dir() -> Path | None:
     """The team's Obsidian "дешборд" folder, or None when this machine has none.
 
