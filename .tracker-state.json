@@ -41594,22 +41594,7 @@
     ]
   },
   "execution": {
-    "claims": {
-      "899": {
-        "actor": "Worker-RF1016W",
-        "session": "rf1016w-20261016",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1899-video-upload-progress",
-        "worktree": "C:\\rf-899",
-        "id": "f3ae21b7d0b44007b748537d6260fe2a",
-        "issue": 899,
-        "state": "handoff",
-        "started_at": "2026-10-16T10:22:18+00:00",
-        "from_status": "status:todo",
-        "pr": 900,
-        "report": "Merged the refreshed ACL-1776 head cd1da59b (which contains main af0ade29) into the previously approved head eb4f87d6; only CHANGELOG conflicted, resolved by keeping both sides; no code change; 151 tests passed. Needs a delta review of the merge only."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -46867,25 +46852,25 @@
             "session": "rf1016w-20261016"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RF1016W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-RG1899",
-          "session": "wrg1899-20261015",
+          "actor": "Worker-RF1016W",
+          "session": "rf1016w-20261016",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1899-video-upload-progress",
-          "worktree": "C:\\wk-1899",
-          "id": "065419e41db745e2a2eca2d59ba83ab9",
+          "worktree": "C:\\rf-899",
+          "id": "f3ae21b7d0b44007b748537d6260fe2a",
           "issue": 899,
           "state": "handoff",
-          "started_at": "2026-10-15T10:25:31+00:00",
+          "started_at": "2026-10-16T10:22:18+00:00",
           "from_status": "status:todo",
           "pr": 900,
-          "report": "# ACL-899 (ACL-1899) handoff r2\n\n- Claim: 065419e41db745e2a2eca2d59ba83ab9 (Worker-RG1899, Coordinator-M1011A, worktree C:\\wk-1899)\n- Branch: work/acl-1899-video-upload-progress\n- New head: eb4f87d69f21cf9a835dab826bb30799642759ed\n- Merge: `git merge --no-edit work/main` clean, no conflicts. 3ee7c6d9 is an ancestor of HEAD.\n- CHANGELOG commit: eb4f87d6, removes the `upload.onprogress` mention from the ACL-1899 first bullet. Nothing else changed.\n- Tests (`-k \"not browser\"`, 9 affected files): 607 passed, 0 failed, 4 deselected (browser).\n- Pushed: `git push work HEAD:work/acl-1899-video-upload-progress` (70517791..eb4f87d6)."
+          "report": "Merged the refreshed ACL-1776 head cd1da59b (which contains main af0ade29) into the previously approved head eb4f87d6; only CHANGELOG conflicted, resolved by keeping both sides; no code change; 151 tests passed. Needs a delta review of the merge only."
         },
         "pr": 900,
-        "queued_at": "2026-10-15T10:30:51+00:00",
+        "queued_at": "2026-10-16T10:25:38+00:00",
         "return_operation": {
           "id": "ec7f09c66a2847639df265a76276cb85",
           "actor": "Coordinator-M1011A",
@@ -51952,7 +51937,8 @@
       309,
       379,
       356,
-      776
+      776,
+      899
     ],
     "review": null,
     "history": [
@@ -75873,6 +75859,13 @@
           "report": "Main moved to af0ade29 (ACL-1924 batch + ACL-1923 no-stage activation, policy 1bd91869). The earlier approval predates this policy and main and is no longer current. Returned to the author for a main merge and fresh independent approval; coordination of this task moves to Coordinator-C1016A (session \"7 \u0437\u0430\u0434\u0430\u0447 \u0432 \u0430\u043f\u0440\u0443\u0432\u0434\u0435\") on the owner's instruction."
         },
         "batch_id": null
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-16T10:25:38+00:00",
+        "issue": 899,
+        "pr": 900,
+        "actor": "Worker-RF1016W"
       }
     ],
     "policy": {
