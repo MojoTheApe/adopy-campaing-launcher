@@ -2175,6 +2175,7 @@
     /* Сообщение поставщику (acl-132): кнопка и подсказка под плохим статусом. */
     .amap-st-report { margin-top: 0.2rem; white-space: normal; }
     .amap-st-report .amap-copy-group { font-size: var(--adopy-text-xs); padding: 0.05rem 0.35rem; }
+    .amap-st-next { display: block; font-size: var(--adopy-text-xs); color: var(--muted); line-height: 1.3; margin-top: 0.1rem; white-space: normal; max-width: 22rem; }
     .amap-st-hint { display: block; font-size: var(--adopy-text-xs); color: var(--muted); line-height: 1.3; margin-top: 0.1rem; }
 
     /* Состояние Multilogin внутри формы подключения: строка всегда, поля
@@ -9691,6 +9692,7 @@ function amapStatusTail(account, s) {
     out += ' <button type="button" class="amap-shot" data-shot="' + esc(s.status_shot) + '" title="Screenshot taken '
       + esc(s.status_shot_at) + '. Copies the image to the clipboard." onclick="amapCopyShot(this)">Copy screenshot</button>';
   }
+  if (s.next_step) out += '<small class="amap-st-next">' + esc(s.next_step) + '</small>';
   var word = AMAP_STATUS_WORDS[s.status];
   if (word && typeof window === 'object' && window.AMAP_SHOW_COPY_FOR_GROUP === true) {
     /* data-head is the fallback tab title; time is the read time. */
