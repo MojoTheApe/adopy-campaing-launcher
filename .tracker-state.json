@@ -48112,7 +48112,7 @@
       },
       "241": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       }
     },
     "actors": {
@@ -77895,6 +77895,12 @@
         "at": "2026-10-16T20:55:09+00:00",
         "issue": 464,
         "reason": "Backlog cleanup 2026-10-16: stale live check of profile auto-close after the RPA publish; moot after the Graph API move."
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-16T20:55:33+00:00",
+        "issue": 241,
+        "reason": "Done: code in main (PR #244, merge 42900654), owner verified on 2026-10-15; rollout to other managers continues in #938. Backlog cleanup 2026-10-16."
       }
     ],
     "policy": {
