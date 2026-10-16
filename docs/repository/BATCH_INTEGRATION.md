@@ -1,5 +1,11 @@
 # Approved tasks and batches of at most five
 
+The later temporary no-stage selection and authorized release continuation are
+defined in [POST_MAIN_DELIVERY.md](POST_MAIN_DELIVERY.md). Its source ACL-1924
+uses the old stage/main route before guarded idle activation in parent ACL-1923.
+The older cutover evidence and stage commands below remain historical; use the
+current pinned guide and selected descriptor for new post-activation batches.
+
 The prepared [ACL-1875 source-review pool](SOURCE_REVIEWS.md) selects execution
 schema 3 with five independent source reviews and the same single integration
 Coordinator/Reviewer. Its own source finishes the current v2 route before actual

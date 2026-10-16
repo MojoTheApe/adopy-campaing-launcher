@@ -148,3 +148,29 @@ def test_missing_descriptor_policy_cannot_hide_schema3_tracker(candidate, missin
     path.write_text(json.dumps(data))
     result = select(root, "pull_request", payload)
     assert result["reason"] == "classification-unavailable-run-full" and result["windows"]
+
+
+def test_no_stage_keeps_source_affected_and_main_batch_full_checks(candidate):
+    root, _, change, event = candidate
+    path = root / "delivery.json"
+    data = json.loads(path.read_text()); data["workflow"]["staging"] = False
+    path.write_text(json.dumps(data))
+    path = root / "tracker/config.json"
+    data = json.loads(path.read_text()); data["workflow"].remove("stage")
+    data["delivery_policy"] = {"staging": {"enabled": False}}
+    path.write_text(json.dumps(data))
+    head = change()
+    assert select(root, "pull_request", event(head))["python"] == ["3.13"]
+    result = select(root, "pull_request", event(head, "codex/batch-" + "a" * 32, "main"))
+    assert result["python"] == ["3.11", "3.13"] and result["windows"]
+    assert select(root, "pull_request", event(head, "codex/batch-" + "a" * 32, "main"),
+                  workflow="windows-installer.yml")["windows"]
+
+
+def test_no_stage_drift_never_reduces_checks(candidate):
+    root, _, change, event = candidate
+    head = change("docs/note.md")
+    path = root / "delivery.json"
+    data = json.loads(path.read_text()); data["workflow"]["staging"] = False
+    path.write_text(json.dumps(data))
+    assert select(root, "pull_request", event(head))["reason"] == "classification-unavailable-run-full"
