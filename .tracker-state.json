@@ -3806,20 +3806,20 @@
       "900": {
         "kind": "independent-review",
         "verdict": "approved",
-        "reviewer": "Reviewer-RV1015P",
-        "review_session": "rv1015p-900",
-        "execution_lane": "b935e9a50ab2457381a5e31dacdb934e",
-        "implementer": "Worker-RG1899",
-        "head_sha": "eb4f87d69f21cf9a835dab826bb30799642759ed",
-        "base_sha": "3ee7c6d9c7a394ecec9f0889805fadb188b3aab7",
-        "tree_sha": "539337642a658fba6fd851220cd535f58d9192b3",
-        "report": "Delta re-review of 263b267f (previously approved, no blockers). Head eb4f87d6 = 263b267f + clean merge of main 3ee7c6d9 (git show --remerge-diff is empty, no manual resolution) + one commit touching only docs/system/CHANGELOG.md that drops the upload.onprogress wording; the remaining xhr.upload mention explains why no upload listener is registered (CORS preflight), elapsed time + size progress, percentage deferred to ACL-891 - accurate. Head contains current work/main 3ee7c6d9; diff vs main is 1776 + 1899 changes only (22 files). Tests: test_acl1899_upload_progress, test_acl1761_api_create, test_acl1776_create_forms: 271 passed, including test_the_page_helper_keeps_the_write_policy_for_jobs. CI all green (tracker-link re-run after handoff passed). 1776 Approved in tracker. No live checks claimed.",
-        "main_sha": "3ee7c6d9c7a394ecec9f0889805fadb188b3aab7",
-        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "reviewer": "Reviewer-DV1016B",
+        "review_session": "dv1016b-900",
+        "execution_lane": "0b332f531991442399eb20fc44ceaf57",
+        "implementer": "Worker-RF1016W",
+        "head_sha": "6743292c1e2093fd9deed315ff38559f6db1f75c",
+        "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+        "tree_sha": "96ac058ee5257da82dcc47a809158e2f92ed204d",
+        "report": "Delta re-review after main merge. Head 6743292c has parents eb4f87d6 (previously approved head) and cd1da59b (new 776 head) and contains work/main af0ade29. Remerge-diff shows only a docs/system/CHANGELOG.md conflict resolved keep-both (ACL-1924 entry and the ACL-1899 entry both present, nothing lost or duplicated). The non-CHANGELOG diff eb4f87d6..6743292c is byte-identical (apart from one hunk line offset) to main 3ee7c6d9..af0ade29 over the same files, so no extra code was added. Ran tests/test_acl1899_upload_progress.py, tests/test_acl1761_api_create.py, tests/test_acl1776_create_forms.py: 271 passed. All PR checks green (installer build jobs skipped as expected). Live checks not claimed.",
+        "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
         "issues": [
           899
         ],
-        "recorded_at": "2026-10-15T10:55:30+00:00",
+        "recorded_at": "2026-10-16T10:55:20+00:00",
         "issue_scopes": {
           "899": "52d852154dfd159e49185f701d1c699a64ca2b269802ff49b0340c10537527de"
         }
