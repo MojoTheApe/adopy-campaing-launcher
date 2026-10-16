@@ -45678,7 +45678,7 @@
             "session": "wrs1816-20261015"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-RS1816",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -75987,6 +75987,68 @@
         "issue": 71,
         "claim": "d0c90d5ca1a849b29d4fd90c2d7a1b7c",
         "actor": "Worker-M1015D141"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-16T10:43:18+00:00",
+        "issue": 816,
+        "pr": 820,
+        "review": {
+          "id": "dacdf9c1929644b490a8a70e2f59a390",
+          "pr": 820,
+          "issues": [
+            816
+          ],
+          "actor": "Reviewer-R1816U",
+          "session": "r1816u-20261016",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-16T10:20:11+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 816,
+            "pr": 820,
+            "branch": "codex/acl-1816-rules-evaluate",
+            "head_sha": "76b5accba12fc67f2349310555592316d033784a",
+            "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+            "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "6a1db86c40b5cc712b42d116a961f25e6b6f3db33793c0cf8e8e912e1dfa657a",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-R1816U",
+              "implementer": "Worker-RS1816",
+              "review_session": "r1816u-20261016",
+              "execution_lane": "dacdf9c1929644b490a8a70e2f59a390",
+              "head_sha": "76b5accba12fc67f2349310555592316d033784a",
+              "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+              "tree_sha": "aefe39e1fa51eafadb8ed1494351bb0ad1bfba30",
+              "report": "Head 76b5accba12fc67f2349310555592316d033784a is a clean merge of origin/main af0ade29b106129089dbabd3f208b548efa246d9. The 1816 diff against main is byte-identical to the previously approved one (git diff origin/main head vs git diff 3ee7c6d9 4d2f8edd: same 12 files, 2293 insertions, identical md5). Re-read the full diff: evaluation is read-only towards Meta (rules modules import only local evidence/model/store; no Graph or campaign-command calls, no HTTP clients); the API (/rules/evaluations, /rules/evaluate-now) only reads the journal or enqueues a job, guarded by api backend and loopback; triggers are event listeners (new workbook, successful inventory read) feeding a single daemon worker queue, with no timers, sleeps or polling of live accounts; Automatic mode stays blocked because automatic_eligible comes from evidence and is further gated by weak identity, stale data and missing reconciliation; user-facing strings are English; no secrets or real ids. Tests: pytest tests/test_acl1816_rules_evaluate.py tests/test_rules_store.py tests/test_acl1815_rules_evidence.py gave 189 passed. No blocking findings.",
+              "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                816
+              ],
+              "recorded_at": "2026-10-16T10:23:13+00:00",
+              "issue_scopes": {
+                "816": "6a1db86c40b5cc712b42d116a961f25e6b6f3db33793c0cf8e8e912e1dfa657a"
+              }
+            },
+            "lane": {
+              "id": "dacdf9c1929644b490a8a70e2f59a390",
+              "pr": 820,
+              "issues": [
+                816
+              ],
+              "actor": "Reviewer-R1816U",
+              "session": "r1816u-20261016",
+              "coordinator": "Coordinator-C0930A",
+              "started_at": "2026-10-16T10:20:11+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-16T10:41:58+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -77350,6 +77412,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-15T11:45:33+00:00"
+      },
+      "816": {
+        "issue": 816,
+        "pr": 820,
+        "branch": "codex/acl-1816-rules-evaluate",
+        "head_sha": "76b5accba12fc67f2349310555592316d033784a",
+        "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+        "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "6a1db86c40b5cc712b42d116a961f25e6b6f3db33793c0cf8e8e912e1dfa657a",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-R1816U",
+          "implementer": "Worker-RS1816",
+          "review_session": "r1816u-20261016",
+          "execution_lane": "dacdf9c1929644b490a8a70e2f59a390",
+          "head_sha": "76b5accba12fc67f2349310555592316d033784a",
+          "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+          "tree_sha": "aefe39e1fa51eafadb8ed1494351bb0ad1bfba30",
+          "report": "Head 76b5accba12fc67f2349310555592316d033784a is a clean merge of origin/main af0ade29b106129089dbabd3f208b548efa246d9. The 1816 diff against main is byte-identical to the previously approved one (git diff origin/main head vs git diff 3ee7c6d9 4d2f8edd: same 12 files, 2293 insertions, identical md5). Re-read the full diff: evaluation is read-only towards Meta (rules modules import only local evidence/model/store; no Graph or campaign-command calls, no HTTP clients); the API (/rules/evaluations, /rules/evaluate-now) only reads the journal or enqueues a job, guarded by api backend and loopback; triggers are event listeners (new workbook, successful inventory read) feeding a single daemon worker queue, with no timers, sleeps or polling of live accounts; Automatic mode stays blocked because automatic_eligible comes from evidence and is further gated by weak identity, stale data and missing reconciliation; user-facing strings are English; no secrets or real ids. Tests: pytest tests/test_acl1816_rules_evaluate.py tests/test_rules_store.py tests/test_acl1815_rules_evidence.py gave 189 passed. No blocking findings.",
+          "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            816
+          ],
+          "recorded_at": "2026-10-16T10:23:13+00:00",
+          "issue_scopes": {
+            "816": "6a1db86c40b5cc712b42d116a961f25e6b6f3db33793c0cf8e8e912e1dfa657a"
+          }
+        },
+        "lane": {
+          "id": "dacdf9c1929644b490a8a70e2f59a390",
+          "pr": 820,
+          "issues": [
+            816
+          ],
+          "actor": "Reviewer-R1816U",
+          "session": "r1816u-20261016",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-16T10:20:11+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-16T10:41:58+00:00"
       }
     },
     "batches": {
@@ -80123,62 +80229,6 @@
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-16T10:19:09+00:00",
         "state": "reviewing"
-      },
-      "820": {
-        "id": "dacdf9c1929644b490a8a70e2f59a390",
-        "pr": 820,
-        "issues": [
-          816
-        ],
-        "actor": "Reviewer-R1816U",
-        "session": "r1816u-20261016",
-        "coordinator": "Coordinator-C0930A",
-        "started_at": "2026-10-16T10:20:11+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 816,
-          "pr": 820,
-          "branch": "codex/acl-1816-rules-evaluate",
-          "head_sha": "76b5accba12fc67f2349310555592316d033784a",
-          "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
-          "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "6a1db86c40b5cc712b42d116a961f25e6b6f3db33793c0cf8e8e912e1dfa657a",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-R1816U",
-            "implementer": "Worker-RS1816",
-            "review_session": "r1816u-20261016",
-            "execution_lane": "dacdf9c1929644b490a8a70e2f59a390",
-            "head_sha": "76b5accba12fc67f2349310555592316d033784a",
-            "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
-            "tree_sha": "aefe39e1fa51eafadb8ed1494351bb0ad1bfba30",
-            "report": "Head 76b5accba12fc67f2349310555592316d033784a is a clean merge of origin/main af0ade29b106129089dbabd3f208b548efa246d9. The 1816 diff against main is byte-identical to the previously approved one (git diff origin/main head vs git diff 3ee7c6d9 4d2f8edd: same 12 files, 2293 insertions, identical md5). Re-read the full diff: evaluation is read-only towards Meta (rules modules import only local evidence/model/store; no Graph or campaign-command calls, no HTTP clients); the API (/rules/evaluations, /rules/evaluate-now) only reads the journal or enqueues a job, guarded by api backend and loopback; triggers are event listeners (new workbook, successful inventory read) feeding a single daemon worker queue, with no timers, sleeps or polling of live accounts; Automatic mode stays blocked because automatic_eligible comes from evidence and is further gated by weak identity, stale data and missing reconciliation; user-facing strings are English; no secrets or real ids. Tests: pytest tests/test_acl1816_rules_evaluate.py tests/test_rules_store.py tests/test_acl1815_rules_evidence.py gave 189 passed. No blocking findings.",
-            "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              816
-            ],
-            "recorded_at": "2026-10-16T10:23:13+00:00",
-            "issue_scopes": {
-              "816": "6a1db86c40b5cc712b42d116a961f25e6b6f3db33793c0cf8e8e912e1dfa657a"
-            }
-          },
-          "lane": {
-            "id": "dacdf9c1929644b490a8a70e2f59a390",
-            "pr": 820,
-            "issues": [
-              816
-            ],
-            "actor": "Reviewer-R1816U",
-            "session": "r1816u-20261016",
-            "coordinator": "Coordinator-C0930A",
-            "started_at": "2026-10-16T10:20:11+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-16T10:41:58+00:00"
-        }
       },
       "831": {
         "id": "f1a9eca1144647bba3e809299727e3a5",
