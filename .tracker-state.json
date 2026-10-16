@@ -45612,7 +45612,7 @@
             "session": "wrs1816-20261015"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-RS1816",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -45631,7 +45631,8 @@
         },
         "pr": 820,
         "queued_at": "2026-10-16T10:17:10+00:00",
-        "review_report": "# Return for a main refresh\n\nMain moved to af0ade29 (ACL-1923/1924: no-stage delivery route, process docs and workflows). Required: merge current main into the branch (merge, no rebase; it merges cleanly), re-run the affected tests, hand off again for fresh review."
+        "review_report": "# Return for a main refresh\n\nMain moved to af0ade29 (ACL-1923/1924: no-stage delivery route, process docs and workflows). Required: merge current main into the branch (merge, no rebase; it merges cleanly), re-run the affected tests, hand off again for fresh review.",
+        "reviewer": "Reviewer-R1816U"
       },
       "822": {
         "implementers": [
@@ -49142,6 +49143,10 @@
       "Reviewer-R1827U": {
         "session": "r1827u-20261016",
         "role": "Reviewer"
+      },
+      "Reviewer-R1816U": {
+        "session": "r1816u-20261016",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -51893,8 +51898,7 @@
       920,
       309,
       379,
-      356,
-      816
+      356
     ],
     "review": null,
     "history": [
@@ -75770,6 +75774,13 @@
         "pr": 829,
         "lane": "514cee07b1454049b5c1a0795ad085ae",
         "actor": "Reviewer-R1827U"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-16T10:20:11+00:00",
+        "pr": 820,
+        "lane": "dacdf9c1929644b490a8a70e2f59a390",
+        "actor": "Reviewer-R1816U"
       }
     ],
     "policy": {
@@ -79993,6 +80004,18 @@
         "session": "r1827u-20261016",
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-16T10:19:09+00:00",
+        "state": "reviewing"
+      },
+      "820": {
+        "id": "dacdf9c1929644b490a8a70e2f59a390",
+        "pr": 820,
+        "issues": [
+          816
+        ],
+        "actor": "Reviewer-R1816U",
+        "session": "r1816u-20261016",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-16T10:20:11+00:00",
         "state": "reviewing"
       }
     },
