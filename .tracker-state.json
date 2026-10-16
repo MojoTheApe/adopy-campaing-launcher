@@ -41552,22 +41552,7 @@
     ]
   },
   "execution": {
-    "claims": {
-      "776": {
-        "actor": "Worker-RF1016W",
-        "session": "rf1016w-20261016",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1776-create-forms",
-        "worktree": "C:\\rf-776",
-        "id": "8aeef0575dbc446db146d616450fa5b7",
-        "issue": 776,
-        "state": "handoff",
-        "started_at": "2026-10-16T10:18:05+00:00",
-        "from_status": "status:todo",
-        "pr": 831,
-        "report": "Merged main af0ade29 into the previously approved head 271113df; only CHANGELOG conflicted, resolved by keeping both sides; no code change; 130 tests passed. Needs a delta review of the merge only."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -45728,25 +45713,25 @@
             "session": "rf1016w-20261016"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RF1016W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-RG1776",
-          "session": "wrg1776-20261015",
+          "actor": "Worker-RF1016W",
+          "session": "rf1016w-20261016",
           "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1776-create-forms",
-          "worktree": "C:\\wk-rf1776",
-          "id": "8e5d859343c040a597da644a2bc471b3",
+          "worktree": "C:\\rf-776",
+          "id": "8aeef0575dbc446db146d616450fa5b7",
           "issue": 776,
           "state": "handoff",
-          "started_at": "2026-10-15T10:15:59+00:00",
+          "started_at": "2026-10-16T10:18:05+00:00",
           "from_status": "status:todo",
           "pr": 831,
-          "report": "# ACL-776 refresh r2 handoff\n\n- Claim: 8e5d859343c040a597da644a2bc471b3 (ACL-1776, Worker-RG1776, session wrg1776-20261015, coordinator Coordinator-M1011A)\n- Branch: codex/acl-1776-create-forms, worktree C:\\wk-rf1776\n- Previous head: f475cdb8\n- New head: 271113df (pushed to work, ff from f475cdb8)\n- Merge: `git merge --no-edit work/main` into the branch, clean, no conflicts. Main 3ee7c6d9 is an ancestor of HEAD (verified).\n- Tests (`-k \"not browser\"`): 868 passed, 0 failed, 2 deselected, 109 warnings.\n  Files: test_acl1776_create_forms, test_acl1819_preflight, test_acl1761_api_create, test_acl1761_parity, test_acl1756_fb_api, test_acl1800_campaign_commands, test_acl1775_*, test_acl_test_platform, test_screens_are_in_english."
+          "report": "Merged main af0ade29 into the previously approved head 271113df; only CHANGELOG conflicted, resolved by keeping both sides; no code change; 130 tests passed. Needs a delta review of the merge only."
         },
         "pr": 831,
-        "queued_at": "2026-10-15T10:22:39+00:00",
+        "queued_at": "2026-10-16T10:21:33+00:00",
         "review_report": "Main moved to af0ade29 (ACL-1924 batch + ACL-1923 no-stage activation). The earlier approval used main 3ee7c6d9 and is no longer current under the new policy. Return to author for a main merge (CHANGELOG-only conflict), then fresh independent delta approval. Content unchanged.",
         "return_operation": {
           "id": "ee510c2d39a74da199c607bbaf5e5d0d",
@@ -51900,7 +51885,8 @@
       920,
       309,
       379,
-      356
+      356,
+      776
     ],
     "review": null,
     "history": [
@@ -75783,6 +75769,13 @@
         "pr": 820,
         "lane": "dacdf9c1929644b490a8a70e2f59a390",
         "actor": "Reviewer-R1816U"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-16T10:21:33+00:00",
+        "issue": 776,
+        "pr": 831,
+        "actor": "Worker-RF1016W"
       }
     ],
     "policy": {
