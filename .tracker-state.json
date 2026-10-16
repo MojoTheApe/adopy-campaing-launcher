@@ -48072,7 +48072,7 @@
       },
       "656": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       }
     },
     "actors": {
@@ -77795,6 +77795,12 @@
         "at": "2026-10-16T20:51:01+00:00",
         "issue": 610,
         "reason": "Backlog cleanup 2026-10-16: stale; targets RPA UI automation (security page URL, repeated Create presses). Checkpoint handling now lives in src/fb_api (error_catalog, token_capture)."
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-16T20:51:26+00:00",
+        "issue": 656,
+        "reason": "Done: delivered in ACL-1652 (PR #667, in main via #716); present in src/web/templates/_account_map.html. Backlog cleanup 2026-10-16."
       }
     ],
     "policy": {
