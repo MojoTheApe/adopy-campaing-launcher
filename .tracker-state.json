@@ -41595,20 +41595,6 @@
   },
   "execution": {
     "claims": {
-      "902": {
-        "actor": "Worker-RF1016W",
-        "session": "rf1016w-20261016",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1902-campaign-name-suffix",
-        "worktree": "C:\\rf-902",
-        "id": "057f454aaede4de68b1c17e6d5db896d",
-        "issue": 902,
-        "state": "handoff",
-        "started_at": "2026-10-16T10:25:59+00:00",
-        "from_status": "status:todo",
-        "pr": 904,
-        "report": "Merged the refreshed ACL-1899 head 6743292c (which contains main af0ade29) into the previously approved head 3c5007af; only CHANGELOG conflicted, resolved by keeping both sides; no code change; 32 tests passed. Needs a delta review of the merge only."
-      },
       "872": {
         "actor": "Worker-W1872C",
         "session": "w1872c-20261016",
@@ -46931,25 +46917,25 @@
             "session": "rf1016w-20261016"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RF1016W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-RG1902",
-          "session": "wrg1902-20261015",
+          "actor": "Worker-RF1016W",
+          "session": "rf1016w-20261016",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1902-campaign-name-suffix",
-          "worktree": "C:\\acl-1902-name-suffix",
-          "id": "88b9a478600740828178e0fae2d1bad1",
+          "worktree": "C:\\rf-902",
+          "id": "057f454aaede4de68b1c17e6d5db896d",
           "issue": 902,
           "state": "handoff",
-          "started_at": "2026-10-15T10:32:11+00:00",
+          "started_at": "2026-10-16T10:25:59+00:00",
           "from_status": "status:todo",
           "pr": 904,
-          "report": "# ACL-902 handoff (r2)\n\n- Claim: 88b9a478600740828178e0fae2d1bad1 (Worker-RG1902, session wrg1902-20261015, coordinator Coordinator-M1011A)\n- Branch: work/acl-1902-campaign-name-suffix, worktree C:\\acl-1902-name-suffix\n- Previous head: 519d6e5e. New head: 3c5007af (pushed to work).\n- Merge: `git merge --no-edit work/main` (main at 3ee7c6d9) was clean, no conflicts. 3ee7c6d9 is an ancestor of HEAD.\n- Tests: `pytest` on the 8 affected files with `-k \"not browser\"`: 489 passed, 0 failed.\n- PR: 904."
+          "report": "Merged the refreshed ACL-1899 head 6743292c (which contains main af0ade29) into the previously approved head 3c5007af; only CHANGELOG conflicted, resolved by keeping both sides; no code change; 32 tests passed. Needs a delta review of the merge only."
         },
         "pr": 904,
-        "queued_at": "2026-10-15T10:36:11+00:00",
+        "queued_at": "2026-10-16T10:29:02+00:00",
         "review_report": "Main moved to af0ade29 (ACL-1924 batch + ACL-1923 no-stage activation). The earlier approval used main 3ee7c6d9 and is no longer current under the new policy. Return to author for a main merge (CHANGELOG-only conflict), then fresh independent delta approval. Content unchanged.",
         "return_operation": {
           "id": "8185d38cb4834bfcae7f66f91bf7c63f",
@@ -51976,7 +51962,8 @@
       379,
       356,
       776,
-      899
+      899,
+      902
     ],
     "review": null,
     "history": [
@@ -75925,6 +75912,13 @@
         "issue": 853,
         "claim": "414a40577add41138c6bd0b1a56b05dd",
         "actor": "Worker-W1853C"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-16T10:29:02+00:00",
+        "issue": 902,
+        "pr": 904,
+        "actor": "Worker-RF1016W"
       }
     ],
     "policy": {
