@@ -41608,20 +41608,6 @@
   },
   "execution": {
     "claims": {
-      "708": {
-        "actor": "Worker-W1708C",
-        "session": "w1708c-20261016",
-        "coordinator": "Coordinator-C1016A",
-        "branch": "codex/acl-1708-rebrand-leftovers",
-        "worktree": "C:\\acl-1708-c",
-        "id": "df8787aed5bb42feb7e5a561cabb94cd",
-        "issue": 708,
-        "state": "handoff",
-        "started_at": "2026-10-16T14:29:01+00:00",
-        "from_status": "status:todo",
-        "pr": 952,
-        "report": "# ACL-1708 report\nChanges: \"Check the launcher window.\" -> \"Check the Adopy Campaign Manager window.\" in src/web/app.py (no tests/JS compare the string; no other user-visible launcher wording in src/web, remaining hits are comments/docstrings/identifiers/URLs). scripts/convert_favicon_to_ico.py deleted (it drew the old mark; repo has no SVG renderer, kit SVGs are src/web/static/logo.svg and favicon.svg, assets/dashboard.ico and favicon.ico are committed kit files); install_dashboard_shortcut.ps1 message no longer points at it; requirements-dev.txt comment fixed. Added viewport meta to report.html. CHANGELOG entry added.\nTests: tests/test_distribution_boundary.py + test_account_blocked_stops_the_campaign.py: 20 passed. 40 report.html-related test files: 713 passed, 1 failed (test_available_accounts_browser::test_select_remove_restore_and_counts, 500 on page render), and test_dashboard_review.py 3 failed; both identical on clean origin/main (pre-existing, unrelated). Remaining ~50 report.html test files only partially run. CI not run (startup_failure)."
-      },
       "72": {
         "actor": "Worker-W142C",
         "session": "w142c-20261016",
@@ -47663,9 +47649,25 @@
             "session": "w1708c-20261016"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1708C",
-        "coordinator": "Coordinator-C1016A"
+        "coordinator": "Coordinator-C1016A",
+        "handoff": {
+          "actor": "Worker-W1708C",
+          "session": "w1708c-20261016",
+          "coordinator": "Coordinator-C1016A",
+          "branch": "codex/acl-1708-rebrand-leftovers",
+          "worktree": "C:\\acl-1708-c",
+          "id": "df8787aed5bb42feb7e5a561cabb94cd",
+          "issue": 708,
+          "state": "handoff",
+          "started_at": "2026-10-16T14:29:01+00:00",
+          "from_status": "status:todo",
+          "pr": 952,
+          "report": "# ACL-1708 report\nChanges: \"Check the launcher window.\" -> \"Check the Adopy Campaign Manager window.\" in src/web/app.py (no tests/JS compare the string; no other user-visible launcher wording in src/web, remaining hits are comments/docstrings/identifiers/URLs). scripts/convert_favicon_to_ico.py deleted (it drew the old mark; repo has no SVG renderer, kit SVGs are src/web/static/logo.svg and favicon.svg, assets/dashboard.ico and favicon.ico are committed kit files); install_dashboard_shortcut.ps1 message no longer points at it; requirements-dev.txt comment fixed. Added viewport meta to report.html. CHANGELOG entry added.\nTests: tests/test_distribution_boundary.py + test_account_blocked_stops_the_campaign.py: 20 passed. 40 report.html-related test files: 713 passed, 1 failed (test_available_accounts_browser::test_select_remove_restore_and_counts, 500 on page render), and test_dashboard_review.py 3 failed; both identical on clean origin/main (pre-existing, unrelated). Remaining ~50 report.html test files only partially run. CI not run (startup_failure)."
+        },
+        "pr": 952,
+        "queued_at": "2026-10-16T14:50:17+00:00"
       },
       "73": {
         "implementers": [
@@ -52398,7 +52400,8 @@
       896,
       151,
       73,
-      165
+      165,
+      708
     ],
     "review": null,
     "history": [
@@ -77302,6 +77305,13 @@
         "issue": 788,
         "claim": "867f984aed504a2c88e16f6dd5d6ab5b",
         "actor": "Worker-W1788C"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-16T14:50:17+00:00",
+        "issue": 708,
+        "pr": 952,
+        "actor": "Worker-W1708C"
       }
     ],
     "policy": {
