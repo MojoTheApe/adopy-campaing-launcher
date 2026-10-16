@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -73,13 +74,36 @@ def _git(*args: str) -> str:
     return subprocess.check_output(["git", *args], text=True, encoding="utf-8").strip()
 
 
-def previous_tag(tag: str) -> str:
-    tags = [t for t in _git("tag", "--list", f"{TAG_PREFIX}*", "--sort=-creatordate").splitlines() if t and t != tag]
-    for candidate in tags:
-        if subprocess.run(["git", "merge-base", "--is-ancestor", candidate, tag],
-                          capture_output=True).returncode == 0:
-            return candidate
-    return ""
+def previous_published_release(repo: str, tag: str) -> dict:
+    """Use the actual stable channel, preserving orphan tags and failed drafts."""
+    token = os.environ.get("ACL_RELEASES_READ_TOKEN") or os.environ.get("GH_TOKEN") or ""
+    env = dict(os.environ, GH_TOKEN=token)
+    # A successful inventory distinguishes a first publication from API failure.
+    rows = json.loads(subprocess.check_output([
+        "gh", "release", "list", "--repo", repo, "--limit", "1000", "--json",
+        "tagName,isDraft,isPrerelease"], env=env, text=True, encoding="utf-8"))
+    stable = [r for r in rows if not r["isDraft"] and not r["isPrerelease"]]
+    if not stable:
+        return {}
+    if not token:
+        raise ValueError("Actual stable-channel verification requires its existing read token")
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from src.web import release_updates as updates
+    manifest, release = updates.fetch_latest(updates.Channel(repo, token))
+    previous = manifest.get("tag")
+    if (release.get("draft") or release.get("prerelease") or previous == tag
+            or not isinstance(previous, str) or not re.fullmatch(r"acl-release-[0-9A-Za-z][0-9A-Za-z._-]{0,63}", previous)
+            or release.get("tag_name") != previous
+            or previous not in {r["tagName"] for r in stable}):
+        raise ValueError("The prior channel must be an actual different stable publication")
+    if (_git("cat-file", "-t", "refs/tags/" + previous) != "tag"
+            or _git("rev-parse", previous + "^{commit}") != manifest.get("commit")
+            or subprocess.run(["git", "merge-base", "--is-ancestor", previous, tag],
+                              capture_output=True).returncode != 0):
+        raise ValueError("Published baseline does not match an included immutable source tag")
+    return {"tag": previous, "commit": manifest["commit"], "repository": repo,
+            "release_id": release["id"], "url": release["html_url"],
+            "signature": release["_acl_signature"]}
 
 
 def merged_pull_requests(since: str, tag: str) -> list[int]:
@@ -106,13 +130,14 @@ def fixed_issues(pulls: list[dict], config: dict | None = None) -> list[dict]:
 
 
 def build(*, tag: str, installer: Path, repo: str, commit: str, previous: str, pulls: list[dict],
-          config: dict | None = None) -> dict:
+          config: dict | None = None, previous_release: dict | None = None) -> dict:
     return {
         "schema": 1,
         "version": version_of(tag),
         "tag": tag,
         "commit": commit,
         "previous_tag": previous,
+        "previous_release": previous_release or {},
         "published_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
         "installer": {
             "name": installer.name,
@@ -151,11 +176,13 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     out = (args.out or installer.parent).resolve()
     out.mkdir(parents=True, exist_ok=True)
-    previous = previous_tag(args.tag)
+    baseline = previous_published_release(args.repo, args.tag)
+    previous = baseline.get("tag", "")
     source = args.source_repo or args.repo
     pulls = [_pull_request(source, n) for n in merged_pull_requests(previous, args.tag)]
     release = build(tag=args.tag, installer=installer, repo=args.repo,
-                    commit=_git("rev-list", "-n", "1", args.tag), previous=previous, pulls=pulls)
+                    commit=_git("rev-list", "-n", "1", args.tag), previous=previous, pulls=pulls,
+                    previous_release=baseline)
     (out / f"{installer.name}.sha256").write_text(f"{release['installer']['sha256']}  {installer.name}\n", encoding="utf-8")
     (out / "release.json").write_text(json.dumps(release, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (out / "release-notes.md").write_text(notes(release), encoding="utf-8")
