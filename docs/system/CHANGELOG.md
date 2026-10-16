@@ -101,6 +101,16 @@ workspaces; an attach on a live run has not been observed yet.
   Add sibling lookup and workspace/filter handlers remain unchanged.
 - Real-Chromium layout regressions cover three hosts, both themes and 280/720/1040 px
   with synthetic long values. This source change does not claim stable delivery.
+## ACL-1273 — Each manual problem report is its own Sentry issue — 2026-10-16
+
+`report_problem()` used a constant fingerprint, so every "Report a problem" from every
+machine landed in one Sentry issue titled after the first test message, and Sentry's
+new-issue alert never fired again. Each report now carries a per-call id (`r` + uuid4
+hex, also sent as the `report_id` tag) in its fingerprint, so two reports — even with the
+same text — are two issues. The `r` prefix keeps the scrubber from turning an all-digit id
+into `<digits>`. Automatic step failures keep grouping by step and reason. The dashboard
+form, `/report-problem` route and scrubber are unchanged. Whether an alert rule and team
+membership exist in Sentry remains an owner-side check; no live Sentry verification yet.
 
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
