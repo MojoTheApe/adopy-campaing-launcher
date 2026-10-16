@@ -47675,7 +47675,7 @@
             "session": "w106c-20261016"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W106C",
         "coordinator": "Coordinator-C1016A",
         "handoff": {
@@ -47693,7 +47693,8 @@
           "report": "ACL-106: per-manager empty-period notice. _period_owner() in src/web/app.py classifies the chosen dates as workbook-empty (nobody) or manager-empty (others have rows). report.html shows a manager-scoped notice in a separate block; the whole-workbook notice now adds that the file may need updating; account map unchanged. Tests: tests/test_empty_period_owner.py (+ existing sidebar tests), 21 passed. Docs updated. Head caff4e4a26a97c07660323e1d68440e46e62194d."
         },
         "pr": 955,
-        "queued_at": "2026-10-16T14:40:12+00:00"
+        "queued_at": "2026-10-16T14:40:12+00:00",
+        "reviewer": "Reviewer-R106D"
       },
       "29": {
         "implementers": [
@@ -49574,6 +49575,10 @@
       "Worker-W142C": {
         "session": "w142c-20261016",
         "role": "Worker"
+      },
+      "Reviewer-R106D": {
+        "session": "r106d-20261016",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -52333,8 +52338,7 @@
       896,
       151,
       73,
-      165,
-      19
+      165
     ],
     "review": null,
     "history": [
@@ -77211,6 +77215,13 @@
         "issue": 72,
         "claim": "748616d6aeaa441ebe3332ae099ea075",
         "actor": "Worker-W142C"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-16T14:44:02+00:00",
+        "pr": 955,
+        "lane": "396562a37833448ea64ad1d4428d104f",
+        "actor": "Reviewer-R106D"
       }
     ],
     "policy": {
@@ -81886,6 +81897,18 @@
         "session": "r123d-20261016",
         "coordinator": "Coordinator-C1016A",
         "started_at": "2026-10-16T14:41:27+00:00",
+        "state": "reviewing"
+      },
+      "955": {
+        "id": "396562a37833448ea64ad1d4428d104f",
+        "pr": 955,
+        "issues": [
+          19
+        ],
+        "actor": "Reviewer-R106D",
+        "session": "r106d-20261016",
+        "coordinator": "Coordinator-C1016A",
+        "started_at": "2026-10-16T14:44:02+00:00",
         "state": "reviewing"
       }
     },
