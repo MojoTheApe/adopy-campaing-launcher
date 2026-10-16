@@ -41594,22 +41594,7 @@
     ]
   },
   "execution": {
-    "claims": {
-      "138": {
-        "actor": "Worker-P1138",
-        "session": "acl1138_proxy_gate",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1138-proxy-gate",
-        "worktree": "C:\\acl-1138-proxy",
-        "id": "91370c8bfef44f8ab814427488fb4344",
-        "issue": 138,
-        "state": "handoff",
-        "started_at": "2026-10-16T11:02:43+00:00",
-        "from_status": "status:backlog",
-        "pr": 947,
-        "report": "Implementation complete on work/acl-1138-proxy-gate, PR #947 into main, head bd0f6741.\nGate: profile proxy read from MLX API (/profile/search by profile_ids) before every attach/start (all Multilogin providers, attach_existing_only, fb_api.profile.open_profile, warm pool open/adopt/checkout); no proxy -> profile_no_proxy account stop; API trouble -> fail-open with proxy_gate_unchecked telemetry; FB_RPA_PROXY_GATE=0 switch.\nChecks: 24 new tests; affected test files locally 2387 + 822 passed; secret scan clean; full suite left to CI.\nVerified read-only against real profiles in workspaces A and B: http and socks5 pass, no-proxy refused. Survey: 34/1848 (A) and 3/520 (B) profiles have no proxy.\nIndependent review (separate Opus subagent, read-only): changes requested twice, fixed, APPROVE at bd0f6741 vs base af0ade29.\nRemaining: acceptance item \"tried against real profiles before it gates\" is met on the configuration side; a live attach on a real run (command-line evidence log line) is not yet observed. Watch proxy_gate_unchecked telemetry after release."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -47498,9 +47483,25 @@
             "session": "acl1138_proxy_gate"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-P1138",
-        "coordinator": "Coordinator-M1011A"
+        "coordinator": "Coordinator-M1011A",
+        "handoff": {
+          "actor": "Worker-P1138",
+          "session": "acl1138_proxy_gate",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "work/acl-1138-proxy-gate",
+          "worktree": "C:\\acl-1138-proxy",
+          "id": "91370c8bfef44f8ab814427488fb4344",
+          "issue": 138,
+          "state": "handoff",
+          "started_at": "2026-10-16T11:02:43+00:00",
+          "from_status": "status:backlog",
+          "pr": 947,
+          "report": "Implementation complete on work/acl-1138-proxy-gate, PR #947 into main, head bd0f6741.\nGate: profile proxy read from MLX API (/profile/search by profile_ids) before every attach/start (all Multilogin providers, attach_existing_only, fb_api.profile.open_profile, warm pool open/adopt/checkout); no proxy -> profile_no_proxy account stop; API trouble -> fail-open with proxy_gate_unchecked telemetry; FB_RPA_PROXY_GATE=0 switch.\nChecks: 24 new tests; affected test files locally 2387 + 822 passed; secret scan clean; full suite left to CI.\nVerified read-only against real profiles in workspaces A and B: http and socks5 pass, no-proxy refused. Survey: 34/1848 (A) and 3/520 (B) profiles have no proxy.\nIndependent review (separate Opus subagent, read-only): changes requested twice, fixed, APPROVE at bd0f6741 vs base af0ade29.\nRemaining: acceptance item \"tried against real profiles before it gates\" is met on the configuration side; a live attach on a real run (command-line evidence log line) is not yet observed. Watch proxy_gate_unchecked telemetry after release."
+        },
+        "pr": 947,
+        "queued_at": "2026-10-16T11:39:09+00:00"
       }
     },
     "actors": {
@@ -52032,7 +52033,8 @@
       379,
       356,
       71,
-      839
+      839,
+      138
     ],
     "review": null,
     "history": [
@@ -76771,6 +76773,13 @@
         "pr": 863,
         "lane": "f223076ac8174baa89508ce5d1b7e314",
         "actor": "Reviewer-R1853D"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-16T11:39:09+00:00",
+        "issue": 138,
+        "pr": 947,
+        "actor": "Worker-P1138"
       }
     ],
     "policy": {
