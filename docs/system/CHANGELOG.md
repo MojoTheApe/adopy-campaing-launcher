@@ -111,6 +111,16 @@ same text — are two issues. The `r` prefix keeps the scrubber from turning an 
 into `<digits>`. Automatic step failures keep grouping by step and reason. The dashboard
 form, `/report-problem` route and scrubber are unchanged. Whether an alert rule and team
 membership exist in Sentry remains an owner-side check; no live Sentry verification yet.
+## RPA: a profile's folder is found by its address - ACL-144
+
+- `browser._find_mlx_profile_dir` no longer runs `rglob` over every Chrome profile in `~/mlx/profiles`
+  (about 10 s per call, paid on every publish run). It looks up `profiles/{workspace}/{folder_id}/{profile_id}`
+  by name, also accepting `profiles/{workspace}/{profile_id}`, at most two levels under a workspace.
+- There is deliberately no recursive fallback: a profile outside the known layout, a missing root or an
+  unsafe id (empty, `.`, `..`, with a path separator) returns `None` (the callers already treat that as
+  "folder not found"), and only an exact folder name matches, so another profile's folder is never chosen.
+- The dashboard's `account_spend._mlx_profile_dir` now calls the same function instead of keeping a copy.
+- Not changed: `fb_api.profile.find_profile_dir` still scans recursively (separate path, separate task).
 
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
