@@ -41619,6 +41619,18 @@
         "state": "implementing",
         "started_at": "2026-10-16T14:29:01+00:00",
         "from_status": "status:todo"
+      },
+      "72": {
+        "actor": "Worker-W142C",
+        "session": "w142c-20261016",
+        "coordinator": "Coordinator-C1016A",
+        "branch": "codex/acl-142-account-add-remove",
+        "worktree": "C:\\acl-142-c",
+        "id": "748616d6aeaa441ebe3332ae099ea075",
+        "issue": 72,
+        "state": "implementing",
+        "started_at": "2026-10-16T14:42:38+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -47737,6 +47749,17 @@
         },
         "pr": 953,
         "queued_at": "2026-10-16T14:37:05+00:00"
+      },
+      "72": {
+        "implementers": [
+          {
+            "actor": "Worker-W142C",
+            "session": "w142c-20261016"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W142C",
+        "coordinator": "Coordinator-C1016A"
       }
     },
     "actors": {
@@ -49547,6 +49570,10 @@
       "Reviewer-R123D": {
         "session": "r123d-20261016",
         "role": "Reviewer"
+      },
+      "Worker-W142C": {
+        "session": "w142c-20261016",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -77177,6 +77204,13 @@
         "pr": 954,
         "lane": "4843e56509d34730a6e2e4540adbad8a",
         "actor": "Reviewer-R123D"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-16T14:42:38+00:00",
+        "issue": 72,
+        "claim": "748616d6aeaa441ebe3332ae099ea075",
+        "actor": "Worker-W142C"
       }
     ],
     "policy": {
