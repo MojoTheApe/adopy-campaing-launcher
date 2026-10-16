@@ -162,19 +162,25 @@ def apply_machine_configuration(
 ) -> None:
     config_dir = Path(config_directory)
     map_path = config_dir / "ad_account_map.csv"
-    existing_map = map_path.read_bytes() if map_path.exists() else b""
-    env_path = config_dir / ".env"
-    existing_env = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
-    env_values = {
-        "MY_CM_NAME": configuration.campaign_manager_name,
-        # ACL-1447: тем же именем подписаны события Sentry (тег `manager`);
-        # в настройках дешборда меняется отдельно от MY_CM_NAME.
-        "ACL_MACHINE_LABEL": configuration.campaign_manager_name,
-        "FB_STATS_EXCEL": str(Path(stats_workbook)),
-        "FB_CREATIVES_ROOT": str(Path(creatives_directory)),
-        **SAFETY_ENV,
-    }
-    _replace_transaction({
-        env_path: merge_env(existing_env, env_values).encode("utf-8"),
-        map_path: _account_map_bytes(configuration, existing_map),
-    })
+    from src.web import meta_connections
+    with meta_connections.transaction(map_path, config_directory=config_dir):
+        existing_map = map_path.read_bytes() if map_path.exists() else b""
+        env_path = config_dir / ".env"
+        existing_env = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
+        env_values = {
+            "MY_CM_NAME": configuration.campaign_manager_name,
+            # ACL-1447: тем же именем подписаны события Sentry (тег `manager`);
+            # в настройках дешборда меняется отдельно от MY_CM_NAME.
+            "ACL_MACHINE_LABEL": configuration.campaign_manager_name,
+            "FB_STATS_EXCEL": str(Path(stats_workbook)),
+            "FB_CREATIVES_ROOT": str(Path(creatives_directory)),
+            **SAFETY_ENV,
+        }
+        proposed_map = _account_map_bytes(configuration, existing_map)
+        import csv
+        import io
+        meta_connections.mapping_will_change(list(csv.DictReader(io.StringIO(proposed_map.decode("utf-8-sig")))))
+        _replace_transaction({
+            env_path: merge_env(existing_env, env_values).encode("utf-8"),
+            map_path: proposed_map,
+        })

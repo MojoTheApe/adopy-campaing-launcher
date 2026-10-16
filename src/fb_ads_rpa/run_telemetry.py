@@ -103,7 +103,7 @@ def _flex_key(name: str) -> str:
 
 
 _SECRET_KEY_NAMES = (
-    "refresh_token", "access_token", "token", "client_secret", "api_key",
+    "refresh_token", "access_token", "token", "client_secret", "app_secret", "credential_ref", "secret_ref", "api_key",
     "proxy_password", "proxy_pass", "passwd", "password", "authorization",
     "fb_dtsg", "lsd",
 )
@@ -209,7 +209,7 @@ def scrub(text: str) -> str:
 #: — диагностика («есть ли токен»), а не сам токен, и в Sentry должен остаться.
 _SECRET_DICT_KEYS = {
     "token", "access_token", "refresh_token", "password", "passwd",
-    "client_secret", "api_key", "apikey", "proxy_pass", "proxy_password",
+    "client_secret", "app_secret", "credential_ref", "secret_ref", "api_key", "apikey", "proxy_pass", "proxy_password",
     "authorization", "fb_dtsg", "lsd",
 }
 _KEY_NORM_DROP = re.compile(r"[-_. ]")

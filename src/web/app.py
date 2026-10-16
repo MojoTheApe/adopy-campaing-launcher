@@ -35,6 +35,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from src.web import account_notes as _account_notes
+from src.web import meta_connections as _meta_connections
 
 # Make project root importable when invoked via `uvicorn src.web.app:app`
 _PROJ_ROOT = Path(__file__).resolve().parents[2]
@@ -109,34 +110,36 @@ def _save_link_to_machine_map(account_name: str, link: str) -> bool:
     import csv as _csv
 
     map_path = Path(get_ad_account_map_path())
-    if not map_path.is_file():
-        return False
-    with open(map_path, newline="", encoding="utf-8-sig") as f:
-        reader = _csv.DictReader(f)
-        rows = list(reader)
-        fieldnames = list(reader.fieldnames or [])
-    if not fieldnames:
-        return False
-    if "tracking_link" not in fieldnames:
-        fieldnames.append("tracking_link")
+    with _meta_connections.transaction(map_path):
+        if not map_path.is_file():
+            return False
+        with open(map_path, newline="", encoding="utf-8-sig") as f:
+            reader = _csv.DictReader(f)
+            rows = list(reader)
+            fieldnames = list(reader.fieldnames or [])
+        if not fieldnames:
+            return False
+        if "tracking_link" not in fieldnames:
+            fieldnames.append("tracking_link")
 
-    name_lower = (account_name or "").strip().casefold()
-    exact = [row for row in rows if (row.get("account_name") or row.get("account") or "").strip().casefold() == name_lower]
-    candidates = exact or [row for row in rows if name_lower and
-        (row.get("account_name") or row.get("account") or "").strip() and (
-        name_lower in (row.get("account_name") or row.get("account") or "").casefold()
-        or (row.get("account_name") or row.get("account") or "").strip().casefold() in name_lower)]
-    if not candidates:
-        return False
-    if len(candidates) != 1:
-        raise ValueError("Account name is ambiguous; use the complete account name")
-    hit = candidates[0]
-    hit["tracking_link"] = (link or "").strip()
-    hit["tracking_link_set"] = "1"
-    if "tracking_link_set" not in fieldnames:
-        fieldnames.append("tracking_link_set")
-    write_csv_atomic(map_path, fieldnames, rows)
-    return True
+        name_lower = (account_name or "").strip().casefold()
+        exact = [row for row in rows if (row.get("account_name") or row.get("account") or "").strip().casefold() == name_lower]
+        candidates = exact or [row for row in rows if name_lower and
+            (row.get("account_name") or row.get("account") or "").strip() and (
+            name_lower in (row.get("account_name") or row.get("account") or "").casefold()
+            or (row.get("account_name") or row.get("account") or "").strip().casefold() in name_lower)]
+        if not candidates:
+            return False
+        if len(candidates) != 1:
+            raise ValueError("Account name is ambiguous; use the complete account name")
+        hit = candidates[0]
+        hit["tracking_link"] = (link or "").strip()
+        hit["tracking_link_set"] = "1"
+        if "tracking_link_set" not in fieldnames:
+            fieldnames.append("tracking_link_set")
+        _meta_connections.mapping_will_change(rows)
+        write_csv_atomic(map_path, fieldnames, rows)
+        return True
 
 
 def _write_link_to_excel(account_name: str, link: str) -> str | None:
@@ -1549,6 +1552,66 @@ async def favicon() -> FileResponse:
     if _FAVICON_ICO.is_file():
         return FileResponse(_FAVICON_ICO, media_type="image/x-icon")
     return FileResponse(_FAVICON, media_type="image/svg+xml")
+
+
+async def _meta_setup_body(request: Request, allowed: set[str]) -> dict:
+    """Bounded parsing without FastAPI validation echoes of credential input."""
+    content = bytearray()
+    try:
+        async for part in request.stream():
+            content.extend(part)
+            if len(content) > 32768:
+                raise _meta_connections.ConnectionError("Meta setup request is too large.", 413)
+        body = json.loads(content)
+    except _meta_connections.ConnectionError:
+        raise
+    except Exception:
+        raise _meta_connections.ConnectionError("Expected a valid JSON object.", 400) from None
+    if not isinstance(body, dict) or set(body) - allowed:
+        raise _meta_connections.ConnectionError("Unsupported Meta setup fields.", 400)
+    return body
+
+
+async def _meta_setup_response(action, *args) -> JSONResponse:
+    try:
+        result = await asyncio.to_thread(action, get_ad_account_map_path(), *args)
+        return JSONResponse({"ok": True, "connection": result})
+    except _meta_connections.ConnectionError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=exc.status)
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Local Meta setup unavailable; try again."}, status_code=503)
+
+
+@app.post("/meta-connections/begin")
+async def meta_connection_begin(request: Request) -> JSONResponse:
+    try:
+        body = await _meta_setup_body(request, {"account_name"})
+    except _meta_connections.ConnectionError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=exc.status)
+    return await _meta_setup_response(_meta_connections.begin, body.get("account_name"))
+
+
+@app.get("/meta-connections/{connection_id}")
+async def meta_connection_status(connection_id: str) -> JSONResponse:
+    return await _meta_setup_response(_meta_connections.status, connection_id)
+
+
+@app.post("/meta-connections/{connection_id}/credential")
+async def meta_connection_credential(connection_id: str, request: Request) -> JSONResponse:
+    try:
+        body = await _meta_setup_body(request, {"app_id", "access_token", "app_secret", "expected_revision", "request_id"})
+    except _meta_connections.ConnectionError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=exc.status)
+    return await _meta_setup_response(_meta_connections.save, connection_id, body)
+
+
+@app.post("/meta-connections/{connection_id}/disconnect")
+async def meta_connection_disconnect(connection_id: str, request: Request) -> JSONResponse:
+    try:
+        body = await _meta_setup_body(request, {"expected_revision", "request_id"})
+    except _meta_connections.ConnectionError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=exc.status)
+    return await _meta_setup_response(_meta_connections.disconnect, connection_id, body)
 
 
 # Multilogin refuses anything above 100 with a plain "limit invalid" 400 — and
@@ -3666,120 +3729,126 @@ async def account_map_patch(request: Request) -> JSONResponse:
     Body JSON: {account_name, ad_account_id, folder_id, profile_id, page_id?, multilogin_instance?}
     Creates the CSV if it doesn't exist yet.
     """
-    import csv as _csv
-
     try:
         data = await request.json()
     except Exception:
         return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+
+    return await asyncio.to_thread(_patch_account_map, data)
+
+
+def _patch_account_map(data: dict) -> JSONResponse:
+    import csv as _csv
 
     account_name = (data.get("account_name") or "").strip()
     if not account_name:
         return JSONResponse({"ok": False, "error": "account_name is required"}, status_code=400)
 
     map_path = Path(get_ad_account_map_path())
-    _FIELDNAMES = [
-        "account_name", "ad_account_id", "page_id", "multilogin_instance",
-        "folder_id", "profile_id", "proxy_type", "proxy_host", "proxy_port",
-        "proxy_user", "proxy_pass", "country", "page_name",
-    ]
+    with _meta_connections.transaction(map_path):
+        _FIELDNAMES = [
+            "account_name", "ad_account_id", "page_id", "multilogin_instance",
+            "folder_id", "profile_id", "proxy_type", "proxy_host", "proxy_port",
+            "proxy_user", "proxy_pass", "country", "page_name",
+        ]
 
-    try:
-        # Read existing rows
-        rows: list[dict] = []
-        existing_columns: list[str] = []
-        if map_path.is_file():
-            with open(map_path, encoding="utf-8-sig", newline="") as f:
-                reader = _csv.DictReader(f)
-                rows = list(reader)
-                existing_columns = list(reader.fieldnames or [])
+        try:
+            # Read existing rows
+            rows: list[dict] = []
+            existing_columns: list[str] = []
+            if map_path.is_file():
+                with open(map_path, encoding="utf-8-sig", newline="") as f:
+                    reader = _csv.DictReader(f)
+                    rows = list(reader)
+                    existing_columns = list(reader.fieldnames or [])
 
-        # Keep every column the file already has. This list is what the writer
-        # emits, and anything missing from it is dropped from EVERY row in the
-        # file — so linking one Multilogin profile used to erase `tracking_link`
-        # for all accounts at once, because the column was added elsewhere
-        # (_save_link_to_machine_map) and never added here. The account then
-        # failed to publish with "Link empty in Upload FB Accounts sheet",
-        # nowhere near the click that caused it.
-        fieldnames = list(_FIELDNAMES) + [c for c in existing_columns if c not in _FIELDNAMES]
+            # Keep every column the file already has. This list is what the writer
+            # emits, and anything missing from it is dropped from EVERY row in the
+            # file — so linking one Multilogin profile used to erase `tracking_link`
+            # for all accounts at once, because the column was added elsewhere
+            # (_save_link_to_machine_map) and never added here. The account then
+            # failed to publish with "Link empty in Upload FB Accounts sheet",
+            # nowhere near the click that caused it.
+            fieldnames = list(_FIELDNAMES) + [c for c in existing_columns if c not in _FIELDNAMES]
 
-        # Upsert: find existing row by account_name (case-insensitive) or append
-        name_lower = account_name.lower()
-        existing_idx: int | None = None
-        for i, row in enumerate(rows):
-            if (row.get("account_name") or "").strip().lower() == name_lower:
-                existing_idx = i
-                break
+            # Upsert: find existing row by account_name (case-insensitive) or append
+            name_lower = account_name.lower()
+            existing_idx: int | None = None
+            for i, row in enumerate(rows):
+                if (row.get("account_name") or "").strip().lower() == name_lower:
+                    existing_idx = i
+                    break
 
-        new_row: dict = {f: "" for f in fieldnames}
-        if existing_idx is not None:
-            new_row.update(rows[existing_idx])
+            new_row: dict = {f: "" for f in fieldnames}
+            if existing_idx is not None:
+                new_row.update(rows[existing_idx])
 
-        new_row["account_name"] = account_name
-        for field in ("ad_account_id", "folder_id", "profile_id", "page_id", "multilogin_instance", "country", "page_name"):
-            val = (data.get(field) or "").strip()
-            if val:
-                # Uppercase two-letter country CODES ("cl" -> "CL"), but leave
-                # full names alone: the dashboard now offers them from the
-                # sheet ("Chile"), and "CHILE" would sit oddly beside them.
-                if field == "country" and len(val) == 2 and val.isalpha():
-                    val = val.upper()
-                new_row[field] = val
+            new_row["account_name"] = account_name
+            for field in ("ad_account_id", "folder_id", "profile_id", "page_id", "multilogin_instance", "country", "page_name"):
+                val = (data.get(field) or "").strip()
+                if val:
+                    # Uppercase two-letter country CODES ("cl" -> "CL"), but leave
+                    # full names alone: the dashboard now offers them from the
+                    # sheet ("Chile"), and "CHILE" would sit oddly beside them.
+                    if field == "country" and len(val) == 2 and val.isalpha():
+                        val = val.upper()
+                    new_row[field] = val
 
-        # Accept a pasted Ads Manager URL, a bare number, or act_<digits>.
-        #
-        # Only what the caller actually sent is validated. This used to check
-        # whatever ended up in the row, including a value carried over from the
-        # file — so connecting a Multilogin profile to an account whose stored
-        # id was malformed failed with an error about the cabinet, which the
-        # caller had not mentioned and could not fix from that screen. Validate
-        # input, not storage.
-        act_raw = (data.get("ad_account_id") or "").strip()
-        if act_raw:
-            act = normalise_ad_account_id(act_raw)
-            if not act:
-                return JSONResponse(
-                    {"ok": False,
-                     "error": "Could not read the ad_account_id. Paste the link from "
-                              "Ads Manager, or the ad account number."},
-                    status_code=400,
+            # Accept a pasted Ads Manager URL, a bare number, or act_<digits>.
+            #
+            # Only what the caller actually sent is validated. This used to check
+            # whatever ended up in the row, including a value carried over from the
+            # file — so connecting a Multilogin profile to an account whose stored
+            # id was malformed failed with an error about the cabinet, which the
+            # caller had not mentioned and could not fix from that screen. Validate
+            # input, not storage.
+            act_raw = (data.get("ad_account_id") or "").strip()
+            if act_raw:
+                act = normalise_ad_account_id(act_raw)
+                if not act:
+                    return JSONResponse(
+                        {"ok": False,
+                         "error": "Could not read the ad_account_id. Paste the link from "
+                                  "Ads Manager, or the ad account number."},
+                        status_code=400,
+                    )
+                # A second account pointing at the same ad account is almost always
+                # a paste into the wrong row, and it would send campaigns somewhere
+                # nobody intended.
+                clash = next(
+                    (r.get("account_name") for i, r in enumerate(rows)
+                     if i != existing_idx and (r.get("ad_account_id") or "").strip() == act),
+                    None,
                 )
-            # A second account pointing at the same ad account is almost always
-            # a paste into the wrong row, and it would send campaigns somewhere
-            # nobody intended.
-            clash = next(
-                (r.get("account_name") for i, r in enumerate(rows)
-                 if i != existing_idx and (r.get("ad_account_id") or "").strip() == act),
-                None,
+                if clash:
+                    return JSONResponse(
+                        {"ok": False,
+                         "error": f"This ad account is already linked to \"{clash}\". "
+                                  f"Check that you pasted it in the right row."},
+                        status_code=400,
+                    )
+                new_row["ad_account_id"] = act
+
+            if existing_idx is not None:
+                rows[existing_idx] = new_row
+            else:
+                rows.append(new_row)
+
+            _meta_connections.mapping_will_change(rows)
+            write_csv_atomic(map_path, fieldnames, rows)
+        except PermissionError:
+            # Same class of bug fixed in /account-link-patch below: an unhandled
+            # exception here previously made FastAPI's default 500 come back as
+            # plain text, not JSON, so the dashboard's r.json() threw and showed
+            # a misleading "Network error" instead of "file is open elsewhere".
+            return JSONResponse(
+                {"ok": False, "error": f"{map_path.name} is open elsewhere (e.g. Excel) — close it and retry"},
+                status_code=409,
             )
-            if clash:
-                return JSONResponse(
-                    {"ok": False,
-                     "error": f"This ad account is already linked to \"{clash}\". "
-                              f"Check that you pasted it in the right row."},
-                    status_code=400,
-                )
-            new_row["ad_account_id"] = act
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": f"Failed to save: {exc}"}, status_code=500)
 
-        if existing_idx is not None:
-            rows[existing_idx] = new_row
-        else:
-            rows.append(new_row)
-
-        write_csv_atomic(map_path, fieldnames, rows)
-    except PermissionError:
-        # Same class of bug fixed in /account-link-patch below: an unhandled
-        # exception here previously made FastAPI's default 500 come back as
-        # plain text, not JSON, so the dashboard's r.json() threw and showed
-        # a misleading "Network error" instead of "file is open elsewhere".
-        return JSONResponse(
-            {"ok": False, "error": f"{map_path.name} is open elsewhere (e.g. Excel) — close it and retry"},
-            status_code=409,
-        )
-    except Exception as exc:
-        return JSONResponse({"ok": False, "error": f"Failed to save: {exc}"}, status_code=500)
-
-    return JSONResponse({"ok": True, "saved": new_row["account_name"]})
+        return JSONResponse({"ok": True, "saved": new_row["account_name"]})
 
 
 
@@ -4934,12 +5003,16 @@ async def account_map_remove(request: Request) -> JSONResponse:
     this machine simply stops knowing how to reach it. Nothing here can or
     should delete a shared record.
     """
-    import csv as _csv
-
     try:
         data = await request.json()
     except Exception:
         return JSONResponse({"ok": False, "error": "Invalid JSON body"}, status_code=400)
+
+    return await asyncio.to_thread(_remove_account_map, data)
+
+
+def _remove_account_map(data: dict) -> JSONResponse:
+    import csv as _csv
 
     # One name or many. Removing several in a single request rewrites the file
     # once instead of N times: fewer chances of leaving the map half-edited.
@@ -4957,38 +5030,40 @@ async def account_map_remove(request: Request) -> JSONResponse:
         )
 
     map_path = Path(get_ad_account_map_path())
-    if not map_path.is_file():
-        return JSONResponse({"ok": False, "error": "Account map not found"}, status_code=404)
+    with _meta_connections.transaction(map_path):
+        if not map_path.is_file():
+            return JSONResponse({"ok": False, "error": "Account map not found"}, status_code=404)
 
-    try:
-        with open(map_path, encoding="utf-8-sig", newline="") as f:
-            reader = _csv.DictReader(f)
-            fieldnames = reader.fieldnames or []
-            rows = list(reader)
+        try:
+            with open(map_path, encoding="utf-8-sig", newline="") as f:
+                reader = _csv.DictReader(f)
+                fieldnames = reader.fieldnames or []
+                rows = list(reader)
 
-        target = set(wanted)
-        kept = [r for r in rows if (r.get("account_name") or "").strip() not in target]
-        removed = [
-            (r.get("account_name") or "").strip() for r in rows
-            if (r.get("account_name") or "").strip() in target
-        ]
-        if not removed:
-            shown = "«" + "», «".join(wanted[:3]) + "»"
-            return JSONResponse(
-                {"ok": False, "error": f"{shown} is not in the map of this machine"},
-                status_code=404,
-            )
+            target = set(wanted)
+            kept = [r for r in rows if (r.get("account_name") or "").strip() not in target]
+            removed = [
+                (r.get("account_name") or "").strip() for r in rows
+                if (r.get("account_name") or "").strip() in target
+            ]
+            if not removed:
+                shown = "«" + "», «".join(wanted[:3]) + "»"
+                return JSONResponse(
+                    {"ok": False, "error": f"{shown} is not in the map of this machine"},
+                    status_code=404,
+                )
 
-        write_csv_atomic(map_path, fieldnames, kept)
-    except Exception as exc:  # noqa: BLE001
-        return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+            _meta_connections.mapping_will_change(kept)
+            write_csv_atomic(map_path, fieldnames, kept)
+        except Exception as exc:  # noqa: BLE001
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
 
-    # `missing` is reported rather than treated as failure: the rest were
-    # removed, and pretending otherwise would invite a confused retry.
-    missing = sorted(set(wanted) - set(removed))
-    return JSONResponse(
-        {"ok": True, "removed": removed, "missing": missing, "left": len(kept)}
-    )
+        # `missing` is reported rather than treated as failure: the rest were
+        # removed, and pretending otherwise would invite a confused retry.
+        missing = sorted(set(wanted) - set(removed))
+        return JSONResponse(
+            {"ok": True, "removed": removed, "missing": missing, "left": len(kept)}
+        )
 
 
 @app.post("/account-link-patch")
@@ -5009,7 +5084,7 @@ async def account_link_patch(request: Request) -> JSONResponse:
 
     # Local settings win on reads, so Save must write that same source first.
     try:
-        saved = _save_link_to_machine_map(account_name, link)
+        saved = await asyncio.to_thread(_save_link_to_machine_map, account_name, link)
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"Could not save the link on this machine: {exc}"}, status_code=409)
     if saved:
@@ -5041,7 +5116,7 @@ async def account_link_patch(request: Request) -> JSONResponse:
         # truth wherever it HAS a row, and an account connected on the
         # dashboard stops depending on someone editing a spreadsheet by hand.
         try:
-            saved = _save_link_to_machine_map(account_name, link)
+            saved = await asyncio.to_thread(_save_link_to_machine_map, account_name, link)
         except Exception as exc:
             return JSONResponse(
                 {"ok": False, "error": f"Could not save the link on this machine: {exc}"},

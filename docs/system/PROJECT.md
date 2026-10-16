@@ -78,6 +78,14 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   publishing is never checked or attempted. See the
   [pilot procedure](../runtime/META_OFFICIAL_ACCESS_PILOT.md).
 
+- The existing Connect panel can prepare a separate Meta application for an
+  exactly mapped profile/ad account, protect its credential with Windows
+  CurrentUser DPAPI, resume, replace or disconnect it locally (ACL-1872).
+  Its result remains **saved; API access not verified**. See
+  [local preparation and recovery](META_CONNECTION_PREPARATION.md); official
+  HTTP routing and automated Developers onboarding remain unfinished ACL-1858
+  work, and wider legacy credential migration remains ACL-1358.
+
 Read [distribution boundaries](../DISTRIBUTION.md), [product/design context](../../PRODUCT.md),
 [design guidance](../../DESIGN.md) and existing specs for subsystem details.
 `content_machine`, `jira_agent` and legacy `fb_publish_agent` are not automatically

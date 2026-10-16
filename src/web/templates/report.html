@@ -939,6 +939,15 @@
       min-width: 6.5rem; flex-shrink: 0;
     }
 
+    .amap-meta, .cbd-connect-host .amap-add > .amap-meta { flex: 1 1 100%; width: 100%; padding-top: .5rem; }
+    .amap-meta summary { cursor: pointer; }
+    .amap-meta p, .amap-meta small { display: block; font-size: .78rem; color: var(--muted); }
+    .amap-meta-fields { display: flex; flex-wrap: wrap; gap: .5rem; align-items: end; }
+    .amap-meta-fields[hidden] { display: none; }
+    .amap-meta-fields label, .amap-meta > label { display: flex; flex-direction: column; gap: .2rem; font-size: .78rem; }
+    .amap-meta-fields input { max-width: 100%; box-sizing: border-box; }
+    .amap-meta-binding, .amap-meta-fields small { flex: 1 1 100%; overflow-wrap: anywhere; }
+    .amap-meta-message { overflow-wrap: anywhere; }
     /* Multilogin connect panel */
     .ml-connect-panel {
       border: 1px solid var(--border); border-radius: 6px;
@@ -12096,6 +12105,93 @@ function amapMlBoot() {
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', amapMlBoot);
 else amapMlBoot();
+
+function amapMetaClear(box) {
+  ['.amap-meta-token', '.amap-meta-secret'].forEach(function (selector) {
+    var input = box.querySelector(selector); if (input) input.value = '';
+  });
+}
+function amapMetaToggle(box) {
+  if (box.open) { amapMetaBegin(box); return; }
+  box._metaGeneration = (box._metaGeneration || 0) + 1;
+  box._metaState = null;
+  amapMetaClear(box);
+  var fields = box.querySelector('.amap-meta-fields');
+  fields.querySelectorAll(':scope > :not(template)').forEach(function (el) { el.remove(); });
+  fields.hidden = true;
+}
+function amapMetaApply(box, state) {
+  if (!box.querySelector('.amap-meta-token')) {
+    var template = box.querySelector('.amap-meta-fields-template');
+    box.querySelector('.amap-meta-fields').appendChild(template.content.cloneNode(true));
+  }
+  box._metaState = state;
+  box.querySelector('.amap-meta-fields').hidden = false;
+  box.querySelector('.amap-meta-app').value = state.app_id || '';
+  box.querySelector('.amap-meta-binding').textContent = 'Profile ' + state.profile_uuid + ' · Ad account ' + state.ad_account_id;
+  box.querySelector('.amap-meta-message').textContent = state.next_action;
+  box.querySelector('.amap-meta-save').textContent = state.has_credential ? 'Replace credential' : 'Save application details';
+  box.querySelector('.amap-meta-save').disabled = !state.can_save;
+  box.querySelector('.amap-meta-disconnect').disabled = state.phase === 'disconnected' || state.phase === 'binding_changed';
+  amapMetaClear(box);
+}
+async function amapMetaCall(url, body) {
+  var response = await fetch(url, { method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  var data = await response.json();
+  if (!data.ok) throw new Error(data.error || 'Could not save local setup.');
+  return data.connection;
+}
+async function amapMetaBegin(box) {
+  if (box._metaBusy) return;
+  var account = box.querySelector('.amap-meta-account').value;
+  box._metaState = null;
+  box.querySelector('.amap-meta-fields').hidden = true;
+  amapMetaClear(box);
+  box.querySelector('.amap-meta-message').textContent = account ? 'Opening saved setup…' : 'Select the account whose separate application you want to prepare.';
+  if (!account) return;
+  var generation = (box._metaGeneration || 0) + 1; box._metaGeneration = generation;
+  try {
+    var state = await amapMetaCall('/meta-connections/begin', { account_name: account });
+    if (box._metaGeneration === generation && box.querySelector('.amap-meta-account').value === account) amapMetaApply(box, state);
+  } catch (e) {
+    if (box._metaGeneration === generation) box.querySelector('.amap-meta-message').textContent = e.message || 'Local setup unavailable.';
+  }
+}
+async function amapMetaChange(btn, disconnect) {
+  var box = btn.closest('.amap-meta'), state = box._metaState;
+  if (!state || box._metaBusy) return;
+  var generation = box._metaGeneration;
+  var body = { expected_revision: state.revision, request_id: crypto.randomUUID() };
+  if (!disconnect) {
+    body.app_id = box.querySelector('.amap-meta-app').value.trim();
+    body.access_token = box.querySelector('.amap-meta-token').value;
+    body.app_secret = box.querySelector('.amap-meta-secret').value;
+  }
+  box._metaBusy = true;
+  var controls = Array.from(box.querySelectorAll('input, select, button'));
+  controls.forEach(function (el) { el.disabled = true; });
+  amapMetaClear(box);
+  box.querySelector('.amap-meta-message').textContent = disconnect ? 'Disconnecting locally…' : 'Protecting and saving…';
+  try {
+    var saved = await amapMetaCall('/meta-connections/' + encodeURIComponent(state.connection_id)
+      + (disconnect ? '/disconnect' : '/credential'), body);
+    if (box.open && box._metaGeneration === generation) amapMetaApply(box, saved);
+  } catch (e) {
+    box.querySelector('.amap-meta-message').textContent = (e.message || 'Save outcome unavailable.') + ' Reopen saved setup before trying again.';
+  } finally {
+    body.access_token = ''; body.app_secret = '';
+    box._metaBusy = false;
+    controls.forEach(function (el) { el.disabled = false; });
+    if (box._metaState) {
+      box.querySelector('.amap-meta-save').disabled = !box._metaState.can_save;
+      box.querySelector('.amap-meta-disconnect').disabled = box._metaState.phase === 'disconnected' || box._metaState.phase === 'binding_changed';
+    }
+    if (box.open && !box._metaState) amapMetaBegin(box);
+  }
+}
+function amapMetaSave(btn) { return amapMetaChange(btn, false); }
+function amapMetaDisconnect(btn) { return amapMetaChange(btn, true); }
 
 function amapHint(row, d) {
   var hint = row.querySelector('.amap-hint');

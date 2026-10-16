@@ -412,31 +412,36 @@ def migrate_legacy_account_map() -> str:
     human-readable note, or "" when there was nothing to do.
     """
     local = os.path.join(get_local_config_dir(), "ad_account_map.csv")
-    legacy = AD_ACCOUNT_MAP_DEFAULT
-    local_info = inspect_account_map(local) if os.path.exists(local) else None
-    legacy_info = inspect_account_map(legacy) if os.path.exists(legacy) else None
+    from src.web import meta_connections
+    with meta_connections.transaction(local):
+        legacy = AD_ACCOUNT_MAP_DEFAULT
+        local_info = inspect_account_map(local) if os.path.exists(local) else None
+        legacy_info = inspect_account_map(legacy) if os.path.exists(legacy) else None
 
-    if local_info and local_info.get("valid"):
-        return ""
-    if not legacy_info or not legacy_info.get("valid"):
-        if local_info and not local_info.get("valid"):
-            return "machine account map needs attention; no valid legacy map was copied"
-        return ""
+        if local_info and local_info.get("valid"):
+            return ""
+        if not legacy_info or not legacy_info.get("valid"):
+            if local_info and not local_info.get("valid"):
+                return "machine account map needs attention; no valid legacy map was copied"
+            return ""
 
-    # A fresh installer used to create the placeholder destination before this
-    # migration ran.  That exact state must not mask a real legacy map.
-    if local_info and not local_info.get("only_placeholders"):
-        return "machine account map is invalid; left untouched for manual recovery"
-    try:
-        Path(local).parent.mkdir(parents=True, exist_ok=True)
-        if os.path.exists(local):
-            backup = f"{local}.pre-migration.bak"
-            if not os.path.exists(backup):
-                shutil.copy2(local, backup)
-        _atomic_copy(legacy, local)
-    except Exception as exc:  # never block start-up over a convenience move
-        return f"could not copy the account map to {local}: {exc}"
-    return f"validated account map copied out of the checkout to {local}"
+        # A fresh installer used to create the placeholder destination before this
+        # migration ran.  That exact state must not mask a real legacy map.
+        if local_info and not local_info.get("only_placeholders"):
+            return "machine account map is invalid; left untouched for manual recovery"
+        try:
+            Path(local).parent.mkdir(parents=True, exist_ok=True)
+            if os.path.exists(local):
+                backup = f"{local}.pre-migration.bak"
+                if not os.path.exists(backup):
+                    shutil.copy2(local, backup)
+            with open(legacy, encoding="utf-8-sig", newline="") as stream:
+                proposed = list(csv.DictReader(stream))
+            meta_connections.mapping_will_change(proposed)
+            _atomic_copy(legacy, local)
+        except Exception as exc:  # never block start-up over a convenience move
+            return f"could not copy the account map to {local}: {exc}"
+        return f"validated account map copied out of the checkout to {local}"
 
 
 _ENV_KEY = re.compile(r"^[A-Z][A-Z0-9_]*$")
@@ -577,9 +582,13 @@ def ensure_machine_config() -> list[str]:
         notes.append(status_note)
     notes.extend(migrate_legacy_google_oauth())
     local_map = Path(get_local_config_dir()) / "ad_account_map.csv"
-    if not local_map.exists() and Path(AD_ACCOUNT_MAP_EXAMPLE).is_file():
-        _atomic_copy(AD_ACCOUNT_MAP_EXAMPLE, local_map)
-        notes.append(f"account map example created at {local_map}; replace placeholders")
+    from src.web import meta_connections
+    with meta_connections.transaction(local_map):
+        if not local_map.exists() and Path(AD_ACCOUNT_MAP_EXAMPLE).is_file():
+            with open(AD_ACCOUNT_MAP_EXAMPLE, encoding="utf-8-sig", newline="") as stream:
+                meta_connections.mapping_will_change(list(csv.DictReader(stream)))
+            _atomic_copy(AD_ACCOUNT_MAP_EXAMPLE, local_map)
+            notes.append(f"account map example created at {local_map}; replace placeholders")
     return notes
 
 

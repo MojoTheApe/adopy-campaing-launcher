@@ -395,6 +395,24 @@ a clear refusal.
 - The marker occupies no label space and has no separate pointer target. The existing
   activity predicate, expanded-country highlight, country actions and FTD counts
   retain their behavior.
+## Separate Meta app preparation in the existing Connect panel — ACL-1872
+
+- A mapped account can save its declared App ID and protected official credential,
+  resume, replace and disconnect locally. The UI explicitly keeps API access
+  unverified; this source introduces no HTTP/browser call or transport change.
+- Windows CurrentUser DPAPI envelopes enforce owner/revision checks. Atomic
+  metadata, shared map/registry locks, request replay and permanent App ownership
+  prevent concurrent changes from exchanging credentials between connections.
+- Mapping replacement retires the old binding before CSV commit. Cleanup failures
+  remain disabled and retryable; pending cleanup resumes the same connection.
+- Contended map transactions run outside the ASGI event loop, preserving control
+  request dispatch. Historical save receipts must retain their permanent App
+  owner; a contradictory registry is preserved and refused before mutation.
+- Malformed retirement phases and contradictory pending states are rejected at
+  registry load, before reconciliation writes or protected-file cleanup. Public
+  regressions preserve registry/blob/map bytes while valid retirement recovers.
+- [Behavior, crash outcomes and recovery](META_CONNECTION_PREPARATION.md) preserve
+  the full remaining ACL-1858 onboarding/HTTP scope and ACL-1358 legacy scope.
 
 ## Media wizard: Crop -> Media loop no longer ends in a false "stuck" stop - ACL-1736
 
