@@ -41606,6 +41606,18 @@
         "state": "implementing",
         "started_at": "2026-10-16T10:25:59+00:00",
         "from_status": "status:todo"
+      },
+      "872": {
+        "actor": "Worker-W1872C",
+        "session": "w1872c-20261016",
+        "coordinator": "Coordinator-C1016A",
+        "branch": "work/acl-1872-isolated-meta-setup",
+        "worktree": "C:\\acl-1872-r2",
+        "id": "ed7640569b8849548a5be1357f87a5c2",
+        "issue": 872,
+        "state": "implementing",
+        "started_at": "2026-10-16T10:26:31+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -46573,11 +46585,15 @@
           {
             "actor": "Worker-T1872A",
             "session": "t1872a-20261015"
+          },
+          {
+            "actor": "Worker-W1872C",
+            "session": "w1872c-20261016"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-T1872A",
-        "coordinator": "Coordinator-M1011A",
+        "state": "implementing",
+        "worker": "Worker-W1872C",
+        "coordinator": "Coordinator-C1016A",
         "handoff": {
           "actor": "Worker-T1872A",
           "session": "t1872a-20261015",
@@ -46600,14 +46616,7 @@
           "session": "coord-m1011a-20261015",
           "report": "Main moved to af0ade29 (ACL-1924 batch + ACL-1923 no-stage activation, policy 1bd91869). The earlier approval predates this policy and main and is no longer current. Returned to the author for a main merge and fresh independent approval; coordination of this task moves to Coordinator-C1016A (session \"7 \u0437\u0430\u0434\u0430\u0447 \u0432 \u0430\u043f\u0440\u0443\u0432\u0434\u0435\") on the owner's instruction."
         },
-        "review_report": "Main moved to af0ade29 (ACL-1924 batch + ACL-1923 no-stage activation, policy 1bd91869). The earlier approval predates this policy and main and is no longer current. Returned to the author for a main merge and fresh independent approval; coordination of this task moves to Coordinator-C1016A (session \"7 \u0437\u0430\u0434\u0430\u0447 \u0432 \u0430\u043f\u0440\u0443\u0432\u0434\u0435\") on the owner's instruction.",
-        "reviewer": "Reviewer-R1872B",
-        "return": {
-          "id": "91b9cdb7a26a463a8f1bebb1297c4b0e",
-          "actor": "Coordinator-M1011A",
-          "session": "coord-m1011a-20261015",
-          "report": "Main moved to af0ade29 (ACL-1924 batch + ACL-1923 no-stage activation, policy 1bd91869). The earlier approval predates this policy and main and is no longer current. Returned to the author for a main merge and fresh independent approval; coordination of this task moves to Coordinator-C1016A (session \"7 \u0437\u0430\u0434\u0430\u0447 \u0432 \u0430\u043f\u0440\u0443\u0432\u0434\u0435\") on the owner's instruction."
-        }
+        "review_report": "Main moved to af0ade29 (ACL-1924 batch + ACL-1923 no-stage activation, policy 1bd91869). The earlier approval predates this policy and main and is no longer current. Returned to the author for a main merge and fresh independent approval; coordination of this task moves to Coordinator-C1016A (session \"7 \u0437\u0430\u0434\u0430\u0447 \u0432 \u0430\u043f\u0440\u0443\u0432\u0434\u0435\") on the owner's instruction."
       },
       "874": {
         "implementers": [
@@ -49195,6 +49204,10 @@
       "Reviewer-R1816U": {
         "session": "r1816u-20261016",
         "role": "Reviewer"
+      },
+      "Worker-W1872C": {
+        "session": "w1872c-20261016",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -75883,6 +75896,13 @@
         "issue": 902,
         "claim": "057f454aaede4de68b1c17e6d5db896d",
         "actor": "Worker-RF1016W"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-16T10:26:31+00:00",
+        "issue": 872,
+        "claim": "ed7640569b8849548a5be1357f87a5c2",
+        "actor": "Worker-W1872C"
       }
     ],
     "policy": {
