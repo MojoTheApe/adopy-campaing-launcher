@@ -4352,7 +4352,7 @@ async def account_spend_turn_off(request: Request) -> JSONResponse:
             profile_busy=lambda key: publish_jobs.profile_in_use(key, since=since),
         )
     except Exception:
-        return JSONResponse({"ok": False, "error": "Could not reach the account. Check the launcher window."}, status_code=503)
+        return JSONResponse({"ok": False, "error": "Could not reach the account. Check the Adopy Campaign Manager window."}, status_code=503)
     body = {"ok": True, "result": result.to_dict()}
     if result.error == account_spend.PROFILE_BUSY_ERROR:
         body["busy"] = True

@@ -142,6 +142,11 @@ For the chosen dates the dashboard now distinguishes a period with no workbook r
 anyone (the workbook may need updating) from one where only the selected manager has no
 rows while others do (nothing to review). The notice names the manager and dates; the
 account map and account-reading controls stay available in both cases.
+## Rebrand leftovers - ACL-1708
+
+- The account-unreachable error now says "Check the Adopy Campaign Manager window." (no visible "launcher" wording left in the dashboard; nothing compared against the old text).
+- Deleted `scripts/convert_favicon_to_ico.py`: it drew the old ACL mark, and the repo has no SVG renderer, so rebuilding from the kit SVGs would need a new dependency. `assets/dashboard.ico` and `favicon.ico` are the committed brand-kit files; nothing can regenerate the old mark.
+- `report.html` gets `<meta name="viewport">` so phones use the responsive layout.
 
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
