@@ -41564,6 +41564,18 @@
         "state": "implementing",
         "started_at": "2026-10-16T09:56:53+00:00",
         "from_status": "status:todo"
+      },
+      "379": {
+        "actor": "Worker-W1015T",
+        "session": "c2c6b65e-1379",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1379-turnoff-by-name",
+        "worktree": "C:\\acl-1379-main",
+        "id": "6b50af5af7c14a218f9e3797792e2e81",
+        "issue": 379,
+        "state": "implementing",
+        "started_at": "2026-10-16T10:00:15+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -47337,6 +47349,17 @@
         "state": "implementing",
         "worker": "Worker-M1356A",
         "coordinator": "Coordinator-M1011A"
+      },
+      "379": {
+        "implementers": [
+          {
+            "actor": "Worker-W1015T",
+            "session": "c2c6b65e-1379"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W1015T",
+        "coordinator": "Coordinator-M1011A"
       }
     },
     "actors": {
@@ -49046,6 +49069,10 @@
       },
       "Worker-M1356A": {
         "session": "cf9ad405-1356",
+        "role": "Worker"
+      },
+      "Worker-W1015T": {
+        "session": "c2c6b65e-1379",
         "role": "Worker"
       }
     },
@@ -75465,6 +75492,13 @@
           "report": "Content approved; needs only a refresh onto current main (merge main, re-run checks, hand off again).\n\nReview of PR 846 / ACL-1840 (head fe58cef0) by Reviewer-RV1015F:\n- Scope matches issue #840: scoped CSS only (`.amap-country > .hc.hc-after` padding aligned to the connection form, wrapping of footer/journal), plus CHANGELOG, a sanitized fixture and a Chromium geometry test. English text, no secrets.\n- Tests: tests/test_country_campaign_footer_layout.py, 19 passed (1280/1024/320 px, both themes, empty/populated/filtered, keyboard disclosure, focus outline inside card, baseline reproduces the missing inset). Source CI on this head is green.\n- Not approvable as it stands: the PR does not contain current main (167 commits behind). Merge-tree against current main conflicts only in docs/system/CHANGELOG.md (keep both entries); report.html merges cleanly.\n- Main has meanwhile gained the real mount (`<section class=\"hc hc-after\" data-hc-after>` in _account_map_country.html, and the .hc-foot/.hc-hist component in _campaign_table.html with `.hc-foot{padding:.5rem 0}`), so the rule is no longer dormant and is not obsolete or duplicated. Selector specificity (0,3,0) still beats main's `.hc`.\n- Request for the refresh: the test fixture is a hand-copied preview of the component (with its own hard-coded .hc CSS). Now that the component exists on main, please re-run the test after the merge and, ideally, render main's real _account_map_country.html/_campaign_table.html CSS in the fixture, and update the CHANGELOG sentence \"dormant on main until ACL-1798's footer mounts\", which is no longer true.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-16T10:00:15+00:00",
+        "issue": 379,
+        "claim": "6b50af5af7c14a218f9e3797792e2e81",
+        "actor": "Worker-W1015T"
       }
     ],
     "policy": {
