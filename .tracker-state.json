@@ -47505,7 +47505,7 @@
       },
       "785": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       }
     },
     "actors": {
@@ -76784,6 +76784,12 @@
         "issue": 138,
         "pr": 947,
         "actor": "Worker-P1138"
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-16T12:41:31+00:00",
+        "issue": 785,
+        "reason": "Done in main: src/fb_api/graph.py parses x-business-use-case-usage / x-ad-account-usage / x-app-usage (usage_from_headers) and slows/stops above SLOW_PCT/STOP_PCT (ACL-1756/1760/1761). Backlog cleanup 2026-10-16."
       }
     ],
     "policy": {
