@@ -4126,6 +4126,27 @@
         "issue_scopes": {
           "29": "7352ef354e14e77a8664335a0a4d1e9e7f5aa69d4bd7775c2f323a1b02673646"
         }
+      },
+      "952": {
+        "kind": "independent-review",
+        "implementer": "Worker-W1708C",
+        "reviewer": "Reviewer-R1708D",
+        "head_sha": "21a36c3c19b7438e2fa05f5d1b8beacffa47e14c",
+        "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+        "tree_sha": "198e39238ed12aaf6f3efc2e83d3e91659c87457",
+        "verdict": "approved",
+        "execution_lane": "d7e5685f29ff43578c73c9cc5b90e815",
+        "review_session": "r1708d-20261016",
+        "report": "ACL-1708 PR #952 independent review (r1708d-20261016). Full diff origin/main...21a36c3c against Issue #708. app.py account-spend turn-off 503 error now 'Check the Adopy Campaign Manager window.'; nothing compares the string (only test files touching turn-off were run). No other 'launcher' wording in src/web (templates, static JS, app.py); remaining src hits are the Multilogin launcher (third-party product term). scripts/convert_favicon_to_ico.py deleted; no reference in .github workflows, packaging spec, tests or scripts; only a historical 2026-06-13 superpowers spec mentions it. install_dashboard_shortcut.ps1 points to restoring committed assets/dashboard.ico (tracked, also used by acl_windows.spec). requirements-dev.txt: only the stale comment line was removed, Pillow==12.2.0 stays pinned; CI ci.yml installs requirements-dev.txt; PIL used only by tests/test_acl1798_home_campaigns_browser.py. report.html viewport meta matches loading.html/robot_health.html; desktop Chromium ignores meta viewport and no test uses is_mobile emulation, so desktop layout and Playwright set_viewport_size tests are unaffected. CHANGELOG entry present. Issue acceptance met: no visible launcher wording in the dashboard; no script regenerates the old mark. Tests (py 3.14, pinned fastapi 0.110.0/starlette 0.36.3/jinja2 3.1.4): test_account_spend, test_turn_off_safety_browser, test_header, test_distribution_boundary, test_distribution_hygiene 109 passed; test_available_accounts_browser + test_dashboard_review 27 passed (a first combined run under heavy machine load showed 2 transient F before a 1700 s timeout; both separate reruns were green). Reported pre-existing failures are environment-specific: venv C:/acl-1356-starlette has fastapi 0.141.1/starlette 1.7.0, where the legacy TemplateResponse(name, {request}) signature raises jinja2 'TypeError: unhashable type: dict'; same 4 failures on main af0ade29 in that venv, 27 passed on main under pinned py3.14. Non-blocking, outside this Issue's dashboard scope: packaged launcher/setup-wizard texts still say 'launcher' (packaging/windows/launcher.py:341 'Could not stop the launcher safely', :273; setup_wizard.py:428/435; 'Install ACL.bat':113 'Close the ACL launcher'); installer.iss/Start-menu 'Adopy Campaign Launcher' names were deliberately kept by ACL-1705.",
+        "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          708
+        ],
+        "recorded_at": "2026-10-16T16:16:09+00:00",
+        "issue_scopes": {
+          "708": "6b7726dd5b2fd3e4f37b1f1ed4921ba836cab3de1eff62531d7029faa5dce02e"
+        }
       }
     },
     "stage": {
