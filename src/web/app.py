@@ -1989,6 +1989,34 @@ async def _apply_release_update(active_jobs) -> JSONResponse:
             release_updates.apply_lock.release()
 
 
+def _period_owner(report: dict) -> dict | None:
+    """Whose emptiness a chosen period is, when it is the manager's alone (ACL-106).
+
+    Read from the already-built period report, never from the workbook frame:
+    this runs on every render. `countries` is built from every manager's rows
+    in the period, so no countries means nobody has rows (the existing
+    workbook notice owns that case). Countries with no `is_me` row in any
+    `cm_comparison` mean other managers have rows and this one has none.
+    Rows without a CM name are nobody's and do not count as others' rows.
+    """
+    cm = str(report.get("my_cm") or "").strip().lower()
+    if not cm or not (report.get("period_from") or report.get("period_to")):
+        return None
+    countries = report.get("countries") or []
+    other_rows = 0
+    for country in countries:
+        for row in country.get("cm_comparison") or []:
+            name = str(row.get("cm") or "").strip()
+            if name.lower() in ("", "nan", "none"):
+                continue
+            if row.get("is_me") or name.lower() == cm:
+                return None
+            other_rows += 1
+    if not other_rows:
+        return None
+    return {"kind": "manager", "manager": str(report.get("my_cm")).strip(), "other_cms": other_rows}
+
+
 def _enrich_country_overview(report: Dict[str, Any]) -> None:
     """Ensure per-country my_totals / my_spend for home overview (cached reports)."""
     for country in report.get("countries", []):
@@ -2101,6 +2129,7 @@ def _render_report(
             # ACL-1827: плитки «Вы / Другие» над картой аккаунтов на Home.
             "home_kpis": _home_kpis(report),
             "period": {"date_from": date_from, "date_to": date_to, "span": span},
+            "period_owner": _period_owner(report),
             "goals": goals_view,
             # ACL-1799: цель страны (My Goals) для Country Workbench — отдельным
             # числом, не смешанным с порогом из benchmarks и результатом пиров.

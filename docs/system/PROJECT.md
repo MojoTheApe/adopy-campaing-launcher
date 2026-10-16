@@ -26,6 +26,9 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   visible latest query is searched again without switching Image/Video. Selected
   creatives and campaign fields remain unchanged until the user chooses a file.
 - `src/analysis_agent`: statistics workbook reading, reports and reconciliation.
+  The dashboard tells an empty chosen period apart by owner (ACL-106): no workbook rows for
+  anyone (the file may need updating) versus rows for other managers but none for the
+  selected manager (nothing to review); the account map stays available in both.
 - `src/campaign_bridge`, `src/upload_agent`: campaign input/output preparation.
 - `src/fb_ads_rpa`, `src/meta_campaign_agent`: Ads Manager interactions, verified
   profile identity, draft preparation, queues and browser lifecycle. See

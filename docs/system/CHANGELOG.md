@@ -136,6 +136,12 @@ membership exist in Sentry remains an owner-side check; no live Sentry verificat
 - `src/analysis_agent/account_next_step.py` maps the Meta `disable_reason` (read from the status text of the Graph read) to one plain-English next step. Page reads carry no reason, so they say the reason was not reported; an unrecognised code says the cause is unknown. Restricted and review states get a generic step. Nothing is diagnosed beyond what Meta reported and no automatic recovery is promised.
 - The step is shown under the status word on the account row (the account name stays in the same row), also after a live Read.
 
+## Empty period says whose emptiness it is - ACL-106
+
+For the chosen dates the dashboard now distinguishes a period with no workbook rows for
+anyone (the workbook may need updating) from one where only the selected manager has no
+rows while others do (nothing to review). The notice names the manager and dates; the
+account map and account-reading controls stay available in both cases.
 
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
