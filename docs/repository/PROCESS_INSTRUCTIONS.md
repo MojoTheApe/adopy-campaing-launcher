@@ -52,7 +52,13 @@ are not an independent-review or merge-admission receipt.
 Runtime/system/product knowledge, README, packaging, scripts, workflows, config,
 policy, dependencies and mixed changes keep the normal route:
 
-**Review -> Approved -> a Coordinator's batch of at most five -> stage -> main.**
+**Review -> Approved -> a Coordinator's reviewed batch of at most five -> main -> verified delivery.**
+
+The [temporary selected route](POST_MAIN_DELIVERY.md) was activated on 2026-10-15
+UTC and currently omits Stage. Ordinary sources remain approval-only; only the
+genuine reserved combined batch enters main. The permanent `stage` branch/history is retained
+for the separately reviewed restoration procedure there. When staging is enabled,
+the pre-main batch route includes exact Stage verification and unchanged promotion.
 
 An Approved queue may contain more than five tasks. Each batch preserves actual
 source authors and their independent reviews; combined review and complete
