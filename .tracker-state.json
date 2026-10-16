@@ -41640,9 +41640,11 @@
         "worktree": "C:\\acl-123-c",
         "id": "0de60cd03b6a4ccb8f5ca7e0ef566136",
         "issue": 29,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-16T14:33:23+00:00",
-        "from_status": "status:backlog"
+        "from_status": "status:backlog",
+        "pr": 954,
+        "report": "ACL-123: the account map row shows a plain-English next step under a disabled/restricted/review status, derived from the Meta disable_reason when the Graph read supplied it; page reads say the reason was not reported; unknown codes say the cause is unknown. Account name stays in the same row. Tests: tests/test_account_next_step.py (9 passed), plus test_account_spend and test_disabled_account_status passing. CI not run (startup_failure)."
       }
     },
     "tasks": {
