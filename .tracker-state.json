@@ -41652,9 +41652,11 @@
         "worktree": "C:\\acl-1165-c",
         "id": "5ca0d4423c8e42ea82f63370ee5811b7",
         "issue": 165,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-16T14:33:50+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 953,
+        "report": "# ACL-1165 report\n\nPR #953, head 3b31d397fb3ab5d0af238dccac390337cff1cb1d.\n\nDesign: log text only. In `_try_attach_existing` a strict miss logs \"strict attempt found no own CDP port (not final...)\" and a lenient miss logs a neutral line; both INFO, neither says \"unavailable\". The only \"attachment unavailable\" is a single WARNING in `MultiloginDirectCDPProvider.open`, just before the existing relaunch refusal, when the profile is running without a port. The refusal, its message and the FB_RPA_ALLOW_UNPROXIED_RELAUNCH gate are untouched.\n\nFiles: src/fb_ads_rpa/browser.py, tests/test_the_first_attach_attempt_is_not_logged_as_a_verdict.py (new), docs/system/CHANGELOG.md.\n\nTests: new file + test_browser_relaunch_gate.py + test_an_open_profile_reaches_the_mlx_api.py + test_attach_short_path.py: 37 passed. CI: startup_failure expected, not waited for."
       }
     },
     "tasks": {
