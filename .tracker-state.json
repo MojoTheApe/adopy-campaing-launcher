@@ -41643,6 +41643,18 @@
         "state": "implementing",
         "started_at": "2026-10-16T14:33:23+00:00",
         "from_status": "status:backlog"
+      },
+      "165": {
+        "actor": "Worker-W144C",
+        "session": "w144c-20261016",
+        "coordinator": "Coordinator-C1016A",
+        "branch": "codex/acl-1165-attach-attempt-log",
+        "worktree": "C:\\acl-1165-c",
+        "id": "5ca0d4423c8e42ea82f63370ee5811b7",
+        "issue": 165,
+        "state": "implementing",
+        "started_at": "2026-10-16T14:33:50+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -47700,6 +47712,17 @@
         ],
         "state": "implementing",
         "worker": "Worker-W123C",
+        "coordinator": "Coordinator-C1016A"
+      },
+      "165": {
+        "implementers": [
+          {
+            "actor": "Worker-W144C",
+            "session": "w144c-20261016"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W144C",
         "coordinator": "Coordinator-C1016A"
       }
     },
@@ -77100,6 +77123,13 @@
         "issue": 29,
         "claim": "0de60cd03b6a4ccb8f5ca7e0ef566136",
         "actor": "Worker-W123C"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-16T14:33:50+00:00",
+        "issue": 165,
+        "claim": "5ca0d4423c8e42ea82f63370ee5811b7",
+        "actor": "Worker-W144C"
       }
     ],
     "policy": {
