@@ -48052,7 +48052,7 @@
       },
       "54": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       }
     },
     "actors": {
@@ -77745,6 +77745,12 @@
         "issue": 401,
         "pr": 960,
         "actor": "Worker-W1401M"
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-16T20:49:16+00:00",
+        "issue": 54,
+        "reason": "Backlog cleanup 2026-10-16: stale idea (undefined scope, untouched since September, premise predates the Graph API / new builder direction). Restore if it becomes relevant again."
       }
     ],
     "policy": {
