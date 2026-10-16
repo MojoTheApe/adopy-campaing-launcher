@@ -4023,7 +4023,11 @@
         с Refresh намеренно: беда случается на экране, и идти за ней в другое
         место человек не станет. -#}
     <button type="button" id="report-problem-btn" class="head-btn" title="Tell us what went wrong — ACM attaches the machine's own facts">Report a problem</button>
-    <button type="button" class="head-btn acl-update" id="acl-update-btn" hidden>Update</button>
+    {#- ACL-1931: вызов и ответ этой страницы — после обновления она
+        перезагружается только на дешборд, который знает ответ, то есть свой. -#}
+    {%- set own = page_identity() %}
+    <button type="button" class="head-btn acl-update" id="acl-update-btn" hidden
+            data-own-nonce="{{ own.nonce }}" data-own-proof="{{ own.proof }}">Update</button>
   </div>
   <div class="head-actions">
     {#- Переключатель, а не иконка. Иконка сообщала состояние одним знаком, и
@@ -4291,13 +4295,15 @@ async function dashRefresh(ev) {
           + 'automatically; use Report a problem if it still does not open.');
         return;
       }
-      fetch('/health', { cache: 'no-store' })
+      fetch('/health?nonce=' + encodeURIComponent(btn.dataset.ownNonce || ''), { cache: 'no-store' })
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (h) {
           // Only reload once the server has actually gone away and returned.
           // Without this the first poll finds the old process still shutting
           // down and reloads straight back onto the version we are replacing.
-          if (h && h.app === 'ACL' && h.ok && (wentDown || (btn.dataset.target && h.version === btn.dataset.target))) { location.reload(); return; }
+          // And only onto MY dashboard: a neighbour's ACL that comes up on
+          // this port cannot answer the page's own challenge (ACL-1931).
+          if (h && h.app === 'ACL' && h.ok && btn.dataset.ownProof && h.proof === btn.dataset.ownProof && (wentDown || (btn.dataset.target && h.version === btn.dataset.target))) { location.reload(); return; }
           setTimeout(poll, 2000);
         })
         .catch(function () { wentDown = true; setTimeout(poll, 2000); });

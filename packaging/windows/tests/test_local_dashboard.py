@@ -16,7 +16,9 @@ import socket
 import sys
 import tempfile
 import threading
+import time
 import unittest
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
@@ -29,7 +31,7 @@ for entry in (str(PACKAGING_DIR), str(ROOT)):
 
 import launcher  # noqa: E402
 import local_dashboard  # noqa: E402
-from config.paths import config_identity  # noqa: E402
+from config.paths import config_identity, config_proof  # noqa: E402
 
 
 _REGISTRY = mock.patch.dict(os.environ, {"ACL_PORT_REGISTRY_DIR": ""})
@@ -59,14 +61,32 @@ def _free_ports(count: int) -> list[int]:
     return ports
 
 
+class _Answer(dict):
+    """Ответ /health настоящего ACL: знает свой каталог настроек и потому
+    умеет ответить на вызов (`?nonce=`) так, как ответил бы сам дешборд."""
+
+    def __init__(self, owner: Path, **payload):
+        super().__init__(payload, config=config_identity(owner))
+        self.owner = owner
+
+
+def _acl(owner: Path, version: str = "x") -> _Answer:
+    return _Answer(owner, app="ACL", ok=True, version=version)
+
+
 class _Dashboard:
     """Настоящий HTTP-сервер, отвечающий на /health так, как ответил бы ACL."""
 
     def __init__(self, port: int, payload: dict | None):
-        body = json.dumps(payload).encode("utf-8") if payload is not None else b"not json at all"
+        owner = getattr(payload, "owner", None)
 
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self):  # noqa: N802 — так зовёт метод http.server
+                answer = dict(payload) if payload is not None else None
+                nonce = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get("nonce")
+                if answer is not None and owner is not None and nonce:
+                    answer["proof"] = config_proof(nonce[0], owner)
+                body = json.dumps(answer).encode("utf-8") if answer is not None else b"not json at all"
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
@@ -103,7 +123,7 @@ class OwnDashboardTests(unittest.TestCase):
 
     @staticmethod
     def _acl(config_dir: Path) -> dict:
-        return {"app": "ACL", "ok": True, "version": "x", "config": config_identity(config_dir)}
+        return _acl(config_dir)
 
     def test_someone_elses_dashboard_on_the_first_port_is_not_mine(self):
         """Ровно то, что случилось 24.09: на первом порту живой ACL — но чужой."""
@@ -132,9 +152,10 @@ class OwnDashboardTests(unittest.TestCase):
         (self.mine / "server.json").write_text(json.dumps({"port": self.ports[3]}), encoding="utf-8")
         asked: list[int] = []
 
-        def probe(port):
+        def probe(port, nonce):
             asked.append(port)
-            return self._acl(self.mine) if port == self.ports[3] else None
+            return ({**self._acl(self.mine), "proof": config_proof(nonce, self.mine)}
+                    if port == self.ports[3] else None)
 
         found = local_dashboard.find_own(self.mine, probe=probe, in_use=lambda port: True)
         self.assertEqual(found[0], self.ports[3])
@@ -229,13 +250,11 @@ class UpdaterTests(unittest.TestCase):
             mine, theirs = Path(tmp) / "anna", Path(tmp) / "dan"
             ports = _free_ports(2)
             with mock.patch.object(local_dashboard, "PORTS", ports):
-                neighbour = _Dashboard(ports[0], {"app": "ACL", "ok": True,
-                                                  "config": config_identity(theirs)})
+                neighbour = _Dashboard(ports[0], _Answer(theirs, app="ACL", ok=True))
                 try:
                     probe = updater.own_health(mine)
                     self.assertIsNone(probe(), "дешборд соседа принят за мой: обновление ждало бы его")
-                    own = _Dashboard(ports[1], {"app": "ACL", "ok": True, "version": "v2",
-                                                "config": config_identity(mine)})
+                    own = _Dashboard(ports[1], _acl(mine, "v2"))
                     try:
                         self.assertEqual((probe() or {}).get("version"), "v2")
                     finally:
@@ -264,10 +283,8 @@ class UpdaterTests(unittest.TestCase):
             with mock.patch.object(updater, "apply_update", side_effect=capture), \
                     mock.patch.object(local_dashboard, "PORTS", ports):
                 self.assertEqual(updater.main(args, local), 0)
-                neighbour = _Dashboard(ports[0], {"app": "ACL", "ok": True, "version": "v1",
-                                                  "config": config_identity(Path(tmp) / "dan")})
-                own = _Dashboard(ports[1], {"app": "ACL", "ok": True, "version": "v2",
-                                            "config": config_identity(local)})
+                neighbour = _Dashboard(ports[0], _acl(Path(tmp) / "dan", "v1"))
+                own = _Dashboard(ports[1], _acl(local, "v2"))
                 try:
                     self.assertEqual((seen["health"]() or {}).get("version"), "v2")
                 finally:
@@ -294,6 +311,70 @@ class IdentityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertNotEqual(config_identity(Path(tmp) / "anna" / "ACL"),
                                 config_identity(Path(tmp) / "dan" / "ACL"))
+
+    def test_the_identity_is_not_a_hash_of_the_path(self):
+        """Ревью ACL-1309: хэш предсказуемого пути позволял проверить догадку
+        об имени соседа — посчитать sha256 от пути к его AppData и
+        сравнить с /health. Теперь в отпечатке секрет каталога."""
+        import hashlib
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp) / "anna" / "ACL"
+            path = os.path.normcase(os.path.realpath(str(folder)))
+            guessed = hashlib.sha256(path.encode("utf-8")).hexdigest()[:16]
+            self.assertNotEqual(config_identity(folder), guessed)
+
+    def test_the_same_path_with_a_different_secret_is_someone_else(self):
+        """Тот же путь — не тот же человек: знание пути ничего не даёт."""
+        from config import paths
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp) / "anna" / "ACL"
+            first = config_identity(folder)
+            (folder / paths.IDENTITY_SECRET_FILE).unlink()
+            paths._IDENTITY_SECRETS.clear()
+            self.assertNotEqual(config_identity(folder), first)
+
+    def test_the_secret_is_kept_and_readable_only_by_its_owner(self):
+        from config import paths
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp) / "anna" / "ACL"
+            first = config_identity(folder)
+            secret = folder / paths.IDENTITY_SECRET_FILE
+            self.assertTrue(secret.is_file(), "секрет не сохранён в каталоге настроек")
+            paths._IDENTITY_SECRETS.clear()
+            self.assertEqual(config_identity(folder), first, "отпечаток меняется между запусками")
+            if os.name == "nt":
+                import subprocess
+
+                sid = paths._current_user_sid()
+                sddl = subprocess.run(
+                    ["powershell", "-NoProfile", "-Command", f"(Get-Acl -LiteralPath '{secret}').Sddl"],
+                    capture_output=True, text=True).stdout.strip()
+                dacl = sddl[sddl.index("D:"):]
+                self.assertTrue(dacl.startswith("D:P"), f"права наследуются от каталога: {sddl}")
+                trustees = [ace.rstrip(")").split(";")[-1] for ace in dacl.split("(")[1:]]
+                self.assertEqual(trustees, [sid], f"секрет читает не только владелец: {sddl}")
+            else:
+                self.assertEqual(secret.stat().st_mode & 0o777, 0o600)
+
+    def test_a_damaged_secret_is_replaced_not_traded_for_the_path(self):
+        """Ревью ACL-1931: обрезанный файл секрета (антивирус, синхронизация)
+        навсегда возвращал отпечаток от пути — тот самый предсказуемый."""
+        import hashlib
+        import hmac
+
+        from config import paths
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp) / "anna" / "ACL"
+            folder.mkdir(parents=True)
+            (folder / paths.IDENTITY_SECRET_FILE).write_bytes(b"short")
+            value = config_identity(folder)
+            key = os.path.normcase(os.path.realpath(str(folder))).encode("utf-8")
+            self.assertNotEqual(value, hmac.new(key, b"acl-identity", hashlib.sha256).hexdigest()[:16])
+            self.assertGreaterEqual(len((folder / paths.IDENTITY_SECRET_FILE).read_bytes().strip()), 32)
 
     def test_the_identity_does_not_give_away_the_path(self):
         """/health слышит любой процесс на машине. Путь выдал бы имя чужой
@@ -337,7 +418,7 @@ class _SharedMachine(unittest.TestCase):
 
     @staticmethod
     def _acl(config_dir: Path, version: str = "x") -> dict:
-        return {"app": "ACL", "ok": True, "version": version, "config": config_identity(config_dir)}
+        return _acl(config_dir, version)
 
 
 class LauncherOnASharedMachineTests(_SharedMachine):
@@ -570,6 +651,93 @@ class StickyPortTests(_SharedMachine):
             command = popen.call_args.args[0]
             ports.append(int(command[command.index("--port") + 1]))
         self.assertEqual(ports, [self.ports[1], self.ports[1]])
+
+
+class StaleMarkTests(_SharedMachine):
+    """Отметка в реестре не держит порт вечно (ACL-1931).
+
+    Человек, ушедший с машины, оставил бы свой порт занятым навсегда:
+    удалить чужой файл в %ProgramData% сосед не может. Хозяин подтверждает
+    отметку каждым запуском; неподтверждённая дольше MARK_TTL_S — ничья.
+    """
+
+    def _age(self, port: int, seconds: float) -> None:
+        mark = Path(os.environ["ACL_PORT_REGISTRY_DIR"]) / f"{port}.json"
+        old = time.time() - seconds
+        os.utime(mark, (old, old))
+
+    def test_a_long_forgotten_mark_no_longer_holds_the_port(self):
+        local_dashboard.choose_port(self.dan)  # Дан — первый порт, и ушёл
+        self._age(self.ports[0], local_dashboard.MARK_TTL_S + 3600)
+
+        self.assertIsNone(local_dashboard.claim_owner(self.ports[0]))
+        self.assertEqual(local_dashboard.choose_port(self.anna), self.ports[0])
+        self.assertEqual(local_dashboard.remembered_port(self.anna), self.ports[0])
+
+    def test_a_recent_mark_still_holds_the_port(self):
+        local_dashboard.choose_port(self.dan)
+        self._age(self.ports[0], local_dashboard.MARK_TTL_S - 3600)
+        self.assertEqual(local_dashboard.choose_port(self.anna), self.ports[1])
+
+    def test_every_launch_of_the_owner_renews_the_mark(self):
+        """Дан пользуется дешбордом каждый день — его отметка не стареет."""
+        local_dashboard.choose_port(self.dan)
+        self._age(self.ports[0], local_dashboard.MARK_TTL_S - 60)
+        local_dashboard.choose_port(self.dan)  # запуск: порт свободен, встаёт на свой
+        self._age_by(self.ports[0], 120)  # прошло ещё две минуты
+        self.assertEqual(local_dashboard.claim_owner(self.ports[0]), config_identity(self.dan))
+
+    def test_opening_a_running_dashboard_renews_the_mark_too(self):
+        """Ярлык нажат при работающем дешборде: сервер не перезапускается,
+        но отметка подтверждается."""
+        local_dashboard.choose_port(self.dan)
+        self._serve(self.ports[0], self._acl(self.dan))
+        self._age(self.ports[0], local_dashboard.MARK_TTL_S - 60)
+        self.assertIsNotNone(local_dashboard.find_own(self.dan))
+        self._age_by(self.ports[0], 120)
+        self.assertEqual(local_dashboard.claim_owner(self.ports[0]), config_identity(self.dan))
+
+    def test_two_newcomers_do_not_share_a_port_whose_mark_cannot_be_removed(self):
+        """Ревью ACL-1931: просроченную отметку ушедшего Дана удалить нельзя
+        (чужой файл в %ProgramData%). Анна встаёт на его порт — и Карл,
+        пришедший следом, не должен запомнить тот же порт."""
+        carl = Path(self.tmp.name) / "carl" / "ACL"
+        carl.mkdir(parents=True)
+        local_dashboard.choose_port(self.dan)
+        self._age(self.ports[0], local_dashboard.MARK_TTL_S + 3600)
+        real_unlink = Path.unlink
+
+        def protected(path, *args, **kwargs):
+            if path.name == f"{self.ports[0]}.json":
+                raise PermissionError("someone else's file")
+            return real_unlink(path, *args, **kwargs)
+
+        with mock.patch.object(Path, "unlink", protected):
+            self.assertEqual(local_dashboard.choose_port(self.anna), self.ports[0])
+            self.assertEqual(local_dashboard.claim_owner(self.ports[0]), config_identity(self.anna))
+            self.assertEqual(local_dashboard.choose_port(carl), self.ports[1])
+            self.assertEqual(local_dashboard.choose_port(self.anna), self.ports[0])
+
+    def _age_by(self, port: int, seconds: float) -> None:
+        mark = Path(os.environ["ACL_PORT_REGISTRY_DIR"]) / f"{port}.json"
+        old = mark.stat().st_mtime - seconds
+        os.utime(mark, (old, old))
+
+
+class ForgedIdentityTests(_SharedMachine):
+    """Ревью ACL-1309: отпечаток в /health публичен — его видно и в реестре
+    портов. Чужой дешборд, повторивший мой `config`, не должен сойти за мой."""
+
+    def test_a_dashboard_that_repeats_my_identity_without_the_secret_is_not_mine(self):
+        forged = {"app": "ACL", "ok": True, "version": "x", "config": config_identity(self.anna)}
+        self._serve(self.ports[0], forged)
+        self.assertIsNone(local_dashboard.find_own(self.anna))
+
+    def test_an_answer_to_an_old_challenge_does_not_count(self):
+        """Подслушанный ответ на прошлый вызов к новому не подходит."""
+        old = {**self._acl(self.anna), "proof": config_proof("old-nonce", self.anna)}
+        self._serve(self.ports[0], old)
+        self.assertIsNone(local_dashboard.find_own(self.anna))
 
 
 def _ipv6_listener(port: int, *, v6only: int) -> socket.socket | None:

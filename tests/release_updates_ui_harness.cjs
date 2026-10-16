@@ -10,12 +10,18 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
 (async () => {
   const handlers = {}, intervals = [], alerts = [];
   let reloads = 0;
-  const button = { hidden: true, disabled: false, dataset: {}, addEventListener: (e, f) => handlers[e] = f };
+  const button = { hidden: true, disabled: false, dataset: { ownNonce: 'n1', ownProof: 'p1' },
+    addEventListener: (e, f) => handlers[e] = f };
+  // ACL-1931: on /health answers whoever holds the port; only my dashboard
+  // knows the answer to my page's challenge.
+  let healthProof = 'p1';
+  const healthUrls = [];
   let status = { available: true, supervised: true, channel: 'release', candidate: { version: '2026-09-20' }, fixed: [] };
   const context = {
     document: { getElementById: () => button },
     fetch: async url => ({ ok: true, json: async () => url.includes('/check') ? status :
-      url === '/health' ? { app: 'ACL', ok: true, version: '2026-09-20' } : { ok: true } }),
+      url.startsWith('/health') ? (healthUrls.push(url),
+        { app: 'ACL', ok: true, version: '2026-09-20', proof: healthProof }) : { ok: true } }),
     setInterval: f => intervals.push(f), setTimeout: () => {},
     alert: s => alerts.push(s), confirm: () => true,
     // ACL-141: окна страницы асинхронные; «да» на обновление, текст — как у alert.
@@ -29,6 +35,13 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
   await flush(); await flush();
   assert.equal(button.hidden, false);
   assert.equal(button.dataset.target, '2026-09-20');
+  healthProof = 'someone-elses';
+  handlers.click();
+  await flush(); await flush();
+  assert.equal(reloads, 0, "a neighbour's ACL that came up on this port must not take over the page");
+  assert.equal(healthUrls[0], '/health?nonce=n1', 'the page asks with its own challenge');
+  healthProof = 'p1';
+  button.disabled = false;
   handlers.click();
   await flush(); await flush();
   assert.equal(reloads, 1, 'a fast restart is detected by version even if no failed health poll was observed');
