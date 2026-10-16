@@ -47783,7 +47783,7 @@
             "session": "w1787c-20261016"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1787C",
         "coordinator": "Coordinator-C1016A",
         "handoff": {
@@ -47801,7 +47801,8 @@
           "report": "ACL-1787 desk research delivered in PR 956 (docs/research/ACL-1787-meta-ad-rules.md). Official Meta docs only; no API calls, credentials or accounts touched. Verified facts separated from inferences and unknowns. Key unknowns for a gated pilot: error 2703 versus pause-with-spend rules, and whether the in-profile token can create rules. Recommendation: do not build yet; run the section 8 pilot with an explicit owner go. Verification: documentation-only change, no code or tests."
         },
         "pr": 956,
-        "queued_at": "2026-10-16T14:53:45+00:00"
+        "queued_at": "2026-10-16T14:53:45+00:00",
+        "reviewer": "Reviewer-R1787D"
       },
       "788": {
         "implementers": [
@@ -49662,6 +49663,10 @@
       },
       "Reviewer-R1708D": {
         "session": "r1708d-20261016",
+        "role": "Reviewer"
+      },
+      "Reviewer-R1787D": {
+        "session": "r1787d-20261016",
         "role": "Reviewer"
       }
     },
@@ -52422,7 +52427,6 @@
       896,
       151,
       165,
-      787,
       788,
       72
     ],
@@ -77388,6 +77392,13 @@
         "issue": 72,
         "pr": 958,
         "actor": "Worker-W142C"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-16T14:57:42+00:00",
+        "pr": 956,
+        "lane": "4dd543551632421d8f4313bceb53da0e",
+        "actor": "Reviewer-R1787D"
       }
     ],
     "policy": {
@@ -82087,6 +82098,18 @@
         "session": "r1708d-20261016",
         "coordinator": "Coordinator-C1016A",
         "started_at": "2026-10-16T14:52:13+00:00",
+        "state": "reviewing"
+      },
+      "956": {
+        "id": "4dd543551632421d8f4313bceb53da0e",
+        "pr": 956,
+        "issues": [
+          787
+        ],
+        "actor": "Reviewer-R1787D",
+        "session": "r1787d-20261016",
+        "coordinator": "Coordinator-C1016A",
+        "started_at": "2026-10-16T14:57:42+00:00",
         "state": "reviewing"
       }
     },
