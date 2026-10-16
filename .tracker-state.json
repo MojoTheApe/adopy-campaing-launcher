@@ -79846,7 +79846,9 @@
         "session": "rv1015f-843",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-16T09:58:36+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "Content approved; needs only a refresh onto current main (merge main, re-run checks, hand off again).\n\nReview of PR 846 / ACL-1840 (head fe58cef0) by Reviewer-RV1015F:\n- Scope matches issue #840: scoped CSS only (`.amap-country > .hc.hc-after` padding aligned to the connection form, wrapping of footer/journal), plus CHANGELOG, a sanitized fixture and a Chromium geometry test. English text, no secrets.\n- Tests: tests/test_country_campaign_footer_layout.py, 19 passed (1280/1024/320 px, both themes, empty/populated/filtered, keyboard disclosure, focus outline inside card, baseline reproduces the missing inset). Source CI on this head is green.\n- Not approvable as it stands: the PR does not contain current main (167 commits behind). Merge-tree against current main conflicts only in docs/system/CHANGELOG.md (keep both entries); report.html merges cleanly.\n- Main has meanwhile gained the real mount (`<section class=\"hc hc-after\" data-hc-after>` in _account_map_country.html, and the .hc-foot/.hc-hist component in _campaign_table.html with `.hc-foot{padding:.5rem 0}`), so the rule is no longer dormant and is not obsolete or duplicated. Selector specificity (0,3,0) still beats main's `.hc`.\n- Request for the refresh: the test fixture is a hand-copied preview of the component (with its own hard-coded .hc CSS). Now that the component exists on main, please re-run the test after the merge and, ideally, render main's real _account_map_country.html/_campaign_table.html CSS in the fixture, and update the CHANGELOG sentence \"dormant on main until ACL-1798's footer mounts\", which is no longer true.",
+        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
