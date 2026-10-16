@@ -41575,9 +41575,11 @@
         "worktree": "C:\\wk-rs1816",
         "id": "27b8a02766c045c980d33dfbb7162649",
         "issue": 816,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-16T10:07:22+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 820,
+        "report": "# ACL-1816 refresh handoff (Worker-RS1816)\nHead: 76b5accb on codex/acl-1816-rules-evaluate, merge of origin/main af0ade29 (ACL-1923/1924 no-stage delivery: process docs, workflows, delivery scripts). Merge only, no conflicts, no 1816 code changed since the reviewed 4d2f8edd.\nTests: test_acl1816_rules_evaluate, test_rules_store, test_acl1815_rules_evidence, test_shared_file_locks, test_goals: 220 passed. scripts/acl_scan_secrets.py clean.\nFull suite not run locally."
       },
       "827": {
         "actor": "Worker-RS1827",
