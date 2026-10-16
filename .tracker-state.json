@@ -79963,7 +79963,9 @@
         "session": "r1827t-20261016",
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-16T10:04:38+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "# Return for a main refresh\n\nMain moved to af0ade29 (ACL-1923/1924: no-stage delivery route, process docs and workflows). Required: merge current main into the branch (merge, no rebase; it merges cleanly), re-run the affected tests, hand off again for fresh review.",
+        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
