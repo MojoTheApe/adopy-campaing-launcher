@@ -47676,7 +47676,7 @@
             "session": "w144c-20261016"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W144C",
         "coordinator": "Coordinator-C1016A",
         "handoff": {
@@ -47694,7 +47694,8 @@
           "report": "# ACL-144 report\n\nPR #951, head a339c1fef11c8667196e61181ad303f34966ccdf.\n\nDesign: `browser._find_mlx_profile_dir(profile_id, folder_id=\"\")` resolves `profiles/{ws}/{folder_id}/{profile_id}` (and `{ws}/{profile_id}`) by directory name, at most two levels under a workspace. It is the single implementation; `account_spend._mlx_profile_dir` delegates to it. No recursive fallback: unknown layout, missing root or unsafe id returns None, and only an exact folder-name match is accepted, so another profile's folder is never chosen. Call sites are unchanged.\n\nFiles: src/fb_ads_rpa/browser.py, src/analysis_agent/account_spend.py, tests/test_a_profile_folder_is_found_by_address.py (new), docs/system/CHANGELOG.md.\n\nTests: test_a_profile_folder_is_found_by_address.py, test_account_spend.py, test_a_campaign_opens_within_two_minutes.py: 101 passed. The tests patch Path.rglob, Path.glob and os.walk to count (and fail on) recursive scans; none happen.\n\nCI: GitHub Actions startup_failure is expected; not waited for.\nNot changed: fb_api.profile.find_profile_dir still uses rglob (separate task)."
         },
         "pr": 951,
-        "queued_at": "2026-10-16T14:32:38+00:00"
+        "queued_at": "2026-10-16T14:32:38+00:00",
+        "reviewer": "Reviewer-R144D"
       },
       "19": {
         "implementers": [
@@ -49641,6 +49642,10 @@
       "Worker-W1788C": {
         "session": "w1788c-20261016",
         "role": "Worker"
+      },
+      "Reviewer-R144D": {
+        "session": "r144d-20261016-951",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -52399,7 +52404,6 @@
       273,
       896,
       151,
-      73,
       165,
       708
     ],
@@ -77312,6 +77316,13 @@
         "issue": 708,
         "pr": 952,
         "actor": "Worker-W1708C"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-16T14:51:13+00:00",
+        "pr": 951,
+        "lane": "7017cec21c6c463aae5d1ff0300738c4",
+        "actor": "Reviewer-R144D"
       }
     ],
     "policy": {
@@ -81999,6 +82010,18 @@
         "session": "r106d-20261016",
         "coordinator": "Coordinator-C1016A",
         "started_at": "2026-10-16T14:44:02+00:00",
+        "state": "reviewing"
+      },
+      "951": {
+        "id": "7017cec21c6c463aae5d1ff0300738c4",
+        "pr": 951,
+        "issues": [
+          73
+        ],
+        "actor": "Reviewer-R144D",
+        "session": "r144d-20261016-951",
+        "coordinator": "Coordinator-C1016A",
+        "started_at": "2026-10-16T14:51:13+00:00",
         "state": "reviewing"
       }
     },
