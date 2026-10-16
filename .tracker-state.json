@@ -41607,7 +41607,20 @@
     ]
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "708": {
+        "actor": "Worker-W1708C",
+        "session": "w1708c-20261016",
+        "coordinator": "Coordinator-C1016A",
+        "branch": "codex/acl-1708-rebrand-leftovers",
+        "worktree": "C:\\acl-1708-c",
+        "id": "df8787aed5bb42feb7e5a561cabb94cd",
+        "issue": 708,
+        "state": "implementing",
+        "started_at": "2026-10-16T14:29:01+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -47604,6 +47617,17 @@
         },
         "pr": 950,
         "queued_at": "2026-10-16T13:17:26+00:00"
+      },
+      "708": {
+        "implementers": [
+          {
+            "actor": "Worker-W1708C",
+            "session": "w1708c-20261016"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W1708C",
+        "coordinator": "Coordinator-C1016A"
       }
     },
     "actors": {
@@ -49393,6 +49417,10 @@
       },
       "Worker-W1151M": {
         "session": "worker_acl1151_20261016",
+        "role": "Worker"
+      },
+      "Worker-W1708C": {
+        "session": "w1708c-20261016",
         "role": "Worker"
       }
     },
@@ -76951,6 +76979,13 @@
         "issue": 151,
         "pr": 950,
         "actor": "Worker-W1151M"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-16T14:29:01+00:00",
+        "issue": 708,
+        "claim": "df8787aed5bb42feb7e5a561cabb94cd",
+        "actor": "Worker-W1708C"
       }
     ],
     "policy": {
