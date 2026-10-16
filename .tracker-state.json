@@ -41576,6 +41576,18 @@
         "state": "implementing",
         "started_at": "2026-10-16T10:07:22+00:00",
         "from_status": "status:todo"
+      },
+      "827": {
+        "actor": "Worker-RS1827",
+        "session": "wrs1827-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1827-design-parity-shell",
+        "worktree": "C:\\wk-rs1827",
+        "id": "270a5ecb8ced42858c9c35ea8f09897d",
+        "issue": 827,
+        "state": "implementing",
+        "started_at": "2026-10-16T10:08:12+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -45843,9 +45855,13 @@
           {
             "actor": "Worker-RS1827",
             "session": "wrs1827-20261015"
+          },
+          {
+            "actor": "Worker-RS1827",
+            "session": "wrs1827-20261015"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-RS1827",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -45864,8 +45880,7 @@
         },
         "pr": 829,
         "queued_at": "2026-10-15T10:34:58+00:00",
-        "review_report": "# Return for a main refresh\n\nMain moved to af0ade29 (ACL-1923/1924: no-stage delivery route, process docs and workflows). Required: merge current main into the branch (merge, no rebase; it merges cleanly), re-run the affected tests, hand off again for fresh review.",
-        "reviewer": "Reviewer-R1827T"
+        "review_report": "# Return for a main refresh\n\nMain moved to af0ade29 (ACL-1923/1924: no-stage delivery route, process docs and workflows). Required: merge current main into the branch (merge, no rebase; it merges cleanly), re-run the affected tests, hand off again for fresh review."
       },
       "771": {
         "implementers": [
@@ -75616,6 +75631,13 @@
         "issue": 816,
         "claim": "27b8a02766c045c980d33dfbb7162649",
         "actor": "Worker-RS1816"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-16T10:08:12+00:00",
+        "issue": 827,
+        "claim": "270a5ecb8ced42858c9c35ea8f09897d",
+        "actor": "Worker-RS1827"
       }
     ],
     "policy": {
