@@ -10641,7 +10641,7 @@
         }
       },
       "361": {
-        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
         "sources": [
           {
             "pr": 378,
@@ -10649,8 +10649,109 @@
             "tree_sha": "0e0b77a78ab35b6a66948f5e1475793964579d07"
           }
         ],
-        "state": "pending",
-        "recorded_at": "2026-09-29T11:32:33+00:00"
+        "state": "verified",
+        "recorded_at": "2026-09-29T11:32:33+00:00",
+        "verification": {
+          "kind": "delivery-verification",
+          "result": "passed",
+          "target": "ACL stable Windows installer and update channel",
+          "merge_shas": [
+            "140fc31e8f072c1d0ec8c432b9e5bf7f1ffae573"
+          ],
+          "checks": [
+            "Full unchanged original Issue#361 scope including all constraints, current status/labels and owner acceptance reviewed. Exact maintained task_scope/accepted_scope match both fresh official readback and retained pack; original pending receipt digest matches authentic retention audit.",
+            "All actual source work merged through original stage/main promotion; exact PR/merge/tree and ancestry in installed/current code retained in legacy128-source-coverage.json. Authentic independent source/integration review reused. All46 cached current official open PRs examined: no explicit selected task scope or outstanding related source work.",
+            "Official remote compare independently verifies artifact commit cd21ea8f93d724f5acf4093bf2d3f7906b5ce8de, sole parent af0ade29b106129089dbabd3f208b548efa246d9, ahead1/behind0, exactly8 synthetic PNGs plus unchanged publicmanifest, no application edits; all9 Git blobSHA/SHA256 match the locally reviewed bytes.",
+            "Official source PR#362 comment6211445153 body read back byte-for-byte: immutable screenshots and manifest plus exact new owner response present at https://github.com/MojoTheApe/adopy-campaing-launcher/pull/362#issuecomment-6211445153.",
+            "Real production Jinja/Builder JS exercised with two synthetic countries and filled Accountmap, both themes, no CSS substitution/preflight bypass, intercepted local HTTP, zero pageerrors; explicit offline limitations remain visible.",
+            "Genuine signed release acl-release-2026-10-15.940/source7d1ad46c14ddd2e08e507e33248af50af42df026 package proof retained: actual native run38817558595/job116709133359 successful install/update/restart/recovery/data preservation. Original native producer task set unchanged[924].",
+            "Exact BEFORE feae4e8893d9f6496395453b34244c5f2e9db809 / reviewed AFTER e45fb29dc5697bc89f01f59ac667c6d1778f505f reconstructed in both themes with actual Builder and Accountmap. Four historical images plus current field pair now attached by immutable links to PR362. Original source PR362 closed superseded; actual integration merged PR376/378, main140fc31e8f072c1d0ec8c432b9e5bf7f1ffae573.",
+            "BEFORE/AFTER HTML+JS outside style blocks are byte-identical; every measured field/row/heading coordinate matches within0.1px in all4 matching states. Theme tokens centralize field surfaces/borders/focus/placeholder; semantic colors and layout/sizes preserved.",
+            "Border/text contrast passes3:1/4.5:1: historical AFTER minima light3.320/16.165, dark3.513/10.660; current light3.251/14.466, dark3.607/11.921. Existing focus-ring/placeholder/elevation/token/real-browser suite19/19 passed on both historical AFTER and current. Original broader Builder/report review/CI retained.",
+            "Owner explicitly accepted field visibility in both themes and dark page/card/field separation: \u00ab\u0414\u0430, \u043f\u0440\u0438\u043d\u0438\u043c\u0430\u044e ACL-1361\u00bb. New retrospective acceptance is durably recorded in PR362 comment6211445153; historical timing or attachments are not invented."
+          ],
+          "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/362#issuecomment-6211445153"
+        },
+        "verified_at": "2026-10-16T08:38:07+00:00",
+        "history": [
+          {
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "sources": [
+              {
+                "pr": 378,
+                "merge_sha": "140fc31e8f072c1d0ec8c432b9e5bf7f1ffae573",
+                "tree_sha": "0e0b77a78ab35b6a66948f5e1475793964579d07"
+              }
+            ],
+            "state": "pending",
+            "recorded_at": "2026-09-29T11:32:33+00:00"
+          }
+        ],
+        "legacy_delivery_reconciliation": {
+          "manifest_sha256": "1c7b9c07ede0b493c65379282924fac207c35e84051682291d4a16597b816569",
+          "authorization": {
+            "issues": [
+              361,
+              650
+            ],
+            "approved_by": "Repository owner current task2026-10-16 authorizes completion attempts for the12 acceptance-only tasks and explicitly accepted the actual shown current screenshots: \u00ab\u0414\u0430, \u043f\u0440\u0438\u043d\u0438\u043c\u0430\u044e ACL-1361\u00bb and \u00ab\u0414\u0430, \u043f\u0440\u0438\u043d\u0438\u043c\u0430\u044e ACL-1650\u00bb. New retrospective authority; no historical pre-merge owner acceptance is asserted. Only these two fully independently verified tasks are selected;7code tasks and all others remain untouched. Original native producer issue scope stays exactly[924].",
+            "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/362#issuecomment-6211445153; https://github.com/MojoTheApe/adopy-campaing-launcher/pull/661#issuecomment-6211449952"
+          },
+          "scope": "89229c7b1947bc74cdaf2e6f81c5fa76d28492e31cf3c42be7b161eac867db22",
+          "accepted_scope": "fbd25dd7ccd2af8640324e671fe181130f44bacbd1e8f672babaffa9cf52ce46",
+          "reviewer": "/root/audit_legacy128_a",
+          "implementer": "/root",
+          "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/362#issuecomment-6211445153; https://github.com/MojoTheApe/adopy-campaing-launcher/pull/661#issuecomment-6211449952",
+          "migration_sha256": "82609ec583389d5f2427cc4b74bb7b8cbb65c40e92002ae3f3b8fc655a493c93",
+          "native": {
+            "request": {
+              "eligible": true,
+              "schema_version": 1,
+              "repository": "MojoTheApe/adopy-campaing-launcher",
+              "batch_id": "3bc5972db83a4bbeaf5f66bc508adadd",
+              "issues": [
+                924
+              ],
+              "main_pr": 940,
+              "merge_sha": "7d1ad46c14ddd2e08e507e33248af50af42df026",
+              "tree_sha": "da457106740ac89e01ab07052825f8a5cd0b3a97",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "target": "ACL stable Windows installer and update channel",
+              "workflow": ".github/workflows/complete-delivery.yml",
+              "job": "Verify published Windows package",
+              "requested_at": "2026-10-15T11:47:43+00:00",
+              "authorization_sha256": "3b42fcf36103d52dbdc92b0193c533f2475fe3c17730b71798a572ae6fab3ffd",
+              "ci_run": 38813359345
+            },
+            "run": 38817558595,
+            "job": 116709133359,
+            "receipt_sha256": "d883d8591c71e27de9149d8df323e64b2a6d59272cb93011bbd13cdfc4788043",
+            "report_sha256": "0a38e684838a0e1978761fd25200da078f003ff37a146082ec0757faf6929cd7"
+          },
+          "release": {
+            "id": 414340904,
+            "assets": [
+              {
+                "id": 645391419,
+                "name": "Adopy-Campaign-Launcher-Setup-2026-10-15.940.exe",
+                "size": 94152447,
+                "digest": "sha256:8e317993c5dd4131929cfaf9ac20fd7ae0a4f48ebd58912b66f6254a3d034286"
+              },
+              {
+                "id": 645391416,
+                "name": "release.json",
+                "size": 10649,
+                "digest": "sha256:95134b86501ca2e34b24f663e9cd23195e4d866dd76d8d194f5a31717b7d2ffa"
+              },
+              {
+                "id": 645391407,
+                "name": "release.json.sig",
+                "size": 177,
+                "digest": "sha256:6804067b3757915e277737e8738fbb8f4160180305395dce357b12038aacb26a"
+              }
+            ]
+          }
+        }
       },
       "371": {
         "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
@@ -26360,7 +26461,7 @@
         }
       },
       "650": {
-        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
         "sources": [
           {
             "pr": 672,
@@ -26368,8 +26469,108 @@
             "tree_sha": "859ee9d57600615abee533d52a32f20549617eb9"
           }
         ],
-        "state": "pending",
-        "recorded_at": "2026-10-07T08:33:22+00:00"
+        "state": "verified",
+        "recorded_at": "2026-10-07T08:33:22+00:00",
+        "verification": {
+          "kind": "delivery-verification",
+          "result": "passed",
+          "target": "ACL stable Windows installer and update channel",
+          "merge_shas": [
+            "fd405412c6004565562ad27713991612bdb1f530"
+          ],
+          "checks": [
+            "Full unchanged original Issue#650 scope including all constraints, current status/labels and owner acceptance reviewed. Exact maintained task_scope/accepted_scope match both fresh official readback and retained pack; original pending receipt digest matches authentic retention audit.",
+            "All actual source work merged through original stage/main promotion; exact PR/merge/tree and ancestry in installed/current code retained in legacy128-source-coverage.json. Authentic independent source/integration review reused. All46 cached current official open PRs examined: no explicit selected task scope or outstanding related source work.",
+            "Official remote compare independently verifies artifact commit cd21ea8f93d724f5acf4093bf2d3f7906b5ce8de, sole parent af0ade29b106129089dbabd3f208b548efa246d9, ahead1/behind0, exactly8 synthetic PNGs plus unchanged publicmanifest, no application edits; all9 Git blobSHA/SHA256 match the locally reviewed bytes.",
+            "Official source PR#661 comment6211449952 body read back byte-for-byte: immutable screenshots and manifest plus exact new owner response present at https://github.com/MojoTheApe/adopy-campaing-launcher/pull/661#issuecomment-6211449952.",
+            "Real production Jinja/Builder JS exercised with two synthetic countries and filled Accountmap, both themes, no CSS substitution/preflight bypass, intercepted local HTTP, zero pageerrors; explicit offline limitations remain visible.",
+            "Genuine signed release acl-release-2026-10-15.940/source7d1ad46c14ddd2e08e507e33248af50af42df026 package proof retained: actual native run38817558595/job116709133359 successful install/update/restart/recovery/data preservation. Original native producer task set unchanged[924].",
+            "Authentic original Reviewer-R1650Q review of exact PR661 head8db911ee4406c3d456599bbe83d455d3eeb7eceb confirms only .cbd-country color --muted to --accent changed (+4/-1 incl comment), preserving size/font/weight/spacing/case/layout. Stage0fa66af6ece68cdbfdcbdd63ccbbbdae8d26d00f -> main PR672 fd405412c6004565562ad27713991612bdb1f530, exact receipt tree859ee9d57600615abee533d52a32f20549617eb9.",
+            "Actual current Builder overview images show Mexico/Saudi Arabia visibly in both themes. Heading contrast on actual surface4.864:1 light/6.247:1 dark >=4.5; original review independently measured5.17/7.05. Later accepted token/layout changes are kept distinct from original color-only delta.",
+            "Owner explicitly accepted the shown two-country heading result in both themes: \u00ab\u0414\u0430, \u043f\u0440\u0438\u043d\u0438\u043c\u0430\u044e ACL-1650\u00bb, retained in PR661 comment6211449952. Original before-merge owner timing remains unproven; explicit new owner-authorized retrospective acceptance resolves the current gate without claiming historical pre-merge approval."
+          ],
+          "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/661#issuecomment-6211449952"
+        },
+        "verified_at": "2026-10-16T08:38:07+00:00",
+        "history": [
+          {
+            "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+            "sources": [
+              {
+                "pr": 672,
+                "merge_sha": "fd405412c6004565562ad27713991612bdb1f530",
+                "tree_sha": "859ee9d57600615abee533d52a32f20549617eb9"
+              }
+            ],
+            "state": "pending",
+            "recorded_at": "2026-10-07T08:33:22+00:00"
+          }
+        ],
+        "legacy_delivery_reconciliation": {
+          "manifest_sha256": "1c7b9c07ede0b493c65379282924fac207c35e84051682291d4a16597b816569",
+          "authorization": {
+            "issues": [
+              361,
+              650
+            ],
+            "approved_by": "Repository owner current task2026-10-16 authorizes completion attempts for the12 acceptance-only tasks and explicitly accepted the actual shown current screenshots: \u00ab\u0414\u0430, \u043f\u0440\u0438\u043d\u0438\u043c\u0430\u044e ACL-1361\u00bb and \u00ab\u0414\u0430, \u043f\u0440\u0438\u043d\u0438\u043c\u0430\u044e ACL-1650\u00bb. New retrospective authority; no historical pre-merge owner acceptance is asserted. Only these two fully independently verified tasks are selected;7code tasks and all others remain untouched. Original native producer issue scope stays exactly[924].",
+            "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/362#issuecomment-6211445153; https://github.com/MojoTheApe/adopy-campaing-launcher/pull/661#issuecomment-6211449952"
+          },
+          "scope": "c105134cef4f048a225bcdfe7523cc1973ff91582837c865282b242a3c799e28",
+          "accepted_scope": "ed9944665e932586b07111f947f6810c27c29da35982ff2ddb44eb3bc5002e97",
+          "reviewer": "/root/audit_legacy128_a",
+          "implementer": "/root",
+          "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/362#issuecomment-6211445153; https://github.com/MojoTheApe/adopy-campaing-launcher/pull/661#issuecomment-6211449952",
+          "migration_sha256": "82609ec583389d5f2427cc4b74bb7b8cbb65c40e92002ae3f3b8fc655a493c93",
+          "native": {
+            "request": {
+              "eligible": true,
+              "schema_version": 1,
+              "repository": "MojoTheApe/adopy-campaing-launcher",
+              "batch_id": "3bc5972db83a4bbeaf5f66bc508adadd",
+              "issues": [
+                924
+              ],
+              "main_pr": 940,
+              "merge_sha": "7d1ad46c14ddd2e08e507e33248af50af42df026",
+              "tree_sha": "da457106740ac89e01ab07052825f8a5cd0b3a97",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "target": "ACL stable Windows installer and update channel",
+              "workflow": ".github/workflows/complete-delivery.yml",
+              "job": "Verify published Windows package",
+              "requested_at": "2026-10-15T11:47:43+00:00",
+              "authorization_sha256": "3b42fcf36103d52dbdc92b0193c533f2475fe3c17730b71798a572ae6fab3ffd",
+              "ci_run": 38813359345
+            },
+            "run": 38817558595,
+            "job": 116709133359,
+            "receipt_sha256": "d883d8591c71e27de9149d8df323e64b2a6d59272cb93011bbd13cdfc4788043",
+            "report_sha256": "0a38e684838a0e1978761fd25200da078f003ff37a146082ec0757faf6929cd7"
+          },
+          "release": {
+            "id": 414340904,
+            "assets": [
+              {
+                "id": 645391419,
+                "name": "Adopy-Campaign-Launcher-Setup-2026-10-15.940.exe",
+                "size": 94152447,
+                "digest": "sha256:8e317993c5dd4131929cfaf9ac20fd7ae0a4f48ebd58912b66f6254a3d034286"
+              },
+              {
+                "id": 645391416,
+                "name": "release.json",
+                "size": 10649,
+                "digest": "sha256:95134b86501ca2e34b24f663e9cd23195e4d866dd76d8d194f5a31717b7d2ffa"
+              },
+              {
+                "id": 645391407,
+                "name": "release.json.sig",
+                "size": 177,
+                "digest": "sha256:6804067b3757915e277737e8738fbb8f4160180305395dce357b12038aacb26a"
+              }
+            ]
+          }
+        }
       },
       "649": {
         "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
