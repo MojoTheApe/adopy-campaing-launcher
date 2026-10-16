@@ -41631,6 +41631,18 @@
         "state": "implementing",
         "started_at": "2026-10-16T14:33:01+00:00",
         "from_status": "status:todo"
+      },
+      "29": {
+        "actor": "Worker-W123C",
+        "session": "w123c-20261016",
+        "coordinator": "Coordinator-C1016A",
+        "branch": "codex/acl-123-disabled-next-step",
+        "worktree": "C:\\acl-123-c",
+        "id": "0de60cd03b6a4ccb8f5ca7e0ef566136",
+        "issue": 29,
+        "state": "implementing",
+        "started_at": "2026-10-16T14:33:23+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -47678,6 +47690,17 @@
         "state": "implementing",
         "worker": "Worker-W106C",
         "coordinator": "Coordinator-C1016A"
+      },
+      "29": {
+        "implementers": [
+          {
+            "actor": "Worker-W123C",
+            "session": "w123c-20261016"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W123C",
+        "coordinator": "Coordinator-C1016A"
       }
     },
     "actors": {
@@ -49479,6 +49502,10 @@
       },
       "Worker-W106C": {
         "session": "w106c-20261016",
+        "role": "Worker"
+      },
+      "Worker-W123C": {
+        "session": "w123c-20261016",
         "role": "Worker"
       }
     },
@@ -77066,6 +77093,13 @@
         "issue": 19,
         "claim": "e5cc3a52d7a34527b7097b74a81ca119",
         "actor": "Worker-W106C"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-16T14:33:23+00:00",
+        "issue": 29,
+        "claim": "0de60cd03b6a4ccb8f5ca7e0ef566136",
+        "actor": "Worker-W123C"
       }
     ],
     "policy": {
