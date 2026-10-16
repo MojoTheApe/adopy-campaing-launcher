@@ -46875,7 +46875,7 @@
             "session": "wrg1902-20261015"
           }
         ],
-        "state": "approved",
+        "state": "returning_approval",
         "worker": "Worker-RG1902",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -46896,12 +46896,18 @@
         "queued_at": "2026-10-15T10:36:11+00:00",
         "review_report": "# Return for a main refresh\n\nMain moved to 3ee7c6d9 (batch with ACL-1819, 1799, 1814; promotion PR 928). The source approval is stale against it. Required: merge current main into the branch (merge, no rebase; a trial merge is clean), re-run the affected tests, hand off again for a delta review. No scope change.",
         "return_operation": {
-          "id": "396f1b2fdbad4b79a91950b1be6afb7e",
+          "id": "8185d38cb4834bfcae7f66f91bf7c63f",
           "actor": "Coordinator-M1011A",
           "session": "coord-m1011a-20261015",
-          "report": "# Return for a main refresh\n\nMain moved to 3ee7c6d9 (batch with ACL-1819, 1799, 1814; promotion PR 928). The source approval is stale against it. Required: merge current main into the branch (merge, no rebase; a trial merge is clean), re-run the affected tests, hand off again for a delta review. No scope change."
+          "report": "Main moved to af0ade29 (ACL-1924 batch + ACL-1923 no-stage activation). The earlier approval used main 3ee7c6d9 and is no longer current under the new policy. Return to author for a main merge (CHANGELOG-only conflict), then fresh independent delta approval. Content unchanged."
         },
-        "reviewer": "Reviewer-RV1015Q"
+        "reviewer": "Reviewer-RV1015Q",
+        "return": {
+          "id": "8185d38cb4834bfcae7f66f91bf7c63f",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "report": "Main moved to af0ade29 (ACL-1924 batch + ACL-1923 no-stage activation). The earlier approval used main 3ee7c6d9 and is no longer current under the new policy. Return to author for a main merge (CHANGELOG-only conflict), then fresh independent delta approval. Content unchanged."
+        }
       },
       "903": {
         "implementers": [
