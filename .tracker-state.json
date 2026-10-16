@@ -41595,20 +41595,6 @@
   },
   "execution": {
     "claims": {
-      "872": {
-        "actor": "Worker-W1872C",
-        "session": "w1872c-20261016",
-        "coordinator": "Coordinator-C1016A",
-        "branch": "work/acl-1872-isolated-meta-setup",
-        "worktree": "C:\\acl-1872-r2",
-        "id": "ed7640569b8849548a5be1357f87a5c2",
-        "issue": 872,
-        "state": "handoff",
-        "started_at": "2026-10-16T10:26:31+00:00",
-        "from_status": "status:todo",
-        "pr": 873,
-        "report": "ACL-1872 refresh onto main af0ade29. Merged origin/main into work/acl-1872-isolated-meta-setup (merge commit 3033cd66, no conflicts, no code changes). Local tests: tests/test_meta_connections.py, test_meta_connections_ui.py, test_meta_connections_windows.py = 54 passed; import smoke of src.web.app, config.protected_secrets, src.web.meta_connections, src.fb_ads_rpa.run_telemetry OK. PR #873 CI: all linux (3.11/3.13), windows, installer build checks passed; tracker-link failed only because task was still implementing."
-      },
       "853": {
         "actor": "Worker-W1853C",
         "session": "w1853c-20261016",
@@ -46606,25 +46592,25 @@
             "session": "w1872c-20261016"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1872C",
         "coordinator": "Coordinator-C1016A",
         "handoff": {
-          "actor": "Worker-T1872A",
-          "session": "t1872a-20261015",
-          "coordinator": "Coordinator-M1011A",
+          "actor": "Worker-W1872C",
+          "session": "w1872c-20261016",
+          "coordinator": "Coordinator-C1016A",
           "branch": "work/acl-1872-isolated-meta-setup",
-          "worktree": "C:\\acl-1872",
-          "id": "4356be6a85ae44d781e577d3badf0e7e",
+          "worktree": "C:\\acl-1872-r2",
+          "id": "ed7640569b8849548a5be1357f87a5c2",
           "issue": 872,
           "state": "handoff",
-          "started_at": "2026-10-15T06:24:37+00:00",
+          "started_at": "2026-10-16T10:26:31+00:00",
           "from_status": "status:todo",
           "pr": 873,
-          "report": "# ACL-1872 takeover handoff \u2014 current main merged\n\nActual Worker-T1872A / t1872a-20261015; Coordinator-M1011A.\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/873\nBranch/worktree: work/acl-1872-isolated-meta-setup / C:\\acl-1872.\nHead: 28a285f8 (normal merge of current main 080df2d8 into 7c6907f8).\n\n## Why the takeover\n\nPrevious Worker-IS1013 / isolated_app_sol_20261013 (Codex, Coordinator-CR1012)\nstopped: its Codex account hit the usage limit at 2026-10-13T21:43Z (credits 0,\nnext reset 2026-10-20). There has been no Codex session activity since\n2026-10-14T01:00Z. Its worktree was clean at PR head 7c6907f8. Ownership was\ntransferred with `execution takeover --stopped`; nothing was hand-edited.\n\n## What the previous worker left\n\n- Original scope and every acceptance criterion are unchanged (see issue body and\n  the 2026-10-13 author handoff comment).\n- The independent review-return fix (1b5459a0, \"Validate retirement metadata\n  before cleanup\") was committed, then current main of that time (7cee2857) was\n  merged (7c6907f8). Hosted product CI and installer CI on 7c6907f8 were green;\n  only tracker-link failed, as expected before handoff.\n\n## What I did\n\n- Merged current main 080df2d8 normally. No conflicts and no product-code changes.\n- Affected local tests (Windows, Python 3.13): 104 passed \u2014\n  test_meta_connections, test_meta_connections_ui, test_meta_connections_windows,\n  test_config_locations, test_accounts_tab_connects_the_same_way,\n  test_connect_account_in_empty_country, test_multilogin_is_connected_in_the_dashboard.\n- Hosted CI on 28a285f8: all product (Linux 3.11/3.13 shards, Windows 3.13, ACL verification), process, descriptor and installer (build/install/repair/uninstall, installer verification) checks PASS; only tracker-link failed, as expected before this handoff.\n\nNo live Meta / Multilogin call, credential or installer was used. The author\ndoes not self-approve, merge or integrate. An independent current-head review of\nthe full scope is still required; the earlier review-return points (retirement\nmetadata validation) should be re-verified on this head."
+          "report": "ACL-1872 refresh onto main af0ade29. Merged origin/main into work/acl-1872-isolated-meta-setup (merge commit 3033cd66, no conflicts, no code changes). Local tests: tests/test_meta_connections.py, test_meta_connections_ui.py, test_meta_connections_windows.py = 54 passed; import smoke of src.web.app, config.protected_secrets, src.web.meta_connections, src.fb_ads_rpa.run_telemetry OK. PR #873 CI: all linux (3.11/3.13), windows, installer build checks passed; tracker-link failed only because task was still implementing."
         },
         "pr": 873,
-        "queued_at": "2026-10-15T06:48:24+00:00",
+        "queued_at": "2026-10-16T11:02:01+00:00",
         "return_operation": {
           "id": "91b9cdb7a26a463a8f1bebb1297c4b0e",
           "actor": "Coordinator-M1011A",
@@ -52030,7 +52016,8 @@
       309,
       379,
       356,
-      71
+      71,
+      872
     ],
     "review": null,
     "history": [
@@ -76359,6 +76346,13 @@
             "approved_at": "2026-10-16T10:59:31+00:00"
           }
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-16T11:02:01+00:00",
+        "issue": 872,
+        "pr": 873,
+        "actor": "Worker-W1872C"
       }
     ],
     "policy": {
