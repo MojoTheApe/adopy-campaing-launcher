@@ -46932,7 +46932,7 @@
             "session": "rf1016w-20261016"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-RF1016W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -76295,6 +76295,68 @@
             "approved_at": "2026-10-16T10:56:27+00:00"
           }
         }
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-16T11:00:19+00:00",
+        "issue": 902,
+        "pr": 904,
+        "review": {
+          "id": "f863723e5f464118b13efa2fb54a12ed",
+          "pr": 904,
+          "issues": [
+            902
+          ],
+          "actor": "Reviewer-DV1016C",
+          "session": "dv1016c-904",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-16T10:39:49+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 902,
+            "pr": 904,
+            "branch": "work/acl-1902-campaign-name-suffix",
+            "head_sha": "971bb3bf77088937eb5dee632c002bbb1ebe80c3",
+            "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+            "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "5ea254204ad12b6db316af984425614260f436776360cc83218fbe5157c7b05d",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-DV1016C",
+              "review_session": "dv1016c-904",
+              "execution_lane": "f863723e5f464118b13efa2fb54a12ed",
+              "implementer": "Worker-RF1016W",
+              "head_sha": "971bb3bf77088937eb5dee632c002bbb1ebe80c3",
+              "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+              "tree_sha": "24b80b8b0767bf07497b733f4ce45ec3a96f667b",
+              "report": "Delta re-review of merge 971bb3bf (parents 3c5007af previous approved head + 6743292c new ACL-1899 head). Head contains work/main af0ade29. remerge-diff shows only docs/system/CHANGELOG.md resolved, keeping both sides (ACL-1924 entry and ACL-1902 entry, nothing lost or duplicated). Non-CHANGELOG diff 3c5007af..971bb3bf is identical (same 39 files, same content, only hunk offsets differ) to main 3ee7c6d9..af0ade29; the CHANGELOG delta is the ACL-1924 entry plus 899's CHANGELOG-only commit eb4f87d6 wording change. No extra code. Tests: test_acl1902_name_suffix, test_acl1761_existing_check, test_acl1761_api_create: 153 passed. gh pr checks 904 all green (linux 1/2/3, windows, tracker-link, process instructions, installer jobs; build jobs skipped). No live checks claimed.",
+              "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                902
+              ],
+              "recorded_at": "2026-10-16T10:58:29+00:00",
+              "issue_scopes": {
+                "902": "5ea254204ad12b6db316af984425614260f436776360cc83218fbe5157c7b05d"
+              }
+            },
+            "lane": {
+              "id": "f863723e5f464118b13efa2fb54a12ed",
+              "pr": 904,
+              "issues": [
+                902
+              ],
+              "actor": "Reviewer-DV1016C",
+              "session": "dv1016c-904",
+              "coordinator": "Coordinator-M1011A",
+              "started_at": "2026-10-16T10:39:49+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-16T10:59:31+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -77834,6 +77896,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-16T10:56:27+00:00"
+      },
+      "902": {
+        "issue": 902,
+        "pr": 904,
+        "branch": "work/acl-1902-campaign-name-suffix",
+        "head_sha": "971bb3bf77088937eb5dee632c002bbb1ebe80c3",
+        "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+        "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "5ea254204ad12b6db316af984425614260f436776360cc83218fbe5157c7b05d",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-DV1016C",
+          "review_session": "dv1016c-904",
+          "execution_lane": "f863723e5f464118b13efa2fb54a12ed",
+          "implementer": "Worker-RF1016W",
+          "head_sha": "971bb3bf77088937eb5dee632c002bbb1ebe80c3",
+          "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+          "tree_sha": "24b80b8b0767bf07497b733f4ce45ec3a96f667b",
+          "report": "Delta re-review of merge 971bb3bf (parents 3c5007af previous approved head + 6743292c new ACL-1899 head). Head contains work/main af0ade29. remerge-diff shows only docs/system/CHANGELOG.md resolved, keeping both sides (ACL-1924 entry and ACL-1902 entry, nothing lost or duplicated). Non-CHANGELOG diff 3c5007af..971bb3bf is identical (same 39 files, same content, only hunk offsets differ) to main 3ee7c6d9..af0ade29; the CHANGELOG delta is the ACL-1924 entry plus 899's CHANGELOG-only commit eb4f87d6 wording change. No extra code. Tests: test_acl1902_name_suffix, test_acl1761_existing_check, test_acl1761_api_create: 153 passed. gh pr checks 904 all green (linux 1/2/3, windows, tracker-link, process instructions, installer jobs; build jobs skipped). No live checks claimed.",
+          "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            902
+          ],
+          "recorded_at": "2026-10-16T10:58:29+00:00",
+          "issue_scopes": {
+            "902": "5ea254204ad12b6db316af984425614260f436776360cc83218fbe5157c7b05d"
+          }
+        },
+        "lane": {
+          "id": "f863723e5f464118b13efa2fb54a12ed",
+          "pr": 904,
+          "issues": [
+            902
+          ],
+          "actor": "Reviewer-DV1016C",
+          "session": "dv1016c-904",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-16T10:39:49+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-16T10:59:31+00:00"
       }
     },
     "batches": {
@@ -80596,62 +80702,6 @@
       "ineligible": {}
     },
     "source_reviews": {
-      "904": {
-        "id": "f863723e5f464118b13efa2fb54a12ed",
-        "pr": 904,
-        "issues": [
-          902
-        ],
-        "actor": "Reviewer-DV1016C",
-        "session": "dv1016c-904",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-16T10:39:49+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 902,
-          "pr": 904,
-          "branch": "work/acl-1902-campaign-name-suffix",
-          "head_sha": "971bb3bf77088937eb5dee632c002bbb1ebe80c3",
-          "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
-          "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "5ea254204ad12b6db316af984425614260f436776360cc83218fbe5157c7b05d",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-DV1016C",
-            "review_session": "dv1016c-904",
-            "execution_lane": "f863723e5f464118b13efa2fb54a12ed",
-            "implementer": "Worker-RF1016W",
-            "head_sha": "971bb3bf77088937eb5dee632c002bbb1ebe80c3",
-            "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
-            "tree_sha": "24b80b8b0767bf07497b733f4ce45ec3a96f667b",
-            "report": "Delta re-review of merge 971bb3bf (parents 3c5007af previous approved head + 6743292c new ACL-1899 head). Head contains work/main af0ade29. remerge-diff shows only docs/system/CHANGELOG.md resolved, keeping both sides (ACL-1924 entry and ACL-1902 entry, nothing lost or duplicated). Non-CHANGELOG diff 3c5007af..971bb3bf is identical (same 39 files, same content, only hunk offsets differ) to main 3ee7c6d9..af0ade29; the CHANGELOG delta is the ACL-1924 entry plus 899's CHANGELOG-only commit eb4f87d6 wording change. No extra code. Tests: test_acl1902_name_suffix, test_acl1761_existing_check, test_acl1761_api_create: 153 passed. gh pr checks 904 all green (linux 1/2/3, windows, tracker-link, process instructions, installer jobs; build jobs skipped). No live checks claimed.",
-            "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              902
-            ],
-            "recorded_at": "2026-10-16T10:58:29+00:00",
-            "issue_scopes": {
-              "902": "5ea254204ad12b6db316af984425614260f436776360cc83218fbe5157c7b05d"
-            }
-          },
-          "lane": {
-            "id": "f863723e5f464118b13efa2fb54a12ed",
-            "pr": 904,
-            "issues": [
-              902
-            ],
-            "actor": "Reviewer-DV1016C",
-            "session": "dv1016c-904",
-            "coordinator": "Coordinator-M1011A",
-            "started_at": "2026-10-16T10:39:49+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-16T10:59:31+00:00"
-        }
-      },
       "887": {
         "id": "d64d081c4f0843ffa5434b5457a05221",
         "pr": 887,
