@@ -46204,7 +46204,7 @@
             "session": "publish-buttons-20261013-Q8V274"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-Q8V274",
         "coordinator": "Coordinator-D7K413",
         "handoff": {
@@ -46223,7 +46223,8 @@
         },
         "pr": 850,
         "queued_at": "2026-10-13T08:15:52+00:00",
-        "review_report": "ACL-1845 / PR850 review return for user-approved design update\n\nActual non-implementing reviewer: Reviewer-D1845, session design_review_1845_20261013.\nThe user selected the single-primary-action design and requested implementation after inspecting the expanded-builder mockup. PR850 head 7b597f43538d1a3a7f26c846e21cc6edb020508c implements the earlier publication styling, but not this selected composition.\n\nRequired changes: one primary bulk-publication action tied to campaign checkboxes; explicit count of campaigns actually submitted, excluding already locked/building campaigns; readable selection scope; secondary individual-publication action; subtle blue fill and distinguishable border for disabled bulk publication. Preserve no-checkbox/all-checkbox publication semantics, error gates, confirmation, queues and API PAUSED-versus-RPA-draft target labels. Validate docked and genuine expanded-builder CSS compatibility without claiming an upstream runtime installation.\n\nReturn this source to its actual author for a fresh implementation claim, required checks, handoff and new independent review. This is not approval, integration or delivery evidence."
+        "review_report": "ACL-1845 / PR850 review return for user-approved design update\n\nActual non-implementing reviewer: Reviewer-D1845, session design_review_1845_20261013.\nThe user selected the single-primary-action design and requested implementation after inspecting the expanded-builder mockup. PR850 head 7b597f43538d1a3a7f26c846e21cc6edb020508c implements the earlier publication styling, but not this selected composition.\n\nRequired changes: one primary bulk-publication action tied to campaign checkboxes; explicit count of campaigns actually submitted, excluding already locked/building campaigns; readable selection scope; secondary individual-publication action; subtle blue fill and distinguishable border for disabled bulk publication. Preserve no-checkbox/all-checkbox publication semantics, error gates, confirmation, queues and API PAUSED-versus-RPA-draft target labels. Validate docked and genuine expanded-builder CSS compatibility without claiming an upstream runtime installation.\n\nReturn this source to its actual author for a fresh implementation claim, required checks, handoff and new independent review. This is not approval, integration or delivery evidence.",
+        "reviewer": "Reviewer-RV1015F"
       },
       "844": {
         "implementers": [
@@ -51863,7 +51864,6 @@
       767,
       771,
       768,
-      845,
       903,
       907,
       891,
@@ -75638,6 +75638,13 @@
         "issue": 827,
         "claim": "270a5ecb8ced42858c9c35ea8f09897d",
         "actor": "Worker-RS1827"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-16T10:09:52+00:00",
+        "pr": 850,
+        "lane": "f42a7256d63e4770bc1fd76ba5bc5d4f",
+        "actor": "Reviewer-RV1015F"
       }
     ],
     "policy": {
@@ -80026,7 +80033,20 @@
       "started_at": "2026-10-15T11:47:02+00:00",
       "ineligible": {}
     },
-    "source_reviews": {},
+    "source_reviews": {
+      "850": {
+        "id": "f42a7256d63e4770bc1fd76ba5bc5d4f",
+        "pr": 850,
+        "issues": [
+          845
+        ],
+        "actor": "Reviewer-RV1015F",
+        "session": "rv1015f-843",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-16T10:09:52+00:00",
+        "state": "reviewing"
+      }
+    },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
   },
   "maintenance_history": [
