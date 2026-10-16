@@ -1,5 +1,17 @@
 # System history
 
+## ACL-1959 — A dropped MLX stop no longer reports a false 404 — 2026-10-16
+
+- `MultiloginLauncher.stop_profile`: if the real stop address
+  (`v1/profile/stop/p/{id}`) fails at the transport level, it is asked once more
+  instead of falling through to the legacy addresses. "Already stopped" on the retry
+  counts as stopped.
+- If the retry also fails, the error names that address and the exception. Before,
+  the reported error was the last legacy 404, which made the failure look like a
+  wrong slot or URL (TEST9095, 16.10: 9403A, Doc124, B90; windows left open after a read).
+- A 404 on the real address still walks the legacy tail. Callers are unchanged:
+  `allow_kill=False` still closes nothing beyond the API.
+
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
 Add a durable authorized release workflow using the maintained installer publisher

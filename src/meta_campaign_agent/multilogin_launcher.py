@@ -206,13 +206,32 @@ class MultiloginLauncher:
             f"{self.config.launcher_base_v1}/profile/stop",
         ]
 
+        # ACL-1959: сбой связи на настоящем адресе — не «маршрута нет». Раньше
+        # исключение молча вело в хвост старых адресов, их 404 затирал
+        # настоящую ошибку, и в лог шло ложное «HTTP 404: 404 page not found»
+        # (TEST9095, 16.10: 9403A, Doc124, B90 — первый вызов падал через
+        # 35-60 с, окно оставалось открытым). Теперь: один повтор того же
+        # адреса (остановка идемпотентна, «already stopped» = готово), а не
+        # ответил и он — ошибка с адресом и типом исключения, без хвоста.
         last_err: str = ""
-        for url in candidates:
+        for index, url in enumerate(candidates):
             params = {"profile_id": profile_id} if url.endswith("/profile/stop") else {}
-            try:
-                r = requests.get(url, headers=self._headers(), params=params, timeout=self.timeout)
-            except Exception as exc:
-                last_err = str(exc)
+            tries = 2 if index == 0 else 1
+            r = None
+            for attempt in range(tries):
+                try:
+                    r = requests.get(url, headers=self._headers(), params=params, timeout=self.timeout)
+                    break
+                except Exception as exc:
+                    last_err = f"{type(exc).__name__}: {exc}"
+                    if index == 0:
+                        log.warning("MLX stop at %s did not answer (%s)%s",
+                                    url.split("/api/", 1)[-1], last_err,
+                                    "; asking once more" if attempt + 1 < tries else "")
+            if r is None:
+                if index == 0:
+                    short = url.split("/api/", 1)[-1]
+                    raise MultiloginLauncherError(f"Stop profile failed ({short}): {last_err}")
                 continue
             if r.status_code < 400:
                 return
