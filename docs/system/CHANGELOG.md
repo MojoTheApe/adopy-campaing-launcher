@@ -3515,6 +3515,28 @@ from the tooltip inside a row with a switch when no name links exist, and, witho
 `level=` hints, takes the level from the name column heading (`Campaign`, `Ad set`,
 `Ad`). An unknown heading still refuses the list.
 
+## Recover one detached Graph browser session without replay — ACL-1836
+
+- The 2026-10-12 incident had already created a PAUSED campaign and ad set when an
+  upload became uncertain. Readback then escaped with `Session with given id not
+  found`, bypassing the pending creator's partial-result handling. The original
+  reason for browser detachment remains unknown.
+- `PageTab` now identifies session loss without retrying the command. Only the
+  local helper boundary can reattach once, to the exact owned target through the
+  existing browser socket. The target and newly attached main frame must retain
+  the expected Ads Manager page/account. The isolated helper is re-established;
+  tokens stay in-page and uncertain calls are never replayed.
+- Lost targets, identity changes, unavailable transport and repeat detachment
+  produce a sticky typed stop. Login/checkpoint remain distinct stops; missing
+  tokens after recovery do not trigger a reload. Read clients retain the stop.
+- Review found that warm mode changes create a new helper without navigating.
+  The tab now retains successful explicit navigation intent and its recovery
+  guard for replacement helpers. Failed navigation cannot rebind the expected
+  account, and the current page URL is never adopted as trusted identity.
+- An anonymized transport fixture and offline regressions cover setup, later
+  reconciliation, non-replay, identity, liveness and interruption. No live Meta
+  calls, runtime configuration changes, package delivery or rollout are claimed.
+
 ## Audience field confirmation — ACL-1250 / PR #247
 
 Merged into master on 2026-09-21 after independent review, full Windows tests and

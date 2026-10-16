@@ -40,7 +40,8 @@ from typing import Any, Callable
 
 from src.fb_ads_rpa.tab_watchdog import CdpError, RawCdp
 
-__all__ = ["CdpError", "CdpTimeout", "PageError", "StaleContextError", "PageTab"]
+__all__ = ["CdpError", "CdpTimeout", "PageError", "StaleContextError",
+           "SessionLostError", "PageIdentityError", "PageTab"]
 
 #: Срок одного служебного вызова CDP (создать вкладку, подключиться, …).
 CALL_S = 10.0
@@ -69,6 +70,18 @@ class StaleContextError(CdpError):
     """Отдельный мир исчез (документ сменился): создать заново и повторить."""
 
 
+class SessionLostError(CdpError):
+    """The owned target's CDP session detached; the sent call is never replayed."""
+
+
+class PageIdentityError(CdpError):
+    """The owned target no longer shows the expected Ads Manager account."""
+
+    def __init__(self, kind: str = "other"):
+        self.kind = kind
+        super().__init__("the owned tab no longer shows the expected Ads Manager account")
+
+
 def _call(cdp: Any, method: str, params: dict | None = None, *, session_id: str = "",
           timeout: float = CALL_S) -> dict:
     try:
@@ -95,6 +108,8 @@ class PageTab:
         self.target_id = target_id
         self.session_id = session_id
         self.closed = False
+        self._recovery_attempted = False
+        self._navigation_url = ""
         #: Удалось ли снять троттлинг фона: {"focus": bool, "lifecycle": bool}.
         self.throttle: dict = {}
 
@@ -183,10 +198,74 @@ class PageTab:
             return ""
 
     # -- вызовы во вкладку
+    @property
+    def navigation_url(self) -> str:
+        """Last successful explicit navigation intent, never a discovered URL.
+
+        A replacement Graph helper may inherit this account binding on our tab.
+        Recovery still verifies the actual target and frame against it.
+        """
+        return self._navigation_url
+
+    @property
+    def recovery_attempted(self) -> bool:
+        """Keep strict identity checks across helper replacements after recovery."""
+        return self._recovery_attempted
+
     def call(self, method: str, params: dict | None = None, *, timeout: float = CALL_S) -> dict:
         if self.closed:
             raise CdpError("the tab is closed")
-        return _call(self._cdp, method, params, session_id=self.session_id, timeout=timeout)
+        try:
+            return _call(self._cdp, method, params, session_id=self.session_id, timeout=timeout)
+        except CdpError as exc:
+            if "session with given id not found" in str(exc).lower():
+                raise SessionLostError("the owned tab's browser session was detached") from exc
+            raise
+
+    @staticmethod
+    def _check_url(actual: str, expected: str) -> None:
+        """Check location only; never navigate to repair a changed identity."""
+        got, wanted = urllib.parse.urlsplit(actual), urllib.parse.urlsplit(expected)
+        path = got.path.lower()
+        if path.startswith(("/checkpoint", "/two_step_verification", "/two_factor")):
+            raise PageIdentityError("checkpoint")
+        if path.startswith(("/login", "/recover")):
+            raise PageIdentityError("login")
+        account = urllib.parse.parse_qs(wanted.query).get("act")
+        if (not expected or wanted.scheme != "https" or
+                wanted.netloc != "adsmanager.facebook.com" or
+                not account or len(account) != 1 or not account[0].isdigit() or
+                (got.scheme, got.netloc, got.path) != (wanted.scheme, wanted.netloc, wanted.path) or
+                urllib.parse.parse_qs(got.query).get("act") != account):
+            raise PageIdentityError()
+
+    def verify_url(self, expected_url: str) -> None:
+        """Check the attached main frame, not a stale target-list snapshot."""
+        frame = (self.call("Page.getFrameTree").get("frameTree") or {}).get("frame") or {}
+        self._check_url(str(frame.get("url") or ""), expected_url)
+
+    def recover_session(self, expected_url: str) -> None:
+        """One reattach to our exact target on the existing browser connection.
+
+        Only a caller that has not sent a Graph call may retry its local work.
+        No endpoint discovery, replacement tab, reload, or original-call replay.
+        """
+        if self.closed or self._recovery_attempted:
+            raise CdpError("the owned browser session cannot be recovered again")
+        self._recovery_attempted = True
+        self._check_url(expected_url, expected_url)
+        info = _call(self._cdp, "Target.getTargetInfo", {"targetId": self.target_id}).get("targetInfo") or {}
+        if info.get("targetId") != self.target_id or info.get("type") != "page" or info.get("subtype"):
+            raise CdpError("the owned browser target is unavailable")
+        self._check_url(str(info.get("url") or ""), expected_url)
+        attached = _call(self._cdp, "Target.attachToTarget", {"targetId": self.target_id, "flatten": True})
+        session_id = str(attached.get("sessionId") or "")
+        if not session_id or session_id == self.session_id:
+            raise CdpError("the browser did not return a new owned-tab session")
+        self.session_id = session_id
+        self.call("Page.enable")
+        self.verify_url(expected_url)
+        self.throttle = self.keep_active()
 
     def keep_active(self) -> dict:
         """Снять троттлинг фона на НАШЕЙ сессии, не показывая окно (как робот, ACL-1402)."""
@@ -194,14 +273,14 @@ class PageTab:
         try:
             self.call("Emulation.setFocusEmulationEnabled", {"enabled": True})
             status["focus"] = True
-        except CdpTimeout:
+        except (CdpTimeout, SessionLostError):
             raise
         except Exception:
             pass
         try:
             self.call("Page.setWebLifecycleState", {"state": "active"})
             status["lifecycle"] = True
-        except CdpTimeout:
+        except (CdpTimeout, SessionLostError):
             raise
         except Exception:
             pass
@@ -255,6 +334,7 @@ class PageTab:
         got = self.call("Page.navigate", {"url": url}, timeout=timeout)
         if got.get("errorText"):
             raise PageError(f"navigation failed: {got['errorText']}")
+        self._navigation_url = url
 
     def reload(self, *, timeout: float = 30.0) -> None:
         self.call("Page.reload", {"ignoreCache": False}, timeout=timeout)

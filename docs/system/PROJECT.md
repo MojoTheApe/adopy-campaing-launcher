@@ -97,6 +97,21 @@ Read [distribution boundaries](../DISTRIBUTION.md), [product/design context](../
 `content_machine`, `jira_agent` and legacy `fb_publish_agent` are not automatically
 part of the ACL runtime; preserve the tested distribution boundary.
 
+## In-profile Graph session recovery
+
+- `src/fb_api`: in-profile Graph transport keeps tokens inside an isolated page
+  world. ACL-1836 permits one recovery of a detached CDP session on the same owned
+  target and existing browser connection. Target and main-frame location must
+  match the navigated Ads Manager account; subsequent reads recheck that location.
+  The owned tab retains the successful explicit navigation intent and recovery
+  guard across replacement helpers, including warm read/write mode changes.
+  A helper never learns its expected account from the current page URL.
+  Local helper setup can retry, but a sent Graph request is never replayed.
+  Missing/changed targets, repeat detachment and unavailable transport stop with
+  `GraphStop`, so creator reconciliation can retain already-created object details.
+  Recovery does not open a replacement tab, restart the profile or reload for a
+  missing token. Pending creator source integration and live delivery remain separate.
+
 ## Delivery state at adoption
 
 PR #245 (installer) and #246 (updater) are merged at the recorded source baseline.
