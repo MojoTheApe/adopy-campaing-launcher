@@ -41704,20 +41704,6 @@
         "state": "implementing",
         "started_at": "2026-10-16T16:08:01+00:00",
         "from_status": "status:todo"
-      },
-      "401": {
-        "actor": "Worker-W1401M",
-        "session": "acl-1401-run1",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1401-mlx-not-running",
-        "worktree": "C:\\acl-1401",
-        "id": "7463c83543a142b5a6346c13c672f5a0",
-        "issue": 401,
-        "state": "handoff",
-        "started_at": "2026-10-16T20:38:32+00:00",
-        "from_status": "status:todo",
-        "pr": 960,
-        "report": "### Handoff (2026-10-16, Worker-W1401M)\n- PR #960 (`work/acl-1401-mlx-not-running`), commit 5eaa7a47, targets main.\n- Launcher refused / connect-timeout at profile start \u2192 `ProfileStop(multilogin_not_running)` in `RpaPublisher._ensure_browser` with the English message \"Multilogin is not running on this computer - start the Multilogin app, then press Publish again\". No DirectCDP, no plain browser, no repeated start.\n- Sentry: goes through the existing attach-stop path (`report_campaign_stop`, step + account tags, reason kind `mlx-not-running`). Triage map row added (buyer-side stop, ACL-1401). Failure/retry policy and operator GUIDE updated.\n- Checks: new tests/test_publish_stops_when_multilogin_is_not_running.py 12 passed (6 fail against main's rpa_publisher.py); related area 206 passed. Full suite left to CI. No live account used.\n- Remaining: independent review."
       }
     },
     "tasks": {
@@ -47964,9 +47950,25 @@
             "session": "acl-1401-run1"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1401M",
-        "coordinator": "Coordinator-M1011A"
+        "coordinator": "Coordinator-M1011A",
+        "handoff": {
+          "actor": "Worker-W1401M",
+          "session": "acl-1401-run1",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "work/acl-1401-mlx-not-running",
+          "worktree": "C:\\acl-1401",
+          "id": "7463c83543a142b5a6346c13c672f5a0",
+          "issue": 401,
+          "state": "handoff",
+          "started_at": "2026-10-16T20:38:32+00:00",
+          "from_status": "status:todo",
+          "pr": 960,
+          "report": "### Handoff (2026-10-16, Worker-W1401M)\n- PR #960 (`work/acl-1401-mlx-not-running`), commit 5eaa7a47, targets main.\n- Launcher refused / connect-timeout at profile start \u2192 `ProfileStop(multilogin_not_running)` in `RpaPublisher._ensure_browser` with the English message \"Multilogin is not running on this computer - start the Multilogin app, then press Publish again\". No DirectCDP, no plain browser, no repeated start.\n- Sentry: goes through the existing attach-stop path (`report_campaign_stop`, step + account tags, reason kind `mlx-not-running`). Triage map row added (buyer-side stop, ACL-1401). Failure/retry policy and operator GUIDE updated.\n- Checks: new tests/test_publish_stops_when_multilogin_is_not_running.py 12 passed (6 fail against main's rpa_publisher.py); related area 206 passed. Full suite left to CI. No live account used.\n- Remaining: independent review."
+        },
+        "pr": 960,
+        "queued_at": "2026-10-16T20:49:10+00:00"
       },
       "26": {
         "implementers": [],
@@ -52658,7 +52660,8 @@
       165,
       788,
       72,
-      19
+      19,
+      401
     ],
     "review": null,
     "history": [
@@ -77735,6 +77738,13 @@
         "at": "2026-10-16T20:48:22+00:00",
         "issue": 38,
         "reason": "Backlog cleanup 2026-10-16: stale idea (undefined scope, untouched since September, premise predates the Graph API / new builder direction). Restore if it becomes relevant again."
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-16T20:49:10+00:00",
+        "issue": 401,
+        "pr": 960,
+        "actor": "Worker-W1401M"
       }
     ],
     "policy": {
