@@ -41704,6 +41704,18 @@
         "state": "implementing",
         "started_at": "2026-10-16T16:08:01+00:00",
         "from_status": "status:todo"
+      },
+      "401": {
+        "actor": "Worker-W1401M",
+        "session": "acl-1401-run1",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1401-mlx-not-running",
+        "worktree": "C:\\acl-1401",
+        "id": "7463c83543a142b5a6346c13c672f5a0",
+        "issue": 401,
+        "state": "implementing",
+        "started_at": "2026-10-16T20:38:32+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -47942,6 +47954,17 @@
         "state": "implementing",
         "worker": "Worker-S1016C",
         "coordinator": "Coordinator-M1011A"
+      },
+      "401": {
+        "implementers": [
+          {
+            "actor": "Worker-W1401M",
+            "session": "acl-1401-run1"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W1401M",
+        "coordinator": "Coordinator-M1011A"
       }
     },
     "actors": {
@@ -49783,6 +49806,10 @@
       },
       "Worker-S1016C": {
         "session": "stop404",
+        "role": "Worker"
+      },
+      "Worker-W1401M": {
+        "session": "acl-1401-run1",
         "role": "Worker"
       }
     },
@@ -77537,6 +77564,13 @@
         "issue": 959,
         "claim": "d184991e30bf45f995d5798b2c866d7c",
         "actor": "Worker-S1016C"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-16T20:38:32+00:00",
+        "issue": 401,
+        "claim": "7463c83543a142b5a6346c13c672f5a0",
+        "actor": "Worker-W1401M"
       }
     ],
     "policy": {
