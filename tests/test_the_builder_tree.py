@@ -92,7 +92,7 @@ def test_a_removed_campaign_is_asked_about_first():
     """Собранная наполовину кампания — работа; вопрос должен называть, какую
     именно убирают, иначе соглашаешься вслепую."""
     block = _tree_block()
-    assert "window.confirm(" in block
+    assert "aclConfirm(" in block
     assert "camp.name" in block[block.index("act === 'drop'"):][:400], (
         "в вопросе не названо, что удаляют"
     )
