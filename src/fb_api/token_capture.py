@@ -211,6 +211,23 @@ _HELPER_JS = r"""
     return true;
   }
 
+  // ACL-1896: зеркало write_policy._check_instagram — одно числовое поле, прямой ключ object_story_spec.
+  function isObj(v) { return v !== null && typeof v === 'object' && !Array.isArray(v); }
+  function IGK() { return (WRITE.instagram || {}).key || 'instagram_user_id'; }
+  function countKey(v, key) {
+    if (Array.isArray(v)) return v.reduce((n, x) => n + countKey(x, key), 0);
+    if (isObj(v)) return Object.keys(v).reduce((n, k) => n + (k === key ? 1 : 0) + countKey(v[k], key), 0);
+    return 0;
+  }
+  function instagramOk(edge, checked) {
+    const key = IGK();
+    const seen = countKey(checked, key);
+    if (!seen) return true;
+    const story = edge === 'adcreatives' ? checked.object_story_spec : null;
+    if (seen !== 1 || !isObj(story) || !(key in story)) return false;
+    return typeof story[key] === 'string' && new RegExp((WRITE.instagram || {}).id_re || '^$').test(story[key]);
+  }
+
   // ACL-1775: единственное место, где разрешён lead_gen_form_id (зеркало
   // write_policy._without_lead_form). Возвращает копию без ключа, null — отказ,
   // исходный объект — формы нет. Ключ в другом месте остаётся и ловится statusOk.
@@ -307,6 +324,7 @@ _HELPER_JS = r"""
       if (ck.length !== 1 || ck[0] !== 'creative_id'
           || (typeof c.creative_id !== 'string' && typeof c.creative_id !== 'number')) return refused('creative');
     }
+    if (!instagramOk(edge, checked)) return refused('instagram');
     const walked = withoutLeadForm(edge, checked, spec.on_ad === true);
     if (walked === null) return refused('lead_form');
     if (!statusOk(walked)) return refused('status');
