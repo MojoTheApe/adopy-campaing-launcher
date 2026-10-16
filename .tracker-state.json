@@ -48016,7 +48016,7 @@
       },
       "541": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       }
     },
     "actors": {
@@ -77653,6 +77653,12 @@
         "at": "2026-10-16T20:44:11+00:00",
         "issue": 696,
         "reason": "Backlog cleanup 2026-10-16: stale; targets the RPA Ads Manager UI path (wizard, classic editor, media library, window scaling), replaced by Graph API creation (ACL-1761). Restore if RPA work resumes."
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-16T20:44:20+00:00",
+        "issue": 541,
+        "reason": "Done: about 85% cut via ACL-1565, ACL-1581 (PR #584), ACL-1582 and ACL-1649 (PR #666). Leftovers (installer build on demand, flaky list, budget alert) get a separate task if needed. Backlog cleanup 2026-10-16."
       }
     ],
     "policy": {
