@@ -41553,20 +41553,6 @@
   },
   "execution": {
     "claims": {
-      "816": {
-        "actor": "Worker-RS1816",
-        "session": "wrs1816-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1816-rules-evaluate",
-        "worktree": "C:\\wk-rs1816",
-        "id": "27b8a02766c045c980d33dfbb7162649",
-        "issue": 816,
-        "state": "handoff",
-        "started_at": "2026-10-16T10:07:22+00:00",
-        "from_status": "status:todo",
-        "pr": 820,
-        "report": "# ACL-1816 refresh handoff (Worker-RS1816)\nHead: 76b5accb on codex/acl-1816-rules-evaluate, merge of origin/main af0ade29 (ACL-1923/1924 no-stage delivery: process docs, workflows, delivery scripts). Merge only, no conflicts, no 1816 code changed since the reviewed 4d2f8edd.\nTests: test_acl1816_rules_evaluate, test_rules_store, test_acl1815_rules_evidence, test_shared_file_locks, test_goals: 220 passed. scripts/acl_scan_secrets.py clean.\nFull suite not run locally."
-      },
       "827": {
         "actor": "Worker-RS1827",
         "session": "wrs1827-20261015",
@@ -45626,7 +45612,7 @@
             "session": "wrs1816-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RS1816",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -45635,16 +45621,16 @@
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1816-rules-evaluate",
           "worktree": "C:\\wk-rs1816",
-          "id": "2549735125ea47cb8fbd1f6fc97a3c22",
+          "id": "27b8a02766c045c980d33dfbb7162649",
           "issue": 816,
           "state": "handoff",
-          "started_at": "2026-10-15T10:14:14+00:00",
+          "started_at": "2026-10-16T10:07:22+00:00",
           "from_status": "status:todo",
           "pr": 820,
-          "report": "# ACL-1816 refresh handoff (Worker-RS1816)\nHead: 4d2f8edd on codex/acl-1816-rules-evaluate (merge of origin/main 3ee7c6d9, merge only, no rebase).\nConflicts: one, src/web/app.py (1816 /rules/evaluations + /rules/evaluate-now routes vs main's 1812 /warm/* routes). Kept both.\nStore API: branch did not touch store.py, so main's 1814 store wins (automatic gate, schema_version, machine_file_lock). Engine now selects rules through list_rules_checked (malformed rules skipped, reported as skipped_malformed in the run summary).\nSafety: Automatic stays impossible (store gate unchanged); no Meta writes; no timers/sleeps/HTTP in rules_runtime/rules_api/gather/engine; evaluation is on demand or daily.\nTests: test_acl1816_rules_evaluate, test_rules_store, test_acl1815_rules_evidence, test_shared_file_locks, test_goals: 220 passed. scripts/acl_scan_secrets.py clean.\nFull suite not run locally; CI not awaited."
+          "report": "# ACL-1816 refresh handoff (Worker-RS1816)\nHead: 76b5accb on codex/acl-1816-rules-evaluate, merge of origin/main af0ade29 (ACL-1923/1924 no-stage delivery: process docs, workflows, delivery scripts). Merge only, no conflicts, no 1816 code changed since the reviewed 4d2f8edd.\nTests: test_acl1816_rules_evaluate, test_rules_store, test_acl1815_rules_evidence, test_shared_file_locks, test_goals: 220 passed. scripts/acl_scan_secrets.py clean.\nFull suite not run locally."
         },
         "pr": 820,
-        "queued_at": "2026-10-15T10:24:38+00:00",
+        "queued_at": "2026-10-16T10:17:10+00:00",
         "review_report": "# Return for a main refresh\n\nMain moved to af0ade29 (ACL-1923/1924: no-stage delivery route, process docs and workflows). Required: merge current main into the branch (merge, no rebase; it merges cleanly), re-run the affected tests, hand off again for fresh review."
       },
       "822": {
@@ -51901,7 +51887,8 @@
       920,
       309,
       379,
-      356
+      356,
+      816
     ],
     "review": null,
     "history": [
@@ -75749,6 +75736,13 @@
         "issue": 356,
         "pr": 942,
         "actor": "Worker-M1356A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-16T10:17:10+00:00",
+        "issue": 816,
+        "pr": 820,
+        "actor": "Worker-RS1816"
       }
     ],
     "policy": {
