@@ -41553,20 +41553,6 @@
   },
   "execution": {
     "claims": {
-      "356": {
-        "actor": "Worker-M1356A",
-        "session": "cf9ad405-1356",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1356-starlette",
-        "worktree": "C:\\acl-1356",
-        "id": "b08a3785c6054e84a4b69df94315f489",
-        "issue": 356,
-        "state": "handoff",
-        "started_at": "2026-10-16T09:56:53+00:00",
-        "from_status": "status:todo",
-        "pr": 942,
-        "report": "ACL-1356 source PR #942 (head c5b2e72c), base main, includes current main.\nDone: fastapi 0.141.1 / starlette 1.7.0 / jinja2 3.1.6 pinned in requirements.txt (single pin source); RequestBodyLimit (1 MiB default, 16 MiB for 5 Builder routes, root_path-aware); read_form() limits on all 14 form parses; SafeStaticFiles refuses UNC/drive/absolute/../device names; 16 TemplateResponse calls request-first.\nChecks: affected local set 514 passed (Python 3.13, new pins); test_request_limits + builder tests 63 passed after review fixes. Pre-handoff read-only review (Opus): no blocking findings; LOW-2/LOW-4 fixed in c5b2e72c; LOW-1 (on_event deprecation), LOW-3/5/6 left as non-blocking notes.\nRemaining: independent review, full CI incl. Windows installer and Python 3.11, owner smoke check of live dashboard (large Builder publish, /static/logo.svg) after delivery."
-      },
       "816": {
         "actor": "Worker-RS1816",
         "session": "wrs1816-20261015",
@@ -47396,9 +47382,25 @@
             "session": "cf9ad405-1356"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-M1356A",
-        "coordinator": "Coordinator-M1011A"
+        "coordinator": "Coordinator-M1011A",
+        "handoff": {
+          "actor": "Worker-M1356A",
+          "session": "cf9ad405-1356",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "work/acl-1356-starlette",
+          "worktree": "C:\\acl-1356",
+          "id": "b08a3785c6054e84a4b69df94315f489",
+          "issue": 356,
+          "state": "handoff",
+          "started_at": "2026-10-16T09:56:53+00:00",
+          "from_status": "status:todo",
+          "pr": 942,
+          "report": "ACL-1356 source PR #942 (head c5b2e72c), base main, includes current main.\nDone: fastapi 0.141.1 / starlette 1.7.0 / jinja2 3.1.6 pinned in requirements.txt (single pin source); RequestBodyLimit (1 MiB default, 16 MiB for 5 Builder routes, root_path-aware); read_form() limits on all 14 form parses; SafeStaticFiles refuses UNC/drive/absolute/../device names; 16 TemplateResponse calls request-first.\nChecks: affected local set 514 passed (Python 3.13, new pins); test_request_limits + builder tests 63 passed after review fixes. Pre-handoff read-only review (Opus): no blocking findings; LOW-2/LOW-4 fixed in c5b2e72c; LOW-1 (on_event deprecation), LOW-3/5/6 left as non-blocking notes.\nRemaining: independent review, full CI incl. Windows installer and Python 3.11, owner smoke check of live dashboard (large Builder publish, /static/logo.svg) after delivery."
+        },
+        "pr": 942,
+        "queued_at": "2026-10-16T10:16:56+00:00"
       },
       "379": {
         "implementers": [
@@ -51898,7 +51900,8 @@
       855,
       920,
       309,
-      379
+      379,
+      356
     ],
     "review": null,
     "history": [
@@ -75739,6 +75742,13 @@
           "report": "Main moved to af0ade29 (ACL-1924 batch + ACL-1923 no-stage activation). The earlier approval used main 3ee7c6d9 and is no longer current under the new policy. Return to author for a main merge (CHANGELOG-only conflict), then fresh independent delta approval. Content unchanged."
         },
         "batch_id": null
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-16T10:16:56+00:00",
+        "issue": 356,
+        "pr": 942,
+        "actor": "Worker-M1356A"
       }
     ],
     "policy": {
