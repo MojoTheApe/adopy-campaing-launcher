@@ -80753,7 +80753,51 @@
         "session": "dv1016d-887",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-16T10:50:16+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 886,
+          "pr": 887,
+          "branch": "codex/acl-1886-graph-error-context",
+          "head_sha": "a484aaa11d201a04a9871205aac83fe2f9e0cc4d",
+          "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+          "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "291706aa97fea07f175753abc951ee231d86a7ea2d52cd679f94cf2db3f7bf9d",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-DV1016D",
+            "review_session": "dv1016d-887",
+            "execution_lane": "d64d081c4f0843ffa5434b5457a05221",
+            "implementer": "Worker-RF1016W",
+            "head_sha": "a484aaa11d201a04a9871205aac83fe2f9e0cc4d",
+            "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+            "tree_sha": "2578a1ea5a96745e2c71410a9a81c09ccaa451b9",
+            "report": "Delta re-review of ACL-1886 after merging work/main af0ade29 into previously approved head 31ee38c9. Verified merge parents are 31ee38c9 + af0ade29 and head contains main; remerge-diff is empty (clean merge, CHANGELOG keep-both). Diff 31ee38c9..a484aaa1 excluding CHANGELOG has the same patch-id as main's 3ee7c6d9..af0ade29 on the same files, so no extra code. tests/test_acl1886_graph_error_context.py: 37 passed. All CI checks green including tracker-link and linux/windows tests. No live checks claimed.",
+            "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              886
+            ],
+            "recorded_at": "2026-10-16T11:01:08+00:00",
+            "issue_scopes": {
+              "886": "291706aa97fea07f175753abc951ee231d86a7ea2d52cd679f94cf2db3f7bf9d"
+            }
+          },
+          "lane": {
+            "id": "d64d081c4f0843ffa5434b5457a05221",
+            "pr": 887,
+            "issues": [
+              886
+            ],
+            "actor": "Reviewer-DV1016D",
+            "session": "dv1016d-887",
+            "coordinator": "Coordinator-M1011A",
+            "started_at": "2026-10-16T10:50:16+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-16T11:04:04+00:00"
+        }
       },
       "873": {
         "id": "d1d21a227cbb495bbc30e555dcf133c4",
