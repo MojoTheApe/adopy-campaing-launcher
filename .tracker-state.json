@@ -41608,20 +41608,6 @@
   },
   "execution": {
     "claims": {
-      "896": {
-        "actor": "Worker-1896A",
-        "session": "acl1896_20261016",
-        "coordinator": "Coordinator-1ECF",
-        "branch": "work/acl-1896-instagram-identity",
-        "worktree": "C:\\acl-1896",
-        "id": "6a20b77a066f4d1f9a92746034e3503a",
-        "issue": 896,
-        "state": "handoff",
-        "started_at": "2026-10-16T13:02:56+00:00",
-        "from_status": "status:backlog",
-        "pr": 949,
-        "report": "ACL-1896 PR #949 (supersedes closed draft #898, which was stacked on the unmerged TEST9095 build). Worker-1896A ported only the ACL-1896 change onto main af0ade29 in work/acl-1896-instagram-identity (commit 33fc9219): read-only Instagram identity discovery (src/fb_api/instagram.py, <=2 reads cached per Page), server pre-flight rule instagram_identity (table + JSON), refusal before any write, object_story_spec.instagram_user_id sent and read back, one numeric field in both write-policy layers, instagram_actor_id refused. Main has no estimate_create_calls and no asset feed, so those parts of #898 were dropped. Local: test_acl1896 26 passed; mutation (skip _require_instagram) fails 5; all creator/policy/preflight/publish_api suites 990 passed, 1 skipped, one Playwright timeout under load that passes alone. 1775 golden compared without the Instagram additions. Nothing live run; live acceptance on the authorized test dashboard remains (token returns the Page fields, Meta accepts instagram_user_id, where readback returns it)."
-      },
       "151": {
         "actor": "Worker-W1151M",
         "session": "worker_acl1151_20261016",
@@ -47558,9 +47544,25 @@
             "session": "acl1896_20261016"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-1896A",
-        "coordinator": "Coordinator-1ECF"
+        "coordinator": "Coordinator-1ECF",
+        "handoff": {
+          "actor": "Worker-1896A",
+          "session": "acl1896_20261016",
+          "coordinator": "Coordinator-1ECF",
+          "branch": "work/acl-1896-instagram-identity",
+          "worktree": "C:\\acl-1896",
+          "id": "6a20b77a066f4d1f9a92746034e3503a",
+          "issue": 896,
+          "state": "handoff",
+          "started_at": "2026-10-16T13:02:56+00:00",
+          "from_status": "status:backlog",
+          "pr": 949,
+          "report": "ACL-1896 PR #949 (supersedes closed draft #898, which was stacked on the unmerged TEST9095 build). Worker-1896A ported only the ACL-1896 change onto main af0ade29 in work/acl-1896-instagram-identity (commit 33fc9219): read-only Instagram identity discovery (src/fb_api/instagram.py, <=2 reads cached per Page), server pre-flight rule instagram_identity (table + JSON), refusal before any write, object_story_spec.instagram_user_id sent and read back, one numeric field in both write-policy layers, instagram_actor_id refused. Main has no estimate_create_calls and no asset feed, so those parts of #898 were dropped. Local: test_acl1896 26 passed; mutation (skip _require_instagram) fails 5; all creator/policy/preflight/publish_api suites 990 passed, 1 skipped, one Playwright timeout under load that passes alone. 1775 golden compared without the Instagram additions. Nothing live run; live acceptance on the authorized test dashboard remains (token returns the Page fields, Meta accepts instagram_user_id, where readback returns it)."
+        },
+        "pr": 949,
+        "queued_at": "2026-10-16T13:15:07+00:00"
       },
       "273": {
         "implementers": [
@@ -52144,7 +52146,8 @@
       71,
       839,
       138,
-      273
+      273,
+      896
     ],
     "review": null,
     "history": [
@@ -76930,6 +76933,13 @@
         "issue": 273,
         "pr": 948,
         "actor": "Worker-1273A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-16T13:15:07+00:00",
+        "issue": 896,
+        "pr": 949,
+        "actor": "Worker-1896A"
       }
     ],
     "policy": {
