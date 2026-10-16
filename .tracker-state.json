@@ -41628,22 +41628,7 @@
     ]
   },
   "execution": {
-    "claims": {
-      "19": {
-        "actor": "Worker-W106C",
-        "session": "w106c-20261016",
-        "coordinator": "Coordinator-C1016A",
-        "branch": "codex/acl-106-empty-period-owner",
-        "worktree": "C:\\acl-106-c",
-        "id": "80b5bf94550146debbee04c5fff42e55",
-        "issue": 19,
-        "state": "handoff",
-        "started_at": "2026-10-16T14:58:36+00:00",
-        "from_status": "status:todo",
-        "pr": 955,
-        "report": "ACL-106 r2: _period_owner(report) now reads the cached period report (no countries -> existing workbook notice; countries without is_me CM row -> manager notice), no frame access; blank/NaN CMs ignored; unused kind=workbook removed. Tests: 23 passed (incl. test that _filter_by_period is never called). Head 2299572df191e1ec6fd1c80d80098bca5030bb3b."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -47708,7 +47693,7 @@
             "session": "w106c-20261016"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W106C",
         "coordinator": "Coordinator-C1016A",
         "handoff": {
@@ -47717,16 +47702,16 @@
           "coordinator": "Coordinator-C1016A",
           "branch": "codex/acl-106-empty-period-owner",
           "worktree": "C:\\acl-106-c",
-          "id": "e5cc3a52d7a34527b7097b74a81ca119",
+          "id": "80b5bf94550146debbee04c5fff42e55",
           "issue": 19,
           "state": "handoff",
-          "started_at": "2026-10-16T14:33:01+00:00",
+          "started_at": "2026-10-16T14:58:36+00:00",
           "from_status": "status:todo",
           "pr": 955,
-          "report": "ACL-106: per-manager empty-period notice. _period_owner() in src/web/app.py classifies the chosen dates as workbook-empty (nobody) or manager-empty (others have rows). report.html shows a manager-scoped notice in a separate block; the whole-workbook notice now adds that the file may need updating; account map unchanged. Tests: tests/test_empty_period_owner.py (+ existing sidebar tests), 21 passed. Docs updated. Head caff4e4a26a97c07660323e1d68440e46e62194d."
+          "report": "ACL-106 r2: _period_owner(report) now reads the cached period report (no countries -> existing workbook notice; countries without is_me CM row -> manager notice), no frame access; blank/NaN CMs ignored; unused kind=workbook removed. Tests: 23 passed (incl. test that _filter_by_period is never called). Head 2299572df191e1ec6fd1c80d80098bca5030bb3b."
         },
         "pr": 955,
-        "queued_at": "2026-10-16T14:40:12+00:00",
+        "queued_at": "2026-10-16T15:06:45+00:00",
         "review_report": "# ACL-106 review \u2014 returned for fixes (Reviewer-R106D, r106d-20261016)\n\nPR #955. Head caff4e4a26a97c07660323e1d68440e46e62194d, base main af0ade29b106129089dbabd3f208b548efa246d9, tree e0ba71efc601b2c59feb6f04e3eaa06646e39389.\n\n## Blocking\n\n1. **Uncached full-frame scan on every page render (render-speed regression).**\n   `_period_owner` (src/web/app.py, new, ~L1844) is called unconditionally from `_render_report`\n   on every render. It runs `_filter_by_period` over the whole workbook frame (`pd.to_datetime(...).dt.date`\n   on every row), then a second, redundant `pd.to_datetime(rows[\"Date\"]).notna()` on the result\n   (`_filter_by_period` already drops unparseable dates), then a str/strip/casefold pass over `CM`.\n   Nothing is cached (unlike `report_for_period`, which is keyed in `_PERIOD_CACHE`), and the cost is paid\n   in the common case too (manager has rows, function returns None after the full scan).\n   Measured with py 3.14 on a synthetic frame: ~85\u2013130 ms per render at 60k rows; ~0.6\u20132.1 s at 300k rows\n   (more than the existing `_filter_by_period` call in `_build_account_map_view`, so per-render date work roughly doubles+).\n   The answer is already in the cached period report: `report_for_period` builds `countries` from all managers'\n   rows in the period, and each country's `cm_comparison` has an `is_me` row only when this CM has rows there\n   (`build_cm_comparison`, same strip/lower match the page uses for \"My totals\"). So:\n   - nobody has rows  <=> `not report[\"countries\"]` (already the existing workbook notice condition);\n   - manager-only empty <=> `report[\"countries\"]` non-empty and no `is_me` row in any `cm_comparison`\n     (other_rows, if wanted, = sum of non-me rows/leads, or drop it \u2014 the template does not use it).\n   Fix: derive `period_owner` from the period report in O(countries x CMs), or at minimum cache the result\n   under the same `_period_key`. Drop the redundant second `to_datetime`. Keep the tests; add one that the\n   owner is derived without touching `_df` (or that render does not rescan the frame).\n\n## Non-blocking (fix while there)\n\n2. Rows with blank/NaN `CM` count as \"rows for other managers\" (`astype(str)` -> \"nan\"). Deriving from\n   `cm_comparison` has the same property; acceptable, but if kept, exclude blank CM so a period holding only\n   unassigned rows is not described as \"other managers have rows\".\n3. `kind: \"workbook\"` is computed but never read by the template (the workbook text is driven by\n   `account_map.dates`/`book_covers_period`). Either drop it or note that it is informational, to avoid two\n   sources of truth for \"nobody has rows\".\n\n## Verified OK\n\n- CM matching: case-insensitive/stripped, consistent with `build_cm_comparison` (`strip().lower()`) and\n  `country_workbench` (`casefold`); `report[\"my_cm\"]` is always the resolved CM from `load_morning_report`.\n- Dates: inclusive both ends via `_filter_by_period`, identical to the report filter. No dates / no manager -> None.\n- Template: the two `#workbook-period-notice` blocks are mutually exclusive; manager name autoescaped\n  (checked `<script>` renders as `&lt;script`); account map and \"Read all\" stay in the manager case;\n  existing workbook message keeps its text plus one sentence.\n- Issue #19 acceptance: distinct explanations, scoped to dates and manager, account map kept \u2014 all met functionally.\n- Tests: tests/test_empty_period_owner.py + test_sidebar_without_workbook.py 21 passed (venv);\n  test_builder_from_links, test_web_form_endpoints, test_web_drill, test_workbook_review pass on py 3.14\n  (3 failures in the acl-1356-starlette venv are a pre-existing Starlette TemplateResponse signature mismatch, unrelated)."
       },
       "29": {
@@ -52467,7 +52452,8 @@
       151,
       165,
       788,
-      72
+      72,
+      19
     ],
     "review": null,
     "history": [
@@ -77444,6 +77430,13 @@
         "at": "2026-10-16T14:58:36+00:00",
         "issue": 19,
         "claim": "80b5bf94550146debbee04c5fff42e55",
+        "actor": "Worker-W106C"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-16T15:06:45+00:00",
+        "issue": 19,
+        "pr": 955,
         "actor": "Worker-W106C"
       }
     ],
