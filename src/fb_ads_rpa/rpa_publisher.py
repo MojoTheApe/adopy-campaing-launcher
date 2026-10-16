@@ -19,6 +19,7 @@ from src.fb_ads_rpa.build_draft import slots_to_campaign_drafts
 from src.fb_ads_rpa.config import get_browser_provider as get_browser_provider_name, get_mlx_attach_only
 from src.fb_ads_rpa.draft import CampaignDraft, RpaPublishResult
 from src.fb_ads_rpa.operations import serialized_browser
+from src.fb_ads_rpa.profile_lease import physical_profile_key, require_profile_lease, ProfileLeaseError
 from src.fb_ads_rpa.enrich_draft import enrich_campaign_drafts
 from src.fb_ads_rpa import profile_trouble
 from src.fb_ads_rpa import run_telemetry as _telemetry
@@ -27,14 +28,14 @@ from src.meta_campaign_agent.ad_account_map import load_ad_account_map, resolve_
 log = logging.getLogger(__name__)
 
 
-def profile_key_for(account_label: str) -> str:
+def profile_key_for(account_label: str, *, provider: str | None = None) -> str:
     """Whose browser a publish of this account occupies: the profile, not the label.
 
     The same rule the spend reader applies (`account_spend._profile_key`), so
     a publish and a read of one account queue on one lock. Two labels can map
     to one profile; two queues to one browser is exactly what the lock is
-    against. When the label does not resolve (not in the map, map unreadable)
-    the label itself is the key: holding too much is safer than too little.
+    against. An unresolved label refuses the operation: a label is not a
+    physical identity and cannot protect a browser in another ACM process.
     """
     label = str(account_label or "").strip()
     try:
@@ -42,7 +43,9 @@ def profile_key_for(account_label: str) -> str:
     except Exception:
         entry = None
     profile = (getattr(entry, "profile_id", "") or "").strip() if entry else ""
-    return profile or label
+    if not profile:
+        raise ProfileLeaseError("Cannot resolve a physical profile from the account map; check the account connection.")
+    return physical_profile_key(profile, provider=provider or get_browser_provider_name())
 
 
 #: ACL-1444: машинный выключатель — `1` держит открытыми все окна профилей,
@@ -87,6 +90,7 @@ def close_account_profile(account_label: str) -> str:
     entry = _resolve_account(account_label)
     if entry is None or not (getattr(entry, "profile_id", "") or "").strip():
         raise RuntimeError(f"{account_label}: no Multilogin profile in the account map")
+    require_profile_lease(physical_profile_key(entry.profile_id))
     return _browser.stop_profile_on_request(entry, account_label)
 
 
@@ -304,10 +308,13 @@ class RpaPublisher:
 
     def _ensure_browser(self, account_label: str) -> BrowserConnection:
         if self._conn is not None:
+            require_profile_lease(physical_profile_key(
+                getattr(self._entry, "profile_id", ""), provider=self.browser_provider_name))
             return self._conn
         entry = self._resolve_entry(account_label)
         if not entry:
             raise RuntimeError(f"Account {account_label!r} not in ad_account_map.csv")
+        require_profile_lease(physical_profile_key(entry.profile_id, provider=self.browser_provider_name))
         self._entry = entry
         attach_only = get_mlx_attach_only()
         # When handing off / keeping the window, never hard-kill on provider switch.
@@ -637,7 +644,8 @@ class RpaPublisher:
             f"profile_stop:{stop.code}" + (":earlier_campaign" if again else ""))
         return result
 
-    @serialized_browser(key=lambda self, draft: profile_key_for(draft.account_label))
+    @serialized_browser(key=lambda self, draft: profile_key_for(
+        draft.account_label, provider=getattr(self, "browser_provider_name", None)))
     def publish_draft(self, draft: CampaignDraft) -> RpaPublishResult:
         if (draft.status or "").strip().upper() != "DRAFT":
             raise ValueError(
@@ -759,7 +767,8 @@ class RpaPublisher:
             )
         return result
 
-    @serialized_browser(key=lambda self, slots, *, account_label, **kw: profile_key_for(account_label))
+    @serialized_browser(key=lambda self, slots, *, account_label, **kw: profile_key_for(
+        account_label, provider=getattr(self, "browser_provider_name", None)))
     def publish_slots(
         self,
         slots: list[dict[str, Any]],

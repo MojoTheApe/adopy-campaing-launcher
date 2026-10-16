@@ -846,7 +846,7 @@ def start_read(account: str, date_from: str, date_to: str = "", *,
                 done = fn(account, date_from, date_to)
         except Exception as exc:  # noqa: BLE001
             done = Snapshot(account=account, state="failed", date_from=date_from, date_to=date_to,
-                            error=f"{type(exc).__name__}: {exc}")
+                            error=_as._failure_text(exc))  # noqa: SLF001
         done.started_at = started_at
         done.finished_at = _as._now()  # noqa: SLF001
         done.finished_at_utc = datetime.now(timezone.utc).isoformat(timespec="seconds")

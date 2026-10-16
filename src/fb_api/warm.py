@@ -641,6 +641,17 @@ class WarmRegistry:
         if foreign:
             return _result(False, "This profile is kept warm by another dashboard window on this computer. "
                            "Use that window, or close it first. Nothing was changed.", "other_dashboard")
+        # ACL-1853: замок профиля теперь по физическому UUID и отказывает словами (в карте не UUID,
+        # профиль занят другой операцией ACM). Отказ — обычный ответ, а не исключение: иначе он
+        # оборвал бы всю пачку `open_many`.
+        from src.fb_ads_rpa.profile_lease import ProfileLeaseError
+
+        try:
+            return self._adopt_locked(label, pid, port)
+        except ProfileLeaseError as exc:
+            return _result(False, f"{exc} Nothing was changed.", "profile_lease")
+
+    def _adopt_locked(self, label: str, pid: str, port: int) -> dict:
         from src.fb_ads_rpa.operations import profile_lock
 
         queue = self._slot_queue()

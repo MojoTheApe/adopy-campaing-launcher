@@ -31,6 +31,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src.analysis_agent import account_spend as sp  # noqa: E402
+from tests.profile_lease_fakes import fake_profile
 
 TPL = ROOT / "src" / "web" / "templates"
 SHOT = "status_Doc20__20261003-100001"
@@ -771,7 +772,7 @@ def test_the_status_shot_is_taken_before_scrolling_to_the_totals(local, monkeypa
     order: list[str] = []
     page = NS(url="https://adsmanager.facebook.com/?act=111", goto=lambda *a, **k: None, close=lambda: None,
               screenshot=lambda path, full_page=False: (order.append("shot"), Path(path).write_bytes(PNG)))
-    monkeypatch.setattr(sp, "_entry_for", lambda _: NS(ad_account_id="111"))
+    monkeypatch.setattr(sp, "_entry_for", lambda account: NS(ad_account_id="111", profile_id=fake_profile(account)))
     monkeypatch.setattr(sp, "_attach_only", lambda *a: NS(page=page, close=lambda **k: None))
     monkeypatch.setattr(sp, "_wait_for_grid", lambda _: True)
     monkeypatch.setattr(sp, "_read_status", lambda _: ("restricted", "We restricted your ad account"))

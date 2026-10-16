@@ -303,6 +303,20 @@ Review of the first version (PR #310) found three gaps, fixed on 2026-10-15:
   replace `find_own`. On a clean machine they still passed when the original bug was put back.
   They now run the real launcher against real stub dashboards on real ports. Each of the
   reviewed bugs was restored in turn, and each one turns the suite red.
+## Physical profile ownership across ACM processes — ACL-1853
+
+- The main Read Spend/country/RPA boundaries now share an OS-backed lease per
+  physical Multilogin UUID across processes of the same OS user, independent of
+  dashboard port and instance configuration. Dolphin IDs retain a separate namespace.
+- Waiting is bounded and cancellable (reads 120 s; a publish job waiting for the
+  profile 30 min, stopped promptly by Stop), nested same-profile calls reenter, and process
+  termination releases ownership. Missing identities, lock failures and changed map
+  targets refuse browser entry; publishing reports a finished error.
+- See [scope and downstream warm/API integration](PROFILE_OWNERSHIP.md). This source
+  change does not claim live verification. Covered after the merge with main: Publish
+  jobs (RPA and API), plan check, forms read, campaign commands and warm adoption. The
+  Graph API reads and the warm open/close/checkout lifecycle (ACL-1760/1761/1812) still
+  take no lease across a session; that is the follow-up #862.
 
 ## Builder: pre-flight audit card that blocks Publish - ACL-1819
 

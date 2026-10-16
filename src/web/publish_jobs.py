@@ -27,6 +27,7 @@ from src.fb_ads_rpa.config import use_rpa_publish
 from src.fb_ads_rpa.draft import RpaPublishResult
 from src.fb_ads_rpa.rpa_publisher import RpaPublisher, profile_key_for
 from src.fb_ads_rpa.operations import publish_lease
+from src.fb_ads_rpa.profile_lease import ProfileLeaseError
 from src.web.keep_awake import keep_display_awake
 from src.web.profile_slots import ProfileSlots
 
@@ -541,6 +542,8 @@ def _run_job(job_id: str, slots: list[dict[str, Any]], **kwargs: Any) -> None:
                 _jobs[job_id]["errors"].append("Stopped by the user")
         if live:
             _finish(job_id, cancelled=True)
+    except ProfileLeaseError as exc:
+        _fatal(job_id, str(exc))
     finally:
         job_cancel.unbind()
         ended.set()
@@ -639,7 +642,7 @@ def _run_job_inner(
                                                 if grant["first_hold"] else None)})
             except Exception:
                 pass
-        with _publish_serial(profile):
+        with _publish_serial(profile, cancelled=lambda: _is_cancelled(job_id)):
             if _is_cancelled(job_id):
                 _finish(job_id, cancelled=True)
                 return
@@ -1355,6 +1358,14 @@ def _let_go_of_profile(job_id: str, publisher: Any, account_label: str, *, clean
         # Очередь будит `_slots.release` в `_run_job` сразу после этого.
 
 
+def _same_profile(label: str, profile: str) -> bool:
+    """Тот ли профиль у активного задания; не разрешившийся ярлык чужого задания — не наш профиль."""
+    try:
+        return profile_key_for(label) == profile
+    except ProfileLeaseError:
+        return False
+
+
 def _profile_has_other_job(job_id: str, account_label: str) -> bool:
     """На профиль этого задания уже стоит другое активное задание (ревью PR #446, F6)."""
     with _jobs_lock:
@@ -1397,14 +1408,17 @@ def close_profile(job_id: str) -> dict[str, Any]:
             return {"ok": False, "code": "not_found", "error": "Job not found"}
         account_label = str(job.get("account_label") or "")
         others = [(str(j.get("account_label") or ""), j.get("status")) for j in _jobs.values()]
-    profile = profile_key_for(account_label)
     busy_msg = "A run is using this profile — wait until it finishes, then close it."
-    if any(status in _ACTIVE_STATUSES and profile_key_for(label) == profile
-           for label, status in others):
-        return {"ok": False, "code": "busy", "error": busy_msg}
-    lease = _publish_serial(profile)
-    if not lease.acquire(blocking=False):
-        return {"ok": False, "code": "busy", "error": busy_msg}
+    try:
+        profile = profile_key_for(account_label)
+        if any(status in _ACTIVE_STATUSES and _same_profile(label, profile)
+               for label, status in others):
+            return {"ok": False, "code": "busy", "error": busy_msg}
+        lease = _publish_serial(profile)
+        if not lease.acquire(blocking=False):
+            return {"ok": False, "code": "busy", "error": busy_msg}
+    except ProfileLeaseError as exc:
+        return {"ok": False, "code": "failed", "error": str(exc)}
     try:
         try:
             _rp.close_account_profile(account_label)

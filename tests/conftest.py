@@ -93,6 +93,14 @@ def _machine_config_off_the_live_folder(tmp_path_factory, monkeypatch):
     yield
 
 
+@pytest.fixture(autouse=True)
+def _profile_leases_off_the_live_folder(tmp_path_factory, monkeypatch):
+    from src.fb_ads_rpa import profile_lease
+
+    root = tmp_path_factory.mktemp("profile_leases")
+    monkeypatch.setattr(profile_lease, "_lease_root", lambda: root)
+
+
 # Тесты не пишут в живой журнал телеметрии (PR #314, ревью).
 #
 # `run_telemetry.TELEMETRY_PATH` смотрит в `output/rpa_telemetry.jsonl` рабочей

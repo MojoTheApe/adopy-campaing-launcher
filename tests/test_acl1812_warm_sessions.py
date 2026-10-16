@@ -1272,7 +1272,9 @@ def test_hand_opened_window_is_never_stopped_or_restarted_by_any_open_profile_pa
     for ok, message in results:
         assert ok is False and message == sp.hand_message()
         assert getattr(message, "code", "") == sp.HAND_OPEN_CODE
-    with pytest.raises(sp.ProfileNotAttachable) as ei:
+    from src.fb_ads_rpa.operations import profile_lock
+
+    with pytest.raises(sp.ProfileNotAttachable) as ei, profile_lock(PID):
         sp._attach_only(hand_world.entry, "Acc")
     assert ei.value.code == sp.HAND_OPEN_CODE and str(ei.value) == warm.HAND_MESSAGE
     assert hand_world.opened == []
