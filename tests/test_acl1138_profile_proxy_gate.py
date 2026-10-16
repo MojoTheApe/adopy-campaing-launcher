@@ -15,15 +15,18 @@ from src.fb_ads_rpa import profile_proxy_gate as gate
 from src.fb_ads_rpa import profile_trouble
 
 
-PID = "11111111-2222-3333-4444-555555555555"
+PID = "550e8400-e29b-41d4-a716-446655440000"
 
 
 @pytest.fixture(autouse=True)
 def _clean(monkeypatch):
     gate._ok_cache.clear()
+    gate._unknown_cache.clear()
     monkeypatch.delenv("FB_RPA_PROXY_GATE", raising=False)
+    monkeypatch.setattr(gate, "_report_unchecked", lambda *a: None)
     yield
     gate._ok_cache.clear()
+    gate._unknown_cache.clear()
 
 
 def _entry(pid: str = PID):
@@ -124,6 +127,40 @@ def test_failed_check_does_not_block_a_healthy_run():
     assert PID not in gate._ok_cache
 
 
+def test_unknown_result_is_held_briefly_so_an_outage_costs_one_timeout():
+    calls = []
+
+    def fetch(pid, tok):
+        calls.append(pid)
+        return gate.ProxyConfig(known=False, reason="timeout")
+
+    # запись в 0; 0 и 30 — из памяти; после UNKNOWN_TTL_S — снова спрашиваем.
+    clock = iter([0.0, 0.0, 30.0, gate.UNKNOWN_TTL_S + 1, gate.UNKNOWN_TTL_S + 1]).__next__
+    for _ in range(4):
+        gate.ensure_profile_has_proxy(_entry(), "Doc1", fetch=fetch, token="t", now=clock)
+    assert calls == [PID, PID]
+
+
+def test_unknown_workspace_asks_both_and_uppercase_id_matches(monkeypatch):
+    monkeypatch.setattr(gate, "_token_for", lambda inst: f"tok-{inst}")
+    seen = []
+
+    def fetch(pid, tok):
+        seen.append(tok)
+        if tok == "tok-A":
+            return gate.ProxyConfig(known=False, reason="profile not found in this Multilogin workspace")
+        return gate.ProxyConfig(known=True, has_proxy=False)
+
+    with pytest.raises(profile_trouble.ProfileStop):
+        gate.ensure_profile_has_proxy(SimpleNamespace(profile_id=PID, multilogin_instance=""),
+                                      "Doc1", fetch=fetch)
+    assert seen == ["tok-A", "tok-B"]
+
+    post, _ = _search_returning({"id": PID.upper(), "proxy": None})
+    cfg = gate.fetch_proxy_config(PID, "tok", post=post)
+    assert cfg.known and not cfg.has_proxy
+
+
 def test_machine_switch_turns_the_gate_off(monkeypatch):
     monkeypatch.setenv("FB_RPA_PROXY_GATE", "0")
 
@@ -171,3 +208,65 @@ def test_direct_provider_refuses_before_touching_the_profile(monkeypatch):
     monkeypatch.setattr(provider, "_find_profile_user_data_dir", untouched)
     with pytest.raises(profile_trouble.ProfileStop):
         provider.open(_entry(), "Doc1")
+
+
+def test_mlx_provider_refuses_before_starting(monkeypatch):
+    from src.fb_ads_rpa import browser
+
+    monkeypatch.setattr(browser.profile_proxy_gate, "ensure_profile_has_proxy", _refuse)
+    import src.meta_campaign_agent.multilogin_config as mc
+
+    def untouched(*a, **k):
+        raise AssertionError("MLX must not be asked to start the profile")
+
+    monkeypatch.setattr(mc, "get_multilogin_instance", untouched)
+    with pytest.raises(profile_trouble.ProfileStop):
+        browser.MultiloginBrowserProvider().open(_entry(), "Doc1")
+
+
+def test_attach_existing_only_refuses(monkeypatch):
+    from src.fb_ads_rpa import browser
+
+    monkeypatch.setattr(browser.profile_proxy_gate, "ensure_profile_has_proxy", _refuse)
+    provider = browser.MultiloginDirectCDPProvider()
+    monkeypatch.setattr(provider, "_try_attach_existing",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not attach")))
+    with pytest.raises(profile_trouble.ProfileStop):
+        provider.attach_existing_only(PID, "C:/x")
+
+
+def test_graph_api_open_profile_refuses_before_process_or_mlx(monkeypatch):
+    from src.fb_api import profile as fb_profile
+    from src.fb_ads_rpa import profile_proxy_gate as pg
+
+    monkeypatch.setattr(pg, "ensure_profile_has_proxy", _refuse)
+
+    def untouched(*a, **k):
+        raise AssertionError("neither the local process nor MLX may be touched")
+
+    with pytest.raises(fb_profile.ProfileError) as exc:
+        fb_profile.open_profile(PID, "f", "B", launcher_factory=untouched, local_probe=untouched)
+    assert exc.value.code == profile_trouble.NO_PROXY
+    assert "Add the proxy to the profile in Multilogin" in str(exc.value)
+
+
+def test_spend_attach_turns_the_refusal_into_not_attachable():
+    from src.analysis_agent import account_spend
+
+    class Direct:
+        def attach_existing_only(self, *a, **k):
+            raise profile_trouble.ProfileStop(profile_trouble.NO_PROXY, "x")
+
+    with pytest.raises(account_spend.ProfileNotAttachable) as exc:
+        account_spend._attach_existing(Direct(), PID, "C:/x", new_page=True)
+    assert exc.value.code == profile_trouble.NO_PROXY
+
+
+def test_publisher_shortcut_does_not_bypass_a_profile_stop():
+    import inspect
+
+    from src.fb_ads_rpa import rpa_publisher
+
+    src = inspect.getsource(rpa_publisher.RpaPublisher._ensure_browser)
+    shortcut = src[src.index("_open_multilogin_direct(entry, account_label)"):]
+    assert shortcut.index("except profile_trouble.ProfileStop") < shortcut.index("trying normal chain")

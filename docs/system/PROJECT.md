@@ -28,8 +28,8 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   confirms audience age/country values within their own field and opens the correct
   collapsed Locations/Languages control, preserving adjacent fields. Later hover-only
   controls remain ACL-1251; the deferred real pilot remains ACL-1215.
-  ACL-1138: before attaching to or starting a Multilogin profile, both Multilogin
-  providers read the profile's proxy from the MLX API (`/profile/search` by id) and
+  ACL-1138: before attaching to or starting a Multilogin profile, every Multilogin
+  provider, `attach_existing_only` and `fb_api.profile.open_profile` read the profile's proxy from the MLX API (`/profile/search` by id) and
   stop the account with `profile_no_proxy` when none is configured. A failed check
   does not block the run; `FB_RPA_PROXY_GATE=0` is the machine switch. The
   browser's `--proxy-server` flag is only logged as evidence.

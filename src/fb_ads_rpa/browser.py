@@ -1570,6 +1570,8 @@ class MultiloginBrowserProvider:
 
         if not entry.profile_id:
             raise MultiloginLauncherError(f"{account_label}: profile_id is required")
+        # ACL-1138: профиль без прокси в Multilogin не поднимаем.
+        profile_proxy_gate.ensure_profile_has_proxy(entry, account_label)
 
         ml = get_multilogin_instance(entry.multilogin_instance)
         self._launcher = MultiloginLauncher(ml)
@@ -1737,8 +1739,11 @@ class MultiloginDirectCDPProvider:
         """
         import psutil  # type: ignore
 
+        # MLX запускает Mimic с короткими именами 8.3 (…\B18D03~1\…): ни длинного
+        # пути, ни полного uuid там нет — ищем ещё по шести символам без дефисов.
+        short = profile_id.replace("-", "").lower()[:6]
         needles = [n for n in (user_data_dir.lower().replace("/", "\\").rstrip("\\"),
-                               profile_id.lower()) if n]
+                               profile_id.lower(), f"\\{short}~" if short else "") if n]
         for proc in psutil.process_iter(["name", "exe", "cmdline"]):
             try:
                 if not (proc.info["name"] and "chrome" in proc.info["name"].lower()):
@@ -1758,6 +1763,7 @@ class MultiloginDirectCDPProvider:
                 return flag
             except Exception:
                 continue
+        log.info("Profile %s browser process not found; --proxy-server not checked", profile_id)
         return None
 
     def _discover_debug_port(self, user_data_dir: str, profile_id: str = "") -> int | None:
@@ -1888,7 +1894,14 @@ class MultiloginDirectCDPProvider:
         принадлежал именно этому профилю. Свободный поиск годится публикации,
         которая профиль только что подняла сама; чтению он позволил бы
         прицепиться к чужому окну и прочитать чужой кабинет.
+
+        ACL-1138: профиль без прокси в Multilogin — `ProfileStop(profile_no_proxy)`.
         """
+        from types import SimpleNamespace
+
+        profile_proxy_gate.ensure_profile_has_proxy(
+            # Пространство здесь неизвестно — гейт спросит оба (A, затем B).
+            SimpleNamespace(profile_id=profile_id, multilogin_instance=""), profile_id)
         return self._try_attach_existing(
             profile_id, user_data_dir, strict_profile=True, new_page=new_page
         )
@@ -1931,7 +1944,10 @@ class MultiloginDirectCDPProvider:
                 **({"check_responsive": True} if check_responsive else {}),
             )
             log.info("Reusing already-running Mimic profile %s on CDP %s", profile_id, port)
-            self._log_proxy_flag(user_data_dir, profile_id)
+            try:
+                self._log_proxy_flag(user_data_dir, profile_id)
+            except Exception:
+                pass
             return conn
         except (ProfileUnresponsive, profile_trouble.ProfileStop):
             # Вызывающий просил проверить живость — ему и решать (ACL-1320).

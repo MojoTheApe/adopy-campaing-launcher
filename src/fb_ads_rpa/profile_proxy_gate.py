@@ -40,8 +40,13 @@ SEARCH_URL = "https://api.multilogin.com/profile/search"
 #: Сколько секунд помним «у профиля прокси есть». Отказ не кэшируем: человек
 #: добавит прокси и сразу нажмёт Publish снова.
 OK_TTL_S = 600.0
+#: Сколько помним «проверить не удалось»: при лежащем API каждое открытие
+#: иначе ждало бы таймаут заново (ревью ACL-1138, M3).
+UNKNOWN_TTL_S = 60.0
+TIMEOUT_S = 5.0
 
 _ok_cache: dict[str, float] = {}
+_unknown_cache: dict[str, tuple[float, "ProxyConfig"]] = {}
 
 
 @dataclass(frozen=True)
@@ -67,7 +72,7 @@ def _parse(profile: dict[str, Any]) -> ProxyConfig:
 
 
 def fetch_proxy_config(profile_id: str, token: str, *, post: Callable[..., Any] | None = None,
-                       timeout: float = 15.0) -> ProxyConfig:
+                       timeout: float = TIMEOUT_S) -> ProxyConfig:
     """Прочитать прокси профиля из MLX API. Ничего не меняет и в Facebook не ходит."""
     if not token:
         return ProxyConfig(known=False, reason="no MLX token")
@@ -89,20 +94,28 @@ def fetch_proxy_config(profile_id: str, token: str, *, post: Callable[..., Any] 
         profiles = ((r.json() or {}).get("data") or {}).get("profiles") or []
     except Exception as exc:
         return ProxyConfig(known=False, reason=f"MLX API: {type(exc).__name__}")
-    match = next((p for p in profiles if isinstance(p, dict) and p.get("id") == profile_id), None)
+    want = profile_id.strip().lower()
+    match = next((p for p in profiles
+                  if isinstance(p, dict) and str(p.get("id") or "").strip().lower() == want), None)
     if match is None:
         # Профиль из другого пространства или удалён — о прокси это ничего не говорит.
         return ProxyConfig(known=False, reason="profile not found in this Multilogin workspace")
     return _parse(match)
 
 
-def _token_for(entry: Any) -> str:
+def _token_for(instance: str) -> str:
     try:
         from src.meta_campaign_agent.multilogin_config import get_multilogin_instance
 
-        return get_multilogin_instance(getattr(entry, "multilogin_instance", "") or "A").automation_token
+        return get_multilogin_instance(instance).automation_token
     except Exception:
         return ""
+
+
+def _instances_for(entry: Any) -> tuple[str, ...]:
+    """Пространство из карты; не указано (прицеп без карты) — оба, A затем B."""
+    inst = (getattr(entry, "multilogin_instance", "") or "").strip().upper()
+    return (inst,) if inst in ("A", "B") else ("A", "B")
 
 
 def ensure_profile_has_proxy(entry: Any, account_label: str, *,
@@ -121,10 +134,20 @@ def ensure_profile_has_proxy(entry: Any, account_label: str, *,
     seen = _ok_cache.get(profile_id)
     if seen is not None and now() - seen < OK_TTL_S:
         return ProxyConfig(known=True, has_proxy=True, reason="cached")
-    cfg = (fetch or fetch_proxy_config)(profile_id, _token_for(entry) if token is None else token)
+    held = _unknown_cache.get(profile_id)
+    if held is not None and now() - held[0] < UNKNOWN_TTL_S:
+        return held[1]
+    tokens = [token] if token is not None else [_token_for(i) for i in _instances_for(entry)]
+    cfg = ProxyConfig(known=False, reason="no MLX token")
+    for tok in tokens:
+        cfg = (fetch or fetch_proxy_config)(profile_id, tok)
+        if cfg.known:
+            break
     if not cfg.known:
         log.warning("%s: could not check the profile's proxy in Multilogin (%s); continuing",
                     account_label, cfg.reason)
+        _report_unchecked(account_label, cfg.reason)
+        _unknown_cache[profile_id] = (now(), cfg)
         return cfg
     if not cfg.has_proxy:
         log.error("%s: Multilogin profile %s has no proxy configured; refusing to open it",
@@ -133,6 +156,17 @@ def ensure_profile_has_proxy(entry: Any, account_label: str, *,
     _ok_cache[profile_id] = now()
     log.info("%s: profile proxy configured in Multilogin (%s)", account_label, cfg.proxy_type or "?")
     return cfg
+
+
+def _report_unchecked(account_label: str, reason: str) -> None:
+    """Пропуск без проверки — в телеметрию: истёкший токен иначе молча выключил бы гейт."""
+    try:
+        from src.fb_ads_rpa import run_telemetry
+
+        run_telemetry.record("proxy_gate_unchecked", False,
+                             diag={"account": account_label, "reason": reason[:120]})
+    except Exception:
+        pass
 
 
 def cmdline_has_proxy_flag(cmdline: list[str] | None) -> bool:
