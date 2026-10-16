@@ -45842,7 +45842,7 @@
             "session": "wrs1827-20261015"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-RS1827",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -45861,7 +45861,8 @@
         },
         "pr": 829,
         "queued_at": "2026-10-15T10:34:58+00:00",
-        "review_report": "# Return for a dependency refresh\n\nMain now also contains batch b2772e6f (ACL-1819 pre-flight, ACL-1799 country workbench, ACL-1814 rules store; PR 926 -> 928). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
+        "review_report": "# Return for a dependency refresh\n\nMain now also contains batch b2772e6f (ACL-1819 pre-flight, ACL-1799 country workbench, ACL-1814 rules store; PR 926 -> 928). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
+        "reviewer": "Reviewer-R1827T"
       },
       "771": {
         "implementers": [
@@ -49080,6 +49081,10 @@
       "Reviewer-R1816T": {
         "session": "r1816t-20261016",
         "role": "Reviewer"
+      },
+      "Reviewer-R1827T": {
+        "session": "r1827t-20261016",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -51830,8 +51835,7 @@
       891,
       855,
       920,
-      309,
-      827
+      309
     ],
     "review": null,
     "history": [
@@ -75553,6 +75557,13 @@
           "report": "# Return for a main refresh\n\nMain moved to af0ade29 (ACL-1923/1924: no-stage delivery route, process docs and workflows). Required: merge current main into the branch (merge, no rebase; it merges cleanly), re-run the affected tests, hand off again for fresh review.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-16T10:04:38+00:00",
+        "pr": 829,
+        "lane": "d259b721b6034ea68693ad32a8cf6e53",
+        "actor": "Reviewer-R1827T"
       }
     ],
     "policy": {
@@ -79941,7 +79952,20 @@
       "started_at": "2026-10-15T11:47:02+00:00",
       "ineligible": {}
     },
-    "source_reviews": {},
+    "source_reviews": {
+      "829": {
+        "id": "d259b721b6034ea68693ad32a8cf6e53",
+        "pr": 829,
+        "issues": [
+          827
+        ],
+        "actor": "Reviewer-R1827T",
+        "session": "r1827t-20261016",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-16T10:04:38+00:00",
+        "state": "reviewing"
+      }
+    },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
   },
   "maintenance_history": [
