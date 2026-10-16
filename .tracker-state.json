@@ -48100,7 +48100,7 @@
       },
       "213": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       }
     },
     "actors": {
@@ -77865,6 +77865,12 @@
         "at": "2026-10-16T20:53:55+00:00",
         "issue": 96,
         "reason": "Backlog cleanup 2026-10-16: stale; RPA ad-level recipe for CTA selection, superseded by Graph API creation (ACL-1761)."
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-16T20:54:19+00:00",
+        "issue": 213,
+        "reason": "Backlog cleanup 2026-10-16: stale; RPA/Playwright cancel path. Main already bounds cancellation (_enforce_cancel_deadline, _cancel_publisher in publish_jobs.py)."
       }
     ],
     "policy": {
