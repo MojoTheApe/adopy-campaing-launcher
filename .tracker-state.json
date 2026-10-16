@@ -47764,7 +47764,7 @@
       },
       "48": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       }
     },
     "actors": {
@@ -77226,6 +77226,12 @@
         "pr": 955,
         "lane": "396562a37833448ea64ad1d4428d104f",
         "actor": "Reviewer-R106D"
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-16T14:45:02+00:00",
+        "issue": 48,
+        "reason": "Obsolete: the Sheets 'publish my library' export no longer exists. ACL-1241 / PR #244 (2026-09-18) moved targets and ad texts to the private GitHub team library. team_library.put() already refuses changed destinations through a contents-API sha guard with conflict retries. Any residual per-file vs cross-file limit belongs to ACL-1241."
       }
     ],
     "policy": {
