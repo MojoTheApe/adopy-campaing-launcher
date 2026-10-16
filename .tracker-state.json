@@ -41616,9 +41616,11 @@
         "worktree": "C:\\acl-1151",
         "id": "39bb20b9dde844b98447a160e326acd1",
         "issue": 151,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-16T13:03:37+00:00",
-        "from_status": "status:backlog"
+        "from_status": "status:backlog",
+        "pr": 950,
+        "report": "ACL-1151 handoff, PR #950 (work/acl-1151-map-pick-profile, head 623e3cd6, base main af0ade29). Worker-W1151M.\nDone: one server derivation src/web/profile_connection.py used by /mlx-profile-details, new GET /mlx-open-profiles and /api/accounts-overview (suggested_name); removed _account_name_from_profile and the tab's JS tailKey. _account_map_add.html: \"last letters\" field and Reload removed; one profile picker (empty + live token = open profiles with derived name/ad account; typing = Multilogin search; no token = empty list). One request aclConnectAccount() for map Connect, Connect by hand, row Save and country form. Sign-in and \"already connected\" linking unchanged.\nChecks: 94 touched tests passed locally (PYTHONPATH=tests), both node harnesses pass; full suite in CI.\nNot done / for review: no live Multilogin verification (none allowed); serve.py restart needed. Note: the issue text predates 4a04ea56 (owner chose search over open-only list) \u2014 the picker keeps search for non-running profiles, so it lists open profiles first rather than only."
       }
     },
     "tasks": {
