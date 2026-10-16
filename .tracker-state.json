@@ -48032,7 +48032,7 @@
       },
       "757": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       }
     },
     "actors": {
@@ -77693,6 +77693,12 @@
         "at": "2026-10-16T20:45:43+00:00",
         "issue": 735,
         "reason": "Backlog cleanup 2026-10-16: stale; targets the RPA Ads Manager UI path (wizard, classic editor, media library, window scaling), replaced by Graph API creation (ACL-1761). Restore if RPA work resumes."
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-16T20:46:16+00:00",
+        "issue": 757,
+        "reason": "Done: the design session took place and produced the Builder 0-9 tasks and the merged two-column builder (ACL-1769). Backlog cleanup 2026-10-16."
       }
     ],
     "policy": {
