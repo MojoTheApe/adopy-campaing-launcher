@@ -46147,7 +46147,7 @@
             "session": "table-fix-01a133d7-1841"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-T8L621",
         "coordinator": "Coordinator-D7K413",
         "handoff": {
@@ -46166,7 +46166,8 @@
         },
         "pr": 848,
         "queued_at": "2026-10-13T08:20:59+00:00",
-        "review_report": "# ACL-1841 / PR848 source review return\n\nChanges required: refresh the source baseline before approval.\n\nPR848 head 17cb5634fb7f33fc33b21a7e3ca8be7a11441acc retains base e8e59f8376458f2f73089c3f2a8d454837ff033f. Official main is now 3327465fcbd46ccff9b64eb7c574ff5b84b99b80; previous source checks establish the old baseline only.\n\nThe genuine author must take a fresh implementation claim on the retained source branch, include current main, reconcile conflicts under author ownership, run affected Home/Manage geometry and keyboard checks plus actual source CI, and obtain fresh independent exact-head/base/scope review after durable handoff.\n\nPreserve the explicit PARTIAL scope. PR848 does not complete ACL-1841: the campaign-toolbar search/filter, expansion, column and batch grouping criterion remains outstanding until ACL-1797/ACL-1798 upstream content is integrated and verified. Full integrated dashboard geometry and builder clearance also remain outstanding. Keep the footer and toolbar outside the horizontal table scroller and preserve the documented author-reconciliation boundaries; do not import unrelated preview commits or erase unresolved acceptance criteria.\n\nThis is a baseline prerequisite return, not a complete acceptance approval. No source edits, approval, merge, stage entry, package publication or installation performed."
+        "review_report": "# ACL-1841 / PR848 source review return\n\nChanges required: refresh the source baseline before approval.\n\nPR848 head 17cb5634fb7f33fc33b21a7e3ca8be7a11441acc retains base e8e59f8376458f2f73089c3f2a8d454837ff033f. Official main is now 3327465fcbd46ccff9b64eb7c574ff5b84b99b80; previous source checks establish the old baseline only.\n\nThe genuine author must take a fresh implementation claim on the retained source branch, include current main, reconcile conflicts under author ownership, run affected Home/Manage geometry and keyboard checks plus actual source CI, and obtain fresh independent exact-head/base/scope review after durable handoff.\n\nPreserve the explicit PARTIAL scope. PR848 does not complete ACL-1841: the campaign-toolbar search/filter, expansion, column and batch grouping criterion remains outstanding until ACL-1797/ACL-1798 upstream content is integrated and verified. Full integrated dashboard geometry and builder clearance also remain outstanding. Keep the footer and toolbar outside the horizontal table scroller and preserve the documented author-reconciliation boundaries; do not import unrelated preview commits or erase unresolved acceptance criteria.\n\nThis is a baseline prerequisite return, not a complete acceptance approval. No source edits, approval, merge, stage entry, package publication or installation performed.",
+        "reviewer": "Reviewer-RV1015F"
       },
       "845": {
         "implementers": [
@@ -51819,7 +51820,6 @@
       771,
       768,
       845,
-      841,
       903,
       907,
       891,
@@ -75499,6 +75499,13 @@
         "issue": 379,
         "claim": "6b50af5af7c14a218f9e3797792e2e81",
         "actor": "Worker-W1015T"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-16T10:01:40+00:00",
+        "pr": 848,
+        "lane": "6258b44ea9f14d86b136e52d14a5f3f9",
+        "actor": "Reviewer-RV1015F"
       }
     ],
     "policy": {
@@ -79887,7 +79894,20 @@
       "started_at": "2026-10-15T11:47:02+00:00",
       "ineligible": {}
     },
-    "source_reviews": {},
+    "source_reviews": {
+      "848": {
+        "id": "6258b44ea9f14d86b136e52d14a5f3f9",
+        "pr": 848,
+        "issues": [
+          841
+        ],
+        "actor": "Reviewer-RV1015F",
+        "session": "rv1015f-843",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-16T10:01:40+00:00",
+        "state": "reviewing"
+      }
+    },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
   },
   "maintenance_history": [
