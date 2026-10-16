@@ -41628,9 +41628,11 @@
         "worktree": "C:\\acl-1273",
         "id": "da2092480bb24f8a94f67903334ed2a6",
         "issue": 273,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-16T13:03:15+00:00",
-        "from_status": "status:backlog"
+        "from_status": "status:backlog",
+        "pr": 948,
+        "report": "## Handoff \u2014 2026-10-16 (Worker-1273A)\n- PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/948, branch `work/acl-1273-manual-report-fingerprint`, head `15e175c3`, base main `af0ade29`.\n- Change: `report_problem()` fingerprint is now `[\"acl-report\", \"manual\", \"r\" + uuid4().hex]`, the same id is sent as tag `report_id`. Step-failure grouping unchanged. Form, route and scrubber unchanged.\n- Tests: new cases in `tests/test_report_delivery_review.py` (unique per call for different and identical text, all-digit id survives scrubbing, step failures still group, tags/context kept). Touched Sentry tests: 84 passed locally; full suite in CI.\n- Independent pre-review (read-only subagent): approve, nits only.\n- Remaining: live check after release \u2014 send two reports from the dashboard, confirm two new Sentry issues and the owner's notification, record the issue ids here; resolve old PYTHON-2. Owner-side: confirm an issue alert rule and team membership for project `python`."
       },
       "151": {
         "actor": "Worker-W1151M",
