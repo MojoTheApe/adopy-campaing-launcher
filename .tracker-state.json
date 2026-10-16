@@ -41607,20 +41607,6 @@
         "started_at": "2026-10-16T10:27:01+00:00",
         "from_status": "status:todo"
       },
-      "839": {
-        "actor": "Worker-R1839B",
-        "session": "refresh_acl1839_20261015",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1839-connection-panel-layout",
-        "worktree": "C:\\acl-1839-refresh",
-        "id": "1bb368008a1147da883d37312bfe49c7",
-        "issue": 839,
-        "state": "handoff",
-        "started_at": "2026-10-16T10:43:42+00:00",
-        "from_status": "status:todo",
-        "pr": 843,
-        "report": "ACL-1839 current-main refresh \u2014 2026-10-16. Actual author Worker-R1839B / session refresh_acl1839_20261015, Coordinator-M1011A, claim 1bb368008a1147da883d37312bfe49c7 on the original branch codex/acl-1839-connection-panel-layout (worktree C:\\acl-1839-refresh), after Reviewer-RV1015F returned the stale source.\n\nPR 843 head c1cbbd4f includes current main af0ade29 via merge commits aabcee4b (main 3ee7c6d9) and c1cbbd4f (main af0ade29). Conflicts resolved as the return report asked: docs/system/CHANGELOG.md keeps the ACL-1839, ACL-1924 and ACL-1819 entries; the .amap-ml rule in src/web/templates/report.html keeps main's font-size var(--adopy-text-sm) and adds min-width: 0 and overflow-wrap: anywhere. Main's .amap-add select/input font-size token is untouched. The diff against main is exactly the original four files (CHANGELOG, _account_map_add.html, report.html, tests/test_account_connection_layout.py), +102/-4; no new product behavior.\n\nLocal Windows/Python 3.14 checks on c1cbbd4f with an isolated ACL_CONFIG_DIR and synthetic data: test_account_connection_layout, test_account_map_view, test_account_map_patch, test_account_map_columns, test_multilogin_connect_chooses_workspace \u2014 50 passed (real Chromium, 280/720/1040 px, both themes, three hosts). git diff --check passed. Hosted CI on c1cbbd4f: product, Windows, Linux x3, installer, descriptor and process checks passed; tracker-link fails only because the task is not yet in Review and must be re-run after this handoff.\n\nA non-implementing read-only pre-review of c1cbbd4f vs af0ade29 found no findings. It is not a formal approval. Remaining: formal independent source review on the current main baseline, batch approval, integration and delivery. No production profiles, Multilogin actions or advertising writes were used."
-      },
       "138": {
         "actor": "Worker-P1138",
         "session": "acl1138_proxy_gate",
@@ -46155,25 +46141,25 @@
             "session": "refresh_acl1839_20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-R1839B",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-D7K413",
-          "session": "design_audit_d7k413_20261013",
-          "coordinator": "Coordinator-D7K413",
+          "actor": "Worker-R1839B",
+          "session": "refresh_acl1839_20261015",
+          "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1839-connection-panel-layout",
-          "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Design-Audit-2026-10-13",
-          "id": "7bba5eba3ec747b4aa55cb8877f43079",
+          "worktree": "C:\\acl-1839-refresh",
+          "id": "1bb368008a1147da883d37312bfe49c7",
           "issue": 839,
           "state": "handoff",
-          "started_at": "2026-10-13T08:01:43+00:00",
+          "started_at": "2026-10-16T10:43:42+00:00",
           "from_status": "status:todo",
           "pr": 843,
-          "report": "### Current-main refresh \u2014 2026-10-13\n\nActual author Worker-D7K413 / session design_audit_d7k413_20261013, Coordinator-D7K413. Independent Reviewer-LR1839 returned the stale source using the supported review-return command; fresh author claim 7bba5eba3ec747b4aa55cb8877f43079 was acquired before changes.\n\nCurrent official main 3327465fcbd46ccff9b64eb7c574ff5b84b99b80 is included by merge commit 02eaf7d92a50c8d440449799a55b09dfb7071178 on codex/acl-1839-connection-panel-layout. The only conflict was the top of docs/system/CHANGELOG.md; both ACL-1839 and upstream ACL-1824 entries were preserved. The source diff against current main remains exactly the four original layout/partial/test/history files, with no new product behavior.\n\nFresh Windows/Python3.14 validation: connection layout, account-map view/patch, Accounts shared connection and platform/CI layout regressions 149 passed, 1 skipped in 68.27s; packaging unittest suite 46 passed; tracked-file secret scan, dashboard/RPA import smoke and git diff --check passed. An initial test command referenced two absent filenames and ran no tests; corrected actual-file suite results above supersede it. The first scanner command similarly referenced an absent script; the actual acl_scan_secrets.py passed. No product check was weakened. All fixtures used synthetic data and an isolated ACL_CONFIG_DIR.\n\nPR843 remains the same source pull request. Fresh hosted CI and exact-current-main independent review are required. This report does not establish approval, source integration, an installed dashboard or package delivery. No production profiles or advertising writes were used."
+          "report": "ACL-1839 current-main refresh \u2014 2026-10-16. Actual author Worker-R1839B / session refresh_acl1839_20261015, Coordinator-M1011A, claim 1bb368008a1147da883d37312bfe49c7 on the original branch codex/acl-1839-connection-panel-layout (worktree C:\\acl-1839-refresh), after Reviewer-RV1015F returned the stale source.\n\nPR 843 head c1cbbd4f includes current main af0ade29 via merge commits aabcee4b (main 3ee7c6d9) and c1cbbd4f (main af0ade29). Conflicts resolved as the return report asked: docs/system/CHANGELOG.md keeps the ACL-1839, ACL-1924 and ACL-1819 entries; the .amap-ml rule in src/web/templates/report.html keeps main's font-size var(--adopy-text-sm) and adds min-width: 0 and overflow-wrap: anywhere. Main's .amap-add select/input font-size token is untouched. The diff against main is exactly the original four files (CHANGELOG, _account_map_add.html, report.html, tests/test_account_connection_layout.py), +102/-4; no new product behavior.\n\nLocal Windows/Python 3.14 checks on c1cbbd4f with an isolated ACL_CONFIG_DIR and synthetic data: test_account_connection_layout, test_account_map_view, test_account_map_patch, test_account_map_columns, test_multilogin_connect_chooses_workspace \u2014 50 passed (real Chromium, 280/720/1040 px, both themes, three hosts). git diff --check passed. Hosted CI on c1cbbd4f: product, Windows, Linux x3, installer, descriptor and process checks passed; tracker-link fails only because the task is not yet in Review and must be re-run after this handoff.\n\nA non-implementing read-only pre-review of c1cbbd4f vs af0ade29 found no findings. It is not a formal approval. Remaining: formal independent source review on the current main baseline, batch approval, integration and delivery. No production profiles, Multilogin actions or advertising writes were used."
         },
         "pr": 843,
-        "queued_at": "2026-10-13T08:14:27+00:00",
+        "queued_at": "2026-10-16T11:08:10+00:00",
         "review_report": "Content approved; needs only a refresh onto current main (merge main, re-run checks, hand off again).\n\nReview of PR 843 / ACL-1839 (head 02eaf7d9) by Reviewer-RV1015F:\n- Scope matches issue #839: aria-labels on the account selector and profile search, min-width/overflow-wrap on .amap-ml, bounded select/input widths, `.amap-hits[hidden]{display:none}`. No behavior change to Add/filter handlers. User-facing text is English; no secrets.\n- Tests: tests/test_account_connection_layout.py, 18 passed (real Chromium, 3 hosts x 2 themes x 3 widths, geometry/focus/accessible names). Source CI on the current head is green.\n- Not approvable as it stands: the PR does not contain current main (167 commits behind).\n- Merge into current main (`git merge-tree --write-tree work/main HEAD`) conflicts in two places, both trivial: docs/system/CHANGELOG.md (keep both entries) and src/web/templates/report.html `.amap-ml` rule, where main changed `font-size: 0.74rem` to `var(--adopy-text-sm)`. Resolve by keeping main's font-size and adding `min-width: 0; overflow-wrap: anywhere`.\n- Main did not fix this itself (no amap-hits[hidden] rule, no min-width on .amap-add controls), so the fix is not obsolete. Note main's `.amap-add select, input` rule now uses `font-size: var(--adopy-text-table)`; the PR's min-width/max-width change to that block merged cleanly but re-run the layout test after merge to confirm the 280 px fit still holds with the token font sizes."
       },
       "840": {
@@ -52050,7 +52036,8 @@
       309,
       379,
       356,
-      71
+      71,
+      839
     ],
     "review": null,
     "history": [
@@ -76462,6 +76449,13 @@
             "approved_at": "2026-10-16T11:04:04+00:00"
           }
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-16T11:08:10+00:00",
+        "issue": 839,
+        "pr": 843,
+        "actor": "Worker-R1839B"
       }
     ],
     "policy": {
