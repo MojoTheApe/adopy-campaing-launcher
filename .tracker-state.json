@@ -47509,7 +47509,7 @@
       },
       "13": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       }
     },
     "actors": {
@@ -76794,6 +76794,12 @@
         "at": "2026-10-16T12:41:31+00:00",
         "issue": 785,
         "reason": "Done in main: src/fb_api/graph.py parses x-business-use-case-usage / x-ad-account-usage / x-app-usage (usage_from_headers) and slows/stops above SLOW_PCT/STOP_PCT (ACL-1756/1760/1761). Backlog cleanup 2026-10-16."
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-16T12:42:49+00:00",
+        "issue": 13,
+        "reason": "Stale: the BI/Adverity extract premise is gone (tracker review 2026-10-14). The remaining need (workbook vs account read vs Graph read) is tracked in acl-109 (#17). Backlog cleanup 2026-10-16."
       }
     ],
     "policy": {
