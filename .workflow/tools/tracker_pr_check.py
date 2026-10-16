@@ -63,7 +63,7 @@ def check(request, config, pr_number, *, allow_transition=False, admission=False
         if direction == 'process':
             allowed = {'review', 'merged'} | ({'in_progress'} if pr.get('draft') else set())
         resuming_merge = (allow_transition and pr.get('merged') and len(status)==2
-                          and {stages.get(s) for s in status} in ({'review','merged'}, {'stage','merged'}, {'review','stage'}, {'approved','stage'}))
+                          and {stages.get(s) for s in status} in ({'review','merged'}, {'stage','merged'}, {'review','stage'}, {'approved','stage'}, {'approved','merged'}))
         if direction == 'process':
             resuming_merge = (allow_transition and pr.get('merged') and len(status) == 2
                               and {stages.get(s) for s in status} == {'review', 'merged'})

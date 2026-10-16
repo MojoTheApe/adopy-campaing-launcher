@@ -102,3 +102,12 @@ Repository instructions have a separately prepared direct-main route described i
 normal fixed Markdown paths and complete Git proof, with independent review and
 applicable instruction checks. This policy/automation source is not yet active in
 main; it changes no campaign-launching behavior or employee-installed version.
+
+## Authorized package completion
+
+The repository provides `.github/workflows/complete-delivery.yml` to continue an
+actual authorized frozen batch after admitted main integration. It reuses the
+existing release publisher, verifies actual published packages on isolated Windows
+and records exact task delivery only from the successful native acceptance job.
+Source preparation, policy activation and actual delivery remain distinct facts;
+see [the process runbook](../repository/POST_MAIN_DELIVERY.md) and parent ACL-1923.
