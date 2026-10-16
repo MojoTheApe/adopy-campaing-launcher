@@ -19,6 +19,16 @@
   "Nothing is being assembled yet". Errors without a place on the page stay a dialog, now the
   dashboard's own.
 
+## ACL-1924 — Published-package acceptance continuation — 2026-10-15
+
+Add a durable authorized release workflow using the maintained installer publisher
+and updater. Its isolated Windows acceptance downloads the actual signed-channel
+previous/current packages, verifies the frozen release SHA/tasks, runs real
+installation/update/restart/recovery and data preservation, and emits the native
+receipt only on success. Existing same-candidate mechanism tests and employee
+update behavior are preserved; live rollout and business pilot are not asserted.
+Parent ACL-1923 retains actual activation and publication verification.
+
 ## Builder: pre-flight audit card that blocks Publish - ACL-1819
 
 - Every check is defined once in `src/fb_api/preflight_rules.py` (id, label, severity, field, hint,
