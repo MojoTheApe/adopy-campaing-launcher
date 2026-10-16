@@ -41631,6 +41631,18 @@
         "state": "implementing",
         "started_at": "2026-10-16T13:03:15+00:00",
         "from_status": "status:backlog"
+      },
+      "151": {
+        "actor": "Worker-W1151M",
+        "session": "worker_acl1151_20261016",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1151-map-pick-profile",
+        "worktree": "C:\\acl-1151",
+        "id": "39bb20b9dde844b98447a160e326acd1",
+        "issue": 151,
+        "state": "implementing",
+        "started_at": "2026-10-16T13:03:37+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -47570,6 +47582,17 @@
         "state": "implementing",
         "worker": "Worker-1273A",
         "coordinator": "Coordinator-M1011A"
+      },
+      "151": {
+        "implementers": [
+          {
+            "actor": "Worker-W1151M",
+            "session": "worker_acl1151_20261016"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W1151M",
+        "coordinator": "Coordinator-M1011A"
       }
     },
     "actors": {
@@ -49355,6 +49378,10 @@
       },
       "Worker-1273A": {
         "session": "d69b43c4-d6df-47bc-a94e-f83cd9b91368",
+        "role": "Worker"
+      },
+      "Worker-W1151M": {
+        "session": "worker_acl1151_20261016",
         "role": "Worker"
       }
     },
@@ -76882,6 +76909,13 @@
         "issue": 273,
         "claim": "da2092480bb24f8a94f67903334ed2a6",
         "actor": "Worker-1273A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-16T13:03:37+00:00",
+        "issue": 151,
+        "claim": "39bb20b9dde844b98447a160e326acd1",
+        "actor": "Worker-W1151M"
       }
     ],
     "policy": {
