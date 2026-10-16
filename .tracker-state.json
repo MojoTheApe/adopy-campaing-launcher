@@ -41620,20 +41620,6 @@
         "started_at": "2026-10-16T14:42:38+00:00",
         "from_status": "status:backlog"
       },
-      "787": {
-        "actor": "Worker-W1787C",
-        "session": "w1787c-20261016",
-        "coordinator": "Coordinator-C1016A",
-        "branch": "codex/acl-1787-ad-rules-research",
-        "worktree": "C:\\acl-1787-c",
-        "id": "cab384b4c05f4c11aae5b3a15a8368e9",
-        "issue": 787,
-        "state": "handoff",
-        "started_at": "2026-10-16T14:45:24+00:00",
-        "from_status": "status:backlog",
-        "pr": 956,
-        "report": "ACL-1787 desk research delivered in PR 956 (docs/research/ACL-1787-meta-ad-rules.md). Official Meta docs only; no API calls, credentials or accounts touched. Verified facts separated from inferences and unknowns. Key unknowns for a gated pilot: error 2703 versus pause-with-spend rules, and whether the in-profile token can create rules. Recommendation: do not build yet; run the section 8 pilot with an explicit owner go. Verification: documentation-only change, no code or tests."
-      },
       "788": {
         "actor": "Worker-W1788C",
         "session": "w1788c-20261016",
@@ -47805,9 +47791,25 @@
             "session": "w1787c-20261016"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1787C",
-        "coordinator": "Coordinator-C1016A"
+        "coordinator": "Coordinator-C1016A",
+        "handoff": {
+          "actor": "Worker-W1787C",
+          "session": "w1787c-20261016",
+          "coordinator": "Coordinator-C1016A",
+          "branch": "codex/acl-1787-ad-rules-research",
+          "worktree": "C:\\acl-1787-c",
+          "id": "cab384b4c05f4c11aae5b3a15a8368e9",
+          "issue": 787,
+          "state": "handoff",
+          "started_at": "2026-10-16T14:45:24+00:00",
+          "from_status": "status:backlog",
+          "pr": 956,
+          "report": "ACL-1787 desk research delivered in PR 956 (docs/research/ACL-1787-meta-ad-rules.md). Official Meta docs only; no API calls, credentials or accounts touched. Verified facts separated from inferences and unknowns. Key unknowns for a gated pilot: error 2703 versus pause-with-spend rules, and whether the in-profile token can create rules. Recommendation: do not build yet; run the section 8 pilot with an explicit owner go. Verification: documentation-only change, no code or tests."
+        },
+        "pr": 956,
+        "queued_at": "2026-10-16T14:53:45+00:00"
       },
       "788": {
         "implementers": [
@@ -52411,7 +52413,8 @@
       273,
       896,
       151,
-      165
+      165,
+      787
     ],
     "review": null,
     "history": [
@@ -77336,6 +77339,13 @@
         "pr": 952,
         "lane": "d7e5685f29ff43578c73c9cc5b90e815",
         "actor": "Reviewer-R1708D"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-16T14:53:45+00:00",
+        "issue": 787,
+        "pr": 956,
+        "actor": "Worker-W1787C"
       }
     ],
     "policy": {
