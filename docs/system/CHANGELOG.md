@@ -1,5 +1,15 @@
 # System history
 
+## ACL-1924 — Published-package acceptance continuation — 2026-10-15
+
+Add a durable authorized release workflow using the maintained installer publisher
+and updater. Its isolated Windows acceptance downloads the actual signed-channel
+previous/current packages, verifies the frozen release SHA/tasks, runs real
+installation/update/restart/recovery and data preservation, and emits the native
+receipt only on success. Existing same-candidate mechanism tests and employee
+update behavior are preserved; live rollout and business pilot are not asserted.
+Parent ACL-1923 retains actual activation and publication verification.
+
 ## API backend: no time limit on file uploads, upload progress on the dashboard - ACL-1899
 
 - Bug (live 2026-10-14): a video upload hit the generic 120 s write timeout, Python stopped waiting
