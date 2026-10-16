@@ -48040,7 +48040,7 @@
       },
       "33": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       }
     },
     "actors": {
@@ -77713,6 +77713,12 @@
         "at": "2026-10-16T20:46:47+00:00",
         "issue": 811,
         "reason": "Done in main by ACL-1812: cfc77b48 (no automatic stop/restart of hand-opened windows, cooldown on open-profile buttons) and df118f5c (shared restart cooldown on every start path). Backlog cleanup 2026-10-16."
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-16T20:47:42+00:00",
+        "issue": 33,
+        "reason": "Backlog cleanup 2026-10-16: stale idea (undefined scope, untouched since September, premise predates the Graph API / new builder direction). Restore if it becomes relevant again."
       }
     ],
     "policy": {
