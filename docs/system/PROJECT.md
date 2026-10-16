@@ -28,6 +28,11 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   confirms audience age/country values within their own field and opens the correct
   collapsed Locations/Languages control, preserving adjacent fields. Later hover-only
   controls remain ACL-1251; the deferred real pilot remains ACL-1215.
+  ACL-1138: before attaching to or starting a Multilogin profile, both Multilogin
+  providers read the profile's proxy from the MLX API (`/profile/search` by id) and
+  stop the account with `profile_no_proxy` when none is configured. A failed check
+  does not block the run; `FB_RPA_PROXY_GATE=0` is the machine switch. The
+  browser's `--proxy-server` flag is only logged as evidence.
 - `src/creative_agent`, `src/knowledge_agent`: creative analysis and domain references.
 - `src/analysis_agent/team_library.py` and related library modules: shared targets/ad texts in
   the separately provisioned private team library; PR #244 replaced Google Sheets

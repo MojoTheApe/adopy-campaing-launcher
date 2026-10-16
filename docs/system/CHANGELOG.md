@@ -1,5 +1,20 @@
 # System history
 
+## ACL-1138 — Refuse a Multilogin profile that has no proxy — 2026-10-16
+
+Before the robot attaches to or starts a Multilogin profile, it reads the profile's
+proxy configuration from the MLX API (`POST /profile/search` with `profile_ids`; works
+in both workspaces, while `/profile/metas` answers 501 in workspace B). A profile with
+no proxy stops the account with `profile_no_proxy` ("Add the proxy to the profile in
+Multilogin"), before anything touches the profile or Facebook. A failed or unavailable
+check logs a warning and lets the run continue; a passing result is cached for ten
+minutes, a refusal is not. `FB_RPA_PROXY_GATE=0` turns it off. The browser command
+line's `--proxy-server` flag is logged after attach/start as evidence only, because
+MLX may apply some proxy types through its agent. Read-only survey on 2026-10-16:
+34 of 1848 profiles in workspace A and 3 of 520 in B have no proxy configured. The gate
+was checked read-only against real http, socks5 and no-proxy profiles in both
+workspaces; an attach on a live run has not been observed yet.
+
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
 Add a durable authorized release workflow using the maintained installer publisher
