@@ -605,6 +605,19 @@ Crop where Next hung and closed the wizard with Close, leaving the ad without me
   scale drop (dpr below 0.85 of before) is undone and not retried.
 - The `window_bounds` diag records `enlarged: true` and `enlarged_to` (the new size). No new
   windows are opened and the window is never moved to another monitor.
+## Busy tab is no longer counted as a frozen episode - ACL-1739
+
+- Doc124 CO_bnc runs (df8549045b4a, e3f55897e533, 6331d5e85536, dbe5e7c04048, ecc2e3e54784,
+  208f67a4b2aa; 07-08.10) ended at `tab_frozen_budget_exceeded` or lost steps to `tab_frozen`.
+  Telemetry: the profile window was covered by 4-7 other windows (`window_hidden_woken`
+  reason `covered`, not foreground), the 5 s liveness probe missed, yet a minute later
+  `stall_evidence` read `responsive: true` (JS heap about 500 MB, 6.3k nodes - normal for Ads
+  Manager). Episodes fell on all steps (objective, create, ad copy, upload), not on video upload.
+- `_tab_frozen` now asks once more with the long probe (`FROZEN_CONFIRM_S`, 10 s) after a missed
+  short probe that the wake did not rescue. If the long probe answers, the tab is busy: no episode
+  is counted (telemetry `tab_frozen`, note `confirm_answered`). A tab that does not answer the long
+  probe either counts as before, so the ACL-1702 budget and the hung-tab watchdog are unchanged.
+
 ## Campaign open: the AI-guided / Manual chooser counts as Create taken - ACL-1726
 
 - Run 4db2039f760d (Facebook_9403A, 08.10): Create now opens Meta's "Create new campaign" chooser
