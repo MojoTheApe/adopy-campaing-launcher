@@ -1,5 +1,15 @@
 # System history
 
+## ACL-1960 — Closing a profile survives one failed launcher request — 2026-10-16
+
+`MultiloginLauncher.stop_profile` asks the main address (`v1/profile/stop/p/{id}`)
+up to three times when the request drops or the launcher answers 5xx (not "already
+stopped"), two seconds apart. Before, one dropped request sent the stop to the
+legacy addresses, which all answer 404, so a read left the profile window open
+and the error showed the last 404 instead of the cause (TEST9095, Doc120,
+2026-10-16 23:10). The raised error now names the main-address failure. 404 on the
+main address still falls through to the legacy tail; other 4xx still stop at once.
+
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
 Add a durable authorized release workflow using the maintained installer publisher

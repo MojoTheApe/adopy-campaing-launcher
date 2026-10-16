@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -9,6 +10,24 @@ import requests
 from src.meta_campaign_agent.multilogin_config import MultiloginInstanceConfig
 
 log = logging.getLogger(__name__)
+
+# ACL-1960: сколько раз спрашивать основной адрес остановки и пауза между.
+_STOP_PRIMARY_TRIES = 3
+_STOP_RETRY_PAUSE_S = 2.0
+
+
+def _reply_message(r: Any) -> str:
+    try:
+        body = r.json()
+        status = body.get("status") if isinstance(body, dict) else None
+        msg = status.get("message") if isinstance(status, dict) else r.text
+    except ValueError:
+        msg = r.text[:200]
+    return msg or ""
+
+
+def _already_stopped(r: Any) -> bool:
+    return "already stopped" in _reply_message(r).lower()
 
 
 class MultiloginLauncherError(RuntimeError):
@@ -207,22 +226,36 @@ class MultiloginLauncher:
         ]
 
         last_err: str = ""
-        for url in candidates:
+        # ACL-1960: обрыв или 5xx на основном адресе — не «маршрута нет».
+        # 16.10 23:10 (Doc120) один такой сбой отправил перебор к старым
+        # адресам, все ответили 404, окно осталось открытым, а в ошибке стоял
+        # 404 последнего — настоящая причина терялась. Основной адрес теперь
+        # спрашивается ещё до двух раз, а его сбой и попадает в ошибку.
+        primary_err: str = ""
+        for index, url in enumerate(candidates):
             params = {"profile_id": profile_id} if url.endswith("/profile/stop") else {}
-            try:
-                r = requests.get(url, headers=self._headers(), params=params, timeout=self.timeout)
-            except Exception as exc:
-                last_err = str(exc)
+            tries = _STOP_PRIMARY_TRIES if index == 0 else 1
+            r = None
+            for attempt in range(tries):
+                if attempt:
+                    time.sleep(_STOP_RETRY_PAUSE_S)
+                try:
+                    r = requests.get(url, headers=self._headers(), params=params, timeout=self.timeout)
+                except Exception as exc:
+                    last_err = str(exc)
+                    r = None
+                    continue
+                if r.status_code < 500 or _already_stopped(r):
+                    break
+                last_err = f"HTTP {r.status_code}: {_reply_message(r)}"
+            if r is None or (r.status_code >= 500 and not _already_stopped(r)):
+                if index == 0:
+                    primary_err = last_err
+                    log.warning("MLX stop on the main address failed %d times: %s", tries, last_err)
                 continue
             if r.status_code < 400:
                 return
-            try:
-                body = r.json()
-                status = body.get("status") if isinstance(body, dict) else None
-                msg = status.get("message") if isinstance(status, dict) else r.text
-            except ValueError:
-                msg = r.text[:200]
-            msg = msg or ""
+            msg = _reply_message(r)
             if "already stopped" in msg.lower():
                 return
             last_err = f"HTTP {r.status_code}: {msg}"
@@ -230,4 +263,6 @@ class MultiloginLauncher:
                 log.info("MLX stop address not served here: %s", url.split("/api/", 1)[-1])
                 continue
             break
+        if primary_err:
+            last_err = f"(main address) {primary_err}; older addresses: {last_err}"
         raise MultiloginLauncherError(f"Stop profile failed {last_err}")
