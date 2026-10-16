@@ -1841,33 +1841,32 @@ async def _apply_release_update(active_jobs) -> JSONResponse:
             release_updates.apply_lock.release()
 
 
-def _period_owner(report: dict, df, date_from: str, date_to: str) -> dict | None:
-    """Whose emptiness an empty period is (ACL-106).
+def _period_owner(report: dict) -> dict | None:
+    """Whose emptiness a chosen period is, when it is the manager's alone (ACL-106).
 
-    "The workbook has no rows for these dates" (nobody has any: the file is
-    stale) and "the workbook has rows, just none for this manager" (they did
-    not run traffic: nothing to review) look identical on a zero-filled page.
-    Only the second needs a notice from here; the first is the existing
-    workbook-period notice. Both are scoped to the chosen dates and manager.
+    Read from the already-built period report, never from the workbook frame:
+    this runs on every render. `countries` is built from every manager's rows
+    in the period, so no countries means nobody has rows (the existing
+    workbook notice owns that case). Countries with no `is_me` row in any
+    `cm_comparison` mean other managers have rows and this one has none.
+    Rows without a CM name are nobody's and do not count as others' rows.
     """
-    cm = str(report.get("my_cm") or "").strip()
-    if df is None or not cm or not (date_from or date_to):
+    cm = str(report.get("my_cm") or "").strip().lower()
+    if not cm or not (report.get("period_from") or report.get("period_to")):
         return None
-    try:
-        rows = _filter_by_period(df, date_from, date_to)
-        if "CM" not in getattr(rows, "columns", []) or "Date" not in getattr(rows, "columns", []):
-            return None
-        import pandas as pd
-
-        rows = rows[pd.to_datetime(rows["Date"], errors="coerce").notna()]
-        if len(rows) == 0:
-            return {"kind": "workbook", "manager": cm}
-        mine = rows["CM"].astype(str).str.strip().str.casefold() == cm.casefold()
-        if bool(mine.any()):
-            return None
-        return {"kind": "manager", "manager": cm, "other_rows": int(len(rows))}
-    except Exception:
+    countries = report.get("countries") or []
+    other_rows = 0
+    for country in countries:
+        for row in country.get("cm_comparison") or []:
+            name = str(row.get("cm") or "").strip()
+            if name.lower() in ("", "nan", "none"):
+                continue
+            if row.get("is_me") or name.lower() == cm:
+                return None
+            other_rows += 1
+    if not other_rows:
         return None
+    return {"kind": "manager", "manager": str(report.get("my_cm")).strip(), "other_cms": other_rows}
 
 
 def _enrich_country_overview(report: Dict[str, Any]) -> None:
@@ -1976,7 +1975,7 @@ def _render_report(
             "account_map": _account_map_view,
             "sidebar_countries": _sidebar_countries(report, _account_map_view),
             "period": {"date_from": date_from, "date_to": date_to, "span": span},
-            "period_owner": _period_owner(report, _df, date_from, date_to),
+            "period_owner": _period_owner(report),
             "goals": goals_view,
             # ACL-1799: цель страны (My Goals) для Country Workbench — отдельным
             # числом, не смешанным с порогом из benchmarks и результатом пиров.
