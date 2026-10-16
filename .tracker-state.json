@@ -41603,9 +41603,11 @@
         "worktree": "C:\\acl-1853-r2",
         "id": "414a40577add41138c6bd0b1a56b05dd",
         "issue": 853,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-16T10:27:01+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 863,
+        "report": "# ACL-1853 refresh onto main\n\n- Merged origin/main (af0ade29) into codex/acl-1853-profile-process-lease (merge commit, no rebase). New head 914a5b05. Scope unchanged.\n- One conflict: docs/system/CHANGELOG.md (ACL-1853 entry vs main's ACL-1924 entry). Resolved by keeping both, main's newer entry first.\n- Tests: 41 affected test files (git diff --name-only origin/main...HEAD, tests/ only): 1330 passed, 0 failed (local, Python 3.14; sentry_sdk installed to run the sentry snapshot test).\n- Source PR #863 CI on 914a5b05: all test, verification and process jobs pass. Only tracker-link failed, because the task was not yet in Review (\"start and implement the task, then move it to Review\"); it is expected to clear after this handoff."
       },
       "138": {
         "actor": "Worker-P1138",
