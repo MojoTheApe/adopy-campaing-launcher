@@ -1,5 +1,12 @@
 # System history
 
+## Empty period says whose emptiness it is - ACL-106
+
+For the chosen dates the dashboard now distinguishes a period with no workbook rows for
+anyone (the workbook may need updating) from one where only the selected manager has no
+rows while others do (nothing to review). The notice names the manager and dates; the
+account map and account-reading controls stay available in both cases.
+
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
 Add a durable authorized release workflow using the maintained installer publisher

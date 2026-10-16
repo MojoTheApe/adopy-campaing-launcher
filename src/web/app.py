@@ -1841,6 +1841,35 @@ async def _apply_release_update(active_jobs) -> JSONResponse:
             release_updates.apply_lock.release()
 
 
+def _period_owner(report: dict, df, date_from: str, date_to: str) -> dict | None:
+    """Whose emptiness an empty period is (ACL-106).
+
+    "The workbook has no rows for these dates" (nobody has any: the file is
+    stale) and "the workbook has rows, just none for this manager" (they did
+    not run traffic: nothing to review) look identical on a zero-filled page.
+    Only the second needs a notice from here; the first is the existing
+    workbook-period notice. Both are scoped to the chosen dates and manager.
+    """
+    cm = str(report.get("my_cm") or "").strip()
+    if df is None or not cm or not (date_from or date_to):
+        return None
+    try:
+        rows = _filter_by_period(df, date_from, date_to)
+        if "CM" not in getattr(rows, "columns", []) or "Date" not in getattr(rows, "columns", []):
+            return None
+        import pandas as pd
+
+        rows = rows[pd.to_datetime(rows["Date"], errors="coerce").notna()]
+        if len(rows) == 0:
+            return {"kind": "workbook", "manager": cm}
+        mine = rows["CM"].astype(str).str.strip().str.casefold() == cm.casefold()
+        if bool(mine.any()):
+            return None
+        return {"kind": "manager", "manager": cm, "other_rows": int(len(rows))}
+    except Exception:
+        return None
+
+
 def _enrich_country_overview(report: Dict[str, Any]) -> None:
     """Ensure per-country my_totals / my_spend for home overview (cached reports)."""
     for country in report.get("countries", []):
@@ -1947,6 +1976,7 @@ def _render_report(
             "account_map": _account_map_view,
             "sidebar_countries": _sidebar_countries(report, _account_map_view),
             "period": {"date_from": date_from, "date_to": date_to, "span": span},
+            "period_owner": _period_owner(report, _df, date_from, date_to),
             "goals": goals_view,
             # ACL-1799: цель страны (My Goals) для Country Workbench — отдельным
             # числом, не смешанным с порогом из benchmarks и результатом пиров.
