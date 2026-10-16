@@ -41628,9 +41628,11 @@
         "worktree": "C:\\acl-106-c",
         "id": "e5cc3a52d7a34527b7097b74a81ca119",
         "issue": 19,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-16T14:33:01+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 955,
+        "report": "ACL-106: per-manager empty-period notice. _period_owner() in src/web/app.py classifies the chosen dates as workbook-empty (nobody) or manager-empty (others have rows). report.html shows a manager-scoped notice in a separate block; the whole-workbook notice now adds that the file may need updating; account map unchanged. Tests: tests/test_empty_period_owner.py (+ existing sidebar tests), 21 passed. Docs updated. Head caff4e4a26a97c07660323e1d68440e46e62194d."
       }
     },
     "tasks": {
