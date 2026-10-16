@@ -92,7 +92,7 @@ def test_static_still_serves_a_plain_file():
         ("", False),
         ("/", False),
         ("//host/share", False),
-        ("\\\\host\\share", False),
+        ("\\\\host\\share", False),  # linux-ok: hostile path as data, never opened
         ("C:/Windows", False),
         ("C:Windows", False),
         ("a/../b", False),
@@ -113,7 +113,7 @@ def test_is_safe_static_path(path, safe):
 
 def test_safe_static_lookup_rejects_windows_absolute_paths_directly(tmp_path, resolver_must_not_run):
     static = SafeStaticFiles(directory=str(tmp_path))
-    for path in ("\\\\host\\share\\x", "C:\\Windows\\win.ini", "C:x", "/etc/passwd", "\\x"):
+    for path in ("\\\\host\\share\\x", "C:\\Windows\\win.ini", "C:x", "/etc/passwd", "\\x"):  # linux-ok: hostile paths as data, never opened
         assert static.lookup_path(path) == ("", None)
     assert resolver_must_not_run == []
 
