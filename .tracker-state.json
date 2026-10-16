@@ -46575,7 +46575,7 @@
             "session": "t1872a-20261015"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-T1872A",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -46600,7 +46600,7 @@
           "session": "coord-m1011a-20261015",
           "report": "Main moved to af0ade29 (ACL-1924 batch + ACL-1923 no-stage activation, policy 1bd91869). The earlier approval predates this policy and main and is no longer current. Returned to the author for a main merge and fresh independent approval; coordination of this task moves to Coordinator-C1016A (session \"7 \u0437\u0430\u0434\u0430\u0447 \u0432 \u0430\u043f\u0440\u0443\u0432\u0434\u0435\") on the owner's instruction."
         },
-        "review_report": "# ACL-1872 / PR873 \u2014 current-main reconciliation return\n\nActual separate non-implementing Reviewer-RS1012 / connection_review_rs1012; Coordinator-CR1012. Original author Worker-IS1013 / isolated_app_sol_20261013. Genuine supported source-review claim846a05ed690f48b88696e29b60ff6a3f, acquired only after fresh readback confirmed task872 queued, implementation claim absent, PR873 ready/open and no existing source review owner. No other claim or foreign integration ownership was changed.\n\nExact source remains1b5459a02ef24408f2d497b0af0487ffb5e4b7bf, tree9335195716d2c1c19768ae7c995def2947140dac, on preserved branch work/acl-1872-isolated-meta-setup. Checkout is clean. Fresh git ls-remote and fetched origin/main both identify7cee2857d4b374bc564c5ca84b9f6ede69f96430. The source/current-main merge-base is still777663bf539308c0898cc177f872a8e0f63b597e, also the PR base checkpoint exposed by GitHub at readback. Current main therefore advanced beyond the source's admitted verification baseline. Full refreshed source review/admission against the new main is required; stale approval is not appropriate.\n\nThe entire current Issue872 body (updated2026-10-13T20:00:47Z), full PR body, original specifications, every acceptance criterion, historical handoffs and latest retirement repair/handoff evidence were read. Nothing in the issue was removed or rewritten. Snapshots: acl1872-new-main-full-issue-1b5459a0.json and acl1872-new-main-pr-1b5459a0.json. The bounded local preparation outcome and unfinished ACL1858/1358 wider official access/HTTP/app-creation work remain unchanged.\n\nCurrent source repair is preserved: registry-load validation precedes retirement cleanup and writes; public malformed-state cases preserve metadata/ciphertext/map bytes, with normal cleanup recovery retained. The author reports235 affected local tests and46 packaging units passing plus scanner/smoke/diff. Exact1b5459a0 product CI38455307156 and actual installer38455307278 succeeded, and ready tracker-link38455371265 attempt2 plus supported check-pr passed after durable handoff. These are valid source evidence for their recorded base/tree, not proof of a newly reconciled candidate. No successful unchanged test was repeated and no final full Standards/Spec approval of this repaired head is claimed in this bounded return.\n\nCurrent-main governance comparison shows AGENTS, delivery/config, workflow pins, source-review procedure and launcher unchanged; the only matching process-document delta is the ACL1879 CI-sharding history entry in docs/repository/CHANGELOG.md. Genuine schema3 policy5/5/5 and clean pinned Tracker46283b8a6fe444065838e136c89ef4ed64bd1528 remain applicable. This return uses their supported execution review-return operation under the actual acquired lane.\n\nDisposition: return to the same original author for a fresh normal implementation claim and reconciliation with actual current main7cee2857 (or newer freshly verified main if it advances again). Preserve the complete issue/history, original source branch, retirement repair, public preservation regressions, prior independent findings/evidence and all other owners. Resolve any actual base delta in that source under the author claim, then run checks justified by the resulting candidate and complete required current-head product/applicable installer CI before normal handoff. A fresh independent full-scope source review is still required afterward. This is a baseline freshness return, not a new product defect, rejection of the repair, or authorization to import unrelated sibling code.\n\nNo product/test/runtime/root-configuration edits, installation, merge, live Meta/Multilogin, credential/profile operation, source approval or foreign ownership mutation was performed. Only read-only Git metadata fetch and private audit evidence were written before the supported return. Historical source approval and successful evidence remain preserved as history; they are not asserted usable against the changed current main.",
+        "review_report": "Main moved to af0ade29 (ACL-1924 batch + ACL-1923 no-stage activation, policy 1bd91869). The earlier approval predates this policy and main and is no longer current. Returned to the author for a main merge and fresh independent approval; coordination of this task moves to Coordinator-C1016A (session \"7 \u0437\u0430\u0434\u0430\u0447 \u0432 \u0430\u043f\u0440\u0443\u0432\u0434\u0435\") on the owner's instruction.",
         "reviewer": "Reviewer-R1872B",
         "return": {
           "id": "91b9cdb7a26a463a8f1bebb1297c4b0e",
@@ -75859,6 +75859,18 @@
           "report": "Main moved to af0ade29 (ACL-1924 batch + ACL-1923 no-stage activation, policy 1bd91869). The earlier approval predates this policy and main and is no longer current. Returned to the author for a main merge and fresh independent approval; coordination of this task moves to Coordinator-C1016A (session \"7 \u0437\u0430\u0434\u0430\u0447 \u0432 \u0430\u043f\u0440\u0443\u0432\u0434\u0435\") on the owner's instruction."
         },
         "batch_id": null
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-16T10:24:47+00:00",
+        "issue": 872,
+        "operation": {
+          "id": "91b9cdb7a26a463a8f1bebb1297c4b0e",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "report": "Main moved to af0ade29 (ACL-1924 batch + ACL-1923 no-stage activation, policy 1bd91869). The earlier approval predates this policy and main and is no longer current. Returned to the author for a main merge and fresh independent approval; coordination of this task moves to Coordinator-C1016A (session \"7 \u0437\u0430\u0434\u0430\u0447 \u0432 \u0430\u043f\u0440\u0443\u0432\u0434\u0435\") on the owner's instruction."
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -77171,50 +77183,6 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-15T08:19:42+00:00"
-      },
-      "872": {
-        "issue": 872,
-        "pr": 873,
-        "branch": "work/acl-1872-isolated-meta-setup",
-        "head_sha": "28a285f89fa1ef150f7d6ce12c773b0927a93d48",
-        "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
-        "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
-        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-        "scope": "056079718ff37abfb6fc03a968d771c38f75990f618fab887e7cdc4db06636b0",
-        "review": {
-          "kind": "independent-review",
-          "verdict": "approved",
-          "reviewer": "Reviewer-R1872B",
-          "implementer": "Worker-T1872A",
-          "review_session": "S-fd075fc8",
-          "execution_lane": "32e478ac0eaf445bb2497f0376c9f142",
-          "head_sha": "28a285f89fa1ef150f7d6ce12c773b0927a93d48",
-          "base_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
-          "tree_sha": "b744a3c0ce70e221c69cf6970aafd3d1378725f4",
-          "report": "# ACL-1872 / PR873 \u2014 independent source review: APPROVED\n\nReviewer-R1872B / session S-fd075fc8 (Coordinator-M1011A). Not an implementer: the recorded implementers are Worker-IS1013 and Worker-T1872A.\nReview lane 32e478ac0eaf445bb2497f0376c9f142. Exact head 28a285f89fa1ef150f7d6ce12c773b0927a93d48, tree b744a3c0ce70e221c69cf6970aafd3d1378725f4, base = current main 080df2d8d9a846180753b1a425c289dcc5aefbb0.\nReviewed the full diff `080df2d8...28a285f8` (16 files, +1839/-206) in a fresh detached worktree (C:\\acl-rev-872). The source branch was not edited.\n\n## Scope checked\n- **Isolated App setup in the existing Connect panel** (`_account_map_add.html`, `report.html`): separate App ID, password-type token/App Secret fields that are never filled back, cleared before and after every request, generation guards against stale responses, and Save/Disconnect disabled while busy or retired. The Multilogin Connect controls are untouched.\n- **DPAPI vault** (`config/protected_secrets.py`): CurrentUser `CryptProtectData` with `CRYPTPROTECT_UI_FORBIDDEN`. There is no plaintext or non-Windows fallback. Each envelope binds owner (connection_id) and revision, and get/delete check both. Delete refuses unverifiable or foreign blobs. Every error is a single safe message with no input, OS text or path. Opaque UUID references are validated before path construction, so there is no traversal.\n- **Registry** (`src/web/meta_connections.py`): strict schema validation on load. This covers phases, revisions, request markers, one valid binding per profile/account pair, permanent App ownership (`app_owners` is never released and is cross-checked against connections and markers), and cleanup entries that must not equal the live credential_ref. Any violation gives a 503 \"unreadable; restore backup\" with no write and no delete.\n- **Writes**: save writes ciphertext first, then commits metadata, and removes only the uncommitted new blob if the metadata write fails. Disconnect and binding change retire durably (a metadata write that disables the binding) before best-effort vault cleanup. Replay receipts are request_id markers: an identical replay returns current state, a mismatched reuse is refused, and a stale expected_revision gets a 409.\n- **Shared map transactions**: every account-map writer goes through `meta_connections.transaction` with one lock order (thread \u2192 registry file \u2192 map file) and calls `mapping_will_change` before the CSV commit. The writers are `/account-map-patch`, `/account-map-remove`, `_save_link_to_machine_map`, `migrate_legacy_account_map`, `ensure_machine_config` and the installer's `apply_machine_configuration`. I searched for other writers of the map and for any reverse-order `machine_file_lock` use and found none. The blocking map writers now run via `asyncio.to_thread`.\n- **Secrets never returned**: `_dto` exposes no credential_ref, token or secret. The endpoints parse a bounded raw body (32 KiB) without FastAPI validation echoes, reject unknown fields, and turn every exception into a generic message. Redaction lists in diagnostics and run_telemetry now include app_secret, credential_ref and secret_ref.\n- **Review-return fix 1b5459a0, re-verified**: `_load` validates retirement before any reconcile, cleanup or write. A cleanup_pending record needs all of the following, otherwise the whole registry is refused:\n  - a valid `retired_phase`\n  - a non-empty cleanup list\n  - an empty credential_ref\n  - binding_valid consistent with the retired phase\n\n  `test_corrupt_retirement_is_refused_before_cleanup_or_writes` covers missing, invalid-type, active-phase, empty-cleanup, active-credential and contradictory-binding damage. It asserts that the registry, the map and the blobs are byte-identical afterwards and that no delete was called.\n\n## Tests (affected only; the full suite is already green in hosted CI on 28a285f8)\n`tests/test_meta_connections{,_ui,_windows}.py` (including real Windows DPAPI round-trips), plus the account-map patch/view/columns/links tests, the connect/Multilogin connect tests, machine paths/config locations/google machine config, run_telemetry and the scrubber tests, and `packaging/windows/tests/test_{diagnostics,integration_fixes,machine_config}.py`: **295 passed** with the local .venv (Python 3.13, Windows).\n\n## Non-blocking observations (possible follow-ups, not required for this scope)\n1. A blob that is permanently undecryptable stays in cleanup_pending forever. This happens, for example, when the DPAPI master key changes after an admin password reset, or when the blob comes from another Windows user. While it is stuck, `begin` keeps returning that record, so no new connection can be prepared for that profile/account pair until a backup is restored. This is consistent with the documented fail-closed rule (\"corruption preserved and refused\"), but the user has no in-app way out.\n2. In `/account-map-patch` and `/account-map-remove`, the transaction is acquired outside the try. A lock `TimeoutError` therefore becomes FastAPI's plain-text 500, which is the class of bug the handler's own comment warns about. Also, when a registry exists but is corrupt, these map writes (including Multilogin Connect's profile link) refuse with \"Saved Meta setup is unreadable\u2026\". That is fail-closed by design and only affects machines that used Meta setup.\n3. The Meta endpoints parse the body regardless of Content-Type, so a cross-origin `text/plain` POST to `/meta-connections/begin` could create an `awaiting_app` record. The response is not readable cross-origin, and the other endpoints need an unknown connection UUID and revision. This matches existing dashboard endpoints and is low risk.\n4. `crypto.randomUUID()` needs a secure context. The dashboard on localhost is fine, but opened over plain HTTP via a LAN IP the Save/Disconnect click would fail silently.\n\nNo blocking issues. No live Meta or Multilogin calls were made and no credentials were used.\n",
-          "main_sha": "080df2d8d9a846180753b1a425c289dcc5aefbb0",
-          "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
-          "issues": [
-            872
-          ],
-          "recorded_at": "2026-10-15T08:59:13+00:00",
-          "issue_scopes": {
-            "872": "056079718ff37abfb6fc03a968d771c38f75990f618fab887e7cdc4db06636b0"
-          }
-        },
-        "lane": {
-          "id": "32e478ac0eaf445bb2497f0376c9f142",
-          "pr": 873,
-          "issues": [
-            872
-          ],
-          "actor": "Reviewer-R1872B",
-          "session": "S-fd075fc8",
-          "coordinator": "Coordinator-M1011A",
-          "started_at": "2026-10-15T08:50:57+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-15T08:59:44+00:00"
       },
       "924": {
         "issue": 924,
