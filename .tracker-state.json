@@ -45620,7 +45620,7 @@
             "session": "wrs1816-20261015"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-RS1816",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -45639,7 +45639,7 @@
         },
         "pr": 820,
         "queued_at": "2026-10-15T10:24:38+00:00",
-        "review_report": "# Return for a dependency refresh\n\nMain now also contains batch b2772e6f (ACL-1819 pre-flight, ACL-1799 country workbench, ACL-1814 rules store; PR 926 -> 928). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
+        "review_report": "# Return for a main refresh\n\nMain moved to af0ade29 (ACL-1923/1924: no-stage delivery route, process docs and workflows). Required: merge current main into the branch (merge, no rebase; it merges cleanly), re-run the affected tests, hand off again for fresh review.",
         "reviewer": "Reviewer-R1816T"
       },
       "822": {
@@ -75535,6 +75535,24 @@
         "pr": 820,
         "lane": "fc3a66a842ee4dbbb1ebe032765d71f9",
         "actor": "Reviewer-R1816T"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-16T10:03:58+00:00",
+        "review": {
+          "id": "fc3a66a842ee4dbbb1ebe032765d71f9",
+          "pr": 820,
+          "issues": [
+            816
+          ],
+          "actor": "Reviewer-R1816T",
+          "session": "r1816t-20261016",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-16T10:02:59+00:00",
+          "state": "returning",
+          "report": "# Return for a main refresh\n\nMain moved to af0ade29 (ACL-1923/1924: no-stage delivery route, process docs and workflows). Required: merge current main into the branch (merge, no rebase; it merges cleanly), re-run the affected tests, hand off again for fresh review.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -79923,22 +79941,7 @@
       "started_at": "2026-10-15T11:47:02+00:00",
       "ineligible": {}
     },
-    "source_reviews": {
-      "820": {
-        "id": "fc3a66a842ee4dbbb1ebe032765d71f9",
-        "pr": 820,
-        "issues": [
-          816
-        ],
-        "actor": "Reviewer-R1816T",
-        "session": "r1816t-20261016",
-        "coordinator": "Coordinator-C0930A",
-        "started_at": "2026-10-16T10:02:59+00:00",
-        "state": "returning",
-        "report": "# Return for a main refresh\n\nMain moved to af0ade29 (ACL-1923/1924: no-stage delivery route, process docs and workflows). Required: merge current main into the branch (merge, no rebase; it merges cleanly), re-run the affected tests, hand off again for fresh review.",
-        "keep_lane": false
-      }
-    },
+    "source_reviews": {},
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
   },
   "maintenance_history": [
