@@ -65,9 +65,8 @@ def execution_policy(config):
         raise ValueError('Execution policy needs schema_version 1..3, implementation_limit 1..16; review_limit is 1 (v1/v2) or 1..5 (v3)')
     if not policy(config):
         raise ValueError('Parallel execution requires the independent-review delivery policy')
-    if version in (2, 3) and (type(value['batch_limit']) is not int or not 1 <= value['batch_limit'] <= (5 if version == 3 else 16)
-                         or not policy(config)['staging']['enabled']):
-        raise ValueError('Approved batches require staging and batch_limit 1..16 (v2) or 1..5 (v3)')
+    if version in (2, 3) and (type(value['batch_limit']) is not int or not 1 <= value['batch_limit'] <= (5 if version == 3 else 16)):
+        raise ValueError('Approved batches require batch_limit 1..16 (v2) or 1..5 (v3)')
     return value
 
 
@@ -108,6 +107,72 @@ def accepted_scope_digest(issue):
     return hashlib.sha256(json.dumps(fields, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
+def task_scope(issue):
+    labels = sorted(x['name'] if isinstance(x, dict) else x for x in issue.get('labels', [])
+                    if not (x['name'] if isinstance(x, dict) else x).startswith(('status:', 'priority:', 'release:')))
+    return hashlib.sha256(json.dumps({k: issue.get(k) for k in ('number', 'title', 'body')}
+                                   | {'labels': labels}, sort_keys=True).encode()).hexdigest()
+
+
+def receipt_digest(receipt):
+    original = {k: v for k, v in receipt.items() if k not in ('history', 'policy_reconciliations')}
+    return hashlib.sha256(json.dumps(original, sort_keys=True).encode()).hexdigest()
+
+
+def reconciled_policy(receipt):
+    """An explicit staging-only audit can carry old facts, never create success."""
+    current, scope = receipt.get('policy'), None
+    for row in receipt.get('policy_reconciliations', []):
+        if (not isinstance(row, dict) or row.get('from_policy') != current
+                or row.get('receipt_sha256') != receipt_digest(receipt)
+                or row.get('sources') != receipt.get('sources', [])
+                or any(not isinstance(row.get(k), str) or not re.fullmatch(r'[0-9a-f]{64}', row[k])
+                       for k in ('from_policy', 'to_policy', 'scope'))
+                or not row.get('report') or not row.get('previous_revision')):
+            return receipt.get('policy'), None
+        current, scope = row['to_policy'], row['scope']
+    return current, scope
+
+
+def reconciled_request_policy(request, batch):
+    """Carry an existing authorization only through its audited unchanged batch."""
+    current = request.get('policy')
+    expected = dict(batch_id=batch.get('id'), issues=batch.get('issues'), target=request.get('target'),
+                    main_prs=batch.get('main_prs'), source_heads=[m.get('head_sha') for m in batch.get('members', [])])
+    for row in request.get('policy_reconciliations', []):
+        if (not isinstance(row, dict) or row.get('from_policy') != current
+                or row.get('request_sha256') != receipt_digest(request)
+                or any(row.get(k) != v for k, v in expected.items())
+                or any(not isinstance(row.get(k), str) or not re.fullmatch(r'[0-9a-f]{64}', row[k])
+                       for k in ('from_policy', 'to_policy'))
+                or not row.get('report') or not row.get('previous_revision')):
+            return request.get('policy')
+        current = row['to_policy']
+    return current
+
+
+def pending_delivery(shared, config):
+    """Keep the target's main stable until its explicitly requested delivery ends."""
+    completion = policy(config)
+    if not completion:
+        return False
+    for batch in (shared.get('execution') or {}).get('batches', {}).values():
+        request = batch.get('delivery_request', {})
+        if (batch.get('state') != 'merged' or request.get('state') != 'requested'
+                or request.get('target') != completion['delivery_target']):
+            continue
+        expected = set(batch.get('main_prs', []))
+        for n in batch['issues']:
+            receipt = shared.get('delivery_workflow', {}).get('tasks', {}).get(str(n), {})
+            matching = [summary(r) for r in [receipt, *reversed(receipt.get('history', []))]
+                        if expected and expected <= {s.get('pr') for s in r.get('sources', [])}
+                        and summary(r).get('policy') == fingerprint(config)]
+            row = next(iter(matching), {})
+            if not row.get('admitted') or completion['completion'] != 'reviewed-merge' and not row.get('verified'):
+                return True
+    return False
+
+
 def execution_state(state, config):
     value = execution_policy(config)
     if not value:
@@ -118,6 +183,10 @@ def execution_state(state, config):
     if (state_schema(state) != 2 or not isinstance(section, dict)
             or section.get('policy') != value):
         raise ValueError('Run execution migrate while the repository is idle to adopt this execution policy')
+    if value['schema_version'] in (2, 3) and 'delivery_policy' not in section and not policy(config)['staging']['enabled']:
+        raise ValueError('Unmarked historical batch state supported Stage only; use inspected delivery-policy migrate before disabling Stage')
+    if section.get('delivery_policy', fingerprint(config)) != fingerprint(config):
+        raise ValueError('Delivery policy changed; use the inspected idle delivery-policy migrate transition')
     for key in ('claims', 'tasks', 'actors', 'completed'):
         if not isinstance(section.get(key), dict):
             raise ValueError('Invalid execution state: ' + key)
@@ -274,12 +343,20 @@ def route(config, pr, request=None):
         if not local:
             raise ValueError('Batch work must use this repository branches')
         if pr['base']['ref'] == main and pr['head']['ref'] != stage['branch']:
+            branch = re.fullmatch(r'codex/batch-([a-f0-9]{32})', pr['head']['ref'])
+            if not stage['enabled'] and branch:
+                ids = re.findall(r'^Tracker batch:\s*([a-f0-9]{32})\s*$', pr.get('body') or '', re.M)
+                if ids != [branch[1]]:
+                    raise ValueError('Direct-main batch needs its exact Tracker batch identity')
+                return 'batch'
             return 'approval'
         if (pr['base']['ref'] == stage['branch'] and pr['head']['ref'] not in (main, stage['branch'])
                 and not re.fullmatch(r'codex/batch-[a-f0-9]{32}', pr['head']['ref'])):
             # Preserve handed-off v1 source PRs. They become approval-only and
             # cannot enter stage individually under schema 2.
             return 'approval'
+        if not stage['enabled']:
+            raise ValueError('Staging is disabled; use approval-only sources and the reserved batch into main')
     if stage['enabled']:
         if pr['base']['ref'] == stage['branch']:
             if pr['head']['ref'] in (main, stage['branch']):
@@ -305,7 +382,7 @@ def naming(config, pr, numbers, request=None):
     title = re.match(r'^\[([^]]+)\]\s+\S', pr.get('title', ''))
     if not title or set(x.strip() for x in title[1].split(',')) != set(ids):
         raise ValueError('PR title must start with all linked IDs: [ID, ID] Summary')
-    if batch_mode(config) and direction == 'stage':
+    if batch_mode(config) and direction in ('stage', 'batch'):
         if not re.fullmatch(r'codex/batch-[a-f0-9]{32}', pr['head']['ref']):
             raise ValueError('Stage accepts only a reserved codex/batch-<ID> candidate')
         reject_closing(pr.get('body', '') + '\n' + pr.get('title', ''))
@@ -332,7 +409,7 @@ def merge_base(request, root, pr):
 
 def summary(receipt):
     """Minimal completion projection, excluding reports, environment and history."""
-    if set(receipt) <= {'policy', 'state', 'admitted', 'verified', 'non_code', 'process'}:
+    if set(receipt) <= {'policy', 'state', 'admitted', 'verified', 'non_code', 'process', 'reconciled_scope'}:
         return receipt
     non_code = bool(receipt.get('non_code') and receipt.get('report'))
     admitted = bool(receipt.get('sources') or non_code)
@@ -352,6 +429,9 @@ def summary(receipt):
         result['verified'] = result['verified'] and bool(valid)
         if valid:
             result['process'] = True
+    effective, scope = reconciled_policy(receipt)
+    if scope:
+        result.update(policy=effective, reconciled_scope=scope)
     return result
 
 
@@ -501,6 +581,7 @@ def dependencies_ready(request, config, numbers, shared):
                 continue
             projected = summary(receipt)
             if (projected.get('policy') != fingerprint(config) or not projected.get('admitted')
+                    or projected.get('reconciled_scope', task_scope(dependency)) != task_scope(dependency)
                     or policy(config)['completion'] != 'reviewed-merge'
                     and not projected.get('non_code') and not projected.get('verified')):
                 raise ValueError(f'#{number}: dependency delivery is unfinished: {identifier}')
