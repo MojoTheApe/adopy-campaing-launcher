@@ -41607,22 +41607,7 @@
     ]
   },
   "execution": {
-    "claims": {
-      "72": {
-        "actor": "Worker-W142C",
-        "session": "w142c-20261016",
-        "coordinator": "Coordinator-C1016A",
-        "branch": "codex/acl-142-account-add-remove",
-        "worktree": "C:\\acl-142-c",
-        "id": "748616d6aeaa441ebe3332ae099ea075",
-        "issue": 72,
-        "state": "handoff",
-        "started_at": "2026-10-16T14:42:38+00:00",
-        "from_status": "status:backlog",
-        "pr": 958,
-        "report": "ACL-142: Connect uses an in-page dialog with \"Read from the open account\" (editable field, name+number shown, explicit tick required for an unedited read of the default redirected account). Country rows: x = confirmed take-out-of-country; \"Remove from ACL\" = confirmed removal of this computer's map row and all placements via /account-map-remove also_unlink. Tests: tests/test_acl_142_account_add_remove.py + Node harness; ran 112 affected tests, all green after fixing one escape. No live calls. Full suite not run (CI only)."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -47767,9 +47752,25 @@
             "session": "w142c-20261016"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W142C",
-        "coordinator": "Coordinator-C1016A"
+        "coordinator": "Coordinator-C1016A",
+        "handoff": {
+          "actor": "Worker-W142C",
+          "session": "w142c-20261016",
+          "coordinator": "Coordinator-C1016A",
+          "branch": "codex/acl-142-account-add-remove",
+          "worktree": "C:\\acl-142-c",
+          "id": "748616d6aeaa441ebe3332ae099ea075",
+          "issue": 72,
+          "state": "handoff",
+          "started_at": "2026-10-16T14:42:38+00:00",
+          "from_status": "status:backlog",
+          "pr": 958,
+          "report": "ACL-142: Connect uses an in-page dialog with \"Read from the open account\" (editable field, name+number shown, explicit tick required for an unedited read of the default redirected account). Country rows: x = confirmed take-out-of-country; \"Remove from ACL\" = confirmed removal of this computer's map row and all placements via /account-map-remove also_unlink. Tests: tests/test_acl_142_account_add_remove.py + Node harness; ran 112 affected tests, all green after fixing one escape. No live calls. Full suite not run (CI only)."
+        },
+        "pr": 958,
+        "queued_at": "2026-10-16T14:56:38+00:00"
       },
       "48": {
         "implementers": [],
@@ -52422,7 +52423,8 @@
       151,
       165,
       787,
-      788
+      788,
+      72
     ],
     "review": null,
     "history": [
@@ -77379,6 +77381,13 @@
         "issue": 788,
         "pr": 957,
         "actor": "Worker-W1788C"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-16T14:56:38+00:00",
+        "issue": 72,
+        "pr": 958,
+        "actor": "Worker-W142C"
       }
     ],
     "policy": {
