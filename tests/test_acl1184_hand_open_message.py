@@ -138,7 +138,8 @@ def test_connect_when_the_checks_disagree_shows_the_way_out(world):
 def test_read_when_the_profile_folder_is_not_found_shows_the_way_out(world, monkeypatch):
     monkeypatch.setattr(sp, "_mlx_profile_dir", lambda *a, **kw: None)
     with pytest.raises(sp.ProfileNotAttachable) as refused:
-        with sp.opening_closed_profile(sp._ReadOpen("FacebookDoc19")):
+        # ACL-1853: чтение идёт под арендой профиля, как в рабочем потоке.
+        with sp.profile_lock(PID), sp.opening_closed_profile(sp._ReadOpen("FacebookDoc19")):
             sp._attach_only(_entry(), "FacebookDoc19")
     assert str(refused.value) == sp.hand_message()
     assert refused.value.code == sp.HAND_OPEN_CODE
@@ -148,7 +149,8 @@ def test_read_when_the_profile_folder_is_not_found_shows_the_way_out(world, monk
 def test_read_when_the_checks_disagree_shows_the_way_out(world):
     world.running = [False, True]
     with pytest.raises(sp.ProfileNotAttachable) as refused:
-        with sp.opening_closed_profile(sp._ReadOpen("FacebookDoc19")):
+        # ACL-1853: чтение идёт под арендой профиля, как в рабочем потоке.
+        with sp.profile_lock(PID), sp.opening_closed_profile(sp._ReadOpen("FacebookDoc19")):
             sp._attach_only(_entry(), "FacebookDoc19")
     assert str(refused.value) == sp.hand_message()
     assert refused.value.code == sp.HAND_OPEN_CODE
@@ -196,7 +198,8 @@ def test_connect_when_multilogin_holds_the_profile_shows_the_way_out(mlx_holds_i
 
 def test_read_when_multilogin_holds_the_profile_shows_the_way_out(mlx_holds_it):
     with pytest.raises(sp.ProfileNotAttachable) as refused:
-        with sp.opening_closed_profile(sp._ReadOpen("FacebookDoc19")):
+        # ACL-1853: чтение идёт под арендой профиля, как в рабочем потоке.
+        with sp.profile_lock(PID), sp.opening_closed_profile(sp._ReadOpen("FacebookDoc19")):
             sp._attach_only(_entry(), "FacebookDoc19")
     assert str(refused.value) == sp.hand_message()
     assert refused.value.code == sp.HAND_OPEN_CODE
