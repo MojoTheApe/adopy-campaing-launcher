@@ -47976,7 +47976,7 @@
       },
       "32": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       },
       "608": {
         "implementers": [],
@@ -77587,6 +77587,12 @@
         "issue": 401,
         "claim": "7463c83543a142b5a6346c13c672f5a0",
         "actor": "Worker-W1401M"
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-16T20:41:10+00:00",
+        "issue": 32,
+        "reason": "Backlog cleanup 2026-10-16: stale idea (undefined scope, untouched since September, premise predates the Graph API / new builder direction). Restore if it becomes relevant again."
       }
     ],
     "policy": {
