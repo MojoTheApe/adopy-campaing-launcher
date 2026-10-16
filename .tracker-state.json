@@ -46885,7 +46885,7 @@
             "session": "rf1016w-20261016"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-RF1016W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -76233,6 +76233,68 @@
             "approved_at": "2026-10-16T10:53:01+00:00"
           }
         }
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-16T10:57:16+00:00",
+        "issue": 899,
+        "pr": 900,
+        "review": {
+          "id": "0b332f531991442399eb20fc44ceaf57",
+          "pr": 900,
+          "issues": [
+            899
+          ],
+          "actor": "Reviewer-DV1016B",
+          "session": "dv1016b-900",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-16T10:45:16+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 899,
+            "pr": 900,
+            "branch": "work/acl-1899-video-upload-progress",
+            "head_sha": "6743292c1e2093fd9deed315ff38559f6db1f75c",
+            "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+            "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "52d852154dfd159e49185f701d1c699a64ca2b269802ff49b0340c10537527de",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-DV1016B",
+              "review_session": "dv1016b-900",
+              "execution_lane": "0b332f531991442399eb20fc44ceaf57",
+              "implementer": "Worker-RF1016W",
+              "head_sha": "6743292c1e2093fd9deed315ff38559f6db1f75c",
+              "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+              "tree_sha": "96ac058ee5257da82dcc47a809158e2f92ed204d",
+              "report": "Delta re-review after main merge. Head 6743292c has parents eb4f87d6 (previously approved head) and cd1da59b (new 776 head) and contains work/main af0ade29. Remerge-diff shows only a docs/system/CHANGELOG.md conflict resolved keep-both (ACL-1924 entry and the ACL-1899 entry both present, nothing lost or duplicated). The non-CHANGELOG diff eb4f87d6..6743292c is byte-identical (apart from one hunk line offset) to main 3ee7c6d9..af0ade29 over the same files, so no extra code was added. Ran tests/test_acl1899_upload_progress.py, tests/test_acl1761_api_create.py, tests/test_acl1776_create_forms.py: 271 passed. All PR checks green (installer build jobs skipped as expected). Live checks not claimed.",
+              "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                899
+              ],
+              "recorded_at": "2026-10-16T10:55:20+00:00",
+              "issue_scopes": {
+                "899": "52d852154dfd159e49185f701d1c699a64ca2b269802ff49b0340c10537527de"
+              }
+            },
+            "lane": {
+              "id": "0b332f531991442399eb20fc44ceaf57",
+              "pr": 900,
+              "issues": [
+                899
+              ],
+              "actor": "Reviewer-DV1016B",
+              "session": "dv1016b-900",
+              "coordinator": "Coordinator-M1011A",
+              "started_at": "2026-10-16T10:45:16+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-16T10:56:27+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -77728,6 +77790,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-16T10:53:01+00:00"
+      },
+      "899": {
+        "issue": 899,
+        "pr": 900,
+        "branch": "work/acl-1899-video-upload-progress",
+        "head_sha": "6743292c1e2093fd9deed315ff38559f6db1f75c",
+        "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+        "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "52d852154dfd159e49185f701d1c699a64ca2b269802ff49b0340c10537527de",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-DV1016B",
+          "review_session": "dv1016b-900",
+          "execution_lane": "0b332f531991442399eb20fc44ceaf57",
+          "implementer": "Worker-RF1016W",
+          "head_sha": "6743292c1e2093fd9deed315ff38559f6db1f75c",
+          "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+          "tree_sha": "96ac058ee5257da82dcc47a809158e2f92ed204d",
+          "report": "Delta re-review after main merge. Head 6743292c has parents eb4f87d6 (previously approved head) and cd1da59b (new 776 head) and contains work/main af0ade29. Remerge-diff shows only a docs/system/CHANGELOG.md conflict resolved keep-both (ACL-1924 entry and the ACL-1899 entry both present, nothing lost or duplicated). The non-CHANGELOG diff eb4f87d6..6743292c is byte-identical (apart from one hunk line offset) to main 3ee7c6d9..af0ade29 over the same files, so no extra code was added. Ran tests/test_acl1899_upload_progress.py, tests/test_acl1761_api_create.py, tests/test_acl1776_create_forms.py: 271 passed. All PR checks green (installer build jobs skipped as expected). Live checks not claimed.",
+          "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            899
+          ],
+          "recorded_at": "2026-10-16T10:55:20+00:00",
+          "issue_scopes": {
+            "899": "52d852154dfd159e49185f701d1c699a64ca2b269802ff49b0340c10537527de"
+          }
+        },
+        "lane": {
+          "id": "0b332f531991442399eb20fc44ceaf57",
+          "pr": 900,
+          "issues": [
+            899
+          ],
+          "actor": "Reviewer-DV1016B",
+          "session": "dv1016b-900",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-16T10:45:16+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-16T10:56:27+00:00"
       }
     },
     "batches": {
@@ -80501,62 +80607,6 @@
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-16T10:39:49+00:00",
         "state": "reviewing"
-      },
-      "900": {
-        "id": "0b332f531991442399eb20fc44ceaf57",
-        "pr": 900,
-        "issues": [
-          899
-        ],
-        "actor": "Reviewer-DV1016B",
-        "session": "dv1016b-900",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-16T10:45:16+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 899,
-          "pr": 900,
-          "branch": "work/acl-1899-video-upload-progress",
-          "head_sha": "6743292c1e2093fd9deed315ff38559f6db1f75c",
-          "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
-          "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "52d852154dfd159e49185f701d1c699a64ca2b269802ff49b0340c10537527de",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-DV1016B",
-            "review_session": "dv1016b-900",
-            "execution_lane": "0b332f531991442399eb20fc44ceaf57",
-            "implementer": "Worker-RF1016W",
-            "head_sha": "6743292c1e2093fd9deed315ff38559f6db1f75c",
-            "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
-            "tree_sha": "96ac058ee5257da82dcc47a809158e2f92ed204d",
-            "report": "Delta re-review after main merge. Head 6743292c has parents eb4f87d6 (previously approved head) and cd1da59b (new 776 head) and contains work/main af0ade29. Remerge-diff shows only a docs/system/CHANGELOG.md conflict resolved keep-both (ACL-1924 entry and the ACL-1899 entry both present, nothing lost or duplicated). The non-CHANGELOG diff eb4f87d6..6743292c is byte-identical (apart from one hunk line offset) to main 3ee7c6d9..af0ade29 over the same files, so no extra code was added. Ran tests/test_acl1899_upload_progress.py, tests/test_acl1761_api_create.py, tests/test_acl1776_create_forms.py: 271 passed. All PR checks green (installer build jobs skipped as expected). Live checks not claimed.",
-            "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              899
-            ],
-            "recorded_at": "2026-10-16T10:55:20+00:00",
-            "issue_scopes": {
-              "899": "52d852154dfd159e49185f701d1c699a64ca2b269802ff49b0340c10537527de"
-            }
-          },
-          "lane": {
-            "id": "0b332f531991442399eb20fc44ceaf57",
-            "pr": 900,
-            "issues": [
-              899
-            ],
-            "actor": "Reviewer-DV1016B",
-            "session": "dv1016b-900",
-            "coordinator": "Coordinator-M1011A",
-            "started_at": "2026-10-16T10:45:16+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-16T10:56:27+00:00"
-        }
       },
       "887": {
         "id": "d64d081c4f0843ffa5434b5457a05221",
