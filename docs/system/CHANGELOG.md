@@ -1,5 +1,15 @@
 # System history
 
+## ACL-1924 — Published-package acceptance continuation — 2026-10-15
+
+Add a durable authorized release workflow using the maintained installer publisher
+and updater. Its isolated Windows acceptance downloads the actual signed-channel
+previous/current packages, verifies the frozen release SHA/tasks, runs real
+installation/update/restart/recovery and data preservation, and emits the native
+receipt only on success. Existing same-candidate mechanism tests and employee
+update behavior are preserved; live rollout and business pilot are not asserted.
+Parent ACL-1923 retains actual activation and publication verification.
+
 ## Physical profile ownership across ACM processes — ACL-1853
 
 - The main Read Spend/country/RPA boundaries now share an OS-backed lease per
