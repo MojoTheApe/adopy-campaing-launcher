@@ -38,6 +38,27 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   After an unknown upload result the readback is repeated up to 6 times over about 2 minutes, counted in
   the per-campaign call budget. Writes without a file keep the short timeout. The write policy is
   unchanged and identical in Python and in the page helper.
+  Campaign name (ACL-1902): before any write, in the run and in Check plan, the creator picks the first
+  free name of `NAME`, `NAME_2` ... `NAME_20`. No live campaign with that name (deleted/archived do not
+  count) -> use it; our own (ACL tag of that name) and identical to the builder -> reuse it (resume of a
+  partial run, no duplicate); our own but different, or the same name without our tag -> next suffix. The
+  suffix is always appended to the full name (`X_2` becomes `X_2_2`; the user's own numbers are not
+  parsed). Ad set and ad names stay as built. The tag is computed from the chosen name, so `NAME_2` has
+  its own tag and its own creatives. All 20 taken -> stop before any write (`name_taken`). The rule
+  `existing_diffs` shows a WARNING with the chosen name when a suffix is used and an ERROR only when all
+  20 are taken. One campaigns search on the base name serves all candidates; if it returns the maximum
+  200 rows it is not trusted and each name is looked up with an exact (EQUAL) search, and if that is
+  also full the run stops before any write. At most 6 of our own earlier campaigns are diffed per
+  resolution (call budget); a name over 400 characters stops (conservative guard, the Meta limit is unverified). A NAME_k (k>1) of ours is
+  reused only if its ads are a subset of the plan's ad names (a builder campaign literally named `X_2`
+  is not taken for our suffix). Ad sets and ads under our tagged campaign are matched by name,
+  so a lost child tag does not make the campaign "different" and a re-run resumes it. No extra writes, no new lock.
+  Names in the app: `campaign_name` in every result, job progress and draft status stays the builder
+  name (the dashboard keys its dots and verdicts by it); the chosen name is the separate field
+  `published_as` (empty when no suffix), shown as "-> published as NAME_2" in the plan and job panels.
+  Meta, statistics and reports show the chosen name `NAME_2`. Each NAME_k has its own tag, so creatives
+  are created again and a video may be uploaded again; an older partial campaign stays PAUSED and is
+  left as is.
 - `src/creative_agent`, `src/knowledge_agent`: creative analysis and domain references.
 - `src/analysis_agent/team_library.py` and related library modules: shared targets/ad texts in
   the separately provisioned private team library; PR #244 replaced Google Sheets
