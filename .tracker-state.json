@@ -48064,7 +48064,7 @@
       },
       "627": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       }
     },
     "actors": {
@@ -77775,6 +77775,12 @@
         "at": "2026-10-16T20:50:11+00:00",
         "issue": 60,
         "reason": "Backlog cleanup 2026-10-16: stale idea (undefined scope, untouched since September, premise predates the Graph API / new builder direction). Restore if it becomes relevant again."
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-16T20:50:37+00:00",
+        "issue": 627,
+        "reason": "Backlog cleanup 2026-10-16: stale live check of the RPA stuck-step path; ACL-1614 merged, path superseded by the Graph-in-profile direction."
       }
     ],
     "policy": {
