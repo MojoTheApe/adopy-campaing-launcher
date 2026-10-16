@@ -39,13 +39,43 @@ def _mlx_home() -> Path:
     return Path(os.environ.get("MLX_HOME", str(Path.home() / "mlx")))
 
 
-def _find_mlx_profile_dir(profile_id: str) -> Path | None:
-    profiles_root = _mlx_home() / "profiles"
-    if not profiles_root.is_dir():
+def _find_mlx_profile_dir(profile_id: str, folder_id: str = "") -> Path | None:
+    """Папка профиля Multilogin — по адресу `profiles/{ws}/{folder_id}/{profile_id}`.
+
+    Раньше здесь был `rglob` по всему `~/mlx/profiles` (полные каталоги
+    Chrome, ~10 с на каждый вызов, ACL-144). Теперь смотрим только имена на
+    глубине не больше двух уровней под рабочим пространством и никуда не
+    спускаемся глубже. Запасного рекурсивного обхода нет намеренно: профиль,
+    которого нет в известной раскладке, считается не найденным (None), а не
+    ищется «где-нибудь ещё» — так нельзя взять папку чужого профиля.
+    Совпадение только по точному имени каталога; пустой id -> None.
+    """
+    profile_id = (profile_id or "").strip()
+    if not profile_id or profile_id in {".", ".."} or any(c in profile_id for c in "/\\"):
         return None
-    for p in profiles_root.rglob(profile_id):
-        if p.is_dir():
-            return p
+    root = _mlx_home() / "profiles"
+    folder_id = (folder_id or "").strip()
+    try:
+        if not root.is_dir():
+            return None
+        for ws in root.iterdir():
+            if not ws.is_dir():
+                continue
+            if folder_id:
+                p = ws / folder_id / profile_id
+                if p.is_dir():
+                    return p
+            p = ws / profile_id
+            if p.is_dir():
+                return p
+            for folder in ws.iterdir():
+                if not folder.is_dir():
+                    continue
+                p = folder / profile_id
+                if p.is_dir():
+                    return p
+    except OSError:
+        return None
     return None
 
 
