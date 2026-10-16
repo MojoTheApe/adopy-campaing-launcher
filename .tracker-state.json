@@ -41595,20 +41595,6 @@
   },
   "execution": {
     "claims": {
-      "853": {
-        "actor": "Worker-W1853C",
-        "session": "w1853c-20261016",
-        "coordinator": "Coordinator-C1016A",
-        "branch": "codex/acl-1853-profile-process-lease",
-        "worktree": "C:\\acl-1853-r2",
-        "id": "414a40577add41138c6bd0b1a56b05dd",
-        "issue": 853,
-        "state": "handoff",
-        "started_at": "2026-10-16T10:27:01+00:00",
-        "from_status": "status:todo",
-        "pr": 863,
-        "report": "# ACL-1853 refresh onto main\n\n- Merged origin/main (af0ade29) into codex/acl-1853-profile-process-lease (merge commit, no rebase). New head 914a5b05. Scope unchanged.\n- One conflict: docs/system/CHANGELOG.md (ACL-1853 entry vs main's ACL-1924 entry). Resolved by keeping both, main's newer entry first.\n- Tests: 41 affected test files (git diff --name-only origin/main...HEAD, tests/ only): 1330 passed, 0 failed (local, Python 3.14; sentry_sdk installed to run the sentry snapshot test).\n- Source PR #863 CI on 914a5b05: all test, verification and process jobs pass. Only tracker-link failed, because the task was not yet in Review (\"start and implement the task, then move it to Review\"); it is expected to clear after this handoff."
-      },
       "138": {
         "actor": "Worker-P1138",
         "session": "acl1138_proxy_gate",
@@ -46367,25 +46353,25 @@
             "session": "w1853c-20261016"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1853C",
         "coordinator": "Coordinator-C1016A",
         "handoff": {
-          "actor": "Worker-T1853A",
-          "session": "t1853a-20261015",
-          "coordinator": "Coordinator-M1011A",
+          "actor": "Worker-W1853C",
+          "session": "w1853c-20261016",
+          "coordinator": "Coordinator-C1016A",
           "branch": "codex/acl-1853-profile-process-lease",
-          "worktree": "C:\\acl-1853",
-          "id": "30d0677551c44417870a375fc36e63b4",
+          "worktree": "C:\\acl-1853-r2",
+          "id": "414a40577add41138c6bd0b1a56b05dd",
           "issue": 853,
           "state": "handoff",
-          "started_at": "2026-10-15T09:28:57+00:00",
-          "from_status": "status:backlog",
+          "started_at": "2026-10-16T10:27:01+00:00",
+          "from_status": "status:todo",
           "pr": 863,
-          "report": "# ACL-1853 source handoff (takeover)\n\nWorker-T1853A / t1853a-20261015; Coordinator-M1011A. Claim 30d0677551c44417870a375fc36e63b4.\nCodex Worker-N7Q4 stopped (usage limit). Prior head 9aaabdd6 was independently approved (RS1012) on old main 3327465f and returned only because main advanced.\nBranch codex/acl-1853-profile-process-lease, worktree C:\\acl-1853, head afe200905c65636a33daeb68d5b1bcf694c681cf, tree 6ca6d26169fbcf45eee2f8462919ed50de29c8eb, base main 3ee7c6d9c7a394ecec9f0889805fadb188b3aab7.\n\n## Changes since 9aaabdd6\n- 00c34974 merge main 080df2d8 (now incl. ACL-1760/1761/1800/1812/1826): account_spend.py (main removed _reopen_for_automation; on_lease_error kept), CHANGELOG union, four tests.\n- d000b0da: warm adopt lease refusal returns result code profile_lease instead of aborting open_many; account_spend_api clean message for empty profile_id and lease refusal; main-origin test fixtures given synthetic UUIDs.\n- e21f4818 (pre-handoff review findings): publish waiters cap 30 min, cancellable (reads 120 s); deferred close timer survives lease refusal; clean refusal text (no class prefix) in API country split / start_read / inventory; Close skips unresolvable unrelated job labels; spawn test timeouts 20 s.\n- afe20090 merge main 3ee7c6d9 (CHANGELOG only).\n- PROFILE_OWNERSHIP.md: merged API/warm paths not holding the lease across the full session are listed as #862 scope.\n\n## Verification\nTargeted tests: 1197+668 after merge; 551 after fixes (lease suite 43 incl. 5 new). Secret scan clean. Pre-handoff independent read-only review (Sonnet): APPROVE, 1 MEDIUM + 4 LOW, all fixed in e21f4818. No live profile/Meta operations."
+          "report": "# ACL-1853 refresh onto main\n\n- Merged origin/main (af0ade29) into codex/acl-1853-profile-process-lease (merge commit, no rebase). New head 914a5b05. Scope unchanged.\n- One conflict: docs/system/CHANGELOG.md (ACL-1853 entry vs main's ACL-1924 entry). Resolved by keeping both, main's newer entry first.\n- Tests: 41 affected test files (git diff --name-only origin/main...HEAD, tests/ only): 1330 passed, 0 failed (local, Python 3.14; sentry_sdk installed to run the sentry snapshot test).\n- Source PR #863 CI on 914a5b05: all test, verification and process jobs pass. Only tracker-link failed, because the task was not yet in Review (\"start and implement the task, then move it to Review\"); it is expected to clear after this handoff."
         },
         "pr": 863,
-        "queued_at": "2026-10-15T10:17:52+00:00",
+        "queued_at": "2026-10-16T11:15:03+00:00",
         "review_report": "Main moved to af0ade29 (ACL-1924 batch + ACL-1923 no-stage activation, policy 1bd91869). The earlier approval predates this policy and main and is no longer current. Returned to the author for a main merge and fresh independent approval; coordination of this task moves to Coordinator-C1016A (session \"7 \u0437\u0430\u0434\u0430\u0447 \u0432 \u0430\u043f\u0440\u0443\u0432\u0434\u0435\") on the owner's instruction.",
         "return_operation": {
           "id": "e26bf4c9096b4a088993fde43345eaa5",
@@ -52039,7 +52025,8 @@
       379,
       356,
       71,
-      839
+      839,
+      853
     ],
     "review": null,
     "history": [
@@ -76764,6 +76751,13 @@
             "approved_at": "2026-10-16T11:12:08+00:00"
           }
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-16T11:15:03+00:00",
+        "issue": 853,
+        "pr": 863,
+        "actor": "Worker-W1853C"
       }
     ],
     "policy": {
