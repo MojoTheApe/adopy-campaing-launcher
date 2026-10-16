@@ -48104,7 +48104,7 @@
       },
       "243": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       }
     },
     "actors": {
@@ -77875,6 +77875,12 @@
         "at": "2026-10-16T20:54:19+00:00",
         "issue": 213,
         "reason": "Backlog cleanup 2026-10-16: stale; RPA/Playwright cancel path. Main already bounds cancellation (_enforce_cancel_deadline, _cancel_publisher in publish_jobs.py)."
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-16T20:54:44+00:00",
+        "issue": 243,
+        "reason": "Backlog cleanup 2026-10-16: stale idea; depends on a Sentry-to-issue Action and tickets.json that were never built. Reopen with a new design if wanted."
       }
     ],
     "policy": {
