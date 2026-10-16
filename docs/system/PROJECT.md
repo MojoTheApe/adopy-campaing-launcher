@@ -193,3 +193,11 @@ Videos up to 200 MB still go up in one request. A video from 200 MB up to 1536 M
 ## ACL-1907 — Language groups equal their expansion ([issue](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/907), 2026-10-14)
 
 Live finding on Doc120: readback reported ad set `languages` expected `[1002]` ("Spanish (All)") vs Meta `[7, 23]`, and a re-run stopped with "Existing ad set ... differs from the builder: languages (builder: 1002, Meta: 7, 23)". `TargetingResolver.locale()` now records, for a pick named "X (All)", the members seen in the same `adlocale` result (`locale_groups`: names equal to X or starting "X (", never hard-coded). `CampaignCreator._language_check` (used by both readback and `_existing_differences` through `_adset_checks`) treats a group id absent from Meta's list as equal to the Meta locales that are members of it; any locale outside the group, or a group with no member in Meta's list, stays a mismatch. When the search listed no members, the compare is strict and the difference text adds "compared strictly: Meta's search did not list the locales it expands into". Read-only change. Live acceptance on the test dashboard is still open.
+## Authorized package completion
+
+The repository provides `.github/workflows/complete-delivery.yml` to continue an
+actual authorized frozen batch after admitted main integration. It reuses the
+existing release publisher, verifies actual published packages on isolated Windows
+and records exact task delivery only from the successful native acceptance job.
+Source preparation, policy activation and actual delivery remain distinct facts;
+see [the process runbook](../repository/POST_MAIN_DELIVERY.md) and parent ACL-1923.

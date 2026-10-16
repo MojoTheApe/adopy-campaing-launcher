@@ -3436,13 +3436,6 @@
     .cbd-seg button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
     .cbd-seg .cbd-lv-bad::after { content: " !"; color: var(--bad); font-weight: 700; }
     .cbd-ed-pick { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; }
-    .cbd-ed-pick label { color: var(--muted); font-size: var(--adopy-text-sm); }
-    .cbd-ed-pick select {
-      min-height: var(--adopy-control-sm); padding: 0.2rem 0.4rem;
-      font: inherit; font-size: var(--adopy-text-body);
-      background: var(--field-bg); color: var(--text);
-      border: 1px solid var(--field-border); border-radius: var(--radius-sm);
-    }
     .cbd-ed-empty {
       color: var(--muted); font-size: var(--adopy-text-body); line-height: 1.6;
       text-align: center; padding: var(--space-xl) var(--space-md);
@@ -6372,7 +6365,7 @@ window.cbPreflight = (function () {
   function creativeNumber(file) {
     var stem = String(file || '').split(/[\\/]/).pop();
     if (stem.indexOf('.') !== -1) stem = stem.slice(0, stem.lastIndexOf('.'));
-    stem = stem.replace(/\d{3,4}\s*[xх×]\s*\d{3,4}/gi, ' ');
+    stem = stem.replace(/\d{3,4}\s*[x\u0445\xd7]\s*\d{3,4}/gi, ' ');
     var m = /(?<!\d)(\d{4})(?!\d)/.exec(stem);
     return m ? m[1] : '';
   }
@@ -7055,13 +7048,6 @@ window.cbTree = (function () {
       if (lv === 'campaign' && bad[i].closest('.cb-preflight')) return true;
     }
     return false;
-  }
-
-  function adNames(slot) {
-    var rows = slot.querySelectorAll('.cb-ad-row');
-    var out = [];
-    for (var i = 0; i < rows.length; i += 1) out.push('Ad ' + (i + 1));
-    return out;
   }
 
   function headHtml(found) {
@@ -8003,7 +7989,7 @@ window.cbTree = (function () {
       var f = (openId && BORROWED) ? findCampaign(openId) : null;
       if (!f) return null;
       return { id: openId, name: f.camp.name || '', account: f.account.account, country: f.group.country,
-        countryName: f.group.countryName, slot: f.camp.slot, adIndex: adIdx, level: level };
+        countryName: f.group.countryName, slot: f.camp.slot, adIndex: 0, level: level };
     }
   };
 })();
@@ -10813,7 +10799,7 @@ function amapCampaignMountVisible() {
     else if (host._hc.syncTop) host._hc.syncTop();
   });
 }
-if (typeof document !== 'undefined' && window.AMAP_CAMPAIGN_TABLE) {
+if (typeof window !== 'undefined' && typeof document !== 'undefined' && window.AMAP_CAMPAIGN_TABLE) {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', amapCampaignMountVisible);
   else amapCampaignMountVisible();
   /* `toggle` не всплывает — слушаем на погружении (так же, как раньше слушали ширины дерева). */
@@ -17093,15 +17079,17 @@ function _doCbPublish(form) {
   var origAll = window.cbPublishAll, origOne = window.cbPublish;
   function slotsOf(form) { return Array.prototype.slice.call(form.querySelectorAll('.cb-slot')); }
   if (typeof origAll === 'function') {
-    window.cbPublishAll = function (onProgress, picked) {
+    window.cbPublishAll = function (onProgress, picked, onlyKeys) {
       var only = picked && picked.length ? picked : null, items = [];
       document.querySelectorAll('form.open-account-form').forEach(function (form) {
         var all = slotsOf(form);
         if (!all.length) return;
+        // ACL-1826: Retry пропущенных идёт через те же ворота, но только по своим формам.
+        if (onlyKeys && onlyKeys.indexOf(cbFormKey(form)) < 0) return;
         var mine = only ? cbPickedIn(form, only) : all;
         if (mine.length) items.push({ form: form, slots: mine });
       });
-      window.cbPreflightGate(items, function () { origAll(onProgress, picked); });
+      window.cbPreflightGate(items, function () { origAll(onProgress, picked, onlyKeys); });
     };
   }
   if (typeof origOne === 'function') {
@@ -19061,9 +19049,8 @@ window.cwWorkbench = (function () {
 
   function applyCreative(a, ev) {
     var rows = a.slot.querySelectorAll('.cb-ad-row');
-    var row = null;
-    Array.prototype.forEach.call(rows, function (r) { if (!row && !r.classList.contains('cbd-ad-off')) row = r; });
-    if (!row) row = rows[a.adIndex || 0] || rows[0];
+    // 1769: карточки объявлений стоят стопкой, скрытых нет — берём нужную по номеру.
+    var row = rows[a.adIndex || 0] || rows[0];
     if (!row) return { done: false, text: 'This draft has no ad to put a creative on.' };
     var msgs = [], done = true;
 

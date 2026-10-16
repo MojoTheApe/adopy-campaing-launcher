@@ -4,20 +4,23 @@ Issues remain in MojoTheApe/adopy-campaing-launcher; the existing board identity
 at https://tracker.team7.cloud/projects/acl/. Keep the six established modules,
 71 historical aliases and +1000 numbering. Never renumber Issues or start a second board.
 
-Source child ACL-1875 selects reviewed, merged Task Tracker
-`46283b8a6fe444065838e136c89ef4ed64bd1528` (TT-97 / PR98), including five independent
-source reviews, with reviewed merged Master
-`8ce271dc289b6a7ef24498ed3d9d92cb78694a3d` (MR-22 / PR23). Actual state migration
-remains parent ACL-1874 and is a separate gate in [SOURCE_REVIEWS.md](SOURCE_REVIEWS.md).
+ACL-1892 selects reviewed, merged Task Tracker
+`0d1fad44f5fdbef64b061324e9a1292fb77fb725` (TT-107 / PR108) and Master
+`eca8a857d9f7f81160bf248f9f9e3109a21ade49` (MR-26 / PR27), retaining ACL's
+guarded client and unchanged project configuration. The compatible shared service
+was already published at `bcb59dfb0e4c5066d891207b49f690f29d9f9ef4`.
+No migration, maintenance reservation or optional native CI policy is selected.
+Follow [verification](VERIFICATION.md); ACL's existing bounded collector and
+Windows/matrix/installer gates remain authoritative.
 
 The historical ACL-1750 source selected reviewed, merged Task Tracker
 `d6ce39bede04851c37bb4d13cc3bed0f2dcd2f76` (TT-79 / PR80) with Master
 `d24db185ebdff2cadcecf89f5b28061d6cd19564` (MR-16 / PR17).
 Run `python scripts/task_tracker.py guide` for the exact currently configured
 engine; helpers live in .workflow/tools and existing scripts paths remain wrappers.
-The client loads the clean engine from `tracker/engine.json`. During ACL-1875's
-old-policy source handoff, use the genuine preserved v2 config and old pin as
-described in [SOURCE_REVIEWS.md](SOURCE_REVIEWS.md). `.workflow/legacy` retains the original configs for audit and
+The guarded client loads the clean engine from `tracker/engine.json`. The completed
+ACL-1874/1875 cutover and preserved old-policy procedure are described in
+[SOURCE_REVIEWS.md](SOURCE_REVIEWS.md). `.workflow/legacy` retains the original configs for audit and
 bootstrap PR history; it is not another live tracker or a second Issue store.
 Do not return to the retired master client. ACL-1248's original adoption is recorded
 in ADOPTION.md. The bounded ACL-1383 old-policy source handoff and ACL-1382 live
@@ -34,9 +37,9 @@ independent source review and direct main receipt instead of Approved/batch/stag
 It cannot displace an active batch or staged candidate. Policy/automation adoption
 itself remains on the old source route until activated.
 
-The prepared schema-3 policy keeps implementation_limit 5, review_limit 5 and
-batch_limit 5. The live v2 policy keeps review_limit 1 until the separate guarded
-state migration. The Approved backlog has no size cap. Ordinary batch-source
+The active schema-3 policy keeps implementation_limit 5, review_limit 5 and
+batch_limit 5; the supported guarded migration and fresh-board proof are complete.
+The Approved backlog has no size cap. Ordinary batch-source
 approval frees only its source review lane; only one
 batch owns stage. Ordinary source PRs target main and remain open until verified
 batch inclusion. Retained

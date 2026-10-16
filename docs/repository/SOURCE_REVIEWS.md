@@ -12,17 +12,26 @@ compatible publication alongside other reviewed shared work.
 **Live ACL execution now uses schema 3 with five Workers, five source reviews and
 batches of five; the separate integration review capacity remains one.**
 
-The selected Tracker engine is reviewed, merged
+The original ACL-1875 cutover selected reviewed, merged Tracker
 `46283b8a6fe444065838e136c89ef4ed64bd1528` ([TT-97 / PR98](https://github.com/MojoTheApe/task-tracker/pull/98)).
-Portable read-only helpers are exported from that exact clean official checkout;
+Its portable read-only helpers were exported from that exact clean official checkout;
 ACL retains its guarded client and relocated checker configuration path. The
-matching reviewed merged Master/Action pin is
+matching reviewed merged Master/Action pin was
 `8ce271dc289b6a7ef24498ed3d9d92cb78694a3d` ([MR-22 / PR23](https://github.com/MojoTheApe/master-repo/pull/23)).
-Both descriptor/lock and Action pins match their actual clean official sources.
+Those original descriptor/lock and Action pins matched their actual clean official sources.
 Updating source pins cannot mutate old live state or prove compatible service publication.
 The earlier independently reviewed shared runtime `919b5f6d` preserved the selected
 Tracker engine bytes. The maintained publication below supplies the actual activation
 prerequisite; it does not replace the consumer engine pin.
+
+ACL-1892 updates the common standard/Action to reviewed merged Master
+`eca8a857d9f7f81160bf248f9f9e3109a21ade49` ([MR-26 / PR27](https://github.com/MojoTheApe/master-repo/pull/27))
+and compatible engine `0d1fad44f5fdbef64b061324e9a1292fb77fb725`
+([TT-107 / PR108](https://github.com/MojoTheApe/task-tracker/pull/108)). This compatible
+source upgrade preserves the already active schema-3 configuration and ownership;
+it does not repeat the dated migration below or enable optional maintenance/CI
+evidence policies. Follow [VERIFICATION.md](VERIFICATION.md) while retaining ACL's
+bounded local collector and full applicable Windows/installer acceptance.
 
 ## Verified live activation — 2026-10-13
 

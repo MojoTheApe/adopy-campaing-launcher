@@ -1,5 +1,89 @@
 # Repository process history
 
+## ACL-1923 — Verified no-stage activation and published delivery — 2026-10-15 UTC
+
+Complete the original operational outcome after ACL-1924's old-route source,
+Stage PR 931 and main PR 940 integration at
+`7d1ad46c14ddd2e08e507e33248af50af42df026`. The supported idle staging-only
+operator applied at 22:29:04 UTC; the same owner resumed admission at 22:30:13 UTC.
+Exact comparison preserved all 482 Issues, 74 historical completions, 128 legacy
+pending receipts, aliases/modules, 5/5/5 capacity and the retained 18 Review/seven
+Approved queues. Current consumer/service pin remains Tracker e775; bounded
+TT-129/TT-131 migration operators grant no historical completion or delivery.
+
+The automatic main-CI wakeup 38813566631 stopped with temporary exit 75 during maintained
+cutover. After resume, the Coordinator agent dispatched recovery 38817558595 under
+the unchanged original exact-batch request; no second human approval was needed.
+The immutable stable release `acl-release-2026-10-15.940` published at 22:38:46 UTC.
+Native actual published Windows install/update/restart/recovery/data checks passed,
+then the recorder verified only scoped ACL-1924 at 22:42:07 UTC, batch Delivered 1/1.
+The fresh board at 22:42:27 UTC confirmed verified delivery, no Stage and no pause.
+See [the full factual record](POST_MAIN_DELIVERY.md#verified-activation-and-published-delivery--2026-10-15-utc)
+for immutable source, operator, native job, signature/hash and receipt evidence.
+
+Retain the permanent `stage` branch, `master` compatibility and the reviewed return-to-Stage
+procedure. This final three-file repository-instruction handoff preserves all
+original parent requirements and dated source/cutover history. Shared Master and
+Tracker changes are already merged and verified; no further contract, product,
+runtime or installer change belongs to this factual handoff.
+
+## ACL-1924 / ACL-1923 — Temporary no-stage and authorized completion — 2026-10-15
+
+Select actual reviewed merged Master `a3f56106f52d0ae19986920519b2fa46a380798b`
+([MR-28 / PR29](https://github.com/MojoTheApe/master-repo/pull/29)) and Tracker
+`e775c624e0323e69ed891926691c3dee6587081a`
+([TT-127 / PR128](https://github.com/MojoTheApe/task-tracker/pull/128)).
+The maintained upgrade reproduces all 41 original pristine template files,
+retains the actual 44-file new pristine baseline, and explicitly preserves ACL
+repository guides and descriptor CI controls at the three reported merge conflicts.
+Guarded client, six modules, aliases, all 74 audited histories and runtime/system
+files are preserved; only the historical manifest policy binding follows the
+supported staging-only reconciliation.
+
+Prepare direct-main frozen approved batches with the same 5/5/5 ownership,
+independent composition review and complete applicable CI. Add the durable
+`batch begin --deliver` native release continuation and exact verified-delivery
+receipt. Persist producer artifact outputs and native artifact bindings across
+partial GitHub retries; choose the actual prior stable signed publication rather
+than orphan source tags. The standing owner integration approval includes delivery
+unless explicitly source-only. Retain permanent stage/history and the supported return procedure.
+Source integration itself uses the old stage/main rules. Parent ACL-1923 owns
+compatible-service publication, idle history/queue-preserving policy migration,
+fresh board and actual end-to-end release evidence; no activation is asserted by
+this source entry. Matching shared changes: MR-28 and TT-127.
+
+## ACL-1892 — Adopt common efficient verification — 2026-10-14
+
+Select reviewed merged Master `eca8a857d9f7f81160bf248f9f9e3109a21ade49`
+([MR-26 / PR27](https://github.com/MojoTheApe/master-repo/pull/27)) and compatible
+Tracker `0d1fad44f5fdbef64b061324e9a1292fb77fb725`
+([TT-107 / PR108](https://github.com/MojoTheApe/task-tracker/pull/108)). The maintained
+three-way upgrade reproduces the actual 38-file old pristine template and retains
+the actual 41-file new pristine baseline, separate from explicit ACL resolutions.
+Keep the guarded client, relocated checker, configuration bytes, aliases/IDs,
+six modules, historical completion and all current ownership/delivery policies.
+
+Add the pinned verification/coordinated-upgrade reading map and optional direct
+CI producer export. Preserve ACL's bounded collector and full applicable
+Linux/Windows/installer checks; common native V1 cannot cover those environments,
+and no CI evidence policy is enabled. The descriptor Action keeps the local draft
+flag and compatibility-master trigger, adds PR-only cancellation with unique push
+identities and a bounded five-minute setup job. Product CI and its matrices remain
+unchanged. Extend existing CI concurrency regressions to the descriptor workflow.
+
+Current repository instructions now describe the actually active schema-3 5/5/5
+policy and completed ACL-1874/1875 cutover; dated migration and recovery evidence
+remain intact. Compatible service publication already exists at
+`bcb59dfb0e4c5066d891207b49f690f29d9f9ef4`; this upgrade reserves no maintenance
+interval, changes no capacity and performs no state migration. Source review,
+batch integration and exact-tree isolated stage acceptance still use the genuine
+current old-policy handoff before unchanged main promotion. Adoption remains draft.
+
+No system/runtime behavior, product code/skills, employee data, installer/updater,
+credentials, release/pilot authorization or production operation changes, so those
+project-owned files are preserved. Required stable-package delivery remains
+separate and pending until genuine publication and installation evidence exists.
+
 ## ACL-1879 — Preserve Linux browser-file balance when diagnostic tests join CI
 
 Adding the official-token diagnostic test file deterministically changed the

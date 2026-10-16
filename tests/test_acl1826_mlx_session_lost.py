@@ -385,7 +385,7 @@ def test_rpa_open_profile_button_carries_the_code(monkeypatch):
 # ───────────────────────── предполётная проверка токена ─────────────────────────
 
 NOW = 1_800_000_000.0
-WS = "0f43865d-0000-4000-8000-0000000051db"
+WS = "550e8400-e29b-41d4-a716-446655440000"
 
 
 def _env(**claims):
@@ -401,7 +401,7 @@ def test_token_preflight_accepts_a_good_token():
 def test_token_preflight_rejects_expired_and_foreign_workspace():
     expired = mlx.token_preflight("B", env=_env(exp=NOW - 5), now=NOW)
     assert expired["ok"] is False and expired["code"] == mlx.TOKEN_EXPIRED
-    foreign = mlx.token_preflight("B", env=_env(workspaceID="3ef7f42d-0000-4000-8000-00000000f08e"), now=NOW)
+    foreign = mlx.token_preflight("B", env=_env(workspaceID="6ba7b810-9dad-11d1-80b4-00c04fd430c8"), now=NOW)
     assert foreign["ok"] is False and foreign["code"] == mlx.TOKEN_WORKSPACE
 
 

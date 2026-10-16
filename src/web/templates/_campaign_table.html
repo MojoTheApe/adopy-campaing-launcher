@@ -1075,9 +1075,9 @@
       return refreshAccount(account).then(function () {
         /* Тот же аккаунт открыт в другой области (он стоит в двух странах) — её данные устарели. */
         instances.forEach(function (i) { if (i !== api && i.watches(account)) i.reload(account); });
-        loadWarm();
         var at = (S.summaries[account] || {}).attempt;
         if (at && BATCH_STOPS[at.code]) stop = {account: account, text: at.error || ''};
+        loadWarm();
       });
     }).catch(function (e) {
       if (e && e.code === 'needs_api_backend') { showNeedsApi(); return; }
