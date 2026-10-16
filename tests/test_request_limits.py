@@ -100,6 +100,11 @@ def test_static_still_serves_a_plain_file():
         (".env", False),
         ("a//b", False),
         ("logo.svg\x00", False),
+        ("CON", False),
+        ("nul.css", False),
+        ("img/com1.png", False),
+        ("logo.svg.", False),
+        ("console.css", True),
     ],
 )
 def test_is_safe_static_path(path, safe):
@@ -230,6 +235,14 @@ def test_builder_routes_get_the_higher_limit_other_routes_do_not():
         assert limiter.limit_for(path) == BUILDER_MAX_BODY
     for path in ("/report-problem", "/account-links", "/publish-jobs/abc/cancel", "/"):
         assert limiter.limit_for(path) == DEFAULT_MAX_BODY
+
+
+def test_builder_limit_survives_a_root_path_prefix():
+    from src.web.request_limits import _route_path
+
+    scope = {"path": "/acl/build-upload", "root_path": "/acl"}
+    limiter = RequestBodyLimit(lambda *a: None, route_max_body=request_limits.ROUTE_MAX_BODY)
+    assert limiter.limit_for(_route_path(scope)) == BUILDER_MAX_BODY
 
 
 # --- form limits --------------------------------------------------------------

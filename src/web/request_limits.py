@@ -132,7 +132,8 @@ class RequestBodyLimit:
             await self.app(scope, receive, send)
             return
 
-        limit = self.limit_for(scope.get("path", ""))
+        # Путь без root_path: за префиксом маршруты билдера должны совпасть.
+        limit = self.limit_for(_route_path(scope))
         declared_raw = Headers(scope=scope).get("content-length")
         if declared_raw is not None:
             try:
@@ -185,6 +186,14 @@ class RequestBodyLimit:
 # (значит, ни «.», ни «..», ни скрытых файлов).
 _SAFE_STATIC_SEGMENT = re.compile(r"[A-Za-z0-9_-][A-Za-z0-9._-]*\Z")
 
+# Имена устройств Windows (CON, NUL.css, COM1…) — не файлы: realpath/stat на них
+# идут к устройству. Хвостовая точка Windows молча отрезает — тоже отказ.
+_WINDOWS_DEVICE = re.compile(r"(CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|COM[0-9¹²³]|LPT[0-9¹²³])(\..*)?\Z", re.I)
+
+
+def _safe_static_segment(segment: str) -> bool:
+    return bool(_SAFE_STATIC_SEGMENT.match(segment)) and not segment.endswith(".") and not _WINDOWS_DEVICE.match(segment)
+
 
 def _route_path(scope: Scope) -> str:
     """Путь внутри смонтированного приложения (как ``get_route_path`` Starlette)."""
@@ -207,7 +216,7 @@ def is_safe_static_path(path: str) -> bool:
         return False
     if ntpath.isabs(rel) or posixpath.isabs(rel) or ntpath.splitdrive(rel)[0]:
         return False
-    return all(_SAFE_STATIC_SEGMENT.match(segment) for segment in rel.split("/"))
+    return all(_safe_static_segment(segment) for segment in rel.split("/"))
 
 
 class SafeStaticFiles(StaticFiles):
