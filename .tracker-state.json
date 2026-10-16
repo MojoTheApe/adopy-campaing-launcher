@@ -41607,7 +41607,20 @@
     ]
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "896": {
+        "actor": "Worker-1896A",
+        "session": "acl1896_20261016",
+        "coordinator": "Coordinator-1ECF",
+        "branch": "work/acl-1896-instagram-identity",
+        "worktree": "C:\\acl-1896",
+        "id": "6a20b77a066f4d1f9a92746034e3503a",
+        "issue": 896,
+        "state": "implementing",
+        "started_at": "2026-10-16T13:02:56+00:00",
+        "from_status": "status:backlog"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -47523,6 +47536,17 @@
       "13": {
         "implementers": [],
         "state": "archived"
+      },
+      "896": {
+        "implementers": [
+          {
+            "actor": "Worker-1896A",
+            "session": "acl1896_20261016"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-1896A",
+        "coordinator": "Coordinator-1ECF"
       }
     },
     "actors": {
@@ -49301,6 +49325,10 @@
       "Reviewer-R1853D": {
         "session": "r1853d-20261016",
         "role": "Reviewer"
+      },
+      "Worker-1896A": {
+        "session": "acl1896_20261016",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -76813,6 +76841,13 @@
         "at": "2026-10-16T12:42:49+00:00",
         "issue": 13,
         "reason": "Stale: the BI/Adverity extract premise is gone (tracker review 2026-10-14). The remaining need (workbook vs account read vs Graph read) is tracked in acl-109 (#17). Backlog cleanup 2026-10-16."
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-16T13:02:56+00:00",
+        "issue": 896,
+        "claim": "6a20b77a066f4d1f9a92746034e3503a",
+        "actor": "Worker-1896A"
       }
     ],
     "policy": {
