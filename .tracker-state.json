@@ -45908,7 +45908,7 @@
             "session": "wrs1827-20261015"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-RS1827",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -76171,6 +76171,68 @@
             "approved_at": "2026-10-16T10:51:41+00:00"
           }
         }
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-16T10:53:45+00:00",
+        "issue": 827,
+        "pr": 829,
+        "review": {
+          "id": "514cee07b1454049b5c1a0795ad085ae",
+          "pr": 829,
+          "issues": [
+            827
+          ],
+          "actor": "Reviewer-R1827U",
+          "session": "r1827u-20261016",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-16T10:19:09+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 827,
+            "pr": 829,
+            "branch": "codex/acl-1827-design-parity-shell",
+            "head_sha": "662abff0610d5be18b15c4bcd2265332a31cb2a2",
+            "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+            "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "fdf30ddff65f891825fc8a270531da766faed723eadbc1aa4b976e58374d588c",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-R1827U",
+              "implementer": "Worker-RS1827",
+              "review_session": "r1827u-20261016",
+              "execution_lane": "514cee07b1454049b5c1a0795ad085ae",
+              "head_sha": "662abff0610d5be18b15c4bcd2265332a31cb2a2",
+              "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+              "tree_sha": "e33f22da27129dce5beab0d9c8247085b9cf7da4",
+              "report": "Verified that the refresh to main af0ade29 changed nothing in ACL-1827: the diff of origin/main..head has the same 6 files and 1048 insertions/25 deletions as 3ee7c6d9..de6dbfaf, the changed-line content hash is identical, and the delta de6dbfaf..head touches exactly the files main changed (delivery docs, workflows, scripts). Reviewed the full 1827 diff against main: UI strings are English, every data-view of main (home, targets, ad-texts, accounts, diag, visual, all country-* views) is still present in the sidebar, the 1778 header (Robot health link, Report a problem, Update, Refresh, meta) is intact with the added popover, no secrets or real ids, the only network call is one fetch of /robot-health/summary on user action and there are no setInterval/setTimeout polls against ad accounts. Ran tests/test_acl1827_shell_parity.py, test_header.py, test_screens_are_in_english.py, test_acl1797_design_system.py in a detached worktree: 56 passed. No blocking findings.",
+              "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                827
+              ],
+              "recorded_at": "2026-10-16T10:23:52+00:00",
+              "issue_scopes": {
+                "827": "fdf30ddff65f891825fc8a270531da766faed723eadbc1aa4b976e58374d588c"
+              }
+            },
+            "lane": {
+              "id": "514cee07b1454049b5c1a0795ad085ae",
+              "pr": 829,
+              "issues": [
+                827
+              ],
+              "actor": "Reviewer-R1827U",
+              "session": "r1827u-20261016",
+              "coordinator": "Coordinator-C0930A",
+              "started_at": "2026-10-16T10:19:09+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-16T10:53:01+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -77622,6 +77684,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-16T10:51:41+00:00"
+      },
+      "827": {
+        "issue": 827,
+        "pr": 829,
+        "branch": "codex/acl-1827-design-parity-shell",
+        "head_sha": "662abff0610d5be18b15c4bcd2265332a31cb2a2",
+        "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+        "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "fdf30ddff65f891825fc8a270531da766faed723eadbc1aa4b976e58374d588c",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-R1827U",
+          "implementer": "Worker-RS1827",
+          "review_session": "r1827u-20261016",
+          "execution_lane": "514cee07b1454049b5c1a0795ad085ae",
+          "head_sha": "662abff0610d5be18b15c4bcd2265332a31cb2a2",
+          "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+          "tree_sha": "e33f22da27129dce5beab0d9c8247085b9cf7da4",
+          "report": "Verified that the refresh to main af0ade29 changed nothing in ACL-1827: the diff of origin/main..head has the same 6 files and 1048 insertions/25 deletions as 3ee7c6d9..de6dbfaf, the changed-line content hash is identical, and the delta de6dbfaf..head touches exactly the files main changed (delivery docs, workflows, scripts). Reviewed the full 1827 diff against main: UI strings are English, every data-view of main (home, targets, ad-texts, accounts, diag, visual, all country-* views) is still present in the sidebar, the 1778 header (Robot health link, Report a problem, Update, Refresh, meta) is intact with the added popover, no secrets or real ids, the only network call is one fetch of /robot-health/summary on user action and there are no setInterval/setTimeout polls against ad accounts. Ran tests/test_acl1827_shell_parity.py, test_header.py, test_screens_are_in_english.py, test_acl1797_design_system.py in a detached worktree: 56 passed. No blocking findings.",
+          "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            827
+          ],
+          "recorded_at": "2026-10-16T10:23:52+00:00",
+          "issue_scopes": {
+            "827": "fdf30ddff65f891825fc8a270531da766faed723eadbc1aa4b976e58374d588c"
+          }
+        },
+        "lane": {
+          "id": "514cee07b1454049b5c1a0795ad085ae",
+          "pr": 829,
+          "issues": [
+            827
+          ],
+          "actor": "Reviewer-R1827U",
+          "session": "r1827u-20261016",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-16T10:19:09+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-16T10:53:01+00:00"
       }
     },
     "batches": {
@@ -80384,62 +80490,6 @@
       "ineligible": {}
     },
     "source_reviews": {
-      "829": {
-        "id": "514cee07b1454049b5c1a0795ad085ae",
-        "pr": 829,
-        "issues": [
-          827
-        ],
-        "actor": "Reviewer-R1827U",
-        "session": "r1827u-20261016",
-        "coordinator": "Coordinator-C0930A",
-        "started_at": "2026-10-16T10:19:09+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 827,
-          "pr": 829,
-          "branch": "codex/acl-1827-design-parity-shell",
-          "head_sha": "662abff0610d5be18b15c4bcd2265332a31cb2a2",
-          "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
-          "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "fdf30ddff65f891825fc8a270531da766faed723eadbc1aa4b976e58374d588c",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-R1827U",
-            "implementer": "Worker-RS1827",
-            "review_session": "r1827u-20261016",
-            "execution_lane": "514cee07b1454049b5c1a0795ad085ae",
-            "head_sha": "662abff0610d5be18b15c4bcd2265332a31cb2a2",
-            "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
-            "tree_sha": "e33f22da27129dce5beab0d9c8247085b9cf7da4",
-            "report": "Verified that the refresh to main af0ade29 changed nothing in ACL-1827: the diff of origin/main..head has the same 6 files and 1048 insertions/25 deletions as 3ee7c6d9..de6dbfaf, the changed-line content hash is identical, and the delta de6dbfaf..head touches exactly the files main changed (delivery docs, workflows, scripts). Reviewed the full 1827 diff against main: UI strings are English, every data-view of main (home, targets, ad-texts, accounts, diag, visual, all country-* views) is still present in the sidebar, the 1778 header (Robot health link, Report a problem, Update, Refresh, meta) is intact with the added popover, no secrets or real ids, the only network call is one fetch of /robot-health/summary on user action and there are no setInterval/setTimeout polls against ad accounts. Ran tests/test_acl1827_shell_parity.py, test_header.py, test_screens_are_in_english.py, test_acl1797_design_system.py in a detached worktree: 56 passed. No blocking findings.",
-            "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              827
-            ],
-            "recorded_at": "2026-10-16T10:23:52+00:00",
-            "issue_scopes": {
-              "827": "fdf30ddff65f891825fc8a270531da766faed723eadbc1aa4b976e58374d588c"
-            }
-          },
-          "lane": {
-            "id": "514cee07b1454049b5c1a0795ad085ae",
-            "pr": 829,
-            "issues": [
-              827
-            ],
-            "actor": "Reviewer-R1827U",
-            "session": "r1827u-20261016",
-            "coordinator": "Coordinator-C0930A",
-            "started_at": "2026-10-16T10:19:09+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-16T10:53:01+00:00"
-        }
-      },
       "904": {
         "id": "f863723e5f464118b13efa2fb54a12ed",
         "pr": 904,
