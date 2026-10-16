@@ -110,6 +110,18 @@ service publication and idle queue-preserving migration are separate gates in
 [ACL-1874](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/874). Preparation changes no
 campaign runtime or installed employee version.
 
+## Graph read failure diagnostics
+
+ACL-1886 adds the fixed GET method and an allowlisted operation category to
+GraphClient errors. Supported search lookups also name only a fixed location,
+locale or interest subtype. Unknown paths/subtypes do not echo request data;
+URLs, parameters, object IDs and names are excluded from this added context.
+Existing error text consumers can display the category without another request.
+This identifies the failed read; it does not establish the cause of a live Meta
+permission denial or change access, retry, token, pagination or stop rules.
+Callers that replace the exception text with a generic message still need their
+own integration; this boundary alone does not update those messages.
+
 ## Maintaining this document
 
 Describe implemented behavior and limitations here when changing the system. Preserve

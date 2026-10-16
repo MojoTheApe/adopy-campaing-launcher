@@ -242,6 +242,20 @@ Crop where Next hung and closed the wizard with Close, leaving the ad without me
   ends in the honest `crop_wizard_stuck`, with the exit reason `looped_back`.
 - The wizard telemetry row gets `looped_back_to` (first earlier step the wizard went back to, e.g.
   `Media`), also inside `exit`. No new clicks: only the existing Next on a Crop that is on screen.
+
+## Safe operation context for Graph read failures — ACL-1886
+
+- Two Plan check permission errors showed the same Graph10/OAuthException/HTTP400
+  diagnostics without identifying the failed read. An offline replay reproduced
+  that loss across search, campaign, promoted-page, pixel and form requests.
+- GraphClient now adds only the fixed GET method, a closed operation category and
+  an optional allowlisted search subtype to its existing error details/text.
+  Unknown paths/types cannot echo URLs, queries, names, IDs or request parameters.
+- Existing caller error handling, token/rate/policy stops and request counts stay
+  unchanged. The anonymized error fixture and public-client tests cover safe
+  context and pagination. This diagnostic fix does not explain or resolve the
+  live permission denial, grant access or establish deployment to a dashboard.
+
 ## Window recovery enlarges a window restored below the editor minimum — ACL-1727
 
 - Run 4db2039f760d (Facebook_9403A): a minimised window was restored to its normal size
