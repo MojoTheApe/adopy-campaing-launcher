@@ -45780,7 +45780,7 @@
             "session": "rf1016w-20261016"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-RF1016W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -45805,7 +45805,8 @@
           "actor": "Coordinator-M1011A",
           "session": "coord-m1011a-20261015",
           "report": "Main moved to af0ade29 (ACL-1924 batch + ACL-1923 no-stage activation). The earlier approval used main 3ee7c6d9 and is no longer current under the new policy. Return to author for a main merge (CHANGELOG-only conflict), then fresh independent delta approval. Content unchanged."
-        }
+        },
+        "reviewer": "Reviewer-DV1016A"
       },
       "826": {
         "implementers": [
@@ -49206,6 +49207,10 @@
       "Worker-W1853C": {
         "session": "w1853c-20261016",
         "role": "Worker"
+      },
+      "Reviewer-DV1016A": {
+        "session": "dv1016a-831",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -51958,7 +51963,6 @@
       309,
       379,
       356,
-      776,
       899,
       902,
       886
@@ -75931,6 +75935,13 @@
         "issue": 886,
         "pr": 887,
         "actor": "Worker-RF1016W"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-16T10:38:14+00:00",
+        "pr": 831,
+        "lane": "f1a9eca1144647bba3e809299727e3a5",
+        "actor": "Reviewer-DV1016A"
       }
     ],
     "policy": {
@@ -80078,6 +80089,18 @@
         "session": "r1816u-20261016",
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-16T10:20:11+00:00",
+        "state": "reviewing"
+      },
+      "831": {
+        "id": "f1a9eca1144647bba3e809299727e3a5",
+        "pr": 831,
+        "issues": [
+          776
+        ],
+        "actor": "Reviewer-DV1016A",
+        "session": "dv1016a-831",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-16T10:38:14+00:00",
         "state": "reviewing"
       }
     },
