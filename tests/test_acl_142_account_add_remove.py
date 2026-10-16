@@ -57,7 +57,7 @@ def test_a_read_from_the_profile_is_marked_as_needing_confirmation(monkeypatch):
     monkeypatch.setattr(sp, "_attach_only", lambda entry, label: Conn())
     monkeypatch.setattr(sp, "_act_from_url", lambda page, tries=20: "act_555")
     monkeypatch.setattr(sp, "_ads_manager_account_name", lambda page: "Default One")
-    out = sp.read_ad_account("p-1", "f-1", "A")
+    out = sp.read_ad_account("11111111-2222-4333-8444-555555555555", "f-1", "A")
     assert out["ok"] and out["act"] == "act_555"
     assert out["needs_confirmation"] is True, "the redirected default account is a proposal"
 

@@ -106,7 +106,7 @@ const found = (act, name) => ({ ok: true, act, account_name: name, needs_confirm
     const box = { getAttribute: () => '', querySelector: () => msg };
     const ctx = {
       calls, FormData: class {}, Object, Promise, String, JSON, encodeURIComponent,
-      prompt: () => 'KLD BFL X84', location: { reload() { calls.push({ url: 'RELOAD' }); } },
+      prompt: () => 'KLD BFL X84', aclPrompt: async () => 'KLD BFL X84', aclConfirm: async () => true, location: { reload() { calls.push({ url: 'RELOAD' }); } },
       amapAskAccount: async () => answer, amapReadOpenAccount() {},
       amapSend() { calls.push({ url: '/account-links' }); }, setTimeout, AMAP_OPEN_TIMEOUT_MSG: '',
       fetch: (url, opts) => { calls.push({ url, opts }); return Promise.resolve({ json: async () => ({ ok: true }) }); },
