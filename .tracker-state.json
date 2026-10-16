@@ -41616,9 +41616,11 @@
         "worktree": "C:\\acl-142-c",
         "id": "748616d6aeaa441ebe3332ae099ea075",
         "issue": 72,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-16T14:42:38+00:00",
-        "from_status": "status:backlog"
+        "from_status": "status:backlog",
+        "pr": 958,
+        "report": "ACL-142: Connect uses an in-page dialog with \"Read from the open account\" (editable field, name+number shown, explicit tick required for an unedited read of the default redirected account). Country rows: x = confirmed take-out-of-country; \"Remove from ACL\" = confirmed removal of this computer's map row and all placements via /account-map-remove also_unlink. Tests: tests/test_acl_142_account_add_remove.py + Node harness; ran 112 affected tests, all green after fixing one escape. No live calls. Full suite not run (CI only)."
       }
     },
     "tasks": {
