@@ -7102,6 +7102,13 @@ window.cbTree = (function () {
     return false;
   }
 
+  function adNames(slot) {
+    var rows = slot.querySelectorAll('.cb-ad-row');
+    var out = [];
+    for (var i = 0; i < rows.length; i += 1) out.push('Ad ' + (i + 1));
+    return out;
+  }
+
   function headHtml(found) {
     var c = found.camp, slot = c.slot;
     var seg = L.LEVELS.map(function (lv) {

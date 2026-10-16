@@ -13,6 +13,10 @@ import pytest
 from playwright.sync_api import sync_playwright
 
 from src.analysis_agent import account_spend as sp
+from tests.profile_lease_fakes import fake_profile
+
+# ACL-1853: аренда профиля принимает только настоящий UUID.
+P1 = fake_profile("p1")
 
 FIXTURE = Path(__file__).parent / "fixtures" / "meta" / "campaign_table_without_row_ids.html"
 PERIOD = '<div role="button" aria-label="Date range: Sep 1, 2026">Sep 1, 2026</div>'
@@ -173,7 +177,7 @@ def run(browser, monkeypatch, tmp_path):
                 pg.close()
 
         page = Page()
-        monkeypatch.setattr(sp, "_entry_for", lambda _: NS(ad_account_id="123", profile_id="p1"))
+        monkeypatch.setattr(sp, "_entry_for", lambda _: NS(ad_account_id="123", profile_id=P1))
         monkeypatch.setattr(sp, "_attach_only", lambda *a: NS(page=page, close=lambda **kw: None))
         monkeypatch.setattr(sp, "_wait_for_grid", lambda _: True)
         monkeypatch.setattr(sp, "TURN_OFF_TRIES", 3)
@@ -262,7 +266,7 @@ def test_the_switch_is_not_covered_in_the_recorded_layout(browser):
 @pytest.fixture
 def store(tmp_path, monkeypatch):
     monkeypatch.setattr(sp, "_store_path", lambda: tmp_path / "spend.json")
-    monkeypatch.setattr(sp, "_entry_for", lambda _: NS(ad_account_id="123", profile_id="p1"))
+    monkeypatch.setattr(sp, "_entry_for", lambda _: NS(ad_account_id="123", profile_id=P1))
     return tmp_path
 
 
@@ -283,7 +287,7 @@ def test_a_busy_profile_is_refused_before_the_browser(store, monkeypatch):
     asked = []
     out = sp.turn_off("FacebookDoc19", "campaign", "", expected_name="Campaign 1", match="name",
                       profile_busy=lambda key: asked.append(key) or True)
-    assert asked == ["p1"]
+    assert asked == [P1]
     assert out.state == "failed" and out.error == sp.PROFILE_BUSY_ERROR
     assert sp.turn_off_history()[0]["error"] == sp.PROFILE_BUSY_ERROR
     assert out.matched_by == "name", "the journal must say this was a by-name refusal"
