@@ -25,10 +25,12 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable
 
+from src.fb_api import form_create as _fc
+from src.fb_api import form_templates as _ft
 from src.fb_api import forms as _forms
 from src.fb_api.graph import GraphClient, GraphError, GraphStop, WritesBlocked, WriteUnknown, normalize_act
 
@@ -106,6 +108,16 @@ LIVE_STATES = ["ACTIVE", "PAUSED", "PENDING_REVIEW", "DISAPPROVED", "PREAPPROVED
                "WITH_ISSUES"]
 
 
+#: Id-пустышка формы для проверки политики и показа плана (формы ещё нет; 5-25 цифр).
+FORM_ID_PLACEHOLDER = "0000000"
+
+
+def _wp_form_edge() -> str:
+    from src.fb_api import write_policy as _wp
+
+    return _wp.FORM_EDGE
+
+
 class PlanError(ValueError):
     """Черновик нельзя создать через API; к Meta ничего не писали."""
 
@@ -138,6 +150,8 @@ class AdPlan:
     description: str
     #: Id существующей формы Страницы (только у Instant Form; иначе пусто).
     form_id: str = ""
+    #: Шаблон формы (ACL-1776): форму создаёт робот при публикации; `form_id` заполняется тогда же.
+    form_template: dict | None = None
 
 
 @dataclass
@@ -208,8 +222,12 @@ def _source(draft: Any, what: str) -> str:
     return "draft" if str(getattr(draft, f"{what}_id", "") or "").strip() else ""
 
 
-def plan_from_draft(draft: Any) -> CampaignPlan:
-    """`CampaignDraft` (после `enrich_campaign_drafts`) → план. Ошибки — `PlanError`."""
+def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | None = None) -> CampaignPlan:
+    """`CampaignDraft` (после `enrich_campaign_drafts`) → план. Ошибки — `PlanError`.
+
+    `template_loader` - поиск шаблона формы по id (ACL-1776); по умолчанию - локальная библиотека.
+    """
+    load_template = template_loader or _ft.get
     problems: list[str] = list(getattr(draft, "errors", None) or [])
     raw_act = str(getattr(draft, "ad_account_id", "") or "").strip()
     try:
@@ -260,8 +278,23 @@ def plan_from_draft(draft: Any) -> CampaignPlan:
                 path=path, title=str(ad.ad_title or "").strip(), body=str(ad.ad_body or "").strip(),
                 description=str(ad.ad_link_description or "").strip(),
                 form_id=(str(getattr(ad, "lead_form_id", "") or "").strip() if plan_set.instant else "")))
-            if plan_set.instant and not plan_set.ads[-1].form_id:
-                problems.append(f"Ad {i}: no Instant Form selected (pick one of the Page's forms)")
+            template_id = (str(getattr(ad, "lead_form_template", "") or "").strip() if plan_set.instant else "")
+            if template_id and plan_set.ads[-1].form_id:
+                problems.append(f"Ad {i}: choose either an existing form or a template, not both")
+            elif template_id:
+                tpl = load_template(template_id)
+                if tpl is None:
+                    problems.append(f"Ad {i}: the form template was not found in the Forms library")
+                else:
+                    clean, errs = _ft.validate(tpl)
+                    if errs:
+                        problems.append(f"Ad {i}: form template {clean.get('name') or template_id!r} is not valid: "
+                                        + "; ".join(errs))
+                    else:
+                        plan_set.ads[-1].form_template = clean
+            elif plan_set.instant and not plan_set.ads[-1].form_id:
+                problems.append(f"Ad {i}: no Instant Form selected (pick one of the Page's forms "
+                                "or a template)")
         ad_sets.append(plan_set)
     # Ревью M2: одинаковые имена схлопнули бы объявления (поиск, сверка, повтор).
     set_names = [x.name for x in ad_sets]
@@ -589,6 +622,9 @@ class CampaignCreator:
         self._creatives: dict[str, str] | None = None
         #: Формы Страницы плана (читаются раз на кампанию, только у Instant Form).
         self._page_forms: _forms.FormsRead | None = None
+        #: Шаблоны форм плана -> что с ними будет (ACL-1776); читается в `_check_forms`.
+        self._form_steps: dict[str, _fc.FormStep] = {}
+        self._form_warnings: list[str] = []
         self.progress = progress
 
     # -- служебное
@@ -602,13 +638,18 @@ class CampaignCreator:
 
     def _write(self, out: Outcome, what: str, path: str, params: dict, find: Callable[[], str | None],
                *, files: dict | None = None, filename: str = "", id_of=lambda b: b.get("id"),
-               on_ad: bool = False) -> str:
+               on_ad: bool = False, form_page: str = "") -> str:
         """Одна запись; неизвестный результат — сверка `find()` чтением."""
         self._check_cancel(out)
         try:
-            # `on_ad` — только креатив Instant Form при наборе ON_AD (ACL-1775).
-            body = (self.client.post(path, params, files=files, filename=filename, on_ad=True) if on_ad
-                    else self.client.post(path, params, files=files, filename=filename))
+            # `on_ad` — только креатив Instant Form при наборе ON_AD (ACL-1775);
+            # `form_page` — создание формы на Странице плана, своя цепочка политики (ACL-1776).
+            extra: dict[str, Any] = {}
+            if on_ad:
+                extra["on_ad"] = True
+            if form_page:
+                extra["form_page"] = form_page
+            body = self.client.post(path, params, files=files, filename=filename, **extra)
         except WriteUnknown as exc:
             # `WritesBlocked` сюда не попадает: та запись не уходила (ревью M4).
             self._step(out, f"{what}: result unknown — reconciling by readback")
@@ -951,9 +992,15 @@ class CampaignCreator:
         targetings = [targeting_for(plan, s, self.resolver) for s in plan.ad_sets]
         self._step(out, "preflight: targeting resolved")
         self._page_forms = None
+        self._form_steps = {}
+        self._form_warnings = []
         if any(s.instant for s in plan.ad_sets):
             self._check_forms(plan)
+            out.warnings += self._form_warnings
             self._step(out, "preflight: Instant Forms belong to the Page")
+            for step in self._form_steps.values():
+                self._step(out, f"preflight: form will be created: {step.form_name}" if step.action == "create"
+                           else f"preflight: form found on the Page, will be reused: {step.form_name}")
         files: dict[str, bytes] = {}
         for s in plan.ad_sets:
             for ad in s.ads:
@@ -979,10 +1026,14 @@ class CampaignCreator:
         if not read.ok:
             raise PlanError(read.message + ".")
         known = read.by_id()
+        templates: dict[str, dict] = {}
         for ad_set in plan.ad_sets:
             if not ad_set.instant:
                 continue
             for ad in ad_set.ads:
+                if ad.form_template:
+                    templates.setdefault(ad.form_template["id"], ad.form_template)
+                    continue
                 form = known.get(ad.form_id)
                 if form is None:
                     raise PlanError(f"Ad {ad.index}: the Instant Form {ad.form_id} is not a form of this "
@@ -991,7 +1042,100 @@ class CampaignCreator:
                     raise PlanError(f"Ad {ad.index}: the Instant Form {form.name!r} is "
                                     f"{form.status.lower() or 'of unknown status'} (only ACTIVE forms can be "
                                     "used); pick another form.")
+        self._form_steps = {}
+        for tid, tpl in templates.items():
+            existing, why = _fc.match_existing(read, tpl)
+            if why:
+                raise PlanError(why + ".")
+            fname = _ft.form_name(tpl)
+            if existing:
+                _fc.clear_pending(plan.act, plan.page_id, fname)
+            elif _fc.is_pending(plan.act, plan.page_id, fname):
+                # Список только что перечитан и формы в нём нет: прошлая запись могла дойти.
+                raise PlanError(_fc.MSG_PENDING + ".")
+            self._form_steps[tid] = _fc.FormStep(template_id=tid, template_name=tpl["name"],
+                                                 form_name=_ft.form_name(tpl), existing_id=existing)
+        if any(step.action == "create" for step in self._form_steps.values()):
+            # Условия Lead Ads: робот их не принимает никогда; без них - остановка до записи.
+            if _forms.page_terms_accepted(self.client, plan.page_id) is False:
+                raise PlanError(_fc.MSG_TERMS_STOP + ".")
+            self._check_form_permission()
         self._page_forms = read
+
+    def _check_form_permission(self) -> None:
+        """Право `pages_manage_ads` у снятого токена: только предупреждение (ACL-1776).
+
+        Токен Ads Manager - не обычное приложение, список прав может не отражать
+        реальность, поэтому отсутствие права не блокирует, а предупреждает; окончательный
+        ответ даст сама запись (отказ Meta -> понятный текст). Чужие токены не просим.
+        """
+        try:
+            rows = self.client.get_all("/me/permissions", {"limit": 100}, max_pages=1)
+        except GraphError:
+            return
+        granted = {str(r.get("permission")) for r in rows if str(r.get("status")) == "granted"}
+        if rows and "pages_manage_ads" not in granted:
+            self._form_warnings.append(_fc.MSG_NO_PERMISSION + " (this is a warning: Meta decides when the form is created)")
+
+    @staticmethod
+    def _planned(ad: AdPlan, placeholder: str) -> AdPlan:
+        """Копия объявления для плана/проверки политики: у шаблонной формы id ещё нет."""
+        if ad.form_template and not ad.form_id:
+            return replace(ad, form_id=placeholder)
+        return ad
+
+    def _find_form_id(self, plan: CampaignPlan, tpl: dict) -> str | None:
+        """Сверка чтением списка форм Страницы: id своей формы по точному имени."""
+        read = _forms.read_page_forms(self.client, plan.page_id)
+        if not read.ok:
+            raise GraphError(read.message)
+        existing, _why = _fc.match_existing(read, tpl)
+        return existing or None
+
+    def _verify_form(self, out: Outcome, plan: CampaignPlan, tpl: dict, form_id: str) -> None:
+        """Форма ACTIVE, на нашей Странице, вопросы как в шаблоне; иначе стоп."""
+        row = self.client.get(f"/{form_id}", {"fields": _fc.READBACK_FIELDS})
+        bad = _fc.compare_form(tpl, plan.page_id, row)
+        if bad:
+            raise CreationStopped(f"The form {_ft.form_name(tpl)!r} was read back with differences ("
+                                  + "; ".join(bad) + "). Nothing that depends on it was created.",
+                                  created=out.created, kind="form_mismatch")
+
+    def _ensure_form(self, out: Outcome, plan: CampaignPlan, ad: AdPlan) -> None:
+        """Форма шаблона объявления: найти свою или создать ОДИН раз; `ad.form_id` - её id."""
+        tpl = ad.form_template
+        if not tpl or ad.form_id:
+            return
+        step = self._form_steps.get(tpl["id"])
+        if step is None:
+            raise PlanError("the form template was not checked before publishing; run Check plan")
+        if not step.form_id:
+            if step.existing_id:
+                step.form_id = step.existing_id
+                out.reused.setdefault("forms", []).append(step.form_id)
+                self._step(out, f"form {step.form_name!r}: found on the Page, reused")
+            else:
+                try:
+                    # Метка ДО записи: без неё повторный запуск может создать вторую форму.
+                    _fc.record_pending(plan.act, plan.page_id, step.form_name)
+                except OSError as exc:
+                    raise CreationStopped(_fc.MSG_NO_STATE, created=out.created,
+                                          kind="form_state") from exc
+                try:
+                    step.form_id = self._write(
+                        out, f"form {step.form_name!r}", f"/{plan.page_id}/{_wp_form_edge()}",
+                        _ft.form_params(tpl), lambda: self._find_form_id(plan, tpl),
+                        form_page=plan.page_id)
+                except GraphError as exc:
+                    _fc.clear_pending(plan.act, plan.page_id, step.form_name)   # Meta отказала: формы нет
+                    raise CreationStopped(_fc.refused_message(exc), created=out.created,
+                                          kind="form_refused") from exc
+                _fc.clear_pending(plan.act, plan.page_id, step.form_name)
+                out.created.setdefault("forms", []).append(step.form_id)
+                self._step(out, f"form {step.form_name!r}: created")
+            self._verify_form(out, plan, tpl, step.form_id)
+            self._step(out, f"form {step.form_name!r}: read back, ACTIVE, on the Page, questions match")
+        ad.form_id = step.form_id
 
     def _check_planned(self, plan: CampaignPlan, targetings: list[dict]) -> None:
         """Политика записи над КАЖДЫМ запланированным объектом — до первой записи (R2-B1).
@@ -1009,9 +1153,21 @@ class CampaignCreator:
                 raise PlanError(f"{what}: {exc}") from exc
 
         ok("campaigns", self.campaign_params(plan), "campaign")
+        done_forms: set[str] = set()
+        for ad_set in plan.ad_sets:
+            for ad in ad_set.ads:
+                tpl = ad.form_template
+                if tpl and tpl["id"] not in done_forms:
+                    done_forms.add(tpl["id"])
+                    try:
+                        _wp.check_form_create(plan.page_id, "POST", f"/{plan.page_id}/{_wp.FORM_EDGE}",
+                                              _ft.form_params(tpl), None, plan.page_id)
+                    except _wp.WriteRefused as exc:
+                        raise PlanError(f"form {tpl['name']!r}: {exc}") from exc
         for ad_set, targeting in zip(plan.ad_sets, targetings):
             ok("adsets", self.adset_params(plan, ad_set, "0", targeting), f"ad set {ad_set.name!r}")
             for ad in ad_set.ads:
+                ad = self._planned(ad, FORM_ID_PLACEHOLDER)
                 media = ({"video_id": "0", "thumb": "https://example.invalid/t.jpg"} if ad.kind == "video"
                          else {"image_hash": "0"})
                 ok("adcreatives", {"name": f"{ad.name} #{ad.index} [{plan.label}]",
@@ -1045,6 +1201,7 @@ class CampaignCreator:
                     data = files[ad.path]
                     media = ({"video_id": "<uploaded video>", "thumb": "<video thumbnail>"} if ad.kind == "video"
                              else {"image_hash": "<uploaded image>"})
+                    ad = self._planned(ad, "<form to be created>")
                     ads.append({"name": ad.name, "status": PAUSED, "format": ad.kind,
                                 "file": Path(ad.path).name, "bytes": len(data),
                                 "library_name": (video_title(plan.tag, data) if ad.kind == "video"
@@ -1123,7 +1280,16 @@ class CampaignCreator:
                     form = known.get(ad.form_id)
                     item["form_id"] = ad.form_id
                     item["form_name"] = form.name if form else ""
-        return {
+                    if ad.form_template:
+                        step = self._form_steps.get(ad.form_template["id"])
+                        item["form_template"] = ad.form_template["name"]
+                        if step is not None:
+                            item["form_name"] = step.form_name
+                            item["form_id"] = step.existing_id
+                            item["form_action"] = step.action
+                            item["form_note"] = (f"form will be created: {step.form_name}" if step.action == "create"
+                                                 else f"form found on the Page, reused: {step.form_name}")
+        summary = {
             "campaign": plan.name, "status": PAUSED, "objective": OBJECTIVE,
             "daily_budget": plan.daily_budget, "currency": self.facts.currency,
             "budget_minor": budget_minor(plan.daily_budget, self.facts.currency),
@@ -1132,6 +1298,10 @@ class CampaignCreator:
             "existing": existing, "existing_differences": list(existing_differences or []),
             "tag": plan.label, "ad_sets": sets,
         }
+        if self._form_steps:
+            # Только у планов с шаблонами форм: сайтовый план не меняется ни байтом (ACL-1775).
+            summary["forms"] = [st.as_dict() for st in self._form_steps.values()]
+        return summary
 
     def _run(self, plan: CampaignPlan, out: Outcome) -> None:
         # 1. Всё, что можно проверить до записи.
@@ -1199,6 +1369,8 @@ class CampaignCreator:
                 if creative_id:
                     self._step(out, f"ad {ad.index}: creative found from a previous run")
                 else:
+                    # ACL-1776: форма из шаблона - ровно перед креативом, которому она нужна.
+                    self._ensure_form(out, plan, ad)
                     creative_id = self._write(
                         out, f"ad {ad.index}: creative", f"/{plan.act}/adcreatives",
                         {"name": creative_name,
@@ -1273,6 +1445,10 @@ class CampaignCreator:
                 by_name.setdefault(str(a.get("name") or "").strip(), []).append(a)
             for ad in ad_set.ads:
                 aobj = f"ad {ad.index} ({ad.name})"
+                if ad.form_template and not ad.form_id:
+                    # Объявление найдено с прошлого запуска: форма шаблона - та, что нашли по имени.
+                    step = self._form_steps.get(ad.form_template["id"])
+                    ad.form_id = (step.form_id or step.existing_id) if step else ""
                 rec = out.ad_media.get(ad.index) or {}
                 rows = by_name.get(ad.name) or []
                 check(aobj, "count", 1, len(rows))

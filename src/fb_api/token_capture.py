@@ -235,11 +235,94 @@ _HELPER_JS = r"""
     return checked;
   }
 
+  // ACL-1776: отдельная цепочка создания формы лидов (зеркало
+  // write_policy.check_form_create). Возвращает null (можно) или короткую причину.
+  function checkForm(spec) {
+    const F = WRITE && WRITE.form_create;
+    if (!F) return 'form_policy';
+    const m = new RegExp('^/([0-9]{1,25})/' + F.edge + '$').exec(String(spec.path || ''));
+    if (!m) return 'form_path';
+    // Страница закреплена на сессию (WRITE.form_create.page), а не берётся у вызывающего.
+    if (!F.page || !/^[0-9]{1,25}$/.test(String(F.page))) return 'form_no_page';
+    if (m[1] !== String(F.page)) return 'form_page';
+    if (String(spec.form_page || '') !== m[1]) return 'form_page';
+    if (spec.files && Object.keys(spec.files).length) return 'form_file';
+    const params = spec.params || {};
+    const txt = (x) => typeof x === 'string' && x.trim().length > 0 && x.length <= F.max_text;
+    const url = (x) => typeof x === 'string' && new RegExp(F.url_re, 'i').test(x.trim());
+    const bad = (value) => {
+      if (Array.isArray(value)) return value.some(bad);
+      if (value && typeof value === 'object') {
+        return Object.keys(value).some((k) => {
+          const low = String(k).toLowerCase();
+          const parts = low.split(/[^a-z0-9]+/);
+          return F.forbidden.indexOf(low) >= 0 || parts.indexOf('tos') >= 0
+            || parts.indexOf('terms') >= 0 || low.indexOf('tos_accepted') >= 0 || bad(value[k]);
+        });
+      }
+      return false;
+    };
+    if (bad(params)) return 'form_forbidden';
+    const keys = Object.keys(params);
+    for (const k of keys) if (!KEY_RE.test(k) || F.keys.indexOf(k) < 0) return 'form_key';
+    for (const k of ['name', 'questions', 'locale']) if (!(k in params)) return 'form_key';
+    const c = Object.assign({}, params);
+    for (const k of F.json_keys) {
+      if (!(k in params)) continue;
+      let v = params[k];
+      if (typeof v === 'string') { try { v = JSON.parse(v); } catch (e) { return 'form_json'; } }
+      c[k] = v;
+    }
+    if (bad(c)) return 'form_forbidden';
+    const only = (obj, kind) => obj && typeof obj === 'object' && !Array.isArray(obj)
+      && Object.keys(obj).every((k) => F.nested[kind].indexOf(k) >= 0);
+    if (!txt(c.name) || c.name.length > 200 || !new RegExp(F.name_re).test(c.name)) return 'form_name';
+    if (!new RegExp(F.locale_re).test(String(c.locale))) return 'form_locale';
+    const qs = c.questions;
+    if (!Array.isArray(qs) || qs.length < 1 || qs.length > F.max_questions) return 'form_questions';
+    for (const q of qs) {
+      if (!only(q, 'question') || F.question_types.indexOf(q.type) < 0) return 'form_questions';
+      if (q.type === 'CUSTOM') { if (!txt(q.key) || !txt(q.label)) return 'form_questions'; }
+      else if (Object.keys(q).length !== 1) return 'form_questions';
+      if ('options' in q) {
+        if (q.type !== 'CUSTOM' || !Array.isArray(q.options) || q.options.length < 1
+            || q.options.length > F.max_options) return 'form_questions';
+        for (const o of q.options) if (!only(o, 'option') || !txt(o.key) || !txt(o.value)) return 'form_questions';
+      }
+    }
+    if ('question_page_custom_headline' in c && !txt(c.question_page_custom_headline)) return 'form_headline';
+    if ('follow_up_action_url' in c && !url(c.follow_up_action_url)) return 'form_url';
+    if ('privacy_policy' in c) {
+      const p = c.privacy_policy;
+      if (!only(p, 'privacy_policy') || !url(p.url) || !txt(p.link_text)) return 'form_privacy';
+    }
+    if ('thank_you_page' in c) {
+      const t = c.thank_you_page;
+      if (!only(t, 'thank_you_page') || !txt(t.title)) return 'form_thanks';
+      if ('body' in t && !txt(t.body)) return 'form_thanks';
+      if ('button_text' in t && !txt(t.button_text)) return 'form_thanks';
+      if ('button_type' in t && F.button_types.indexOf(t.button_type) < 0) return 'form_thanks';
+      if ('website_url' in t && !url(t.website_url)) return 'form_thanks';
+    }
+    if ('context_card' in c) {
+      const x = c.context_card;
+      if (!only(x, 'context_card') || !txt(x.title) || F.card_styles.indexOf(x.style) < 0) return 'form_card';
+      if (!Array.isArray(x.content) || !x.content.length || !x.content.every(txt)) return 'form_card';
+    }
+    return null;
+  }
+
   async function write(spec) {
     const refused = (why) => ({ error: 'write_refused', why: why });
     if (!WRITE) return { error: 'read_only' };
     if (spec.method !== 'POST') return { error: 'read_only' };
     const path = String(spec.path || '');
+    // ACL-1776: путь Страницы идёт ТОЛЬКО по цепочке форм; путь act_X - только по своей.
+    if (/\/leadgen_forms$/.test(path)) {
+      const why = checkForm(spec);
+      if (why) return refused(why);
+      return post(path, spec.params || {}, undefined, null, spec, {});
+    }
     // ACL-1800: правка существующего объекта — отдельная узкая политика. Помощник
     // создателя (без `object_update`) пути объекта не принимает; помощник правок
     // (без рёбер) пути создания не принимает.
@@ -330,6 +413,11 @@ _HELPER_JS = r"""
         if (hex !== String(expect.sha256 || '')) return refused('file_hash');
       } catch (e) { return refused('file_hash'); }
     }
+    return post(path, params, want, blob, spec, files);
+  }
+
+  // Общая отправка записи: политика уже проверена (цепочка act_X или цепочка форм).
+  async function post(path, params, want, blob, spec, files) {
     scanFast(); scanHtml();
     if (!token) return { error: 'no_token', state: state() };
     if (typeof fetch !== 'function') return { error: 'no_fetch' };
@@ -460,6 +548,7 @@ class InPageGraph:
     def __init__(self, tab: Any, *, name: str | None = None,
                  graph_host: str = "captured", credentials: str = "captured",
                  allow_writes: bool = False, write_act: str | None = None,
+                 write_page: str | None = None,
                  allow_object_updates: bool = False,
                  sleep: Callable[[float], None] = time.sleep,
                  clock: Callable[[], float] = time.monotonic):
@@ -471,6 +560,7 @@ class InPageGraph:
         self.object_updates = bool(allow_object_updates)
         self.allow_writes = bool(allow_writes) or self.object_updates
         self.write_act = None
+        self.write_page: str | None = None
         self._write_policy: dict | None = None
         if self.allow_writes:
             from src.fb_api import write_policy as _wp
@@ -479,8 +569,11 @@ class InPageGraph:
             if not m:
                 raise ValueError("allow_writes needs the verified act_<id>")
             self.write_act = str(write_act)
+            if write_page and not re.fullmatch(r"[0-9]{1,25}", str(write_page)):
+                raise ValueError("write_page must be the numeric Page id of the plan")
+            self.write_page = str(write_page) if write_page else None
             self._write_policy = (_wp.policy_for_commands(self.write_act) if self.object_updates
-                                  else _wp.policy_for_page(self.write_act))
+                                  else _wp.policy_for_page(self.write_act, self.write_page or ""))
         if graph_host not in GRAPH_HOST_MODES:
             raise ValueError(f"graph_host must be one of {sorted(GRAPH_HOST_MODES)}")
         if credentials not in CREDENTIAL_MODES:
@@ -534,6 +627,30 @@ class InPageGraph:
             raise stop from exc
 
     # -- отдельный мир и помощник
+    def pin_page(self, page: str, *, timeout: float = 30.0) -> dict:
+        """Закрепить Страницу плана на сессию (ACL-1776), как `write_act` закреплён на кабинет.
+
+        Один раз: повторно - только то же значение. Помощник переустанавливается
+        в новом мире уже с этой Страницей в политике форм. После сброса мира ждём токен
+        (`wait_ready`): свежий мир мог не найти его в буфере Resource Timing. Возвращает
+        состояние страницы; без токена вызывающий не пишет.
+        """
+        if not self.allow_writes:
+            raise ValueError("read-only: writes are not enabled for this page")
+        page = str(page or "")
+        if not re.fullmatch(r"[0-9]{1,25}", page):
+            raise ValueError("the Page to pin must be a numeric Page id")
+        if self.write_page:
+            if self.write_page != page:
+                raise ValueError("a different Page is already pinned for this session")
+            return {"kind": "ads_manager", "has_token": True, "pinned": True}
+        from src.fb_api import write_policy as _wp
+
+        self.write_page = page
+        self._write_policy = _wp.policy_for_page(self.write_act, page)
+        self._reset_world()
+        return self.wait_ready(timeout=timeout)
+
     def _reset_world(self) -> None:
         self._ctx = None
         self._injected = False
@@ -723,7 +840,8 @@ class InPageGraph:
         raise CdpError("staging failed")  # недостижимо
 
     def write(self, path: str, params: dict | None = None, *, files: dict | None = None,
-              filename: str = "", timeout: float = 120.0, on_ad: bool = False) -> dict:
+              filename: str = "", timeout: float = 120.0, on_ad: bool = False,
+              form_page: str = "") -> dict:
         """POST в разрешённое ребро. РОВНО один раз; сбой после отправки — `call_unknown`.
 
         `files` — {поле: bytes}. Файл складывается в помощник прямо перед
@@ -737,13 +855,18 @@ class InPageGraph:
 
         from src.fb_api import write_policy as _wp
 
-        if self.object_updates:
+        if form_page:
+            # ACL-1776: цепочка форм - Страница плана; цепочка act_X для такого пути не годится.
+            _wp.check_form_create(form_page, "POST", path, params, files, self.write_page or "")
+        elif self.object_updates:
             _wp.check_object_update("POST", path, params, files)
         else:
             _wp.check(self.write_act, "POST", path, params, files, on_ad=on_ad)
         spec: dict[str, Any] = {"method": "POST", "path": path, "params": params or {}, "files": {},
                                 "filename": filename, "host": self.graph_host,
                                 "credentials": self.credentials}
+        if form_page:
+            spec["form_page"] = str(form_page)
         if on_ad:
             # ACL-1775: набор плана ON_AD — вторая линия политики пропустит форму в креативе.
             spec["on_ad"] = True
