@@ -41637,9 +41637,11 @@
         "worktree": "C:\\acl-106-c",
         "id": "80b5bf94550146debbee04c5fff42e55",
         "issue": 19,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-16T14:58:36+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 955,
+        "report": "ACL-106 r2: _period_owner(report) now reads the cached period report (no countries -> existing workbook notice; countries without is_me CM row -> manager notice), no frame access; blank/NaN CMs ignored; unused kind=workbook removed. Tests: 23 passed (incl. test that _filter_by_period is never called). Head 2299572df191e1ec6fd1c80d80098bca5030bb3b."
       }
     },
     "tasks": {
