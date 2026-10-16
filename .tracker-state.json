@@ -4104,6 +4104,27 @@
         "issue_scopes": {
           "787": "072075680194e9c34c8c58470312d713dbf6be600ed939a280019c0b36701dcb"
         }
+      },
+      "954": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R123D",
+        "implementer": "Worker-W123C",
+        "head_sha": "03660fb989b8a268ca659b0af91fe225df1d8118",
+        "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+        "tree_sha": "0e6a35593dd30369d3a449966705c000ebc464a7",
+        "execution_lane": "4843e56509d34730a6e2e4540adbad8a",
+        "review_session": "r123d-20261016",
+        "report": "Full diff origin/main...03660fb9 reviewed against Issue #29 (acl-123) acceptance. next_step maps all 15 Meta disable_reason names from account_spend_api._DISABLE_REASONS (codes 1-15 match Meta's AdAccount enum) to one English step that restates Meta's reason and points to Account Quality / Billing / the account provider; no diagnosis beyond the reported reason and no recovery promised (PERMANENT_CLOSE says do not launch, ask for replacement). Unknown code says the cause is unknown and how to investigate; page read without reason says the reason was not reported. Restricted/review get a generic step; clear/unknown get none. Escaping: Jinja autoescape (Starlette Jinja2Templates) on the template, esc() on the JS amapStatusTail path; step text is a fixed table plus a regex-limited [A-Z0-9_]/digit token, so no XSS via status_text. Account name stays in the same row (template test). Tests run (venv acl-1356-starlette): test_account_next_step (9) + test_disabled_account_status, test_account_status_read, test_acl1760_api_read, test_account_map_view, test_account_map_columns, test_every_change_leaves_a_record, test_review_ui_regressions, test_copy_status_text, test_account_spend, test_status_screenshot passed; one Playwright set_content timeout in test_account_spend::test_the_new_table_without_row_ids_is_read_by_name under 99% host CPU, unrelated to this diff. Non-blocking notes: blocked status gets no step; JS live-read path with next_step has no browser test; reason regex is not anchored to the Meta API suffix; wording of steps still needs the owner's agreement per the Issue's open decision; PROJECT.md not updated (component-level doc, CHANGELOG entry present).",
+        "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          29
+        ],
+        "recorded_at": "2026-10-16T15:49:11+00:00",
+        "issue_scopes": {
+          "29": "7352ef354e14e77a8664335a0a4d1e9e7f5aa69d4bd7775c2f323a1b02673646"
+        }
       }
     },
     "stage": {
