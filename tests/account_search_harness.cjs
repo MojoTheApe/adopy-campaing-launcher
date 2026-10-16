@@ -34,8 +34,12 @@ function fixture(fetch) {
   assert.deepEqual(Array.from(f.renders.at(-1).names),['KLD_X85']);
   f.ctx.amapFilter(f.input); await f.flush();
   assert.equal(calls.length,1,'repeat query must use cache');
-  f.ctx.amapFind(f.btn); await f.flush();
-  assert.equal(calls.length,2,'Reload must refresh this query');
+  // ACL-1151: кнопки Reload нет — устаревший ответ перечитывается сам.
+  vm.runInContext('for (var k in _mlxCacheAt) _mlxCacheAt[k] -= AMAP_SEARCH_TTL_MS + 1;', f.ctx);
+  f.ctx.amapFilter(f.input); await f.flush();
+  assert.equal(calls.length,2,'a stale answer must be fetched again');
+  f.ctx.amapFilter(f.input); await f.flush();
+  assert.equal(calls.length,2,'a fresh answer comes from the cache');
 
   const resolves={};
   const race=fixture((_url,opts)=>new Promise(resolve=>{resolves[JSON.parse(opts.body).instance]=resolve;}));

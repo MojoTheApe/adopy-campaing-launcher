@@ -4469,7 +4469,7 @@ async function dashRefresh(ev) {
 
   <section class="acc-connect">
     <h3>Connect an account</h3>
-    <p class="acc-sub">Find the profile by its last letters — open it if you need to, then connect.</p>
+    <p class="acc-sub">Pick a profile — the ones open on this computer are listed first; type part of a name to find any other. Connect opens it and reads its ad account.</p>
 
     {#- Та же форма, что в разделе страны, а не третий её вариант.
 
@@ -11791,6 +11791,12 @@ document.addEventListener('DOMContentLoaded', function () {
    покажет что-нибудь вроде `KLD_BFL_8412`, а нужный уедет вниз. */
 var _mlxCache = {};   // инстанс -> массив профилей
 var _mlxLoading = {}; // инстанс -> Promise
+var _mlxCacheAt = {}; // ключ -> когда получен (ACL-1151: вместо кнопки Reload)
+/* Кнопки Reload больше нет (ACL-1151), поэтому ответ живёт ограниченно:
+   профиль, заведённый минуту назад, находится тем же вводом без лишних
+   действий. Записи без отметки времени (подставленные тестом или старым
+   кодом) считаются свежими. */
+var AMAP_SEARCH_TTL_MS = 60000;
 
 /* Спрашиваем ровно то, что набрано, а не всё рабочее пространство.
 
@@ -11810,7 +11816,8 @@ var _mlxLoading = {}; // инстанс -> Promise
 function amapProfiles(inst, reload, text) {
   var q = (text || '').trim();
   var key = inst + '\0' + q.toLowerCase();
-  if (reload) { delete _mlxCache[key]; delete _mlxLoading[key]; }
+  var stale = _mlxCacheAt[key] && Date.now() - _mlxCacheAt[key] > AMAP_SEARCH_TTL_MS;
+  if (reload || stale) { delete _mlxCache[key]; delete _mlxLoading[key]; delete _mlxCacheAt[key]; }
   if (_mlxCache[key]) return Promise.resolve(_mlxCache[key]);
   if (_mlxLoading[key]) return _mlxLoading[key];
   var pending = fetch('/multilogin-search', {
@@ -11820,11 +11827,46 @@ function amapProfiles(inst, reload, text) {
   }).then(function (r) { return r.json(); }).then(function (d) {
     if (!d || !d.ok) throw new Error((d && d.error) || 'Multilogin did not answer');
     var profiles = d.profiles || [];
-    if (_mlxLoading[key] === pending) { _mlxCache[key] = profiles; delete _mlxLoading[key]; }
+    if (_mlxLoading[key] === pending) { _mlxCache[key] = profiles; _mlxCacheAt[key] = Date.now(); delete _mlxLoading[key]; }
     return profiles;
   }).catch(function (e) { if (_mlxLoading[key] === pending) delete _mlxLoading[key]; throw e; });
   _mlxLoading[key] = pending;
   return pending;
+}
+
+/* Профили, открытые на этой машине, — то, что выбирают, ничего не набирая
+   (ACL-1151, как вкладка Accounts раньше). Имя и кабинет у каждого уже
+   выведены сервером тем же правилом, что и у найденного поиском, поэтому
+   строка выглядит одинаково, как бы профиль ни попал в список. */
+var AMAP_OPEN_TTL_MS = 30000;
+var _mlxOpen = null;   // {at, promise}
+
+function amapOpenProfiles(force) {
+  if (!force && _mlxOpen && Date.now() - _mlxOpen.at < AMAP_OPEN_TTL_MS) return _mlxOpen.promise;
+  var entry = { at: Date.now() };
+  entry.promise = fetch('/mlx-open-profiles', { credentials: 'same-origin' })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (!d || !d.ok) throw new Error((d && d.error) || 'Could not list open profiles');
+      return (d.profiles || []).map(function (p) {
+        return {
+          profile_id: p.profile_id, name: p.name || '', folder_id: p.folder_id || '', open_here: true,
+          _details: { ok: true, ad_account_id: p.ad_account_id || '', folder_id: p.folder_id || '',
+                      suggested_name: p.suggested_name || '', taken_by: p.taken_by || '' }
+        };
+      });
+    })
+    .catch(function (e) { if (_mlxOpen === entry) _mlxOpen = null; throw e; });
+  _mlxOpen = entry;
+  return entry.promise;
+}
+
+/* Без живого токена список профилей пуст — так же, как поиск: подключение
+   пишет профиль под этим аккаунтом Multilogin, и выбирать его вслепую нельзя.
+   `null` — состояние ещё не известно. */
+function amapTokenAlive(inst) {
+  if (typeof AMAP_ML_STATE === 'undefined' || !AMAP_ML_STATE[inst]) return null;
+  return !!AMAP_ML_STATE[inst].alive;
 }
 
 function amapRank(profiles, q) {
@@ -11848,8 +11890,26 @@ function amapFilter(input, reload) {
   hits.hidden = true; hits.innerHTML = '';
   function current() { return box._amapGeneration === generation && (box.querySelector('.amap-inst').value || 'A') === inst; }
 
-  if (!q) { hits.hidden = true; hits.innerHTML = ''; msg.textContent = ''; return; }
   msg.className = 'amap-msg';
+  if (!q) {
+    var label = ACL_MLX_LABELS[inst] || inst;
+    var alive = amapTokenAlive(inst);
+    if (alive !== true) {
+      msg.textContent = alive === false ? 'Connect Multilogin ' + label + ' below to pick a profile.' : '';
+      return;
+    }
+    msg.textContent = 'profiles open on this machine…';
+    return amapOpenProfiles(false).then(function (list) {
+      if (!current() || (input.value || '').trim()) return;
+      msg.textContent = list.length
+        ? list.length + ' open on this machine — or type part of a name to search ' + label
+        : 'No profile is open on this machine — type part of its name to search ' + label;
+      amapRenderHits(box, hits, list.slice(0, 12), inst);
+    }).catch(function () {
+      /* Список открытых — удобство, а не условие: поиск по имени работает и без него. */
+      if (current() && !(input.value || '').trim()) msg.textContent = 'Type part of a profile name to search ' + label;
+    });
+  }
   msg.textContent = _mlxCache[inst + '\0' + q.toLowerCase()] ? ''
     : ('searching ' + (ACL_MLX_LABELS[inst] || inst) + '…');
 
@@ -11879,10 +11939,6 @@ function amapFilter(input, reload) {
     msg.textContent = String(e && e.message || e);
     msg.className = 'amap-msg bad';
   });
-}
-
-function amapFind(btn) {
-  return amapFilter(btn.closest('.amap-add').querySelector('.amap-find'), true);
 }
 
 /* Один рисовальщик на оба пути — и на кнопку, и на ввод. Две копии этой
@@ -12179,7 +12235,7 @@ async function amapMlSubmit(btn, paste) {
     token.value = '';
     amapMlSay(block, 'Token saved; checking connection…');
     var state = await amapMlRefresh(inst, true);
-    amapMlSay(block, state && state.alive ? 'Connected' + (j.workspace ? ' to workspace ' + j.workspace : '') + '. Reload to search profiles.' :
+    amapMlSay(block, state && state.alive ? 'Connected' + (j.workspace ? ' to workspace ' + j.workspace : '') + '. Pick a profile above.' :
       'Token saved, but connection could not be verified. Check Multilogin and try again.', !(state && state.alive));
   } catch (e) { amapMlSay(block, String(e.message || e), true); }
   finally {
@@ -12313,11 +12369,17 @@ async function amapMetaChange(btn, disconnect) {
 function amapMetaSave(btn) { return amapMetaChange(btn, false); }
 function amapMetaDisconnect(btn) { return amapMetaChange(btn, true); }
 
+/* Что подключение запишет — до нажатия (ACL-1151). Обе половины выводит
+   сервер (`profile_connection`); здесь только слова. Чего вывести не
+   удалось, сказано прямо: имя спросят при подключении, кабинет прочтут из
+   профиля, когда Connect его откроет. */
 function amapHint(row, d) {
   var hint = row.querySelector('.amap-hint');
   if (!hint) return;
-  if (d && d.ad_account_id) hint.textContent = d.ad_account_id + (d.suggested_name ? ' · ' + d.suggested_name : '');
-  else hint.textContent = 'never opened here — the ad account will be read from it';
+  var name = d && d.suggested_name, act = d && d.ad_account_id;
+  hint.textContent = (name ? name : 'no matching account name — you will type it')
+    + ' · ' + (act ? act : 'never opened here — the ad account will be read from it')
+    + (d && d.taken_by ? ' · already used by ' + d.taken_by : '');
 }
 
 async function amapConnect(box, profile, instance, btn, opened) {
@@ -12328,9 +12390,14 @@ async function amapConnect(box, profile, instance, btn, opened) {
      сверку с книгой убрали. Следствие записано как acl-145 — тринадцать
      аккаунтов в карте записаны книжными именами, и связь с книгой идёт по
      имени, поэтому новые под именем профиля своих чисел не увидят. */
+  /* ACL-1151: выведенное имя показывается на подтверждение; не вывелось —
+     так и сказано, а в поле имя самого профиля, чтобы было что поправить. */
   var name = d.suggested_name || profile.name || '';
+  /* ACL-141: своё окно вместо prompt(); ACL-1151: без совпадения в таблице — честная подпись. */
   name = ((await aclPrompt('', { title: 'Connect ' + (profile.name || 'this profile'),
-    label: 'Ad account name', value: name, okLabel: 'Next' })) || '').trim();
+    label: d.suggested_name ? 'Ad account name'
+      : "No account in the sheet matches this profile, so this is the profile's own name. Correct it if the sheet calls the account differently",
+    value: name, okLabel: 'Next' })) || '').trim();
   if (!name) return;
   var act = (d.ad_account_id || '').trim();
   if (!act && profile._openTimedOut) {
@@ -12397,18 +12464,14 @@ async function amapConnect(box, profile, instance, btn, opened) {
   }
   btn.disabled = true; msg.textContent = 'connecting…'; msg.className = 'amap-msg';
 
-  var patch = await fetch('/account-map-patch', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-    body: JSON.stringify({
-      account_name: name, ad_account_id: act,
-      profile_id: profile.profile_id, folder_id: profile.folder_id || d.folder_id || '',
-      multilogin_instance: instance, country: country
-    })
+  var pd = await aclConnectAccount({
+    account_name: name, ad_account_id: act,
+    profile_id: profile.profile_id, folder_id: profile.folder_id || d.folder_id || '',
+    multilogin_instance: instance, country: country
   });
-  var pd = null; try { pd = await patch.json(); } catch (e) {}
-  if (!pd || !pd.ok) {
+  if (!pd.ok) {
     /* кнопку включает amapOpenAndConnect: пока исходное открытие не закончилось, она выключена */
-    msg.textContent = (pd && pd.error) ? pd.error : ('could not save (HTTP ' + patch.status + ')');
+    msg.textContent = pd.error;
     msg.className = 'amap-msg bad';
     return;
   }
@@ -12429,6 +12492,31 @@ async function amapConnect(box, profile, instance, btn, opened) {
     return;
   }
   amapSend({ action: 'link', kind: 'country', value: country, account: name }, msg);
+}
+
+/* ACL-1151: запрос подключения — один на все экраны (карта, вкладка
+   Accounts, ручной ввод). Поле, добавленное здесь, доходит до всех сразу;
+   своя копия запроса на каком-то экране однажды его потеряла бы.
+   Пустые поля не отправляются, кроме кабинета: пустой кабинет — осознанное
+   «подключить и вписать позже» (ACL-1588). Возвращает {ok, error, ...}. */
+async function aclConnectAccount(fields) {
+  var payload = { account_name: String(fields.account_name || '').trim() };
+  if ('ad_account_id' in fields) payload.ad_account_id = String(fields.ad_account_id || '').trim();
+  ['profile_id', 'folder_id', 'multilogin_instance', 'country'].forEach(function (k) {
+    var v = String(fields[k] || '').trim();
+    if (v) payload[k] = v;
+  });
+  if (!payload.account_name) return { ok: false, error: 'The account name is required' };
+  var r;
+  try {
+    r = await fetch('/account-map-patch', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+      body: JSON.stringify(payload)
+    });
+  } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
+  var out = null; try { out = await r.json(); } catch (e) {}
+  if (!out || !out.ok) return { ok: false, error: (out && out.error) || ('could not save (HTTP ' + r.status + ')') };
+  return out;
 }
 
 function amapAddThisCountry(name, btn) {
@@ -17848,29 +17936,17 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     m.textContent = t || '';
   }
 
-  function tailKey(label) {
-    var m = String(label || '').split(' ')[0].match(/([A-Za-z])(\d{1,4})$/);
-    return m ? (m[1] + m[2]).toUpperCase() : '';
-  }
-
   function detectedFor(profileId) {
     var p = openProfiles.filter(function (x) { return x.profile_id === profileId; })[0];
     return (p && p.ad_account_id) || '';
   }
 
+  /* ACL-1151: имя аккаунта выводит сервер (`profile_connection`) — тем же
+     правилом, что и у профиля в карте. Своя формула здесь уже однажды
+     расходилась с серверной. */
   function accountForProfile(profileId) {
     var p = openProfiles.filter(function (x) { return x.profile_id === profileId; })[0];
-    if (!p || !p.key) return '';
-    var hits = knownLabels.filter(function (l) { return tailKey(l) === p.key; });
-    // Один аккаунт встречается дважды: полным именем из таблицы и коротким из
-    // статистики. Схлопываем, иначе ясное совпадение читается как спорное.
-    var byBase = {};
-    hits.forEach(function (l) {
-      var base = String(l).split(' ')[0].toLowerCase();
-      if (!byBase[base] || l.length > byBase[base].length) byBase[base] = l;
-    });
-    var uniq = Object.keys(byBase).map(function (k) { return byBase[k]; });
-    return uniq.length === 1 ? uniq[0] : '';
+    return (p && p.suggested_name) || '';
   }
 
   function profileOptions(current, suggested) {
@@ -17953,21 +18029,13 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     // записи без ad_account_id. Молча исчезнувший аккаунт хуже отказа.
     if (!ad) { say('Ad account could not be worked out — enter it manually', 'err'); openManual(); return; }
 
-    var picked = openProfiles.filter(function (p) { return p.profile_id === pid; })[0];
-    var payload = { account_name: name, ad_account_id: ad };
-    if (pid) payload.profile_id = pid;
-    if (extras.folder_id) payload.folder_id = extras.folder_id;
-    if (extras.multilogin_instance) payload.multilogin_instance = extras.multilogin_instance;
-    if (country) payload.country = country;
-
     var btn = el('ac-add-btn');
     if (btn) btn.disabled = true;
     say('Connecting…');
-    fetch('/account-map-patch', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    }).then(function (r) { return r.json(); })
-      .then(function (d) {
+    aclConnectAccount({
+      account_name: name, ad_account_id: ad, profile_id: pid, folder_id: extras.folder_id,
+      multilogin_instance: extras.multilogin_instance, country: country
+    }).then(function (d) {
         if (btn) btn.disabled = false;
         if (!d.ok) { say(d.error || 'failed', 'err'); return; }
         say('Connected: ' + name, 'ok');
@@ -18122,18 +18190,12 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     var msg = row.querySelector('.ac-row-msg');
     var picked = openProfiles.filter(function (p) { return p.profile_id === prof; })[0];
 
-    var payload = { account_name: label };
-    if (adid.trim()) payload.ad_account_id = adid.trim();
-    if (prof.trim()) payload.profile_id = prof.trim();
-    if (picked && picked.folder_id) payload.folder_id = picked.folder_id;
-
     btn.disabled = true;
     if (msg) { msg.style.color = 'var(--muted)'; msg.textContent = 'saving…'; }
-    fetch('/account-map-patch', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    }).then(function (r) { return r.json(); })
-      .then(function (d) {
+    aclConnectAccount({
+      account_name: label, ad_account_id: adid, profile_id: prof,
+      folder_id: picked && picked.folder_id
+    }).then(function (d) {
         btn.disabled = false;
         if (!d.ok) { if (msg) { msg.style.color = 'var(--bad)'; msg.textContent = d.error || 'error'; } return; }
         if (msg) { msg.style.color = 'var(--good)'; msg.textContent = '✓'; }
@@ -18449,16 +18511,11 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     if (!adid) { show('Ad account could not be worked out — paste the link', 'err'); return; }
 
     var picked = openProfiles.filter(function (p) { return p.profile_id === prof; })[0];
-    var payload = { account_name: label, ad_account_id: adid, country: country };
-    if (prof) payload.profile_id = prof;
-    if (picked && picked.folder_id) payload.folder_id = picked.folder_id;
-
     btn.disabled = true; show('Connecting…');
-    fetch('/account-map-patch', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    }).then(function (r) { return r.json(); })
-      .then(function (d) {
+    aclConnectAccount({
+      account_name: label, ad_account_id: adid, country: country, profile_id: prof,
+      folder_id: picked && picked.folder_id
+    }).then(function (d) {
         btn.disabled = false;
         if (!d.ok) { show(d.error || 'failed', 'err'); return; }
         show('✓ ' + label + ' → ' + country, 'ok');

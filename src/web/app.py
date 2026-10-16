@@ -3377,6 +3377,15 @@ def api_accounts_overview() -> JSONResponse:
     # Спрятанное помечается, а не вырезается: счётчик спрятанных и кнопка
     # «показать» должны на что-то опираться, а список, молча глотающий
     # строки, хуже длинного списка.
+    # ACL-1151: имена из книги и статистики запоминаются для подсказки в
+    # карте, которая книгу сама не читает. Порядок «книга, потом подсказки»
+    # совпадает с тем, что раньше считала вкладка у себя в браузере.
+    from src.web import profile_connection as _pc
+
+    known_for_profiles = [a["label"] for a in accounts] + list(suggestions)
+    _pc.remember_labels(known_for_profiles)
+    known_for_profiles = _pc.known_labels(known_for_profiles)
+
     from src.web import hidden_accounts as _hidden
 
     hidden_keys = _hidden.load()
@@ -3404,6 +3413,9 @@ def api_accounts_overview() -> JSONResponse:
                 # The ad account this profile actually works in, read from its
                 # own browser history — the last field a person had to copy.
                 "ad_account_id": ad_account_id_for(p["profile_id"]),
+                # ACL-1151: имя аккаунта выводит то же правило, что у профиля,
+                # найденного поиском в карте, — `profile_connection`.
+                "suggested_name": _pc.suggest_account_name(p.get("name") or "", known_for_profiles),
                 "taken_by": taken.get(p["profile_id"], ""),
             }
             for p in open_detail
@@ -4905,50 +4917,62 @@ async def mlx_profile_details(profile_id: str = "", name: str = "") -> JSONRespo
     That also sets the limit: history exists only for a profile this machine has
     opened. A profile found by searching Multilogin's cloud but never opened
     here has no history, so the id comes back empty and somebody types it.
+
+    ACL-1151: имя и кабинет выводит `profile_connection.derive` — то же
+    правило, что у открытых профилей в обзоре аккаунтов.
     """
-    from src.fb_ads_rpa import mlx_profiles
+    from starlette.concurrency import run_in_threadpool
+
+    from src.web import profile_connection
 
     pid = (profile_id or "").strip()
     if not pid:
         return JSONResponse({"ok": False, "error": "profile_id is required"}, status_code=400)
-    try:
-        act = mlx_profiles.ad_account_id_for(pid)
-    except Exception:
-        act = ""
-    try:
-        folder = mlx_profiles.folder_id_for(pid)
-    except Exception:
-        folder = ""
-    return JSONResponse({
-        "ok": True,
-        "ad_account_id": act,
-        "folder_id": folder,
-        "opened_here": bool(act or folder),
-        "suggested_name": _account_name_from_profile(name),
-    })
+    derived = await run_in_threadpool(profile_connection.derive, pid, name)
+    return JSONResponse({"ok": True, **derived})
 
 
-def _account_name_from_profile(profile_name: str) -> str:
-    """Guess the ad account's name from the Multilogin profile's.
+@app.get("/mlx-open-profiles")
+async def mlx_open_profiles() -> JSONResponse:
+    """Profiles open on this machine, each with what connecting would write.
 
-    The two are named by the same convention with different prefixes —
-    `KLD_BFL_X01` is the profile for `FacebookMKTOBFLX01`. What ties them is the
-    tail: a letter followed by digits. Matching on that is how the dashboard
-    already pairs the two elsewhere, so a suggestion is worth offering — but only
-    as a prefilled field somebody can correct, never as a silent decision.
+    The account picker lists these first, before anything is typed: the
+    usual case is "the profile I just opened". Same derivation as
+    `/mlx-profile-details`, so a profile reads the same here and when found by
+    search. Local reads only — no Google Sheets, no Multilogin cloud search.
     """
-    import re as _re
+    from starlette.concurrency import run_in_threadpool
 
-    tail = _re.search(r"([A-Za-z]\d{2,4})\s*$", (profile_name or "").strip())
-    if not tail:
-        return ""
-    map_path = get_ad_account_map_path()
-    known = list(load_ad_account_map(map_path)) if os.path.isfile(map_path) else []
-    wanted = tail.group(1).casefold()
-    for label in known:
-        if label.casefold().endswith(wanted):
-            return label
-    return ""
+    from src.fb_ads_rpa.mlx_profiles import open_profiles_detailed
+    from src.web import profile_connection
+
+    def _collect() -> list[dict]:
+        map_path = get_ad_account_map_path()
+        account_map = load_ad_account_map(map_path) if os.path.isfile(map_path) else {}
+        taken = {
+            (getattr(e, "profile_id", "") or "").strip(): label
+            for label, e in account_map.items()
+            if (getattr(e, "profile_id", "") or "").strip()
+        }
+        labels = profile_connection.known_labels()
+        out = []
+        for p in open_profiles_detailed():
+            d = profile_connection.derive(p["profile_id"], p.get("name") or "", labels)
+            out.append({
+                "profile_id": p["profile_id"],
+                "name": p.get("name") or "",
+                "folder_id": p.get("folder_id") or d["folder_id"],
+                "ad_account_id": d["ad_account_id"],
+                "suggested_name": d["suggested_name"],
+                "taken_by": taken.get(p["profile_id"], ""),
+            })
+        return out
+
+    try:
+        profiles = await run_in_threadpool(_collect)
+    except Exception as exc:  # noqa: BLE001 — список необязателен, поиск остаётся
+        return JSONResponse({"ok": False, "error": str(exc), "profiles": []})
+    return JSONResponse({"ok": True, "profiles": profiles})
 
 
 @app.post("/account-links")

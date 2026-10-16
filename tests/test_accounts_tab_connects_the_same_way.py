@@ -142,6 +142,6 @@ def test_the_page_says_why_a_new_profile_has_nothing_to_read():
 
 def test_the_heading_describes_the_new_way():
     section = _section()
-    assert re.search(r"Find the profile by its last letters", section), (
-        "подпись всё ещё обещает выбор из открытых профилей"
-    )
+    # ACL-1151: один выбор — профиль; «последних букв» больше нет.
+    assert re.search(r"Pick a profile", section), "подпись не говорит, что выбирают профиль"
+    assert "last letters" not in section, "подпись всё ещё просит последние буквы"
