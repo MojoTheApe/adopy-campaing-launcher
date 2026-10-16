@@ -41628,9 +41628,11 @@
         "worktree": "C:\\acl-1787-c",
         "id": "cab384b4c05f4c11aae5b3a15a8368e9",
         "issue": 787,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-16T14:45:24+00:00",
-        "from_status": "status:backlog"
+        "from_status": "status:backlog",
+        "pr": 956,
+        "report": "ACL-1787 desk research delivered in PR 956 (docs/research/ACL-1787-meta-ad-rules.md). Official Meta docs only; no API calls, credentials or accounts touched. Verified facts separated from inferences and unknowns. Key unknowns for a gated pilot: error 2703 versus pause-with-spend rules, and whether the in-profile token can create rules. Recommendation: do not build yet; run the section 8 pilot with an explicit owner go. Verification: documentation-only change, no code or tests."
       },
       "788": {
         "actor": "Worker-W1788C",
