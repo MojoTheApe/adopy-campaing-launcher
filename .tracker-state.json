@@ -47649,7 +47649,7 @@
             "session": "w1708c-20261016"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1708C",
         "coordinator": "Coordinator-C1016A",
         "handoff": {
@@ -47667,7 +47667,8 @@
           "report": "# ACL-1708 report\nChanges: \"Check the launcher window.\" -> \"Check the Adopy Campaign Manager window.\" in src/web/app.py (no tests/JS compare the string; no other user-visible launcher wording in src/web, remaining hits are comments/docstrings/identifiers/URLs). scripts/convert_favicon_to_ico.py deleted (it drew the old mark; repo has no SVG renderer, kit SVGs are src/web/static/logo.svg and favicon.svg, assets/dashboard.ico and favicon.ico are committed kit files); install_dashboard_shortcut.ps1 message no longer points at it; requirements-dev.txt comment fixed. Added viewport meta to report.html. CHANGELOG entry added.\nTests: tests/test_distribution_boundary.py + test_account_blocked_stops_the_campaign.py: 20 passed. 40 report.html-related test files: 713 passed, 1 failed (test_available_accounts_browser::test_select_remove_restore_and_counts, 500 on page render), and test_dashboard_review.py 3 failed; both identical on clean origin/main (pre-existing, unrelated). Remaining ~50 report.html test files only partially run. CI not run (startup_failure)."
         },
         "pr": 952,
-        "queued_at": "2026-10-16T14:50:17+00:00"
+        "queued_at": "2026-10-16T14:50:17+00:00",
+        "reviewer": "Reviewer-R1708D"
       },
       "73": {
         "implementers": [
@@ -49645,6 +49646,10 @@
       },
       "Reviewer-R144D": {
         "session": "r144d-20261016-951",
+        "role": "Reviewer"
+      },
+      "Reviewer-R1708D": {
+        "session": "r1708d-20261016",
         "role": "Reviewer"
       }
     },
@@ -52404,8 +52409,7 @@
       273,
       896,
       151,
-      165,
-      708
+      165
     ],
     "review": null,
     "history": [
@@ -77323,6 +77327,13 @@
         "pr": 951,
         "lane": "7017cec21c6c463aae5d1ff0300738c4",
         "actor": "Reviewer-R144D"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-16T14:52:13+00:00",
+        "pr": 952,
+        "lane": "d7e5685f29ff43578c73c9cc5b90e815",
+        "actor": "Reviewer-R1708D"
       }
     ],
     "policy": {
@@ -82022,6 +82033,18 @@
         "session": "r144d-20261016-951",
         "coordinator": "Coordinator-C1016A",
         "started_at": "2026-10-16T14:51:13+00:00",
+        "state": "reviewing"
+      },
+      "952": {
+        "id": "d7e5685f29ff43578c73c9cc5b90e815",
+        "pr": 952,
+        "issues": [
+          708
+        ],
+        "actor": "Reviewer-R1708D",
+        "session": "r1708d-20261016",
+        "coordinator": "Coordinator-C1016A",
+        "started_at": "2026-10-16T14:52:13+00:00",
         "state": "reviewing"
       }
     },
