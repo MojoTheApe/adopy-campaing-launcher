@@ -4083,6 +4083,27 @@
         "issue_scopes": {
           "73": "3a25372ae9c718cc8f08a1c2cf0a72178f1d6ee782f7356fba460f6033aa2db0"
         }
+      },
+      "956": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1787D",
+        "implementer": "Worker-W1787C",
+        "head_sha": "12c1babb0b32f3fd36cd18956693f879a5268257",
+        "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+        "tree_sha": "c01364d12d28edb6ddeb873f00c4cd445b5143c8",
+        "execution_lane": "4dd543551632421d8f4313bceb53da0e",
+        "review_session": "r1787d-20261016",
+        "report": "Desk research doc ACL-1787 reviewed against Issue 787, Meta official docs (adrules_library create edge, execution-spec, schedule guide, error 2703, permissions) and origin/main src/fb_api/write_policy.py (six edges, PAUSED-only, no DELETE, execution_options forbidden). Verified/inferred/unknown clearly labelled; recommendation respects PAUSED-only, no live polling, no Meta deletes. Single doc file, no code.",
+        "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          787
+        ],
+        "recorded_at": "2026-10-16T15:08:56+00:00",
+        "issue_scopes": {
+          "787": "072075680194e9c34c8c58470312d713dbf6be600ed939a280019c0b36701dcb"
+        }
       }
     },
     "stage": {
