@@ -48068,7 +48068,7 @@
       },
       "610": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       }
     },
     "actors": {
@@ -77785,6 +77785,12 @@
         "at": "2026-10-16T20:50:37+00:00",
         "issue": 627,
         "reason": "Backlog cleanup 2026-10-16: stale live check of the RPA stuck-step path; ACL-1614 merged, path superseded by the Graph-in-profile direction."
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-16T20:51:01+00:00",
+        "issue": 610,
+        "reason": "Backlog cleanup 2026-10-16: stale; targets RPA UI automation (security page URL, repeated Create presses). Checkpoint handling now lives in src/fb_api (error_catalog, token_capture)."
       }
     ],
     "policy": {
