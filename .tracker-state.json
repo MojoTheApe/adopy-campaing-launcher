@@ -46896,7 +46896,7 @@
             "session": "rf1016w-20261016"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-RF1016W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -46921,7 +46921,8 @@
           "session": "coord-m1011a-20261015",
           "report": "Main moved to af0ade29 (ACL-1924 batch + ACL-1923 no-stage activation). The earlier approval used main 3ee7c6d9 and is no longer current under the new policy. Return to author for a main merge (CHANGELOG-only conflict), then fresh independent delta approval. Content unchanged."
         },
-        "review_report": "Main moved to af0ade29 (ACL-1924 batch + ACL-1923 no-stage activation). The earlier approval used main 3ee7c6d9 and is no longer current under the new policy. Return to author for a main merge (CHANGELOG-only conflict), then fresh independent delta approval. Content unchanged."
+        "review_report": "Main moved to af0ade29 (ACL-1924 batch + ACL-1923 no-stage activation). The earlier approval used main 3ee7c6d9 and is no longer current under the new policy. Return to author for a main merge (CHANGELOG-only conflict), then fresh independent delta approval. Content unchanged.",
+        "reviewer": "Reviewer-DV1016B"
       },
       "902": {
         "implementers": [
@@ -49262,6 +49263,10 @@
       "Worker-R1839B": {
         "session": "refresh_acl1839_20261015",
         "role": "Worker"
+      },
+      "Reviewer-DV1016B": {
+        "session": "dv1016b-900",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -52014,7 +52019,6 @@
       309,
       379,
       356,
-      899,
       886
     ],
     "review": null,
@@ -76075,6 +76079,13 @@
         "issue": 839,
         "claim": "1bb368008a1147da883d37312bfe49c7",
         "actor": "Worker-R1839B"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-16T10:45:16+00:00",
+        "pr": 900,
+        "lane": "0b332f531991442399eb20fc44ceaf57",
+        "actor": "Reviewer-DV1016B"
       }
     ],
     "policy": {
@@ -80278,6 +80289,18 @@
         "session": "dv1016c-904",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-16T10:39:49+00:00",
+        "state": "reviewing"
+      },
+      "900": {
+        "id": "0b332f531991442399eb20fc44ceaf57",
+        "pr": 900,
+        "issues": [
+          899
+        ],
+        "actor": "Reviewer-DV1016B",
+        "session": "dv1016b-900",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-16T10:45:16+00:00",
         "state": "reviewing"
       }
     },
