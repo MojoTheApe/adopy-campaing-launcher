@@ -28,6 +28,16 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   confirms audience age/country values within their own field and opens the correct
   collapsed Locations/Languages control, preserving adjacent fields. Later hover-only
   controls remain ACL-1251; the deferred real pilot remains ACL-1215.
+- `src/fb_api`: API backend (`ACL_FB_BACKEND=api`) - Graph API calls made from inside the Multilogin
+  profile's Ads Manager tab; everything is created PAUSED, never activated, never deleted. File uploads
+  (`advideos`, `adimages`; ACL-1899) have no time limit: the page helper sends the file with
+  `XMLHttpRequest` as a job (`startCall` / `poll` / `abort`; no upload listener, because it would trigger a CORS preflight that Graph rejects for credentialed requests), Python polls it about once per second
+  (local CDP only, no Meta call) and the dashboard job panel shows `ad 1: uploading video (180 MB),
+  1m 20s` (elapsed time, no byte progress; a real percentage comes with chunked upload, ACL-891). The wait ends on the answer, a network/HTTP/Meta error, a lost page, or Stop (the request is
+  aborted, the result is treated as unknown and reconciled by readback; a file is never uploaded twice).
+  After an unknown upload result the readback is repeated up to 6 times over about 2 minutes, counted in
+  the per-campaign call budget. Writes without a file keep the short timeout. The write policy is
+  unchanged and identical in Python and in the page helper.
 - `src/creative_agent`, `src/knowledge_agent`: creative analysis and domain references.
 - `src/analysis_agent/team_library.py` and related library modules: shared targets/ad texts in
   the separately provisioned private team library; PR #244 replaced Google Sheets

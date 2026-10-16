@@ -376,7 +376,9 @@ class GraphClient:
 
     # -- одна запись (ACL-1761)
     def post(self, path: str, params: dict | None = None, *, files: dict | None = None,
-             filename: str = "", on_ad: bool = False, form_page: str = "") -> dict:
+             filename: str = "", on_ad: bool = False, form_page: str = "",
+             progress: Callable[[float], None] | None = None,
+             cancelled: Callable[[], bool] | None = None) -> dict:
         """POST ровно один раз. Никаких повторов, пересъёмки токена и т.п.
 
         - отказ до отправки (политика, нет токена) — стоп, к Meta ничего не ушло;
@@ -402,6 +404,11 @@ class GraphClient:
             # ACL-1776: создание формы Страницы - своя цепочка политики, Страница плана.
             if form_page:
                 extra["form_page"] = str(form_page)
+            # ACL-1899: прогресс и Stop нужны только записи с файлом; прежние транспорты их не знают.
+            if files and progress is not None:
+                extra["progress"] = progress
+            if files and cancelled is not None:
+                extra["cancelled"] = cancelled
             reply = self.transport.write(path, params or {}, files=files, filename=filename, **extra)
         except ValueError as exc:
             # Политика Python: ничего не отправлено.
