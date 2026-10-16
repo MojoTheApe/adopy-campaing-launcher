@@ -41619,20 +41619,6 @@
         "started_at": "2026-10-16T10:27:01+00:00",
         "from_status": "status:todo"
       },
-      "71": {
-        "actor": "Worker-M1015D141",
-        "session": "S-92830979",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-141-in-page-dialogs",
-        "worktree": "C:\\acl-141-dialogs",
-        "id": "d0c90d5ca1a849b29d4fd90c2d7a1b7c",
-        "issue": 71,
-        "state": "handoff",
-        "started_at": "2026-10-16T10:41:12+00:00",
-        "from_status": "status:backlog",
-        "pr": 939,
-        "report": "ACL-141 implementation handoff (Worker-M1015D141, claim d0c90d5ca1a849b29d4fd90c2d7a1b7c).\n\nScope: replace every browser alert/confirm/prompt in the dashboard with one in-page dialog; move field/action failures inline (acl-141a, acl-141b).\n\n- New `src/web/templates/_acl_dialog.js`, inlined into `report.html` via Jinja include: aclAlert / aclConfirm / aclPrompt (Promises, queued; an identical dialog already open or queued answers \"cancel\" at once, so a double click cannot run an action twice). Each dialog has a title, body, primary and quiet buttons and uses the shared `dialog` styles. Escape cancels. Initial focus goes to the field, to the primary button, or to Cancel on destructive actions. Focus is restored on close. Prompts have labelled fields and Enter submits.\n- aclInlineError(anchor, text): a red `role=\"alert\"` line next to the failing button or field. Used for Refresh, Update, calendar, open profile, profile search and save, goal form, \"Nothing is being assembled yet\". Falls back to a dialog when the anchor is gone.\n- All 40 call sites (38 in report.html, 2 in static/warm_sessions.js) are converted, and each keeps its confirm/cancel meaning. acm_commands.js already had its own dialog.\n- Tests: native-dialog listeners now go through tests/acl_dialog_capture.py. Node harnesses get aclConfirm/aclAlert/aclPrompt stubs with the same answers.\n\nEvidence:\n- PR #939 pre-merge head fe51a65f: every hosted check green (linux 3.13 x3, windows 3.13, installer, ACL verification). Only tracker-link failed, because there was no claim during the maintenance hold.\n- Merged current main af0ade29 at b2cadfb2. The only conflict was docs/system/CHANGELOG.md (both entries kept). Main did not touch report.html, static or the affected tests.\n- Local: affected set 1869 passed. The 4 that failed were fixed and re-run green (136 passed). Post-merge sanity: 218 passed.\n- Manual check in the browser pane: prompt, danger confirm, Escape, Enter, queue order, inline error at Refresh.\n- Pre-review (Sonnet, read-only): its HIGH (tests that still relied on native dialogs) and MEDIUM (double activation) findings are fixed.\n\nNot done / known:\n- tests/browser_review_cards.py is a manual script, not in CI. It already fails on main (\"Demo text is already taken\") and still stops there."
-      },
       "839": {
         "actor": "Worker-R1839B",
         "session": "refresh_acl1839_20261015",
@@ -47504,9 +47490,25 @@
             "session": "S-92830979"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-M1015D141",
-        "coordinator": "Coordinator-M1011A"
+        "coordinator": "Coordinator-M1011A",
+        "handoff": {
+          "actor": "Worker-M1015D141",
+          "session": "S-92830979",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "work/acl-141-in-page-dialogs",
+          "worktree": "C:\\acl-141-dialogs",
+          "id": "d0c90d5ca1a849b29d4fd90c2d7a1b7c",
+          "issue": 71,
+          "state": "handoff",
+          "started_at": "2026-10-16T10:41:12+00:00",
+          "from_status": "status:backlog",
+          "pr": 939,
+          "report": "ACL-141 implementation handoff (Worker-M1015D141, claim d0c90d5ca1a849b29d4fd90c2d7a1b7c).\n\nScope: replace every browser alert/confirm/prompt in the dashboard with one in-page dialog; move field/action failures inline (acl-141a, acl-141b).\n\n- New `src/web/templates/_acl_dialog.js`, inlined into `report.html` via Jinja include: aclAlert / aclConfirm / aclPrompt (Promises, queued; an identical dialog already open or queued answers \"cancel\" at once, so a double click cannot run an action twice). Each dialog has a title, body, primary and quiet buttons and uses the shared `dialog` styles. Escape cancels. Initial focus goes to the field, to the primary button, or to Cancel on destructive actions. Focus is restored on close. Prompts have labelled fields and Enter submits.\n- aclInlineError(anchor, text): a red `role=\"alert\"` line next to the failing button or field. Used for Refresh, Update, calendar, open profile, profile search and save, goal form, \"Nothing is being assembled yet\". Falls back to a dialog when the anchor is gone.\n- All 40 call sites (38 in report.html, 2 in static/warm_sessions.js) are converted, and each keeps its confirm/cancel meaning. acm_commands.js already had its own dialog.\n- Tests: native-dialog listeners now go through tests/acl_dialog_capture.py. Node harnesses get aclConfirm/aclAlert/aclPrompt stubs with the same answers.\n\nEvidence:\n- PR #939 pre-merge head fe51a65f: every hosted check green (linux 3.13 x3, windows 3.13, installer, ACL verification). Only tracker-link failed, because there was no claim during the maintenance hold.\n- Merged current main af0ade29 at b2cadfb2. The only conflict was docs/system/CHANGELOG.md (both entries kept). Main did not touch report.html, static or the affected tests.\n- Local: affected set 1869 passed. The 4 that failed were fixed and re-run green (136 passed). Post-merge sanity: 218 passed.\n- Manual check in the browser pane: prompt, danger confirm, Escape, Enter, queue order, inline error at Refresh.\n- Pre-review (Sonnet, read-only): its HIGH (tests that still relied on native dialogs) and MEDIUM (double activation) findings are fixed.\n\nNot done / known:\n- tests/browser_review_cards.py is a manual script, not in CI. It already fails on main (\"Demo text is already taken\") and still stops there."
+        },
+        "pr": 939,
+        "queued_at": "2026-10-16T10:47:53+00:00"
       }
     },
     "actors": {
@@ -52021,7 +52023,8 @@
       309,
       379,
       356,
-      886
+      886,
+      71
     ],
     "review": null,
     "history": [
@@ -76088,6 +76091,13 @@
         "pr": 900,
         "lane": "0b332f531991442399eb20fc44ceaf57",
         "actor": "Reviewer-DV1016B"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-16T10:47:53+00:00",
+        "issue": 71,
+        "pr": 939,
+        "actor": "Worker-M1015D141"
       }
     ],
     "policy": {
