@@ -47965,6 +47965,10 @@
         "state": "implementing",
         "worker": "Worker-W1401M",
         "coordinator": "Coordinator-M1011A"
+      },
+      "26": {
+        "implementers": [],
+        "state": "archiving"
       }
     },
     "actors": {
