@@ -41616,9 +41616,11 @@
         "worktree": "C:\\acl-1708-c",
         "id": "df8787aed5bb42feb7e5a561cabb94cd",
         "issue": 708,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-16T14:29:01+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 952,
+        "report": "# ACL-1708 report\nChanges: \"Check the launcher window.\" -> \"Check the Adopy Campaign Manager window.\" in src/web/app.py (no tests/JS compare the string; no other user-visible launcher wording in src/web, remaining hits are comments/docstrings/identifiers/URLs). scripts/convert_favicon_to_ico.py deleted (it drew the old mark; repo has no SVG renderer, kit SVGs are src/web/static/logo.svg and favicon.svg, assets/dashboard.ico and favicon.ico are committed kit files); install_dashboard_shortcut.ps1 message no longer points at it; requirements-dev.txt comment fixed. Added viewport meta to report.html. CHANGELOG entry added.\nTests: tests/test_distribution_boundary.py + test_account_blocked_stops_the_campaign.py: 20 passed. 40 report.html-related test files: 713 passed, 1 failed (test_available_accounts_browser::test_select_remove_restore_and_counts, 500 on page render), and test_dashboard_review.py 3 failed; both identical on clean origin/main (pre-existing, unrelated). Remaining ~50 report.html test files only partially run. CI not run (startup_failure)."
       },
       "72": {
         "actor": "Worker-W142C",
