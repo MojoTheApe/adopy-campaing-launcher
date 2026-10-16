@@ -41631,20 +41631,6 @@
         "state": "implementing",
         "started_at": "2026-10-16T14:33:01+00:00",
         "from_status": "status:todo"
-      },
-      "29": {
-        "actor": "Worker-W123C",
-        "session": "w123c-20261016",
-        "coordinator": "Coordinator-C1016A",
-        "branch": "codex/acl-123-disabled-next-step",
-        "worktree": "C:\\acl-123-c",
-        "id": "0de60cd03b6a4ccb8f5ca7e0ef566136",
-        "issue": 29,
-        "state": "handoff",
-        "started_at": "2026-10-16T14:33:23+00:00",
-        "from_status": "status:backlog",
-        "pr": 954,
-        "report": "ACL-123: the account map row shows a plain-English next step under a disabled/restricted/review status, derived from the Meta disable_reason when the Graph read supplied it; page reads say the reason was not reported; unknown codes say the cause is unknown. Account name stays in the same row. Tests: tests/test_account_next_step.py (9 passed), plus test_account_spend and test_disabled_account_status passing. CI not run (startup_failure)."
       }
     },
     "tasks": {
@@ -47700,9 +47686,25 @@
             "session": "w123c-20261016"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W123C",
-        "coordinator": "Coordinator-C1016A"
+        "coordinator": "Coordinator-C1016A",
+        "handoff": {
+          "actor": "Worker-W123C",
+          "session": "w123c-20261016",
+          "coordinator": "Coordinator-C1016A",
+          "branch": "codex/acl-123-disabled-next-step",
+          "worktree": "C:\\acl-123-c",
+          "id": "0de60cd03b6a4ccb8f5ca7e0ef566136",
+          "issue": 29,
+          "state": "handoff",
+          "started_at": "2026-10-16T14:33:23+00:00",
+          "from_status": "status:backlog",
+          "pr": 954,
+          "report": "ACL-123: the account map row shows a plain-English next step under a disabled/restricted/review status, derived from the Meta disable_reason when the Graph read supplied it; page reads say the reason was not reported; unknown codes say the cause is unknown. Account name stays in the same row. Tests: tests/test_account_next_step.py (9 passed), plus test_account_spend and test_disabled_account_status passing. CI not run (startup_failure)."
+        },
+        "pr": 954,
+        "queued_at": "2026-10-16T14:39:06+00:00"
       },
       "165": {
         "implementers": [
@@ -52295,7 +52297,8 @@
       896,
       151,
       73,
-      165
+      165,
+      29
     ],
     "review": null,
     "history": [
@@ -77144,6 +77147,13 @@
         "issue": 165,
         "pr": 953,
         "actor": "Worker-W144C"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-16T14:39:06+00:00",
+        "issue": 29,
+        "pr": 954,
+        "actor": "Worker-W123C"
       }
     ],
     "policy": {
