@@ -45620,7 +45620,7 @@
             "session": "wrs1816-20261015"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-RS1816",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -45639,7 +45639,8 @@
         },
         "pr": 820,
         "queued_at": "2026-10-15T10:24:38+00:00",
-        "review_report": "# Return for a dependency refresh\n\nMain now also contains batch b2772e6f (ACL-1819 pre-flight, ACL-1799 country workbench, ACL-1814 rules store; PR 926 -> 928). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review."
+        "review_report": "# Return for a dependency refresh\n\nMain now also contains batch b2772e6f (ACL-1819 pre-flight, ACL-1799 country workbench, ACL-1814 rules store; PR 926 -> 928). Required: merge current main into the branch (merge, no rebase), keep main's behaviour where the same code meets, re-run the affected tests, hand off again for fresh review.",
+        "reviewer": "Reviewer-R1816T"
       },
       "822": {
         "implementers": [
@@ -49075,6 +49076,10 @@
       "Worker-W1015T": {
         "session": "c2c6b65e-1379",
         "role": "Worker"
+      },
+      "Reviewer-R1816T": {
+        "session": "r1816t-20261016",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -51825,7 +51830,6 @@
       891,
       855,
       920,
-      816,
       309,
       827
     ],
@@ -75524,6 +75528,13 @@
           "report": "Changes requested:\n\nReview of PR 848 / ACL-1841 (head b5f85d02) by Reviewer-RV1015F:\n1. [blocking] Conflicts with current main: src/web/templates/_account_map_country.html (a real content conflict) and docs/system/CHANGELOG.md. Main's ACL-1800 account tree added, around the `<table class=\"amap-grid\">`, a \"Read campaigns in <country>\" toolbar button, a `section.hc.hc-scoped.amap-campaigns` block above the table and `section.hc.hc-after` below it, and report.html's `.amap-grid` rules (table-layout/ellipsis/`td.amap-acc`/`td.amap-actions`, now around lines 1869-1932) changed. The `.amap-table-scroll` wrapper and the `min-width: 1120px`/wrap overrides must be re-applied on top of that markup and re-verified: the wrapper must contain only the account table (not the new campaigns section nor `.hc-after`), and the campaign-tree rows/buttons mounted into the table by main's JS must stay reachable.\n2. [blocking] Acceptance criteria are not complete, and the PR says so itself (\"partial source\" in the CHANGELOG). Issue #841 still requires: search/filter, expansion, column settings and batch commands keeping coherent groups when wrapping; country footer/form and builder handle not covering table actions; no page-level horizontal overflow checked on the integrated source. The campaign toolbar the issue refers to is now on main (ACL-1797/1798/1800), so the \"absent from this main base\" reason no longer holds. Either cover those criteria after the refresh, or have the coordinator explicitly accept this as a partial slice with a follow-up Issue; a partial slice should not close #841.\n3. [minor] The new test renders the partial with `campaign_table_api` undefined, so it will not exercise main's new markup. After the merge, add a case with `campaign_table_api` returning true (campaigns section + hc-after present) and assert that the scroll region still contains only the table and the actions stay reachable.\nPositives: the table-scroll approach (focusable region with role/aria-label, `scrollbar-gutter`, wrapping names/headers) is sound; tests/test_account_table_responsive.py, 16 passed (1280/1024/768/390, both themes, home and manage, empty inventory); source CI green on this head; English text, no secrets.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-16T10:02:59+00:00",
+        "pr": 820,
+        "lane": "fc3a66a842ee4dbbb1ebe032765d71f9",
+        "actor": "Reviewer-R1816T"
       }
     ],
     "policy": {
@@ -79912,7 +79923,20 @@
       "started_at": "2026-10-15T11:47:02+00:00",
       "ineligible": {}
     },
-    "source_reviews": {},
+    "source_reviews": {
+      "820": {
+        "id": "fc3a66a842ee4dbbb1ebe032765d71f9",
+        "pr": 820,
+        "issues": [
+          816
+        ],
+        "actor": "Reviewer-R1816T",
+        "session": "r1816t-20261016",
+        "coordinator": "Coordinator-C0930A",
+        "started_at": "2026-10-16T10:02:59+00:00",
+        "state": "reviewing"
+      }
+    },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
   },
   "maintenance_history": [
