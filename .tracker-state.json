@@ -41718,20 +41718,6 @@
         "started_at": "2026-10-16T16:08:01+00:00",
         "from_status": "status:todo"
       },
-      "680": {
-        "actor": "Worker-W1680A",
-        "session": "w1680a-s1",
-        "coordinator": "Coordinator-T1004Q",
-        "branch": "work/acl-1680-one-config-dir",
-        "worktree": "C:\\acl-1680",
-        "id": "122c1999e90a48909b54605472476158",
-        "issue": 680,
-        "state": "handoff",
-        "started_at": "2026-10-17T07:14:42+00:00",
-        "from_status": "status:todo",
-        "pr": 966,
-        "report": "ACL-1680 handoff. PR 966.\nChanges: config/paths.py resolves the real AppData\\Local\\ACL (own commit); config/config_unify.py pins ACL_CONFIG_DIR, merges the MSIX package copy (newer wins, .env by key, backups, source kept), logs folder and warns on a second differing .env; wired into launcher.py, serve.py, acl_migrate_config.py; README note.\nTests: tests/test_acl1680_one_config_dir.py + packaging/windows/tests + test_machine_paths + test_windows_launcher_contract: 80 passed. Full suite left to CI. No real MSIX run."
-      },
       "681": {
         "actor": "Worker-W1681A",
         "session": "worker_acl1681_20261017",
@@ -48253,9 +48239,25 @@
             "session": "w1680a-s1"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1680A",
-        "coordinator": "Coordinator-T1004Q"
+        "coordinator": "Coordinator-T1004Q",
+        "handoff": {
+          "actor": "Worker-W1680A",
+          "session": "w1680a-s1",
+          "coordinator": "Coordinator-T1004Q",
+          "branch": "work/acl-1680-one-config-dir",
+          "worktree": "C:\\acl-1680",
+          "id": "122c1999e90a48909b54605472476158",
+          "issue": 680,
+          "state": "handoff",
+          "started_at": "2026-10-17T07:14:42+00:00",
+          "from_status": "status:todo",
+          "pr": 966,
+          "report": "ACL-1680 handoff. PR 966.\nChanges: config/paths.py resolves the real AppData\\Local\\ACL (own commit); config/config_unify.py pins ACL_CONFIG_DIR, merges the MSIX package copy (newer wins, .env by key, backups, source kept), logs folder and warns on a second differing .env; wired into launcher.py, serve.py, acl_migrate_config.py; README note.\nTests: tests/test_acl1680_one_config_dir.py + packaging/windows/tests + test_machine_paths + test_windows_launcher_contract: 80 passed. Full suite left to CI. No real MSIX run."
+        },
+        "pr": 966,
+        "queued_at": "2026-10-17T07:24:19+00:00"
       },
       "287": {
         "implementers": [
@@ -52977,7 +52979,8 @@
       380,
       558,
       287,
-      305
+      305,
+      680
     ],
     "review": null,
     "history": [
@@ -78248,6 +78251,13 @@
         "issue": 626,
         "claim": "3f0be656f75e4fef8787dd235e12b930",
         "actor": "Worker-W1626A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-17T07:24:19+00:00",
+        "issue": 680,
+        "pr": 966,
+        "actor": "Worker-W1680A"
       }
     ],
     "policy": {
