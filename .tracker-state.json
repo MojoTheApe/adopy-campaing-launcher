@@ -41718,20 +41718,6 @@
         "started_at": "2026-10-16T16:08:01+00:00",
         "from_status": "status:todo"
       },
-      "668": {
-        "actor": "Worker-W1668A",
-        "session": "w1668a-s1",
-        "coordinator": "Coordinator-T1004Q",
-        "branch": "work/acl-1668-missing-creative",
-        "worktree": "C:\\acl-1668",
-        "id": "a34782a0721f49feb3cfe9c7963ac83c",
-        "issue": 668,
-        "state": "handoff",
-        "started_at": "2026-10-17T11:34:35+00:00",
-        "from_status": "status:todo",
-        "pr": 975,
-        "report": "# ACL-1668 handoff report\n\nPR #975. Chosen creative missing from the refreshed list is marked \"File missing \u2014 pick again\" (theme error colour, name kept). Publish and Publish all list the rows in the confirm and refuse to send. Enrichment error now reads \"Creative file missing: ... pick the file again\".\n\nChecks run: tests/test_builder_review_browser.py (13 passed incl. 2 new), tests/test_acl1668_missing_creative_publish.py and tests/test_second_primary_text_reaches_the_robot.py (16 passed).\nNot run: full suite (CI). Not checked: live dashboard."
-      },
       "202": {
         "actor": "Worker-W1202A",
         "session": "w1202a-s1",
@@ -48430,9 +48416,25 @@
             "session": "w1668a-s1"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1668A",
-        "coordinator": "Coordinator-T1004Q"
+        "coordinator": "Coordinator-T1004Q",
+        "handoff": {
+          "actor": "Worker-W1668A",
+          "session": "w1668a-s1",
+          "coordinator": "Coordinator-T1004Q",
+          "branch": "work/acl-1668-missing-creative",
+          "worktree": "C:\\acl-1668",
+          "id": "a34782a0721f49feb3cfe9c7963ac83c",
+          "issue": 668,
+          "state": "handoff",
+          "started_at": "2026-10-17T11:34:35+00:00",
+          "from_status": "status:todo",
+          "pr": 975,
+          "report": "# ACL-1668 handoff report\n\nPR #975. Chosen creative missing from the refreshed list is marked \"File missing \u2014 pick again\" (theme error colour, name kept). Publish and Publish all list the rows in the confirm and refuse to send. Enrichment error now reads \"Creative file missing: ... pick the file again\".\n\nChecks run: tests/test_builder_review_browser.py (13 passed incl. 2 new), tests/test_acl1668_missing_creative_publish.py and tests/test_second_primary_text_reaches_the_robot.py (16 passed).\nNot run: full suite (CI). Not checked: live dashboard."
+        },
+        "pr": 975,
+        "queued_at": "2026-10-17T11:54:03+00:00"
       },
       "358": {
         "implementers": [
@@ -53174,7 +53176,8 @@
       681,
       971,
       403,
-      358
+      358,
+      668
     ],
     "review": null,
     "history": [
@@ -78536,6 +78539,13 @@
         "issue": 358,
         "pr": 974,
         "actor": "Worker-W1358A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-17T11:54:03+00:00",
+        "issue": 668,
+        "pr": 975,
+        "actor": "Worker-W1668A"
       }
     ],
     "policy": {
