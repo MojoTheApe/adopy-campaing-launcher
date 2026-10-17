@@ -56,6 +56,11 @@ def execution_policy(config):
     value = config.get('execution_policy')
     if 'execution_policy' not in config:
         return None
+    if isinstance(value, dict) and type(value.get('schema_version')) is int and value['schema_version'] == 4:
+        result = direct_module().execution_policy(config)
+        direct_module().bundle(config)
+        policy(config)
+        return result
     fields = {'schema_version', 'implementation_limit', 'review_limit'}
     version = value.get('schema_version') if isinstance(value, dict) else None
     if (not isinstance(value, dict) or set(value) != fields | ({'batch_limit'} if version in (2, 3) else set())
@@ -71,7 +76,8 @@ def execution_policy(config):
 
 
 def batch_mode(config):
-    return bool(execution_policy(config) and execution_policy(config)['schema_version'] in (2, 3))
+    value = execution_policy(config)
+    return bool(value and (value['schema_version'] in (2, 3) or value['schema_version'] == 4 and value['route'] == 'batch'))
 
 
 def review_lanes(section):
@@ -85,7 +91,8 @@ def review_lane(section, *, pr=None, claim=None, issue=None):
     matches = [lane for lane in review_lanes(section)
                if (pr is None or lane.get('pr') == pr)
                and (claim is None or lane.get('id') == claim)
-               and (issue is None or issue in lane.get('issues', []))]
+               and (issue is None or issue in lane.get('issues', [])
+                    or lane.get('subject') == {'kind': 'task', 'id': issue})]
     if len(matches) > 1:
         raise ValueError('Conflicting review owners; inspect shared state')
     return matches[0] if matches else None
@@ -105,6 +112,14 @@ def accepted_scope_digest(issue):
     fields = {k: issue.get(k) for k in ('number', 'title', 'body', 'state', 'state_reason', 'created_at', 'closed_at')}
     fields['labels'] = [x for x in labels if not x.startswith(('release:', 'priority:'))]
     return hashlib.sha256(json.dumps(fields, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+def direct_module():
+    try:
+        from . import direct_policy
+    except ImportError:
+        import tracker_direct_policy as direct_policy
+    return direct_policy
 
 
 def context_module():
@@ -146,6 +161,8 @@ def completion_policy(config):
 
 def completion_adoption_order(state, config):
     """Existing projects select and activate the two independent policies in order."""
+    if config.get('execution_policy', {}).get('schema_version') == 4:
+        return  # One owned idle bundle migration adopts its mandatory guards.
     if (completion_policy(config) and not state.get('completion')
             and 'task_context_policy' in config
             and state.get('task_context', {}).get('policy') != context_module().policy(config)):
@@ -154,8 +171,9 @@ def completion_adoption_order(state, config):
                          'then select task context. Do not select both unactivated policies together.')
 
 
-def completion_state(state, config):
+def completion_state(state, config, *, projected=False):
     """Reader/writer fence: selecting a config never activates private state."""
+    retry_module().state(state, config, projected=projected)
     completion_adoption_order(state, config)
     selected = completion_policy(config)
     activation = state.get('completion', {})
@@ -280,6 +298,20 @@ def pending_delivery(shared, config):
     completion = policy(config)
     if not completion:
         return False
+    # Modern direct archives retain their own typed authorization, never a
+    # fabricated batch. Collection duplicates for source/promotion are harmless.
+    for archive in (shared.get('execution') or {}).get('completed',{}).values():
+        auth=archive.get('delivery_request',{})
+        if (archive.get('kind')!='direct' or archive.get('state')!='completed' or auth.get('state')!='requested'
+                or auth.get('target')!=completion['delivery_target']):continue
+        direct=direct_module();selected=direct.subject(archive.get('subject'))
+        number=direct.task_number(selected)
+        expected=archive.get('finalization',{}).get('main_pr')
+        receipt=shared.get('delivery_workflow',{}).get('tasks',{}).get(str(number),{})
+        candidates=[receipt,*reversed(receipt.get('history',[]))]
+        row=next((summary(r) for r in candidates if expected in {s.get('pr') for s in r.get('sources',[])}
+                  and summary(r).get('policy')==fingerprint(config)),{})
+        if not row.get('admitted') or not row.get('verified'):return True
     for batch in (shared.get('execution') or {}).get('batches', {}).values():
         request = batch.get('delivery_request', {})
         if (batch.get('state') != 'merged' or request.get('state') != 'requested'
@@ -303,6 +335,14 @@ def execution_state(state, config):
     if state.get('task_context', {}).get('policy') != context:
         raise ValueError('Task context policy changed; use owned idle task-context adopt, never edit shared state')
     value = execution_policy(config)
+    if value and value['schema_version'] == 4:
+        section = direct_module().state(state, config)
+        direct_module().validate_execution(section, config['project']['repository'])
+        if section.get('delivery_policy') != fingerprint(config):
+            raise ValueError('Modern delivery policy changed; use inspected owned migration')
+        return section
+    if state.get('execution_contract'):
+        raise ValueError('Modern execution requires its adopted policy; no legacy fallback')
     if not value:
         if state_schema(state) == 2:
             raise ValueError('Shared execution state requires the adopted execution policy; restore the pinned config')
@@ -375,10 +415,18 @@ def file_bytes(request, root, row):
 def read_full_state(request, repo):
     root = 'repos/' + repo
     row = request(root + '/contents/.tracker-state.json?ref=tracker-state')
-    state = json.loads(file_bytes(request, root, row))
+    state = json.loads(file_bytes(request, root, row),object_pairs_hook=direct_module().unique_object)
     if state_schema(state) not in (1, 2):
         raise ValueError('Invalid tracker state')
     return state
+
+
+def retry_module():
+    try:
+        from . import ci_retry
+    except ImportError:
+        import tracker_ci_retry as ci_retry
+    return ci_retry
 
 
 def state_schema(state):
@@ -389,10 +437,21 @@ def state_schema(state):
     """
     version = state.get('schema_version')
     held = state.get('maintenance')
-    if type(version) is not int or version not in (1, 2, 3, 4, 5):
+    if type(version) is not int or version not in (1, 2, 3, 4, 5, 6, 7):
         raise ValueError('Unsupported shared state protocol')
+    # Maintenance is the outer pause, followed by retry, completion and context.
+    # These are known versioned wrappers, not interchangeable policy adoption.
+    underlying = held.get('base_schema_version') if version == 3 and isinstance(held, dict) else version
+    modern = underlying == 7
+    underlying = direct_module().protocol(state)
+    retry = state.get('ci_retry')
+    if underlying == 6:
+        retry_module().validate(retry)
+        underlying = retry['base_schema_version']
+    elif 'ci_retry' in state:
+        raise ValueError('CI retry requires the fenced shared state protocol')
     completion = state.get('completion')
-    completion_version = version == 5 or version == 3 and isinstance(held, dict) and held.get('base_schema_version') == 5
+    completion_version = underlying == 5
     if completion_version:
         if (not isinstance(completion, dict) or completion.get('policy') != {'schema_version': 1}
                 or type(completion['policy'].get('schema_version')) is not int
@@ -402,11 +461,11 @@ def state_schema(state):
             raise ValueError('Invalid scoped completion state protocol')
     elif completion is not None:
         raise ValueError('Completion requires the fenced shared state protocol')
-    underlying = completion['base_schema_version'] if completion_version else version
+    underlying = completion['base_schema_version'] if completion_version else underlying
     context = state.get('task_context')
-    context_version = (underlying == 4 or version == 3 and isinstance(held, dict) and held.get('base_schema_version') == 4)
+    context_version = underlying == 4
     if context_version:
-        if (not isinstance(context, dict) or context.get('policy') != {'schema_version': 1}
+        if (not isinstance(context, dict) or context.get('policy') != {'schema_version': 2 if modern else 1}
                 or type(context['policy'].get('schema_version')) is not int
                 or type(context.get('base_schema_version')) is not int or context['base_schema_version'] != 2
                 or not isinstance(context.get('readiness'), dict) or not isinstance(context.get('history'), list)):
@@ -419,7 +478,7 @@ def state_schema(state):
         return 2 if underlying == 4 else underlying
     if (not isinstance(held, dict) or held.get('schema_version') != 1
             or type(held.get('schema_version')) is not int or held.get('state') != 'held'
-            or type(held.get('base_schema_version')) is not int or held['base_schema_version'] not in (1, 2, 4, 5)
+            or type(held.get('base_schema_version')) is not int or held['base_schema_version'] not in (1, 2, 4, 5, 6, 7)
             or not isinstance(held.get('id'), str) or not re.fullmatch(r'[0-9a-f]{32}', held['id'])
             or not isinstance(held.get('actor'), str) or not re.fullmatch(r'Maintainer-[A-Za-z0-9]{4,32}', held['actor'])
             or not isinstance(held.get('session'), str) or not re.fullmatch(r'[A-Za-z0-9_-]{4,100}', held['session'])
@@ -433,7 +492,7 @@ def state_schema(state):
         datetime.datetime.fromisoformat(held['reserved_at'].replace('Z', '+00:00'))
     except ValueError:
         raise ValueError('Invalid maintenance reservation timestamp') from None
-    return (2 if underlying == 4 else underlying) if completion_version else 2 if held['base_schema_version'] == 4 else held['base_schema_version']
+    return 2 if underlying == 4 else underlying
 
 
 def admission_open(state):
@@ -444,6 +503,10 @@ def admission_open(state):
 
 def set_state_schema(state, version):
     state_schema(state)
+    if state.get('execution_contract'):
+        if version != 2:
+            raise ValueError('Modern execution retains its full outer7 guard bundle; no implicit downgrade')
+        return
     if state.get('completion'):
         retained = state['completion']['base_schema_version']
         if retained == 4 and version != 2:
@@ -454,6 +517,9 @@ def set_state_schema(state, version):
     if state.get('task_context'):
         if version != 2:
             raise ValueError('Task context retains execution schema; no implicit downgrade')
+        return
+    if state.get('ci_retry'):
+        state['ci_retry']['base_schema_version'] = version
         return
     if state.get('maintenance'):
         state['maintenance']['base_schema_version'] = version
@@ -488,6 +554,10 @@ def process_module():
 
 
 def route(config, pr, request=None):
+    modern = config.get('execution_policy', {}).get('schema_version') == 4
+    if modern and re.search(r'^Tracker capture:', pr.get('body') or '', re.M | re.I):
+        direct_module().capture_policy(config)
+        return direct_module().source_route(config, pr)
     # Only an authoritative Git proof can choose this exception. Ordinary callers
     # without a request retain their previous delivery route.
     if request and 'process_instructions' in config and process_module().classify(request, config, pr):
@@ -629,6 +699,8 @@ def checked(request, root, head, required):
 
 
 def review_matches(receipt, config, pr, content, numbers):
+    if config.get('execution_policy', {}).get('schema_version') == 4 and receipt and receipt.get('subject'):
+        return len(numbers) == 1 and direct_module().review_matches(receipt, config, pr, content, {'kind':'task','id':numbers[0]})
     if not isinstance(receipt, dict) or receipt.get('policy') != fingerprint(config):
         return False
     if (receipt.get('verdict') != 'approved' or receipt.get('head_sha') != pr['head']['sha']
@@ -649,6 +721,10 @@ def admit(request, config, pr, numbers):
     content = pr_tree(request, root, pr)
     shared = read_full_state(request, config['project']['repository'])
     execution = execution_state(shared, config)
+    if config.get('execution_policy', {}).get('schema_version') == 4:
+        direction = route(config, pr, request)
+        if direction != 'approval' and not re.search(r'^Tracker batch:', pr.get('body') or '', re.M):
+            return direct_module().admit(request, config, pr, direct_module().linkage(pr.get('body'), config), shared)
     if process and process.classify(request, config, pr):
         return process.admit(request, config, pr, numbers, shared)
     if not value:

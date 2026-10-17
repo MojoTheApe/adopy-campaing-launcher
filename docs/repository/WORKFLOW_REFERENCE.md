@@ -18,6 +18,8 @@ Full exact local contracts:
 - [CI_REUSE.md](CI_REUSE.md)
 - [LEGACY_DELIVERY_RECONCILIATION.md](LEGACY_DELIVERY_RECONCILIATION.md)
 - [PORTABLE_CONTRACT.md](PORTABLE_CONTRACT.md)
+- [CI_RETRY.md](CI_RETRY.md)
+- [DIRECT_WORKFLOW.md](DIRECT_WORKFLOW.md)
 
 ---
 
@@ -486,6 +488,234 @@ promotion into `main`. If main/content changes, return fixes to the claimed
 original author(s), obtain fresh relevant review/checks and Stage verification;
 old evidence cannot approve changed content. Merge/squash requires the reviewed
 first parent and identical reviewed resulting tree; rebase merge is unsupported.
+
+---
+
+Reference case: modern direct, Stage disabled.
+
+## Selected route: modern direct execution schema4
+
+There are 1 implementation slots,
+1 independent source review slots and one integration
+reservation. Role, Stage, delivery target and capacity remain separate choices.
+Select/adopt execution4 + task-context2 + completion1 as one guarded bundle under
+actual owned idle maintenance; config/export grants no capacity until it matches
+outer7 state. Optional retry6 stays inside7 without resetting any history/budget.
+Do not separately activate a partial modern bundle. Old projects retain their own
+selected schema, limits, Stage and choices until their reviewed owned migration.
+
+A tracked source has exactly one real Issue, current semantic readiness, one
+actual Worker/session/claim and a dedicated branch/worktree. Use task-context
+assess, then work; never set In Progress by editing labels. After checks use
+execution handoff, then execution review-acquire with a different real Reviewer.
+The source handoff retains its addressable branch/worktree and exact scope/report
+through pending writes, fixes and stopped-owner recovery; neither a new claim nor
+an old status label releases it. Review-plan names the actual full scope and
+head/base/tree/main/policy. Independently inspect it and record-review with the
+actual required assessments; a hash or command is not semantic review.
+
+```sh
+python scripts/task_tracker.py task-context assess TASK_ID --actor Worker-W001 --session ACTUAL_WORKER_RUN --coordinator Coordinator-C001 --branch codex/TASK_BRANCH --worktree WORKTREE_PATH
+python scripts/task_tracker.py task-context assess TASK_ID --actor Worker-W001 --session ACTUAL_WORKER_RUN --coordinator Coordinator-C001 --branch codex/TASK_BRANCH --worktree WORKTREE_PATH --evidence-file readiness.json --apply
+python scripts/task_tracker.py work TASK_ID --actor Worker-W001 --session ACTUAL_WORKER_RUN --coordinator Coordinator-C001 --branch codex/TASK_BRANCH --worktree WORKTREE_PATH
+python scripts/task_tracker.py execution handoff TASK_ID --pr SOURCE_PR --actor Worker-W001 --session ACTUAL_WORKER_RUN --coordinator Coordinator-C001 --branch codex/TASK_BRANCH --worktree WORKTREE_PATH --claim ACTUAL_WORKER_CLAIM --report-file handoff.md
+python scripts/task_tracker.py execution review-acquire --pr SOURCE_PR --actor Reviewer-R001 --session ACTUAL_REVIEW_RUN --coordinator Coordinator-C001
+python scripts/task_tracker.py direct review-plan --pr SOURCE_PR --actor Reviewer-R001 --session ACTUAL_REVIEW_RUN --claim ACTUAL_REVIEW_CLAIM
+python scripts/task_tracker.py record-review --pr SOURCE_PR --evidence-file review.json --apply
+```
+
+The actual source Reviewer uses `python scripts/task_tracker.py direct begin --pr SOURCE_PR` with
+that same Reviewer/session/claim. This retains the source lane and acquires the
+one serialized integration reservation; it does not create Approved or a batch,
+merge, publish or deploy. Other direct/capture/batch/process/Stage work must wait
+for that held reservation. Source review may continue within its separate limit.
+
+## Selected integration: Stage disabled
+
+The actually reserved reviewed singleton (or true combined batch) enters main. No Stage entry or receipt is manufactured.
+
+Keep the genuine Reviewer/reservation through actual main, durable accepted-scope
+receipt, reconciled real task status and atomic archive/release. The maintained
+merged command performs this order; there is no early direct finish command.
+Unknown writes/crashes retain ownership and reconcile the same operation. Pending
+package/production/publication remains unfinished after a permitted source handoff.
+Changed source/scope or real conflicts require the actual owned author return,
+fresh work/checks/handoff/review. Unchanged direct sources after forward main
+changes use the held independent Reviewer and actual semantic compatibility plus
+current native combined-candidate checks; no empty commit or path-disjoint guess.
+Read [modern commands, migration and recovery](DIRECT_WORKFLOW.md).
+
+---
+
+Reference case: modern direct, Stage enabled.
+
+## Selected route: modern direct execution schema4
+
+There are 1 implementation slots,
+1 independent source review slots and one integration
+reservation. Role, Stage, delivery target and capacity remain separate choices.
+Select/adopt execution4 + task-context2 + completion1 as one guarded bundle under
+actual owned idle maintenance; config/export grants no capacity until it matches
+outer7 state. Optional retry6 stays inside7 without resetting any history/budget.
+Do not separately activate a partial modern bundle. Old projects retain their own
+selected schema, limits, Stage and choices until their reviewed owned migration.
+
+A tracked source has exactly one real Issue, current semantic readiness, one
+actual Worker/session/claim and a dedicated branch/worktree. Use task-context
+assess, then work; never set In Progress by editing labels. After checks use
+execution handoff, then execution review-acquire with a different real Reviewer.
+The source handoff retains its addressable branch/worktree and exact scope/report
+through pending writes, fixes and stopped-owner recovery; neither a new claim nor
+an old status label releases it. Review-plan names the actual full scope and
+head/base/tree/main/policy. Independently inspect it and record-review with the
+actual required assessments; a hash or command is not semantic review.
+
+```sh
+python scripts/task_tracker.py task-context assess TASK_ID --actor Worker-W001 --session ACTUAL_WORKER_RUN --coordinator Coordinator-C001 --branch codex/TASK_BRANCH --worktree WORKTREE_PATH
+python scripts/task_tracker.py task-context assess TASK_ID --actor Worker-W001 --session ACTUAL_WORKER_RUN --coordinator Coordinator-C001 --branch codex/TASK_BRANCH --worktree WORKTREE_PATH --evidence-file readiness.json --apply
+python scripts/task_tracker.py work TASK_ID --actor Worker-W001 --session ACTUAL_WORKER_RUN --coordinator Coordinator-C001 --branch codex/TASK_BRANCH --worktree WORKTREE_PATH
+python scripts/task_tracker.py execution handoff TASK_ID --pr SOURCE_PR --actor Worker-W001 --session ACTUAL_WORKER_RUN --coordinator Coordinator-C001 --branch codex/TASK_BRANCH --worktree WORKTREE_PATH --claim ACTUAL_WORKER_CLAIM --report-file handoff.md
+python scripts/task_tracker.py execution review-acquire --pr SOURCE_PR --actor Reviewer-R001 --session ACTUAL_REVIEW_RUN --coordinator Coordinator-C001
+python scripts/task_tracker.py direct review-plan --pr SOURCE_PR --actor Reviewer-R001 --session ACTUAL_REVIEW_RUN --claim ACTUAL_REVIEW_CLAIM
+python scripts/task_tracker.py record-review --pr SOURCE_PR --evidence-file review.json --apply
+```
+
+The actual source Reviewer uses `python scripts/task_tracker.py direct begin --pr SOURCE_PR` with
+that same Reviewer/session/claim. This retains the source lane and acquires the
+one serialized integration reservation; it does not create Approved or a batch,
+merge, publish or deploy. Other direct/capture/batch/process/Stage work must wait
+for that held reservation. Source review may continue within its separate limit.
+
+## Selected integration: Stage enabled
+
+The working singleton (or actual combined batch) enters permanent Stage, receives the exact configured Git/runtime verification, then its unchanged subject/members promote to main. Record stage only after the actual admitted merge, verify-stage for the actual target, and check-merge for promotion. Git-only n8n Stage never authorizes n8n runtime changes.
+
+Keep the genuine Reviewer/reservation through actual main, durable accepted-scope
+receipt, reconciled real task status and atomic archive/release. The maintained
+merged command performs this order; there is no early direct finish command.
+Unknown writes/crashes retain ownership and reconcile the same operation. Pending
+package/production/publication remains unfinished after a permitted source handoff.
+Changed source/scope or real conflicts require the actual owned author return,
+fresh work/checks/handoff/review. Unchanged direct sources after forward main
+changes use the held independent Reviewer and actual semantic compatibility plus
+current native combined-candidate checks; no empty commit or path-disjoint guess.
+Read [modern commands, migration and recovery](DIRECT_WORKFLOW.md).
+
+---
+
+Reference case: modern batch, Stage disabled.
+
+## Selected route: modern batch execution schema4
+
+There are 1 implementation slots,
+1 independent source review slots and one integration
+reservation. Role, Stage, delivery target and capacity remain separate choices.
+Select/adopt execution4 + task-context2 + completion1 as one guarded bundle under
+actual owned idle maintenance; config/export grants no capacity until it matches
+outer7 state. Optional retry6 stays inside7 without resetting any history/budget.
+Do not separately activate a partial modern bundle. Old projects retain their own
+selected schema, limits, Stage and choices until their reviewed owned migration.
+
+A tracked source has exactly one real Issue, current semantic readiness, one
+actual Worker/session/claim and a dedicated branch/worktree. Use task-context
+assess, then work; never set In Progress by editing labels. After checks use
+execution handoff, then execution review-acquire with a different real Reviewer.
+The source handoff retains its addressable branch/worktree and exact scope/report
+through pending writes, fixes and stopped-owner recovery; neither a new claim nor
+an old status label releases it. Review-plan names the actual full scope and
+head/base/tree/main/policy. Independently inspect it and record-review with the
+actual required assessments; a hash or command is not semantic review.
+
+```sh
+python scripts/task_tracker.py task-context assess TASK_ID --actor Worker-W001 --session ACTUAL_WORKER_RUN --coordinator Coordinator-C001 --branch codex/TASK_BRANCH --worktree WORKTREE_PATH
+python scripts/task_tracker.py task-context assess TASK_ID --actor Worker-W001 --session ACTUAL_WORKER_RUN --coordinator Coordinator-C001 --branch codex/TASK_BRANCH --worktree WORKTREE_PATH --evidence-file readiness.json --apply
+python scripts/task_tracker.py work TASK_ID --actor Worker-W001 --session ACTUAL_WORKER_RUN --coordinator Coordinator-C001 --branch codex/TASK_BRANCH --worktree WORKTREE_PATH
+python scripts/task_tracker.py execution handoff TASK_ID --pr SOURCE_PR --actor Worker-W001 --session ACTUAL_WORKER_RUN --coordinator Coordinator-C001 --branch codex/TASK_BRANCH --worktree WORKTREE_PATH --claim ACTUAL_WORKER_CLAIM --report-file handoff.md
+python scripts/task_tracker.py execution review-acquire --pr SOURCE_PR --actor Reviewer-R001 --session ACTUAL_REVIEW_RUN --coordinator Coordinator-C001
+python scripts/task_tracker.py direct review-plan --pr SOURCE_PR --actor Reviewer-R001 --session ACTUAL_REVIEW_RUN --claim ACTUAL_REVIEW_CLAIM
+python scripts/task_tracker.py record-review --pr SOURCE_PR --evidence-file review.json --apply
+```
+
+Tracked engineering stays approval-only into main. Use batch approve to record
+real Approved and release that source lane, then the genuine Coordinator intake
+and frozen batch begin with up to 2 real members. One member
+is still a batch. Its actual integration Reviewer is a subrole of the single
+reservation, independent of every implementer. The combined PR and promotion
+retain every frozen member and the real Tracker batch line. Never replace those
+members with a singleton or use direct begin for an ordinary batch source.
+
+## Selected integration: Stage disabled
+
+The actually reserved reviewed singleton (or true combined batch) enters main. No Stage entry or receipt is manufactured.
+
+Keep the genuine Reviewer/reservation through actual main, durable accepted-scope
+receipt, reconciled real task status and atomic archive/release. The maintained
+merged command performs this order; there is no early direct finish command.
+Unknown writes/crashes retain ownership and reconcile the same operation. Pending
+package/production/publication remains unfinished after a permitted source handoff.
+Changed source/scope or real conflicts require the actual owned author return,
+fresh work/checks/handoff/review. Unchanged direct sources after forward main
+changes use the held independent Reviewer and actual semantic compatibility plus
+current native combined-candidate checks; no empty commit or path-disjoint guess.
+Read [modern commands, migration and recovery](DIRECT_WORKFLOW.md).
+
+---
+
+Reference case: modern batch, Stage enabled.
+
+## Selected route: modern batch execution schema4
+
+There are 1 implementation slots,
+1 independent source review slots and one integration
+reservation. Role, Stage, delivery target and capacity remain separate choices.
+Select/adopt execution4 + task-context2 + completion1 as one guarded bundle under
+actual owned idle maintenance; config/export grants no capacity until it matches
+outer7 state. Optional retry6 stays inside7 without resetting any history/budget.
+Do not separately activate a partial modern bundle. Old projects retain their own
+selected schema, limits, Stage and choices until their reviewed owned migration.
+
+A tracked source has exactly one real Issue, current semantic readiness, one
+actual Worker/session/claim and a dedicated branch/worktree. Use task-context
+assess, then work; never set In Progress by editing labels. After checks use
+execution handoff, then execution review-acquire with a different real Reviewer.
+The source handoff retains its addressable branch/worktree and exact scope/report
+through pending writes, fixes and stopped-owner recovery; neither a new claim nor
+an old status label releases it. Review-plan names the actual full scope and
+head/base/tree/main/policy. Independently inspect it and record-review with the
+actual required assessments; a hash or command is not semantic review.
+
+```sh
+python scripts/task_tracker.py task-context assess TASK_ID --actor Worker-W001 --session ACTUAL_WORKER_RUN --coordinator Coordinator-C001 --branch codex/TASK_BRANCH --worktree WORKTREE_PATH
+python scripts/task_tracker.py task-context assess TASK_ID --actor Worker-W001 --session ACTUAL_WORKER_RUN --coordinator Coordinator-C001 --branch codex/TASK_BRANCH --worktree WORKTREE_PATH --evidence-file readiness.json --apply
+python scripts/task_tracker.py work TASK_ID --actor Worker-W001 --session ACTUAL_WORKER_RUN --coordinator Coordinator-C001 --branch codex/TASK_BRANCH --worktree WORKTREE_PATH
+python scripts/task_tracker.py execution handoff TASK_ID --pr SOURCE_PR --actor Worker-W001 --session ACTUAL_WORKER_RUN --coordinator Coordinator-C001 --branch codex/TASK_BRANCH --worktree WORKTREE_PATH --claim ACTUAL_WORKER_CLAIM --report-file handoff.md
+python scripts/task_tracker.py execution review-acquire --pr SOURCE_PR --actor Reviewer-R001 --session ACTUAL_REVIEW_RUN --coordinator Coordinator-C001
+python scripts/task_tracker.py direct review-plan --pr SOURCE_PR --actor Reviewer-R001 --session ACTUAL_REVIEW_RUN --claim ACTUAL_REVIEW_CLAIM
+python scripts/task_tracker.py record-review --pr SOURCE_PR --evidence-file review.json --apply
+```
+
+Tracked engineering stays approval-only into main. Use batch approve to record
+real Approved and release that source lane, then the genuine Coordinator intake
+and frozen batch begin with up to 2 real members. One member
+is still a batch. Its actual integration Reviewer is a subrole of the single
+reservation, independent of every implementer. The combined PR and promotion
+retain every frozen member and the real Tracker batch line. Never replace those
+members with a singleton or use direct begin for an ordinary batch source.
+
+## Selected integration: Stage enabled
+
+The working singleton (or actual combined batch) enters permanent Stage, receives the exact configured Git/runtime verification, then its unchanged subject/members promote to main. Record stage only after the actual admitted merge, verify-stage for the actual target, and check-merge for promotion. Git-only n8n Stage never authorizes n8n runtime changes.
+
+Keep the genuine Reviewer/reservation through actual main, durable accepted-scope
+receipt, reconciled real task status and atomic archive/release. The maintained
+merged command performs this order; there is no early direct finish command.
+Unknown writes/crashes retain ownership and reconcile the same operation. Pending
+package/production/publication remains unfinished after a permitted source handoff.
+Changed source/scope or real conflicts require the actual owned author return,
+fresh work/checks/handoff/review. Unchanged direct sources after forward main
+changes use the held independent Reviewer and actual semantic compatibility plus
+current native combined-candidate checks; no empty commit or path-disjoint guess.
+Read [modern commands, migration and recovery](DIRECT_WORKFLOW.md).
 
 ## Retained legacy operations and recovery
 

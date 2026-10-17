@@ -40,6 +40,13 @@ config/descriptor in the project, preserving its existing delivery/execution
 policy and historical allowlist. Then use an actual Maintainer's owned reservation
 and drain existing owners; elapsed time never releases a claim.
 
+For an existing package project, finish the selection source's already authorized
+package **before** reserving maintenance. The bounded
+[one-policy package continuation](DELIVERY_POLICY.md#one-policy-selection-package-before-activation)
+derives its operative prior config from the genuine frozen batch baseline; it
+does not relax ordinary admission or activation. Pending/failed target delivery
+blocks completion adoption even after source ownership is released.
+
 For an existing execution-v2/v3 project adopting both `task_context_policy` and
 `completion_policy`, use **two separate reviewed config selections and two
 activations**. Either activate task context first, then select and activate
