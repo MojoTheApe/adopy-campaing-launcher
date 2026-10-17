@@ -48507,7 +48507,7 @@
       },
       "591": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       }
     },
     "actors": {
@@ -78562,6 +78562,12 @@
         "issue": 202,
         "pr": 976,
         "actor": "Worker-W1202A"
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-17T12:07:02+00:00",
+        "issue": 591,
+        "reason": "Done: already fixed in main by ACL-1628 (PR #658, 9f592b54) - the test waits for the aria-label and add() fires input. Verified 30/30 consecutive passes on work/main af0ade29 on 2026-10-17. Backlog cleanup."
       }
     ],
     "policy": {
