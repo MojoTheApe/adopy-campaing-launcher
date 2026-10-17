@@ -42202,20 +42202,6 @@
         "state": "implementing",
         "started_at": "2026-10-17T21:00:31+00:00",
         "from_status": "status:idea"
-      },
-      "992": {
-        "actor": "Worker-M1992A",
-        "session": "acl_1992",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1992-api-build-percent",
-        "worktree": "C:\\acl-1992",
-        "id": "cda2954f62c848d2ac499e8fa6d225fe",
-        "issue": 992,
-        "state": "handoff",
-        "started_at": "2026-10-17T21:22:23+00:00",
-        "from_status": "status:idea",
-        "pr": 993,
-        "report": "Implemented in PR 993 (head a62a352f). API jobs report units {done,total,last} per campaign; page percent = done/total (<=99 before result, monotonic); robot jobs keep the ACL-1347 model. creator.py untouched. Pre-handoff independent read-only review: no HIGH, all findings fixed in a62a352f. Targeted tests green locally; full suite left to CI. Live API check on 9095 still pending."
       }
     },
     "tasks": {
@@ -49714,9 +49700,25 @@
             "session": "acl_1992"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-M1992A",
-        "coordinator": "Coordinator-M1011A"
+        "coordinator": "Coordinator-M1011A",
+        "handoff": {
+          "actor": "Worker-M1992A",
+          "session": "acl_1992",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "work/acl-1992-api-build-percent",
+          "worktree": "C:\\acl-1992",
+          "id": "cda2954f62c848d2ac499e8fa6d225fe",
+          "issue": 992,
+          "state": "handoff",
+          "started_at": "2026-10-17T21:22:23+00:00",
+          "from_status": "status:idea",
+          "pr": 993,
+          "report": "Implemented in PR 993 (head a62a352f). API jobs report units {done,total,last} per campaign; page percent = done/total (<=99 before result, monotonic); robot jobs keep the ACL-1347 model. creator.py untouched. Pre-handoff independent read-only review: no HIGH, all findings fixed in a62a352f. Targeted tests green locally; full suite left to CI. Live API check on 9095 still pending."
+        },
+        "pr": 993,
+        "queued_at": "2026-10-17T21:35:18+00:00"
       }
     },
     "actors": {
@@ -54460,7 +54462,8 @@
       356,
       871,
       287,
-      377
+      377,
+      992
     ],
     "review": null,
     "history": [
@@ -85276,6 +85279,13 @@
         "event": "included-sources-closed",
         "at": "2026-10-17T21:24:13+00:00",
         "batch_id": "6d00e4a9014a4e8ca3b7756c4c71c199"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-17T21:35:18+00:00",
+        "issue": 992,
+        "pr": 993,
+        "actor": "Worker-M1992A"
       }
     ],
     "policy": {
