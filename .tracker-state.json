@@ -46714,7 +46714,7 @@
             "session": "w1872c-20261016"
           }
         ],
-        "state": "archiving",
+        "state": "archived",
         "worker": "Worker-W1872C",
         "coordinator": "Coordinator-C1016A",
         "handoff": {
@@ -82721,6 +82721,12 @@
           "report": "# Withdrawn: official Meta app route cancelled by the owner (2026-10-17)\n\nOwner rule: Facebook must never see one IP or one shared app across our ad accounts. The route that uses an app plus a token, called from the dashboard machine, is cancelled entirely. All API work stays on the in-profile Graph route (ACL-1756/1760/1761) through each profile's own proxy.\n\nThis task belongs to the cancelled route, so it is withdrawn without merging. The branch and the review history are kept for reference. Related backlog tasks were archived with the same reason: ACL-1858, 1859, 1860, 1883."
         },
         "batch_id": null
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-17T16:38:49+00:00",
+        "issue": 872,
+        "reason": "Withdrawn 2026-10-17: the owner cancelled the official Meta app route. Facebook must never see one IP or one shared app across our ad accounts, so all API work stays on the in-profile Graph route (ACL-1756/1760/1761) through each profile's proxy."
       }
     ],
     "policy": {
