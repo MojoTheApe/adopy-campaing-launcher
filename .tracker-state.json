@@ -41741,6 +41741,18 @@
         "state": "implementing",
         "started_at": "2026-10-17T07:16:02+00:00",
         "from_status": "status:todo"
+      },
+      "626": {
+        "actor": "Worker-W1626A",
+        "session": "w1626a-session",
+        "coordinator": "Coordinator-C1626",
+        "branch": "work/acl-1626-notes-set-aside",
+        "worktree": "C:\\acl-1626",
+        "id": "3f0be656f75e4fef8787dd235e12b930",
+        "issue": 626,
+        "state": "implementing",
+        "started_at": "2026-10-17T07:23:02+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -48307,6 +48319,17 @@
         },
         "pr": 965,
         "queued_at": "2026-10-17T07:20:10+00:00"
+      },
+      "626": {
+        "implementers": [
+          {
+            "actor": "Worker-W1626A",
+            "session": "w1626a-session"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W1626A",
+        "coordinator": "Coordinator-C1626"
       }
     },
     "actors": {
@@ -50180,6 +50203,10 @@
       },
       "Worker-W1305A": {
         "session": "w1305a-20261017",
+        "role": "Worker"
+      },
+      "Worker-W1626A": {
+        "session": "w1626a-session",
         "role": "Worker"
       }
     },
@@ -78212,6 +78239,13 @@
         "issue": 305,
         "pr": 965,
         "actor": "Worker-W1305A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-17T07:23:02+00:00",
+        "issue": 626,
+        "claim": "3f0be656f75e4fef8787dd235e12b930",
+        "actor": "Worker-W1626A"
       }
     ],
     "policy": {
