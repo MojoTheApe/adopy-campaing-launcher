@@ -60,6 +60,9 @@ class _FakeProvider:
         pass
 
 
+_PID = "550e8400-e29b-41d4-a716-446655440000"
+
+
 def _publisher(monkeypatch, exc: BaseException, *, attach_only: bool = True):
     pub = rp.RpaPublisher.__new__(rp.RpaPublisher)
     pub.hand_off = pub.dry_run = False
@@ -69,8 +72,12 @@ def _publisher(monkeypatch, exc: BaseException, *, attach_only: bool = True):
     pub._built_at = None
     pub._account_stop = None
     pub._provider = _FakeProvider(exc)
+    # ACL-1853: публикатор знает провайдера, профиль — настоящий UUID.
+    pub.browser_provider_name = "multilogin"
+    monkeypatch.setattr(rp, "require_profile_lease", lambda key: None)
+    monkeypatch.setattr(rp, "profile_key_for", lambda label, **kw: _PID)
     monkeypatch.setattr(pub, "_resolve_entry", lambda label: SimpleNamespace(
-        profile_id="p-1", folder_id="f-1", multilogin_instance="A"))
+        profile_id=_PID, folder_id="f-1", multilogin_instance="A"))
     monkeypatch.setattr(pub, "_reset_browser", lambda **kw: None)
     monkeypatch.setattr(pub, "_profile_already_running", lambda entry: False)
     monkeypatch.setattr(rp, "get_mlx_attach_only", lambda: attach_only)
