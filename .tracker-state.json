@@ -48654,7 +48654,7 @@
       },
       "311": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       }
     },
     "actors": {
@@ -78822,6 +78822,12 @@
         "at": "2026-10-17T13:55:50+00:00",
         "issue": 69,
         "reason": "Owner decision 2026-10-17: closed for now. The team-lead role stays the ACL_TEAM_LEAD flag (used by the acl-602 goals overview, PR #982); no authenticated role mechanism is planned. Restore if real permissions are needed."
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-17T13:58:45+00:00",
+        "issue": 311,
+        "reason": "Owner decision 2026-10-17: no longer relevant. Multilogin access for the team is already solved (ACL-1441: each buyer picks the workspace and issues their own token). Draft PR left untouched for history."
       }
     ],
     "policy": {
