@@ -29,6 +29,65 @@ Unknown/mixed sources, combined batches, actual stage/promotion, manual and rele
 contexts retain their complete applicable checks. Read author evidence before
 adding reviewer checks; unchanged successful coverage needs no blind local repeat.
 
+
+### Fast feedback and full verification
+
+ACL's existing **`Classify and check project tooling`** check is tooling fast
+feedback. Its `scope` job in `.github/workflows/ci.yml` has a five-minute ceiling
+and keeps its exact name, producer annotation and dependencies. It runs these
+existing commands after checkout of full history:
+
+```sh
+python3 scripts/acl_ci_scope.py --workflow ci.yml
+python3 scripts/acl_scan_secrets.py
+python3 -m pip install 'pytest>=8,<10' 'PyYAML>=6,<7' cryptography==50.0.1
+python3 -m json.tool tracker/config.json > /dev/null
+python3 -m json.tool tracker/engine.json > /dev/null
+python3 -m pytest --noconftest tests/test_acl_ci_scope.py tests/test_acl_batch_ci_scope.py tests/test_acl_complete_delivery.py tests/test_acl_process_instructions.py tests/test_acl_batch.py tests/test_acl_ci_reuse.py tests/test_acl_ci_workflows.py tests/test_acl_ci_chain.py tests/test_acl_ci_minutes.py tests/test_acl_tracker.py tests/test_tracker_v2.py tests/test_master_adoption.py tests/test_acl_test_platform.py tests/test_ci_layout.py -q
+```
+
+The classifier requires the real event/Git context and its existing read token.
+Local tooling feedback can use the scanner, JSON checks and this test list with
+installed dependencies; it does not fabricate a hosted classifier result.
+`--noconftest` belongs to this existing tooling-only suite. Affected product tests
+retain their normal isolated machine, library and telemetry fixtures.
+
+Fast feedback omits the complete application/Chromium suite, Windows-only
+behavior and startup smoke, full interpreter matrix, installer
+build/install/repair/uninstall and published-package acceptance. Its success is
+never full product, admission or delivery evidence. `Process instructions` also
+requires actual tooling success and remains restricted to its existing
+instruction-only eligibility; mixed changes follow the normal source/batch route.
+
+Full applicable admission still requires the distinct exact names `descriptor`,
+`tracker-link`, **`ACL verification`** and **`Installer verification`**. The ACL
+aggregate requires successful scope/process checks and every applicable selected
+Linux/Windows result; explicit non-applicability is separate from proven reuse.
+Missing, failed, cancelled or unknown required coverage cannot pass on tooling
+success. Ordinary sources retain the conservative affected selection; combined
+batches, actual stage/promotion/main, manual and unknown contexts retain all
+applicable checks. The existing matrix, exact-tree collector and independent
+combined/package acceptance in [WORKFLOW.md](WORKFLOW.md) remain authoritative.
+
+Group related local corrections before pushing a meaningful new candidate. Record
+why another heavy run is needed: changed relevant inputs, a new failure, unresolved
+coverage or a new integration composition. Preserve passing unchanged evidence;
+do not create cosmetic commits or manual reruns for a demonstration. A candidate
+push still starts its normal applicable checks while tooling feedback arrives early.
+
+A PR title/body `edited` event starts linkage feedback only; the existing code
+workflows use GitHub's default `opened`, `synchronize` and `reopened` activities.
+A new head (`synchronize`) still starts normal candidate verification. A changed
+base or integration composition requires fresh relevant evidence and the normal
+author/review route; metadata activity does not provide that proof. Editing
+metadata neither starts nor cancels product/installer checks. Only a superseded
+same-PR run is cancelled; separate PRs and every integration/main/manual run keep
+their own identities. No new workflow, job, check name or trigger is added for
+this plan. See [GitHub's PR activity defaults](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request).
+The actual parsed-workflow activity regression is in
+`tests/test_acl_ci_workflows.py`; `tests/test_ci_layout.py` exercises the real
+aggregate shell and already refuses tooling success with missing required jobs.
+
 ACL's existing `scripts/acl_ci_reuse.py` collector remains unchanged, including its
 bounded exact-tree/merged-source rules. TT-107's optional native V1 protocol does
 not cover ACL's dynamic YAML, matrices, Windows runners or installer/artifact
