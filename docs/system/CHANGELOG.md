@@ -1,5 +1,18 @@
 # System history
 
+## ACL-1358 — Tokens in Windows protected storage — 2026-10-17
+
+Multilogin automation tokens (machine `.env`, stored as `dpapi:v1:...`) and the
+Google token files (`token_accounts.json`, `token_telemetry.json`, same path,
+`ACLDPAPI1` header) are encrypted with Windows DPAPI for the current user. Existing
+plain files are migrated by `ensure_machine_config` / `acl_migrate_config`: encrypted
+backup in `protected-backup/`, verification, then replacement; any failure leaves the
+file untouched. `load_env` decrypts into the process environment only; a value that
+cannot be opened (other Windows user) is dropped so the app asks to reconnect. Without
+DPAPI (non-Windows) behaviour is unchanged. Support-bundle redaction opens protected
+values to build its denylist. Not done: narrowing the telemetry Google scope (owner
+decision pending), `ACL_UPDATE_TOKEN` review.
+
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
 Add a durable authorized release workflow using the maintained installer publisher

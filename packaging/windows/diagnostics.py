@@ -84,6 +84,19 @@ def local_values_to_redact(config_directory: str | Path) -> set[str]:
     """Read sensitive local sources only to build a denylist; never export them."""
     config_dir = Path(config_directory)
     values = {value for value in _env_entries(config_dir / ".env").values() if len(value) >= 4}
+    # Tokens kept in protected storage: the stored form is ciphertext, so the
+    # denylist must also hold the plain value (opened here, never exported).
+    try:
+        from config import token_vault
+
+        for stored in list(values):
+            if token_vault.is_protected_value(stored):
+                try:
+                    values.add(token_vault.decode_env_value(stored))
+                except Exception:
+                    pass
+    except Exception:
+        token_vault = None
     map_path = config_dir / "ad_account_map.csv"
     try:
         with map_path.open(newline="", encoding="utf-8-sig") as stream:
@@ -96,7 +109,11 @@ def local_values_to_redact(config_directory: str | Path) -> set[str]:
         try:
             if path.stat().st_size > MAX_JSON_SECRET_SOURCE_BYTES:
                 continue
-            document = json.loads(path.read_text(encoding="utf-8"))
+            if token_vault is not None:
+                text = token_vault.read_secret_text(path)
+            else:
+                text = path.read_text(encoding="utf-8")
+            document = json.loads(text)
             values.update(value for value in _json_strings(document) if len(value) >= 8)
         except Exception:
             pass
