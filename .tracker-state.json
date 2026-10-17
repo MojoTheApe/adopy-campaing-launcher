@@ -46106,7 +46106,7 @@
             "session": "work_gx1012a_20261012"
           }
         ],
-        "state": "stopped",
+        "state": "archiving",
         "worker": "Worker-GX1012A",
         "coordinator": "Coordinator-CX1012A",
         "handoff": {
