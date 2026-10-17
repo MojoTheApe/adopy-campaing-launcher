@@ -454,13 +454,36 @@ def get_job(job_id: str) -> dict[str, Any] | None:
         return snap
 
 
+def _runs_the_loop_here() -> bool:
+    """True when this thread is the one running the asyncio loop it is marked with."""
+    try:
+        import asyncio.events as _ae
+
+        loop = _ae._get_running_loop()
+    except Exception:
+        return False
+    return (loop is not None and loop.is_running()
+            and getattr(loop, "_thread_id", None) == threading.get_ident())
+
+
 def _clear_inherited_asyncio_loop() -> None:
     """Clear asyncio running-loop marks before sync Playwright in a worker thread.
 
     Also stop any leaked sync Playwright driver from a prior failed CDP attach
     in this thread (that leaves get_running_loop() returning a running loop and
     triggers 'Playwright Sync API inside the asyncio loop' on the next start).
+
+    ACL-1380: never on the thread that actually runs the loop. Clearing the
+    mark there is exactly how the server died on 14.09/22.09/29.09: every next
+    task step fails with «loop … is not the running loop» and /health stops
+    answering while the process stays alive. An inherited mark in a worker
+    points to the server's loop running on ANOTHER thread — that one is ours
+    to clear.
     """
+    if _runs_the_loop_here():
+        logging.getLogger(__name__).error("ACL-1380: refused to clear the asyncio loop mark on the "
+                   "thread that runs it (%s)", threading.current_thread().name)
+        return
     try:
         from src.fb_ads_rpa.browser import _reset_asyncio_running_loop, _stop_thread_playwright
 

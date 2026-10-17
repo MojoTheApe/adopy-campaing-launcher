@@ -1220,10 +1220,44 @@ def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
     return result
 
 
+_targets_refresh_lock = threading.Lock()
+_targets_refreshing = False
+
+
+def _refresh_sheet_targets_in_background() -> None:
+    """Обновить копию библиотеки таргетингов в своём потоке, один раз за раз.
+
+    ACL-1380: раньше страница сама ходила в api.github.com (`pull(force=True)`,
+    таймаут 15 с) на каждом открытии и на каждом `/api/ref-data`. Теперь
+    отрисовка читает копию на машине, а обновление идёт рядом: свежие цели
+    коллег видны со следующего открытия. Без force — `pull` сам не ходит в сеть
+    чаще раза в PULL_EVERY_SECONDS; второй поток, пока первый ещё ждёт ответа,
+    не запускается.
+    """
+    global _targets_refreshing
+    with _targets_refresh_lock:
+        if _targets_refreshing:
+            return
+        _targets_refreshing = True
+
+    def run() -> None:
+        global _targets_refreshing
+        try:
+            from src.analysis_agent import targeting_registry as tr
+            tr.pull()
+        except Exception:
+            pass
+        finally:
+            with _targets_refresh_lock:
+                _targets_refreshing = False
+
+    threading.Thread(target=run, daemon=True, name="acl-targets-refresh").start()
+
+
 def _load_sheet_targets() -> list[dict]:
-    """The team targeting library (read copy refreshed from the repository)."""
+    """The team targeting library from the machine's read copy (no network)."""
     from src.analysis_agent import targeting_registry as tr
-    tr.pull(force=True)
+    _refresh_sheet_targets_in_background()
     return [{"code": t.name, "label": t.name, "fb_interest": t.rpa_interests()}
             for t in tr.all_targets()]
 
