@@ -41675,20 +41675,6 @@
         "state": "implementing",
         "started_at": "2026-10-17T19:10:11+00:00",
         "from_status": "status:todo"
-      },
-      "356": {
-        "actor": "Worker-7k2q9",
-        "session": "s-a75a7899",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1356-starlette",
-        "worktree": "C:\\acl-1356",
-        "id": "11fde19af4e848909afcfede0fe9a212",
-        "issue": 356,
-        "state": "handoff",
-        "started_at": "2026-10-17T19:17:54+00:00",
-        "from_status": "status:todo",
-        "pr": 942,
-        "report": "## Report\n- FastAPI 0.141.1 / Starlette 1.7.0 / uvicorn 0.44.0 / python-multipart 0.0.32 pinned in requirements.txt; no other packaging file pins them.\n- src/web/request_limits.py: 1 MiB default body limit, 16 MiB for Campaign Builder form routes (documented), form limits via read_form, SafeStaticFiles for /static. The dashboard has no HTTP file-upload endpoints (creatives are chosen by name from disk), so max_files=0 breaks nothing.\n- tests/test_request_limits.py: 44 passed; CI on PR #942 all green.\n- Independent Sonnet pre-review: no real findings."
       }
     },
     "tasks": {
@@ -47721,25 +47707,25 @@
             "session": "s-a75a7899"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-7k2q9",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-M1356A",
-          "session": "cf9ad405-1356",
+          "actor": "Worker-7k2q9",
+          "session": "s-a75a7899",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1356-starlette",
           "worktree": "C:\\acl-1356",
-          "id": "b08a3785c6054e84a4b69df94315f489",
+          "id": "11fde19af4e848909afcfede0fe9a212",
           "issue": 356,
           "state": "handoff",
-          "started_at": "2026-10-16T09:56:53+00:00",
+          "started_at": "2026-10-17T19:17:54+00:00",
           "from_status": "status:todo",
           "pr": 942,
-          "report": "ACL-1356 source PR #942 (head c5b2e72c), base main, includes current main.\nDone: fastapi 0.141.1 / starlette 1.7.0 / jinja2 3.1.6 pinned in requirements.txt (single pin source); RequestBodyLimit (1 MiB default, 16 MiB for 5 Builder routes, root_path-aware); read_form() limits on all 14 form parses; SafeStaticFiles refuses UNC/drive/absolute/../device names; 16 TemplateResponse calls request-first.\nChecks: affected local set 514 passed (Python 3.13, new pins); test_request_limits + builder tests 63 passed after review fixes. Pre-handoff read-only review (Opus): no blocking findings; LOW-2/LOW-4 fixed in c5b2e72c; LOW-1 (on_event deprecation), LOW-3/5/6 left as non-blocking notes.\nRemaining: independent review, full CI incl. Windows installer and Python 3.11, owner smoke check of live dashboard (large Builder publish, /static/logo.svg) after delivery."
+          "report": "## Report\n- FastAPI 0.141.1 / Starlette 1.7.0 / uvicorn 0.44.0 / python-multipart 0.0.32 pinned in requirements.txt; no other packaging file pins them.\n- src/web/request_limits.py: 1 MiB default body limit, 16 MiB for Campaign Builder form routes (documented), form limits via read_form, SafeStaticFiles for /static. The dashboard has no HTTP file-upload endpoints (creatives are chosen by name from disk), so max_files=0 breaks nothing.\n- tests/test_request_limits.py: 44 passed; CI on PR #942 all green.\n- Independent Sonnet pre-review: no real findings."
         },
         "pr": 942,
-        "queued_at": "2026-10-16T10:16:56+00:00",
+        "queued_at": "2026-10-17T19:24:04+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -53793,7 +53779,8 @@
       }
     },
     "review_queue": [
-      864
+      864,
+      356
     ],
     "review": {
       "id": "b0a91a786e154807abe0a878a5dfeda0",
@@ -83622,6 +83609,13 @@
         "issue": 864,
         "pr": 985,
         "actor": "Worker-ACL1864"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-17T19:24:04+00:00",
+        "issue": 356,
+        "pr": 942,
+        "actor": "Worker-7k2q9"
       }
     ],
     "policy": {
