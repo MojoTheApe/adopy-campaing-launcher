@@ -41726,9 +41726,11 @@
         "worktree": "C:\\acl-602",
         "id": "2ab7ba9e05eb425e88e804f162cf7b94",
         "issue": 70,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-17T13:35:50+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 982,
+        "report": "ACL-602: added goals.overview() and GET /goals/overview (lead only via ACL_TEAM_LEAD, 403 otherwise); GET /goals for another person's name also needs the flag. Tests: py -m pytest tests/test_goals.py, 21 passed. No UI panel (API only). PR #982."
       },
       "142": {
         "actor": "Worker-W1142A",
