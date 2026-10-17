@@ -18745,20 +18745,12 @@ function aclPickerSearch(inst, text) {
     var foundHit = !picked && (rowExtras[label] || []).filter(function (p) { return p.profile_id === prof; })[0];
     if (foundHit) picked = foundHit;
 
-<<<<<<< HEAD
-=======
-    var payload = { account_name: label };
-    if (adid.trim()) payload.ad_account_id = adid.trim();
-    if (prof.trim()) payload.profile_id = prof.trim();
-    if (picked && picked.folder_id) payload.folder_id = picked.folder_id;
-    if (foundHit && foundHit.inst) payload.multilogin_instance = foundHit.inst;
-
->>>>>>> refs/pr/976
     btn.disabled = true;
     if (msg) { msg.style.color = 'var(--muted)'; msg.textContent = 'saving…'; }
     aclConnectAccount({
       account_name: label, ad_account_id: adid, profile_id: prof,
-      folder_id: picked && picked.folder_id
+      folder_id: picked && picked.folder_id,
+      multilogin_instance: foundHit && foundHit.inst
     }).then(function (d) {
         btn.disabled = false;
         if (!d.ok) { if (msg) { msg.style.color = 'var(--bad)'; msg.textContent = d.error || 'error'; } return; }
