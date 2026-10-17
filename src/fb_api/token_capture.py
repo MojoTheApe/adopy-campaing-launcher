@@ -228,6 +228,7 @@ _HELPER_JS = r"""
     if (typeof phase !== 'string' || U.phases.indexOf(phase) < 0) return 'upload_phase';
     const allowed = U.keys[phase];
     for (const k of Object.keys(params)) if (allowed.indexOf(k) < 0) return 'upload_key';
+    if ('waterfall_id' in params && !(typeof params.waterfall_id === 'string' && /^[0-9a-f]{32}$/.test(params.waterfall_id))) return 'upload_waterfall';
     if (phase === 'start') {
       const n = digitsOf(params.file_size);
       if (!n || n > U.file_max) return 'upload_size';

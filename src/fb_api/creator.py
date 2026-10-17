@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+import uuid
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable
@@ -1109,7 +1110,10 @@ class CampaignCreator:
         path = f"/{plan.act}/advideos"
         size = len(big)
         what = f"{who}: video upload"
-        started = self._upload_call(out, what, path, {"upload_phase": "start", "file_size": str(size)}, None)
+        # Meta требует waterfall_id от токена Ads Manager (подкод 1363049); один на всю загрузку.
+        waterfall = uuid.uuid4().hex
+        started = self._upload_call(out, what, path, {"upload_phase": "start", "file_size": str(size),
+                                                       "waterfall_id": waterfall}, None)
         sid, vid = str(started.get("upload_session_id") or ""), str(started.get("video_id") or "")
         if not (sid.isdigit() and vid.isdigit()):
             raise CreationStopped(f"{what}: Meta returned no upload session", created=out.created,
@@ -1128,7 +1132,8 @@ class CampaignCreator:
             if len(chunk) != n:
                 raise CreationStopped(f"{what}: the file changed while uploading", created=out.created,
                                       kind="video_error")
-            params = {"upload_phase": "transfer", "upload_session_id": sid, "start_offset": str(offset)}
+            params = {"upload_phase": "transfer", "upload_session_id": sid, "start_offset": str(offset),
+                      "waterfall_id": waterfall}
             try:
                 body = self._upload_call(out, what, path, params, {_wpol.UPLOAD_CHUNK_FIELD: chunk})
             except CreationStopped as exc:
@@ -1151,7 +1156,8 @@ class CampaignCreator:
             offset, end = self._offsets(body, size, offset, what)
         try:
             done = self._upload_call(out, what, path, {"upload_phase": "finish", "upload_session_id": sid,
-                                                        "title": title, "name": title}, None)
+                                                        "title": title, "name": title,
+                                                        "waterfall_id": waterfall}, None)
         except CreationStopped as exc:
             if exc.kind != "unknown":
                 raise
