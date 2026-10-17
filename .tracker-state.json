@@ -41726,9 +41726,11 @@
         "worktree": "C:\\acl-1668",
         "id": "a34782a0721f49feb3cfe9c7963ac83c",
         "issue": 668,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-17T11:34:35+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 975,
+        "report": "# ACL-1668 handoff report\n\nPR #975. Chosen creative missing from the refreshed list is marked \"File missing \u2014 pick again\" (theme error colour, name kept). Publish and Publish all list the rows in the confirm and refuse to send. Enrichment error now reads \"Creative file missing: ... pick the file again\".\n\nChecks run: tests/test_builder_review_browser.py (13 passed incl. 2 new), tests/test_acl1668_missing_creative_publish.py and tests/test_second_primary_text_reaches_the_robot.py (16 passed).\nNot run: full suite (CI). Not checked: live dashboard."
       },
       "202": {
         "actor": "Worker-W1202A",
