@@ -41729,6 +41729,18 @@
         "state": "implementing",
         "started_at": "2026-10-17T11:34:35+00:00",
         "from_status": "status:todo"
+      },
+      "358": {
+        "actor": "Worker-W1358A",
+        "session": "w1358a-20261017",
+        "coordinator": "Coordinator-T1004Q",
+        "branch": "work/acl-1358-protected-tokens",
+        "worktree": "C:\\acl-1358",
+        "id": "0cc9fcf7d7d94181a80986d5052a98e7",
+        "issue": 358,
+        "state": "implementing",
+        "started_at": "2026-10-17T11:35:04+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -48419,6 +48431,17 @@
         "state": "implementing",
         "worker": "Worker-W1668A",
         "coordinator": "Coordinator-T1004Q"
+      },
+      "358": {
+        "implementers": [
+          {
+            "actor": "Worker-W1358A",
+            "session": "w1358a-20261017"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W1358A",
+        "coordinator": "Coordinator-T1004Q"
       }
     },
     "actors": {
@@ -50308,6 +50331,10 @@
       },
       "Worker-W1668A": {
         "session": "w1668a-s1",
+        "role": "Worker"
+      },
+      "Worker-W1358A": {
+        "session": "w1358a-20261017",
         "role": "Worker"
       }
     },
@@ -78408,6 +78435,13 @@
         "issue": 668,
         "claim": "a34782a0721f49feb3cfe9c7963ac83c",
         "actor": "Worker-W1668A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-17T11:35:04+00:00",
+        "issue": 358,
+        "claim": "0cc9fcf7d7d94181a80986d5052a98e7",
+        "actor": "Worker-W1358A"
       }
     ],
     "policy": {
