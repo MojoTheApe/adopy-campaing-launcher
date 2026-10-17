@@ -110,13 +110,28 @@ _TOPIC_OF = {
     "budget_min": "budget",
     "ad_names_unique": "names",
     "existing_diffs": "names",
+    # Правила этой сборки, которых нет в main (TEST9095: 1896, 1776, 1771, 1774, 1767, 1768).
+    "instagram_identity": "account",
+    "form_template_privacy": "destination",
+    "form_template_contacts": "destination",
+    "form_terms": "destination",
+    "interests_confirmed": "audience",
+    "vertical_needs_main": "creative",
+    "vertical_ratio": "creative",
+    "texts_limit": "creative",
+    "texts_vertical": "creative",
+    "texts_dynamic": "creative",
+    "devices_consistent": "audience",
+    "start_time_valid": "budget",
+    "adset_names_unique": "names",
+    "adset_has_ads": "names",
 }
 
 
 def _r(rid: str, label: str, severity: str, side: str, hint: str, *, sel: str = "", level: str = "campaign",
        applies: str = "always", unit: str = "campaign") -> dict[str, Any]:
     return {"id": rid, "label": label, "severity": severity, "side": side, "hint": hint,
-            "field": {"sel": sel, "level": level}, "applies": applies, "unit": unit, "topic": _TOPIC_OF[rid]}
+            "field": {"sel": sel, "level": level}, "applies": applies, "unit": unit, "topic": _TOPIC_OF.get(rid, "meta")}
 
 
 #: Порядок = порядок строк в карточке. `applies`: always | website | instant_form.
