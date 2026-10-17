@@ -42026,7 +42026,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "987": {
+        "actor": "Worker-WFO05CI",
+        "session": "WFO-20261017-ACL-CI-Author",
+        "coordinator": "Coordinator-WFO3C7A5M",
+        "branch": "codex/acl-1987-selection-support",
+        "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/workflow-implementation/2026-10-16/work/acl-1987-selection-support",
+        "id": "7015f32a66cc41beb979bfb5658e6e58",
+        "issue": 987,
+        "state": "implementing",
+        "started_at": "2026-10-17T20:04:22+00:00",
+        "from_status": "status:backlog"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -49475,6 +49488,17 @@
         },
         "pr": 935,
         "queued_at": "2026-10-17T19:36:55+00:00"
+      },
+      "987": {
+        "implementers": [
+          {
+            "actor": "Worker-WFO05CI",
+            "session": "WFO-20261017-ACL-CI-Author"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-WFO05CI",
+        "coordinator": "Coordinator-WFO3C7A5M"
       }
     },
     "actors": {
@@ -84692,6 +84716,13 @@
         "event": "included-sources-closed",
         "at": "2026-10-17T19:48:29+00:00",
         "batch_id": "6b2f4033a38f4640b5ebdedf056fb0f0"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-17T20:04:22+00:00",
+        "issue": 987,
+        "claim": "7015f32a66cc41beb979bfb5658e6e58",
+        "actor": "Worker-WFO05CI"
       }
     ],
     "policy": {
