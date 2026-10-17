@@ -160,7 +160,7 @@ never finish a parent. Retain owned post-main acceptance recovery when original
 criteria remain unchecked; do not edit a frozen checkbox as a scope workaround.
 Read the retained-reviewer record-acceptance procedure in the local delivery contract.
 
-Main merge is pending completion until the actual stable package release and installation/acceptance verification. A source tag or upload alone is insufficient. Required target: `__PRODUCTION_TARGET__`. Pending/failed delivery stays unfinished. A merge never publishes,
+Main merge is pending completion until the actual stable package release and installation/acceptance verification. A source tag or upload alone is insufficient. Required target: `ACL stable Windows installer and update channel`. Pending/failed delivery stays unfinished. A merge never publishes,
 installs or verifies an external business result. With actual integration/delivery authorization, the Coordinator persists batch begin --deliver with the exact real native workflow/job; no merge/push can invent this permission. The project-owned producer and exported delivery recorder verify the unchanged authorized target/revision.
 
 Actual verified non-code Research/Operations uses `complete --verified-non-code`

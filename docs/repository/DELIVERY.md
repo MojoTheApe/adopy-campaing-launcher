@@ -66,6 +66,18 @@ branch-to-environment connections require their own explicit setup.
 A partially implemented ticket stays active. Never substitute a closed Issue or
 non-code completion for missing code/delivery evidence.
 
+## Optional-policy selection packages
+
+The released support pin supplies the bounded Stage-off execution-v2/v3
+one-policy selection package described in [DELIVERY_POLICY.md](DELIVERY_POLICY.md#one-policy-selection-package-before-activation).
+Prepare only its genuine separately reviewed one-member selection, retain the
+original authorization, complete actual published-package verification and
+record its exact native receipt before reserving maintenance for owned idle
+activation. Do not co-select policies or deliver through held maintenance.
+Other pending deliveries, unresolved effects and real owners still block
+adoption. [EARLY_ADOPTION.md](EARLY_ADOPTION.md) retains reader/every-writer,
+full recovery and separate pilot gates; this support source activates nothing.
+
 ## Procedure references
 
 Follow [VERIFICATION.md](VERIFICATION.md) for common check selection and coordinated

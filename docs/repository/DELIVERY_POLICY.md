@@ -294,6 +294,82 @@ attempts instead of deriving their names from the latest overall run attempt.
 See [TT-127](https://github.com/MojoTheApe/task-tracker/issues/127) and its
 Master companion [MR-28](https://github.com/MojoTheApe/master-repo/issues/28).
 
+### One policy-selection package before activation
+
+An existing execution-v2/v3 package project with Stage disabled can select one
+previously absent `task_context_policy: {"schema_version":1}`,
+`completion_policy: {"schema_version":1}` or
+`ci_retry_policy: {"schema_version":1,"max_executions":1|2}` through a separately
+reviewed source. The package containing that selection must finish its already
+authorized old-policy delivery **before** maintenance or adoption. Selection is
+not activation, and releasing source ownership does not finish target acceptance.
+
+Publish the compatible portable recorder, actual engine, matching Master and
+reader first, as a separate completed support upgrade. Retain a complete verified
+last-good reader/state recovery point supporting the intended fence: context4,
+completion5 and retry6 have different reader requirements. No compatible retry6
+recovery point means defer retry activation; it does not force a context/completion
+pilot to select retry. This procedure installs no reader or backup itself.
+
+Use the unchanged source/combined/main review and admission route under the
+actual operative policy. Freeze a genuine **one-member** batch with the existing
+`batch begin --deliver --delivery-workflow PATH --delivery-job EXACT_NAME` before
+main. After full source/combined review, required checks and the normal main
+receipt/status/Coordinator release, run the existing portable `resolve` and
+`record` commands above against that exact main revision. The project producer
+still performs its full package, installation/update/recovery and configured
+target acceptance. No successful upload, syntax check or synthetic fixture
+substitutes for that real native verifier.
+
+This continuation derives the operative config only from that batch's retained
+immutable baseline **B**, independently fetched from the official repository.
+The selected merge **M** must remain exact current main and have the identical
+tree as the independently reviewed single source. Its admitted main receipt,
+original `batch-frozen` membership/request, full current Issue scope, source and
+combined reviews and native producer remain required. A config supplied by a
+caller or a matching policy fingerprint cannot select an arbitrary old baseline.
+
+The complete immutable B→M diff must change exactly these existing regular,
+non-executable files in a separated Master package project:
+
+- `delivery.json`, adding only the matching descriptor policy;
+- `tracker/config.json`, adding only that same policy;
+- `docs/repository/TRACKER.md` and the corresponding `WORKFLOW.md` (context),
+  `DELIVERY.md` (completion) or `VERIFICATION.md` (retry);
+- `.workflow/template-base.json`, preserving the standard revision, file set and
+  every other pristine input/file while adding the same explicit selection.
+
+The portable recorder validates the complete tree, actual Git blob identities,
+unambiguous JSON and these exact structural consequences. Independent source and
+combined review cover the full documentation text; the recorder does not contain
+a second Master renderer. Runtime, engine pin, helper/manifest, workflow, capacity,
+namespace, target, existing policies or additional-file changes require a
+separate source first. Other layouts, Stage, multiple members/new selections,
+missing original receipts/review, another pending delivery or an unresolved retry
+effect stop this continuation. There is no flag that relaxes those boundaries.
+
+After the exact native receipt is recorded, drain every real owner, intake,
+Stage and other pending operation/delivery. Reserve genuine maintenance, preview
+and apply the one matching `task-context adopt`, `completion adopt` or
+`ci-retry adopt`, then resume that same owner and verify the fresh project view.
+The context/completion adopters explicitly refuse pending or failed authorized
+delivery even when source owners are already released. Reserving maintenance
+early does not permit package recording there: resume the same reservation,
+finish its genuine package, then take a fresh idle adoption window.
+
+No state protocol, receipt schema, ordinary admission/model fallback or delivery
+authority is added. Existing retry anchors, budgets, unknown barriers, scopes and
+receipt history remain intact. The recorder rechecks current M after immutable
+resolution and again after native verification before its original state-SHA CAS.
+A conflict or lost reply requires fresh GET-only reconciliation of that original
+effect; never redispatch a package merely because the response was lost. A final
+GET cannot make GitHub and an external target globally atomic.
+
+Source support is tracked by [TT-160](https://github.com/MojoTheApe/task-tracker/issues/160)
+and [Master54](https://github.com/MojoTheApe/master-repo/issues/54). Consumer
+selection, real activation, reader recovery and ordinary before/after outcomes
+remain separately owned and verified.
+
 ### Owner-approved historical completion
 
 An adoption may preserve an explicitly audited set of completed tasks instead of
