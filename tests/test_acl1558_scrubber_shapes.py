@@ -67,6 +67,9 @@ PROXY_CASES = [
     ("proxy=proxyuser:pr0xyPass@198.51.100.7:3128 failed", "proxy=<user>:<hidden>@198.51.100.7:3128 failed"),
     ("proxy 'proxyuser:p@ss:w0rd@198.51.100.7:3128' refused", "proxy '<user>:<hidden>@198.51.100.7:3128' refused"),
     ("[proxyuser:pr0xyPass@[2001:db8::1]:8080]", "[<user>:<hidden>@[2001:db8::1]:8080]"),
+    # пароль с `/` (base64) прячется целиком
+    ("http://proxyuser:pr0xyPass/w0rd+==@198.51.100.7:8080", "http://<user>:<hidden>@198.51.100.7:8080"),
+    ("proxyuser:pr0xyPass@localhost:3128", "<user>:<hidden>@localhost:3128"),
 ]
 
 
@@ -85,6 +88,11 @@ def test_proxy_credentials_are_hidden_and_the_host_is_kept(raw, expected):
     r"saved to C:\Users\demo@corp\out.txt",
     "https://example.com/path",
     "time 10:15 user@ host",
+    "email:john@example.com sent",
+    "ratio 16:9@2x",
+    "https://user@example.com/x",
+    "C:/Users/a@b.example.com",
+    "git@github.com:org/repo",
 ])
 def test_ordinary_text_with_colons_and_at_signs_is_not_over_scrubbed(text):
     assert "<user>" not in rt.scrub(text)
@@ -129,7 +137,26 @@ def test_scrub_diag_keeps_every_entry_when_scrubbed_keys_collide():
     assert "act_<hidden>" in out and "act_<hidden>#2" in out and "<email>" in out
 
 
-@pytest.mark.parametrize("key", ["step", "campaign_name", "ad_123", "v2", "2026-10-17", "SA_sa_All_Image_Mix"])
+@pytest.mark.parametrize("key,leak", [
+    ("acct 123456789", "123456789"),
+    ("12345678-x", "12345678"),
+    ("ad_act_1234567", "1234567"),
+    ("ACT_99", "ACT_99"),
+    ("Act_1234567:state", "1234567"),
+])
+def test_ids_inside_longer_keys_are_hidden(key, leak):
+    out = rt.scrub_diag({key: 1})
+    assert not any(leak in str(k) for k in out), out
+    assert list(out.values()) == [1]
+
+
+def test_integer_keys_holding_an_account_id_are_hidden():
+    out = rt.scrub_diag({123456789: "x", 1234567890123: "y", 7: "small", True: "flag"})
+    assert sorted(map(str, out)) == sorted(["<id>", "<digits>", "7", "True"]), out
+    assert out[7] == "small" and out[True] == "flag"
+
+
+@pytest.mark.parametrize("key", ["step","campaign_name", "ad_123", "v2", "2026-10-17", "SA_sa_All_Image_Mix"])
 def test_ordinary_keys_are_unchanged(key):
     assert rt.scrub_key(key) == key
 

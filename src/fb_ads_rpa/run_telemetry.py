@@ -177,7 +177,9 @@ _SCRUB = (
     (re.compile(r"\bBearer [A-Za-z0-9._~+/-]{1,16384}", re.I), "Bearer <hidden>"),
     # ACL-1558: голый токен Graph API (`EAAB…`/`EAAG…`) без имени ключа и
     # без `Bearer` рядом. Ключевые формы выше уже заменили его на `<hidden>`,
-    # сюда доходит только то, что они пропустили.
+    # сюда доходит только то, что они пропустили. Токен, приклеенный к
+    # букве (`tokenEAAB…`), не ловится — иначе резались бы обычные слова с
+    # `EAA` внутри; приклеенный к `_`, `=`, `/`, кавычке — ловится.
     (re.compile(r"(?<![A-Za-z0-9])EAA[A-Za-z0-9]{20,16384}"), "<token>"),
     # ACL-1558: учётка прокси `user:pass@host[:port]` (в т.ч. после `http://`).
     # Хост и порт остаются — по ним видно, какой прокси отказал; логин и
@@ -185,11 +187,16 @@ _SCRUB = (
     # пробела, `/`, `=`, кавычки, скобки…), иначе каждая позиция длинной
     # строки начинала бы свой перебор; обе части ограничены 256 — линейно.
     # Пароль жадный и может содержать `@`/`:`, совпадение заканчивается на
-    # ПОСЛЕДНЕЙ `@` слова — `p@ss` не оставляет хвост `ss@` открытым. `\`
-    # исключён из обеих частей: `C:\Users\a@b` — путь, а не учётка;
-    # `mailto:` — адрес, а не логин.
-    (re.compile(r"(?<![^\s/=,;(\[{<>\"'])(?!mailto:)[^\s:@/\\\"'<>=,;(\[{]{1,256}:[^\s/\\\"'<>]{1,256}@"
-                r"(?=[A-Za-z0-9\[])", re.I),
+    # ПОСЛЕДНЕЙ `@` слова — `p@ss` не оставляет хвост `ss@` открытым. `/`
+    # в пароле можно (base64-пароли), но не первым: `https://user@host` —
+    # это схема, а не `https:<пароль>`. `\` исключён из обеих частей:
+    # `C:\Users\a@b` — путь, а не учётка; `mailto:`/`email:` — адрес, а не
+    # логин. Хост обязан выглядеть хостом (имя с доменом, IPv4, `[IPv6]`
+    # или `имя:порт`) — `16:9@2x` не учётка.
+    (re.compile(r"(?<![^\s/=,;(\[{<>\"'])(?!(?:mailto|e-?mail):)[^\s:@/\\\"'<>=,;(\[{]{1,256}:"
+                r"[^\s/\\\"'<>][^\s\\\"'<>]{0,255}@"
+                r"(?=\[|\d{1,3}(?:\.\d{1,3}){3}|[A-Za-z0-9-]{1,63}(?:\.[A-Za-z0-9-]{1,63}){0,8}\.[A-Za-z]{2,24}\b"
+                r"|[A-Za-z0-9.-]{1,253}:\d{1,5}\b)", re.I),
      "<user>:<hidden>@"),
     (re.compile(r"(act=)(?:act_)?\d{6,}"), r"\1<hidden>"),
     (re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b"), "<uuid>"),
@@ -251,8 +258,8 @@ def _hides_dict_value(key: object, item: object) -> bool:
 #: из 6–9 цифр и почта проходили в контексты Sentry как есть (ACL-1554
 #: закрыл это только для вложения итога, `run_summary._scrub_strings`).
 _KEY_EMAIL = re.compile(r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]{1,63}(?:\.[A-Za-z0-9-]{1,63}){0,8}\.[A-Za-z]{2,24}\b")
-_KEY_ACT = re.compile(r"\bact_\d+")
-_KEY_DIGITS = re.compile(r"\d{6,}")
+_KEY_ACT = re.compile(r"(?<![A-Za-z0-9])act_\d+", re.I)
+_KEY_DIGITS = re.compile(r"(?<![A-Za-z0-9])\d{6,}(?![A-Za-z0-9])")
 
 
 def scrub_key(key: str) -> str:
@@ -260,12 +267,21 @@ def scrub_key(key: str) -> str:
     out = scrub(key)
     out = _KEY_EMAIL.sub("<email>", out)
     out = _KEY_ACT.sub("act_<hidden>", out)
-    if _KEY_DIGITS.fullmatch(out):
-        out = "<id>"
-    return out
+    return _KEY_DIGITS.sub("<id>", out)
 
 
-def _put_unique(out: dict, key, item) -> None:
+def clean_key(key):
+    """Строковый ключ — через `scrub_key`; целый (номер кабинета числом) —
+    тоже, но остаётся числом, если прятать нечего."""
+    if isinstance(key, str):
+        return scrub_key(key)
+    if isinstance(key, int) and not isinstance(key, bool):
+        clean = scrub_key(str(key))
+        return key if clean == str(key) else clean
+    return key
+
+
+def put_unique(out: dict, key, item) -> None:
     """Два ключа, ставшие одинаковыми после вычистки, не затирают друг друга."""
     if key in out:
         n = 2
@@ -281,7 +297,7 @@ def scrub_diag(value):
         out: dict = {}
         for key, item in value.items():
             clean = "<hidden>" if _hides_dict_value(key, item) else scrub_diag(item)
-            _put_unique(out, scrub_key(key) if isinstance(key, str) else key, clean)
+            put_unique(out, clean_key(key), clean)
         return out
     if isinstance(value, (list, tuple)):
         return [scrub_diag(item) for item in value]

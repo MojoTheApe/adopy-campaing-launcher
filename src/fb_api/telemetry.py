@@ -44,21 +44,21 @@ def scrub(text: Any) -> str:
 def scrub_value(value: Any) -> Any:
     """Вычистить вложенную структуру: строки, ключи словарей, списки."""
     if isinstance(value, dict):
+        try:  # ACL-1558: почта и короткие номера в ключе — общим `clean_key`
+            from src.fb_ads_rpa import run_telemetry
+        except Exception:
+            run_telemetry = None
         out = {}
         for key, item in value.items():
             if isinstance(key, str) and key.lower().replace("-", "_") in {"access_token", "token"}:
                 out[key] = "<hidden>"
                 continue
             clean = scrub_value(item)
-            if not isinstance(key, str):
-                out[key] = clean
+            if run_telemetry is None:
+                out[scrub(key) if isinstance(key, str) else key] = clean
                 continue
-            try:  # ACL-1558: почта и короткие номера в ключе — общим `scrub_key`
-                from src.fb_ads_rpa import run_telemetry
-
-                run_telemetry._put_unique(out, scrub(run_telemetry.scrub_key(key)), clean)
-            except ImportError:
-                out[scrub(key)] = clean
+            new_key = run_telemetry.clean_key(key)
+            run_telemetry.put_unique(out, scrub(new_key) if isinstance(new_key, str) else new_key, clean)
         return out
     if isinstance(value, (list, tuple)):
         return [scrub_value(item) for item in value]

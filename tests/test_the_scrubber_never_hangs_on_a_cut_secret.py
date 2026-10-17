@@ -112,6 +112,8 @@ KEY_PREFIX_CASES = {
     "many_short_proxy_words": " a:b" * 25_000,
     "proxy_at_run": "a:b@" * 25_000,
     "colon_run_after_delimiters": "=a:" * 33_000,
+    "proxy_slash_password_runs": " a:b/c@d" * 12_000,
+    "proxy_host_lookahead_runs": " a:b@" + "x-1." * 25_000,
 }
 
 
