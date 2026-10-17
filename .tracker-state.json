@@ -41750,9 +41750,11 @@
         "worktree": "C:\\acl-1403",
         "id": "2b83c8bbc58e45c7b8c0d6d8aa30a101",
         "issue": 403,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-17T11:35:53+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 973,
+        "report": "# ACL-1403 report\n\nPR #973. Refused CDP port after an MLX start: the new code waits for the port (1+2+3+3 s; the Stop button ends the wait), then raises ProfileStop `profile_cdp_refused` with a plain English message. It is registered in failure_policy, retry_policy (block and review), sentry_triage_map and the Sentry reason kinds. `report_job_exception` now sets the `machine` tag.\n\nTests (mocks only): tests/test_a_refused_cdp_port_after_start_is_a_named_stop.py (6 tests), plus the profile, failure-policy, sentry-triage and job-exception suites: all pass. test_a_stopped_profile_never_spins_the_robot is a CPU-timing test that failed once under load, unrelated to this change.\n\nNot done: the root cause (stale port, start-up race or crash) could not be established, because the comp38339 serve log was not available. The retry covers the race; the stop covers the other two. PR #960 (ACL-1401) is not merged here; the registry edits are placed away from its hunks, and the launcher classification is left in its `_ensure_browser`."
       },
       "202": {
         "actor": "Worker-W1202A",
