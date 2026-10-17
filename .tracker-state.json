@@ -46106,7 +46106,7 @@
             "session": "work_gx1012a_20261012"
           }
         ],
-        "state": "archiving",
+        "state": "archived",
         "worker": "Worker-GX1012A",
         "coordinator": "Coordinator-CX1012A",
         "handoff": {
@@ -78827,6 +78827,12 @@
         "event": "archived",
         "at": "2026-10-17T13:58:45+00:00",
         "issue": 311,
+        "reason": "Owner decision 2026-10-17: no longer relevant. Multilogin access for the team is already solved (ACL-1441: each buyer picks the workspace and issues their own token). Draft PR left untouched for history."
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-17T13:59:16+00:00",
+        "issue": 335,
         "reason": "Owner decision 2026-10-17: no longer relevant. Multilogin access for the team is already solved (ACL-1441: each buyer picks the workspace and issues their own token). Draft PR left untouched for history."
       }
     ],
