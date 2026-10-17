@@ -41717,6 +41717,18 @@
         "state": "implementing",
         "started_at": "2026-10-16T16:08:01+00:00",
         "from_status": "status:todo"
+      },
+      "784": {
+        "actor": "Worker-W1784A",
+        "session": "11633f9c-acl-1784",
+        "coordinator": "Coordinator-C1016A",
+        "branch": "work/acl-1784-api-no-review-window",
+        "worktree": "C:\\acl-1784",
+        "id": "c8b34860c26142858796d7543604ef62",
+        "issue": 784,
+        "state": "implementing",
+        "started_at": "2026-10-17T06:17:51+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -48126,6 +48138,17 @@
       "241": {
         "implementers": [],
         "state": "archived"
+      },
+      "784": {
+        "implementers": [
+          {
+            "actor": "Worker-W1784A",
+            "session": "11633f9c-acl-1784"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W1784A",
+        "coordinator": "Coordinator-C1016A"
       }
     },
     "actors": {
@@ -49971,6 +49994,10 @@
       },
       "Worker-W1401M": {
         "session": "acl-1401-run1",
+        "role": "Worker"
+      },
+      "Worker-W1784A": {
+        "session": "11633f9c-acl-1784",
         "role": "Worker"
       }
     },
@@ -77914,6 +77941,13 @@
         "at": "2026-10-16T20:55:33+00:00",
         "issue": 241,
         "reason": "Done: code in main (PR #244, merge 42900654), owner verified on 2026-10-15; rollout to other managers continues in #938. Backlog cleanup 2026-10-16."
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-17T06:17:51+00:00",
+        "issue": 784,
+        "claim": "c8b34860c26142858796d7543604ef62",
+        "actor": "Worker-W1784A"
       }
     ],
     "policy": {
