@@ -46714,7 +46714,7 @@
             "session": "w1872c-20261016"
           }
         ],
-        "state": "changes_requested",
+        "state": "archiving",
         "worker": "Worker-W1872C",
         "coordinator": "Coordinator-C1016A",
         "handoff": {
