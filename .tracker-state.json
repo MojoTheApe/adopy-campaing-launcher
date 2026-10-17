@@ -41729,6 +41729,18 @@
         "state": "implementing",
         "started_at": "2026-10-17T07:16:02+00:00",
         "from_status": "status:todo"
+      },
+      "968": {
+        "actor": "Worker-WFO05CI",
+        "session": "WFO-20261017-ACL-CI-Author",
+        "coordinator": "Coordinator-WFO20261017",
+        "branch": "codex/acl-1968-ci-accounting",
+        "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/workflow-implementation/2026-10-16/work/acl-ci-report",
+        "id": "c9575f18a3b448a69746f1f89f9391bf",
+        "issue": 968,
+        "state": "implementing",
+        "started_at": "2026-10-17T10:19:36+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -48338,6 +48350,17 @@
         },
         "pr": 967,
         "queued_at": "2026-10-17T07:25:35+00:00"
+      },
+      "968": {
+        "implementers": [
+          {
+            "actor": "Worker-WFO05CI",
+            "session": "WFO-20261017-ACL-CI-Author"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-WFO05CI",
+        "coordinator": "Coordinator-WFO20261017"
       }
     },
     "actors": {
@@ -50215,6 +50238,10 @@
       },
       "Worker-W1626A": {
         "session": "w1626a-session",
+        "role": "Worker"
+      },
+      "Worker-WFO05CI": {
+        "session": "WFO-20261017-ACL-CI-Author",
         "role": "Worker"
       }
     },
@@ -78270,6 +78297,13 @@
         "issue": 626,
         "pr": 967,
         "actor": "Worker-W1626A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-17T10:19:36+00:00",
+        "issue": 968,
+        "claim": "c9575f18a3b448a69746f1f89f9391bf",
+        "actor": "Worker-WFO05CI"
       }
     ],
     "policy": {
