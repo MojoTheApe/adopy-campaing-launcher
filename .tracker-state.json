@@ -41738,9 +41738,11 @@
         "worktree": "C:\\acl-1626",
         "id": "3f0be656f75e4fef8787dd235e12b930",
         "issue": 626,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-17T07:23:02+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 967,
+        "report": "Implementation handoff for ACL-1626 (PR 967, branch work/acl-1626-notes-set-aside).\n\nDone: items 1 and 2 (warning log, set_aside/warning in the save response, page banner, millisecond backup name with collision counter).\n\nChecks: non-browser tests in tests/test_acl1620_account_notes.py and tests/test_acl1633_country_notes.py pass (42). Browser (Playwright) tests were not verified locally: environment errors (_design_tokens, acl.test timeout).\n\nRemaining: item 3, a live check on the owner's machine (write, edit, clear a note, restart the dashboard, the note survives). The dashboard needs a serve.py restart for the Python change."
       }
     },
     "tasks": {
