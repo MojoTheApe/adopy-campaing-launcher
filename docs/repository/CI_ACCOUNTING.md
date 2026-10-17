@@ -6,6 +6,22 @@ not dispatch/rerun workflows, change checks, delete caches/artifacts, change
 retention or run a background collector. Keep the original ACL-1649 2–3x target
 and historical measurements; this correction establishes no numerical saving.
 
+ACL supplies only its default repository, private capture boundary and known
+orchestration job names. The executable report is the exact standalone
+`.workflow/tools/tracker_ci_accounting.py` artifact from published Tracker3.5.0,
+commit `df0154b96410296b50bc9d7a00af7847d9a97700`. Its source blob, SHA256 and
+portable floor are recorded in `tracker/ci-accounting-artifact.json`; the adapter
+checks its fixed digest before loading it. Changed bytes require a reviewed
+artifact refresh. There is one accounting implementation, with no private engine
+import or checkout at report time.
+
+This scoped read-only artifact does not change the guarded e775 workflow engine,
+descriptor/config policies, ownership/state or their generated integration files.
+It does not create a replacement full export manifest. A later full workflow
+upgrade must inspect this local addition and its fixed digest through the normal
+three-way conflict/review procedure. The adapter owns its capture root; callers
+cannot override it with `--project-root` to write raw observations into ACL.
+
 ```sh
 python scripts/acl_ci_minutes.py --from 2026-10-15 --to 2026-10-15
 python scripts/acl_ci_minutes.py --from 2026-10-15 --to 2026-10-15 --json
@@ -53,8 +69,9 @@ to reproduce its 20 rows →12 intervals, eight carried rows, and 212 naive vers
 
 ## What is counted and what remains unknown
 
-Within one run, carried rows need the same job name, interval, actual runner,
-conclusion and digest of native steps across different attempts. New job IDs,
+Within one run, carried rows need the same job name, actually supplied matrix,
+interval, actual runner, conclusion and digest of native steps across different
+attempts. New job IDs,
 check-run URLs or attempt numbers alone are not execution identity. Native absent
 runner-group sentinels 0/null are equivalent; actual runner changes remain distinct
 and unresolved. Same-attempt multiplicity is retained. Identical intervals in
@@ -68,6 +85,13 @@ duration, platform, matrix axes and retry cause remain unknown; job names/native
 references are retained, not interpreted as a review/coverage contract. There is no
 new retry policy or execution budget in this command. Read-only GET retries do
 not consume native execution attempts.
+
+Identical repeated native IDs across pages are deduplicated. If the same ID
+changes, every version of that ID is excluded from known interval/storage totals,
+and an explicit collection gap remains even if a later page repeats its original
+value. Conflicting jobs cannot establish a complete global upper bound; conflicting
+artifact/cache observations cannot establish a byte total. Raw snapshot pages
+retain the original observations for inspection.
 
 Every interval retains seconds, its rounded-up minute estimate and native
 observations. Selected execution-period seconds are clipped; daily estimates

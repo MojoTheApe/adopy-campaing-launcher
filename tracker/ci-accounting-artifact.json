@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "kind": "standalone-read-only-accounting-artifact",
+  "repository": "MojoTheApe/task-tracker",
+  "revision": "df0154b96410296b50bc9d7a00af7847d9a97700",
+  "release_tag": "v3.5.0",
+  "release_id": 415796891,
+  "source_path": "tracker/ci_accounting.py",
+  "source_git_blob": "eb5bccc5b6abbd3b4860fce63cd894854a6c53ac",
+  "artifact_path": ".workflow/tools/tracker_ci_accounting.py",
+  "sha256": "c9c8d12aa05ced4775956fecae7bfa69bbb945e6a940a5bd7fbd326b68f28aed",
+  "bytes": 27914,
+  "portable_python_minimum": "3.9",
+  "workflow_engine_adopted": false,
+  "project_workflow_engine_unchanged": "e775c624e0323e69ed891926691c3dee6587081a"
+}

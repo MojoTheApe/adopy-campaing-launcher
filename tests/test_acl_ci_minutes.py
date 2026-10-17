@@ -1,8 +1,11 @@
 """Execution accounting and bounded observation coverage; no test uses the network."""
 import copy
 import datetime as dt
+import hashlib
 import json
 from pathlib import Path
+import subprocess
+import sys
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -276,3 +279,148 @@ def test_gh_transport_retries_only_get_and_never_leaks_error(monkeypatch):
     monkeypatch.setattr(minutes.time, "sleep", lambda _: None)
     assert minutes.gh_api("repos/owner/repo") == {"ok": True}
     assert len(calls) == 3 and all(c[2:4] == ["--method", "GET"] for c in calls)
+
+
+@pytest.mark.parametrize("key", ["jobs", "artifacts", "actions_caches"])
+def test_conflicting_duplicate_native_id_cannot_return_on_a_later_page(key):
+    rows = [dict(id=i, size_in_bytes=10) for i in range(1, 101)]
+    conflict = dict(rows[0], size_in_bytes=999)
+    pages = {1: rows, 2: [conflict, *rows[1:]], 3: [rows[0]]}
+    def api(path):
+        page = int(parse_qs(urlsplit(path).query)["page"][0])
+        return {key: copy.deepcopy(pages[page]), "total_count": 100}
+    observed, coverage = minutes.pages(api, "synthetic?per_page=100", key)
+    assert {row["id"] for row in observed} == set(range(2, 101))
+    assert not coverage["complete"]
+    assert "native_row_changed_during_collection" in coverage["gaps"]
+
+
+def test_conflicting_job_pages_never_present_a_complete_consumption_upper_bound():
+    rows = [job(i) for i in range(1, 101)]
+    conflict = dict(rows[0], completed_at="2026-10-15T09:01:02Z")
+    class Conflict(Api):
+        def __call__(self, path):
+            if "/jobs?" in path:
+                page = int(parse_qs(urlsplit(path).query)["page"][0])
+                return {"jobs": copy.deepcopy(rows if page == 1 else [conflict]), "total_count": 100}
+            return super().__call__(path)
+    result = report(Conflict([run()]))
+    assert not result["coverage"]["complete"]
+    assert result["totals"]["counted_intervals"] == 99
+    assert result["estimate_coverage"]["global_upper_seconds"] is None
+    assert all(observation["id"] != 1 for row in result["runs"][0]["intervals"]
+               for observation in row["observations"])
+
+
+def test_conflicting_storage_observations_keep_byte_totals_unknown():
+    rows = [dict(id=i, size_in_bytes=10) for i in range(1, 101)]
+    class Conflict(Api):
+        def __call__(self, path):
+            for suffix, key in (("/actions/artifacts?", "artifacts"), ("/actions/caches?", "actions_caches")):
+                if suffix in path:
+                    page = int(parse_qs(urlsplit(path).query)["page"][0])
+                    return {key: copy.deepcopy(rows if page == 1 else [dict(rows[0], size_in_bytes=999)]),
+                            "total_count": 100}
+            return super().__call__(path)
+    result = minutes.storage_snapshot(Conflict(), REPO)
+    for key in ("artifacts", "caches"):
+        assert not result[key]["coverage"]["complete"]
+        assert result[key]["reported_bytes"] is None
+        assert all(row["id"] != 1 for row in result[key]["entries"])
+
+
+@pytest.mark.parametrize("changed", [{"python": "3.11"}, None, {}])
+def test_changed_native_matrix_is_unresolved_not_carried_execution(changed):
+    first, second = job(), job(2, 2)
+    first["matrix"] = {"python": "3.13"}
+    if changed is not None:
+        second["matrix"] = changed
+    result = report(Api([run()], {1: [first, second]}))
+    assert result["totals"]["carried_forward_rows"] == 0
+    assert result["totals"]["counted_intervals"] == 1
+    assert result["totals"]["unresolved_identity_intervals"] == 1
+    assert not result["coverage"]["complete"]
+    assert result["estimate_coverage"]["global_upper_seconds"] is None
+    assert [row["matrix"] for row in result["runs"][0]["intervals"]] == [first["matrix"], changed]
+
+
+def test_identical_supplied_matrix_with_different_key_order_remains_carried():
+    first, second = job(), job(2, 2)
+    first["matrix"] = {"python": "3.13", "shard": 1}
+    second["matrix"] = {"shard": 1, "python": "3.13"}
+    result = report(Api([run()], {1: [first, second]}))
+    assert result["coverage"]["complete"]
+    assert result["totals"]["carried_forward_rows"] == 1
+    assert result["totals"]["counted_intervals"] == 1
+
+
+def test_accounting_artifact_matches_its_actual_source_blob_and_portable_record():
+    record = json.loads((minutes.ROOT / "tracker/ci-accounting-artifact.json").read_text())
+    raw = (minutes.ROOT / record["artifact_path"]).read_bytes()
+    assert record["revision"] == "df0154b96410296b50bc9d7a00af7847d9a97700"
+    assert hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest() == record["source_git_blob"]
+    assert hashlib.sha256(raw).hexdigest() == record["sha256"] == minutes._PROVIDER_SHA256
+    assert len(raw) == record["bytes"]
+    assert record["workflow_engine_adopted"] is False
+    assert json.loads((minutes.ROOT / "tracker/engine.json").read_text())["revision"] == record["project_workflow_engine_unchanged"]
+
+
+def test_adapter_owned_private_root_cannot_be_overridden_before_transport(tmp_path, monkeypatch, capsys):
+    output = tmp_path / "raw.json"
+    monkeypatch.setattr(minutes, "gh_api", lambda _: pytest.fail("Invalid capture boundary must not perform GETs"))
+    assert minutes.main(["--project-root", str(tmp_path), "--save-snapshot", str(output)]) == 1
+    assert not output.exists()
+    assert "could not be produced" in capsys.readouterr().err
+
+
+def test_import_api_preserves_acl_capture_root(tmp_path, monkeypatch):
+    monkeypatch.setattr(minutes, "ROOT", tmp_path)
+    output = tmp_path / "inside-repository.json"
+    with pytest.raises(ValueError, match="outside this repository"):
+        minutes.SnapshotAPI().save(output, {})
+    assert not output.exists()
+
+
+def _isolated_adapter(tmp_path):
+    root = tmp_path / "consumer"
+    script = root / "scripts/acl_ci_minutes.py"
+    helper = root / ".workflow/tools/tracker_ci_accounting.py"
+    script.parent.mkdir(parents=True)
+    helper.parent.mkdir(parents=True)
+    script.write_bytes((minutes.ROOT / "scripts/acl_ci_minutes.py").read_bytes())
+    helper.write_bytes(minutes._PROVIDER.read_bytes())
+    return script, helper
+
+
+def test_actual_cli_uses_acl_defaults_and_replays_without_private_engine(tmp_path):
+    script, _ = _isolated_adapter(tmp_path)
+    api = minutes.SnapshotAPI(Api([run()], {1: [job()]}))
+    parameters = dict(repo=minutes.DEFAULT_REPO, first="2026-10-15", last="2026-10-15", include_storage=False)
+    expected = minutes.collect(api, **parameters)
+    api.snapshot["parameters"] = parameters
+    snapshot = tmp_path / "synthetic.json"
+    snapshot.write_text(json.dumps(api.snapshot))
+    probe = ("import runpy,sys; namespace=runpy.run_path(sys.argv[1]); "
+             "status=namespace['main'](sys.argv[2:]); "
+             "assert not any(n=='tracker' or n.startswith('tracker.') for n in sys.modules); "
+             "raise SystemExit(status)")
+    for flag in (["--json"], []):
+        result = subprocess.run([sys.executable, "-I", "-c", probe, str(script), "--snapshot", str(snapshot), *flag],
+                                cwd=tmp_path, capture_output=True, text=True)
+        assert result.returncode == 0, result.stderr
+        if flag:
+            assert json.loads(result.stdout) == expected
+        else:
+            assert result.stdout.strip() == minutes.render(expected)
+
+
+def test_changed_artifact_is_refused_before_its_code_can_execute(tmp_path):
+    script, helper = _isolated_adapter(tmp_path)
+    marker = tmp_path / "must-not-exist"
+    with helper.open("a") as output:
+        output.write("\nfrom pathlib import Path\nPath(" + repr(str(marker)) + ").write_text('unsafe')\n")
+    result = subprocess.run([sys.executable, "-I", str(script), "--help"], cwd=tmp_path,
+                            capture_output=True, text=True)
+    assert result.returncode != 0
+    assert "Canonical accounting artifact changed" in result.stderr
+    assert not marker.exists()

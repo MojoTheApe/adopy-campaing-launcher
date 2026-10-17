@@ -8,7 +8,9 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
 ## Components and current behavior
 
 - `scripts/acl_ci_minutes.py`: on-demand native Actions execution accounting with
-  private GET snapshot replay. It distinguishes carried-forward rows from actual
+  private GET snapshot replay, using one exact released standalone canonical
+  accounting artifact with ACL defaults/privacy and no workflow-engine adoption.
+  It distinguishes carried-forward rows from actual
   observed intervals and reports query/period/identity gaps, estimates and current
   storage separately from unknown billing. See [accounting limits and commands](../repository/CI_ACCOUNTING.md).
   It changes no CI trigger, retry budget, admission gate or application runtime.

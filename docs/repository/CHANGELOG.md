@@ -12,6 +12,14 @@ Preserve ACL-1649's original cost target/history, ordinary workflow gates and al
 other actual claims. No retry/dispatch policy or consumer activation is introduced.
 Task: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/968.
 
+Independent source review exposed changing duplicate job IDs hidden by pagination
+and different supplied matrix cells collapsed as carried work. Consume the exact
+already released Tracker3.5.0 standalone accounting artifact instead of retaining
+a second implementation; the ACL adapter keeps only defaults, capture privacy and
+overhead names. Preserve conflicting native observations as explicit unknowns and
+retain same-attempt/native20-row behavior. Artifact provenance and a fixed digest
+protect the copy; this does not repin or activate the e775 workflow engine.
+
 ## ACL-1923 — Verified no-stage activation and published delivery — 2026-10-15 UTC
 
 Complete the original operational outcome after ACL-1924's old-route source,
