@@ -41663,7 +41663,20 @@
     ]
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "871": {
+        "actor": "Worker-1871",
+        "session": "acl1871-sonnet-20261017",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1871-builder-side-tab",
+        "worktree": "C:\\acl-1871",
+        "id": "316509c845c04e7bad6e75a706701e40",
+        "issue": 871,
+        "state": "implementing",
+        "started_at": "2026-10-17T19:10:11+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -46725,11 +46738,15 @@
           {
             "actor": "Worker-FIVE874",
             "session": "flow_five_reviews_acl_worker_01a134f0_20261013"
+          },
+          {
+            "actor": "Worker-1871",
+            "session": "acl1871-sonnet-20261017"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-FIVE874",
-        "coordinator": "Coordinator-FLOW513",
+        "state": "implementing",
+        "worker": "Worker-1871",
+        "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-FIVE874",
           "session": "flow_five_reviews_acl_worker_01a134f0_20261013",
@@ -51002,6 +51019,10 @@
       "Reviewer-WFOC984R7": {
         "session": "wfo_20261017_acl_combined_review",
         "role": "Reviewer"
+      },
+      "Worker-1871": {
+        "session": "acl1871-sonnet-20261017",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -83505,6 +83526,13 @@
         "event": "batch-refreshed",
         "at": "2026-10-17T19:01:14+00:00",
         "batch_id": "6b2f4033a38f4640b5ebdedf056fb0f0"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-17T19:10:11+00:00",
+        "issue": 871,
+        "claim": "316509c845c04e7bad6e75a706701e40",
+        "actor": "Worker-1871"
       }
     ],
     "policy": {
