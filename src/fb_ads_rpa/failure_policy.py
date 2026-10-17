@@ -86,6 +86,13 @@ POLICY: dict[str, tuple[str, str]] = {
         "profile through Multilogin failed; no draft was created - "
         + _profile.MESSAGES[_profile.RESTART_FAILED],
     ),
+    # ACL-1403: Multilogin started the profile, its automation port refused connections.
+    _profile.CDP_REFUSED: (
+        BLOCKING,
+        "Multilogin started the profile but its browser refused the automation connection "
+        "(it may have crashed at start); no draft was created - "
+        + _profile.MESSAGES[_profile.CDP_REFUSED],
+    ),
     # ACL-1320: Meta's new single-screen editor (URL .../simple_create).
     # ACL-1327: the robot walks this editor; the stop is left for a layout it
     # does not recognise (no Ad set / Ad section) and for FB_RPA_SIMPLE_CREATE=0.
@@ -339,6 +346,11 @@ GUIDE: dict[str, tuple[str, str, str]] = {
         "Profile restart failed",
         "The profile stopped answering and could not be restarted, so no draft was created.",
         "Open the profile in Multilogin, check that Ads Manager loads, close it and publish again.",
+    ),
+    _profile.CDP_REFUSED: (
+        "Profile browser did not accept the connection",
+        "Multilogin started the profile, but its browser refused the automation connection, so no draft was created.",
+        "Open the profile in Multilogin, check that it loads, close it and publish again.",
     ),
     "simple_create_layout": (
         "Unknown layout of Meta's single-screen editor",
