@@ -50987,6 +50987,10 @@
       "Coordinator-WFO3C7A5M": {
         "session": "wfo_20261017_acl_three_source_coordinator",
         "role": "Coordinator"
+      },
+      "Reviewer-WFOC984R7": {
+        "session": "wfo_20261017_acl_combined_review",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -53724,7 +53728,21 @@
       }
     },
     "review_queue": [],
-    "review": null,
+    "review": {
+      "id": "95d949908067430fbcb0ec500cd0a0e8",
+      "batch_id": "6b2f4033a38f4640b5ebdedf056fb0f0",
+      "pr": 984,
+      "issues": [
+        968,
+        971,
+        977
+      ],
+      "actor": "Reviewer-WFOC984R7",
+      "session": "wfo_20261017_acl_combined_review",
+      "coordinator": "Coordinator-WFO3C7A5M",
+      "state": "reviewing",
+      "started_at": "2026-10-17T18:15:33+00:00"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -83365,6 +83383,25 @@
         "event": "batch-refreshed",
         "at": "2026-10-17T18:00:13+00:00",
         "batch_id": "6b2f4033a38f4640b5ebdedf056fb0f0"
+      },
+      {
+        "event": "batch-review-acquired",
+        "at": "2026-10-17T18:15:33+00:00",
+        "review": {
+          "id": "95d949908067430fbcb0ec500cd0a0e8",
+          "batch_id": "6b2f4033a38f4640b5ebdedf056fb0f0",
+          "pr": 984,
+          "issues": [
+            968,
+            971,
+            977
+          ],
+          "actor": "Reviewer-WFOC984R7",
+          "session": "wfo_20261017_acl_combined_review",
+          "coordinator": "Coordinator-WFO3C7A5M",
+          "state": "reviewing",
+          "started_at": "2026-10-17T18:15:33+00:00"
+        }
       }
     ],
     "policy": {
@@ -88098,7 +88135,7 @@
       "id": "6b2f4033a38f4640b5ebdedf056fb0f0",
       "actor": "Coordinator-WFO3C7A5M",
       "session": "wfo_20261017_acl_three_source_coordinator",
-      "state": "assembling",
+      "state": "reviewing",
       "issues": [
         968,
         971,
@@ -88244,7 +88281,7 @@
       "branch": "codex/batch-6b2f4033a38f4640b5ebdedf056fb0f0",
       "intake": "6fb79a7d4f8f472a8c1354264e15a641",
       "started_at": "2026-10-17T17:49:03+00:00",
-      "pr": null,
+      "pr": 984,
       "entered_stage": false,
       "history": [
         {
