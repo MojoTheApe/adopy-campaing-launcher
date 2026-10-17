@@ -5768,7 +5768,9 @@ async def api_account_pages(request: Request) -> JSONResponse:
     account = str(form.get("account_label") or "").strip()
     if not account:
         return JSONResponse({"ok": False, "state": "failed", "message": "account is required"}, status_code=400)
-    return JSONResponse(await asyncio.to_thread(read_pages, account))
+    # Без force — ответ из кэша на машине (12 ч): лишний запуск профиля ради списка Страниц не нужен.
+    force = str(form.get("force") or "") == "1"
+    return JSONResponse(await asyncio.to_thread(read_pages, account, force=force))
 
 
 @app.post("/api/page-forms")

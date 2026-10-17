@@ -58,6 +58,7 @@
     paintAccount(key);
     var body = new FormData();
     body.append('account_label', key);
+    if (force) body.append('force', '1');   // «Refresh pages» — мимо кэша сервера
     fetch('/api/account-pages', {method: 'POST', body: body})
       .then(function (r) { return r.json().then(function (data) {
         if (!r.ok || !data.ok) throw new Error(data.message || 'Could not load Facebook Pages. Refresh pages to retry.');
