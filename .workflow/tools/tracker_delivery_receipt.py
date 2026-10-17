@@ -127,10 +127,11 @@ def task_context(request, repo, config, shared, batch, merge_sha):
         if (statuses != merged or {'flag:archived', 'flag:blocked'} & labels or row.get('process')
                 or item.get('state_reason') == 'not_planned' or 'pull_request' in item
                 or effective != rules.fingerprint(config)
-                or (reconciled_scope or member.get('scope')) != rules.task_scope(item)
+                or not rules.scope_matches(item, reconciled_scope or member.get('scope'), config)
                 or execution.get('state') != 'merged' or execution.get('batch_id') != batch['id']
                 or {s.get('merge_sha') for s in row.get('sources', [])} != {merge_sha}):
             raise PendingDelivery('Every frozen task needs its exact reviewed main merge receipt first')
+        rules.require_completion_scope(item, config, row)
         verification = row.get('verification') or {}
         already_verified = already_verified and (row.get('state') == 'verified'
             and verification.get('result') == 'passed'
@@ -318,6 +319,7 @@ def record(document, receipt, run_id, job_id, *, apply=False, request=github):
         if row.get('state') == 'verified':
             raise ValueError('Verified delivery already exists; preserve it instead of replacing evidence')
         row.setdefault('history', []).append({k: copy.deepcopy(v) for k, v in row.items() if k != 'history'})
+        rules.retain_scope(row)
         row.pop('policy_reconciliations', None)
         row.update(policy=document['policy'], state='verified', verification=copy.deepcopy(receipt),
                    verified_at=at, native_delivery=native)

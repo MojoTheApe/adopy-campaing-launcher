@@ -7,6 +7,14 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
 
 ## Components and current behavior
 
+- `scripts/acl_ci_minutes.py`: on-demand native Actions execution accounting with
+  private GET snapshot replay, using one exact released standalone canonical
+  accounting artifact with ACL defaults/privacy and no workflow-engine adoption.
+  It distinguishes carried-forward rows from actual
+  observed intervals and reports query/period/identity gaps, estimates and current
+  storage separately from unknown billing. See [accounting limits and commands](../repository/CI_ACCOUNTING.md).
+  It changes no CI trigger, retry budget, admission gate or application runtime.
+
 - `src/meta_campaign_agent/official_token_verifier.py` and
   `scripts/acl_meta_token_probe.py`: explicit standalone official-token application
   inspection. One fixed versioned Graph GET returns typed, sanitized evidence;
@@ -66,7 +74,7 @@ credentials, library setup or employee installations.
 
 Engineering delivery now has an explicitly prepared Approved/batch policy;
 actual state activation is separately verified under
-[ACL-1566](../repository/BATCH_INTEGRATION.md). Campaign runtime, employee
+[ACL-1566](../repository/BATCH_INTEGRATION_ACL.md). Campaign runtime, employee
 installations and stable-package publication retain their existing boundaries.
 
 [Source child ACL-1875](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/875)
@@ -79,6 +87,16 @@ service publication and idle queue-preserving migration are separate gates in
 [ACL-1874](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/874). Preparation changes no
 campaign runtime or installed employee version.
 
+## CI feedback and admission
+
+The existing `Classify and check project tooling` result supplies bounded tooling
+fast feedback. The [ACL-owned fast/full plan](../repository/VERIFICATION.md#fast-feedback-and-full-verification)
+records its exact commands and omitted coverage. Full applicable product and
+installer admission keeps the separate required aggregates and existing native
+platform/producer rules. Parsed workflow regressions preserve linkage-only PR
+metadata feedback and normal verification on a changed head; no workflow, runtime,
+retry policy or employee installation is changed by documenting this plan.
+
 ## Maintaining this document
 
 Describe implemented behavior and limitations here when changing the system. Preserve
@@ -86,7 +104,7 @@ plans under original specs, label them as plans, and record what/why and ticket/
 links in CHANGELOG.md. Process-only changes belong in ../repository/CHANGELOG.md.
 
 Repository instructions have a separately prepared direct-main route described in
-[PROCESS_INSTRUCTIONS.md](../repository/PROCESS_INSTRUCTIONS.md). Eligibility uses
+[PROCESS_INSTRUCTIONS.md](../repository/PROCESS_INSTRUCTIONS_ACL.md). Eligibility uses
 normal fixed Markdown paths and complete Git proof, with independent review and
 applicable instruction checks. This policy/automation source is not yet active in
 main; it changes no campaign-launching behavior or employee-installed version.

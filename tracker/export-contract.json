@@ -1,0 +1,98 @@
+{
+  "ci_gate": {
+    "actions": [
+      "plan",
+      "gate"
+    ],
+    "contexts": [
+      "auto",
+      "source",
+      "integration",
+      "main",
+      "promotion"
+    ]
+  },
+  "ci_reuse_contexts": {
+    "1": [
+      "source",
+      "integration"
+    ],
+    "2": [
+      "source",
+      "integration",
+      "main"
+    ]
+  },
+  "contracts": {
+    "ci_context": [
+      1
+    ],
+    "ci_evidence_policy": [
+      1,
+      2
+    ],
+    "completion_policy": [
+      1
+    ],
+    "delivery_policy": [
+      1
+    ],
+    "execution_policy": [
+      1,
+      2,
+      3
+    ],
+    "process_instructions": [
+      1
+    ],
+    "task_context_policy": [
+      1
+    ]
+  },
+  "engine": {
+    "repository": "MojoTheApe/task-tracker",
+    "revision": "866baf6dec2bd82d8ca052002cc3dc6f4805e247"
+  },
+  "format_version": 1,
+  "layouts": {
+    "raw": {
+      "scripts/task_tracker.py": "c3de0aaf6b2c66616e497d559f069b3232b5396eff3bd8dc39bb4d2a9f3b4d43",
+      "scripts/tracker_batch_policy.py": "f8ab211b8d4577f0fd5a9ff007593bdc1de566a5f6ffdbf469c4f70630b64cc3",
+      "scripts/tracker_ci_evidence.py": "83fe75a2d73b5052c42b82d1e8c82027be8a35de4d47dc19ae3b0bb88b78cbf2",
+      "scripts/tracker_ci_gate.py": "8496073ab5c4deabacb26255420963d7a531cd4b6cc0541d6b29a6bb1462f307",
+      "scripts/tracker_delivery_policy.py": "94ca15bbbb4cc4c09fd2f470c49fc2ee9551a286321ed7d8d8251df11bf3c597",
+      "scripts/tracker_delivery_receipt.py": "722aeb6e170366c6ff30bdc52d679e9d79841808b90b5df8750a4b6882cb6f36",
+      "scripts/tracker_pr_check.py": "4925f25c8401924d95de71d951472124b4dc583775f89a5e87027221afc7954c",
+      "scripts/tracker_process_instructions.py": "7282c5d77d2e3b5273a80df788ca92906aa0928dfc0207aeefba76e18a839108",
+      "scripts/tracker_task_context.py": "ce8e36ad286416ee69564961a2cdb90d00125cb9142e0dafad942a50c7c6c379"
+    },
+    "separated": {
+      ".workflow/tools/task_tracker.py": "dfc707bd0c2a726531c7478f1ed576c9df20b92388a4f7a0564a868c39e31bba",
+      ".workflow/tools/tracker_batch_policy.py": "f8ab211b8d4577f0fd5a9ff007593bdc1de566a5f6ffdbf469c4f70630b64cc3",
+      ".workflow/tools/tracker_ci_evidence.py": "83fe75a2d73b5052c42b82d1e8c82027be8a35de4d47dc19ae3b0bb88b78cbf2",
+      ".workflow/tools/tracker_ci_gate.py": "8496073ab5c4deabacb26255420963d7a531cd4b6cc0541d6b29a6bb1462f307",
+      ".workflow/tools/tracker_delivery_policy.py": "94ca15bbbb4cc4c09fd2f470c49fc2ee9551a286321ed7d8d8251df11bf3c597",
+      ".workflow/tools/tracker_delivery_receipt.py": "722aeb6e170366c6ff30bdc52d679e9d79841808b90b5df8750a4b6882cb6f36",
+      ".workflow/tools/tracker_pr_check.py": "0f708cc968d777bfed9d2e5f4be50d04145bd97762c1b6ddbed1a6bd32a529c5",
+      ".workflow/tools/tracker_process_instructions.py": "7282c5d77d2e3b5273a80df788ca92906aa0928dfc0207aeefba76e18a839108",
+      ".workflow/tools/tracker_task_context.py": "ce8e36ad286416ee69564961a2cdb90d00125cb9142e0dafad942a50c7c6c379",
+      "scripts/task_tracker.py": "404a87faf60b4daec1965c7ff5bd34e0da11215b53cc6dfa5216c9e205e55887",
+      "scripts/tracker_batch_policy.py": "fcd088bcfc2d282f4a8e6d6daee22dbce6e780c29e484090f00f7cac8020240e",
+      "scripts/tracker_ci_evidence.py": "ace03f4ed111914522948fefaf78ce893b409356b7bb4890e4791d095dfa0650",
+      "scripts/tracker_ci_gate.py": "ebec5a5eb46d147b84536e7153b1fe5e8a8a1e5440e677dd1cd63b65a1d14449",
+      "scripts/tracker_delivery_policy.py": "16b81b3c5026eca16131f0fc69fb7b187b3cc9d9fb456877f97ba5cdf64db78e",
+      "scripts/tracker_delivery_receipt.py": "d744153071b0550df2bb55e794d7abd9c00c41f8244435150ef6cd80d2b78f68",
+      "scripts/tracker_pr_check.py": "3b817af552b4c0a277760523ed569037453f6d933657ea6c6de2b984b11fa76d",
+      "scripts/tracker_process_instructions.py": "4f810aaa6e9544b226ca36faaeca2a5bf78cabf75b96f5d4c7b9e3835bceff27",
+      "scripts/tracker_task_context.py": "d155cdc0275b7e741d90ce29b296e611f0e9b8e3a28d8ba01bb76175399742f6"
+    }
+  },
+  "runtime": {
+    "engine_min_python": "3.11",
+    "portable_min_python": "3.9"
+  },
+  "validator": {
+    "sha256": "83fe75a2d73b5052c42b82d1e8c82027be8a35de4d47dc19ae3b0bb88b78cbf2",
+    "source": "tracker/ci_evidence.py"
+  }
+}
