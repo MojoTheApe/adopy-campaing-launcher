@@ -608,6 +608,9 @@ def check_plan(slots: list[dict[str, Any]], *, account_label: str, country: str)
         if isinstance(exc, ApiPublishError) and exc.code == "account":
             # ACL-1819: кабинет недоступен/не активен — это вердикт правила account_active.
             account_audit = {"rule": "account_active", "status": "error", "detail": error, "ads": []}
+    if error:
+        # TEST9095r: текст отказа в журнал сервера (сравнение с 9095p), не для PR.
+        log.warning("Check plan %s failed: %s", account_label, _tm.scrub(error))
     _record("api_plan_check", not error, diag={"campaigns": len(drafts), "results": len(results)},
             duration_s=round(time.monotonic() - started, 1))
     return {"account": account_label, "results": results, "dry_run": True, "error": error,
