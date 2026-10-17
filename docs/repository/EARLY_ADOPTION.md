@@ -63,6 +63,16 @@ reports and raw captures private. Record only safe outcome references on the boa
 
 ## Sequential reviewed selection and activation
 
+**STOP optional selections at this source's pinned Tracker3.4.0 / `866baf6`.**
+That revision lacks the selection-package delivery bridge: a newly selected
+task-context or completion contract can prevent its own authorized package
+continuation before activation. Its maintenance/adoption idle checks also omit
+pending target delivery. Before either optional selection, a separate reviewed
+support upgrade must actually be published, integrated and pinned with compatible
+selection-delivery support. Verify the real reader, every writer and recovery
+paths against that published revision. This source supplies no engine fix,
+selection or activation; a candidate or a newer source pin alone is insufficient.
+
 Do not execute adoption commands as part of this support source. Actual starts
 wait for all compatible writers and a genuine coordinated window. A maintenance
 reservation prevents new admissions; it does not release existing owners or make
@@ -73,25 +83,40 @@ state, reset stage or mass-close retained sources.
 
 1. Integrate this independently reviewed support source through ACL's existing
    normal source/batch/main route. Preserve the ordinary before measurement.
-   Verify all writers above and actual published reader; record exact revisions.
+   Complete the separate compatible-support prerequisite above before selecting
+   an optional policy. Verify all writers above and actual published reader;
+   record exact revisions and recovery proof.
 2. Make a separate reviewed configuration change selecting only task context1 in
    descriptor and config. Keep completion absent. Master1.2.0's upgrade command
    has no task-context flag: explicitly review the matching objects against the
    canonical contract and preserve a truthful pristine template ancestry.
-   Source selection is not activation. Publish the real official main config.
-3. With a genuine Maintainer identity, preview/reserve the maintained interval;
+   Source selection is not activation. Integrate this selection through its genuine
+   frozen batch and full applicable native checks; publish the real official main
+   config. Complete its authorized exact-target package publication, installation,
+   update and recovery verification and durable delivery receipt **before** step3.
+   Explicitly reconcile pending delivery for that exact selection target; pending,
+   failed or unknown delivery stops here without reserving maintenance or adopting.
+3. Only after that verified selection delivery and exact-target drain, with a
+   genuine Maintainer identity, preview/reserve the maintained interval;
    retain the returned claim and private report. Inspect `maintenance show`, drain
    existing owners through their own supported operations, then preview/apply
    `task-context adopt` with that exact actor/session/claim/report. Require the
    actual current-main config and idle state; stop on changed ownership or CAS.
+   A legacy `maintenance show` idle result cannot replace the explicit pending
+   delivery check or the completed exact-target package receipt.
    Verify retained queue/approvals/history/delivery, protocol4 and fresh board,
    then resume that same interval. Do not run `execution migrate` again just to
    change a compatible pin on an already activated execution-v3 project.
 4. Only after the first activation is genuinely complete, make the next separate
    reviewed selection of completion1, preserving already active task context.
    `standard.py upgrade --completion-policy` can preview this source change.
-   Integrate through its actual supported route, then use a new owned interval,
-   inspected `completion adopt` preview/apply and verified resume. Protocol5
+   Again integrate this separate selection through its genuine frozen batch and
+   full applicable native checks to official main. Complete its own authorized
+   exact-target package publication, installation, update and recovery verification
+   and durable delivery receipt, and explicitly drain pending target delivery
+   **before** reserving a new owned maintenance interval. Pending, failed or unknown
+   delivery stops this second cutover too; old idle output is insufficient.
+   Only then use inspected `completion adopt` preview/apply and verified resume. Protocol5
    retains its underlying task-context/execution state. Never leave both new
    policies selected but unactivated: each adoption requires the other selected
    contract already to match durable state and refuses an incompatible mixture.
