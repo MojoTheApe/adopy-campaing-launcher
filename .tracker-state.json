@@ -90159,7 +90159,51 @@
         "session": "root_tt142_implementation",
         "coordinator": "Coordinator-WFO3C7A5M",
         "started_at": "2026-10-17T20:22:00+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 987,
+          "pr": 988,
+          "branch": "codex/acl-1987-selection-support",
+          "head_sha": "8fc4021ae3c486c81cdc45ea76ad151930124870",
+          "base_sha": "f86ca81eda7fada409bb672f694ed016a08a586c",
+          "main_sha": "f86ca81eda7fada409bb672f694ed016a08a586c",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "f0c16cf100ff857252602f188c8566c4b162b291e4b59f3e07a60754b09d8a17",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-TT142I",
+            "implementer": "Worker-WFO05CI",
+            "head_sha": "8fc4021ae3c486c81cdc45ea76ad151930124870",
+            "base_sha": "f86ca81eda7fada409bb672f694ed016a08a586c",
+            "tree_sha": "a3f76d61cb857a5e0b5b5a9537e2a20edb8c4a11",
+            "execution_lane": "740c221588c3408fbe92b82ed363b105",
+            "review_session": "root_tt142_implementation",
+            "report": "Private independent ACL-1987 consumer Source review SHA256 e42462a9cfa09d0c6a99b68f02c035eb790864112dcb9a4a03be139cbcee7148",
+            "main_sha": "f86ca81eda7fada409bb672f694ed016a08a586c",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              987
+            ],
+            "recorded_at": "2026-10-17T20:42:12+00:00",
+            "issue_scopes": {
+              "987": "f0c16cf100ff857252602f188c8566c4b162b291e4b59f3e07a60754b09d8a17"
+            }
+          },
+          "lane": {
+            "id": "740c221588c3408fbe92b82ed363b105",
+            "pr": 988,
+            "issues": [
+              987
+            ],
+            "actor": "Reviewer-TT142I",
+            "session": "root_tt142_implementation",
+            "coordinator": "Coordinator-WFO3C7A5M",
+            "started_at": "2026-10-17T20:22:00+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-17T20:42:49+00:00"
+        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
