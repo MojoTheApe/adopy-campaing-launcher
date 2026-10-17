@@ -41738,9 +41738,11 @@
         "worktree": "C:\\acl-1287",
         "id": "56d2e51944d441de953514b2199d4734",
         "issue": 287,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-17T07:15:11+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 964,
+        "report": "## Implementation report ACL-1287\n- Finding: country_split.py reasons are already English on work/main (ACL-1462) with an existing guard test. account_spend.py has no Russian in error/how; remaining Russian literals are JS comments and log.error messages (not on screen).\n- Change: added tests/test_account_spend_reasons_are_english.py (AST guard, plus two self-tests proving it catches Russian reasons and allows logger/docstring).\n- Tests run: test_account_spend_reasons_are_english.py, test_country_split_reasons_are_english.py: 6 passed.\n- Not run: full suite (CI only). No browser test added: nothing was translated.\n- PR: #964"
       },
       "681": {
         "actor": "Worker-W1681A",
