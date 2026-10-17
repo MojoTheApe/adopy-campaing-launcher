@@ -41675,6 +41675,18 @@
         "state": "implementing",
         "started_at": "2026-10-17T19:10:11+00:00",
         "from_status": "status:todo"
+      },
+      "864": {
+        "actor": "Worker-ACL1864",
+        "session": "acl1864-s1",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1864-stats-header-rows",
+        "worktree": "C:\\acl-1864",
+        "id": "e16c25b3617543da822454b612c93f0a",
+        "issue": 864,
+        "state": "implementing",
+        "started_at": "2026-10-17T19:11:22+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -46578,11 +46590,15 @@
           {
             "actor": "Worker-SR1012",
             "session": "connection_sr1012_worker"
+          },
+          {
+            "actor": "Worker-ACL1864",
+            "session": "acl1864-s1"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-SR1012",
-        "coordinator": "Coordinator-CR1012",
+        "state": "implementing",
+        "worker": "Worker-ACL1864",
+        "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-SR1012",
           "session": "connection_sr1012_worker",
@@ -51022,6 +51038,10 @@
       },
       "Worker-1871": {
         "session": "acl1871-sonnet-20261017",
+        "role": "Worker"
+      },
+      "Worker-ACL1864": {
+        "session": "acl1864-s1",
         "role": "Worker"
       }
     },
@@ -83533,6 +83553,13 @@
         "issue": 871,
         "claim": "316509c845c04e7bad6e75a706701e40",
         "actor": "Worker-1871"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-17T19:11:22+00:00",
+        "issue": 864,
+        "claim": "e16c25b3617543da822454b612c93f0a",
+        "actor": "Worker-ACL1864"
       }
     ],
     "policy": {
