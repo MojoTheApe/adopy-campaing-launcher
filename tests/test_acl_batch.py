@@ -3,10 +3,27 @@ import copy
 import json
 from pathlib import Path
 import subprocess
+import shutil
 
 import pytest
 
 from scripts import acl_batch
+
+
+def test_batch_state_reader_keeps_acl_preflight_before_shared_client(tmp_path, monkeypatch, capfd):
+    source = Path(__file__).resolve().parents[1]
+    for name in ('scripts/acl_task_tracker.py', 'scripts/task_tracker.py',
+                 'scripts/acl_adoption.py', '.workflow/tools/task_tracker.py'):
+        target = tmp_path / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source / name, target)
+    (tmp_path / '.workflow/adoption.json').write_text(json.dumps({'schema_version': 1, 'state': 'prepared'}))
+    monkeypatch.setenv('PYTHONDONTWRITEBYTECODE', '1')
+    before = sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob('*'))
+    with pytest.raises(subprocess.CalledProcessError):
+        acl_batch.execution(tmp_path)
+    assert 'not active' in capfd.readouterr().err
+    assert sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob('*')) == before
 
 
 @pytest.fixture(params=[2, 3], ids=["v2", "v3-five-reviews"])

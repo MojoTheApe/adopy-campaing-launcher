@@ -31,7 +31,9 @@ def fingerprint(config):
     return hashlib.sha256(json.dumps(policy(config), sort_keys=True).encode()).hexdigest()
 
 
-def scope(issue):
+def scope(issue, config=None):
+    if config and 'task_context_policy' in config:
+        return rules.task_scope(issue, config)
     labels = sorted(x['name'] for x in issue['labels'] if not x['name'].startswith(('status:', 'priority:', 'release:')))
     return hashlib.sha256(json.dumps({k: issue.get(k) for k in ('number', 'title', 'body')}
                                    | {'labels': labels}, sort_keys=True).encode()).hexdigest()
@@ -236,7 +238,7 @@ def admit(request, config, pr, numbers, shared):
             actual = [stages.get(x['name'][7:]) for x in issue['labels'] if x['name'].startswith('status:')]
             if actual != ['merged']:
                 raise ValueError('Old process merge cannot complete reopened legacy work')
-        if review.get('issue_scopes', {}).get(str(n)) != scope(issue):
+        if not rules.scope_matches(issue, review.get('issue_scopes', {}).get(str(n)), config):
             raise ValueError('Process task scope changed after independent review')
     current = request(root + '/git/ref/heads/' + quote(config['project']['base_branch'], safe=''))['object']['sha']
     if pr.get('merged'):

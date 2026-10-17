@@ -50,6 +50,8 @@ def check(request, config, pr_number, *, allow_transition=False, admission=False
     modules={m['id'] for m in config['modules']}
     for n in numbers:
         issue=request(root+f'/issues/{n}')
+        if 'task_context_policy' in config:
+            delivery_policy.context_module().requirements(issue.get('body'))
         if 'pull_request' in issue: raise ValueError(f'#{n} is a PR, not a tracked task')
         labels={l['name'] for l in issue['labels']}
         status=[s[7:] for s in labels if s.startswith('status:')]

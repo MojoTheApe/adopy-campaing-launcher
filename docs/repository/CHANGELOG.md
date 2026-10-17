@@ -1,5 +1,25 @@
 # Repository process history
 
+## ACL-1977 — Published early-adoption support source — 2026-10-17
+
+Select published Master1.2.0 `864ca7a5814e703dd6e61207362d24cbc26dc9ad` and
+Tracker3.4.0 `866baf6dec2bd82d8ca052002cc3dc6f4805e247` through an audited three-way
+upgrade from the original44-file pristine base. Preserve actual execution-v3
+5/5/5, no Stage, process1, all identities/history, exact-tree collector and full
+platform/installer/package controls. Optional task-context/completion/CI/retry
+selections remain absent; source support does not activate them or complete Task06.
+
+All18 shared separated bytes and manifest remain canonical. ACL's historical
+prepared-bootstrap preflight moves to `scripts/acl_task_tracker.py`; operator
+commands use that adapter, while canonical helper entry points are unchanged
+upstream exports and do not claim the ACL preflight. Retired writers and original
+marker/evidence validation remain unchanged. Original local contract adaptations
+are preserved byte-for-byte in `_ACL`/`_ACL_HISTORY` documents; exact shared
+references occupy canonical paths. System knowledge changes only two relocated
+history links; runtime/product/application bytes remain untouched. See
+[the sequential adoption plan](EARLY_ADOPTION.md) for reader/writer, owned idle
+cutover/recovery and the full remaining pilot obligations.
+
 ## ACL-1923 — Verified no-stage activation and published delivery — 2026-10-15 UTC
 
 Complete the original operational outcome after ACL-1924's old-route source,
@@ -26,6 +46,26 @@ procedure. This final three-file repository-instruction handoff preserves all
 original parent requirements and dated source/cutover history. Shared Master and
 Tracker changes are already merged and verified; no further contract, product,
 runtime or installer change belongs to this factual handoff.
+
+## ACL-1968 — correct on-demand CI execution accounting
+
+Repair the existing report's carried-forward double counting and distinguish
+skipped work from proven reuse. Add explicit creation/execution periods, capped
+history partition/completeness, raw native identity, private deterministic replay
+and separate current storage facts. Report rounded interval estimates and unknown
+billing without a Windows money multiplier. The retained native case is 20 rows,
+12 intervals and 212 versus 112 estimated minutes, not an invoice or measured saving.
+Preserve ACL-1649's original cost target/history, ordinary workflow gates and all
+other actual claims. No retry/dispatch policy or consumer activation is introduced.
+Task: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/968.
+
+Independent source review exposed changing duplicate job IDs hidden by pagination
+and different supplied matrix cells collapsed as carried work. Consume the exact
+already released Tracker3.5.0 standalone accounting artifact instead of retaining
+a second implementation; the ACL adapter keeps only defaults, capture privacy and
+overhead names. Preserve conflicting native observations as explicit unknowns and
+retain same-attempt/native20-row behavior. Artifact provenance and a fixed digest
+protect the copy; this does not repin or activate the e775 workflow engine.
 
 ## ACL-1924 / ACL-1923 — Temporary no-stage and authorized completion — 2026-10-15
 
@@ -171,7 +211,7 @@ This source adoption changes automation and policy and therefore uses ordinary
 stage delivery. It does not promote ACL-1747, deploy the shared Tracker, migrate
 state, release an employee package or complete parent ACL-1566. Preserve the nine
 queued Reviews, six modules, 71 aliases, +1000 namespace, 74-task historical manifest
-and delivery fingerprint. See [PROCESS_INSTRUCTIONS.md](PROCESS_INSTRUCTIONS.md).
+and delivery fingerprint. See [PROCESS_INSTRUCTIONS.md](PROCESS_INSTRUCTIONS_ACL.md).
 
 ## ACL-1747 — Prepare independent approval and five-task batches
 
@@ -194,7 +234,7 @@ author fixes, fresh approvals/review/reverification. No stage reset or fake auth
 Source integration and actual activation are separate. Parent ACL-1566 retains
 supported queue-preserving migration, fresh shared-board proof and a real two-task
 batch. The nine existing Review handoffs and all source PRs/authors remain intact.
-See [BATCH_INTEGRATION.md](BATCH_INTEGRATION.md) for the old-v1 source cutover,
+See [BATCH_INTEGRATION.md](BATCH_INTEGRATION_ACL.md) for the old-v1 source cutover,
 large-state TT-73 operator support and explicit live rollout prerequisites.
 No stable release, employee update or live Multilogin/advertising action is claimed.
 
@@ -211,7 +251,7 @@ implementation is MR-11/TT-67 and needs no further change for this report.
 
 The parent uses a real Worker claim and an independent Reviewer lane to integrate
 this activation report. Its final handoff remains required before ordinary intake
-resumes. See [actual evidence and limitations](PARALLEL_EXECUTION.md#actual-activation--2026-09-29)
+resumes. See [actual evidence and limitations](PARALLEL_EXECUTION_ACL.md#actual-activation--2026-09-29)
 and [ACL-1382](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/382).
 This is repository-process activation; application/runtime behavior, stable package
 publication and employee installation are unchanged.

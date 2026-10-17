@@ -107,15 +107,139 @@ def accepted_scope_digest(issue):
     return hashlib.sha256(json.dumps(fields, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
-def task_scope(issue):
+def context_module():
+    try:
+        from . import task_context
+    except ImportError:
+        import tracker_task_context as task_context
+    return task_context
+
+
+def task_scope(issue, config=None):
     labels = sorted(x['name'] if isinstance(x, dict) else x for x in issue.get('labels', [])
                     if not (x['name'] if isinstance(x, dict) else x).startswith(('status:', 'priority:', 'release:')))
-    return hashlib.sha256(json.dumps({k: issue.get(k) for k in ('number', 'title', 'body')}
-                                   | {'labels': labels}, sort_keys=True).encode()).hexdigest()
+    fields = {k: issue.get(k) for k in ('number', 'title', 'body')}
+    modern = config is not None and context_module().policy(config)
+    if modern:
+        fields['body'] = context_module().requirements(issue.get('body'))
+    return ('v2:' if modern else '') + hashlib.sha256(json.dumps(fields | {'labels': labels}, sort_keys=True).encode()).hexdigest()
 
+
+def scope_matches(issue, expected, config):
+    if isinstance(expected, str) and expected.startswith('v2:'):
+        return context_module().scope_matches(issue, expected, config)
+    return task_scope(issue) == expected
+
+
+
+def completion_policy(config):
+    if 'completion_policy' not in config:
+        return None
+    value = config['completion_policy']
+    if (not isinstance(value, dict) or set(value) != {'schema_version'}
+            or type(value.get('schema_version')) is not int or value['schema_version'] != 1):
+        raise ValueError('Invalid completion_policy')
+    if not policy(config):
+        raise ValueError('Scoped completion requires the independent-review delivery policy')
+    return value
+
+
+def completion_adoption_order(state, config):
+    """Existing projects select and activate the two independent policies in order."""
+    if (completion_policy(config) and not state.get('completion')
+            and 'task_context_policy' in config
+            and state.get('task_context', {}).get('policy') != context_module().policy(config)):
+        raise ValueError('Select and activate task_context_policy and completion_policy in separate reviewed configs: '
+                         'activate task context first, then select completion, or activate completion alone first, '
+                         'then select task context. Do not select both unactivated policies together.')
+
+
+def completion_state(state, config):
+    """Reader/writer fence: selecting a config never activates private state."""
+    completion_adoption_order(state, config)
+    selected = completion_policy(config)
+    activation = state.get('completion', {})
+    if (activation.get('policy') != selected
+            or selected and activation.get('repository') != config['project']['repository']):
+        raise ValueError('Completion policy changed; use owned idle completion adopt after compatible publication')
+    return bool(selected)
+
+
+def completion_assessment(issue, config, receipt, *, activated=None):
+    """Shared logical outcome for full receipts and their allowlisted projection.
+
+    Unknown historical scope is conservative only after explicit project adoption.
+    Scope is never inferred from the Issue being assessed.
+    """
+    projected = summary(receipt)
+    selected = bool(completion_policy(config))
+    active = selected if activated is None else activated
+    labels = {x['name'] if isinstance(x, dict) else x for x in issue.get('labels', [])}
+    stages = {s if isinstance(s, str) else s['id']: s if isinstance(s, str) else s['phase'] for s in config['workflow']}
+    phases = [stages.get(x[7:], 'merged' if x == 'status:shipped' else None) for x in labels if x.startswith('status:')]
+    eligible = (phases == ['merged'] and 'flag:archived' not in labels and not (active and 'flag:blocked' in labels)
+                and issue.get('state_reason') != 'not_planned' and 'pull_request' not in issue)
+    historical = config.get('historical_completion') or {}
+    accepted = historical.get('tasks', {}).get(str(issue['number']), {})
+    project = config['project']
+    identity = project.get('legacy_task_ids', {}).get(str(issue['number']),
+                f"{project['id_prefix']}-{issue['number'] + project.get('id_offset', 0)}")
+    history = bool(not receipt and historical.get('policy') == fingerprint(config)
+                   and accepted.get('id') == identity
+                   and accepted.get('issue_sha256') == accepted_scope_digest(issue))
+    required = policy(config)['completion'] != 'reviewed-merge'
+    current = projected.get('policy') == fingerprint(config)
+    expected = (projected.get('scope') or projected.get('reconciled_scope')) if active else projected.get('reconciled_scope')
+    reason = 'pending'
+    if selected and not active:
+        reason, current = 'unverified', False
+    elif (active and (not expected or not projected.get('scope_provenance'))
+          and (receipt or phases == ['merged'] and 'flag:archived' not in labels
+               and issue.get('state_reason') != 'not_planned')):
+        reason, current = 'unverified', False
+    elif expected:
+        try:
+            if not scope_matches(issue, expected, config):
+                reason, current = 'requirements-changed', False
+        except ValueError:
+            reason, current = 'requirements-changed', False
+    if 'task_context_policy' in config:
+        try:
+            context_module().requirements(issue.get('body'))
+        except ValueError:
+            reason, current = ('requirements-changed' if active else 'pending'), False
+    if history and (not selected or active):
+        return dict(complete=eligible and 'flag:blocked' not in labels, delivery_state='historical', delivery_required=required,
+                    scope_current=True, admitted=False, verified=False)
+    admitted = bool(current and projected.get('admitted'))
+    verified = bool(current and projected.get('verified'))
+    required = required and not (current and (projected.get('non_code') or projected.get('process') and verified))
+    if current:
+        reason = 'not-required' if admitted and not required else projected.get('state', 'pending')
+    return dict(complete=bool(eligible and admitted and (not required or verified)),
+                delivery_state=reason, delivery_required=required,
+                scope_current=current, admitted=admitted, verified=verified)
+
+
+def require_completion_scope(issue, config, receipt):
+    result = completion_assessment(issue, config, receipt)
+    if not result['scope_current'] or not result['admitted']:
+        raise ValueError('Task requirements/policy changed or accepted scope is unverified; review its current scope')
+    return result
+
+
+def retain_scope(receipt):
+    """Materialize audited scope before removing reconciliation-only proof."""
+    projected = summary(receipt)
+    if projected.get('scope'):
+        receipt.setdefault('scope', projected['scope'])
+    if projected.get('scope_provenance'):
+        receipt.setdefault('scope_provenance', projected['scope_provenance'])
 
 def receipt_digest(receipt):
-    original = {k: v for k, v in receipt.items() if k not in ('history', 'policy_reconciliations')}
+    # Scope recovery is auxiliary original-proof metadata. Adding it during
+    # activation must not invalidate an already audited receipt fingerprint.
+    original = {k: v for k, v in receipt.items() if k not in ('history', 'policy_reconciliations', 'scope', 'scope_provenance')}
     return hashlib.sha256(json.dumps(original, sort_keys=True).encode()).hexdigest()
 
 
@@ -126,7 +250,7 @@ def reconciled_policy(receipt):
         if (not isinstance(row, dict) or row.get('from_policy') != current
                 or row.get('receipt_sha256') != receipt_digest(receipt)
                 or row.get('sources') != receipt.get('sources', [])
-                or any(not isinstance(row.get(k), str) or not re.fullmatch(r'[0-9a-f]{64}', row[k])
+                or any(not isinstance(row.get(k), str) or not re.fullmatch(r'(?:v2:)?[0-9a-f]{64}' if k == 'scope' else r'[0-9a-f]{64}', row[k])
                        for k in ('from_policy', 'to_policy', 'scope'))
                 or not row.get('report') or not row.get('previous_revision')):
             return receipt.get('policy'), None
@@ -174,6 +298,10 @@ def pending_delivery(shared, config):
 
 
 def execution_state(state, config):
+    completion_state(state, config)
+    context = context_module().policy(config) if 'task_context_policy' in config else None
+    if state.get('task_context', {}).get('policy') != context:
+        raise ValueError('Task context policy changed; use owned idle task-context adopt, never edit shared state')
     value = execution_policy(config)
     if not value:
         if state_schema(state) == 2:
@@ -261,15 +389,37 @@ def state_schema(state):
     """
     version = state.get('schema_version')
     held = state.get('maintenance')
-    if type(version) is not int or version not in (1, 2, 3):
+    if type(version) is not int or version not in (1, 2, 3, 4, 5):
         raise ValueError('Unsupported shared state protocol')
+    completion = state.get('completion')
+    completion_version = version == 5 or version == 3 and isinstance(held, dict) and held.get('base_schema_version') == 5
+    if completion_version:
+        if (not isinstance(completion, dict) or completion.get('policy') != {'schema_version': 1}
+                or type(completion['policy'].get('schema_version')) is not int
+                or type(completion.get('base_schema_version')) is not int or completion['base_schema_version'] not in (1, 2, 4)
+                or not isinstance(completion.get('repository'), str) or not re.fullmatch(r'[\w.-]+/[\w.-]+', completion['repository'])
+                or not isinstance(completion.get('history'), list) or not completion['history']):
+            raise ValueError('Invalid scoped completion state protocol')
+    elif completion is not None:
+        raise ValueError('Completion requires the fenced shared state protocol')
+    underlying = completion['base_schema_version'] if completion_version else version
+    context = state.get('task_context')
+    context_version = (underlying == 4 or version == 3 and isinstance(held, dict) and held.get('base_schema_version') == 4)
+    if context_version:
+        if (not isinstance(context, dict) or context.get('policy') != {'schema_version': 1}
+                or type(context['policy'].get('schema_version')) is not int
+                or type(context.get('base_schema_version')) is not int or context['base_schema_version'] != 2
+                or not isinstance(context.get('readiness'), dict) or not isinstance(context.get('history'), list)):
+            raise ValueError('Invalid task context state protocol')
+    elif context is not None:
+        raise ValueError('Task context requires the fenced shared state protocol')
     if version != 3:
         if held is not None:
             raise ValueError('Maintenance requires the fenced shared state protocol')
-        return version
+        return 2 if underlying == 4 else underlying
     if (not isinstance(held, dict) or held.get('schema_version') != 1
             or type(held.get('schema_version')) is not int or held.get('state') != 'held'
-            or type(held.get('base_schema_version')) is not int or held['base_schema_version'] not in (1, 2)
+            or type(held.get('base_schema_version')) is not int or held['base_schema_version'] not in (1, 2, 4, 5)
             or not isinstance(held.get('id'), str) or not re.fullmatch(r'[0-9a-f]{32}', held['id'])
             or not isinstance(held.get('actor'), str) or not re.fullmatch(r'Maintainer-[A-Za-z0-9]{4,32}', held['actor'])
             or not isinstance(held.get('session'), str) or not re.fullmatch(r'[A-Za-z0-9_-]{4,100}', held['session'])
@@ -283,7 +433,7 @@ def state_schema(state):
         datetime.datetime.fromisoformat(held['reserved_at'].replace('Z', '+00:00'))
     except ValueError:
         raise ValueError('Invalid maintenance reservation timestamp') from None
-    return held['base_schema_version']
+    return (2 if underlying == 4 else underlying) if completion_version else 2 if held['base_schema_version'] == 4 else held['base_schema_version']
 
 
 def admission_open(state):
@@ -294,6 +444,17 @@ def admission_open(state):
 
 def set_state_schema(state, version):
     state_schema(state)
+    if state.get('completion'):
+        retained = state['completion']['base_schema_version']
+        if retained == 4 and version != 2:
+            raise ValueError('Task context retains execution schema; no implicit downgrade')
+        if retained != 4:
+            state['completion']['base_schema_version'] = version
+        return
+    if state.get('task_context'):
+        if version != 2:
+            raise ValueError('Task context retains execution schema; no implicit downgrade')
+        return
     if state.get('maintenance'):
         state['maintenance']['base_schema_version'] = version
     else:
@@ -409,8 +570,11 @@ def merge_base(request, root, pr):
 
 def summary(receipt):
     """Minimal completion projection, excluding reports, environment and history."""
-    if set(receipt) <= {'policy', 'state', 'admitted', 'verified', 'non_code', 'process', 'reconciled_scope'}:
-        return receipt
+    if set(receipt) <= {'policy', 'state', 'admitted', 'verified', 'non_code', 'process', 'reconciled_scope', 'scope', 'scope_provenance'}:
+        result = dict(receipt)
+        if isinstance(result.get('scope_provenance'), dict):
+            result['scope_provenance'] = hashlib.sha256(json.dumps(result['scope_provenance'], sort_keys=True).encode()).hexdigest()
+        return result
     non_code = bool(receipt.get('non_code') and receipt.get('report'))
     admitted = bool(receipt.get('sources') or non_code)
     result = {'policy': receipt.get('policy'), 'state': receipt.get('state', 'pending'),
@@ -429,9 +593,16 @@ def summary(receipt):
         result['verified'] = result['verified'] and bool(valid)
         if valid:
             result['process'] = True
+    for key in ('scope', 'scope_provenance'):
+        if receipt.get(key):
+            result[key] = (hashlib.sha256(json.dumps(receipt[key], sort_keys=True).encode()).hexdigest()
+                           if key == 'scope_provenance' and isinstance(receipt[key], dict) else receipt[key])
     effective, scope = reconciled_policy(receipt)
     if scope:
         result.update(policy=effective, reconciled_scope=scope)
+        if not result.get('scope'):
+            result['scope'] = scope
+            # A historical staging audit alone is not an original scope review.
     return result
 
 
@@ -544,6 +715,12 @@ def admit(request, config, pr, numbers):
         page += 1
         if page > 100:
             raise ValueError('Too many commits to verify safely')
+    if completion_policy(config):
+        reviewed = (state.get('reviews', {}).get(str(receipt.get('pr')), {})
+                    if direction == 'promotion' else receipt)
+        for n in numbers:
+            if not scope_matches(request(root + f'/issues/{n}'), reviewed.get('issue_scopes', {}).get(str(n)), config):
+                raise ValueError('Reviewed task requirements changed; obtain fresh independent review')
     checked(request, root, pr['head']['sha'], value['required_checks'])
     return {'tree_sha': content, 'policy': fingerprint(config), 'route': direction,
             'main_sha': main_ref['object']['sha'] if direction == 'stage' else None}
@@ -573,15 +750,6 @@ def dependencies_ready(request, config, numbers, shared):
             if not policy(config):
                 continue
             receipt = shared.get('delivery_workflow', {}).get('tasks', {}).get(str(n), {})
-            historical = config.get('historical_completion', {})
-            accepted = historical.get('tasks', {}).get(str(n), {})
-            expected_id = project.get('legacy_task_ids', {}).get(str(n), f"{project['id_prefix']}-{n + project.get('id_offset', 0)}")
-            if (not receipt and historical.get('policy') == fingerprint(config)
-                    and accepted.get('id') == expected_id and accepted.get('issue_sha256') == accepted_scope_digest(dependency)):
-                continue
-            projected = summary(receipt)
-            if (projected.get('policy') != fingerprint(config) or not projected.get('admitted')
-                    or projected.get('reconciled_scope', task_scope(dependency)) != task_scope(dependency)
-                    or policy(config)['completion'] != 'reviewed-merge'
-                    and not projected.get('non_code') and not projected.get('verified')):
+            active = completion_state(shared, config)
+            if not completion_assessment(dependency, config, receipt, activated=active)['complete']:
                 raise ValueError(f'#{number}: dependency delivery is unfinished: {identifier}')
