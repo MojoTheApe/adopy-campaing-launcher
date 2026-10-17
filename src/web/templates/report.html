@@ -1944,6 +1944,7 @@
     .amap-note-pop .amap-note-state { color: var(--muted); }
     .amap-note-pop .amap-note-state.bad { color: var(--danger); }
     .amap-note-toast { position: fixed; left: 1rem; bottom: 1rem; z-index: 1000; font-size: var(--adopy-text-table); background: var(--bg-elev); border: 1px solid var(--field-border); border-radius: var(--radius-sm); padding: 0.35rem 0.6rem; box-shadow: var(--adopy-shadow-popover); }
+    .amap-note-aside { position: fixed; left: 1rem; bottom: 3.2rem; z-index: 1000; max-width: 32rem; overflow-wrap: anywhere; font-size: var(--adopy-text-table); background: var(--bg-elev); border: 1px solid var(--danger); border-radius: var(--radius-sm); padding: 0.35rem 0.6rem; box-shadow: var(--adopy-shadow-popover); }
     .amap .amap-x {
       background: none; border: 1px solid var(--field-border);
       color: var(--muted); border-radius: var(--radius-sm);
@@ -10584,13 +10585,22 @@ async function amapSend(body, msgEl) {
     });
   }
 
+  // Файл заметок был испорчен и отложен в сторону: говорим об этом на странице.
+  var aside = null, asideTimer = null;
+  function notifyAside(msg) {
+    if (!aside) { aside = document.createElement('div'); aside.className = 'amap-note-aside'; aside.setAttribute('role', 'alert'); document.body.appendChild(aside); }
+    aside.textContent = msg; aside.hidden = false;
+    clearTimeout(asideTimer);
+    asideTimer = setTimeout(function () { aside.hidden = true; }, 15000);
+  }
+
   function post(kind, label, text, ifEmpty) {
     var body = { text: text }; body[kind] = label;
     if (ifEmpty) body.if_empty = true;
     return fetch('/api/account-notes', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
     }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok && j.ok, j: j, status: r.status }; }); })
-      .then(function (res) { if (!res.ok) { var e = new Error((res.j && res.j.error) || 'failed'); e.status = res.status; throw e; } return res.j; });
+      .then(function (res) { if (!res.ok) { var e = new Error((res.j && res.j.error) || 'failed'); e.status = res.status; throw e; } if (res.j && res.j.warning) notifyAside(res.j.warning); return res.j; });
   }
 
   function build() {
