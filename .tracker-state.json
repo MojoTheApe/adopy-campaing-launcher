@@ -46378,7 +46378,7 @@
             "session": "architecture_audit_n7q4_20261013"
           }
         ],
-        "state": "stopped",
+        "state": "archiving",
         "worker": "Worker-N7Q4",
         "coordinator": "Coordinator-CR1012",
         "handoff": {
