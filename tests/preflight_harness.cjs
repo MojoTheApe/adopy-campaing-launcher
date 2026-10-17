@@ -5,6 +5,8 @@
 //       -> {имя: [вердикты cbPreflight.evaluate]}  (сверяется с evaluate_client на Python)
 //   node preflight_harness.cjs <template> --lines <cases.json>
 //       -> {имя: {lines, count, blocks}}  (карточка: клиент + серверные вердикты)
+//   node preflight_harness.cjs <template> --topics <cases.json>
+//       -> {имя: [{id, label, status, rules}]}  (разделы карточки, ACL-1990)
 // Таблица правил — тот же JSON, что уходит на страницу (src/fb_api/preflight_rules.json).
 const fs = require('fs'), vm = require('vm'), assert = require('assert'), path = require('path');
 const html = fs.readFileSync(process.argv[2], 'utf8');
@@ -28,9 +30,16 @@ if (mode === '--evaluate') {
     const lines = P.lines(c.input, c.opts || {});
     out[k] = { lines, count: P.count(lines), blocks: P.blocks(lines) };
   });
+} else if (mode === '--topics') {
+  // ACL-1990: разделы карточки из тех же строк.
+  Object.keys(data).forEach((k) => {
+    const c = data[k];
+    out[k] = P.topics(P.lines(c.input, c.opts || {})).map((t) => ({ id: t.id, label: t.label, status: t.status,
+      rules: t.lines.map((x) => x.rule) }));
+  });
 } else if (mode === '--names') {
   out.names = data.map((x) => P.adName(x[0], x[1]));
 } else {
-  throw new Error('режим: --evaluate | --lines | --names');
+  throw new Error('режим: --evaluate | --lines | --topics | --names');
 }
 process.stdout.write(JSON.stringify(out));

@@ -50,6 +50,7 @@
       "label": "Ad account is active",
       "severity": "error",
       "side": "server",
+      "topic": "account",
       "unit": "campaign"
     },
     {
@@ -63,6 +64,7 @@
       "label": "Facebook Page",
       "severity": "error",
       "side": "server",
+      "topic": "account",
       "unit": "campaign"
     },
     {
@@ -89,6 +91,7 @@
       "label": "Pixel for conversions",
       "severity": "error",
       "side": "server",
+      "topic": "account",
       "unit": "campaign"
     },
     {
@@ -102,6 +105,7 @@
       "label": "Instant Form of the Page",
       "severity": "error",
       "side": "server",
+      "topic": "destination",
       "unit": "ad"
     },
     {
@@ -115,6 +119,7 @@
       "label": "Instant Form chosen",
       "severity": "error",
       "side": "client",
+      "topic": "destination",
       "unit": "ad"
     },
     {
@@ -167,6 +172,7 @@
       "label": "Country",
       "severity": "error",
       "side": "client",
+      "topic": "audience",
       "unit": "campaign"
     },
     {
@@ -180,6 +186,7 @@
       "label": "Country found in Meta targeting",
       "severity": "error",
       "side": "server",
+      "topic": "audience",
       "unit": "campaign"
     },
     {
@@ -193,6 +200,7 @@
       "label": "Language found in Meta targeting",
       "severity": "error",
       "side": "server",
+      "topic": "audience",
       "unit": "campaign"
     },
     {
@@ -206,6 +214,7 @@
       "label": "Detailed targeting found in Meta",
       "severity": "error",
       "side": "server",
+      "topic": "audience",
       "unit": "campaign"
     },
     {
@@ -232,6 +241,7 @@
       "label": "Link https://",
       "severity": "error",
       "side": "client",
+      "topic": "destination",
       "unit": "campaign"
     },
     {
@@ -245,6 +255,7 @@
       "label": "Tracking parameters in the link",
       "severity": "warning",
       "side": "client",
+      "topic": "destination",
       "unit": "campaign"
     },
     {
@@ -258,6 +269,7 @@
       "label": "Media chosen",
       "severity": "error",
       "side": "client",
+      "topic": "creative",
       "unit": "ad"
     },
     {
@@ -271,6 +283,7 @@
       "label": "Media file exists and is readable",
       "severity": "error",
       "side": "server",
+      "topic": "creative",
       "unit": "ad"
     },
     {
@@ -284,6 +297,7 @@
       "label": "Media within Meta limits",
       "severity": "error",
       "side": "server",
+      "topic": "creative",
       "unit": "ad"
     },
     {
@@ -297,6 +311,7 @@
       "label": "Vertical file for Stories and Reels",
       "severity": "warning",
       "side": "server",
+      "topic": "creative",
       "unit": "ad"
     },
     {
@@ -375,6 +390,7 @@
       "label": "Primary text",
       "severity": "error",
       "side": "client",
+      "topic": "creative",
       "unit": "ad"
     },
     {
@@ -388,6 +404,7 @@
       "label": "Headline",
       "severity": "error",
       "side": "client",
+      "topic": "creative",
       "unit": "ad"
     },
     {
@@ -401,6 +418,7 @@
       "label": "Headline up to 40 characters",
       "severity": "warning",
       "side": "client",
+      "topic": "creative",
       "unit": "ad"
     },
     {
@@ -414,6 +432,7 @@
       "label": "Text visible in full (up to 125)",
       "severity": "warning",
       "side": "client",
+      "topic": "creative",
       "unit": "ad"
     },
     {
@@ -427,6 +446,7 @@
       "label": "CTA allowed for the objective",
       "severity": "error",
       "side": "client",
+      "topic": "creative",
       "unit": "ad"
     },
     {
@@ -440,6 +460,7 @@
       "label": "Daily budget",
       "severity": "error",
       "side": "client",
+      "topic": "budget",
       "unit": "campaign"
     },
     {
@@ -453,6 +474,7 @@
       "label": "Budget is at least Meta's minimum",
       "severity": "error",
       "side": "server",
+      "topic": "budget",
       "unit": "campaign"
     },
     {
@@ -466,6 +488,7 @@
       "label": "Age 18-65",
       "severity": "error",
       "side": "client",
+      "topic": "audience",
       "unit": "campaign"
     },
     {
@@ -505,6 +528,7 @@
       "label": "Ad names are unique",
       "severity": "error",
       "side": "client",
+      "topic": "names",
       "unit": "ad"
     },
     {
@@ -544,7 +568,38 @@
       "label": "Campaign name is free, or gets a _2, _3 suffix",
       "severity": "error",
       "side": "server",
+      "topic": "names",
       "unit": "campaign"
+    }
+  ],
+  "topics": [
+    {
+      "id": "account",
+      "label": "Account & access"
+    },
+    {
+      "id": "audience",
+      "label": "Audience & targeting"
+    },
+    {
+      "id": "budget",
+      "label": "Budget"
+    },
+    {
+      "id": "destination",
+      "label": "Link & Instant Form"
+    },
+    {
+      "id": "creative",
+      "label": "Creatives & texts"
+    },
+    {
+      "id": "names",
+      "label": "Names & duplicates"
+    },
+    {
+      "id": "meta",
+      "label": "Meta plan check"
     }
   ],
   "version": 1
