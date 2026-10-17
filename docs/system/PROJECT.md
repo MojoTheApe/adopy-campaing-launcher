@@ -87,6 +87,16 @@ service publication and idle queue-preserving migration are separate gates in
 [ACL-1874](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/874). Preparation changes no
 campaign runtime or installed employee version.
 
+## CI feedback and admission
+
+The existing `Classify and check project tooling` result supplies bounded tooling
+fast feedback. The [ACL-owned fast/full plan](../repository/VERIFICATION.md#fast-feedback-and-full-verification)
+records its exact commands and omitted coverage. Full applicable product and
+installer admission keeps the separate required aggregates and existing native
+platform/producer rules. Parsed workflow regressions preserve linkage-only PR
+metadata feedback and normal verification on a changed head; no workflow, runtime,
+retry policy or employee installation is changed by documenting this plan.
+
 ## Maintaining this document
 
 Describe implemented behavior and limitations here when changing the system. Preserve

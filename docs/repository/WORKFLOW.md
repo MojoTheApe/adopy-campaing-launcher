@@ -145,6 +145,15 @@ remains required for code, dependencies, packaging and CI changes. Record succes
 and unrun manual checks separately. Do not rerun a successful unchanged candidate
 without a new failure, change or unresolved concern.
 
+### Fast feedback before full applicable checks
+
+Use the project-owned [fast/full plan](VERIFICATION.md#fast-feedback-and-full-verification)
+for the exact `Classify and check project tooling` commands and omissions.
+Its tooling feedback helps group local corrections; it does not replace
+`ACL verification`, `Installer verification` or actual delivery acceptance.
+Metadata edits retain linkage-only feedback; new code candidates keep normal
+applicable checks and only superseded same-PR runs cancel.
+
 ### Running the test suite
 
 The full suite runs in parallel with pytest-xdist (`requirements-dev.txt`):
