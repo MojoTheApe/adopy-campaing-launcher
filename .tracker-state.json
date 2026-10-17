@@ -41729,6 +41729,18 @@
         "state": "implementing",
         "started_at": "2026-10-17T06:17:51+00:00",
         "from_status": "status:todo"
+      },
+      "558": {
+        "actor": "Worker-W1558M",
+        "session": "622fd2f5-ec4b-4ed3-9102-43e164915329",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1558-scrubber-shapes",
+        "worktree": "C:\\acl-1558",
+        "id": "af427451e1d04e74904f49c784113c47",
+        "issue": 558,
+        "state": "implementing",
+        "started_at": "2026-10-17T06:18:19+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -48149,6 +48161,17 @@
         "state": "implementing",
         "worker": "Worker-W1784A",
         "coordinator": "Coordinator-C1016A"
+      },
+      "558": {
+        "implementers": [
+          {
+            "actor": "Worker-W1558M",
+            "session": "622fd2f5-ec4b-4ed3-9102-43e164915329"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W1558M",
+        "coordinator": "Coordinator-M1011A"
       }
     },
     "actors": {
@@ -49998,6 +50021,10 @@
       },
       "Worker-W1784A": {
         "session": "11633f9c-acl-1784",
+        "role": "Worker"
+      },
+      "Worker-W1558M": {
+        "session": "622fd2f5-ec4b-4ed3-9102-43e164915329",
         "role": "Worker"
       }
     },
@@ -77948,6 +77975,13 @@
         "issue": 784,
         "claim": "c8b34860c26142858796d7543604ef62",
         "actor": "Worker-W1784A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-17T06:18:19+00:00",
+        "issue": 558,
+        "claim": "af427451e1d04e74904f49c784113c47",
+        "actor": "Worker-W1558M"
       }
     ],
     "policy": {
