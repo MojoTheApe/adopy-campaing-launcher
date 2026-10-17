@@ -41684,9 +41684,11 @@
         "worktree": "C:\\acl-1356",
         "id": "11fde19af4e848909afcfede0fe9a212",
         "issue": 356,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-17T19:17:54+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 942,
+        "report": "## Report\n- FastAPI 0.141.1 / Starlette 1.7.0 / uvicorn 0.44.0 / python-multipart 0.0.32 pinned in requirements.txt; no other packaging file pins them.\n- src/web/request_limits.py: 1 MiB default body limit, 16 MiB for Campaign Builder form routes (documented), form limits via read_form, SafeStaticFiles for /static. The dashboard has no HTTP file-upload endpoints (creatives are chosen by name from disk), so max_files=0 breaks nothing.\n- tests/test_request_limits.py: 44 passed; CI on PR #942 all green.\n- Independent Sonnet pre-review: no real findings."
       }
     },
     "tasks": {
