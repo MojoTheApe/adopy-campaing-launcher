@@ -255,6 +255,11 @@ class ApiPublisher:
     def cancelled(self) -> bool:
         return self.cancel_event.is_set()
 
+    @property
+    def writes(self) -> int:
+        """Сколько записей ушло в Meta за задание, включая с неизвестным итогом (ACL-1784)."""
+        return int(getattr(self._client, "writes", 0) or 0) if self._client is not None else 0
+
     def build_drafts(self, slots, *, account_label: str, country: str, **_ignored) -> list[Any]:
         return build_drafts(slots, account_label=account_label, country=country)
 
