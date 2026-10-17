@@ -90700,7 +90700,8 @@
         "main_prs": [
           989
         ],
-        "finished_at": "2026-10-17T21:20:21+00:00"
+        "finished_at": "2026-10-17T21:20:21+00:00",
+        "closing_sources": true
       }
     },
     "integration": null,
