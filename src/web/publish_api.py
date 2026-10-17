@@ -400,15 +400,16 @@ class ApiPublisher:
         assert self._client is not None and self._facts is not None and self._resolver is not None
         self._client.reset_budget(int(_env_number(CREATE_MAX_CALLS_ENV, DEFAULT_CREATE_MAX_CALLS, 20, 250)))
 
-        counter = BuildCounter(plan)
+        # Пробный запуск ничего не создаёт — процента сборки у него нет.
+        counter = None if self.dry_run else self._counter(plan)
 
         def step(text: str) -> None:
             self.progress(f"{name}: {text}")
             _record("api_create_step", True, campaign=name, diag={"step": text})
-            counter.feed(text)   # и строка без новой единицы — «last» на странице свежий
-            self._report_units(name, counter)
+            if counter is not None:   # и строка без новой единицы — «last» на странице свежий
+                self._report_units(name, counter, text)
 
-        if not self.dry_run:
+        if counter is not None:
             self._report_units(name, counter)
 
         creator = CampaignCreator(self._client, self._facts, self._resolver,
@@ -456,8 +457,17 @@ class ApiPublisher:
                     "mismatches": len(outcome.mismatches), "stop": outcome.stop_kind})
         return res
 
-    def _report_units(self, name: str, counter: BuildCounter) -> None:
+    @staticmethod
+    def _counter(plan: Any) -> BuildCounter | None:
         try:
+            return BuildCounter(plan)
+        except Exception:  # noqa: BLE001 — процент не должен ронять публикацию
+            return None
+
+    def _report_units(self, name: str, counter: BuildCounter, text: str = "") -> None:
+        try:
+            if text:
+                counter.feed(text)
             self.units(name, counter.view())
         except Exception:  # noqa: BLE001 — процент не должен ронять публикацию
             pass

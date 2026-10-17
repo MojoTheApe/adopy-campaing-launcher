@@ -191,10 +191,12 @@ def test_dry_run_reports_no_units(monkeypatch):
     monkeypatch.setattr(publish_api, '_record', lambda *a, **kw: None)
 
     class FakeCreator:
-        def __init__(self, *a, **kw):
-            pass
+        def __init__(self, *a, progress, **kw):
+            self.progress = progress
 
         def plan_only(self, plan_):
+            for line in ONE_IMAGE[:2]:      # настоящий plan_only пишет строки предпроверки
+                self.progress(line)
             return Outcome(campaign_name='C')
 
     monkeypatch.setattr(publish_api, 'CampaignCreator', FakeCreator)
@@ -206,3 +208,33 @@ def test_dry_run_reports_no_units(monkeypatch):
     pub.units = lambda name, view: got.append(view)
     pub.publish_draft(SimpleNamespace(name='C'))
     assert got == []
+
+
+def test_unknown_result_lines_with_tricky_names_are_not_counted():
+    c = BuildCounter(_plan([_ad(1)], [_ad(1, 'video')]))
+    _feed(c, ONE_IMAGE[:3])
+    before = c.done
+    _feed(c, ["ad set 'a: found': result unknown — reconciling by readback",
+              "ad 1: creative: result unknown — reconciling by readback",
+              "form 'x: created': result unknown"])
+    assert c.done == before and c.total == 12
+
+
+def test_a_broken_counter_never_breaks_publishing(monkeypatch):
+    from src.web import publish_api
+
+    monkeypatch.setattr(publish_api, 'BuildCounter', lambda plan: 1 / 0)
+    assert publish_api.ApiPublisher._counter(_plan([_ad(1)])) is None
+
+
+def test_every_counted_line_still_exists_in_the_creator():
+    """Строки, по которым идёт счёт, — дословно из creator.py: переименование там
+    иначе молча держало бы процент на 99 при зелёных тестах."""
+    src = (Path(__file__).resolve().parents[1] / 'src' / 'fb_api' / 'creator.py').read_text(encoding='utf-8')
+    for piece in ['"preflight: creatives read"', '"campaign: created PAUSED, tag kept"',
+                  '"campaign: found from a previous run"', ": created PAUSED, tag kept\"",
+                  ": found from a previous run\"", ": image uploaded\"", ": image already in the ad account\"",
+                  ": video uploaded\"", ": video already in the ad account\"", ": video processed\"",
+                  ": creative created\"", ": creative found from a previous run\"", ": created PAUSED\"",
+                  '"readback: ']:
+        assert piece in src, piece
