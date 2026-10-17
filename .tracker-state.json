@@ -41729,6 +41729,18 @@
         "state": "implementing",
         "started_at": "2026-10-17T07:14:42+00:00",
         "from_status": "status:todo"
+      },
+      "287": {
+        "actor": "Worker-W1287A",
+        "session": "w1287a-s1",
+        "coordinator": "Coordinator-T1004Q",
+        "branch": "work/acl-1287-english-row-text",
+        "worktree": "C:\\acl-1287",
+        "id": "56d2e51944d441de953514b2199d4734",
+        "issue": 287,
+        "state": "implementing",
+        "started_at": "2026-10-17T07:15:11+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -48230,6 +48242,17 @@
         "state": "implementing",
         "worker": "Worker-W1680A",
         "coordinator": "Coordinator-T1004Q"
+      },
+      "287": {
+        "implementers": [
+          {
+            "actor": "Worker-W1287A",
+            "session": "w1287a-s1"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W1287A",
+        "coordinator": "Coordinator-T1004Q"
       }
     },
     "actors": {
@@ -50091,6 +50114,10 @@
       },
       "Worker-W1680A": {
         "session": "w1680a-s1",
+        "role": "Worker"
+      },
+      "Worker-W1287A": {
+        "session": "w1287a-s1",
         "role": "Worker"
       }
     },
@@ -78086,6 +78113,13 @@
         "issue": 680,
         "claim": "122c1999e90a48909b54605472476158",
         "actor": "Worker-W1680A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-17T07:15:11+00:00",
+        "issue": 287,
+        "claim": "56d2e51944d441de953514b2199d4734",
+        "actor": "Worker-W1287A"
       }
     ],
     "policy": {
