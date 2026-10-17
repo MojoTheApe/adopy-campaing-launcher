@@ -105,6 +105,15 @@ KEY_PREFIX_CASES = {
     "dot_run": "x." * 50_000,
     "camel_hump_run": "aB" * 50_000,
     "separator_colon_run": "token:" * 16_000,
+    # ACL-1558: голый токен и учётка прокси — ограниченные части, старт
+    # только в начале слова.
+    "endless_bare_token": "EAA" + "a" * 100_000,
+    "proxy_user_without_at": "u:" + "p" * 100_000,
+    "many_short_proxy_words": " a:b" * 25_000,
+    "proxy_at_run": "a:b@" * 25_000,
+    "colon_run_after_delimiters": "=a:" * 33_000,
+    "proxy_slash_password_runs": " a:b/c@d" * 12_000,
+    "proxy_host_lookahead_runs": " a:b@" + "x-1." * 25_000,
 }
 
 
