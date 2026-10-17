@@ -41684,9 +41684,11 @@
         "worktree": "C:\\acl-1864",
         "id": "e16c25b3617543da822454b612c93f0a",
         "issue": 864,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-17T19:11:22+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 985,
+        "report": "ACL-1864 ready for review. PR #985. Shared Stats header selection (first non-empty row of first sheet) used by all Stats readers, wizard and settings validation; regression tests with 515 formatted empty rows, bad/duplicate headers, 0/False, empty sheet, byte-hash unchanged. Independent Sonnet pre-review: 1 real finding (edge-space headers) fixed; scripts/sync_creatives_from_excel.py intentionally untouched (own sheet option/looser schema)."
       },
       "356": {
         "actor": "Worker-7k2q9",
