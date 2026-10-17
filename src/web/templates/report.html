@@ -8504,7 +8504,7 @@ window.cbBuild = (function () {
     if (byUnits !== null) {
       if (byUnits > t.pct) {
         var up = Math.floor(byUnits) > Math.floor(t.pct);
-        t.pct = Math.round(byUnits * 10) / 10;
+        t.pct = Math.floor(byUnits * 10) / 10;   // floor: не показывать больше, чем создано
         if (up) save();
       }
       return Math.floor(t.pct);

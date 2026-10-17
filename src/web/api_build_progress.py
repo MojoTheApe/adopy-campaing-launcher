@@ -20,9 +20,14 @@ from __future__ import annotations
 import re
 from typing import Any
 
+# Шаблоны привязаны к концу строки: имя группы или формы стоит внутри строки,
+# и «ad set 'a: found': result unknown — reconciling» не должна засчитаться.
 _AD = re.compile(r"^ad (\d+): (.+)$")
-_AD_SET = re.compile(r"^ad set .+: (created|found)")
-_FORM = re.compile(r"^form .+: (created|found)")
+_AD_SET = re.compile(r"^ad set .+: (created PAUSED, tag kept|found from a previous run)$")
+_FORM = re.compile(r"^form .+: (created|found on the Page, reused)$")
+_AD_DONE = re.compile(r"^(image uploaded|image already in the ad account|video uploaded"
+                      r"|video already in the ad account|video processed|creative created"
+                      r"|creative found from a previous run|created PAUSED|found from a previous run)$")
 
 
 def _ad_units(ad: Any) -> int:
@@ -79,7 +84,7 @@ class BuildCounter:
             if key not in self._done:
                 self.total += 1
                 self._mark(key)
-        elif text.startswith("campaign:") and ("created" in text or "found" in text):
+        elif text in ("campaign: created PAUSED, tag kept", "campaign: found from a previous run"):
             self._mark(("preflight",), ("campaign",))
         elif _AD_SET.match(text):
             self._set += 1
@@ -88,7 +93,7 @@ class BuildCounter:
             self._mark(("readback",))
         else:
             m = _AD.match(text)
-            if m:
+            if m and _AD_DONE.match(m.group(2)):
                 self._ad(int(m.group(1)), m.group(2))
         return (len(self._done), self.total) != before
 
