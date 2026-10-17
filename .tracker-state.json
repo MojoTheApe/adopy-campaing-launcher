@@ -41672,9 +41672,11 @@
         "worktree": "C:\\acl-1871",
         "id": "316509c845c04e7bad6e75a706701e40",
         "issue": 871,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-17T19:10:11+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 986,
+        "report": "Implemented ACL-1871 in PR 986: side-tab closed/normal/wide buttons, click-to-toggle label, drag resize, persisted bounded width, keyboard arrows.\nTests run (affected only): builder_drawer_harness.cjs, test_acl1871_side_tab_browser, test_the_builder_drawer, test_acl1769_two_column_layout, test_acl1797_design_system, test_builder_second_primary_text, test_drawer_review_browser, test_field_contrast - all green. Full suite left to GitHub CI.\nIndependent Sonnet review: 6 findings (overlay padding jump, wide<normal on narrow screens, drag from closed, stuck click-swallow flag, a11y hints); all fixed in the second commit.\nNot done: no visual screenshot comparison against the mock."
       }
     },
     "tasks": {
