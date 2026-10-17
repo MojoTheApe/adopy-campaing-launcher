@@ -41672,9 +41672,11 @@
         "worktree": "C:\\acl-1287-pr",
         "id": "95328251ac024ae897588ed0c52302fb",
         "issue": 287,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-17T19:29:58+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 964,
+        "report": "ACL-1287 / #287 handoff, branch work/acl-1287-english-row-text, PR #964 (base main).\n\nChecks run (worktree C:/acl-1287-pr, merged with work/main: already up to date):\n- tests/test_account_spend_reasons_are_english.py: pass (AST guard, all account_spend.py literals outside docstrings and logger calls).\n- tests/test_country_split_reasons_are_english.py: pass (tokenizer guard on country_split.py, from ACL-1462).\n- No code changed in this run; the PR diff is still only the account_spend guard test.\n\nFindings: the translations the issue lists were already applied to country_split.py under ACL-1462, and account_spend.py has no Russian in error/how/entered fields. Remaining Cyrillic in account_spend.py is in log.error messages (not shown to users, out of scope), docstrings and code comments.\n\nNot verified: full suite (runs in GitHub CI only); the end-to-end check that a failed split and spend read render English on screen (checklist items 2 and 3 of the issue are not covered by this PR).\n\nRemaining risk: low; the guard covers literals, not runtime-built strings.\nDurable reference: PR https://github.com/MojoTheApe/adopy-campaing-launcher/pull/964"
       },
       "377": {
         "actor": "Worker-K7Q2M",
