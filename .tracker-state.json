@@ -41726,9 +41726,11 @@
         "worktree": "C:\\acl-1142",
         "id": "abaa09763e9c42839fbb86003c138b4f",
         "issue": 142,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-17T13:36:58+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 983,
+        "report": "ACL-1142: teach state in pacing.py is per job; banner names the account and releases only its job; amber dot (build-attn) for a waiting job. PR #983. Tests: test_acl1142_per_job_teach, test_pacing_takeover, test_acl1614, test_acl1702, test_acl1603, test_campaign_build_dot_browser, test_create_wizard_flow all pass. Merge risk: small hunks in publish_jobs.py, report.html, CHANGELOG.md overlapping #869/#936/#961/#863."
       }
     },
     "tasks": {
