@@ -49592,7 +49592,7 @@
             "session": "WFO-20261017-ACL-CI-Author"
           }
         ],
-        "state": "approved",
+        "state": "merged",
         "worker": "Worker-WFO05CI",
         "coordinator": "Coordinator-WFO3C7A5M",
         "handoff": {
@@ -49611,7 +49611,8 @@
         },
         "pr": 988,
         "queued_at": "2026-10-17T20:19:01+00:00",
-        "reviewer": "Reviewer-TT142I"
+        "reviewer": "Reviewer-TT142I",
+        "batch_id": "6d00e4a9014a4e8ca3b7756c4c71c199"
       },
       "990": {
         "implementers": [
@@ -54342,6 +54343,19 @@
         "coordinator": "Coordinator-WFO3C7A5M",
         "state": "reviewing",
         "started_at": "2026-10-17T19:12:24+00:00"
+      },
+      "989": {
+        "id": "3cbe376edb644d8d83720156b2b6ae34",
+        "batch_id": "6d00e4a9014a4e8ca3b7756c4c71c199",
+        "pr": 989,
+        "issues": [
+          987
+        ],
+        "actor": "Reviewer-WFOC984R7",
+        "session": "wfo_20261017_acl_combined_review",
+        "coordinator": "Coordinator-WFO3C7A5M",
+        "state": "reviewing",
+        "started_at": "2026-10-17T20:53:27+00:00"
       }
     },
     "review_queue": [
@@ -54351,19 +54365,7 @@
       287,
       377
     ],
-    "review": {
-      "id": "3cbe376edb644d8d83720156b2b6ae34",
-      "batch_id": "6d00e4a9014a4e8ca3b7756c4c71c199",
-      "pr": 989,
-      "issues": [
-        987
-      ],
-      "actor": "Reviewer-WFOC984R7",
-      "session": "wfo_20261017_acl_combined_review",
-      "coordinator": "Coordinator-WFO3C7A5M",
-      "state": "reviewing",
-      "started_at": "2026-10-17T20:53:27+00:00"
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -85067,6 +85069,104 @@
         "issue": 990,
         "claim": "0b3da6a8634d4bf8959080dea6038abd",
         "actor": "Worker-PF17Q"
+      },
+      {
+        "event": "batch-integrated",
+        "at": "2026-10-17T21:20:21+00:00",
+        "batch": {
+          "id": "6d00e4a9014a4e8ca3b7756c4c71c199",
+          "actor": "Coordinator-WFO3C7A5M",
+          "session": "wfo_20261017_acl_three_source_coordinator",
+          "state": "merged",
+          "issues": [
+            987
+          ],
+          "members": [
+            {
+              "issue": 987,
+              "pr": 988,
+              "branch": "codex/acl-1987-selection-support",
+              "head_sha": "8fc4021ae3c486c81cdc45ea76ad151930124870",
+              "base_sha": "f86ca81eda7fada409bb672f694ed016a08a586c",
+              "main_sha": "f86ca81eda7fada409bb672f694ed016a08a586c",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "f0c16cf100ff857252602f188c8566c4b162b291e4b59f3e07a60754b09d8a17",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-TT142I",
+                "implementer": "Worker-WFO05CI",
+                "head_sha": "8fc4021ae3c486c81cdc45ea76ad151930124870",
+                "base_sha": "f86ca81eda7fada409bb672f694ed016a08a586c",
+                "tree_sha": "a3f76d61cb857a5e0b5b5a9537e2a20edb8c4a11",
+                "execution_lane": "740c221588c3408fbe92b82ed363b105",
+                "review_session": "root_tt142_implementation",
+                "report": "Private independent ACL-1987 consumer Source review SHA256 e42462a9cfa09d0c6a99b68f02c035eb790864112dcb9a4a03be139cbcee7148",
+                "main_sha": "f86ca81eda7fada409bb672f694ed016a08a586c",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  987
+                ],
+                "recorded_at": "2026-10-17T20:42:12+00:00",
+                "issue_scopes": {
+                  "987": "f0c16cf100ff857252602f188c8566c4b162b291e4b59f3e07a60754b09d8a17"
+                }
+              },
+              "lane": {
+                "id": "740c221588c3408fbe92b82ed363b105",
+                "pr": 988,
+                "issues": [
+                  987
+                ],
+                "actor": "Reviewer-TT142I",
+                "session": "root_tt142_implementation",
+                "coordinator": "Coordinator-WFO3C7A5M",
+                "started_at": "2026-10-17T20:22:00+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-17T20:42:49+00:00"
+            }
+          ],
+          "main_sha": "f86ca81eda7fada409bb672f694ed016a08a586c",
+          "branch": "codex/batch-6d00e4a9014a4e8ca3b7756c4c71c199",
+          "intake": "90926e7222ac4fcaa84e636ad81f7b91",
+          "started_at": "2026-10-17T20:46:37+00:00",
+          "pr": 989,
+          "entered_stage": false,
+          "history": [],
+          "delivery_request": {
+            "schema_version": 1,
+            "state": "requested",
+            "batch_id": "6d00e4a9014a4e8ca3b7756c4c71c199",
+            "issues": [
+              987
+            ],
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "target": "ACL stable Windows installer and update channel",
+            "workflow": ".github/workflows/complete-delivery.yml",
+            "job": "Verify published Windows package",
+            "actor": "Coordinator-WFO3C7A5M",
+            "session": "wfo_20261017_acl_three_source_coordinator",
+            "requested_at": "2026-10-17T20:46:37+00:00"
+          },
+          "review": {
+            "id": "3cbe376edb644d8d83720156b2b6ae34",
+            "batch_id": "6d00e4a9014a4e8ca3b7756c4c71c199",
+            "pr": 989,
+            "issues": [
+              987
+            ],
+            "actor": "Reviewer-WFOC984R7",
+            "session": "wfo_20261017_acl_combined_review",
+            "coordinator": "Coordinator-WFO3C7A5M",
+            "state": "reviewing",
+            "started_at": "2026-10-17T20:53:27+00:00"
+          },
+          "main_prs": [
+            989
+          ],
+          "finished_at": "2026-10-17T21:20:21+00:00"
+        }
       }
     ],
     "policy": {
@@ -90473,97 +90573,115 @@
         "finished_at": "2026-10-17T19:45:23+00:00",
         "closing_sources": false,
         "sources_closed": true
-      }
-    },
-    "integration": {
-      "id": "6d00e4a9014a4e8ca3b7756c4c71c199",
-      "actor": "Coordinator-WFO3C7A5M",
-      "session": "wfo_20261017_acl_three_source_coordinator",
-      "state": "reviewing",
-      "issues": [
-        987
-      ],
-      "members": [
-        {
-          "issue": 987,
-          "pr": 988,
-          "branch": "codex/acl-1987-selection-support",
-          "head_sha": "8fc4021ae3c486c81cdc45ea76ad151930124870",
-          "base_sha": "f86ca81eda7fada409bb672f694ed016a08a586c",
-          "main_sha": "f86ca81eda7fada409bb672f694ed016a08a586c",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "f0c16cf100ff857252602f188c8566c4b162b291e4b59f3e07a60754b09d8a17",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-TT142I",
-            "implementer": "Worker-WFO05CI",
-            "head_sha": "8fc4021ae3c486c81cdc45ea76ad151930124870",
-            "base_sha": "f86ca81eda7fada409bb672f694ed016a08a586c",
-            "tree_sha": "a3f76d61cb857a5e0b5b5a9537e2a20edb8c4a11",
-            "execution_lane": "740c221588c3408fbe92b82ed363b105",
-            "review_session": "root_tt142_implementation",
-            "report": "Private independent ACL-1987 consumer Source review SHA256 e42462a9cfa09d0c6a99b68f02c035eb790864112dcb9a4a03be139cbcee7148",
-            "main_sha": "f86ca81eda7fada409bb672f694ed016a08a586c",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              987
-            ],
-            "recorded_at": "2026-10-17T20:42:12+00:00",
-            "issue_scopes": {
-              "987": "f0c16cf100ff857252602f188c8566c4b162b291e4b59f3e07a60754b09d8a17"
-            }
-          },
-          "lane": {
-            "id": "740c221588c3408fbe92b82ed363b105",
-            "pr": 988,
-            "issues": [
-              987
-            ],
-            "actor": "Reviewer-TT142I",
-            "session": "root_tt142_implementation",
-            "coordinator": "Coordinator-WFO3C7A5M",
-            "started_at": "2026-10-17T20:22:00+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-17T20:42:49+00:00"
-        }
-      ],
-      "main_sha": "f86ca81eda7fada409bb672f694ed016a08a586c",
-      "branch": "codex/batch-6d00e4a9014a4e8ca3b7756c4c71c199",
-      "intake": "90926e7222ac4fcaa84e636ad81f7b91",
-      "started_at": "2026-10-17T20:46:37+00:00",
-      "pr": 989,
-      "entered_stage": false,
-      "history": [],
-      "delivery_request": {
-        "schema_version": 1,
-        "state": "requested",
-        "batch_id": "6d00e4a9014a4e8ca3b7756c4c71c199",
+      },
+      "6d00e4a9014a4e8ca3b7756c4c71c199": {
+        "id": "6d00e4a9014a4e8ca3b7756c4c71c199",
+        "actor": "Coordinator-WFO3C7A5M",
+        "session": "wfo_20261017_acl_three_source_coordinator",
+        "state": "merged",
         "issues": [
           987
         ],
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "target": "ACL stable Windows installer and update channel",
-        "workflow": ".github/workflows/complete-delivery.yml",
-        "job": "Verify published Windows package",
-        "actor": "Coordinator-WFO3C7A5M",
-        "session": "wfo_20261017_acl_three_source_coordinator",
-        "requested_at": "2026-10-17T20:46:37+00:00"
+        "members": [
+          {
+            "issue": 987,
+            "pr": 988,
+            "branch": "codex/acl-1987-selection-support",
+            "head_sha": "8fc4021ae3c486c81cdc45ea76ad151930124870",
+            "base_sha": "f86ca81eda7fada409bb672f694ed016a08a586c",
+            "main_sha": "f86ca81eda7fada409bb672f694ed016a08a586c",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "f0c16cf100ff857252602f188c8566c4b162b291e4b59f3e07a60754b09d8a17",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-TT142I",
+              "implementer": "Worker-WFO05CI",
+              "head_sha": "8fc4021ae3c486c81cdc45ea76ad151930124870",
+              "base_sha": "f86ca81eda7fada409bb672f694ed016a08a586c",
+              "tree_sha": "a3f76d61cb857a5e0b5b5a9537e2a20edb8c4a11",
+              "execution_lane": "740c221588c3408fbe92b82ed363b105",
+              "review_session": "root_tt142_implementation",
+              "report": "Private independent ACL-1987 consumer Source review SHA256 e42462a9cfa09d0c6a99b68f02c035eb790864112dcb9a4a03be139cbcee7148",
+              "main_sha": "f86ca81eda7fada409bb672f694ed016a08a586c",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                987
+              ],
+              "recorded_at": "2026-10-17T20:42:12+00:00",
+              "issue_scopes": {
+                "987": "f0c16cf100ff857252602f188c8566c4b162b291e4b59f3e07a60754b09d8a17"
+              }
+            },
+            "lane": {
+              "id": "740c221588c3408fbe92b82ed363b105",
+              "pr": 988,
+              "issues": [
+                987
+              ],
+              "actor": "Reviewer-TT142I",
+              "session": "root_tt142_implementation",
+              "coordinator": "Coordinator-WFO3C7A5M",
+              "started_at": "2026-10-17T20:22:00+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-17T20:42:49+00:00"
+          }
+        ],
+        "main_sha": "f86ca81eda7fada409bb672f694ed016a08a586c",
+        "branch": "codex/batch-6d00e4a9014a4e8ca3b7756c4c71c199",
+        "intake": "90926e7222ac4fcaa84e636ad81f7b91",
+        "started_at": "2026-10-17T20:46:37+00:00",
+        "pr": 989,
+        "entered_stage": false,
+        "history": [],
+        "delivery_request": {
+          "schema_version": 1,
+          "state": "requested",
+          "batch_id": "6d00e4a9014a4e8ca3b7756c4c71c199",
+          "issues": [
+            987
+          ],
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "target": "ACL stable Windows installer and update channel",
+          "workflow": ".github/workflows/complete-delivery.yml",
+          "job": "Verify published Windows package",
+          "actor": "Coordinator-WFO3C7A5M",
+          "session": "wfo_20261017_acl_three_source_coordinator",
+          "requested_at": "2026-10-17T20:46:37+00:00"
+        },
+        "review": {
+          "id": "3cbe376edb644d8d83720156b2b6ae34",
+          "batch_id": "6d00e4a9014a4e8ca3b7756c4c71c199",
+          "pr": 989,
+          "issues": [
+            987
+          ],
+          "actor": "Reviewer-WFOC984R7",
+          "session": "wfo_20261017_acl_combined_review",
+          "coordinator": "Coordinator-WFO3C7A5M",
+          "state": "reviewing",
+          "started_at": "2026-10-17T20:53:27+00:00"
+        },
+        "main_prs": [
+          989
+        ],
+        "finished_at": "2026-10-17T21:20:21+00:00"
       }
     },
+    "integration": null,
     "intake": {
       "id": "90926e7222ac4fcaa84e636ad81f7b91",
       "actor": "Coordinator-WFO3C7A5M",
       "session": "wfo_20261017_acl_three_source_coordinator",
-      "state": "running",
+      "state": "finished",
       "issues": [
         987
       ],
-      "remaining": [
-        987
+      "remaining": [],
+      "batches": [
+        "6d00e4a9014a4e8ca3b7756c4c71c199"
       ],
-      "batches": [],
       "started_at": "2026-10-17T20:45:44+00:00",
       "ineligible": {}
     },
