@@ -48873,7 +48873,7 @@
             "session": "WFO-20261017-ACL-Early-Author"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-WFO06ACL",
         "coordinator": "Coordinator-WFO20261017",
         "handoff": {
@@ -83438,6 +83438,68 @@
         "pr": 978,
         "lane": "3cebcc2302aa435f993c078e3dc0b61c",
         "actor": "Reviewer-WFO971C4M8"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-17T18:56:05+00:00",
+        "issue": 977,
+        "pr": 978,
+        "review": {
+          "id": "3cebcc2302aa435f993c078e3dc0b61c",
+          "pr": 978,
+          "issues": [
+            977
+          ],
+          "actor": "Reviewer-WFO971C4M8",
+          "session": "405969e2a0d24390ba648f8f8929b7a1",
+          "coordinator": "Coordinator-WFO20261017",
+          "started_at": "2026-10-17T18:33:45+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 977,
+            "pr": 978,
+            "branch": "codex/acl-1977-released-workflow-support",
+            "head_sha": "be1013a009a6d0981027915a9ab32c4ccf76d2db",
+            "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+            "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "e055bdfc601ab600ab43de400c1afaa936d9d4d132b72ee46d2bb3919e8f05cb",
+            "review": {
+              "kind": "independent-review",
+              "implementer": "Worker-WFO06ACL",
+              "reviewer": "Reviewer-WFO971C4M8",
+              "review_session": "405969e2a0d24390ba648f8f8929b7a1",
+              "execution_lane": "3cebcc2302aa435f993c078e3dc0b61c",
+              "head_sha": "be1013a009a6d0981027915a9ab32c4ccf76d2db",
+              "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+              "tree_sha": "5ef347e5d98e562681349324a999b051bc8ba52f",
+              "verdict": "approved",
+              "report": "# ACL-1977 / PR978 \u2014 independent Source review after F1 return\n\nVerdict: **approved for the ordinary Source Approved queue**, with no remaining actionable finding in this exact corrected source and all current native gates successful. This report grants no combined review, direct source merge, main admission, stable package receipt, live selection/activation or full Task06 acceptance.\n\nThe actual independent non-implementing Reviewer is the same `/root/acl971_review` run, actor `Reviewer-WFO971C4M8`, with its original privately retained session. Actual author `/root/instructions_review` used its genuine fresh original Worker claim. I did not edit this source and did not become the combined Reviewer. Current adopted e775 `execution review-acquire --pr978` genuinely acquired only my fresh Source lane. Before/after full canonical-state comparison preserves all other owners,968/971 approvals, the active Coordinator's batch/intake/integration/delivery, queue order and history; only Source977 review acquisition and its one audit event changed. Raw claims and state remain in private0600 records.\n\n## Exact source, scope and original proof\n\n- Repository/PR: `MojoTheApe/adopy-campaing-launcher`, PR978, branch `codex/acl-1977-released-workflow-support`; open/ready/unmerged into main.\n- New Source head `be1013a009a6d0981027915a9ab32c4ccf76d2db`; tree `5ef347e5d98e562681349324a999b051bc8ba52f`; sole parent `5ebf72b04673ce1f7b287e931aad4cada1ec7aa9`.\n- Base/current main remains `af0ade29b106129089dbabd3f208b548efa246d9`.\n- Whole Issue977 body remains SHA256 `685e42377833b87c45332b80efdee0859fda5b71f0140899d7e6e8e710676685`; stable current PR body SHA256 `94492cd55eb6310208193f6e0afecfcdd1bde2943b0ada883f6f74dc67a40b29` retains old checkpoints as dated history and adds this correction truthfully.\n- Actual admission client/guard remains e775 `e775c624e0323e69ed891926691c3dee6587081a`, using the unchanged old-policy controller checkout. The candidate continues to select published Master1.2 `864ca7a5814e703dd6e61207362d24cbc26dc9ad` / Tracker3.4 `866baf6dec2bd82d8ca052002cc3dc6f4805e247`.\n\nI read the full unchanged Issue requirements/history, complete current PR, actual-main AGENTS/reading map and adopted Source commands, original complete independent Source report, combined review's full F1 report and supported Source-only return, the whole corrected runbook and entire35-line correction. Fresh actual file API matches all58 full-source changed paths/blobs and exactly two Source commits. Issue/PR comments and submitted review API lists are empty. Parent Master39 scope remains unchanged SHA256 `cb347d39dba493f4e69b13bf0566b3e9b22307280ae6a607b2a645511bf08d1f`; its full Task06 outcomes remain outstanding.\n\nThe original Source review missed the concrete866 selection-delivery limitation identified by the independent combined Reviewer. Its old no-findings statement for the runbook is superseded by this fresh correction review. The actual combined52 candidate was returned, then its genuine Coordinator returned only Source977; proof SHA256 `280951588d24af2719d9aa7c352498be19ba9c95229c3b99273de4fd52797033`. No old approval was relabelled for the changed head.\n\n## F1 closure and full-scope preservation\n\nThe only correction is `docs/repository/EARLY_ADOPTION.md`, +30/\u22125 lines, mode100644, blob `a000af99b6c48602873788d22d2971e9cd999b5e`, SHA256 `8403d647814da517455cbdc3ac6ae05eda85a6398b093743019abd946c4a40b1`. Everything outside its sequential selection section is byte-identical. All1312 tracked leaves retain the same paths/modes; every other leaf is identical to prior5eb, including all other57 full-PR changes. All1427 directory/leaf entries are accounted for. No code, helper, guard, workflow, configuration, pin, pristine baseline, system/runtime knowledge or acceptance scope changed.\n\nI checked the actual selected866 functions behind F1: delivery resolution calls strict `execution_state` before continuation, while task-context/completion adoption and `maintenance.busy` omit pending delivery. The corrected recipe explicitly **stops optional selections at866** until a separate reviewed compatible selection-delivery support upgrade is actually published, integrated/pinned and verified against the real reader, every writer and recovery. It does not claim a candidate/technical merge/new pin supplies that published prerequisite, implement the bridge here, weaken validation or invent a workaround config.\n\nEach subsequent task-context and completion selection stays separate and genuinely reviewed through its frozen batch, official main and full native checks. Each exact target must finish authorized package publication plus installation/update/recovery verification and its durable receipt **before** maintenance reservation/adoption. Explicit pending-target drain is required; pending, failed or unknown delivery stops either cutover. Older `maintenance show` idle output is explicitly insufficient. The same owned CAS/actor/session/report, sequential protocol4 then5 checks, writer fencing, retained history and recovery remain. This satisfies F1 at the bounded runbook source boundary without pretending to complete future live work.\n\nOriginal full-scope audit `fee18ae805d755f1a7600904dbfae27e91c590b095565b02d28de855739db8bb` remains valid for the byte-identical content it inspected: genuine44\u219272 pristine ancestry,18 canonical helpers/manifest,13 canonical references, four preserved historical guide bodies,293 unchanged product/runtime/guard/collector blobs, exact config and conservative no-change repeat upgrade. This review's entire-leaf comparison supports reuse of that unchanged proof; it does not invent a new regenerated template or new installer outcome. Actual selected controls remain execution3 /5 Workers /5 Source reviews /batch5 /noStage /process1. Optional task-context/completion/shared-CI/retry policies remain absent. Package authorization, installer/updater/data protections and all parent acceptance remain unchanged.\n\n## Verification and exact-head native evidence\n\nAuthor's corrected-head process instruction/link check (30files,121local links), tracked secret scan, focused ordering/preservation check and whitespace passed. I read those receipts and performed a separate immutable full-leaf/API/diff/selected866-code audit, SHA256 `1081cd273594a5f0b2eaa13fc934b9a446606c169fef2a648142f156b08dbfe4`. Broad unchanged suites and template generators were not repeated for this single documentation correction. My private audit initially confused the prior1312 leaf inventory with directory-inclusive entries; only the audit counter was corrected to1312 leaves/1427 entries, with no Source edit or product-test failure. The old two missing-local-Chromium failures remain retained historical evidence, not silently converted into passes.\n\nInitial new-head linkage run39058243870 failed before the actual handoff because Issue977 had not yet reached Review; its original job117470575468 log explicitly records that phase refusal. The normal post-handoff PR metadata update triggered linkage39058344556, which now succeeds. Both remain preserved; no manual rerun, dispatch or historical green substitution was used.\n\nActual PR test-merge `ddd86572e30d8ce422b0081781cc68e71179d393` has tree5ef347 and ordered af0ade29/be1013 parents. Both actual native classifier check/annotation sets independently bind that exact tree and head; their Actions app, native job/check names and details URLs match. Private immutable binding proof SHA256 `c3ecd6854f6e9073c09a0f4086536245a5728e23e4a1f8b4343df2239581cc59` is retained separately from completion outcomes.\n\nNew original-attempt1 installer run39058243806 is successful, including actual job117471227359 and `Installer verification`. I independently read all17 successful native steps: both isolated/candidate package builds, packaged executable and Windows installer, real install/launch/repair/uninstall and real isolated update/restart/recovery, plus retained evidence. This is fresh source-candidate installer execution on the new head, not stable publication/download-channel or employee rollout proof.\n\nAt the actual18:52:02Z terminal readback, all16 latest applicable GitHub Actions checks on exact be1013 are successful, including the four required names `descriptor`, `tracker-link`, `ACL verification`, `Installer verification`. Original attempt1 CI39058243824 has all10jobs successful, including every Linux3.11/3.13 shard and Windows3.13. Original attempt1 installer39058243806 has all4jobs successful. Descriptor39058243815 and the normal newer linkage39058344556 succeed. Direct terminal job lists and exact classifier/tree binding were checked; no old5eb/combined52 result supplies coverage. Safe native summary SHA256 `62624bd4b8998d3f20bc13e20edd1015554290911cf0b8b023290459cce2d36b` distinguishes these actual source checks from future stable publication and live consumer receipt.\n\n## Required next boundary\n\nOnly after current native guards pass, record this exact head/base/tree/scope report through the actual maintained Source lane, then `batch approve` only977 and verify its released lane, unchanged bodies/main and exact other approvals/foreign state. The real Coordinator must later refresh/rebuild its same frozen batch using the new tip, obtain separate fresh independent combined review and applicable combined/main/package evidence. I am not eligible to review a combined candidate containing sources I reviewed.\n\nSourcePR978 remains unmerged. Full Task06, actual compatible support publication, genuine policy selections/activation, exact-target package acceptance, board/state/client/writer/recovery proof and measured ordinary-work outcome remain unfinished. No Task07/Task13 prerequisite, owner pause removal, host159 operation, consumer activation, Master54 work or foreign release is introduced by this Source approval boundary.\n",
+              "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                977
+              ],
+              "recorded_at": "2026-10-17T18:54:05+00:00",
+              "issue_scopes": {
+                "977": "e055bdfc601ab600ab43de400c1afaa936d9d4d132b72ee46d2bb3919e8f05cb"
+              }
+            },
+            "lane": {
+              "id": "3cebcc2302aa435f993c078e3dc0b61c",
+              "pr": 978,
+              "issues": [
+                977
+              ],
+              "actor": "Reviewer-WFO971C4M8",
+              "session": "405969e2a0d24390ba648f8f8929b7a1",
+              "coordinator": "Coordinator-WFO20261017",
+              "started_at": "2026-10-17T18:33:45+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-17T18:55:39+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -85155,6 +85217,50 @@
           "keep_lane": true
         },
         "approved_at": "2026-10-17T17:44:02+00:00"
+      },
+      "977": {
+        "issue": 977,
+        "pr": 978,
+        "branch": "codex/acl-1977-released-workflow-support",
+        "head_sha": "be1013a009a6d0981027915a9ab32c4ccf76d2db",
+        "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+        "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "e055bdfc601ab600ab43de400c1afaa936d9d4d132b72ee46d2bb3919e8f05cb",
+        "review": {
+          "kind": "independent-review",
+          "implementer": "Worker-WFO06ACL",
+          "reviewer": "Reviewer-WFO971C4M8",
+          "review_session": "405969e2a0d24390ba648f8f8929b7a1",
+          "execution_lane": "3cebcc2302aa435f993c078e3dc0b61c",
+          "head_sha": "be1013a009a6d0981027915a9ab32c4ccf76d2db",
+          "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+          "tree_sha": "5ef347e5d98e562681349324a999b051bc8ba52f",
+          "verdict": "approved",
+          "report": "# ACL-1977 / PR978 \u2014 independent Source review after F1 return\n\nVerdict: **approved for the ordinary Source Approved queue**, with no remaining actionable finding in this exact corrected source and all current native gates successful. This report grants no combined review, direct source merge, main admission, stable package receipt, live selection/activation or full Task06 acceptance.\n\nThe actual independent non-implementing Reviewer is the same `/root/acl971_review` run, actor `Reviewer-WFO971C4M8`, with its original privately retained session. Actual author `/root/instructions_review` used its genuine fresh original Worker claim. I did not edit this source and did not become the combined Reviewer. Current adopted e775 `execution review-acquire --pr978` genuinely acquired only my fresh Source lane. Before/after full canonical-state comparison preserves all other owners,968/971 approvals, the active Coordinator's batch/intake/integration/delivery, queue order and history; only Source977 review acquisition and its one audit event changed. Raw claims and state remain in private0600 records.\n\n## Exact source, scope and original proof\n\n- Repository/PR: `MojoTheApe/adopy-campaing-launcher`, PR978, branch `codex/acl-1977-released-workflow-support`; open/ready/unmerged into main.\n- New Source head `be1013a009a6d0981027915a9ab32c4ccf76d2db`; tree `5ef347e5d98e562681349324a999b051bc8ba52f`; sole parent `5ebf72b04673ce1f7b287e931aad4cada1ec7aa9`.\n- Base/current main remains `af0ade29b106129089dbabd3f208b548efa246d9`.\n- Whole Issue977 body remains SHA256 `685e42377833b87c45332b80efdee0859fda5b71f0140899d7e6e8e710676685`; stable current PR body SHA256 `94492cd55eb6310208193f6e0afecfcdd1bde2943b0ada883f6f74dc67a40b29` retains old checkpoints as dated history and adds this correction truthfully.\n- Actual admission client/guard remains e775 `e775c624e0323e69ed891926691c3dee6587081a`, using the unchanged old-policy controller checkout. The candidate continues to select published Master1.2 `864ca7a5814e703dd6e61207362d24cbc26dc9ad` / Tracker3.4 `866baf6dec2bd82d8ca052002cc3dc6f4805e247`.\n\nI read the full unchanged Issue requirements/history, complete current PR, actual-main AGENTS/reading map and adopted Source commands, original complete independent Source report, combined review's full F1 report and supported Source-only return, the whole corrected runbook and entire35-line correction. Fresh actual file API matches all58 full-source changed paths/blobs and exactly two Source commits. Issue/PR comments and submitted review API lists are empty. Parent Master39 scope remains unchanged SHA256 `cb347d39dba493f4e69b13bf0566b3e9b22307280ae6a607b2a645511bf08d1f`; its full Task06 outcomes remain outstanding.\n\nThe original Source review missed the concrete866 selection-delivery limitation identified by the independent combined Reviewer. Its old no-findings statement for the runbook is superseded by this fresh correction review. The actual combined52 candidate was returned, then its genuine Coordinator returned only Source977; proof SHA256 `280951588d24af2719d9aa7c352498be19ba9c95229c3b99273de4fd52797033`. No old approval was relabelled for the changed head.\n\n## F1 closure and full-scope preservation\n\nThe only correction is `docs/repository/EARLY_ADOPTION.md`, +30/\u22125 lines, mode100644, blob `a000af99b6c48602873788d22d2971e9cd999b5e`, SHA256 `8403d647814da517455cbdc3ac6ae05eda85a6398b093743019abd946c4a40b1`. Everything outside its sequential selection section is byte-identical. All1312 tracked leaves retain the same paths/modes; every other leaf is identical to prior5eb, including all other57 full-PR changes. All1427 directory/leaf entries are accounted for. No code, helper, guard, workflow, configuration, pin, pristine baseline, system/runtime knowledge or acceptance scope changed.\n\nI checked the actual selected866 functions behind F1: delivery resolution calls strict `execution_state` before continuation, while task-context/completion adoption and `maintenance.busy` omit pending delivery. The corrected recipe explicitly **stops optional selections at866** until a separate reviewed compatible selection-delivery support upgrade is actually published, integrated/pinned and verified against the real reader, every writer and recovery. It does not claim a candidate/technical merge/new pin supplies that published prerequisite, implement the bridge here, weaken validation or invent a workaround config.\n\nEach subsequent task-context and completion selection stays separate and genuinely reviewed through its frozen batch, official main and full native checks. Each exact target must finish authorized package publication plus installation/update/recovery verification and its durable receipt **before** maintenance reservation/adoption. Explicit pending-target drain is required; pending, failed or unknown delivery stops either cutover. Older `maintenance show` idle output is explicitly insufficient. The same owned CAS/actor/session/report, sequential protocol4 then5 checks, writer fencing, retained history and recovery remain. This satisfies F1 at the bounded runbook source boundary without pretending to complete future live work.\n\nOriginal full-scope audit `fee18ae805d755f1a7600904dbfae27e91c590b095565b02d28de855739db8bb` remains valid for the byte-identical content it inspected: genuine44\u219272 pristine ancestry,18 canonical helpers/manifest,13 canonical references, four preserved historical guide bodies,293 unchanged product/runtime/guard/collector blobs, exact config and conservative no-change repeat upgrade. This review's entire-leaf comparison supports reuse of that unchanged proof; it does not invent a new regenerated template or new installer outcome. Actual selected controls remain execution3 /5 Workers /5 Source reviews /batch5 /noStage /process1. Optional task-context/completion/shared-CI/retry policies remain absent. Package authorization, installer/updater/data protections and all parent acceptance remain unchanged.\n\n## Verification and exact-head native evidence\n\nAuthor's corrected-head process instruction/link check (30files,121local links), tracked secret scan, focused ordering/preservation check and whitespace passed. I read those receipts and performed a separate immutable full-leaf/API/diff/selected866-code audit, SHA256 `1081cd273594a5f0b2eaa13fc934b9a446606c169fef2a648142f156b08dbfe4`. Broad unchanged suites and template generators were not repeated for this single documentation correction. My private audit initially confused the prior1312 leaf inventory with directory-inclusive entries; only the audit counter was corrected to1312 leaves/1427 entries, with no Source edit or product-test failure. The old two missing-local-Chromium failures remain retained historical evidence, not silently converted into passes.\n\nInitial new-head linkage run39058243870 failed before the actual handoff because Issue977 had not yet reached Review; its original job117470575468 log explicitly records that phase refusal. The normal post-handoff PR metadata update triggered linkage39058344556, which now succeeds. Both remain preserved; no manual rerun, dispatch or historical green substitution was used.\n\nActual PR test-merge `ddd86572e30d8ce422b0081781cc68e71179d393` has tree5ef347 and ordered af0ade29/be1013 parents. Both actual native classifier check/annotation sets independently bind that exact tree and head; their Actions app, native job/check names and details URLs match. Private immutable binding proof SHA256 `c3ecd6854f6e9073c09a0f4086536245a5728e23e4a1f8b4343df2239581cc59` is retained separately from completion outcomes.\n\nNew original-attempt1 installer run39058243806 is successful, including actual job117471227359 and `Installer verification`. I independently read all17 successful native steps: both isolated/candidate package builds, packaged executable and Windows installer, real install/launch/repair/uninstall and real isolated update/restart/recovery, plus retained evidence. This is fresh source-candidate installer execution on the new head, not stable publication/download-channel or employee rollout proof.\n\nAt the actual18:52:02Z terminal readback, all16 latest applicable GitHub Actions checks on exact be1013 are successful, including the four required names `descriptor`, `tracker-link`, `ACL verification`, `Installer verification`. Original attempt1 CI39058243824 has all10jobs successful, including every Linux3.11/3.13 shard and Windows3.13. Original attempt1 installer39058243806 has all4jobs successful. Descriptor39058243815 and the normal newer linkage39058344556 succeed. Direct terminal job lists and exact classifier/tree binding were checked; no old5eb/combined52 result supplies coverage. Safe native summary SHA256 `62624bd4b8998d3f20bc13e20edd1015554290911cf0b8b023290459cce2d36b` distinguishes these actual source checks from future stable publication and live consumer receipt.\n\n## Required next boundary\n\nOnly after current native guards pass, record this exact head/base/tree/scope report through the actual maintained Source lane, then `batch approve` only977 and verify its released lane, unchanged bodies/main and exact other approvals/foreign state. The real Coordinator must later refresh/rebuild its same frozen batch using the new tip, obtain separate fresh independent combined review and applicable combined/main/package evidence. I am not eligible to review a combined candidate containing sources I reviewed.\n\nSourcePR978 remains unmerged. Full Task06, actual compatible support publication, genuine policy selections/activation, exact-target package acceptance, board/state/client/writer/recovery proof and measured ordinary-work outcome remain unfinished. No Task07/Task13 prerequisite, owner pause removal, host159 operation, consumer activation, Master54 work or foreign release is introduced by this Source approval boundary.\n",
+          "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            977
+          ],
+          "recorded_at": "2026-10-17T18:54:05+00:00",
+          "issue_scopes": {
+            "977": "e055bdfc601ab600ab43de400c1afaa936d9d4d132b72ee46d2bb3919e8f05cb"
+          }
+        },
+        "lane": {
+          "id": "3cebcc2302aa435f993c078e3dc0b61c",
+          "pr": 978,
+          "issues": [
+            977
+          ],
+          "actor": "Reviewer-WFO971C4M8",
+          "session": "405969e2a0d24390ba648f8f8929b7a1",
+          "coordinator": "Coordinator-WFO20261017",
+          "started_at": "2026-10-17T18:33:45+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-17T18:55:39+00:00"
       }
     },
     "batches": {
@@ -88615,64 +88721,7 @@
       "started_at": "2026-10-17T17:48:06+00:00",
       "ineligible": {}
     },
-    "source_reviews": {
-      "978": {
-        "id": "3cebcc2302aa435f993c078e3dc0b61c",
-        "pr": 978,
-        "issues": [
-          977
-        ],
-        "actor": "Reviewer-WFO971C4M8",
-        "session": "405969e2a0d24390ba648f8f8929b7a1",
-        "coordinator": "Coordinator-WFO20261017",
-        "started_at": "2026-10-17T18:33:45+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 977,
-          "pr": 978,
-          "branch": "codex/acl-1977-released-workflow-support",
-          "head_sha": "be1013a009a6d0981027915a9ab32c4ccf76d2db",
-          "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
-          "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "e055bdfc601ab600ab43de400c1afaa936d9d4d132b72ee46d2bb3919e8f05cb",
-          "review": {
-            "kind": "independent-review",
-            "implementer": "Worker-WFO06ACL",
-            "reviewer": "Reviewer-WFO971C4M8",
-            "review_session": "405969e2a0d24390ba648f8f8929b7a1",
-            "execution_lane": "3cebcc2302aa435f993c078e3dc0b61c",
-            "head_sha": "be1013a009a6d0981027915a9ab32c4ccf76d2db",
-            "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
-            "tree_sha": "5ef347e5d98e562681349324a999b051bc8ba52f",
-            "verdict": "approved",
-            "report": "# ACL-1977 / PR978 \u2014 independent Source review after F1 return\n\nVerdict: **approved for the ordinary Source Approved queue**, with no remaining actionable finding in this exact corrected source and all current native gates successful. This report grants no combined review, direct source merge, main admission, stable package receipt, live selection/activation or full Task06 acceptance.\n\nThe actual independent non-implementing Reviewer is the same `/root/acl971_review` run, actor `Reviewer-WFO971C4M8`, with its original privately retained session. Actual author `/root/instructions_review` used its genuine fresh original Worker claim. I did not edit this source and did not become the combined Reviewer. Current adopted e775 `execution review-acquire --pr978` genuinely acquired only my fresh Source lane. Before/after full canonical-state comparison preserves all other owners,968/971 approvals, the active Coordinator's batch/intake/integration/delivery, queue order and history; only Source977 review acquisition and its one audit event changed. Raw claims and state remain in private0600 records.\n\n## Exact source, scope and original proof\n\n- Repository/PR: `MojoTheApe/adopy-campaing-launcher`, PR978, branch `codex/acl-1977-released-workflow-support`; open/ready/unmerged into main.\n- New Source head `be1013a009a6d0981027915a9ab32c4ccf76d2db`; tree `5ef347e5d98e562681349324a999b051bc8ba52f`; sole parent `5ebf72b04673ce1f7b287e931aad4cada1ec7aa9`.\n- Base/current main remains `af0ade29b106129089dbabd3f208b548efa246d9`.\n- Whole Issue977 body remains SHA256 `685e42377833b87c45332b80efdee0859fda5b71f0140899d7e6e8e710676685`; stable current PR body SHA256 `94492cd55eb6310208193f6e0afecfcdd1bde2943b0ada883f6f74dc67a40b29` retains old checkpoints as dated history and adds this correction truthfully.\n- Actual admission client/guard remains e775 `e775c624e0323e69ed891926691c3dee6587081a`, using the unchanged old-policy controller checkout. The candidate continues to select published Master1.2 `864ca7a5814e703dd6e61207362d24cbc26dc9ad` / Tracker3.4 `866baf6dec2bd82d8ca052002cc3dc6f4805e247`.\n\nI read the full unchanged Issue requirements/history, complete current PR, actual-main AGENTS/reading map and adopted Source commands, original complete independent Source report, combined review's full F1 report and supported Source-only return, the whole corrected runbook and entire35-line correction. Fresh actual file API matches all58 full-source changed paths/blobs and exactly two Source commits. Issue/PR comments and submitted review API lists are empty. Parent Master39 scope remains unchanged SHA256 `cb347d39dba493f4e69b13bf0566b3e9b22307280ae6a607b2a645511bf08d1f`; its full Task06 outcomes remain outstanding.\n\nThe original Source review missed the concrete866 selection-delivery limitation identified by the independent combined Reviewer. Its old no-findings statement for the runbook is superseded by this fresh correction review. The actual combined52 candidate was returned, then its genuine Coordinator returned only Source977; proof SHA256 `280951588d24af2719d9aa7c352498be19ba9c95229c3b99273de4fd52797033`. No old approval was relabelled for the changed head.\n\n## F1 closure and full-scope preservation\n\nThe only correction is `docs/repository/EARLY_ADOPTION.md`, +30/\u22125 lines, mode100644, blob `a000af99b6c48602873788d22d2971e9cd999b5e`, SHA256 `8403d647814da517455cbdc3ac6ae05eda85a6398b093743019abd946c4a40b1`. Everything outside its sequential selection section is byte-identical. All1312 tracked leaves retain the same paths/modes; every other leaf is identical to prior5eb, including all other57 full-PR changes. All1427 directory/leaf entries are accounted for. No code, helper, guard, workflow, configuration, pin, pristine baseline, system/runtime knowledge or acceptance scope changed.\n\nI checked the actual selected866 functions behind F1: delivery resolution calls strict `execution_state` before continuation, while task-context/completion adoption and `maintenance.busy` omit pending delivery. The corrected recipe explicitly **stops optional selections at866** until a separate reviewed compatible selection-delivery support upgrade is actually published, integrated/pinned and verified against the real reader, every writer and recovery. It does not claim a candidate/technical merge/new pin supplies that published prerequisite, implement the bridge here, weaken validation or invent a workaround config.\n\nEach subsequent task-context and completion selection stays separate and genuinely reviewed through its frozen batch, official main and full native checks. Each exact target must finish authorized package publication plus installation/update/recovery verification and its durable receipt **before** maintenance reservation/adoption. Explicit pending-target drain is required; pending, failed or unknown delivery stops either cutover. Older `maintenance show` idle output is explicitly insufficient. The same owned CAS/actor/session/report, sequential protocol4 then5 checks, writer fencing, retained history and recovery remain. This satisfies F1 at the bounded runbook source boundary without pretending to complete future live work.\n\nOriginal full-scope audit `fee18ae805d755f1a7600904dbfae27e91c590b095565b02d28de855739db8bb` remains valid for the byte-identical content it inspected: genuine44\u219272 pristine ancestry,18 canonical helpers/manifest,13 canonical references, four preserved historical guide bodies,293 unchanged product/runtime/guard/collector blobs, exact config and conservative no-change repeat upgrade. This review's entire-leaf comparison supports reuse of that unchanged proof; it does not invent a new regenerated template or new installer outcome. Actual selected controls remain execution3 /5 Workers /5 Source reviews /batch5 /noStage /process1. Optional task-context/completion/shared-CI/retry policies remain absent. Package authorization, installer/updater/data protections and all parent acceptance remain unchanged.\n\n## Verification and exact-head native evidence\n\nAuthor's corrected-head process instruction/link check (30files,121local links), tracked secret scan, focused ordering/preservation check and whitespace passed. I read those receipts and performed a separate immutable full-leaf/API/diff/selected866-code audit, SHA256 `1081cd273594a5f0b2eaa13fc934b9a446606c169fef2a648142f156b08dbfe4`. Broad unchanged suites and template generators were not repeated for this single documentation correction. My private audit initially confused the prior1312 leaf inventory with directory-inclusive entries; only the audit counter was corrected to1312 leaves/1427 entries, with no Source edit or product-test failure. The old two missing-local-Chromium failures remain retained historical evidence, not silently converted into passes.\n\nInitial new-head linkage run39058243870 failed before the actual handoff because Issue977 had not yet reached Review; its original job117470575468 log explicitly records that phase refusal. The normal post-handoff PR metadata update triggered linkage39058344556, which now succeeds. Both remain preserved; no manual rerun, dispatch or historical green substitution was used.\n\nActual PR test-merge `ddd86572e30d8ce422b0081781cc68e71179d393` has tree5ef347 and ordered af0ade29/be1013 parents. Both actual native classifier check/annotation sets independently bind that exact tree and head; their Actions app, native job/check names and details URLs match. Private immutable binding proof SHA256 `c3ecd6854f6e9073c09a0f4086536245a5728e23e4a1f8b4343df2239581cc59` is retained separately from completion outcomes.\n\nNew original-attempt1 installer run39058243806 is successful, including actual job117471227359 and `Installer verification`. I independently read all17 successful native steps: both isolated/candidate package builds, packaged executable and Windows installer, real install/launch/repair/uninstall and real isolated update/restart/recovery, plus retained evidence. This is fresh source-candidate installer execution on the new head, not stable publication/download-channel or employee rollout proof.\n\nAt the actual18:52:02Z terminal readback, all16 latest applicable GitHub Actions checks on exact be1013 are successful, including the four required names `descriptor`, `tracker-link`, `ACL verification`, `Installer verification`. Original attempt1 CI39058243824 has all10jobs successful, including every Linux3.11/3.13 shard and Windows3.13. Original attempt1 installer39058243806 has all4jobs successful. Descriptor39058243815 and the normal newer linkage39058344556 succeed. Direct terminal job lists and exact classifier/tree binding were checked; no old5eb/combined52 result supplies coverage. Safe native summary SHA256 `62624bd4b8998d3f20bc13e20edd1015554290911cf0b8b023290459cce2d36b` distinguishes these actual source checks from future stable publication and live consumer receipt.\n\n## Required next boundary\n\nOnly after current native guards pass, record this exact head/base/tree/scope report through the actual maintained Source lane, then `batch approve` only977 and verify its released lane, unchanged bodies/main and exact other approvals/foreign state. The real Coordinator must later refresh/rebuild its same frozen batch using the new tip, obtain separate fresh independent combined review and applicable combined/main/package evidence. I am not eligible to review a combined candidate containing sources I reviewed.\n\nSourcePR978 remains unmerged. Full Task06, actual compatible support publication, genuine policy selections/activation, exact-target package acceptance, board/state/client/writer/recovery proof and measured ordinary-work outcome remain unfinished. No Task07/Task13 prerequisite, owner pause removal, host159 operation, consumer activation, Master54 work or foreign release is introduced by this Source approval boundary.\n",
-            "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              977
-            ],
-            "recorded_at": "2026-10-17T18:54:05+00:00",
-            "issue_scopes": {
-              "977": "e055bdfc601ab600ab43de400c1afaa936d9d4d132b72ee46d2bb3919e8f05cb"
-            }
-          },
-          "lane": {
-            "id": "3cebcc2302aa435f993c078e3dc0b61c",
-            "pr": 978,
-            "issues": [
-              977
-            ],
-            "actor": "Reviewer-WFO971C4M8",
-            "session": "405969e2a0d24390ba648f8f8929b7a1",
-            "coordinator": "Coordinator-WFO20261017",
-            "started_at": "2026-10-17T18:33:45+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-17T18:55:39+00:00"
-        }
-      }
-    },
+    "source_reviews": {},
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
   },
   "maintenance_history": [
