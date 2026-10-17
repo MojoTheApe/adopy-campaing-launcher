@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import json
 import shutil
 import subprocess
@@ -172,6 +173,10 @@ _CASES = {
     "finish_file": {"params": FINISH, "chunk": 4},
     "finish_extra": {"params": {**FINISH, "source": "x"}, "chunk": None},
     "max_chunk": {"params": TRANSFER, "chunk": wp.UPLOAD_CHUNK_MAX},
+    # 17.10: Meta 1363049 «A waterfall ID is required» — id загрузки во всех фазах.
+    "start_waterfall": {"params": {**START, "waterfall_id": "0" * 32}, "chunk": None},
+    "transfer_waterfall": {"params": {**TRANSFER, "waterfall_id": "ab" * 16}, "chunk": 4},
+    "bad_waterfall": {"params": {**START, "waterfall_id": "not-hex"}, "chunk": None},
 }
 
 
@@ -546,3 +551,23 @@ def test_mutation_skipping_the_offset_check_is_caught(small, monkeypatch, tmp_pa
     monkeypatch.setattr(cr.CampaignCreator, "_offsets", staticmethod(lax))
     with pytest.raises(AssertionError):
         _guard_offsets(tmp_path)
+
+
+# ───────────────────────── waterfall_id (17.10, Meta 1363049) ─────────────────────────
+
+def test_the_policy_takes_a_waterfall_id_and_only_as_32_hex():
+    _ok({**START, "waterfall_id": "0123456789abcdef" * 2})
+    _ok({**FINISH, "waterfall_id": "f" * 32})
+    _refused({**START, "waterfall_id": "F" * 32})
+    _refused({**START, "waterfall_id": "x" * 32})
+    _refused({**START, "waterfall_id": 123})
+
+
+def test_every_phase_of_one_upload_carries_the_same_waterfall_id(small, tmp_path):
+    d, _f = _big_draft(tmp_path)
+    meta = ChunkMeta()
+    out, _ = _run(meta, d)
+    assert out.error == "", out.error
+    ids = {params.get("waterfall_id") for _path, params in meta.posts if "upload_phase" in params}
+    assert len(ids) == 1 and None not in ids
+    assert re.fullmatch(r"[0-9a-f]{32}", ids.pop())

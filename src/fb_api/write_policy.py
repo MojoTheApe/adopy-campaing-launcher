@@ -57,10 +57,15 @@ PAUSED = "PAUSED"
 #: finish (| cancel - не даём), `file_size`, `upload_session_id`, `start_offset`, `video_file_chunk`.
 #: Ровно три фазы с ЗАКРЫТЫМ набором ключей на фазу; всё прочее - отказ.
 UPLOAD_PHASES = ("start", "transfer", "finish")
+#: 17.10 живой Doc120 (файл 247 МБ): Meta отказала в start с подкодом 1363049
+#: «A waterfall ID is required when the caller is a Facebook App» — токен Ads Manager
+#: считается приложением. `waterfall_id` — наш случайный id одной загрузки (32 hex),
+#: один и тот же во всех трёх фазах, как у загрузчика Ads Manager.
+UPLOAD_WATERFALL_RE = re.compile(r"[0-9a-f]{32}", re.ASCII)
 UPLOAD_KEYS = {
-    "start": frozenset({"upload_phase", "file_size"}),
-    "transfer": frozenset({"upload_phase", "upload_session_id", "start_offset"}),
-    "finish": frozenset({"upload_phase", "upload_session_id", "title", "name"}),
+    "start": frozenset({"upload_phase", "file_size", "waterfall_id"}),
+    "transfer": frozenset({"upload_phase", "upload_session_id", "start_offset", "waterfall_id"}),
+    "finish": frozenset({"upload_phase", "upload_session_id", "title", "name", "waterfall_id"}),
 }
 #: Файл фазы transfer (multipart); у start и finish файла нет.
 UPLOAD_CHUNK_FIELD = "video_file_chunk"
@@ -481,6 +486,9 @@ def _check_upload(params: dict, files: dict) -> None:
     extra = sorted(set(params) - UPLOAD_KEYS[phase])
     if extra:
         raise WriteRefused(f"write refused: key {extra[0]!r} is not allowed in upload phase {phase}")
+    if "waterfall_id" in params and not (isinstance(params["waterfall_id"], str)
+                                         and UPLOAD_WATERFALL_RE.fullmatch(params["waterfall_id"])):
+        raise WriteRefused("write refused: waterfall_id must be 32 lowercase hex characters")
     if phase == "start":
         size = _digits(params.get("file_size"))
         if not size or size > UPLOAD_FILE_MAX:
