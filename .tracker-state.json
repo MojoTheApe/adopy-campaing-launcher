@@ -41687,6 +41687,18 @@
         "state": "implementing",
         "started_at": "2026-10-17T19:11:22+00:00",
         "from_status": "status:todo"
+      },
+      "356": {
+        "actor": "Worker-7k2q9",
+        "session": "s-a75a7899",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1356-starlette",
+        "worktree": "C:\\acl-1356",
+        "id": "11fde19af4e848909afcfede0fe9a212",
+        "issue": 356,
+        "state": "implementing",
+        "started_at": "2026-10-17T19:17:54+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -47710,10 +47722,14 @@
           {
             "actor": "Worker-M1356A",
             "session": "cf9ad405-1356"
+          },
+          {
+            "actor": "Worker-7k2q9",
+            "session": "s-a75a7899"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-M1356A",
+        "state": "implementing",
+        "worker": "Worker-7k2q9",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-M1356A",
@@ -51042,6 +51058,10 @@
       },
       "Worker-ACL1864": {
         "session": "acl1864-s1",
+        "role": "Worker"
+      },
+      "Worker-7k2q9": {
+        "session": "s-a75a7899",
         "role": "Worker"
       }
     },
@@ -83593,6 +83613,13 @@
           "state": "reviewing",
           "started_at": "2026-10-17T19:12:24+00:00"
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-17T19:17:54+00:00",
+        "issue": 356,
+        "claim": "11fde19af4e848909afcfede0fe9a212",
+        "actor": "Worker-7k2q9"
       }
     ],
     "policy": {
