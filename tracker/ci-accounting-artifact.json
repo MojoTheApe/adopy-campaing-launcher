@@ -12,5 +12,5 @@
   "bytes": 27914,
   "portable_python_minimum": "3.9",
   "workflow_engine_adopted": false,
-  "project_workflow_engine_unchanged": "e775c624e0323e69ed891926691c3dee6587081a"
+  "workflow_engine_at_introduction": "e775c624e0323e69ed891926691c3dee6587081a"
 }

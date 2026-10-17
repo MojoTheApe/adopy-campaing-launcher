@@ -15,9 +15,11 @@ checks its fixed digest before loading it. Changed bytes require a reviewed
 artifact refresh. There is one accounting implementation, with no private engine
 import or checkout at report time.
 
-This scoped read-only artifact does not change the guarded e775 workflow engine,
-descriptor/config policies, ownership/state or their generated integration files.
-It does not create a replacement full export manifest. A later full workflow
+The artifact was introduced while the project used workflow engine e775; its
+provenance records that historical context separately from the artifact's source.
+The artifact does not select or constrain a later independently reviewed workflow
+engine. It changes no descriptor/config policy, ownership/state or generated
+integration file and creates no replacement full export manifest. A full workflow
 upgrade must inspect this local addition and its fixed digest through the normal
 three-way conflict/review procedure. The adapter owns its capture root; callers
 cannot override it with `--project-root` to write raw observations into ACL.

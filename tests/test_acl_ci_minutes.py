@@ -354,7 +354,25 @@ def test_identical_supplied_matrix_with_different_key_order_remains_carried():
     assert result["totals"]["counted_intervals"] == 1
 
 
-def test_accounting_artifact_matches_its_actual_source_blob_and_portable_record():
+@pytest.mark.parametrize("engine_revision", [
+    None,
+    "e775c624e0323e69ed891926691c3dee6587081a",
+    "866baf6dec2bd82d8ca052002cc3dc6f4805e247",
+])
+def test_accounting_artifact_matches_its_actual_source_blob_and_portable_record(
+        tmp_path, monkeypatch, engine_revision):
+    if engine_revision is not None:
+        # Real introduction and independently approved ACL-1977 workflow pins.
+        # An accounting artifact must survive a separate workflow adoption.
+        original_record = (minutes.ROOT / "tracker/ci-accounting-artifact.json").read_bytes()
+        script, _ = _isolated_adapter(tmp_path)
+        root = script.parents[1]
+        (root / "tracker").mkdir()
+        (root / "tracker/ci-accounting-artifact.json").write_bytes(original_record)
+        (root / "tracker/engine.json").write_text(json.dumps({
+            "repository": "MojoTheApe/task-tracker", "revision": engine_revision,
+        }))
+        monkeypatch.setattr(minutes, "ROOT", root)
     record = json.loads((minutes.ROOT / "tracker/ci-accounting-artifact.json").read_text())
     raw = (minutes.ROOT / record["artifact_path"]).read_bytes()
     assert record["revision"] == "df0154b96410296b50bc9d7a00af7847d9a97700"
@@ -362,7 +380,7 @@ def test_accounting_artifact_matches_its_actual_source_blob_and_portable_record(
     assert hashlib.sha256(raw).hexdigest() == record["sha256"] == minutes._PROVIDER_SHA256
     assert len(raw) == record["bytes"]
     assert record["workflow_engine_adopted"] is False
-    assert json.loads((minutes.ROOT / "tracker/engine.json").read_text())["revision"] == record["project_workflow_engine_unchanged"]
+    assert record["workflow_engine_at_introduction"] == "e775c624e0323e69ed891926691c3dee6587081a"
 
 
 def test_adapter_owned_private_root_cannot_be_overridden_before_transport(tmp_path, monkeypatch, capsys):
