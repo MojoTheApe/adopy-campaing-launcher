@@ -42211,9 +42211,11 @@
         "worktree": "C:\\acl-1992",
         "id": "cda2954f62c848d2ac499e8fa6d225fe",
         "issue": 992,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-17T21:22:23+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 993,
+        "report": "Implemented in PR 993 (head a62a352f). API jobs report units {done,total,last} per campaign; page percent = done/total (<=99 before result, monotonic); robot jobs keep the ACL-1347 model. creator.py untouched. Pre-handoff independent read-only review: no HIGH, all findings fixed in a62a352f. Targeted tests green locally; full suite left to CI. Live API check on 9095 still pending."
       }
     },
     "tasks": {
