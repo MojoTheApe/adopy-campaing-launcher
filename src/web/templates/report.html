@@ -9210,7 +9210,8 @@ function amapFillAttribution(box, objects, data) {
            тихой пометкой у уровня строки. */
         /* «$0.00» и «0» — не числа Meta: такой черновик ничем не отличается
            от пустого, и пометка ему не нужна. */
-        nowb = /[1-9]/.test(String(o.spend || '') + String(o.results || ''));
+        nowb = /[1-9]/.test(String(o.spend || '') + String(o.results || ''))
+             && Object.keys(data.campaigns || {}).length > 0;  // книга пуста за период — пометка вводит в заблуждение
       }
     }
     line.querySelectorAll('.amap-tree-num.attr').forEach(function (cell) {

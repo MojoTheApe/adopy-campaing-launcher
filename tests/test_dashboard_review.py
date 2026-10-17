@@ -291,3 +291,17 @@ def test_country_totals_count_duplicate_once_and_keep_distinct(isolated_links):
     country = web_app._build_account_map_view({}, df, "2026-10-11", "2026-10-11")["countries"][0]
     assert len(country["rows"]) == 3
     assert country["leads"] == 12 and country["deposits"] == 2 and country["spend"] == 60.0
+
+
+def test_compact_key_ignores_rule_keys():
+    # ACL-1377: ключи по правилу имён не сжимаются — rule1:0x и rule10:x не равны
+    assert web_app._compact_account_key("Facebook_6540") == "facebook6540"
+    from unittest import mock
+    with mock.patch.object(web_app, "_account_key", return_value="rule1:0x"):
+        assert web_app._compact_account_key("anything") == ""
+
+
+def test_only_near_alias_in_workbook_gives_no_match_for_other_account():
+    df = _id_frame("Facebook6545")
+    label = "Facebook_6540_61579599532457"
+    assert web_app.workbook_alias_for(df, "Peru", label) == label
