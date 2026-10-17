@@ -41672,9 +41672,11 @@
         "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/workflow-implementation/2026-10-16/work/acl-early-adoption",
         "id": "bd0b78dabacf4ef999be6da52aa853aa",
         "issue": 977,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-17T18:26:19+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 978,
+        "report": "# ACL-1977 bounded runbook correction handoff\n\nSource PR978 head be1013a009a6d0981027915a9ab32c4ccf76d2db,\ntree 5ef347e5d98e562681349324a999b051bc8ba52f,\nbase af0ade29b106129089dbabd3f208b548efa246d9.\nWhole Issue scope remains 685e42377833b87c45332b80efdee0859fda5b71f0140899d7e6e8e710676685.\n\nThe genuine original author corrected only docs/repository/EARLY_ADOPTION.md\nafter supported source return and a fresh normal Worker claim. The runbook now\nstops optional selection at pinned866 until separately reviewed compatible\nselection-delivery support is actually published, integrated/pinned and verified\nfor real readers/writers/recovery. Each separate context then completion\nselection requires its genuine frozen batch/main/full native checks and complete\nexact-target package/install/update/recovery delivery receipt before maintenance\nor adoption. Pending, failed or unknown delivery stops both cutovers; old idle\noutput is insufficient. No code, pin, optional selection or activation changed.\n\nLocal checks passed: maintained process/link checker (30 files,121 local links),\ntracked secret scanner, bounded sequential-order/preservation checks and git\ndiff --check. All other source blobs and the runbook outside that sequential\nsection are preserved. Earlier broad tests and their two local absent-Chromium\nfailures remain recorded; they were not repeated for this documentation delta.\nNew ordinary native checks are pending and must be read at this exact head.\n\nFresh independent full-scope source review/approval remains required. This is\nneither self-approval nor combined approval; retained968/971 approvals, the same\nfrozen batch/Coordinator and all foreign ownership/history are preserved. Full\nTask06 and actual package/adoption outcomes remain unfinished."
       }
     },
     "tasks": {
