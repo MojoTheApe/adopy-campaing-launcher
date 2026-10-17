@@ -28,7 +28,7 @@ def github(path):
 
 
 def execution(root):
-    result = subprocess.check_output([sys.executable, str(root / "scripts/task_tracker.py"),
+    result = subprocess.check_output([sys.executable, str(root / "scripts/acl_task_tracker.py"),
                                       "execution", "show"], cwd=root, text=True)
     return json.loads(result)["execution"]
 

@@ -74,7 +74,7 @@ credentials, library setup or employee installations.
 
 Engineering delivery now has an explicitly prepared Approved/batch policy;
 actual state activation is separately verified under
-[ACL-1566](../repository/BATCH_INTEGRATION.md). Campaign runtime, employee
+[ACL-1566](../repository/BATCH_INTEGRATION_ACL.md). Campaign runtime, employee
 installations and stable-package publication retain their existing boundaries.
 
 [Source child ACL-1875](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/875)
@@ -104,7 +104,7 @@ plans under original specs, label them as plans, and record what/why and ticket/
 links in CHANGELOG.md. Process-only changes belong in ../repository/CHANGELOG.md.
 
 Repository instructions have a separately prepared direct-main route described in
-[PROCESS_INSTRUCTIONS.md](../repository/PROCESS_INSTRUCTIONS.md). Eligibility uses
+[PROCESS_INSTRUCTIONS.md](../repository/PROCESS_INSTRUCTIONS_ACL.md). Eligibility uses
 normal fixed Markdown paths and complete Git proof, with independent review and
 applicable instruction checks. This policy/automation source is not yet active in
 main; it changes no campaign-launching behavior or employee-installed version.

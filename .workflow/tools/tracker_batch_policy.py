@@ -12,8 +12,8 @@ except ImportError:
     import tracker_pr_check as pr_checks
 
 
-def scope(issue):
-    return rules.task_scope(issue)
+def scope(issue, config=None):
+    return rules.task_scope(issue, config)
 
 
 def source(request, config, approval, baseline, *, phases=('approved',), pending=False, completed=False, frozen=False, included_in=None):
@@ -33,10 +33,12 @@ def source(request, config, approval, baseline, *, phases=('approved',), pending
             or 'flag:blocked' in labels or 'flag:archived' in labels
             or issue.get('state_reason') == 'not_planned' or 'pull_request' in issue
             or issue.get('state') == 'closed' and not completed
-            or scope(issue) != approval.get('scope')):
+            or not rules.scope_matches(issue, approval.get('scope'), config)):
         raise ValueError(f'#{number}: approved scope/status changed; return to its author and review again')
     pr = request(root + f'/pulls/{approval["pr"]}')
     review = approval.get('review', {})
+    compatible = (approval.get('main_sha') != baseline and 'task_context_policy' in config
+                  and rules.context_module().compatible(request, config, approval, baseline))
     included_merge = bool(pr.get('merged') and included_in)
     if (pr.get('merged') and not included_merge or pr.get('draft')
             or pr.get('state') != 'open' and not (completed or included_merge)
@@ -44,8 +46,9 @@ def source(request, config, approval, baseline, *, phases=('approved',), pending
             or pr_checks.linked_numbers(pr.get('body'), config) != [number]
             or pr['head']['ref'] != approval.get('branch')
             or pr['head']['sha'] != approval.get('head_sha')
-            or not frozen and pr['base']['sha'] != approval.get('base_sha')
-            or approval.get('main_sha') != baseline
+            or not frozen and (rules.tree(request, root, pr['base']['sha']) != rules.tree(request, root, baseline)
+                               if compatible else pr['base']['sha'] != approval.get('base_sha'))
+            or approval.get('main_sha') != baseline and not compatible
             or approval.get('policy') != rules.fingerprint(config)):
         raise ValueError(f'#{number}: source approval is stale for its PR, main or policy')
     # GitHub auto-marks main-targeted sources merged when promotion contains their
@@ -61,9 +64,10 @@ def source(request, config, approval, baseline, *, phases=('approved',), pending
     # A PR's live base follows main after promotion. Frozen member proof retains
     # its reviewed baseline; a later intake must revalidate the new live base.
     frozen = dict(pr, base=dict(pr['base'], sha=approval['base_sha']))
-    if (rules.tree(request, root, approval['base_sha']) != rules.tree(request, root, baseline)
+    reviewed_main = approval['main_sha'] if compatible else baseline
+    if (rules.tree(request, root, approval['base_sha']) != rules.tree(request, root, reviewed_main)
             or not rules.review_matches(review, config, frozen, content, [number])
-            or review.get('main_sha') != baseline):
+            or review.get('main_sha') != reviewed_main):
         raise ValueError(f'#{number}: independent source review does not match the frozen baseline')
     if not completed:
         rules.checked(request, root, pr['head']['sha'], rules.policy(config)['required_checks'])
