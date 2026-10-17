@@ -41675,6 +41675,18 @@
         "state": "implementing",
         "started_at": "2026-10-17T19:29:58+00:00",
         "from_status": "status:todo"
+      },
+      "377": {
+        "actor": "Worker-K7Q2M",
+        "session": "acl-1377",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1377-workbook-key",
+        "worktree": "C:\\acl-1377",
+        "id": "70338b0599da44ebab25711d8038c70b",
+        "issue": 377,
+        "state": "implementing",
+        "started_at": "2026-10-17T19:30:37+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -49095,6 +49107,17 @@
       "883": {
         "implementers": [],
         "state": "archived"
+      },
+      "377": {
+        "implementers": [
+          {
+            "actor": "Worker-K7Q2M",
+            "session": "acl-1377"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-K7Q2M",
+        "coordinator": "Coordinator-M1011A"
       }
     },
     "actors": {
@@ -51052,6 +51075,10 @@
       },
       "Worker-ACL1287B": {
         "session": "acl-1287-pr-222939",
+        "role": "Worker"
+      },
+      "Worker-K7Q2M": {
+        "session": "acl-1377",
         "role": "Worker"
       }
     },
@@ -83642,6 +83669,13 @@
         "issue": 287,
         "claim": "95328251ac024ae897588ed0c52302fb",
         "actor": "Worker-ACL1287B"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-17T19:30:37+00:00",
+        "issue": 377,
+        "claim": "70338b0599da44ebab25711d8038c70b",
+        "actor": "Worker-K7Q2M"
       }
     ],
     "policy": {
