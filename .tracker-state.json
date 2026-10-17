@@ -41718,20 +41718,6 @@
         "started_at": "2026-10-16T16:08:01+00:00",
         "from_status": "status:todo"
       },
-      "784": {
-        "actor": "Worker-W1784A",
-        "session": "11633f9c-acl-1784",
-        "coordinator": "Coordinator-C1016A",
-        "branch": "work/acl-1784-api-no-review-window",
-        "worktree": "C:\\acl-1784",
-        "id": "c8b34860c26142858796d7543604ef62",
-        "issue": 784,
-        "state": "handoff",
-        "started_at": "2026-10-17T06:17:51+00:00",
-        "from_status": "status:todo",
-        "pr": 961,
-        "report": "ACL-1784 ready for review. PR #961 (work/acl-1784-api-no-review-window, head 23c74400).\nAPI path only: no review window when nothing was written (GraphClient.writes == 0) or every campaign is clean; profile stopped only if the job started it; English panel notice for each case; RPA unchanged.\nChecks: new tests/test_acl1784_api_review_window.py 9 passed (8 fail on old code); related suites 463 passed locally. Full suite pending CI (Actions startup_failure)."
-      },
       "558": {
         "actor": "Worker-W1558M",
         "session": "622fd2f5-ec4b-4ed3-9102-43e164915329",
@@ -48172,9 +48158,25 @@
             "session": "11633f9c-acl-1784"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1784A",
-        "coordinator": "Coordinator-C1016A"
+        "coordinator": "Coordinator-C1016A",
+        "handoff": {
+          "actor": "Worker-W1784A",
+          "session": "11633f9c-acl-1784",
+          "coordinator": "Coordinator-C1016A",
+          "branch": "work/acl-1784-api-no-review-window",
+          "worktree": "C:\\acl-1784",
+          "id": "c8b34860c26142858796d7543604ef62",
+          "issue": 784,
+          "state": "handoff",
+          "started_at": "2026-10-17T06:17:51+00:00",
+          "from_status": "status:todo",
+          "pr": 961,
+          "report": "ACL-1784 ready for review. PR #961 (work/acl-1784-api-no-review-window, head 23c74400).\nAPI path only: no review window when nothing was written (GraphClient.writes == 0) or every campaign is clean; profile stopped only if the job started it; English panel notice for each case; RPA unchanged.\nChecks: new tests/test_acl1784_api_review_window.py 9 passed (8 fail on old code); related suites 463 passed locally. Full suite pending CI (Actions startup_failure)."
+        },
+        "pr": 961,
+        "queued_at": "2026-10-17T06:25:29+00:00"
       },
       "558": {
         "implementers": [
@@ -52817,7 +52819,8 @@
       788,
       72,
       19,
-      401
+      401,
+      784
     ],
     "review": null,
     "history": [
@@ -78018,6 +78021,13 @@
         "issue": 380,
         "claim": "a7d6881e4f5743e29b12674bd5c77a9b",
         "actor": "Worker-W1380M"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-17T06:25:29+00:00",
+        "issue": 784,
+        "pr": 961,
+        "actor": "Worker-W1784A"
       }
     ],
     "policy": {
