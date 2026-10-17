@@ -46714,7 +46714,7 @@
             "session": "w1872c-20261016"
           }
         ],
-        "state": "stopped",
+        "state": "returning_approval",
         "worker": "Worker-W1872C",
         "coordinator": "Coordinator-C1016A",
         "handoff": {
@@ -46734,10 +46734,10 @@
         "pr": 873,
         "queued_at": "2026-10-16T11:02:01+00:00",
         "return_operation": {
-          "id": "91b9cdb7a26a463a8f1bebb1297c4b0e",
-          "actor": "Coordinator-M1011A",
-          "session": "coord-m1011a-20261015",
-          "report": "Main moved to af0ade29 (ACL-1924 batch + ACL-1923 no-stage activation, policy 1bd91869). The earlier approval predates this policy and main and is no longer current. Returned to the author for a main merge and fresh independent approval; coordination of this task moves to Coordinator-C1016A (session \"7 \u0437\u0430\u0434\u0430\u0447 \u0432 \u0430\u043f\u0440\u0443\u0432\u0434\u0435\") on the owner's instruction."
+          "id": "ca50974d22544e40b9c6228e077462a4",
+          "actor": "Coordinator-C1016A",
+          "session": "c7e3da-20261016",
+          "report": "# Withdrawn: official Meta app route cancelled by the owner (2026-10-17)\n\nOwner rule: Facebook must never see one IP or one shared app across our ad accounts. The route that uses an app plus a token, called from the dashboard machine, is cancelled entirely. All API work stays on the in-profile Graph route (ACL-1756/1760/1761) through each profile's own proxy.\n\nThis task belongs to the cancelled route, so it is withdrawn without merging. The branch and the review history are kept for reference. Related backlog tasks were archived with the same reason: ACL-1858, 1859, 1860, 1883."
         },
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "reviewer": "Reviewer-R1872D",
@@ -46745,6 +46745,12 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578023+00:00",
           "remote_process_stopped_verified": false
+        },
+        "return": {
+          "id": "ca50974d22544e40b9c6228e077462a4",
+          "actor": "Coordinator-C1016A",
+          "session": "c7e3da-20261016",
+          "report": "# Withdrawn: official Meta app route cancelled by the owner (2026-10-17)\n\nOwner rule: Facebook must never see one IP or one shared app across our ad accounts. The route that uses an app plus a token, called from the dashboard machine, is cancelled entirely. All API work stays on the in-profile Graph route (ACL-1756/1760/1761) through each profile's own proxy.\n\nThis task belongs to the cancelled route, so it is withdrawn without merging. The branch and the review history are kept for reference. Related backlog tasks were archived with the same reason: ACL-1858, 1859, 1860, 1883."
         }
       },
       "874": {
@@ -50886,6 +50892,10 @@
       "Worker-W1142A": {
         "session": "w1142a-s1",
         "role": "Worker"
+      },
+      "Coordinator-C1016A": {
+        "session": "c7e3da-20261016",
+        "role": "Coordinator"
       }
     },
     "completed": {
