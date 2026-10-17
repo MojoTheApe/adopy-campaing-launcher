@@ -156,6 +156,18 @@ def _blocker_from_result(result: dict[str, Any]) -> str:
     return ""
 
 
+def _units_view(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    try:
+        done, total = int(raw.get("done") or 0), int(raw.get("total") or 0)
+    except (TypeError, ValueError):
+        return None
+    if total <= 0:
+        return None
+    return {"done": max(0, min(done, total)), "total": total, "last": str(raw.get("last") or "")[:200]}
+
+
 def job_progress(
     job: dict[str, Any],
     *,
@@ -217,6 +229,7 @@ def job_progress(
                 if n >= MAX_CAMPAIGN_ATTEMPTS and name not in blocker:
                     blocker[name] = f"Gave up after {n} attempts at step '{step}' — needs a person"
 
+    units_by_name = job.get("units") if isinstance(job.get("units"), dict) else {}
     campaigns: list[dict[str, Any]] = []
     current = ""
     for name in names:
@@ -238,6 +251,8 @@ def job_progress(
             "idle_s": round((now - ts).total_seconds(), 1) if ts else None,
             "stall_after_s": stall_after_for(steps_seen.get(name, [])),
             "blocker": why,
+            # ACL-1992: API-путь — сколько объектов кампании уже создано из скольких.
+            "units": _units_view(units_by_name.get(name)),
         })
 
     # Тишина задания: от последнего шага любой его кампании, а до первого
