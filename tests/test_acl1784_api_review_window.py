@@ -94,6 +94,9 @@ class FakePublisher:
         pass
 
 
+_KEY = "550e8400-e29b-41d4-a716-446655440000"
+
+
 @pytest.fixture
 def api_job(monkeypatch):
     with pj._jobs_lock:
@@ -107,7 +110,8 @@ def api_job(monkeypatch):
     monkeypatch.setattr(pj, "keep_display_awake", lambda *a, **k: contextlib.nullcontext())
     monkeypatch.setattr(pj, "_watch_screen_lock", lambda *a, **k: contextlib.nullcontext())
     monkeypatch.setattr(pj, "_start_stuck_watch", lambda *a, **k: None)
-    monkeypatch.setattr(pj, "profile_key_for", lambda label: label)
+    # ACL-1853: ключ замка — физический UUID профиля, ярлык не годится.
+    monkeypatch.setattr(pj, "profile_key_for", lambda label: _KEY)
     monkeypatch.setattr(publish_api, "ApiPublisher", FakePublisher)
 
     def run(scenario, label="KLD_BFL_B96"):
@@ -191,7 +195,7 @@ def test_a_readback_mismatch_keeps_the_review_window(api_job):
                                "started_now": True})
     assert pub.finish_calls == [{"clean": False, "other": False}]
     assert not job.get("profile_closed")
-    assert _kept(slots) == [("KLD_BFL_B96", True)]
+    assert _kept(slots) == [(_KEY, True)]
     assert job["review_window"] is True
     assert pj.API_REVIEW_NOTICE in job["creative_notices"]
 
@@ -199,7 +203,7 @@ def test_a_readback_mismatch_keeps_the_review_window(api_job):
 def test_an_error_after_a_write_keeps_the_review_window(api_job):
     slots, job, _ = api_job({"drafts": [{"name": "C1"}], "writes": 2, "publish_raises": True,
                              "result": _ok_result, "started_now": True})
-    assert _kept(slots) == [("KLD_BFL_B96", True)]
+    assert _kept(slots) == [(_KEY, True)]
     assert pj.API_REVIEW_NOTICE in job["creative_notices"]
 
 
