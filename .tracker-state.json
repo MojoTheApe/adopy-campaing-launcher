@@ -41741,6 +41741,18 @@
         "state": "implementing",
         "started_at": "2026-10-17T11:35:04+00:00",
         "from_status": "status:todo"
+      },
+      "403": {
+        "actor": "Worker-W1403A",
+        "session": "w1403a-1792236912",
+        "coordinator": "Coordinator-T1004Q",
+        "branch": "work/acl-1403-cdp-refused-after-start",
+        "worktree": "C:\\acl-1403",
+        "id": "2b83c8bbc58e45c7b8c0d6d8aa30a101",
+        "issue": 403,
+        "state": "implementing",
+        "started_at": "2026-10-17T11:35:53+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -48442,6 +48454,17 @@
         "state": "implementing",
         "worker": "Worker-W1358A",
         "coordinator": "Coordinator-T1004Q"
+      },
+      "403": {
+        "implementers": [
+          {
+            "actor": "Worker-W1403A",
+            "session": "w1403a-1792236912"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W1403A",
+        "coordinator": "Coordinator-T1004Q"
       }
     },
     "actors": {
@@ -50335,6 +50358,10 @@
       },
       "Worker-W1358A": {
         "session": "w1358a-20261017",
+        "role": "Worker"
+      },
+      "Worker-W1403A": {
+        "session": "w1403a-1792236912",
         "role": "Worker"
       }
     },
@@ -78442,6 +78469,13 @@
         "issue": 358,
         "claim": "0cc9fcf7d7d94181a80986d5052a98e7",
         "actor": "Worker-W1358A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-17T11:35:53+00:00",
+        "issue": 403,
+        "claim": "2b83c8bbc58e45c7b8c0d6d8aa30a101",
+        "actor": "Worker-W1403A"
       }
     ],
     "policy": {
