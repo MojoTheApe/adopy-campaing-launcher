@@ -4519,6 +4519,12 @@ async def goals_read(cm: str = "") -> JSONResponse:
     from starlette.concurrency import run_in_threadpool
 
     who = (cm or "").strip() or (os.environ.get("MY_CM_NAME") or "").strip()
+    me = (os.environ.get("MY_CM_NAME") or "").strip()
+    if who.casefold() != me.casefold() and not goals_store.is_team_lead():
+        return JSONResponse(
+            {"ok": False, "error": f"These are {who}'s goals. Only a team lead sees somebody else's."},
+            status_code=403,
+        )
     seed = await run_in_threadpool(_goal_countries_now, who)
     return JSONResponse({
         "ok": True,
@@ -4526,6 +4532,20 @@ async def goals_read(cm: str = "") -> JSONResponse:
         "goals": goals_store.for_cm(who, seed),
         "team_lead": goals_store.is_team_lead(),
     })
+
+
+@app.get("/goals/overview")
+async def goals_overview() -> JSONResponse:
+    """Every manager's saved goals, read-only. Team lead only (ACL_TEAM_LEAD).
+
+    Same agreement as editing: the flag keeps the UI honest, it is not a lock.
+    """
+    from src.web import goals as goals_store
+
+    if not goals_store.is_team_lead():
+        return JSONResponse(
+            {"ok": False, "error": "Only a team lead sees everyone's goals."}, status_code=403)
+    return JSONResponse({"ok": True, "managers": goals_store.overview()})
 
 
 @app.post("/goals")
