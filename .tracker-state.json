@@ -41726,9 +41726,11 @@
         "worktree": "C:\\acl-1202",
         "id": "9eb8e649a5e846cb939cbb76b3e7197e",
         "issue": 202,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-17T11:36:51+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 976,
+        "report": "# ACL-1202 handoff report\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/976 (branch work/acl-1202-overview-profile-search)\n\nEach Accounts overview row gets a name search backed by the shared cached amapProfiles -> /multilogin-search. Open profiles first and labelled open; found profiles labelled closed and saved with folder_id and Multilogin slot. Suggestion keys on search results via server-side profile_name_key (key on search answers, label_key on overview rows). Empty answer says \"X is not in Multilogin\"; catalogue failure keeps open profiles and says it did not answer.\n\nPR #950 (ACL-1151) is still open and not in main, so its profile_connection module is not available; this change reuses only code that exists on main and is not rewritten by #950 (amapProfiles, amapRank, profile_name_key). Expect a small report.html conflict with #950 in the Accounts IIFE.\n\nTests: tests/test_acl_1202_overview_profile_search.py (4 new, node harness included); touched suites 66 passed. Full suite left to CI. Not verified live; serve.py restart needed."
       }
     },
     "tasks": {
