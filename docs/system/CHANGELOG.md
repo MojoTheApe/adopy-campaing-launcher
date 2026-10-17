@@ -174,6 +174,16 @@ stop before the first write) or whose every campaign is created and verified
 frees its slot; it stops the profile only if the job started it, never one the
 user opened. The job panel states in English why the window was or was not
 kept. The RPA path is unchanged.
+## Teach wait is per job, with a banner and an amber dot per account - ACL-1142
+
+- The "we need your click" state in `pacing.py` was three module-level variables for the whole
+  dashboard. It is now kept per job (the job thread is tagged through `job_cancel.bind(event, job_id)`):
+  a wait pauses only its own job, the manual Pause button still pauses all.
+- `GET /rpa-teach/status` lists every waiting job with its account; `POST /rpa-teach/resume?job_id=`
+  releases exactly that job (without `job_id` it works only while one job waits, otherwise 409).
+- The job snapshot carries `teach` (waiting, step, account). The banner names the account and its button
+  releases only its own job; the campaign dot of a waiting job turns amber (`build-attn`).
+- The concurrency cap stays `ACL_MAX_PROFILES` (default 2, ACL-1603).
 
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
