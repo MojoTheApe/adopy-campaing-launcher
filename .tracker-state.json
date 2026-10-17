@@ -42047,7 +42047,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "990": {
+        "actor": "Worker-PF17Q",
+        "session": "S-2f528671",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1990-preflight-topics",
+        "worktree": "C:\\acl-1990-preflight-topics",
+        "id": "0b3da6a8634d4bf8959080dea6038abd",
+        "issue": 990,
+        "state": "implementing",
+        "started_at": "2026-10-17T21:00:31+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -49524,6 +49537,17 @@
         "pr": 988,
         "queued_at": "2026-10-17T20:19:01+00:00",
         "reviewer": "Reviewer-TT142I"
+      },
+      "990": {
+        "implementers": [
+          {
+            "actor": "Worker-PF17Q",
+            "session": "S-2f528671"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-PF17Q",
+        "coordinator": "Coordinator-M1011A"
       }
     },
     "actors": {
@@ -51490,6 +51514,10 @@
       "Reviewer-TT142I": {
         "session": "root_tt142_implementation",
         "role": "Reviewer"
+      },
+      "Worker-PF17Q": {
+        "session": "S-2f528671",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -84957,6 +84985,13 @@
           "state": "reviewing",
           "started_at": "2026-10-17T20:53:27+00:00"
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-17T21:00:31+00:00",
+        "issue": 990,
+        "claim": "0b3da6a8634d4bf8959080dea6038abd",
+        "actor": "Worker-PF17Q"
       }
     ],
     "policy": {
