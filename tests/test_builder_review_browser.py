@@ -330,3 +330,105 @@ def test_creatives_list_change_keeps_closed_dropdown_and_unchanged_previews(crea
     pg.wait_for_timeout(400)
     assert pg.locator('.cb-sel-dropdown:not([hidden])').count() == 0  # закрытый список не открываем
     assert pg.locator('.cbp-media').first.get_attribute('data-mark') == 'same'  # чужой файл: превью не трогаем
+
+
+# ── ACL-1668: выбранный креатив удалили/переименовали — строка помечена, публикация отказывает ──
+
+@pytest.fixture
+def missing_env(browser, tmp_path, monkeypatch):
+    from src.web import app as webapp
+    monkeypatch.setattr(webapp, 'get_creatives_root', lambda: str(tmp_path))
+    (tmp_path / '1111_old.jpg').write_bytes(b'x')
+    (tmp_path / '2222_keep.jpg').write_bytes(b'x')
+    pool = ThreadPoolExecutor(max_workers=1)
+
+    def route(r):
+        if r.request.url.split('?')[0].endswith('/api/creatives'):
+            body = pool.submit(lambda: asyncio.run(webapp.api_creatives()).body).result()
+            r.fulfill(content_type='application/json', body=body)
+        else:
+            r.fulfill(content_type='application/json', body='{"files":[],"texts":[]}')
+
+    src = REPORT.read_text(encoding='utf-8')
+    start = src.index('// ── Campaign Builder JS')
+    end = src.index('// ── Preview & Publish', start)
+    esc = src[src.index('    function aclEscHtml'):src.index('\n    }', src.index('    function aclEscHtml')) + 6]
+    script = Environment().from_string(src[start:end]).render(
+        ref_options_json={'targetings': [], 'os': ['All']}, account_alias_map_json={},
+        account_preflight_json={})
+    pub_all = src[src.index('window.cbPublishAll = '):src.index('/* ── ACL-1819: серверные проверки')]
+    helpers = src[src.index('function cbSlotTitle'):src.index('/* Все аккаунты уходят на сервер СРАЗУ')]
+    publish = src[src.index('window.cbTrackingWarning'):src.index('function _doCbPublish')]
+    ctx = browser.new_context()
+    ctx.route('**/*', route)
+    pg = ctx.new_page()
+    errors = []
+    pg.on('pageerror', lambda e: errors.append(str(e)))
+    pg.goto('http://acl.test/')
+    pg.set_content('<form class="open-account-form" id="form" data-country="Mexico"><input name="country" value="Mexico">'
+                   '<input name="account_label" value="Demo"><input name="tracking_link" value="">'
+                   '<input name="camp_count" class="cb-count" value="0"><div class="cb-slots"></div></form>')
+    pg.add_script_tag(content=esc + '\n' + script + '\n' + helpers + '\n' + pub_all + '\n' + publish)
+    pg.evaluate("window._safeConfirm = (t,b,run,o) => { window.confirmation = {body:b, run}; };"
+                "window.alerts = []; window.alert = m => window.alerts.push(m);"
+                "window._doCbPublish = () => { window.sent = true; };"
+                "window._runPublishQueue = () => { window.sent = true; return {skipped: []}; };"
+                "cbAddSlot(document.querySelector('form'))")
+    pg.wait_for_function('window.CB_CREATIVES_REFRESH_COUNT >= 1')
+    pg.wait_for_timeout(300)
+    yield pg, tmp_path
+    assert not errors, errors
+    ctx.close()
+    pool.shutdown()
+
+
+def _pick_file(pg, name):
+    pg.evaluate("""n => { const s = document.querySelector('.cb-slot');
+      s.querySelector('[name$="_creative_file"]').value = n;
+      s.querySelector('.cb-creative-search').value = n; }""", name)
+
+
+def test_deleted_chosen_creative_is_marked_and_publish_is_refused_with_row_named(missing_env):
+    pg, folder = missing_env
+    _pick_file(pg, '1111_old.jpg')
+    pg.evaluate("cbCreativesAge(1e12); cbRefreshCreatives(0)")
+    pg.wait_for_timeout(400)
+    assert pg.locator('.cb-file-missing-note').count() == 0
+    (folder / '1111_old.jpg').unlink()
+    pg.evaluate("cbCreativesAge(1e12)")
+    pg.evaluate("cbRefreshCreatives(0)")
+    pg.wait_for_selector('.cb-file-missing-note', timeout=5000)
+    note = pg.locator('.cb-file-missing-note')
+    assert note.inner_text() == 'File missing \u2014 pick again'
+    assert 'color:var(--bad)' in note.get_attribute('style').replace(' ', '')  # error colour of the theme
+    assert pg.locator('.cb-creative-search').input_value() == '1111_old.jpg'  # имя остаётся
+    # Publish (одна форма): подтверждение называет строку, подтверждение ничего не шлёт.
+    pg.evaluate('cbPublish(document.querySelector("form"))')
+    body = pg.evaluate('confirmation.body')
+    assert 'File missing' in body and 'Ad 1' in body and '1111_old.jpg' in body
+    pg.evaluate('confirmation.run()')
+    assert pg.evaluate('window.sent') is None and pg.evaluate('alerts.length') == 1
+    # Publish all: то же самое.
+    pg.evaluate('window.confirmation = null; cbPublishAll(null)')
+    body = pg.evaluate('confirmation.body')
+    assert 'File missing' in body and '1111_old.jpg' in body
+    pg.evaluate('confirmation.run()')
+    assert pg.evaluate('window.sent') is None and pg.evaluate('alerts.length') == 2
+    # Выбрали файл заново — пометка уходит, публикация не отказывает.
+    _pick_file(pg, '2222_keep.jpg')
+    pg.evaluate("cbCreativesAge(1e12); cbRefreshCreatives(0)")
+    pg.wait_for_function('!document.querySelector(".cb-file-missing-note")', timeout=5000)
+    pg.evaluate('window.confirmation = null; cbPublish(document.querySelector("form"))')
+    assert 'File missing' not in pg.evaluate('confirmation.body')
+    pg.evaluate('confirmation.run()')
+    assert pg.evaluate('window.sent') is True
+
+
+def test_unlisted_chosen_file_is_marked_once_the_list_is_loaded(missing_env):
+    pg, folder = missing_env
+    _pick_file(pg, 'typed-but-never-listed.jpg')
+    pg.evaluate("cbCreativesAge(1e12); cbRefreshCreatives(0)")
+    pg.wait_for_timeout(400)
+    # Выбранного нет в папке, а список загружен: помечено. Без загрузки списка молчим.
+    assert pg.locator('.cb-file-missing-note').count() == 1
+    assert pg.evaluate('cbMissingCreatives(document).length') == 1
