@@ -4118,6 +4118,37 @@
         "issue_scopes": {
           "968": "0adfdf041aeb6e2ec14df79b04667b62b19a9dfd5d67676108903ce44b7afb52"
         }
+      },
+      "984": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-WFOC984R7",
+        "implementer": "Coordinator-WFO3C7A5M",
+        "head_sha": "9e71f2d644d503895da7dcd74ef0025bb594475d",
+        "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+        "tree_sha": "b5687a18b9761bcad0b3fb1a2704d7d30dd4d4f6",
+        "execution_lane": "b0a91a786e154807abe0a878a5dfeda0",
+        "review_session": "wfo_20261017_acl_combined_review",
+        "batch_id": "6b2f4033a38f4640b5ebdedf056fb0f0",
+        "source_heads": [
+          "56249b0d6f61eaf42a68851a23fb8b50e517c8dc",
+          "4ee28aedba1545f61aa6b05ee5d9c609f6268a70",
+          "be1013a009a6d0981027915a9ab32c4ccf76d2db"
+        ],
+        "report": "Independent combined review of exact PR984 approved for integration; no open findings. Durable private full report SHA256 96a69cb4977d2c787ced1bbb005636a9b9e00e72108cdc4752cf1b07a63590ce. Actual original-attempt full seven platform cells, all16 native checks and real installer update/recovery passed; corrected Source977 F1 closed. Exact post-main stable package delivery and original parent Task05/06 acceptance remain unfinished.",
+        "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          968,
+          971,
+          977
+        ],
+        "recorded_at": "2026-10-17T19:33:58+00:00",
+        "issue_scopes": {
+          "968": "0adfdf041aeb6e2ec14df79b04667b62b19a9dfd5d67676108903ce44b7afb52",
+          "971": "76df662eb75a310f37206cef7965a910006f03e78aa0788f4890435507eb9662",
+          "977": "e055bdfc601ab600ab43de400c1afaa936d9d4d132b72ee46d2bb3919e8f05cb"
+        }
       }
     },
     "stage": {
