@@ -41729,20 +41729,6 @@
         "state": "implementing",
         "started_at": "2026-10-17T06:18:19+00:00",
         "from_status": "status:todo"
-      },
-      "380": {
-        "actor": "Worker-W1380M",
-        "session": "s-1380-334896ca",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1380-ref-options-off-render",
-        "worktree": "C:\\acl-1380",
-        "id": "a7d6881e4f5743e29b12674bd5c77a9b",
-        "issue": 380,
-        "state": "handoff",
-        "started_at": "2026-10-17T06:18:51+00:00",
-        "from_status": "status:todo",
-        "pr": 962,
-        "report": "PR #962 (work/acl-1380-ref-options-off-render, f3e7bbf3).\n- Render path: _load_sheet_targets reads the machine copy and starts one background non-forced pull; no pull(force=True) on GET / or /api/ref-data. Measured 392 ms median -> 18 ms on the real library.\n- asyncio errors: cause reproduced (clearing the running-loop mark on the server loop thread -> \"loop ... is not the running loop\"). Cancel route covered by a live-uvicorn test; _clear_inherited_asyncio_loop refuses on the loop thread. Zombie/launcher part stays in #163.\n- Cold/warm GET / timings cited from the 29.09 profiling (not re-measured live: owner dashboard not restarted).\n- Tests: 8 new; 148 touched-area tests passed locally. Needs serve.py restart to take effect."
       }
     },
     "tasks": {
@@ -48198,9 +48184,25 @@
             "session": "s-1380-334896ca"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1380M",
-        "coordinator": "Coordinator-M1011A"
+        "coordinator": "Coordinator-M1011A",
+        "handoff": {
+          "actor": "Worker-W1380M",
+          "session": "s-1380-334896ca",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "work/acl-1380-ref-options-off-render",
+          "worktree": "C:\\acl-1380",
+          "id": "a7d6881e4f5743e29b12674bd5c77a9b",
+          "issue": 380,
+          "state": "handoff",
+          "started_at": "2026-10-17T06:18:51+00:00",
+          "from_status": "status:todo",
+          "pr": 962,
+          "report": "PR #962 (work/acl-1380-ref-options-off-render, f3e7bbf3).\n- Render path: _load_sheet_targets reads the machine copy and starts one background non-forced pull; no pull(force=True) on GET / or /api/ref-data. Measured 392 ms median -> 18 ms on the real library.\n- asyncio errors: cause reproduced (clearing the running-loop mark on the server loop thread -> \"loop ... is not the running loop\"). Cancel route covered by a live-uvicorn test; _clear_inherited_asyncio_loop refuses on the loop thread. Zombie/launcher part stays in #163.\n- Cold/warm GET / timings cited from the 29.09 profiling (not re-measured live: owner dashboard not restarted).\n- Tests: 8 new; 148 touched-area tests passed locally. Needs serve.py restart to take effect."
+        },
+        "pr": 962,
+        "queued_at": "2026-10-17T06:34:52+00:00"
       }
     },
     "actors": {
@@ -52822,7 +52824,8 @@
       72,
       19,
       401,
-      784
+      784,
+      380
     ],
     "review": null,
     "history": [
@@ -78030,6 +78033,13 @@
         "issue": 784,
         "pr": 961,
         "actor": "Worker-W1784A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-17T06:34:52+00:00",
+        "issue": 380,
+        "pr": 962,
+        "actor": "Worker-W1380M"
       }
     ],
     "policy": {
