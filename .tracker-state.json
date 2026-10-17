@@ -46378,7 +46378,7 @@
             "session": "architecture_audit_n7q4_20261013"
           }
         ],
-        "state": "archiving",
+        "state": "archived",
         "worker": "Worker-N7Q4",
         "coordinator": "Coordinator-CR1012",
         "handoff": {
@@ -82733,6 +82733,12 @@
         "at": "2026-10-17T16:39:15+00:00",
         "issue": 788,
         "reason": "Withdrawn 2026-10-17: the owner cancelled the official Meta app route. Facebook must never see one IP or one shared app across our ad accounts, so all API work stays on the in-profile Graph route (ACL-1756/1760/1761) through each profile's proxy."
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-17T16:40:16+00:00",
+        "issue": 844,
+        "reason": "Owner decision 2026-10-17 (main rule): Facebook must never see one IP or one shared app across our ad accounts, so the official Meta app route is dropped entirely; API work stays in-profile (ACL-1756/1760/1761). The probe did its job: the ACL-1859 one-account read pilot passed (spend matched Ads Manager) and led to this decision."
       }
     ],
     "policy": {
