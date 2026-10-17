@@ -49,7 +49,16 @@ def scrub_value(value: Any) -> Any:
             if isinstance(key, str) and key.lower().replace("-", "_") in {"access_token", "token"}:
                 out[key] = "<hidden>"
                 continue
-            out[scrub(key) if isinstance(key, str) else key] = scrub_value(item)
+            clean = scrub_value(item)
+            if not isinstance(key, str):
+                out[key] = clean
+                continue
+            try:  # ACL-1558: почта и короткие номера в ключе — общим `scrub_key`
+                from src.fb_ads_rpa import run_telemetry
+
+                run_telemetry._put_unique(out, scrub(run_telemetry.scrub_key(key)), clean)
+            except ImportError:
+                out[scrub(key)] = clean
         return out
     if isinstance(value, (list, tuple)):
         return [scrub_value(item) for item in value]

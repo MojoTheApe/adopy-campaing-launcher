@@ -1,5 +1,17 @@
 # System history
 
+## ACL-1558 — Scrubber catches bare tokens, proxy credentials and id/email dict keys — 2026-10-17
+
+The shared telemetry scrubber (`run_telemetry.scrub` / `scrub_diag`, used by telemetry rows,
+Sentry contexts and the Run summary attachment) now also hides:
+- a bare Graph API token `EAA…` with no `token=` or `Bearer` before it (`<token>`);
+- proxy credentials `user:pass@host[:port]`, also after `http://`/`socks5://`: login and
+  password become `<user>:<hidden>@`, host and port stay visible;
+- dict keys that are ids or emails (`act_1234567`, a 6+ digit account id, `name@example.com`)
+  in `scrub_diag`, so Sentry contexts no longer carry them; keys that collide after scrubbing
+  keep both entries (`key`, `key#2`). The Graph pilot's `scrub_value` uses the same key rule.
+All new patterns are bounded and start only at word starts, so scrubbing stays linear.
+
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
 Add a durable authorized release workflow using the maintained installer publisher
