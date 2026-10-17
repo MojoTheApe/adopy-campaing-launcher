@@ -577,7 +577,7 @@
        Шапку всё равно сдвигаем из-под него, пока есть куда: иначе Refresh и
        тема прятались бы под панелью. */
     @media (max-width: 1100px) and (min-width: 760px) {
-      body.cbd-open .head-top { padding-right: calc(var(--cbd-w) + var(--cbd-handle-w) + 1.5rem); }
+      body.cbd-open:not(.cbd-overlay) .head-top { padding-right: calc(var(--cbd-w) + var(--cbd-handle-w) + 1.5rem); }
     }
     @media (pointer: coarse) {
       .head-btn, .head-refresh { min-height: 44px; }
@@ -2771,7 +2771,8 @@
       border-radius: var(--radius-md) 0 0 var(--radius-md);
       box-shadow: var(--shadow-md);
     }
-    .cbd-root.cbd-dragging { transition: none; user-select: none; }
+    .cbd-root.cbd-dragging { transition: none; }
+    body.cbd-resizing { user-select: none; }
     .cbd-handle {
       width: 100%; box-sizing: border-box;
       touch-action: none;
@@ -3216,7 +3217,8 @@
     /* Растянутая панель: та же панель на ширину окна, страница под ней не
        сдвигается (двигать её некуда). Закрытая — снова у края, шириной в
        обычную. */
-    body.cbd-open.cbd-expanded { padding-right: 0; }
+    /* Шире обычной и странице не остаётся места — панель ложится поверх. */
+    body.cbd-open.cbd-overlay { padding-right: 0; }
 
     .cbd-cols {
       flex: 1; min-height: 0; display: grid;
@@ -5264,7 +5266,7 @@ window.cbDrawer = (function () {
   function maxWidth() { return Math.max(240, viewport() - HANDLE_W - EDGE); }
   function clamp(w) { return Math.max(Math.min(MIN_W, maxWidth()), Math.min(maxWidth(), w)); }
   function width() {
-    if (mode === 'wide') return maxWidth();
+    if (mode === 'wide') return Math.max(maxWidth(), Math.min(NORMAL_W, Math.max(240, viewport() - HANDLE_W)));
     if (mode === 'custom') return clamp(custom);
     return Math.min(NORMAL_W, Math.max(240, viewport() - HANDLE_W));
   }
@@ -5276,6 +5278,7 @@ window.cbDrawer = (function () {
     document.documentElement.style.setProperty('--cbd-w', w + 'px');
     root.setAttribute('data-expanded', wide ? '1' : '0');
     document.body.classList.toggle('cbd-expanded', wide);
+    document.body.classList.toggle('cbd-overlay', w > NORMAL_W && viewport() - w - HANDLE_W < 600);
     var open = isOpen();
     pressed(presetClosed, !open);
     pressed(presetNormal, open && mode === 'normal');
@@ -5337,6 +5340,7 @@ window.cbDrawer = (function () {
       drag.moved = true;
       swallowClick = true;
       root.classList.add('cbd-dragging');
+      document.body.classList.add('cbd-resizing');
       if (!isOpen()) set(true);
     }
     mode = 'custom';
@@ -5346,19 +5350,22 @@ window.cbDrawer = (function () {
   function dragEnd(e) {
     if (!drag || e.pointerId !== drag.id) return;
     var moved = drag.moved;
+    if (e.type === 'pointercancel') swallowClick = false;
     drag = null;
     root.classList.remove('cbd-dragging');
+    document.body.classList.remove('cbd-resizing');
     if (moved) rememberSize();
   }
   handle.addEventListener('pointerdown', function (e) {
     if (e.button) return;
     swallowClick = false;
-    drag = { id: e.pointerId, x: e.clientX, w: width(), moved: false };
+    drag = { id: e.pointerId, x: e.clientX, w: isOpen() ? width() : 0, moved: false };
     try { handle.setPointerCapture(e.pointerId); } catch (err) { /* не критично */ }
   });
   handle.addEventListener('pointermove', dragMove);
   handle.addEventListener('pointerup', dragEnd);
   handle.addEventListener('pointercancel', dragEnd);
+  handle.setAttribute('aria-keyshortcuts', 'ArrowLeft ArrowRight');
   handle.addEventListener('click', function () {
     if (swallowClick) { swallowClick = false; return; }
     set(!isOpen());
