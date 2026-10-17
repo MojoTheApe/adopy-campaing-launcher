@@ -41703,9 +41703,11 @@
         "worktree": "C:\\acl-1377",
         "id": "70338b0599da44ebab25711d8038c70b",
         "issue": 377,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-17T19:30:37+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 935,
+        "report": "PR #935: compact workbook-alias match (Facebook_6540_<id> -> Facebook6540) with collision/ambiguity guards, \"not in workbook\" hint on Meta-only campaign rows. Tests: tests/test_dashboard_review.py, tests/test_the_account_tree_on_screen.py (144 passed). Independent Sonnet review done; findings on rule keys and empty-workbook hint fixed. Owner check on the live dashboard still required."
       }
     },
     "tasks": {
