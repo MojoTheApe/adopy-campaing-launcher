@@ -1,5 +1,18 @@
 # System history
 
+## ACL-1992 — API publish: build percent counts created objects — 2026-10-18
+
+The percent next to the campaign being built was a time-based estimate from robot
+step names (ACL-1347). The Graph API path writes every step as `api_create_step`,
+which the model does not know, so the percent stood at one number for the whole
+run. API jobs now report `units: {done, total}` per campaign on the job poll:
+`total` from the plan (preflight, campaign, ad sets, per ad media — video counts
+upload and processing — creative and ad, readback; forms are added as they come),
+`done` from the creator's existing progress lines (`src/web/api_build_progress.py`).
+The page shows `done / total`, at most 99 % before the result, never going back,
+and the latest progress line as "Building: …". Robot jobs keep the old model.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/992).
+
 ## Check plan: "A or B" terms are split again when Meta refuses the work lookups - ACL-1933
 
 - Fixes an ACL-1920 regression. When Meta refused the work positions / work employers lookups, a
