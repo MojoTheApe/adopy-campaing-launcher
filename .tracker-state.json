@@ -41717,6 +41717,18 @@
         "state": "implementing",
         "started_at": "2026-10-16T16:08:01+00:00",
         "from_status": "status:todo"
+      },
+      "668": {
+        "actor": "Worker-W1668A",
+        "session": "w1668a-s1",
+        "coordinator": "Coordinator-T1004Q",
+        "branch": "work/acl-1668-missing-creative",
+        "worktree": "C:\\acl-1668",
+        "id": "a34782a0721f49feb3cfe9c7963ac83c",
+        "issue": 668,
+        "state": "implementing",
+        "started_at": "2026-10-17T11:34:35+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -48396,6 +48408,17 @@
         },
         "pr": 972,
         "queued_at": "2026-10-17T11:34:08+00:00"
+      },
+      "668": {
+        "implementers": [
+          {
+            "actor": "Worker-W1668A",
+            "session": "w1668a-s1"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W1668A",
+        "coordinator": "Coordinator-T1004Q"
       }
     },
     "actors": {
@@ -50281,6 +50304,10 @@
       },
       "Worker-WFO05Fast": {
         "session": "WFO-20261017-ACL-Fast-Author",
+        "role": "Worker"
+      },
+      "Worker-W1668A": {
+        "session": "w1668a-s1",
         "role": "Worker"
       }
     },
@@ -78374,6 +78401,13 @@
         "issue": 971,
         "pr": 972,
         "actor": "Worker-WFO05Fast"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-17T11:34:35+00:00",
+        "issue": 668,
+        "claim": "a34782a0721f49feb3cfe9c7963ac83c",
+        "actor": "Worker-W1668A"
       }
     ],
     "policy": {
