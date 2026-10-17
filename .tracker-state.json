@@ -41726,9 +41726,11 @@
         "worktree": "C:\\acl-1784",
         "id": "c8b34860c26142858796d7543604ef62",
         "issue": 784,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-17T06:17:51+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 961,
+        "report": "ACL-1784 ready for review. PR #961 (work/acl-1784-api-no-review-window, head 23c74400).\nAPI path only: no review window when nothing was written (GraphClient.writes == 0) or every campaign is clean; profile stopped only if the job started it; English panel notice for each case; RPA unchanged.\nChecks: new tests/test_acl1784_api_review_window.py 9 passed (8 fail on old code); related suites 463 passed locally. Full suite pending CI (Actions startup_failure)."
       },
       "558": {
         "actor": "Worker-W1558M",
