@@ -93,6 +93,8 @@ def read_stats_workbook(path: str, usecols: Optional[List[str]] = None):
 
     header = find_stats_header_row(str(path))
     df = pd.read_excel(path, header=header)
+    # Проверка схемы сравнивает имена без пробелов по краям — приводим колонки так же.
+    df.columns = [c.strip() if isinstance(c, str) else c for c in df.columns]
     if usecols is not None:
         df = df[list(usecols)]
     return df

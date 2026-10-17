@@ -131,3 +131,11 @@ def test_morning_report_builder_accepts_shifted_headers(tmp_path):
     ra.pop("source_excel", None)
     rb.pop("source_excel", None)
     assert ra.get("countries") == rb.get("countries")
+
+
+def test_headers_with_edge_spaces_load_under_stripped_names(tmp_path):
+    spaced = [h + " " if h == "$ Net" else h for h in HEADERS]
+    book = _book(tmp_path / "sp.xlsx", lead_rows=3, headers=spaced)
+    df = read_stats_workbook(str(book))
+    assert "$ Net" in df.columns
+    assert len(_load_enriched_df(str(book))) == 2
