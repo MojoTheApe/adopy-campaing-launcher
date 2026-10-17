@@ -18,3 +18,10 @@
 *.jpeg binary
 *.gif binary
 *.zip binary
+
+# Exact shared portable export bytes on every checkout (ACL-1977).
+/.gitattributes text eol=lf
+/scripts/task_tracker.py text eol=lf
+/scripts/tracker_*.py text eol=lf
+/.workflow/tools/*.py text eol=lf
+/tracker/export-contract.json text eol=lf

@@ -1,6 +1,9 @@
 # Verification policy
 
-Follow the [shared verification policy](https://github.com/MojoTheApe/master-repo/blob/a3f56106f52d0ae19986920519b2fa46a380798b/docs/verification.md)
+Read the exact [selected shared guide](TRACKER.md), the [ACL support/cutover plan](EARLY_ADOPTION.md) and the guarded operator mapping in [AGENTS.md](../../AGENTS.md).
+Shared contract references retain canonical bodies; `_ACL` documents preserve the original local cutover history and stronger controls.
+
+Follow the [shared verification policy](https://github.com/MojoTheApe/master-repo/blob/864ca7a5814e703dd6e61207362d24cbc26dc9ad/docs/verification.md)
 at this project's exact standard pin. `delivery.json` defines actual product
 commands/required CI names; retain matching Tracker settings, runtime checks and
 local exceptions. Separate fast source feedback, combined-candidate integration
@@ -15,7 +18,7 @@ inputs, findings, missing scope or unresolved concerns. Cancel obsolete PR runs,
 preserve admitted integration push evidence and measure costs before pruning tests.
 
 For an authorized standard upgrade, use the
-[coordinated procedure](https://github.com/MojoTheApe/master-repo/blob/a3f56106f52d0ae19986920519b2fa46a380798b/docs/workflow-upgrades.md).
+[coordinated procedure](https://github.com/MojoTheApe/master-repo/blob/864ca7a5814e703dd6e61207362d24cbc26dc9ad/docs/workflow-upgrades.md).
 Only the exact compatible Tracker guide supplies commands. A newer standard/skill
 cannot activate an unimplemented maintenance or evidence collector.
 
@@ -48,4 +51,4 @@ The temporary no-stage selection and durable authorized package continuation are
 defined in [POST_MAIN_DELIVERY.md](POST_MAIN_DELIVERY.md). Complete combined/main
 checks and actual published-package acceptance remain required; skipping Stage
 does not turn a successful build into a delivery receipt. Initial source ACL-1924
-keeps its old-stage route until the separately verified idle activation.
+used its old-stage route before the separately recorded idle activation.
