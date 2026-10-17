@@ -48098,7 +48098,7 @@
             "session": "w1788c-20261016"
           }
         ],
-        "state": "stopped",
+        "state": "archiving",
         "worker": "Worker-W1788C",
         "coordinator": "Coordinator-C1016A",
         "handoff": {
