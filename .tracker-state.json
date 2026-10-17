@@ -48584,7 +48584,7 @@
       },
       "17": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       }
     },
     "actors": {
@@ -78686,6 +78686,12 @@
         "issue": 770,
         "claim": "ccaaf16c570b4a139601356ba2723732",
         "actor": "Worker-W1770A"
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-17T13:23:11+00:00",
+        "issue": 17,
+        "reason": "Owner 2026-10-17: not urgent, removed from the plan for now. Prepared narrow scope for a later restart: per account row, compare the workbook total with the latest stored account read for the same period and currency. Show agree / differ / not comparable with a reason (proposed tolerance +-10%) as a flag in the row tooltip, with no extra live reads. Existing reconcile_spend (rules/evidence.py, 20%) gates rules only and is not shown."
       }
     ],
     "policy": {
