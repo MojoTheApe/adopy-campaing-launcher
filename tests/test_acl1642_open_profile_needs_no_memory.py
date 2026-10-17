@@ -349,9 +349,24 @@ def test_dashboard_text_has_the_hint_and_the_started_ahead_note():
     # Все три места, где очередь пишет «ждёт память», берут один текст с подсказкой.
     assert "queued — waiting for memory'" not in html
     assert html.count("cbMemoryWait(") >= 4
-    src =(ROOT / "src" / "web" / "profile_slots.py").read_text(encoding="utf-8")
+    src = (ROOT / "src" / "web" / "profile_slots.py").read_text(encoding="utf-8")
     for forbidden in ("terminate(", ".kill(", "close_profile", "stop_profile"):
         assert forbidden not in src
+
+
+def test_a_probe_thread_that_cannot_start_means_closed_not_an_error(monkeypatch):
+    """CI Windows (PR #936): поток не стартовал — задание идёт как с закрытым профилем, не падает."""
+    probe = ps.OpenProfileProbe(lambda profiles: {"p1"}, ttl_s=0.5)
+
+    def fail(*a):
+        raise RuntimeError("cannot start new thread")
+
+    monkeypatch.setattr(threading.Thread, "start", fail)
+    assert probe.read("p1") is None
+    assert probe.read("p1") is None   # в окне отката новых попыток нет
+    monkeypatch.undo()
+    slots = ps.ProfileSlots(memory=lambda: mem(48.0), open_probe=probe)
+    assert slots.acquire("A", "p1")["decision"]["allow"]
 
 
 def test_a_failing_check_does_not_spin_the_queue():
