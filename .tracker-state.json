@@ -48601,7 +48601,7 @@
             "session": "WFO-20261017-ACL-CI-Author"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-WFO05CI",
         "coordinator": "Coordinator-WFO20261017",
         "handoff": {
@@ -48619,7 +48619,8 @@
           "report": "### Actual source handoff \u2014 17 October 2026\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/969. Branch codex/acl-1968-ci-accounting; source head 249321aeb2d9e8d4ae1fef0207d6f3406069b3b2, tree 10e9beb220a64413c8dfd0a8c60e0b2d7b762523, base af0ade29b106129089dbabd3f208b548efa246d9. The source is committed and clean.\n\nAn actual maintained free Worker claim was verified before source edits (Worker-WFO05CI, distinct real author session); all other worker/source-review/integration/intake ownership stayed intact. Final local affected tests with the real ACL conftest: 130 passed (Python3.12.14, bundled pandas via PYTHONPATH). Secret scan including the staged minimal native fixture and whitespace passed; report syntax parses under Python3.9 grammar. Local startup smoke was attempted and reported missing unchanged application dependencies in this workflow venv; it is not a startup/Windows pass. Actual required native source checks and separate independent review remain pending.\n\nThe reviewed-source candidate retains native 20-row fixture behavior: 12 counted intervals/eight carried rows/212 naive versus 112 distinct rounded-minute estimates. A genuine ordinary four-workflow creation-second cohort was captured with GET only and a private mode0600 raw snapshot; reports/provenance are retained privately by the coordinator. It has 30 native job rows, 20 counted intervals/10 carried, 8510 observed seconds / 155 rounded interval minutes. This is a bounded historical creation cohort, not a full execution-period census, invoice, measured saving or storage bill. Current storage facts are separately labelled.\n\nChanged/missing interval identity remains explicitly unresolved with a possible additional contribution and incomplete estimate coverage. Capped/history/job gaps, old-run lookback, skipped-not-proven-reuse, unknown billing/matrix/cause and immutable snapshot replay limits are documented. Source changes no workflow triggers, checks, retry budgets, shared policies, capacity, runtime or installer.\n\nThis is an ordinary singleton approval-only source. The author now performs the maintained execution handoff to release only its implementation slot and queue Review. All five actual source review lanes were occupied; independent review must wait for a genuine available lane, and admission/integration/package acceptance remain separately owned. Do not merge this source directly or mark this task, ACL-1649 or Master Task05 complete from this handoff. After the actual review freezes scope, keep operational results in comments unless a conscious requirement change needs fresh author work/review."
         },
         "pr": 969,
-        "queued_at": "2026-10-17T10:33:02+00:00"
+        "queued_at": "2026-10-17T10:33:02+00:00",
+        "reviewer": "Reviewer-WFOBaseline968"
       },
       "971": {
         "implementers": [
@@ -50896,6 +50897,10 @@
       "Coordinator-C1016A": {
         "session": "c7e3da-20261016",
         "role": "Coordinator"
+      },
+      "Reviewer-WFOBaseline968": {
+        "session": "wfo_20261016_baseline_review_acl968",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -53633,7 +53638,6 @@
       }
     },
     "review_queue": [
-      968,
       971,
       977
     ],
@@ -82739,6 +82743,13 @@
         "at": "2026-10-17T16:40:16+00:00",
         "issue": 844,
         "reason": "Owner decision 2026-10-17 (main rule): Facebook must never see one IP or one shared app across our ad accounts, so the official Meta app route is dropped entirely; API work stays in-profile (ACL-1756/1760/1761). The probe did its job: the ACL-1859 one-account read pilot passed (spend matched Ads Manager) and led to this decision."
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-17T16:42:28+00:00",
+        "pr": 969,
+        "lane": "7a134c44cea84d54bc86b1bf590c0e8e",
+        "actor": "Reviewer-WFOBaseline968"
       }
     ],
     "policy": {
@@ -87358,7 +87369,20 @@
       "report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
       "administrative_pause_operation": "owner-acl-exclusive-workflow-20261017-01"
     },
-    "source_reviews": {},
+    "source_reviews": {
+      "969": {
+        "id": "7a134c44cea84d54bc86b1bf590c0e8e",
+        "pr": 969,
+        "issues": [
+          968
+        ],
+        "actor": "Reviewer-WFOBaseline968",
+        "session": "wfo_20261016_baseline_review_acl968",
+        "coordinator": "Coordinator-WFO20261017",
+        "started_at": "2026-10-17T16:42:28+00:00",
+        "state": "reviewing"
+      }
+    },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
   },
   "maintenance_history": [
