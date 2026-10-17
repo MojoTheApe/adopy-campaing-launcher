@@ -499,7 +499,7 @@ def test_the_card_under_api_waits_for_the_check_and_shows_the_server_verdicts(tm
     assert _status(shown["lines"], "page_ok") == "error" and shown["blocks"] is True
     stale = _lines({"input": _ok_input(), "opts": {"backend": "api", "server": out.audit, "stale": True}})
     assert _status(stale["lines"], "page_ok") == "unknown" and stale["blocks"] is False
-    assert "press Check" in next(x for x in stale["lines"] if x["rule"] == "page_ok")["detail"]
+    assert "Edited since the check" in next(x for x in stale["lines"] if x["rule"] == "page_ok")["detail"]
 
 
 def test_warnings_never_block_and_a_server_warning_rule_cannot_become_an_error():
@@ -513,7 +513,94 @@ def test_warnings_never_block_and_a_server_warning_rule_cannot_become_an_error()
 
 def test_a_plan_error_without_verdicts_still_blocks():
     shown = _lines({"input": _ok_input(), "opts": {"backend": "api", "server": [], "planError": "Ad 1: boom"}})
-    assert shown["blocks"] is True and shown["lines"][-1]["rule"] == "plan_error"
+    last = shown["lines"][-1]
+    assert shown["blocks"] is True and last["rule"] == "plan_check" and last["status"] == "error"
+    assert last["detail"] == "Ad 1: boom" and last["topic"] == "meta"
+
+
+# ───────────────────────────── ACL-1990: разделы и «не удалось проверить» ─────────────────────────────
+
+def test_every_rule_belongs_to_a_topic_and_the_page_gets_the_topics():
+    assert pf.TOPIC_IDS[-1] == "meta" and len(set(pf.TOPIC_IDS)) == len(pf.TOPIC_IDS)
+    for r in pf.RULES:
+        assert r["topic"] in pf.TOPIC_IDS and r["topic"] != "meta", r["id"]
+    assert all(t["label"].isascii() for t in pf.TOPICS), "UI на английском"
+    assert pf.export_rules()["topics"] == pf.TOPICS
+    # Каждый раздел, кроме «meta», чем-то заполнен; «meta» держит только строку plan_check.
+    assert {r["topic"] for r in pf.RULES} == set(pf.TOPIC_IDS) - {"meta"}
+
+
+def _topics(case: dict) -> list:
+    return _harness("--topics", {"x": case})["x"]
+
+
+def test_topics_take_the_worst_status_of_their_checks():
+    broken = _with(link="https://track.example.com/c", ads=_ad(0, body=""))
+    got = {t["id"]: t for t in _topics({"input": broken, "opts": {"backend": "rpa"}})}
+    assert "meta" not in got, "под RPA нет проверки с Meta"
+    assert got["creative"]["status"] == "error" and "primary_text" in got["creative"]["rules"]
+    assert got["destination"]["status"] == "warning"
+    assert got["budget"]["status"] == "ok" and got["budget"]["rules"] == ["budget_set"]
+    api = {t["id"]: t for t in _topics({"input": _ok_input(), "opts": {"backend": "api", "server": None}})}
+    # До проверки серверные строки «not checked»: раздел серый, не красный.
+    assert api["account"]["status"] == "unknown" and api["meta"]["rules"] == ["plan_check"]
+    assert [t["id"] for t in _topics({"input": _ok_input(), "opts": {"backend": "api"}})] == pf.TOPIC_IDS
+
+
+def test_a_check_that_could_not_run_is_not_checked_and_does_not_block():
+    opts = {"backend": "api", "server": [], "planError": "The profile is busy with another job",
+            "planErrorKind": "not_checked"}
+    shown = _lines({"input": _ok_input(), "opts": opts})
+    plan = shown["lines"][-1]
+    assert shown["blocks"] is False and plan["rule"] == "plan_check"
+    assert plan["status"] == "unknown" and plan["retry"] is True and "busy" in plan["detail"]
+    assert _status(shown["lines"], "page_ok") == "unknown"
+    assert next(x for x in shown["lines"] if x["rule"] == "page_ok")["detail"] == "Could not check"
+    # Клиентская ошибка при этом блокирует, как и раньше.
+    assert _lines({"input": _with(link=""), "opts": opts})["blocks"] is True
+
+
+@pytest.mark.parametrize("exc", [
+    ConnectionResetError(10054, "An existing connection was forcibly closed by the remote host"),
+    TimeoutError("CDP did not answer in 30 s"),
+    RuntimeError("Profile p-Test is busy with another job"),
+])
+def test_check_plan_marks_a_failed_read_session_as_not_checked(tmp_path, monkeypatch, exc):
+    from contextlib import contextmanager
+
+    from src.analysis_agent import account_spend as _as
+    from src.analysis_agent import account_spend_api as _api
+    from src.web import publish_api
+
+    @contextmanager
+    def session(account):
+        raise exc
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(publish_api, "build_drafts", lambda slots, **kw: [_draft(tmp_path, ads=1)])
+    monkeypatch.setattr(_api, "_session", session)
+    monkeypatch.setattr(_as, "_profile_key", lambda account, *a, **k: "p-" + account)
+    out = publish_api.check_plan([{"name": "x"}], account_label="Test", country="MX")
+    assert out["results"] == [] and out["error"] and out["error_kind"] == "not_checked"
+    assert out["account_audit"] is None
+
+
+def test_check_plan_kinds_for_the_account_and_a_broken_draft(tmp_path, monkeypatch):
+    from src.web import publish_api
+
+    meta = AuditMeta(status=2)
+    monkeypatch.setattr(publish_api, "build_drafts", lambda slots, **kw: [_draft(tmp_path, ads=1)])
+    _read_session(monkeypatch, meta)
+    assert publish_api.check_plan([{"name": "x"}], account_label="Test", country="MX")["error_kind"] == "account"
+
+    def broken(slots, **kw):
+        raise ValueError("bad slot")
+    monkeypatch.setattr(publish_api, "build_drafts", broken)
+    assert publish_api.check_plan([{"name": "x"}], account_label="Test", country="MX")["error_kind"] == "plan"
+    d = _draft(tmp_path, ads=1)
+    monkeypatch.setattr(publish_api, "build_drafts", lambda slots, **kw: [d])
+    _read_session(monkeypatch, AuditMeta())
+    assert publish_api.check_plan([{"name": "x"}], account_label="Test", country="MX")["error_kind"] == ""
 
 
 def test_the_account_verdict_is_shown_on_the_account_line():

@@ -51,7 +51,8 @@ function world(backend, fetchReply) {
       const a = slot._form._pfAudit, name = slot._name, hit = a && a.byName[name];
       const opts = { backend, server: null, stale: false };
       if (backend === 'api' && hit) {
-        opts.server = hit.audit || []; opts.planError = hit.error || ''; opts.accountAudit = hit.accountAudit || null;
+        opts.server = hit.audit || []; opts.planError = hit.error || ''; opts.planErrorKind = hit.errorKind || '';
+        opts.accountAudit = hit.accountAudit || null;
         opts.stale = hit.rev !== slot._rev;
       }
       return w.cbPreflight.lines(slot._input, opts);
@@ -155,6 +156,28 @@ function itemsFor(slots, form) { return [{ form: form, slots: slots }]; }
     w.cbPreflightGate(itemsFor([s], form), () => { log.proceeded += 1; });
     await new Promise((r) => setTimeout(r, 60));
     assert.equal(log.proceeded, 0, 'не проверенная кампания ушла в Publish');
+  }
+  // 6b. ACL-1990: проверка не дошла до кампании (профиль занят, сеть, таймаут) — это
+  //     «Could not check», а не ошибка кампании: Publish идёт, настоящая публикация
+  //     сама упрётся в ту же причину и скажет о ней.
+  {
+    const { w, log } = world('api', { error: 'The profile is busy with another job', error_kind: 'not_checked', results: [] });
+    const form = {}, s = slotOf(form, 'C1', okInput(), 'cbs1');
+    w.cbPreflightGate(itemsFor([s], form), () => { log.proceeded += 1; });
+    await new Promise((r) => setTimeout(r, 60));
+    assert.equal(log.proceeded, 1, 'временный сбой проверки выключил Publish');
+    const pl = w.cbTree.auditLines(s).find((x) => x.rule === 'plan_check');
+    assert.equal(pl.status, 'unknown');
+    assert.equal(pl.retry, true);
+  }
+  // 6c. Отказ кабинета (account_audit) по-прежнему блокирует.
+  {
+    const { w, log } = world('api', { error: 'Test: the ad account is not active', error_kind: 'account', results: [],
+      account_audit: { rule: 'account_active', status: 'error', detail: 'not active', ads: [] } });
+    const form = {}, s = slotOf(form, 'C1', okInput(), 'cbs1');
+    w.cbPreflightGate(itemsFor([s], form), () => { log.proceeded += 1; });
+    await new Promise((r) => setTimeout(r, 60));
+    assert.equal(log.proceeded, 0, 'неактивный кабинет пропустил Publish');
   }
   // 7. Одна из двух кампаний с ошибкой — не пускает обе (Publish all).
   {

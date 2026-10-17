@@ -1,5 +1,24 @@
 # System history
 
+## Builder: pre-flight audit as topics, Check with Meta, "could not check" - ACL-1990 — 2026-10-18
+
+- The audit card shows seven topics instead of ~25 rows: Account & access, Audience & targeting,
+  Budget, Link & Instant Form, Creatives & texts, Names & duplicates, Meta plan check. Each rule
+  carries its `topic` in `preflight_rules.py`; the topic list is exported with the rules.
+- Topic status is the worst of its checks (error › warning › not checked › ok). A topic with an
+  error, a warning or a "Retry" opens by itself; a click opens or closes it and is remembered until
+  its status changes. A check inside still jumps to its field.
+- "Check with Meta" sits in a strip at the top of the card with what the last check found
+  ("Checked with Meta at …", "Edited since the check", "Could not check: …"). While it runs it says
+  that the Multilogin profile is being opened (30 s – 3 min) and counts the elapsed time; the
+  drawer-foot "Check plan (no writes)" became "Check N campaigns with Meta" and counts time too.
+- `/publish-plan` returns `error_kind`: `not_checked` when the read session fails before any campaign
+  is checked (profile busy, connection reset, proxy sign-in, CDP timeout, rate limit), `account` for
+  an unavailable ad account, `plan` for a draft that cannot be built. `not_checked` shows as
+  "Could not check" with Retry in Meta plan check and no longer switches Publish off; the publish
+  job meets the same cause and reports it. `account` and `plan` still block.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/990).
+
 ## ACL-1971 — Explicit tooling fast/full plan — 2026-10-17
 
 Document the existing tooling check's exact commands, omissions and correction
