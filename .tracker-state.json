@@ -41717,6 +41717,18 @@
         "state": "implementing",
         "started_at": "2026-10-16T16:08:01+00:00",
         "from_status": "status:todo"
+      },
+      "680": {
+        "actor": "Worker-W1680A",
+        "session": "w1680a-s1",
+        "coordinator": "Coordinator-T1004Q",
+        "branch": "work/acl-1680-one-config-dir",
+        "worktree": "C:\\acl-1680",
+        "id": "122c1999e90a48909b54605472476158",
+        "issue": 680,
+        "state": "implementing",
+        "started_at": "2026-10-17T07:14:42+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -48207,6 +48219,17 @@
         },
         "pr": 962,
         "queued_at": "2026-10-17T06:34:52+00:00"
+      },
+      "680": {
+        "implementers": [
+          {
+            "actor": "Worker-W1680A",
+            "session": "w1680a-s1"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W1680A",
+        "coordinator": "Coordinator-T1004Q"
       }
     },
     "actors": {
@@ -50064,6 +50087,10 @@
       },
       "Worker-W1380M": {
         "session": "s-1380-334896ca",
+        "role": "Worker"
+      },
+      "Worker-W1680A": {
+        "session": "w1680a-s1",
         "role": "Worker"
       }
     },
@@ -78052,6 +78079,13 @@
         "issue": 558,
         "pr": 963,
         "actor": "Worker-W1558M"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-17T07:14:42+00:00",
+        "issue": 680,
+        "claim": "122c1999e90a48909b54605472476158",
+        "actor": "Worker-W1680A"
       }
     ],
     "policy": {
