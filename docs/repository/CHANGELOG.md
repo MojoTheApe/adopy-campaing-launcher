@@ -1,5 +1,17 @@
 # Repository process history
 
+## ACL-1968 — correct on-demand CI execution accounting
+
+Repair the existing report's carried-forward double counting and distinguish
+skipped work from proven reuse. Add explicit creation/execution periods, capped
+history partition/completeness, raw native identity, private deterministic replay
+and separate current storage facts. Report rounded interval estimates and unknown
+billing without a Windows money multiplier. The retained native case is 20 rows,
+12 intervals and 212 versus 112 estimated minutes, not an invoice or measured saving.
+Preserve ACL-1649's original cost target/history, ordinary workflow gates and all
+other actual claims. No retry/dispatch policy or consumer activation is introduced.
+Task: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/968.
+
 ## ACL-1923 — Verified no-stage activation and published delivery — 2026-10-15 UTC
 
 Complete the original operational outcome after ACL-1924's old-route source,
