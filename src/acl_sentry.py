@@ -228,6 +228,10 @@ def report_job_exception(exc: BaseException, *, job: str = "", account: str = ""
 
     with sentry_sdk.new_scope() as scope:
         scope.set_tag("failure_kind", "job_exception")
+        # ACL-1403: тег машины ставим явно — событие PYTHON-4E пришло без него.
+        for key, value in _machine_tags.items():
+            if value:
+                scope.set_tag(key, value)
         if phase:
             scope.set_tag("job_phase", phase)
         if account:
@@ -400,6 +404,8 @@ _REASONS = (
     ("still-loading", ("table-loading", "still loading", "не отрисовал", "грузится")),
     ("wrong-account", ("не тот кабинет", "different account", "changed during")),
     ("wrong-period", ("другой период", "period does not match", "период не")),
+    # ACL-1403: порт автоматизации профиля отказал (раньше общего «refused») в соединении после старта.
+    ("cdp-refused", ("did not accept the connection", "profile_cdp_refused")),
     ("refused", ("refused:", "отказ", "недоступна")),
     # Увиденное на живых прогонах 15.09 — каждая строка добавлена потому, что
     # отказ случился и был разобран, а не «на всякий случай».

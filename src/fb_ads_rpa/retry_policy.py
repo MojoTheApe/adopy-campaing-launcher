@@ -131,6 +131,8 @@ BLOCKING_REVIEW_STEPS = frozenset(
         # ACL-1401: the Multilogin app is not running (launcher refused the
         # connection); decided by the publisher at attach, before any campaign.
         "multilogin_not_running",
+        # ACL-1403: MLX started the profile, its CDP port refused connections.
+        "profile_cdp_refused",
         # ACL-1320: the profile is open by hand; the publisher stops the
         # account's job before any campaign instead of closing the window.
         "profile_open_by_hand",
