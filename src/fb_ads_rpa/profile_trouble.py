@@ -38,6 +38,7 @@ SIMPLE_CREATE = "simple_create_layout"
 LEAD_TERMS = "lead_terms_not_accepted"
 WRONG_AD_ACCOUNT = "wrong_ad_account"
 NO_PROXY = "profile_no_proxy"
+MLX_NOT_RUNNING = "multilogin_not_running"
 
 #: Что сказать человеку — английский, это видно в дешборде.
 MESSAGES = {
@@ -74,6 +75,12 @@ MESSAGES = {
     NO_PROXY: "This Multilogin profile has no proxy set, so it would reach Facebook from this "
               "computer's own IP address. Add the proxy to the profile in Multilogin, "
               "then press Publish again",
+    # ACL-1401: локальный лаунчер Multilogin (launcher.mlx.yt:45001) отказал
+    # в соединении — приложение Multilogin на компьютере не запущено. Ни один
+    # профиль этого аккаунта (и любого другого) не поднимется, пока его не
+    # запустят; повторять запуск и уходить в простой браузер нельзя.
+    MLX_NOT_RUNNING: "Multilogin is not running on this computer - start the Multilogin app, "
+                     "then press Publish again",
 }
 
 #: Остановки, после которых остальные кампании задания этого аккаунта не
@@ -149,6 +156,40 @@ def login_in_text(text: str) -> str:
     for url in _LOGIN_IN_TEXT.findall(text or ""):
         if login_url(url):
             return url
+    return ""
+
+
+#: Локальный лаунчер Multilogin: `launcher.mlx.yt` указывает на 127.0.0.1,
+#: порт 45001 (`MULTILOGIN_LAUNCHER_*`, multilogin_config).
+_LAUNCHER = re.compile(r"launcher\.mlx\.yt|(?:port=|:)45001\b", re.I)
+
+
+def launcher_unreachable(exc: BaseException | None) -> str:
+    """Лаунчер Multilogin не принял соединение (ACL-1401) — деталь или "".
+
+    Ищет по цепочке причин (`__cause__` / `__context__`) ошибку соединения
+    `requests` (отказ, таймаут соединения) к локальному лаунчеру. Таймаут
+    чтения — не она: лаунчер ответил на соединение и просто долго поднимает
+    профиль. Обёртки (`RuntimeError(f"{exc} (MLX attach-only…)")`) не мешают:
+    смотрим всю цепочку, а не только верхнее исключение.
+    """
+    try:
+        import requests
+    except Exception:  # pragma: no cover - requests есть всегда
+        return ""
+    seen: set[int] = set()
+    cur = exc
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        if (isinstance(cur, requests.exceptions.ConnectionError)
+                and not isinstance(cur, requests.exceptions.ReadTimeout)):
+            url = str(getattr(getattr(cur, "request", None), "url", "") or "")
+            if _LAUNCHER.search(url) or _LAUNCHER.search(str(cur)):
+                kind = ("connect_timeout"
+                        if isinstance(cur, requests.exceptions.ConnectTimeout)
+                        else "connection_refused")
+                return f"{kind}: launcher.mlx.yt:45001"
+        cur = cur.__cause__ or cur.__context__
     return ""
 
 
