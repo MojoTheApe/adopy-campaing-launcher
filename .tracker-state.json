@@ -41717,20 +41717,6 @@
         "state": "implementing",
         "started_at": "2026-10-16T16:08:01+00:00",
         "from_status": "status:todo"
-      },
-      "558": {
-        "actor": "Worker-W1558M",
-        "session": "622fd2f5-ec4b-4ed3-9102-43e164915329",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1558-scrubber-shapes",
-        "worktree": "C:\\acl-1558",
-        "id": "af427451e1d04e74904f49c784113c47",
-        "issue": 558,
-        "state": "handoff",
-        "started_at": "2026-10-17T06:18:19+00:00",
-        "from_status": "status:todo",
-        "pr": 963,
-        "report": "ACL-1558 handoff to review.\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/963, branch work/acl-1558-scrubber-shapes, head bbf18a02, base af0ade29 (work/main).\nDone: bare EAA token -> <token>; user:pass@host[:port] -> <user>:<hidden>@host[:port] (host kept); dict keys with act_/6+ digit ids, emails, int ids scrubbed in scrub_diag (Sentry contexts) and fb_api scrub_value; collisions keep both entries. All patterns bounded, linear.\nChecks: touched scrubber/telemetry/sentry tests 376 passed locally, no-hang test green with new probes; full suite left to GitHub CI.\nPre-review: independent read-only subagent, round 1 request changes (7 findings, fixed), round 2 approve on bbf18a02; remaining low trade-offs listed in PR.\nRemaining: official source review; nothing live verified (not needed: scrubber code only)."
       }
     },
     "tasks": {
@@ -48175,9 +48161,25 @@
             "session": "622fd2f5-ec4b-4ed3-9102-43e164915329"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1558M",
-        "coordinator": "Coordinator-M1011A"
+        "coordinator": "Coordinator-M1011A",
+        "handoff": {
+          "actor": "Worker-W1558M",
+          "session": "622fd2f5-ec4b-4ed3-9102-43e164915329",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "work/acl-1558-scrubber-shapes",
+          "worktree": "C:\\acl-1558",
+          "id": "af427451e1d04e74904f49c784113c47",
+          "issue": 558,
+          "state": "handoff",
+          "started_at": "2026-10-17T06:18:19+00:00",
+          "from_status": "status:todo",
+          "pr": 963,
+          "report": "ACL-1558 handoff to review.\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/963, branch work/acl-1558-scrubber-shapes, head bbf18a02, base af0ade29 (work/main).\nDone: bare EAA token -> <token>; user:pass@host[:port] -> <user>:<hidden>@host[:port] (host kept); dict keys with act_/6+ digit ids, emails, int ids scrubbed in scrub_diag (Sentry contexts) and fb_api scrub_value; collisions keep both entries. All patterns bounded, linear.\nChecks: touched scrubber/telemetry/sentry tests 376 passed locally, no-hang test green with new probes; full suite left to GitHub CI.\nPre-review: independent read-only subagent, round 1 request changes (7 findings, fixed), round 2 approve on bbf18a02; remaining low trade-offs listed in PR.\nRemaining: official source review; nothing live verified (not needed: scrubber code only)."
+        },
+        "pr": 963,
+        "queued_at": "2026-10-17T06:39:50+00:00"
       },
       "380": {
         "implementers": [
@@ -52827,7 +52829,8 @@
       19,
       401,
       784,
-      380
+      380,
+      558
     ],
     "review": null,
     "history": [
@@ -78042,6 +78045,13 @@
         "issue": 380,
         "pr": 962,
         "actor": "Worker-W1380M"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-17T06:39:50+00:00",
+        "issue": 558,
+        "pr": 963,
+        "actor": "Worker-W1558M"
       }
     ],
     "policy": {
