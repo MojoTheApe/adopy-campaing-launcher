@@ -48098,7 +48098,7 @@
             "session": "w1788c-20261016"
           }
         ],
-        "state": "archiving",
+        "state": "archived",
         "worker": "Worker-W1788C",
         "coordinator": "Coordinator-C1016A",
         "handoff": {
@@ -82726,6 +82726,12 @@
         "event": "archived",
         "at": "2026-10-17T16:38:49+00:00",
         "issue": 872,
+        "reason": "Withdrawn 2026-10-17: the owner cancelled the official Meta app route. Facebook must never see one IP or one shared app across our ad accounts, so all API work stays on the in-profile Graph route (ACL-1756/1760/1761) through each profile's proxy."
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-17T16:39:15+00:00",
+        "issue": 788,
         "reason": "Withdrawn 2026-10-17: the owner cancelled the official Meta app route. Facebook must never see one IP or one shared app across our ad accounts, so all API work stays on the in-profile Graph route (ACL-1756/1760/1761) through each profile's proxy."
       }
     ],
