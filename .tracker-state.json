@@ -41729,6 +41729,18 @@
         "state": "implementing",
         "started_at": "2026-10-17T13:35:50+00:00",
         "from_status": "status:todo"
+      },
+      "142": {
+        "actor": "Worker-W1142A",
+        "session": "w1142a-s1",
+        "coordinator": "Coordinator-T1004Q",
+        "branch": "work/acl-1142-per-job-pacing",
+        "worktree": "C:\\acl-1142",
+        "id": "abaa09763e9c42839fbb86003c138b4f",
+        "issue": 142,
+        "state": "implementing",
+        "started_at": "2026-10-17T13:36:58+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -48616,6 +48628,17 @@
         "state": "implementing",
         "worker": "Worker-W0602A",
         "coordinator": "Coordinator-T1004Q"
+      },
+      "142": {
+        "implementers": [
+          {
+            "actor": "Worker-W1142A",
+            "session": "w1142a-s1"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W1142A",
+        "coordinator": "Coordinator-T1004Q"
       }
     },
     "actors": {
@@ -50533,6 +50556,10 @@
       },
       "Worker-W0602A": {
         "session": "acl602-run1",
+        "role": "Worker"
+      },
+      "Worker-W1142A": {
+        "session": "w1142a-s1",
         "role": "Worker"
       }
     },
@@ -78750,6 +78777,13 @@
         "issue": 70,
         "claim": "2ab7ba9e05eb425e88e804f162cf7b94",
         "actor": "Worker-W0602A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-17T13:36:58+00:00",
+        "issue": 142,
+        "claim": "abaa09763e9c42839fbb86003c138b4f",
+        "actor": "Worker-W1142A"
       }
     ],
     "policy": {
