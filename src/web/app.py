@@ -34,6 +34,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from src.web import account_notes as _account_notes
+from src.web import builder_drafts as _builder_drafts
 
 # Make project root importable when invoked via `uvicorn src.web.app:app`
 _PROJ_ROOT = Path(__file__).resolve().parents[2]
@@ -3483,6 +3484,35 @@ async def api_account_notes_set(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": "Could not save the note. Try again."}, status_code=500)
     key = _account_notes.country_key(label) if kind == "country" else label.strip()
     return JSONResponse({"ok": True, "kind": kind, kind: label.strip(), "key": key, "text": notes.get(key, "")})
+
+
+@app.get("/api/builder-state")
+def api_builder_state_get() -> JSONResponse:
+    """Серверная копия черновиков билдера (ACL-1681): {name: {saved_at, data}}."""
+    return JSONResponse({"ok": True, "docs": _builder_drafts.load()})
+
+
+@app.post("/api/builder-state")
+async def api_builder_state_set(request: Request) -> JSONResponse:
+    """Сохранить один документ черновиков; побеждает более новый `saved_at`.
+
+    Body JSON: {name: keep|jobs|ui, saved_at: ms, data: {...}, base: ms|null}.
+    Ответ: {ok, accepted, doc}; accepted=false — на сервере копия новее, она в doc.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Expected JSON"}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"ok": False, "error": "Expected a JSON object"}, status_code=400)
+    try:
+        accepted, doc = _builder_drafts.save(body.get("name"), body.get("saved_at"),
+                                             body.get("data"), body.get("base"))
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except OSError:
+        return JSONResponse({"ok": False, "error": "Could not save the draft. Try again."}, status_code=500)
+    return JSONResponse({"ok": True, "accepted": accepted, "doc": doc})
 
 
 @app.post("/api/accounts-hidden")
