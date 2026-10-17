@@ -41663,22 +41663,7 @@
     ]
   },
   "execution": {
-    "claims": {
-      "977": {
-        "actor": "Worker-WFO06ACL",
-        "session": "WFO-20261017-ACL-Early-Author",
-        "coordinator": "Coordinator-WFO20261017",
-        "branch": "codex/acl-1977-released-workflow-support",
-        "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/workflow-implementation/2026-10-16/work/acl-early-adoption",
-        "id": "bd0b78dabacf4ef999be6da52aa853aa",
-        "issue": 977,
-        "state": "handoff",
-        "started_at": "2026-10-17T18:26:19+00:00",
-        "from_status": "status:todo",
-        "pr": 978,
-        "report": "# ACL-1977 bounded runbook correction handoff\n\nSource PR978 head be1013a009a6d0981027915a9ab32c4ccf76d2db,\ntree 5ef347e5d98e562681349324a999b051bc8ba52f,\nbase af0ade29b106129089dbabd3f208b548efa246d9.\nWhole Issue scope remains 685e42377833b87c45332b80efdee0859fda5b71f0140899d7e6e8e710676685.\n\nThe genuine original author corrected only docs/repository/EARLY_ADOPTION.md\nafter supported source return and a fresh normal Worker claim. The runbook now\nstops optional selection at pinned866 until separately reviewed compatible\nselection-delivery support is actually published, integrated/pinned and verified\nfor real readers/writers/recovery. Each separate context then completion\nselection requires its genuine frozen batch/main/full native checks and complete\nexact-target package/install/update/recovery delivery receipt before maintenance\nor adoption. Pending, failed or unknown delivery stops both cutovers; old idle\noutput is insufficient. No code, pin, optional selection or activation changed.\n\nLocal checks passed: maintained process/link checker (30 files,121 local links),\ntracked secret scanner, bounded sequential-order/preservation checks and git\ndiff --check. All other source blobs and the runbook outside that sequential\nsection are preserved. Earlier broad tests and their two local absent-Chromium\nfailures remain recorded; they were not repeated for this documentation delta.\nNew ordinary native checks are pending and must be read at this exact head.\n\nFresh independent full-scope source review/approval remains required. This is\nneither self-approval nor combined approval; retained968/971 approvals, the same\nfrozen batch/Coordinator and all foreign ownership/history are preserved. Full\nTask06 and actual package/adoption outcomes remain unfinished."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -48888,7 +48873,7 @@
             "session": "WFO-20261017-ACL-Early-Author"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-WFO06ACL",
         "coordinator": "Coordinator-WFO20261017",
         "handoff": {
@@ -48897,16 +48882,16 @@
           "coordinator": "Coordinator-WFO20261017",
           "branch": "codex/acl-1977-released-workflow-support",
           "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/workflow-implementation/2026-10-16/work/acl-early-adoption",
-          "id": "5875857d58e14c9db2ed3bfab9e5479d",
+          "id": "bd0b78dabacf4ef999be6da52aa853aa",
           "issue": 977,
           "state": "handoff",
-          "started_at": "2026-10-17T12:23:58+00:00",
-          "from_status": "status:backlog",
+          "started_at": "2026-10-17T18:26:19+00:00",
+          "from_status": "status:todo",
           "pr": 978,
-          "report": "# ACL-1977 source handoff\n\nWorker-WFO06ACL / session WFO-20261017-ACL-Early-Author authored the bounded published workflow support upgrade in isolated branch codex/acl-1977-released-workflow-support. Source PR978: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/978. Exact head 5ebf72b04673ce1f7b287e931aad4cada1ec7aa9, base af0ade29b106129089dbabd3f208b548efa246d9, tree 1ab78aaed7ab6fee582b371302f45f7fa5c2a1f9. Full original Issue977 scope/history and its explicit guard-path clarification are preserved.\n\nPublished Master `864ca7a5814e703dd6e61207362d24cbc26dc9ad` (1.2.0) / Tracker `866baf6dec2bd82d8ca052002cc3dc6f4805e247` (3.4.0) support is prepared. Real old 44-file pristine ancestry and new 72-file canonical baseline use the actual unchanged choices: execution-v3 5/5/5, no Stage, process1. Config remains byte-identical. All 18 separated helpers/manifest and 13 canonical references match; four original local guides retain exact bytes/modes in explicit same-directory copies. Product/runtime/history/guard/retired writers/local exact-tree collector and package/installer delivery controls remain intact. Project-owned acl_task_tracker.py preserves prepared-bootstrap/active-marker validation before the canonical exact client; the sole internal batch reader uses it. Original markers and guard implementation remain unchanged. Optional task-context/completion/shared-CI/retry selections stay absent. No policies/state/service were activated.\n\nSelf-checks: 119 initial affected tests passed, 471 additional caller tests passed, final 29 guard/adapter/internal-callsite cases passed, 46 packaging cases passed. Two unrelated local report-dialog UI cases failed before assertions because the Playwright Chromium executable was absent; no UI code changed, no browser installation or blind rerun was performed, and hosted full product checks remain mandatory. Strict export/pristine/move/hash/LF/link/config preservation, no-change repeat upgrade, staged scanner/import smoke/descriptor draft/diff checks passed. Native branch controls returned 403/unverified, not enforcement proof.\n\nA distinct root run performed independent early review at this exact clean source, regenerated the 72-file canonical output, verified genuine old 44,18 helpers / 13 guides, four original bodies/modes and 293 preserved blobs, exercised five actual negative adapter subprocess boundaries and clean 866 active guide, and reported no actionable findings. This early review held no source lane and supplies no formal approval or merge admission. Its report/evidence remain local/private. Final independent source review still requires the genuine current-policy source-review lane.\n\nNative snapshot 2026-10-17T12:49:57Z: descriptor39033357002 SUCCESS; tracker-link39033356967 SUCCESS; product39033356962 tooling/process and Windows3.13 SUCCESS, six Linux3.11/3.13 shards IN_PROGRESS; installer39033356996 classify/Verify build inputs SUCCESS, real Build/install/repair/uninstall IN_PROGRESS. Full aggregates remain pending; selector-skip is not installer proof. No manual rerun or additional trigger was used.\n\nHandoff uses the genuine unchanged current-main-policy e775 client/config from the existing old checkout, acting only on this actual Worker claim. Release only this Worker through the normal verified handoff; queue behind the actual held source-review pool. Preserve other queued 968/971 and all foreign Worker/Reviewer/intake/integration ownership. Do not self-approve or merge an approval-only source.\n\nMaster39 / Task06 remains unfinished for normal source integration, two separately reviewed policy selections and owned idle activations, actual compatible published reader/all writers, retained pre-cutover sources/history and old-writer refusal, real current-main readiness/journal/changed-requirement/Approved compatibility/new-combination behavior, fresh board/recovery checkpoints and comparable ordinary-work after measurement. Package publication/installation and pending delivery remain genuinely unfinished wherever required. No release, employee rollout, service/registry change, maintenance reservation or business operation is claimed."
+          "report": "# ACL-1977 bounded runbook correction handoff\n\nSource PR978 head be1013a009a6d0981027915a9ab32c4ccf76d2db,\ntree 5ef347e5d98e562681349324a999b051bc8ba52f,\nbase af0ade29b106129089dbabd3f208b548efa246d9.\nWhole Issue scope remains 685e42377833b87c45332b80efdee0859fda5b71f0140899d7e6e8e710676685.\n\nThe genuine original author corrected only docs/repository/EARLY_ADOPTION.md\nafter supported source return and a fresh normal Worker claim. The runbook now\nstops optional selection at pinned866 until separately reviewed compatible\nselection-delivery support is actually published, integrated/pinned and verified\nfor real readers/writers/recovery. Each separate context then completion\nselection requires its genuine frozen batch/main/full native checks and complete\nexact-target package/install/update/recovery delivery receipt before maintenance\nor adoption. Pending, failed or unknown delivery stops both cutovers; old idle\noutput is insufficient. No code, pin, optional selection or activation changed.\n\nLocal checks passed: maintained process/link checker (30 files,121 local links),\ntracked secret scanner, bounded sequential-order/preservation checks and git\ndiff --check. All other source blobs and the runbook outside that sequential\nsection are preserved. Earlier broad tests and their two local absent-Chromium\nfailures remain recorded; they were not repeated for this documentation delta.\nNew ordinary native checks are pending and must be read at this exact head.\n\nFresh independent full-scope source review/approval remains required. This is\nneither self-approval nor combined approval; retained968/971 approvals, the same\nfrozen batch/Coordinator and all foreign ownership/history are preserved. Full\nTask06 and actual package/adoption outcomes remain unfinished."
         },
         "pr": 978,
-        "queued_at": "2026-10-17T12:51:46+00:00",
+        "queued_at": "2026-10-17T18:29:20+00:00",
         "return_operation": {
           "id": "6b2f4033a38f4640b5ebdedf056fb0f0",
           "actor": "Coordinator-WFO3C7A5M",
@@ -53752,7 +53737,9 @@
         "route": "process"
       }
     },
-    "review_queue": [],
+    "review_queue": [
+      977
+    ],
     "review": null,
     "history": [
       {
@@ -83437,6 +83424,13 @@
         "at": "2026-10-17T18:26:19+00:00",
         "issue": 977,
         "claim": "bd0b78dabacf4ef999be6da52aa853aa",
+        "actor": "Worker-WFO06ACL"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-17T18:29:20+00:00",
+        "issue": 977,
+        "pr": 978,
         "actor": "Worker-WFO06ACL"
       }
     ],
