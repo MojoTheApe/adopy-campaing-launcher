@@ -41717,6 +41717,18 @@
         "state": "implementing",
         "started_at": "2026-10-16T16:08:01+00:00",
         "from_status": "status:todo"
+      },
+      "971": {
+        "actor": "Worker-WFO05Fast",
+        "session": "WFO-20261017-ACL-Fast-Author",
+        "coordinator": "Coordinator-WFO20261017",
+        "branch": "codex/acl-1971-fast-full-plan",
+        "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/workflow-implementation/2026-10-16/work/acl-fast-full",
+        "id": "24026c033265454686b95f445400d0c8",
+        "issue": 971,
+        "state": "implementing",
+        "started_at": "2026-10-17T11:30:04+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -48369,6 +48381,17 @@
         },
         "pr": 969,
         "queued_at": "2026-10-17T10:33:02+00:00"
+      },
+      "971": {
+        "implementers": [
+          {
+            "actor": "Worker-WFO05Fast",
+            "session": "WFO-20261017-ACL-Fast-Author"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-WFO05Fast",
+        "coordinator": "Coordinator-WFO20261017"
       }
     },
     "actors": {
@@ -50250,6 +50273,10 @@
       },
       "Worker-WFO05CI": {
         "session": "WFO-20261017-ACL-CI-Author",
+        "role": "Worker"
+      },
+      "Worker-WFO05Fast": {
+        "session": "WFO-20261017-ACL-Fast-Author",
         "role": "Worker"
       }
     },
@@ -78328,6 +78355,13 @@
         "issue": 681,
         "pr": 970,
         "actor": "Worker-W1681A"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-17T11:30:04+00:00",
+        "issue": 971,
+        "claim": "24026c033265454686b95f445400d0c8",
+        "actor": "Worker-WFO05Fast"
       }
     ],
     "policy": {
