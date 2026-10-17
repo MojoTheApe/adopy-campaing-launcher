@@ -41676,20 +41676,6 @@
         "started_at": "2026-10-17T19:10:11+00:00",
         "from_status": "status:todo"
       },
-      "864": {
-        "actor": "Worker-ACL1864",
-        "session": "acl1864-s1",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1864-stats-header-rows",
-        "worktree": "C:\\acl-1864",
-        "id": "e16c25b3617543da822454b612c93f0a",
-        "issue": 864,
-        "state": "handoff",
-        "started_at": "2026-10-17T19:11:22+00:00",
-        "from_status": "status:todo",
-        "pr": 985,
-        "report": "ACL-1864 ready for review. PR #985. Shared Stats header selection (first non-empty row of first sheet) used by all Stats readers, wizard and settings validation; regression tests with 515 formatted empty rows, bad/duplicate headers, 0/False, empty sheet, byte-hash unchanged. Independent Sonnet pre-review: 1 real finding (edge-space headers) fixed; scripts/sync_creatives_from_excel.py intentionally untouched (own sheet option/looser schema)."
-      },
       "356": {
         "actor": "Worker-7k2q9",
         "session": "s-a75a7899",
@@ -46610,28 +46596,31 @@
             "session": "acl1864-s1"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-ACL1864",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-SR1012",
-          "session": "connection_sr1012_worker",
-          "coordinator": "Coordinator-CR1012",
-          "branch": "codex/acl-1864-stats-leading-rows",
-          "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Audit-2026-10-12\\worktrees\\acl-1864",
-          "id": "02065bdd371f4967b5311d303481b860",
+          "actor": "Worker-ACL1864",
+          "session": "acl1864-s1",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "work/acl-1864-stats-header-rows",
+          "worktree": "C:\\acl-1864",
+          "id": "e16c25b3617543da822454b612c93f0a",
           "issue": 864,
-          "state": "stopping",
-          "started_at": "2026-10-13T08:16:28+00:00",
+          "state": "handoff",
+          "started_at": "2026-10-17T19:11:22+00:00",
           "from_status": "status:todo",
-          "report": "# ACL-1864 deferred without implementation \u2014 2026-10-13\n\nWorker-SR1012 / connection_sr1012_worker, Coordinator-CR1012.\nClaim02065bdd371f4967b5311d303481b860.\n\nThe owner repaired the workbook and reported that it now works, then asked to\ncontinue the primary connection/API work. The Coordinator directed this new\npreventive Stats-loader task to remain queued rather than begin source changes.\n\nIssue864 remains valid recurrence protection: accept only leading empty/formatted\nrows before the first valid unambiguous Stats header, retaining strict validation.\nIts synthetic regression/design context is preserved in the Issue. No source\nedits, commit, push or PR were made. The isolated worktree is clean at main\n3327465fcbd46ccff9b64eb7c574ff5b84b99b80, under\nACM-Audit-2026-10-12/worktrees/acl-1864. Preserve it and the issue for later work.\n\nThe pending normal claim did succeed after a shared-state race, so release this\nexact owned claim through supported execution stop. This is a priority deferral,\nnot an implemented fix or a live verification. No workbook, machine path or\nrunning9095 dashboard was modified by this Worker. Resume only after a new\nauthorized normal claim."
+          "pr": 985,
+          "report": "ACL-1864 ready for review. PR #985. Shared Stats header selection (first non-empty row of first sheet) used by all Stats readers, wizard and settings validation; regression tests with 515 formatted empty rows, bad/duplicate headers, 0/False, empty sheet, byte-hash unchanged. Independent Sonnet pre-review: 1 real finding (edge-space headers) fixed; scripts/sync_creatives_from_excel.py intentionally untouched (own sheet option/looser schema)."
         },
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578014+00:00",
           "remote_process_stopped_verified": false
-        }
+        },
+        "pr": 985,
+        "queued_at": "2026-10-17T19:21:46+00:00"
       },
       "865": {
         "implementers": [
@@ -53801,7 +53790,9 @@
         "route": "process"
       }
     },
-    "review_queue": [],
+    "review_queue": [
+      864
+    ],
     "review": {
       "id": "b0a91a786e154807abe0a878a5dfeda0",
       "batch_id": "6b2f4033a38f4640b5ebdedf056fb0f0",
@@ -83622,6 +83613,13 @@
         "issue": 356,
         "claim": "11fde19af4e848909afcfede0fe9a212",
         "actor": "Worker-7k2q9"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-17T19:21:46+00:00",
+        "issue": 864,
+        "pr": 985,
+        "actor": "Worker-ACL1864"
       }
     ],
     "policy": {
