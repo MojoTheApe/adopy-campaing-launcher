@@ -41717,20 +41717,6 @@
         "state": "implementing",
         "started_at": "2026-10-16T16:08:01+00:00",
         "from_status": "status:todo"
-      },
-      "971": {
-        "actor": "Worker-WFO05Fast",
-        "session": "WFO-20261017-ACL-Fast-Author",
-        "coordinator": "Coordinator-WFO20261017",
-        "branch": "codex/acl-1971-fast-full-plan",
-        "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/workflow-implementation/2026-10-16/work/acl-fast-full",
-        "id": "24026c033265454686b95f445400d0c8",
-        "issue": 971,
-        "state": "handoff",
-        "started_at": "2026-10-17T11:30:04+00:00",
-        "from_status": "status:backlog",
-        "pr": 972,
-        "report": "ACL-1971 ready source PR972, head4ee28aedba1545f61aa6b05ee5d9c609f6268a70/tree9f29a2bd2ae136aba5b53229aa904ab749723629/baseaf0ade29b106129089dbabd3f208b548efa246d9. Five files: project fast/full docs and actual parsed-YAML activity regression only. Local61 workflow/layout tests +46 packaging unittests +scanner/smoke/diffcheck passed;3 in-memory activity mutations rejected. Initial minimal environment missing dependencies was resolved with existing complete runtime, no install/source workaround. Ordinary native checks running; independent source review/integration/delivery pending. Preserve all five held source-review lanes, other Workers, intake/integration and accounting PR969. Release only this actual Worker into queued Review; do not infer approval or completion. Durable author evidence evidence/acl1971-self-check.json; full current Issue971 preserved with PR backlink."
       }
     },
     "tasks": {
@@ -48391,9 +48377,25 @@
             "session": "WFO-20261017-ACL-Fast-Author"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-WFO05Fast",
-        "coordinator": "Coordinator-WFO20261017"
+        "coordinator": "Coordinator-WFO20261017",
+        "handoff": {
+          "actor": "Worker-WFO05Fast",
+          "session": "WFO-20261017-ACL-Fast-Author",
+          "coordinator": "Coordinator-WFO20261017",
+          "branch": "codex/acl-1971-fast-full-plan",
+          "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/workflow-implementation/2026-10-16/work/acl-fast-full",
+          "id": "24026c033265454686b95f445400d0c8",
+          "issue": 971,
+          "state": "handoff",
+          "started_at": "2026-10-17T11:30:04+00:00",
+          "from_status": "status:backlog",
+          "pr": 972,
+          "report": "ACL-1971 ready source PR972, head4ee28aedba1545f61aa6b05ee5d9c609f6268a70/tree9f29a2bd2ae136aba5b53229aa904ab749723629/baseaf0ade29b106129089dbabd3f208b548efa246d9. Five files: project fast/full docs and actual parsed-YAML activity regression only. Local61 workflow/layout tests +46 packaging unittests +scanner/smoke/diffcheck passed;3 in-memory activity mutations rejected. Initial minimal environment missing dependencies was resolved with existing complete runtime, no install/source workaround. Ordinary native checks running; independent source review/integration/delivery pending. Preserve all five held source-review lanes, other Workers, intake/integration and accounting PR969. Release only this actual Worker into queued Review; do not infer approval or completion. Durable author evidence evidence/acl1971-self-check.json; full current Issue971 preserved with PR backlink."
+        },
+        "pr": 972,
+        "queued_at": "2026-10-17T11:34:08+00:00"
       }
     },
     "actors": {
@@ -53051,7 +53053,8 @@
       680,
       626,
       968,
-      681
+      681,
+      971
     ],
     "review": null,
     "history": [
@@ -78363,6 +78366,13 @@
         "at": "2026-10-17T11:30:04+00:00",
         "issue": 971,
         "claim": "24026c033265454686b95f445400d0c8",
+        "actor": "Worker-WFO05Fast"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-17T11:34:08+00:00",
+        "issue": 971,
+        "pr": 972,
         "actor": "Worker-WFO05Fast"
       }
     ],
