@@ -4170,6 +4170,31 @@
         "issue_scopes": {
           "987": "f0c16cf100ff857252602f188c8566c4b162b291e4b59f3e07a60754b09d8a17"
         }
+      },
+      "989": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-WFOC984R7",
+        "implementer": "Coordinator-WFO3C7A5M",
+        "head_sha": "7f0616e62952b560eb001efcd26dde489e4e9ec0",
+        "base_sha": "f86ca81eda7fada409bb672f694ed016a08a586c",
+        "tree_sha": "a3f76d61cb857a5e0b5b5a9537e2a20edb8c4a11",
+        "execution_lane": "3cbe376edb644d8d83720156b2b6ae34",
+        "review_session": "wfo_20261017_acl_combined_review",
+        "batch_id": "6d00e4a9014a4e8ca3b7756c4c71c199",
+        "source_heads": [
+          "8fc4021ae3c486c81cdc45ea76ad151930124870"
+        ],
+        "report": "Independent exact PR989 combined review approved for integration; no open findings. Private full report SHA256 3c9b0562688a8ae2d25374672016457cf927f5e3b5a24a6515cf702cdc7c2ecc. Actual original-attempt full7platform cells/all16checks and real installer update/recovery passed. Published-package criterion4 and actual post-main gates remain required; no optional activation or parentTask05/06 completion.",
+        "main_sha": "f86ca81eda7fada409bb672f694ed016a08a586c",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          987
+        ],
+        "recorded_at": "2026-10-17T21:13:37+00:00",
+        "issue_scopes": {
+          "987": "f0c16cf100ff857252602f188c8566c4b162b291e4b59f3e07a60754b09d8a17"
+        }
       }
     },
     "stage": {
