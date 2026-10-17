@@ -48650,7 +48650,7 @@
       },
       "69": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       }
     },
     "actors": {
@@ -78812,6 +78812,12 @@
         "issue": 142,
         "pr": 983,
         "actor": "Worker-W1142A"
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-17T13:55:50+00:00",
+        "issue": 69,
+        "reason": "Owner decision 2026-10-17: closed for now. The team-lead role stays the ACL_TEAM_LEAD flag (used by the acl-602 goals overview, PR #982); no authenticated role mechanism is planned. Restore if real permissions are needed."
       }
     ],
     "policy": {
