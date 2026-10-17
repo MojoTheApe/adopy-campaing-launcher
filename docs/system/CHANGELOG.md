@@ -165,6 +165,15 @@ legacy addresses, which all answer 404, so a read left the profile window open
 and the error showed the last 404 instead of the cause (TEST9095, Doc120,
 2026-10-16 23:10). The raised error now names the main-address failure. 404 on the
 main address still falls through to the legacy tail; other 4xx still stop at once.
+## API publish: no review window when there is nothing to review — ACL-1784 — 2026-10-17
+
+With `fb_backend=api` a finished job keeps the Multilogin profile as a review
+window (holding a queue slot) only when Meta received writes and the readback
+did not confirm them all. A job that wrote nothing (plan or preflight error,
+stop before the first write) or whose every campaign is created and verified
+frees its slot; it stops the profile only if the job started it, never one the
+user opened. The job panel states in English why the window was or was not
+kept. The RPA path is unchanged.
 
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
