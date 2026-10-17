@@ -22,6 +22,8 @@ def policy(config):
     if 'task_context_policy' not in config:
         return None
     value = config['task_context_policy']
+    if isinstance(value, dict) and type(value.get('schema_version')) is int and value['schema_version'] == 2:
+        return rules.direct_module().context_policy(config)
     if (not isinstance(value, dict) or set(value) != {'schema_version'}
             or type(value.get('schema_version')) is not int or value['schema_version'] != 1):
         raise ValueError('Invalid task_context_policy')
@@ -82,11 +84,11 @@ def adopt(api, config, store, args):
         rules.execution_state(state, config)
         return {'already_adopted': True, 'applied': False}
     maintenance.owned(state, args)
-    if maintenance.busy(state):
-        raise ValueError('Drain actual owners, pending operations, intake and stage before adoption')
     previous = dict(config)
     previous.pop('task_context_policy', None)
     rules.execution_state(state, previous)
+    if maintenance.busy(state) or rules.pending_delivery(state, previous):
+        raise ValueError('Drain actual owners, pending delivery/operations, intake and stage before adoption')
     ref = baseline(api, config)
     row = api.request(api.root + '/contents/tracker/config.json?ref=' + ref)
     if json.loads(rules.file_bytes(api.request, api.root, row)) != config:
@@ -101,6 +103,8 @@ def adopt(api, config, store, args):
                              'readiness': {}, 'history': [{'event': 'adopted', 'main_sha': ref, 'report': text}]}
     if state.get('completion'):
         state['completion']['base_schema_version'] = 4
+    elif state.get('ci_retry'):
+        state['ci_retry']['base_schema_version'] = 4
     else:
         state['maintenance']['base_schema_version'] = 4
     execution.audit(state['execution'], 'task-context-adopted', main_sha=ref)
@@ -132,7 +136,7 @@ def assess(api, config, store, number, args):
     if not args.evidence_file:
         return {'identity': identity, 'required_assessments': ['code', 'decisions', 'related_work', 'dependencies', 'report'],
                 'verdicts': ['ready', 'needs-clarification', 'superseded'], 'applied': False}
-    document = json.loads(args.evidence_file.read_text(encoding='utf-8'))
+    document = json.loads(args.evidence_file.read_text(encoding='utf-8'),object_pairs_hook=rules.direct_module().unique_object)
     assessment(document, identity, ('code', 'decisions', 'related_work', 'dependencies'),
                ('ready', 'needs-clarification', 'superseded'))
     # An assessment grants no branch/edit ownership. A prospective replacement
@@ -141,8 +145,14 @@ def assess(api, config, store, number, args):
         raise ValueError('Task context changed during assessment')
     if args.apply:
         context = state['task_context']
-        context['readiness'].setdefault(str(number), {})[session] = copy.deepcopy(document)
-        context['history'].append({'event': 'assessed', 'evidence': copy.deepcopy(document)})
+        stored=copy.deepcopy(document)
+        if policy(config)['schema_version']==2:
+            if digest({k:document.get(k) for k in identity})!=digest(identity):
+                raise ValueError('Use the exactly typed actual readiness identity')
+            stored=dict(identity,verdict=document['verdict'],assessment_sha256=digest({k:document[k] for k in ('code','decisions','related_work','dependencies')}),
+                        report_sha256=digest(document['report']))
+        context['readiness'].setdefault(str(number), {})[session] = stored
+        context['history'].append({'event': 'assessed', 'evidence': copy.deepcopy(stored)})
         store.write(state, sha)
     return {'applied': args.apply, 'issue': number, 'verdict': document['verdict']}
 
@@ -152,6 +162,13 @@ def require_ready(api, config, state, number, fields):
         return
     identity = readiness_identity(api, config, number, fields['actor'], fields['session'])
     document = state.get('task_context', {}).get('readiness', {}).get(str(number), {}).get(fields['session'])
+    if policy(config)['schema_version']==2:
+        direct=rules.direct_module()
+        if (not isinstance(document,dict) or set(document)!=set(identity)|{'verdict','assessment_sha256','report_sha256'}
+                or digest({k:document.get(k) for k in identity})!=digest(identity) or document.get('verdict')!='ready'
+                or any(not direct.hashed(document.get(k)) for k in ('assessment_sha256','report_sha256'))):
+            raise ValueError('Record the current exact Worker/main/full-scope context2 readiness assessment before work')
+        return
     assessment(document, identity, ('code', 'decisions', 'related_work', 'dependencies'), ('ready',))
 
 
@@ -190,7 +207,7 @@ def source_context(api, config, section, number):
     if not approval or section['tasks'].get(str(number), {}).get('state') != 'approved':
         raise ValueError('Compatibility requires an unchanged Approved source')
     batch = section.get('integration')
-    if batch and number in batch['issues']:
+    if batch and number in batch.get('issues', []):
         raise ValueError('Frozen batch members require the normal held-batch recovery')
     # Original evidence remains valid against its original immutable baseline.
     pr = batch_policy.source(api.request, config, approval, approval['main_sha'], frozen=True)
@@ -204,6 +221,13 @@ def source_context(api, config, section, number):
 
 
 def review_acquire(api, config, store, number, args):
+    if config.get('execution_policy', {}).get('schema_version') == 4 and config['execution_policy']['route'] == 'direct':
+        from . import direct_actions
+        state, _, section = direct_actions.read(store, config)
+        lane = rules.review_lane(section, issue=number)
+        from . import execution
+        execution.owned(lane, args, 'Reviewer')
+        return {'review': lane, 'resumed': True, 'instruction': 'Use review-record for actual compatibility; the source Reviewer stays held.'}
     from . import execution
     from .sync import now
     state, sha, section = read(api, config, store)
@@ -215,7 +239,7 @@ def review_acquire(api, config, store, number, args):
             raise ValueError('Another review operation owns this task')
         return {'review': lane, 'resumed': True}
     rules.admission_open(state)
-    if section['policy']['schema_version'] == 3:
+    if section['policy']['schema_version'] in (3, 4):
         if len(section['source_reviews']) >= section['policy']['review_limit']:
             raise ValueError('All source review slots are occupied')
     elif section.get('review'):
@@ -229,6 +253,9 @@ def review_acquire(api, config, store, number, args):
                 coordinator=execution.actor(args.coordinator, 'Coordinator'), pr=approval['pr'], issues=[number],
                 state='reviewing', route='compatibility', main_sha=current, previous_main_sha=previous,
                 approval_sha256=approval_digest(approval), started_at=now())
+    if section['policy']['schema_version'] == 4:
+        lane.pop('issues')
+        lane['subject'] = {'kind':'task','id':number}
     execution.put_review(section, lane)
     execution.audit(section, 'compatibility-acquired', issue=number, lane=lane['id'])
     store.write(state, sha)
@@ -246,6 +273,9 @@ def compatibility_identity(api, config, approval, lane):
 
 
 def review_record(api, config, store, number, args):
+    if config.get('execution_policy', {}).get('schema_version') == 4 and config['execution_policy']['route'] == 'direct':
+        from . import direct_actions
+        return direct_actions.compatibility(api, config, store, args, number)
     from . import execution
     state, sha, section = read(api, config, store)
     lane = rules.review_lane(section, issue=number)
@@ -296,6 +326,9 @@ def source_context_after_write(api, config, approval):
 
 
 def review_release(api, config, store, number, args):
+    if config.get('execution_policy', {}).get('schema_version') == 4 and config['execution_policy']['route'] == 'direct':
+        from . import direct_actions
+        raise ValueError('Direct compatibility does not release the genuine source Reviewer; use the actual execution review-return for author changes')
     from . import execution
     state, sha, section = read(api, config, store)
     lane = execution.owned(rules.review_lane(section, issue=number), args, 'Reviewer')

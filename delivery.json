@@ -2,7 +2,7 @@
   "exceptions": [
     {
       "scope": "Published workflow support source",
-      "reason": "The selected Master 1.2.0 / Tracker 3.4.0 pair is published. This source-only support upgrade does not verify the separate Task06 policy selections, owned activations, board/recovery/behavior and comparable after measurement; adoption remains draft until those actual gates are settled. Existing package and delivery controls are preserved.",
+      "reason": "The selected Master1.5.1 / Tracker3.7.1 pair is published. This compatible support upgrade preserves existing ACL policies and supplies the separate one-policy selection-package delivery bridge. It does not verify Task05/06 policy selections, owned activation, reader/every-writer/recovery readiness, board/behavior or comparable ordinary outcomes; adoption remains draft until those actual gates are settled. Existing package and delivery controls are preserved.",
       "reference": "docs/repository/EARLY_ADOPTION.md"
     },
     {
@@ -66,8 +66,8 @@
   },
   "standard": {
     "repository": "https://github.com/MojoTheApe/master-repo",
-    "revision": "864ca7a5814e703dd6e61207362d24cbc26dc9ad",
-    "version": "1.2.0"
+    "revision": "622557ec5be09ca45ef795035805fdab0f4a2528",
+    "version": "1.5.1"
   },
   "checks": [
     "python scripts/acl_scan_secrets.py",
@@ -81,7 +81,7 @@
     "repository": "MojoTheApe/task-tracker",
     "verification": "Existing acl board verified server-side on 2026-09-21 after Task Tracker PR #64 deployment 0dadc889e18b027c8ca98b888407d492848f2f19: 160 identities, seven columns, 74 bounded historical completions, all six fresh snapshots, preserved authentication and restricted HTTP access. Browser verification excluded by owner. See docs/repository/ADOPTION.md and ACL-1248.",
     "registration": "verified",
-    "revision": "866baf6dec2bd82d8ca052002cc3dc6f4805e247",
+    "revision": "be87599d1b5e625058bbddc33c35bda86687b5bf",
     "workspace_id": "acl"
   },
   "completion": "verified-stable-package",

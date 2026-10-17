@@ -1,5 +1,30 @@
 # Repository process history
 
+## ACL-1987 — Released compatible selection-delivery support — 2026-10-17
+
+Advance source support from Master1.2.0/Tracker3.4.0 to published Master1.5.1
+`622557ec5be09ca45ef795035805fdab0f4a2528` and Tracker3.7.1
+`be87599d1b5e625058bbddc33c35bda86687b5bf` through the actual old/new/local
+upgrade. The genuine82-file pristine target and full12-raw/24-separated helper
+manifest remain canonical. Keep descriptor2, execution3/5-5-5, process1, no Stage,
+configuration bytes, IDs/history and full applicable CI/package controls.
+
+Resolve the exact three overlapping files by preserving the local workflow
+and complete delivery/verification guidance while adding current shared rules.
+The selected guide now names the actual configured package target. Preserve
+ACL-1977/F1 verbatim in [its dated history](EARLY_ADOPTION_1977_HISTORY.md);
+the [current plan](EARLY_ADOPTION.md) requires each separate optional selection
+package and exact receipt before maintenance/adoption. The unchanged C9 report
+keeps its historical df0154 provenance and now has real current manifest ownership.
+
+No system/runtime, application, product skills, installer/updater, employee data
+or advertising behavior changes; no service, optional policy or state activation.
+Master54/PR55 and Tracker160/PR161 provide the separately reviewed published pair;
+their source contracts require no further upstream edit for this consumer upgrade.
+This support leaf still needs its own normal independent Source/combined review,
+native gates, main/package acceptance and exact delivery receipt; full Task05/06
+and ACL-1649 targets remain separate unfinished outcomes.
+
 ## ACL-1977 — Published early-adoption support source — 2026-10-17
 
 Select published Master1.2.0 `864ca7a5814e703dd6e61207362d24cbc26dc9ad` and
