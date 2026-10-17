@@ -48662,7 +48662,7 @@
       },
       "859": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       }
     },
     "actors": {
@@ -78847,6 +78847,12 @@
         "event": "archived",
         "at": "2026-10-17T16:28:19+00:00",
         "issue": 858,
+        "reason": "Owner decision 2026-10-17 (main rule): Facebook must never see one IP or one shared app across our ad accounts. The official Meta app route (app + token called from the dashboard machine) is dropped entirely; all API work stays on the in-profile Graph route (ACL-1756/1760/1761) through each profile's own proxy. The ACL-1859 read pilot worked (spend matched Ads Manager) but the route is rejected."
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-17T16:28:45+00:00",
+        "issue": 859,
         "reason": "Owner decision 2026-10-17 (main rule): Facebook must never see one IP or one shared app across our ad accounts. The official Meta app route (app + token called from the dashboard machine) is dropped entirely; all API work stays on the in-profile Graph route (ACL-1756/1760/1761) through each profile's own proxy. The ACL-1859 read pilot worked (spend matched Ads Manager) but the route is rejected."
       }
     ],
