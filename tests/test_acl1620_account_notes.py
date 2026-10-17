@@ -364,3 +364,47 @@ def test_reopening_right_after_close_shows_the_new_text(browser):
     assert _get() == {"Demo": "fresh text"}
     assert not errors, errors
     page.close()
+
+
+def test_a_damaged_file_is_reported_in_the_save_response_and_logged(caplog):
+    path = Path(paths.get_account_notes_path())
+    path.write_text("{not json", encoding="utf-8")
+    with caplog.at_level("WARNING"):
+        code, body = _post({"account": "A", "text": "x"})
+    backup = next(path.parent.glob("account_notes.json.corrupt-*"))
+    assert code == 200 and body["set_aside"] == str(backup)
+    assert body["warning"] == f"Notes file was damaged; a copy was kept at {backup}"
+    assert any("damaged" in r.getMessage() and str(backup) in r.getMessage() for r in caplog.records)
+    # Healthy file afterwards: no warning.
+    assert "set_aside" not in _post({"account": "B", "text": "y"})[1]
+
+
+def test_two_corruptions_in_the_same_millisecond_keep_both_copies(monkeypatch):
+    class _Fixed:
+        @staticmethod
+        def now():
+            import datetime as _dt
+            return _dt.datetime(2026, 1, 2, 3, 4, 5, 678000)
+
+    monkeypatch.setattr(notes, "datetime", _Fixed)
+    path = Path(paths.get_account_notes_path())
+    for bad in ("{one", "{two"):
+        path.write_text(bad, encoding="utf-8")
+        assert _post({"account": "A", "text": "x"})[0] == 200
+    names = sorted(p.name for p in path.parent.glob("account_notes.json.corrupt-*"))
+    assert names == ["account_notes.json.corrupt-20260102-030405-678",
+                     "account_notes.json.corrupt-20260102-030405-678-2"]
+    assert sorted(p.read_text(encoding="utf-8") for p in path.parent.glob("account_notes.json.corrupt-*")) == ["{one", "{two"]
+
+
+def test_the_backup_name_has_millisecond_resolution():
+    path = Path(paths.get_account_notes_path())
+    path.write_text("{bad", encoding="utf-8")
+    _post({"account": "A", "text": "x"})
+    name = next(path.parent.glob("account_notes.json.corrupt-*")).name
+    assert re.fullmatch(r"account_notes\.json\.corrupt-\d{8}-\d{6}-\d{3}", name)
+
+
+def test_the_page_shows_the_set_aside_warning():
+    src = (TPL / "report.html").read_text(encoding="utf-8")
+    assert "notifyAside(res.j.warning)" in src and "amap-note-aside" in src
