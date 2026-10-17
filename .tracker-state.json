@@ -50983,6 +50983,10 @@
       "Reviewer-WFO971C4M8": {
         "session": "405969e2a0d24390ba648f8f8929b7a1",
         "role": "Reviewer"
+      },
+      "Coordinator-WFO3C7A5M": {
+        "session": "wfo_20261017_acl_three_source_coordinator",
+        "role": "Coordinator"
       }
     },
     "completed": {
@@ -83153,6 +83157,29 @@
             "approved_at": "2026-10-17T17:44:02+00:00"
           }
         }
+      },
+      {
+        "event": "intake-frozen",
+        "at": "2026-10-17T17:48:06+00:00",
+        "intake": {
+          "id": "6fb79a7d4f8f472a8c1354264e15a641",
+          "actor": "Coordinator-WFO3C7A5M",
+          "session": "wfo_20261017_acl_three_source_coordinator",
+          "state": "running",
+          "issues": [
+            968,
+            971,
+            977
+          ],
+          "remaining": [
+            968,
+            971,
+            977
+          ],
+          "batches": [],
+          "started_at": "2026-10-17T17:48:06+00:00",
+          "ineligible": {}
+        }
       }
     ],
     "policy": {
@@ -87884,27 +87911,23 @@
     },
     "integration": null,
     "intake": {
-      "id": "ab1a8348cdd44225addf47706c1456d4",
-      "actor": "Coordinator-M1011A",
-      "session": "coord-m1011a-20261015",
-      "state": "cancelled",
+      "id": "6fb79a7d4f8f472a8c1354264e15a641",
+      "actor": "Coordinator-WFO3C7A5M",
+      "session": "wfo_20261017_acl_three_source_coordinator",
+      "state": "running",
       "issues": [
-        776,
-        899,
-        902,
-        886
+        968,
+        971,
+        977
       ],
       "remaining": [
-        776,
-        899,
-        902,
-        886
+        968,
+        971,
+        977
       ],
       "batches": [],
-      "started_at": "2026-10-16T11:09:41+00:00",
-      "ineligible": {},
-      "report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
-      "administrative_pause_operation": "owner-acl-exclusive-workflow-20261017-01"
+      "started_at": "2026-10-17T17:48:06+00:00",
+      "ineligible": {}
     },
     "source_reviews": {},
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
