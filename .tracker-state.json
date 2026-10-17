@@ -41717,6 +41717,18 @@
         "state": "implementing",
         "started_at": "2026-10-16T16:08:01+00:00",
         "from_status": "status:todo"
+      },
+      "977": {
+        "actor": "Worker-WFO06ACL",
+        "session": "WFO-20261017-ACL-Early-Author",
+        "coordinator": "Coordinator-WFO20261017",
+        "branch": "codex/acl-1977-released-workflow-support",
+        "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/workflow-implementation/2026-10-16/work/acl-early-adoption",
+        "id": "5875857d58e14c9db2ed3bfab9e5479d",
+        "issue": 977,
+        "state": "implementing",
+        "started_at": "2026-10-17T12:23:58+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -48508,6 +48520,17 @@
       "591": {
         "implementers": [],
         "state": "archived"
+      },
+      "977": {
+        "implementers": [
+          {
+            "actor": "Worker-WFO06ACL",
+            "session": "WFO-20261017-ACL-Early-Author"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-WFO06ACL",
+        "coordinator": "Coordinator-WFO20261017"
       }
     },
     "actors": {
@@ -50409,6 +50432,10 @@
       },
       "Worker-W1202A": {
         "session": "w1202a-s1",
+        "role": "Worker"
+      },
+      "Worker-WFO06ACL": {
+        "session": "WFO-20261017-ACL-Early-Author",
         "role": "Worker"
       }
     },
@@ -78568,6 +78595,13 @@
         "at": "2026-10-17T12:07:02+00:00",
         "issue": 591,
         "reason": "Done: already fixed in main by ACL-1628 (PR #658, 9f592b54) - the test waits for the aria-label and add() fires input. Verified 30/30 consecutive passes on work/main af0ade29 on 2026-10-17. Backlog cleanup."
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-17T12:23:58+00:00",
+        "issue": 977,
+        "claim": "5875857d58e14c9db2ed3bfab9e5479d",
+        "actor": "Worker-WFO06ACL"
       }
     ],
     "policy": {
