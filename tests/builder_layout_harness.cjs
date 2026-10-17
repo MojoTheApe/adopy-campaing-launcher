@@ -116,4 +116,16 @@ assert.equal(L.routes('Daily budget missing')[0].level, 'campaign');
 assert.equal(L.routes('Ad 1: no creative file')[0].level, 'ad');
 assert.equal(L.routes('Detailed targeting not found by Meta: Foo')[0].level, 'adset');
 
+// ACL-1770: Страница/пиксель - выбор из прочитанного списка; в карту уходит только в пустую графу.
+assert.deepEqual(L.ppOptions([{ id: '1', name: 'A' }, { id: '2' }], '', '', 'Account default').map((o) => o.id), ['', '1', '2']);
+assert.equal(L.ppOptions([], '', '77', 'Account default')[0].label, 'Account default (77)');
+assert.ok(L.ppOptions([{ id: '1' }], '9', '', 'D').some((o) => o.id === '9' && o.missing), 'сохранённый выбор не пропал');
+const two = { ok: true, pages: [{ id: '1' }, { id: '2' }], pixels: [{ id: '5' }], map: {} };
+assert.equal(L.ppShouldSave(two, 'page', '2'), true);
+assert.equal(L.ppShouldSave(two, 'pixel', '5'), false, 'единственный пиксель - выбирать нечего');
+assert.equal(L.ppShouldSave({ ...two, map: { page_id: '1' } }, 'page', '2'), false, 'карта уже заполнена');
+assert.equal(L.ppShouldSave({ ...two, ok: false }, 'page', '2'), false);
+assert.equal(L.ppShouldSave(two, 'page', ''), false);
+assert.ok(/Read Pages and pixels/.test(L.ppStatus(null)));
+
 console.log('ok');

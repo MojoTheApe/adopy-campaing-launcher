@@ -74,6 +74,9 @@ def slots_to_campaign_drafts(
                 copy_name=(s.get("copy") or "").strip(),
                 copy2_name=(s.get("copy2") or "").strip(),
                 lead_form_id=(s.get("lead_form_id") or "").strip() if destination == "instant_form" else "",
+                # ACL-1770: ключей нет у слотов без своей Страницы/ссылки - прежние черновики те же.
+                page_id=(s.get("page_id") or "").strip(),
+                link=(s.get("link") or "").strip(),
             )
             for s in group
         ]
@@ -87,6 +90,7 @@ def slots_to_campaign_drafts(
             daily_budget=budget,
             ads=ads,
             destination=destination,
+            pixel_id=(first.get("pixel_id") or "").strip(),
         )
 
         tracking_link = (first.get("tracking_link") or "").strip()

@@ -5692,6 +5692,36 @@ window.cbLayout = (function () {
     return String(entry.message || 'The forms could not be read');
   }
 
+  /* ACL-1770: Страницы и пиксели кабинета. Список читается по нажатию "Read Pages and pixels"
+     (entry = ответ /api/page-pixels). Первое значение - "как в карте" (значение не уходит). */
+  function ppOptions(items, current, mapId, defaultLabel) {
+    var out = [], seen = {};
+    var def = String(mapId || '');
+    out.push({ id: '', label: def ? defaultLabel + ' (' + def + ')' : defaultLabel });
+    (items || []).forEach(function (x) {
+      if (!x || !x.id) return;
+      seen[String(x.id)] = true;
+      out.push({ id: String(x.id), label: (x.name || x.id) + ' · ' + x.id });
+    });
+    var cur = String(current == null ? '' : current);
+    if (cur && !seen[cur]) out.push({ id: cur, label: cur + ' (not in the loaded list)', missing: true });
+    return out;
+  }
+
+  function ppStatus(entry) {
+    if (!entry) return 'Press "Read Pages and pixels" to choose';
+    if (entry.ok) return String(entry.message || '');
+    return String(entry.message || 'The Pages and pixels could not be read');
+  }
+
+  /* Выбор уходит в карту только когда её графа пуста, а в кабинете из чего выбирать несколько. */
+  function ppShouldSave(entry, kind, chosen) {
+    if (!entry || !entry.ok || !chosen) return false;
+    var list = kind === 'page' ? entry.pages : entry.pixels;
+    var have = ((entry.map || {})[kind === 'page' ? 'page_id' : 'pixel_id']) || '';
+    return !have && (list || []).length > 1;
+  }
+
   function parseList(raw) {
     try {
       var v = JSON.parse(raw || '[]');
@@ -5702,6 +5732,7 @@ window.cbLayout = (function () {
   return {
     LEVELS: LEVELS, LEVEL_LABEL: LEVEL_LABEL, FUTURE: FUTURE, DESTINATIONS: DESTINATIONS,
     destination: destination, formOptions: formOptions, formsStatus: formsStatus,
+    ppOptions: ppOptions, ppStatus: ppStatus, ppShouldSave: ppShouldSave,
     level: level, futureTip: futureTip, futureHtml: futureHtml, effectiveName: effectiveName,
     accountState: accountState, clampAd: clampAd, routes: routes, campMeta: campMeta, parseList: parseList
   };
@@ -13024,6 +13055,126 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     });
   };
 
+  /* ACL-1770: Страница и ссылка принадлежат объявлению, пиксель - набору. Списки читаются ТОЛЬКО по
+     нажатию "Read Pages and pixels" и лежат в window.cbPagePixels по аккаунту. Скрытые поля
+     (`_page`, `_pixel`) хранят выбор; пустое = "как в карте", и на сервер не уходит. */
+  window.cbPagePixels = window.cbPagePixels || {};
+
+  function ppFill(sel, hid, items, mapId, label) {
+    var opts = window.cbLayout.ppOptions(items, hid.value, mapId, label);
+    var sig = JSON.stringify([opts, hid.value]);
+    if (sel.dataset.sig === sig) return;
+    var html = '';
+    opts.forEach(function (o) {
+      html += '<option value="' + aclEscHtml(o.id) + '">' + aclEscHtml(o.label) + '</option>';
+    });
+    sel.innerHTML = html;
+    sel.value = hid.value;
+    sel.dataset.sig = sig;
+  }
+
+  window.cbFillPagePixelSelects = function (root) {
+    var L = window.cbLayout;
+    if (!L || !root) return;
+    var api = window.ACL_FB_BACKEND === 'api';
+    var tip = api ? '' : 'API backend only: the Page and pixel are set through the Graph API';
+    var slots = root.classList && root.classList.contains('cb-slot') ? [root] : root.querySelectorAll('.cb-slot');
+    Array.prototype.forEach.call(slots, function (slot) {
+      var entry = window.cbPagePixels[formAccount(slot)] || null;
+      var map = (entry && entry.map) || {};
+      var psel = slot.querySelector('.cb-pixel-select'), phid = slot.querySelector('input[name$="_pixel"]');
+      if (psel && phid) {
+        ppFill(psel, phid, entry && entry.pixels, map.pixel_id, 'Account default');
+        var off = !api && !phid.value;
+        if (psel.disabled !== off) psel.disabled = off;
+        if (psel.title !== tip) psel.title = tip;
+      }
+      var pnote = slot.querySelector('[data-pp-note]');
+      var text = L.ppStatus(entry);
+      if (pnote && pnote.textContent !== text && !pnote.dataset.keep) pnote.textContent = text;
+      slot.querySelectorAll('.cb-ad-row').forEach(function (row) {
+        var sel = row.querySelector('.cb-page-select'), hid = row.querySelector('input[name$="_page"]');
+        if (sel && hid) {
+          ppFill(sel, hid, entry && entry.pages, map.page_id, 'Account default');
+          var offp = !api && !hid.value;
+          if (sel.disabled !== offp) sel.disabled = offp;
+          if (sel.title !== tip) sel.title = tip;
+        }
+        var link = row.querySelector('input[name$="_link"]');
+        if (link) {
+          var offl = !api && !link.value;
+          if (link.disabled !== offl) link.disabled = offl;
+          if (link.title !== tip) link.title = tip;
+        }
+      });
+    });
+  };
+
+  function ppSave(account, kind, id, note) {
+    var body = new FormData();
+    body.append('account_label', account);
+    body.append(kind === 'page' ? 'page_id' : 'pixel_id', id);
+    function say(text) { if (note) { note.dataset.keep = '1'; note.textContent = text; } }
+    fetch('/api/account-defaults', { method: 'POST', body: body })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d || {} }; }); })
+      .then(function (x) {
+        var entry = window.cbPagePixels[account];
+        if (x.ok && x.d.ok) {
+          if (entry && entry.map && x.d.saved) {
+            Object.keys(x.d.saved).forEach(function (k) { entry.map[k] = x.d.saved[k]; });
+          }
+          say('Saved to the account map: ' + (kind === 'page' ? 'Page ' : 'pixel ') + id);
+        } else {
+          say('Not saved to the account map: ' + (x.d.error || 'try again'));
+        }
+      })
+      .catch(function () { say('Not saved to the account map: the dashboard did not answer'); });
+  }
+
+  function ppChosen(sel, kind) {
+    var host = kind === 'page' ? sel.closest('.cb-ad-row') : sel.closest('.cb-slot');
+    var hid = host ? host.querySelector(kind === 'page' ? 'input[name$="_page"]' : 'input[name$="_pixel"]') : null;
+    if (!hid) return;
+    hid.value = sel.value;
+    hid.dispatchEvent(new Event('input', { bubbles: true }));
+    var slot = sel.closest('.cb-slot');
+    var account = formAccount(sel);
+    var entry = window.cbPagePixels[account] || null;
+    var note = slot ? slot.querySelector('[data-pp-note]') : null;
+    if (note) delete note.dataset.keep;
+    if (window.cbLayout.ppShouldSave(entry, kind, sel.value)) ppSave(account, kind, sel.value, note);
+    window.cbFillPagePixelSelects(slot);
+  }
+  window.cbPageChosen = function (sel) { ppChosen(sel, 'page'); };
+  window.cbPixelChosen = function (sel) { ppChosen(sel, 'pixel'); };
+
+  window.cbRefreshPagePixels = function (btn) {
+    var slot = btn.closest('.cb-slot');
+    var account = slot ? formAccount(slot) : '';
+    var note = slot ? slot.querySelector('[data-pp-note]') : null;
+    if (!account || btn.disabled) return;
+    btn.disabled = true;
+    if (note) { delete note.dataset.keep; note.textContent = 'Reading the Pages and pixels from Meta…'; }
+    var body = new FormData();
+    body.append('account_label', account);
+    function done(entry) {
+      window.cbPagePixels[account] = entry;
+      btn.disabled = false;
+      document.querySelectorAll('.cb-slot').forEach(function (s) {
+        if (formAccount(s) === account) window.cbFillPagePixelSelects(s);
+      });
+    }
+    fetch('/api/page-pixels', { method: 'POST', body: body })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d || {} }; }); })
+      .then(function (x) {
+        done(x.d.pages ? x.d : { ok: false, pages: [], pixels: [], map: {},
+          message: x.d.error || 'The Pages and pixels could not be read' });
+      })
+      .catch(function () {
+        done({ ok: false, pages: [], pixels: [], map: {}, message: 'The dashboard did not answer; try again' });
+      });
+  };
+
   /* Место конверсии набора -> что видно и что уходит на сервер. */
   window.cbSyncDestination = function (slot) {
     var L = window.cbLayout;
@@ -13049,6 +13200,11 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       if (hid && hid.disabled === instant) hid.disabled = !instant;
     });
     window.cbFillFormSelects(slot);
+    /* Пиксель и ссылка только у сайтового набора (у Instant Form цель - форма Страницы). */
+    slot.querySelectorAll('.cb-web-only').forEach(function (el) {
+      if (el.hidden !== instant) el.hidden = instant;
+    });
+    window.cbFillPagePixelSelects(slot);
   };
 
   window.cbDestinationChanged = function (sel) {
@@ -13151,6 +13307,16 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<input type="hidden" name="' + pfx + 'form_id" value="" disabled>' +
       '<div class="cb-form-note" data-form-note></div>' +
       '</div>' +
+      /* ACL-1770: Страница и ссылка принадлежат объявлению. Пусто = как в карте / у кампании. */
+      '<span class="cb-label">Page</span>' +
+      '<div class="cb-pp-wrap">' +
+      '<select class="cb-input cb-select cb-page-select" onchange="cbPageChosen(this)" aria-label="Facebook Page of the ad"></select>' +
+      '<input type="hidden" name="' + pfx + 'page" value="">' +
+      '</div>' +
+      '<span class="cb-label cb-web-only">Link</span>' +
+      '<div class="cb-pp-wrap cb-web-only">' +
+      '<input type="url" name="' + pfx + 'link" class="cb-input" value="" placeholder="Same as the campaign link" autocomplete="off" aria-label="Tracking link of the ad" title="Leave empty to use the campaign tracking link">' +
+      '</div>' +
       '<span class="cb-label">More primary texts</span>' + future('texts', 'button', '+ Primary text 3–5') +
       '<span class="cb-label">CTA</span>' + future('cta', 'select', 'Learn more', 'Every ad uses Learn more today') +
       '<span class="cb-label">Stories / Reels file</span>' + future('media', 'button', 'Choose a vertical file') +
@@ -13218,6 +13384,12 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       var thNew = newTitle.querySelector('input[type=hidden]');
       if (thSrc && thNew) thNew.value = thSrc.value;
     }
+    // ACL-1770: Страница и ссылка объявления едут в копию.
+    ['page', 'link'].forEach(function (suffix) {
+      var a = srcRow.querySelector('[name$="_' + suffix + '"]');
+      var b = newRow.querySelector('[name$="_' + suffix + '"]');
+      if (a && b) b.value = a.value;
+    });
     // ACL-1775: выбранная форма Страницы едет в копию.
     var srcForm = srcRow.querySelector('input[name$="_form_id"]');
     var newForm = newRow.querySelector('input[name$="_form_id"]');
@@ -13514,6 +13686,14 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<option value="instant_form">Instant Form</option>' +
       '</select>' +
       '<div class="cb-api-note" data-forms-api-only hidden>Instant Form works only with the API backend.</div>' +
+      '</div>' +
+      /* ACL-1770: пиксель принадлежит набору; список Страниц/пикселей читается по нажатию. */
+      '<span class="cb-label cb-web-only">Pixel</span>' +
+      '<div class="cb-pp-wrap cb-web-only">' +
+      '<select class="cb-input cb-select cb-pixel-select" onchange="cbPixelChosen(this)" aria-label="Pixel of the ad set"></select>' +
+      '<button type="button" class="cb-form-refresh" onclick="cbRefreshPagePixels(this)" title="Read the Pages and pixels of the ad account from Meta now">Read Pages and pixels</button>' +
+      '<input type="hidden" name="camp_' + idx + '_pixel" value="">' +
+      '<div class="cb-form-note" data-pp-note></div>' +
       '</div>' +
       '<span class="cb-label">Placements</span>' + future('placements', 'button', 'Configure placements', 'Today every ad set gets the same fixed manual Facebook and Instagram list') +
       '</div>' +
@@ -14609,6 +14789,7 @@ function cbPlanHtml(data) {
         var interests = (a.interests || []).map(function (g) { return g.join(', '); }).join(' AND ');
         h += '<div class="cbd-plan-set" style="font-size:var(--adopy-text-sm);margin-top:0.2rem">Ad set <strong>'
           + aclEscHtml(a.name) + '</strong> · ' + aclEscHtml((a.countries || []).join(', '))
+          + (a.pixel_id ? ' · pixel ' + aclEscHtml(a.pixel_id) + (a.pixel_source ? ' (' + aclEscHtml(a.pixel_source) + ')' : '') : '')
           + ' · age ' + aclEscHtml(a.age) + ' · language ' + aclEscHtml(a.language || 'any')
           + ' · interests ' + aclEscHtml(interests || 'none') + ' · placements '
           + aclEscHtml(a.placements || '') + (a.destination ? ' · ' + aclEscHtml(a.destination) : '')
@@ -14620,6 +14801,7 @@ function cbPlanHtml(data) {
             + aclEscHtml(ad.description) : '')
             + (ad.form_id ? '<br>Instant Form ' + aclEscHtml(ad.form_name || '?') + ' (' + aclEscHtml(ad.form_id) + ')'
                           : '<br>link ' + aclEscHtml(ad.link))
+            + (ad.page_id ? ' · page ' + aclEscHtml(ad.page_id) + (ad.page_source ? ' (' + aclEscHtml(ad.page_source) + ')' : '') : '')
             + ' · CTA ' + aclEscHtml(ad.cta) + '</li>';
         });
         h += '</ol>';

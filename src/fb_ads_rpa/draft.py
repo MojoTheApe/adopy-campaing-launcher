@@ -46,6 +46,10 @@ class AdDraft:
     ad_body2: str = ""
     # ACL-1775: id существующей формы Страницы (только Instant Form, только API-бэкенд).
     lead_form_id: str = ""
+    # ACL-1770: Страница и ссылка принадлежат объявлению (только API-бэкенд).
+    # Пусто - как у кампании.
+    page_id: str = ""
+    link: str = ""
 
     def ad_name(self) -> str:
         """Name for the ad in Ads Manager: "<creative> [<variant>] - <text>".
@@ -90,6 +94,10 @@ class AdDraft:
             out["ad_body2"] = (self.ad_body2 or "")[:80]
         if self.lead_form_id:
             out["lead_form_id"] = self.lead_form_id
+        if self.page_id:
+            out["page_id"] = self.page_id
+        if self.link:
+            out["link"] = self.link
         return out
 
 
@@ -104,6 +112,8 @@ class AdSetDraft:
     ads: list[AdDraft] = field(default_factory=list)
     # ACL-1775: "website" (как всегда) или "instant_form" (только API-бэкенд).
     destination: str = "website"
+    # ACL-1770: пиксель набора (только API-бэкенд). Пусто - как у кампании.
+    pixel_id: str = ""
 
     def to_preview_dict(self) -> dict[str, Any]:
         out = {
@@ -116,6 +126,8 @@ class AdSetDraft:
         }
         if self.destination != "website":
             out["destination"] = self.destination
+        if self.pixel_id:
+            out["pixel_id"] = self.pixel_id
         return out
 
 

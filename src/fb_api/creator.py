@@ -138,6 +138,10 @@ class AdPlan:
     description: str
     #: Id существующей формы Страницы (только у Instant Form; иначе пусто).
     form_id: str = ""
+    #: ACL-1770: Страница и ссылка объявления. Пусто = как у кампании (`CampaignPlan`).
+    page_id: str = ""
+    link: str = ""
+    page_source: str = ""
 
 
 @dataclass
@@ -150,6 +154,9 @@ class AdSetPlan:
     ads: list[AdPlan] = field(default_factory=list)
     #: "website" (как всегда) или "instant_form" (ACL-1775).
     destination: str = DEST_WEBSITE
+    #: ACL-1770: пиксель набора. Пусто = как у кампании (`CampaignPlan`).
+    pixel_id: str = ""
+    pixel_source: str = ""
 
     @property
     def instant(self) -> bool:
@@ -177,6 +184,17 @@ class CampaignPlan:
     @property
     def label(self) -> str:
         return f"acl-{self.tag}"
+
+    # ACL-1770: Страница и ссылка принадлежат объявлению, пиксель - набору.
+    # Значение уровня главнее; пусто - берётся значение кампании.
+    def page_of(self, ad: "AdPlan") -> str:
+        return ad.page_id or self.page_id
+
+    def link_of(self, ad: "AdPlan") -> str:
+        return ad.link or self.link
+
+    def pixel_of(self, ad_set: "AdSetPlan") -> str:
+        return ad_set.pixel_id or self.pixel_id
 
 
 def _interest_groups(raw: str) -> list[list[str]]:
@@ -224,9 +242,21 @@ def plan_from_draft(draft: Any) -> CampaignPlan:
     link = str(getattr(draft, "link", "") or "").strip()
     ad_sets_src = list(getattr(draft, "ad_sets", None) or [])
     # Ссылка нужна только сайтовым наборам: у Instant Form своей ссылки нет (ACL-1775).
-    if not link and (not ad_sets_src or any(str(getattr(s, "destination", "") or DEST_WEBSITE) != DEST_FORM
-                                            for s in ad_sets_src)):
-        problems.append("Tracking link is empty; the API backend needs it for the ads")
+    # ACL-1770: ссылка у объявления своя, если задана; пустая - сообщение называет объявление.
+    if not ad_sets_src:
+        if not link:
+            problems.append("Tracking link is empty; the API backend needs it for the ads")
+    elif not link:
+        website_ads = [(i, a) for s in ad_sets_src
+                       if str(getattr(s, "destination", "") or DEST_WEBSITE) != DEST_FORM
+                       for i, a in enumerate(s.ads, start=1)]
+        bare = [(i, a) for i, a in website_ads if not str(getattr(a, "link", "") or "").strip()]
+        if website_ads and len(bare) == len(website_ads):
+            problems.append("Tracking link is empty; the API backend needs it for the ads")
+        else:
+            for i, a in bare:
+                problems.append(f"Tracking link is empty for ad {i} ({a.ad_name() or 'unnamed'}); "
+                                "type it in the ad or in the campaign")
     if not ad_sets_src:
         problems.append("No ad sets in the campaign")
     budget = getattr(ad_sets_src[0], "daily_budget", None) if ad_sets_src else None
@@ -241,6 +271,8 @@ def plan_from_draft(draft: Any) -> CampaignPlan:
             os=str(getattr(s, "os", "All") or "All").strip(),
             interest_groups=_interest_groups(str(getattr(s, "targeting_label", "") or "")),
         )
+        plan_set.pixel_id = str(getattr(s, "pixel_id", "") or "").strip()
+        plan_set.pixel_source = "ad set" if plan_set.pixel_id else ""
         dest = str(getattr(s, "destination", "") or DEST_WEBSITE).strip().lower()
         if dest not in (DEST_WEBSITE, DEST_FORM):
             problems.append(f"Unknown conversion location {dest!r} in ad set {plan_set.name!r}")
@@ -259,7 +291,10 @@ def plan_from_draft(draft: Any) -> CampaignPlan:
                 index=i, name=ad.ad_name(), kind=_kind_of(path, getattr(ad, "creative_type", "")),
                 path=path, title=str(ad.ad_title or "").strip(), body=str(ad.ad_body or "").strip(),
                 description=str(ad.ad_link_description or "").strip(),
-                form_id=(str(getattr(ad, "lead_form_id", "") or "").strip() if plan_set.instant else "")))
+                form_id=(str(getattr(ad, "lead_form_id", "") or "").strip() if plan_set.instant else ""),
+                page_id=str(getattr(ad, "page_id", "") or "").strip(),
+                link=str(getattr(ad, "link", "") or "").strip(),
+                page_source="ad" if str(getattr(ad, "page_id", "") or "").strip() else ""))
             if plan_set.instant and not plan_set.ads[-1].form_id:
                 problems.append(f"Ad {i}: no Instant Form selected (pick one of the Page's forms)")
         ad_sets.append(plan_set)
@@ -328,14 +363,29 @@ def preflight_account(client: GraphClient, act: str) -> AccountFacts:
 
 
 def resolve_page(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
-    """Страница плана: на кабинете и одна определённая. Заметки; ошибки — `PlanError`."""
+    """Страница плана: на кабинете и одна определённая. Заметки; ошибки — `PlanError`.
+
+    ACL-1770: Страница принадлежит объявлению. Своя Страница объявления проверяется по кабинету
+    и называет объявление; без неё действует Страница кампании (карта, затем единственная).
+    """
     notes = []
+    ads = [(s, a) for s in plan.ad_sets for a in s.ads]
+    for ad_set, ad in ads:
+        if ad.page_id and ad.page_id not in facts.pages:
+            raise PlanError(f"The page of ad {ad.index} ({ad.name}) is not among the pages "
+                            f"this ad account can advertise from ({len(facts.pages)} found). "
+                            "Nothing was created.")
+    # Кампании нужна своя Страница, если есть объявление без своей или набор-форма
+    # (форма принадлежит Странице набора).
+    needed = any(not a.page_id for _, a in ads) or any(s.instant for s in plan.ad_sets) or not ads
     if plan.page_id:
         # Принадлежность проверяется и при пустом списке: пустой список — не «можно всё».
         if plan.page_id not in facts.pages:
             src = plan.page_source or "draft"
             raise PlanError(f"The page from the {src} ({plan.page_id}) is not among the pages "
                             f"this ad account can advertise from ({len(facts.pages)} found).")
+    elif not needed:
+        pass
     elif len(facts.pages) == 1:
         plan.page_id = facts.pages[0]
         plan.page_source = "account default"
@@ -343,13 +393,27 @@ def resolve_page(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
     else:
         raise PlanError(f"page_id is empty in the account map and the ad account has "
                         f"{len(facts.pages)} pages; set page_id")
+    for ad_set, ad in ads:
+        if ad_set.instant and ad.page_id and ad.page_id != plan.page_id:
+            raise PlanError(f"Ad {ad.index} ({ad.name}) uses an Instant Form, which belongs to the "
+                            "Page of its ad set; use the campaign Page for it. Nothing was created.")
     return notes
 
 
 def resolve_pixel(plan: CampaignPlan, facts: AccountFacts) -> None:
-    """Пиксель плана (только сайтовые наборы). Ошибки — `PlanError`."""
-    if plan.ad_sets and all(s.instant for s in plan.ad_sets):
-        # Instant Form: цель — форма Страницы, пиксель не нужен (ACL-1775).
+    """Пиксель плана (только сайтовые наборы). Ошибки — `PlanError`.
+
+    ACL-1770: пиксель принадлежит набору; свой проверяется по кабинету и называет набор.
+    """
+    website = [s for s in plan.ad_sets if not s.instant]
+    for ad_set in website:
+        if ad_set.pixel_id and ad_set.pixel_id not in facts.pixels:
+            raise PlanError(f"The pixel of ad set {ad_set.name!r} ({ad_set.pixel_id}) is not on this "
+                            f"ad account ({len(facts.pixels)} found). Fix the pixel instead of "
+                            "letting another one be picked. Nothing was created.")
+    if plan.ad_sets and (not website or all(s.pixel_id for s in website)):
+        # Instant Form: цель — форма Страницы, пиксель не нужен (ACL-1775); либо у каждого
+        # сайтового набора пиксель свой (ACL-1770).
         pass
     elif plan.pixel_id:
         # То же для пикселя. Читается первая страница (50): больше — безопасный отказ.
@@ -802,7 +866,7 @@ class CampaignCreator:
         return {"name": ad_set.name, "campaign_id": campaign_id, "status": PAUSED,
                 "optimization_goal": OPTIMIZATION_GOAL, "billing_event": BILLING_EVENT,
                 "destination_type": DESTINATION,
-                "promoted_object": {"pixel_id": plan.pixel_id, "custom_event_type": CUSTOM_EVENT},
+                "promoted_object": {"pixel_id": plan.pixel_of(ad_set), "custom_event_type": CUSTOM_EVENT},
                 "targeting": targeting, "adlabels": [{"name": plan.label}]}
 
     @staticmethod
@@ -811,18 +875,18 @@ class CampaignCreator:
             # ACL-1775: CTA несёт id существующей формы; своей ссылки у объявления нет.
             cta = {"type": CTA_TYPE, "value": {"lead_gen_form_id": ad.form_id}}
         else:
-            cta = {"type": CTA_TYPE, "value": {"link": plan.link}}
+            cta = {"type": CTA_TYPE, "value": {"link": plan.link_of(ad)}}
         if ad.kind == "video":
             data = {"video_id": media["video_id"], "image_url": media["thumb"], "title": ad.title,
                     "message": ad.body, "call_to_action": cta}
             if ad.description:
                 data["link_description"] = ad.description
-            return {"page_id": plan.page_id, "video_data": data}
-        data = {"link": INSTANT_FORM_LINK if instant else plan.link, "message": ad.body,
+            return {"page_id": plan.page_of(ad), "video_data": data}
+        data = {"link": INSTANT_FORM_LINK if instant else plan.link_of(ad), "message": ad.body,
                 "name": ad.title, "image_hash": media["image_hash"], "call_to_action": cta}
         if ad.description:
             data["description"] = ad.description
-        return {"page_id": plan.page_id, "link_data": data}
+        return {"page_id": plan.page_of(ad), "link_data": data}
 
     def _story(self, plan: CampaignPlan, ad: AdPlan, ad_set: AdSetPlan, media: dict) -> dict:
         """Спецификация креатива; `instant` передаётся только Instant Form (сайт - как раньше)."""
@@ -874,7 +938,7 @@ class CampaignCreator:
             check("optimization_goal", OPTIMIZATION_GOAL, row.get("optimization_goal"))
             check("billing_event", BILLING_EVENT, row.get("billing_event"))
             check("destination_type", DESTINATION, row.get("destination_type"))
-            check("pixel", plan.pixel_id, str(po.get("pixel_id") or ""))
+            check("pixel", plan.pixel_of(ad_set), str(po.get("pixel_id") or ""))
             check("conversion_event", CUSTOM_EVENT, po.get("custom_event_type"))
         check("schedule", "starts on activation, no end date",
               "starts on activation, no end date" if not row.get("end_time") else
@@ -1105,11 +1169,14 @@ class CampaignCreator:
                 "placements": placements_text(t),
                 "creative_enhancements": "off: " + ", ".join(CREATIVE_FEATURES_OPT_OUT),
                 "optimization": f"{OPTIMIZATION_GOAL} · {CUSTOM_EVENT} on the website pixel",
+                **({"pixel_id": ad_set.pixel_id, "pixel_source": ad_set.pixel_source} if ad_set.pixel_id else {}),
                 "ads": [{
                     "index": ad.index, "name": ad.name, "status": PAUSED, "format": ad.kind,
                     "file": Path(ad.path).name, "bytes": len(files.get(ad.path, b"")),
                     "headline": ad.title, "primary_text": ad.body, "description": ad.description,
-                    "link": plan.link, "cta": CTA_TYPE,
+                    "link": plan.link_of(ad), "cta": CTA_TYPE,
+                    # ACL-1770: ключи только у объявления со своей Страницей - прежний план не меняется.
+                    **({"page_id": ad.page_id, "page_source": ad.page_source} if ad.page_id else {}),
                 } for ad in ad_set.ads],
             })
             if ad_set.instant:
@@ -1293,7 +1360,7 @@ class CampaignCreator:
                     check(aobj, f"enhancement {feature}", OPT_OUT,
                           (feats.get(feature) or {}).get("enroll_status"))
                 spec = creative.get("object_story_spec") or {}
-                check(aobj, "page", plan.page_id, str(spec.get("page_id") or ""))
+                check(aobj, "page", plan.page_of(ad), str(spec.get("page_id") or ""))
                 data = files.get(ad.path, b"")
                 if ad.kind == "video":
                     vd = spec.get("video_data") or {}
@@ -1309,7 +1376,7 @@ class CampaignCreator:
                     if ad_set.instant:
                         self._form_checks(check, aobj, ad, cta, page_forms)
                     else:
-                        check(aobj, "link", plan.link, (cta.get("value") or {}).get("link"))
+                        check(aobj, "link", plan.link_of(ad), (cta.get("value") or {}).get("link"))
                     check(aobj, "headline", ad.title, vd.get("title") or "")
                     check(aobj, "primary_text", ad.body, vd.get("message") or "")
                     check(aobj, "description", ad.description, vd.get("link_description") or "")
@@ -1329,8 +1396,8 @@ class CampaignCreator:
                     if ad_set.instant:
                         self._form_checks(check, aobj, ad, cta, page_forms)
                     else:
-                        check(aobj, "cta_link", plan.link, (cta.get("value") or {}).get("link"))
-                        check(aobj, "link", plan.link, ld.get("link"))
+                        check(aobj, "cta_link", plan.link_of(ad), (cta.get("value") or {}).get("link"))
+                        check(aobj, "link", plan.link_of(ad), ld.get("link"))
                     check(aobj, "headline", ad.title, ld.get("name") or "")
                     check(aobj, "primary_text", ad.body, ld.get("message") or "")
                     check(aobj, "description", ad.description, ld.get("description") or "")

@@ -2280,6 +2280,17 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                 slot["destination"] = destination
             if destination == "instant_form":
                 slot["lead_form_id"] = (form.get(f"camp_{idx}_ad_{a_idx}_form_id") or "").strip()
+            # ACL-1770: Страница и ссылка объявления, пиксель набора. Ключи только у слотов,
+            # где человек что-то выбрал или вписал: прежние слоты не меняются ни байтом.
+            ad_page = (form.get(f"camp_{idx}_ad_{a_idx}_page") or "").strip()
+            ad_link = (form.get(f"camp_{idx}_ad_{a_idx}_link") or "").strip()
+            set_pixel = (form.get(f"camp_{idx}_pixel") or "").strip()
+            if ad_page:
+                slot["page_id"] = ad_page
+            if ad_link:
+                slot["link"] = ad_link
+            if set_pixel:
+                slot["pixel_id"] = set_pixel
             slots.append(slot)
     # Return the ISO code, not the raw form value ("Costa Rica"). Confirmed
     # live 2026-07-30: the full name leaked into draft.country, where both
@@ -5189,6 +5200,10 @@ INSTANT_FORM_RPA_ERROR = ("Instant Forms are available only with the Graph API b
                           "(ACL_FB_BACKEND=api). Switch the ad set back to Website or use the API backend.")
 
 
+LEVEL_RPA_ERROR = ("A Page or link chosen for an ad, or a pixel chosen for an ad set, needs the Graph API "
+                   "backend (API backend only). Clear them to publish with the robot.")
+
+
 def _instant_form_refusal(slots: list[dict]) -> JSONResponse | None:
     """ACL-1775: слот с Instant Form при RPA-бэкенде - отказ вслух, а не молча сайтом."""
     from src.web import publish_api
@@ -5197,6 +5212,9 @@ def _instant_form_refusal(slots: list[dict]) -> JSONResponse | None:
         return None
     if any(s.get("destination", "website") != "website" for s in slots):
         return JSONResponse({"error": INSTANT_FORM_RPA_ERROR}, status_code=409)
+    # ACL-1770: Страница/ссылка объявления и пиксель набора - только API; RPA не роняет их молча.
+    if any(s.get(k) for s in slots for k in ("page_id", "link", "pixel_id")):
+        return JSONResponse({"error": LEVEL_RPA_ERROR}, status_code=409)
     return None
 
 
@@ -5216,6 +5234,39 @@ async def api_page_forms(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": "Instant Forms need the Graph API backend (ACL_FB_BACKEND=api)."},
                             status_code=409)
     return JSONResponse(await asyncio.to_thread(page_forms.read_forms, account))
+
+
+@app.post("/api/page-pixels")
+async def api_page_pixels(request: Request) -> JSONResponse:
+    """ACL-1770: Страницы и пиксели кабинета для выбора в билдере. Только по нажатию человека."""
+    from src.web import page_pixel_options, publish_api
+
+    form = await request.form()
+    account = (form.get("account_label") or form.get("account") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    if not publish_api.api_enabled():
+        return JSONResponse({"ok": False, "error": "Choosing a Page or pixel needs the Graph API backend "
+                                                   "(API backend only)."}, status_code=409)
+    return JSONResponse(await asyncio.to_thread(page_pixel_options.read_options, account))
+
+
+@app.post("/api/account-defaults")
+async def api_account_defaults(request: Request) -> JSONResponse:
+    """ACL-1770: выбранные Страницу/пиксель записать в карту этой машины (только в пустую графу)."""
+    from src.web import page_pixel_options
+
+    form = await request.form()
+    account = (form.get("account_label") or form.get("account") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    try:
+        saved = await asyncio.to_thread(
+            page_pixel_options.save_choice, account,
+            page_id=str(form.get("page_id") or ""), pixel_id=str(form.get("pixel_id") or ""))
+    except page_pixel_options.SaveRefused as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=exc.status)
+    return JSONResponse({"ok": True, "saved": saved})
 
 
 @app.post("/preview-publish")
