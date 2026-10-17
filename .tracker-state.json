@@ -41718,20 +41718,6 @@
         "started_at": "2026-10-16T16:08:01+00:00",
         "from_status": "status:todo"
       },
-      "70": {
-        "actor": "Worker-W0602A",
-        "session": "acl602-run1",
-        "coordinator": "Coordinator-T1004Q",
-        "branch": "work/acl-602-lead-goals-overview",
-        "worktree": "C:\\acl-602",
-        "id": "2ab7ba9e05eb425e88e804f162cf7b94",
-        "issue": 70,
-        "state": "handoff",
-        "started_at": "2026-10-17T13:35:50+00:00",
-        "from_status": "status:todo",
-        "pr": 982,
-        "report": "ACL-602: added goals.overview() and GET /goals/overview (lead only via ACL_TEAM_LEAD, 403 otherwise); GET /goals for another person's name also needs the flag. Tests: py -m pytest tests/test_goals.py, 21 passed. No UI panel (API only). PR #982."
-      },
       "142": {
         "actor": "Worker-W1142A",
         "session": "w1142a-s1",
@@ -48627,9 +48613,25 @@
             "session": "acl602-run1"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W0602A",
-        "coordinator": "Coordinator-T1004Q"
+        "coordinator": "Coordinator-T1004Q",
+        "handoff": {
+          "actor": "Worker-W0602A",
+          "session": "acl602-run1",
+          "coordinator": "Coordinator-T1004Q",
+          "branch": "work/acl-602-lead-goals-overview",
+          "worktree": "C:\\acl-602",
+          "id": "2ab7ba9e05eb425e88e804f162cf7b94",
+          "issue": 70,
+          "state": "handoff",
+          "started_at": "2026-10-17T13:35:50+00:00",
+          "from_status": "status:todo",
+          "pr": 982,
+          "report": "ACL-602: added goals.overview() and GET /goals/overview (lead only via ACL_TEAM_LEAD, 403 otherwise); GET /goals for another person's name also needs the flag. Tests: py -m pytest tests/test_goals.py, 21 passed. No UI panel (API only). PR #982."
+        },
+        "pr": 982,
+        "queued_at": "2026-10-17T13:39:34+00:00"
       },
       "142": {
         "implementers": [
@@ -53342,7 +53344,8 @@
       202,
       977,
       770,
-      47
+      47,
+      70
     ],
     "review": null,
     "history": [
@@ -78786,6 +78789,13 @@
         "issue": 142,
         "claim": "abaa09763e9c42839fbb86003c138b4f",
         "actor": "Worker-W1142A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-17T13:39:34+00:00",
+        "issue": 70,
+        "pr": 982,
+        "actor": "Worker-W0602A"
       }
     ],
     "policy": {
