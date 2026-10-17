@@ -41726,9 +41726,11 @@
         "worktree": "C:\\acl-341",
         "id": "3efe9b149f3041fc817b98d04a7c64df",
         "issue": 47,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-17T13:08:21+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 980,
+        "report": "Added tests/test_recipe_player_sequences.py (PR #980): 20 passing + 2 strict xfail, RecipePlayer.run() on bench fixtures, no live account, no src change.\nChecks: py -m pytest tests/test_recipe_player_sequences.py -> 20 passed, 2 xfailed. recipe_player coverage 8% -> 39% (new file alone, sysmon core).\nFindings for RPA track (xfail): risky click that found nothing ends run ok=True; stale-coordinate click logged ok. Also, a failed recover_from_bad_url / wizard_guard FAIL still ends ok=True (seen in probe, not pinned by a test).\nLeft: full suite only in CI; two tests take 15-30 s (real waits in meta_dom)."
       }
     },
     "tasks": {
