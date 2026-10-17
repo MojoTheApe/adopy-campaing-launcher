@@ -85201,6 +85201,11 @@
         "issue": 992,
         "claim": "cda2954f62c848d2ac499e8fa6d225fe",
         "actor": "Worker-M1992A"
+      },
+      {
+        "event": "included-sources-closed",
+        "at": "2026-10-17T21:24:13+00:00",
+        "batch_id": "6d00e4a9014a4e8ca3b7756c4c71c199"
       }
     ],
     "policy": {
@@ -90701,7 +90706,8 @@
           989
         ],
         "finished_at": "2026-10-17T21:20:21+00:00",
-        "closing_sources": true
+        "closing_sources": false,
+        "sources_closed": true
       }
     },
     "integration": null,
