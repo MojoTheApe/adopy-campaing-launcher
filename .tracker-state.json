@@ -41738,9 +41738,11 @@
         "worktree": "C:\\acl-1770",
         "id": "ccaaf16c570b4a139601356ba2723732",
         "issue": 770,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-17T13:11:10+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 979,
+        "report": "## Result\n\nPage and link are now per ad, the pixel is per ad set, and a buyer's pick is saved to the account map (PR #979, branch work/acl-1770-page-pixel-levels).\n\n## Checks\n\n- tests/test_acl1770_page_pixel_levels.py: 22 passed (two Pages, ad picks the second -> readback Page OK; empty link names the ad; pixel per set; saved choice used next time; RPA refusal; map write keeps columns and never overwrites a different value).\n- Related: test_acl1761_api_create / plan_check / parity / creative_lookup, test_acl1766_map_pixel, test_acl1769_two_column_layout, test_acl1775_instant_forms, test_acl1819_preflight, test_builder_duplicate_buttons, test_builder_second_primary_text: all pass. builder_layout_harness.cjs: ok.\n- Not run: full suite (CI). tests/test_acl1775_builder_forms.py::test_the_page_code_behaves_in_node fails only on a CRLF checkout (harness slices on LF); it passes on the LF content.\n\n## Not done\n\n- No live check on the 9095 dashboard (needs owner yes and test accounts).\n- Several ad sets per campaign (ACL-1768, PR #833) not in this branch: the pixel select is per slot today and will follow when that merges."
       }
     },
     "tasks": {
