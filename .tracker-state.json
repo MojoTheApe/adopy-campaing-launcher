@@ -4097,6 +4097,27 @@
         "issue_scopes": {
           "977": "e055bdfc601ab600ab43de400c1afaa936d9d4d132b72ee46d2bb3919e8f05cb"
         }
+      },
+      "969": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-WFOBaseline968",
+        "implementer": "Worker-WFO05CI",
+        "head_sha": "56249b0d6f61eaf42a68851a23fb8b50e517c8dc",
+        "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+        "tree_sha": "8592012ba21ebd5bac51ebe564b76a0f5354df7d",
+        "execution_lane": "7a134c44cea84d54bc86b1bf590c0e8e",
+        "review_session": "wfo_20261016_baseline_review_acl968",
+        "report": "Independent full source review retained privately, SHA256 0bcb9cd5a9bba443a4731423a20d98ac82f10e5f301e99a011d4f9e8bb0109d7. Exact head/base/tree; whole scope ce983b68a061ea4dc1b206c598ed0ec42cd15ea06f9308b3adc9b40a18dd3d02. F1-F4 closed; current applicable native source gates passed. Source approval only; no intake, integration, package or broader parent completion.",
+        "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          968
+        ],
+        "recorded_at": "2026-10-17T17:43:38+00:00",
+        "issue_scopes": {
+          "968": "0adfdf041aeb6e2ec14df79b04667b62b19a9dfd5d67676108903ce44b7afb52"
+        }
       }
     },
     "stage": {
