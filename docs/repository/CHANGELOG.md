@@ -27,6 +27,26 @@ original parent requirements and dated source/cutover history. Shared Master and
 Tracker changes are already merged and verified; no further contract, product,
 runtime or installer change belongs to this factual handoff.
 
+## ACL-1968 — correct on-demand CI execution accounting
+
+Repair the existing report's carried-forward double counting and distinguish
+skipped work from proven reuse. Add explicit creation/execution periods, capped
+history partition/completeness, raw native identity, private deterministic replay
+and separate current storage facts. Report rounded interval estimates and unknown
+billing without a Windows money multiplier. The retained native case is 20 rows,
+12 intervals and 212 versus 112 estimated minutes, not an invoice or measured saving.
+Preserve ACL-1649's original cost target/history, ordinary workflow gates and all
+other actual claims. No retry/dispatch policy or consumer activation is introduced.
+Task: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/968.
+
+Independent source review exposed changing duplicate job IDs hidden by pagination
+and different supplied matrix cells collapsed as carried work. Consume the exact
+already released Tracker3.5.0 standalone accounting artifact instead of retaining
+a second implementation; the ACL adapter keeps only defaults, capture privacy and
+overhead names. Preserve conflicting native observations as explicit unknowns and
+retain same-attempt/native20-row behavior. Artifact provenance and a fixed digest
+protect the copy; this does not repin or activate the e775 workflow engine.
+
 ## ACL-1924 / ACL-1923 — Temporary no-stage and authorized completion — 2026-10-15
 
 Select actual reviewed merged Master `a3f56106f52d0ae19986920519b2fa46a380798b`
