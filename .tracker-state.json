@@ -41717,6 +41717,18 @@
         "state": "implementing",
         "started_at": "2026-10-16T16:08:01+00:00",
         "from_status": "status:todo"
+      },
+      "47": {
+        "actor": "Worker-W0341A",
+        "session": "acl341-w0341a-20261017",
+        "coordinator": "Coordinator-T1004Q",
+        "branch": "work/acl-341-recipe-player-tests",
+        "worktree": "C:\\acl-341",
+        "id": "3efe9b149f3041fc817b98d04a7c64df",
+        "issue": 47,
+        "state": "implementing",
+        "started_at": "2026-10-17T13:08:21+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -48535,6 +48547,17 @@
         },
         "pr": 978,
         "queued_at": "2026-10-17T12:51:46+00:00"
+      },
+      "47": {
+        "implementers": [
+          {
+            "actor": "Worker-W0341A",
+            "session": "acl341-w0341a-20261017"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W0341A",
+        "coordinator": "Coordinator-T1004Q"
       }
     },
     "actors": {
@@ -50440,6 +50463,10 @@
       },
       "Worker-WFO06ACL": {
         "session": "WFO-20261017-ACL-Early-Author",
+        "role": "Worker"
+      },
+      "Worker-W0341A": {
+        "session": "acl341-w0341a-20261017",
         "role": "Worker"
       }
     },
@@ -78614,6 +78641,13 @@
         "issue": 977,
         "pr": 978,
         "actor": "Worker-WFO06ACL"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-17T13:08:21+00:00",
+        "issue": 47,
+        "claim": "3efe9b149f3041fc817b98d04a7c64df",
+        "actor": "Worker-W0341A"
       }
     ],
     "policy": {
