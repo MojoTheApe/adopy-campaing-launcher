@@ -57,7 +57,7 @@ def test_workbook_progress_follows_real_read_and_processing(monkeypatch, isolate
         assert stages == ["reading", "processing", "preparing"]
         return {"countries": []}
 
-    monkeypatch.setattr(service.pd, "read_excel", read)
+    monkeypatch.setattr(service, "read_stats_workbook", read)
     monkeypatch.setattr(service, "compute_metrics", metrics)
     monkeypatch.setattr(service, "enrich_structure", lambda frame: frame)
     monkeypatch.setattr(service, "apply_variant_backfill", lambda frame: frame)
@@ -69,7 +69,7 @@ def test_workbook_progress_follows_real_read_and_processing(monkeypatch, isolate
 def test_cached_workbook_skips_reading_and_processing(monkeypatch, isolated):
     stages = []
     monkeypatch.setattr(service, "build_morning_report", lambda **kw: {"countries": []})
-    monkeypatch.setattr(service.pd, "read_excel", lambda *a: pytest.fail("cached workbook was reread"))
+    monkeypatch.setattr(service, "read_stats_workbook", lambda *a: pytest.fail("cached workbook was reread"))
     service.load_morning_report(enriched_df=pd.DataFrame(), account_rows_cached=[], progress=stages.append)
     assert stages == ["preparing"]
 
@@ -80,7 +80,7 @@ def test_read_failure_does_not_complete_the_workbook_stage(monkeypatch, isolated
     def fail(path):
         raise ValueError("broken workbook")
 
-    monkeypatch.setattr(service.pd, "read_excel", fail)
+    monkeypatch.setattr(service, "read_stats_workbook", fail)
     with pytest.raises(ValueError, match="broken workbook"):
         service.load_morning_report(skip_gsheet=True, progress=stages.append)
     assert stages == ["reading"]
