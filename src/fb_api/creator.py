@@ -39,6 +39,7 @@ from src.fb_api import forms as _forms
 from src.fb_api import instagram as _ig
 from src.fb_api import write_policy as _wpol
 from src.fb_api import targeting_resolver as _tr
+from src.fb_api import video_compress as _video_compress
 from src.fb_api.graph import GraphClient, GraphError, GraphStop, WritesBlocked, WriteUnknown, normalize_act
 
 PAUSED = "PAUSED"
@@ -1106,7 +1107,8 @@ class CampaignCreator:
                  reconcile_wait_s: float | None = None,
                  progress: Callable[[str], None] = lambda _s: None,
                  now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
-                 live_progress: Callable[[str], None] = lambda _s: None):
+                 live_progress: Callable[[str], None] = lambda _s: None,
+                 compress_video: Callable[..., bytes] | None = None):
         self.client = client
         self.facts = facts
         self.resolver = resolver
@@ -1136,6 +1138,8 @@ class CampaignCreator:
         #: Живой процент загрузки файла (ACL-1899): только на панель задания, без шагов и телеметрии.
         self.live_progress = live_progress
         self.now = now
+        #: Сжатие тяжёлого видео перед загрузкой (Issue #1000); в тестах подменяется.
+        self.compress_video = compress_video or _video_compress.maybe_compress
 
     # -- Instagram-идентичность (ACL-1896)
     def instagram_identity(self, plan: CampaignPlan) -> _ig.IgIdentity:
@@ -1913,7 +1917,8 @@ class CampaignCreator:
             if w not in out.warnings:
                 out.warnings.append(w)
 
-    def _prepare(self, plan: CampaignPlan, out: Outcome) -> tuple[list[dict], dict[str, bytes]]:
+    def _prepare(self, plan: CampaignPlan, out: Outcome, *,
+                 compress: bool = True) -> tuple[list[dict], dict[str, bytes]]:
         """Всё, что проверяется до записи: страница, пиксель, таргетинг, файлы."""
         out.warnings += resolve_page_pixel(plan, self.facts)
         try:
@@ -1939,6 +1944,13 @@ class CampaignCreator:
                     data = self.load_media(ad.path, ad.kind)
                 except OSError as exc:
                     raise PlanError(f"ad {ad.index}: creative file cannot be read ({exc})") from exc
+                if ad.kind == "video" and compress:
+                    # Тяжёлый ролик сжимается до проверки лимита: 247 МБ в лимит 200 не влезал бы.
+                    def warn(text: str) -> None:
+                        out.warnings.append(text)
+                        self._step(out, text)
+                    data = self.compress_video(ad.path, data, ad.index,
+                                               lambda text: self._step(out, text), warn=warn)
                 limit = VIDEO_MAX_BYTES if ad.kind == "video" else IMAGE_MAX_BYTES
                 if not data or len(data) > limit:
                     raise PlanError(f"ad {ad.index}: creative file is empty or larger than "
@@ -2149,7 +2161,7 @@ class CampaignCreator:
         renamed = name_error = ""
         requested, skipped = plan.name, []
         try:
-            targetings, files = self._prepare(plan, out)
+            targetings, files = self._prepare(plan, out, compress=False)
             choice = self._resolve_name(plan, targetings)
             plan, existing, skipped = choice.plan, choice.existing, choice.skipped
             out.published_as = plan.name
