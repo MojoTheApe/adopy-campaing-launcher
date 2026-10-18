@@ -42223,20 +42223,6 @@
         "state": "implementing",
         "started_at": "2026-10-17T21:00:31+00:00",
         "from_status": "status:idea"
-      },
-      "996": {
-        "actor": "Worker-B1994",
-        "session": "baseline_review_acl1994_20261018",
-        "coordinator": "Coordinator-WFO06ROOT",
-        "branch": "codex/acl-1996-batch-index-refresh",
-        "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/workflow-implementation/2026-10-16/work/acl-1996-batch-index-refresh",
-        "id": "98edae724e42451db6ef05f9afcfe6a9",
-        "issue": 996,
-        "state": "handoff",
-        "started_at": "2026-10-18T07:57:15+00:00",
-        "from_status": "status:backlog",
-        "pr": 997,
-        "report": "# ACL-1996 Source author handoff\n\nActual https://github.com/MojoTheApe/adopy-campaing-launcher/pull/997; head b8add6c3feb83804107d2ac4d3c417d500bd58d8; tree 5816d5ed9afd3c420c3b7228a66786e61562d543; operative baseline c71a8ece67138f6596748774001f3bc3ab2f04bf. Exactly four 100644 paths; only local batch orchestration/tests and repository documentation/history changed. All 1,322 other paths/config/pins/runtime preserved.\n\nFinal stable-head required tooling 729 PASS, pinned draft descriptor/scanner/adoption audit/isolated import smoke/local links/whitespace PASS. Full 1,326 native and physical bytes/modes and HEAD unchanged pre/post. Earlier affected 51 PASS216.59s and immutable-c71 expected classification 2 FAIL / 7.82s are distinct retained observations. Native Source checks are observed separately, never inferred from local results.\n\nRemaining: genuine full-scope Source review/current required native checks; real frozen batch with independent combined review/main admission; configured stable-package install/update/restart/recovery/data receipt. One approved-tool changed-code attempt only under genuine Coordinator and unchanged operative config/pins. Unknown historical stash-failure cause, no old failed paths retried. No selfapproval/main/package/selection activation or parent Task05/06 completion. All foreign ownership/queues/history/archives/unknowns retained."
       }
     },
     "tasks": {
@@ -49790,9 +49776,25 @@
             "session": "baseline_review_acl1994_20261018"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-B1994",
-        "coordinator": "Coordinator-WFO06ROOT"
+        "coordinator": "Coordinator-WFO06ROOT",
+        "handoff": {
+          "actor": "Worker-B1994",
+          "session": "baseline_review_acl1994_20261018",
+          "coordinator": "Coordinator-WFO06ROOT",
+          "branch": "codex/acl-1996-batch-index-refresh",
+          "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/workflow-implementation/2026-10-16/work/acl-1996-batch-index-refresh",
+          "id": "98edae724e42451db6ef05f9afcfe6a9",
+          "issue": 996,
+          "state": "handoff",
+          "started_at": "2026-10-18T07:57:15+00:00",
+          "from_status": "status:backlog",
+          "pr": 997,
+          "report": "# ACL-1996 Source author handoff\n\nActual https://github.com/MojoTheApe/adopy-campaing-launcher/pull/997; head b8add6c3feb83804107d2ac4d3c417d500bd58d8; tree 5816d5ed9afd3c420c3b7228a66786e61562d543; operative baseline c71a8ece67138f6596748774001f3bc3ab2f04bf. Exactly four 100644 paths; only local batch orchestration/tests and repository documentation/history changed. All 1,322 other paths/config/pins/runtime preserved.\n\nFinal stable-head required tooling 729 PASS, pinned draft descriptor/scanner/adoption audit/isolated import smoke/local links/whitespace PASS. Full 1,326 native and physical bytes/modes and HEAD unchanged pre/post. Earlier affected 51 PASS216.59s and immutable-c71 expected classification 2 FAIL / 7.82s are distinct retained observations. Native Source checks are observed separately, never inferred from local results.\n\nRemaining: genuine full-scope Source review/current required native checks; real frozen batch with independent combined review/main admission; configured stable-package install/update/restart/recovery/data receipt. One approved-tool changed-code attempt only under genuine Coordinator and unchanged operative config/pins. Unknown historical stash-failure cause, no old failed paths retried. No selfapproval/main/package/selection activation or parent Task05/06 completion. All foreign ownership/queues/history/archives/unknowns retained."
+        },
+        "pr": 997,
+        "queued_at": "2026-10-18T08:17:03+00:00"
       }
     },
     "actors": {
@@ -54541,7 +54543,8 @@
       871,
       287,
       377,
-      992
+      992,
+      996
     ],
     "review": null,
     "history": [
@@ -85754,6 +85757,13 @@
         "at": "2026-10-18T07:57:15+00:00",
         "issue": 996,
         "claim": "98edae724e42451db6ef05f9afcfe6a9",
+        "actor": "Worker-B1994"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-18T08:17:03+00:00",
+        "issue": 996,
+        "pr": 997,
         "actor": "Worker-B1994"
       }
     ],
