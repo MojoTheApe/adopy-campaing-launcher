@@ -13,6 +13,7 @@ import os
 import random
 import re
 import shutil
+import sys
 import time
 import uuid
 from pathlib import Path
@@ -665,23 +666,34 @@ def update_machine_env(values: dict[str, str]) -> str:
         if not _ENV_KEY.fullmatch(key):
             raise ValueError(f"invalid environment key: {key!r}")
 
+    from config import token_vault
+
     target = Path(get_machine_env_path())
     if not target.exists():
         migrate_legacy_env(create_from_example=True)
-    lines = target.read_text(encoding="utf-8").splitlines() if target.exists() else []
-    pending = dict(values)
-    out: list[str] = []
-    for line in lines:
-        match = re.match(r"^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=", line)
-        key = match.group(1) if match else None
-        if key in pending:
-            out.append(_dotenv_line(key, pending.pop(key)))
-        else:
-            out.append(line)
-    if pending and out and out[-1].strip():
-        out.append("")
-    out.extend(_dotenv_line(key, value) for key, value in pending.items())
-    _atomic_write(target, ("\n".join(out).rstrip() + "\n").encode("utf-8"))
+
+    def stored(key: str, value: str) -> str:
+        # ACL-1358: automation tokens go to disk in Windows protected form; the
+        # process environment below still gets the plain value.
+        if token_vault.is_secret_env_key(key):
+            return token_vault.encode_env_value(value)
+        return value
+
+    with machine_file_lock(target.with_name(".env.lock")):
+        lines = target.read_text(encoding="utf-8").splitlines() if target.exists() else []
+        pending = dict(values)
+        out: list[str] = []
+        for line in lines:
+            match = re.match(r"^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=", line)
+            key = match.group(1) if match else None
+            if key in pending:
+                out.append(_dotenv_line(key, stored(key, pending.pop(key))))
+            else:
+                out.append(line)
+        if pending and out and out[-1].strip():
+            out.append("")
+        out.extend(_dotenv_line(key, stored(key, value)) for key, value in pending.items())
+        _atomic_write(target, ("\n".join(out).rstrip() + "\n").encode("utf-8"))
     for key, value in values.items():
         os.environ[key] = value
     return str(target)
@@ -771,6 +783,38 @@ def migrate_legacy_google_oauth() -> list[str]:
     return notes
 
 
+def protect_machine_secrets() -> list[str]:
+    """ACL-1358: move plain tokens into Windows protected storage, once.
+
+    Covers the Multilogin automation tokens in the machine ``.env`` and the
+    Google token files. Each file is backed up (encrypted) and verified before
+    the plain text is replaced; a failure leaves the file as it was. Does
+    nothing where DPAPI is unavailable (non-Windows).
+    """
+    from config import token_vault
+
+    if not token_vault.available():
+        return []
+    config_dir = Path(get_local_config_dir())
+    notes: list[str] = []
+    env_path = Path(get_machine_env_path())
+    if env_path.is_file():
+        try:
+            with machine_file_lock(env_path.with_name(".env.lock")):
+                note = token_vault.migrate_env_file(env_path, config_dir)
+        except Exception as exc:
+            note = f".env: could not move tokens to protected storage ({type(exc).__name__})"
+        if note:
+            notes.append(note)
+    token_files = {Path(get_google_oauth_token_path())}
+    token_files.update(config_dir / name for name in token_vault.TOKEN_FILES)
+    for path in sorted(token_files):
+        note = token_vault.migrate_file(path, config_dir)
+        if note:
+            notes.append(note)
+    return notes
+
+
 def ensure_machine_config() -> list[str]:
     """Idempotent install/upgrade provisioning, migration before examples."""
     Path(get_local_config_dir()).mkdir(parents=True, exist_ok=True)
@@ -785,6 +829,7 @@ def ensure_machine_config() -> list[str]:
     if status_note:
         notes.append(status_note)
     notes.extend(migrate_legacy_google_oauth())
+    notes.extend(protect_machine_secrets())
     local_map = Path(get_local_config_dir()) / "ad_account_map.csv"
     from src.web import meta_connections
     with meta_connections.transaction(local_map):
@@ -843,6 +888,17 @@ def load_env() -> list[str]:
     # it needs no change there to start reporting.
     if not (os.environ.get("GSHEET_TELEMETRY_ID") or "").strip():
         os.environ["GSHEET_TELEMETRY_ID"] = DEFAULT_TELEMETRY_SHEET_ID
+    # ACL-1358: tokens stored in protected form become plain only in this
+    # process's environment. One that cannot be opened (another Windows user,
+    # damaged value) is dropped so the app asks to reconnect.
+    try:
+        from config import token_vault
+
+        for key in token_vault.decrypt_environment():
+            print(f"[config] {key} is stored for another Windows user or is damaged; "
+                  "connect Multilogin again", file=sys.stderr)
+    except Exception:
+        pass
     return loaded
 
 

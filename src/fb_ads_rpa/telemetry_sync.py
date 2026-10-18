@@ -356,12 +356,14 @@ def config_status() -> dict[str, Any]:
 def _has_oauth_token() -> bool:
     """Local evidence only; the next explicit upload verifies remote access."""
     try:
-        token = json.loads(_local(_TOKEN_FILE).read_text(encoding="utf-8"))
+        from config import token_vault
+
+        token = json.loads(token_vault.read_secret_text(_local(_TOKEN_FILE)))
         scopes = token.get("scopes") or []
         if isinstance(scopes, str):
             scopes = scopes.split()
         return bool(token.get("refresh_token") and token.get("client_id") and token.get("client_secret") and set(_SCOPES).issubset(scopes))
-    except (OSError, ValueError, AttributeError):
+    except (OSError, ValueError, AttributeError, RuntimeError):
         return False
 
 
@@ -400,7 +402,11 @@ def _service_oauth(sheet_id: str):
     creds = None
     if token_file.is_file():
         try:
-            creds = Credentials.from_authorized_user_file(str(token_file), _SCOPES)
+            from config import token_vault
+
+            creds = Credentials.from_authorized_user_info(
+                json.loads(token_vault.read_secret_text(token_file)), _SCOPES
+            )
         except Exception:
             creds = None
 
@@ -417,7 +423,9 @@ def _service_oauth(sheet_id: str):
             flow = InstalledAppFlow.from_client_secrets_file(client_path, _SCOPES)
             creds = flow.run_local_server(port=0)
         token_file.parent.mkdir(parents=True, exist_ok=True)
-        token_file.write_text(creds.to_json(), encoding="utf-8")
+        from config import token_vault
+
+        token_vault.write_secret_text(token_file, creds.to_json())
 
     return build("sheets", "v4", credentials=creds, cache_discovery=False)
 
