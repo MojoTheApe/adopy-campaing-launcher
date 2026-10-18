@@ -42413,9 +42413,11 @@
         "worktree": "/Users/dmitry.o/Documents/Codex/2026-10-17/zip/work/acl-owner-guide",
         "id": "e98fd3270ddc40b18a7afbf533f2038a",
         "issue": 1007,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-18T16:17:18+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 1008,
+        "report": "ACL-2007 owner guide is ready for independent review in PR1008. Scope: AGENTS.md and three docs/repository Markdown files only. Current requirements are the full Issue1007 body. Existing instruction/link check passed (35 files/158 links), staged secret scan passed, diff checks passed. Latest adjustment aligns Done/review/delivery labels and acl-lib operational-data description with the published Tracker source; hosted checks must use the final head. No application change or Windows pilot completion is claimed. Worker-OG18/root-owner-guide-20261018 hands off to Coordinator-OG18 and a distinct actual reviewer."
       }
     },
     "tasks": {
