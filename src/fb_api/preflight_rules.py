@@ -334,6 +334,8 @@ def min_budget_for(currency: str) -> float | None:
 
 def _item_text(item: dict) -> str:
     """Термин без находки: имя и кандидаты (или честное «кандидатов нет»)."""
+    if item.get("state") == "rejected":
+        return item["reason"]        # ACL-2003: id отвергнут/не подтверждён Meta - причина уже полная фраза
     rows = item.get("candidates") or []
     cands = ("candidates: " + ", ".join(f"{c['name']} [{c['type']}]" for c in rows[:5])
              if rows else "no candidates")
@@ -412,8 +414,11 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
                 put("interests_resolve", UNKNOWN, ". ".join(why))
             elif lost:
                 put("interests_resolve", ERROR,
-                    "Detailed targeting not found by Meta: " + "; ".join(_item_text(i) for i in lost))
+                    ("Detailed targeting not found by Meta: " if any(i.get("state") != "rejected" for i in lost) else
+                     "Detailed targeting is not accepted by Meta: ") + "; ".join(_item_text(i) for i in lost))
                 out["interests_resolve"]["items"] = lost
+                if any(i.get("state") == "rejected" for i in lost):
+                    out["interests_resolve"]["action"] = "remove"     # не Confirm: подтверждение ничего не меняет
             else:
                 put("interests_resolve", OK)
             if asks:

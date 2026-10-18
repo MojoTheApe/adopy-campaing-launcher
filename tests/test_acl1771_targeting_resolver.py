@@ -516,3 +516,62 @@ def test_split_candidate_is_confirmable_and_clear_works(web):
     assert _call(web.targeting_resolver_clear, {})[0] == 400, "без термина и без all - отказ"
     assert _call(web.targeting_resolver_clear, {"term": "alpari group or plus500"})[1]["removed"] == 1
     assert _call(web.targeting_resolver_cache)[1]["entries"] == []
+
+
+# -- ACL-2003: подтверждённый интерес, который Meta не подтверждает, не предлагается Confirm по кругу
+SKY = {"sky betting": [{"id": "55", "name": "Sky Betting and Gaming"}]}
+
+
+def test_stale_id_equal_to_the_only_candidate_is_rejected_not_offered_again(tmp_path):
+    store = _store(tmp_path)
+    store.put("sky betting", id="55", type="interests", name="Sky Betting and Gaming")
+    c = FakeSearch(interests=SKY)           # adinterest отдаёт id 55, adinterestvalid - valid=false
+    with pytest.raises(cr.TargetingUnresolved) as ei:
+        cr.TargetingResolver(c, store).interests([["sky betting"]])
+    it = ei.value.items[0]
+    assert it["state"] == "rejected" and it["candidates"] == [] and it["action"] == "remove"
+    assert "no longer accepts the interest 'Sky Betting and Gaming'" in it["reason"]
+    assert "Remove 'sky betting'" in it["reason"]
+    assert "confirmation" not in str(ei.value)
+
+
+def test_missing_validity_row_says_could_not_verify(tmp_path):
+    store = _store(tmp_path)
+    store.put("sky betting", id="55", type="interests", name="Sky Betting and Gaming")
+
+    class Silent(FakeSearch):
+        def get_all(self, path, params=None, *, max_pages=5):
+            if params["type"] == "adinterestvalid":
+                self.log.append(("adinterestvalid", max_pages, params))
+                self.calls += 1
+                return []                    # Meta ничего не вернула про id
+            return super().get_all(path, params, max_pages=max_pages)
+
+    r = tr.TermResolver(Silent(interests=SKY), store)
+    r.prefetch(["sky betting"])
+    res = r.resolve("sky betting")
+    assert res["state"] == "rejected"
+    assert res["reason"].startswith("Could not verify the interest 'Sky Betting and Gaming'")
+
+
+def test_stale_pick_still_offers_other_candidates_but_not_itself(tmp_path):
+    store = _store(tmp_path)
+    store.put("forex trading", id="6", type="interests", name="Forex Trading Tips")
+    c = FakeSearch(interests=NEAR)
+    r = tr.TermResolver(c, store)
+    r.prefetch(["forex trading"])
+    res = r.resolve("forex trading")
+    assert [x["id"] for x in res["candidates"]] == ["7"]
+
+
+def test_ids_that_were_never_checked_are_not_stale(tmp_path):
+    store = _store(tmp_path)
+    store.put("sky betting", id="55", type="interests", name="Sky Betting and Gaming")
+    c = FakeSearch(interests=SKY)
+    r = tr.TermResolver(c, store)
+    # prefetch не вызывали (или бюджет вышел до пакета): валидность не проверена, доверяем кэшу
+    assert r.resolve("sky betting")["state"] == "confirmed"
+    # проверенным был только другой id - 55 всё равно не проверен
+    r2 = tr.TermResolver(FakeSearch(valid={"yoga": ("Yoga", "11")}, interests=SKY), store)
+    r2.prefetch(["yoga"])
+    assert r2.resolve("sky betting")["state"] == "confirmed"
