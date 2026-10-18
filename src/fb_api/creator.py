@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from src.fb_api import forms as _forms
+from src.fb_api import video_compress as _video_compress
 from src.fb_api.graph import GraphClient, GraphError, GraphStop, WritesBlocked, WriteUnknown, normalize_act
 
 PAUSED = "PAUSED"
@@ -573,7 +574,8 @@ class CampaignCreator:
                  video_wait_s: float = VIDEO_WAIT_S, video_poll_s: float = VIDEO_POLL_S,
                  video_max_polls: int = VIDEO_MAX_POLLS,
                  reconcile_wait_s: float | None = None,
-                 progress: Callable[[str], None] = lambda _s: None):
+                 progress: Callable[[str], None] = lambda _s: None,
+                 compress_video: Callable[..., bytes] | None = None):
         self.client = client
         self.facts = facts
         self.resolver = resolver
@@ -590,6 +592,8 @@ class CampaignCreator:
         #: Формы Страницы плана (читаются раз на кампанию, только у Instant Form).
         self._page_forms: _forms.FormsRead | None = None
         self.progress = progress
+        #: Сжатие тяжёлого видео перед загрузкой (Issue #1000); в тестах подменяется.
+        self.compress_video = compress_video or _video_compress.maybe_compress
 
     # -- служебное
     def _step(self, out: Outcome, text: str) -> None:
@@ -945,7 +949,8 @@ class CampaignCreator:
             out.error, out.stop_kind = f"Write result unknown: {exc}", "unknown"
         return out
 
-    def _prepare(self, plan: CampaignPlan, out: Outcome) -> tuple[list[dict], dict[str, bytes]]:
+    def _prepare(self, plan: CampaignPlan, out: Outcome, *,
+                 compress: bool = True) -> tuple[list[dict], dict[str, bytes]]:
         """Всё, что проверяется до записи: страница, пиксель, таргетинг, файлы."""
         out.warnings += resolve_page_pixel(plan, self.facts)
         targetings = [targeting_for(plan, s, self.resolver) for s in plan.ad_sets]
@@ -961,6 +966,13 @@ class CampaignCreator:
                     data = self.read_file(ad.path)
                 except OSError as exc:
                     raise PlanError(f"ad {ad.index}: creative file cannot be read ({exc})") from exc
+                if ad.kind == "video" and compress:
+                    # Тяжёлый ролик сжимается до проверки лимита: 247 МБ в лимит 200 не влезал бы.
+                    def warn(text: str) -> None:
+                        out.warnings.append(text)
+                        self._step(out, text)
+                    data = self.compress_video(ad.path, data, ad.index,
+                                               lambda text: self._step(out, text), warn=warn)
                 limit = VIDEO_MAX_BYTES if ad.kind == "video" else IMAGE_MAX_BYTES
                 if not data or len(data) > limit:
                     raise PlanError(f"ad {ad.index}: creative file is empty or larger than "
@@ -1033,7 +1045,7 @@ class CampaignCreator:
         differences: list | None = None
         files: dict | None = None
         try:
-            targetings, files = self._prepare(plan, out)
+            targetings, files = self._prepare(plan, out, compress=False)
             existing = self._find_campaign(plan)
             differences = (self._existing_differences(plan, targetings, str(existing["id"]),
                                                       self._find_sets(plan, str(existing["id"])))
