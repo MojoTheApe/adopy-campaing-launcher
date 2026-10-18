@@ -43078,7 +43078,7 @@
             "session": "S406R"
           }
         ],
-        "state": "stopped",
+        "state": "archiving",
         "worker": "Worker-S406R",
         "coordinator": "Coordinator-C930E",
         "handoff": {
