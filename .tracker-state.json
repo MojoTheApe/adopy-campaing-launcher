@@ -52192,6 +52192,10 @@
       "Reviewer-R1381A": {
         "session": "scope_audit_20261018_acl1381",
         "role": "Reviewer"
+      },
+      "Coordinator-C1818A": {
+        "session": "root-20261018-acl1381-delivery",
+        "role": "Coordinator"
       }
     },
     "completed": {
@@ -86674,6 +86678,25 @@
             "approved_at": "2026-10-18T17:02:01+00:00"
           }
         }
+      },
+      {
+        "event": "intake-frozen",
+        "at": "2026-10-18T17:03:04+00:00",
+        "intake": {
+          "id": "254b7b09971d4f50adc2a4b8d7832266",
+          "actor": "Coordinator-C1818A",
+          "session": "root-20261018-acl1381-delivery",
+          "state": "running",
+          "issues": [
+            381
+          ],
+          "remaining": [
+            381
+          ],
+          "batches": [],
+          "started_at": "2026-10-18T17:03:04+00:00",
+          "ineligible": {}
+        }
       }
     ],
     "policy": {
@@ -92538,18 +92561,18 @@
     },
     "integration": null,
     "intake": {
-      "id": "ec6fe0fd154d49499057ca153d16bf02",
-      "actor": "Coordinator-WFO3C7A5M",
-      "session": "wfo_20261017_acl_three_source_coordinator",
-      "state": "finished",
+      "id": "254b7b09971d4f50adc2a4b8d7832266",
+      "actor": "Coordinator-C1818A",
+      "session": "root-20261018-acl1381-delivery",
+      "state": "running",
       "issues": [
-        996
+        381
       ],
-      "remaining": [],
-      "batches": [
-        "7d14b6df596d43b3b7f89a61ab4d6e9c"
+      "remaining": [
+        381
       ],
-      "started_at": "2026-10-18T08:52:20+00:00",
+      "batches": [],
+      "started_at": "2026-10-18T17:03:04+00:00",
       "ineligible": {}
     },
     "source_reviews": {},
