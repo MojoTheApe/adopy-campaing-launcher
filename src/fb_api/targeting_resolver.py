@@ -291,7 +291,9 @@ class TermResolver:
         self._valid: dict[str, dict] = {}
         self._valid_asked: set[str] = set()
         self._valid_ids: set[str] = set()
-        self._ids_checked = False
+        #: id интересов, реально отправленных в успешный пакет adinterestvalid; и те, что Meta явно назвала valid=false.
+        self._ids_asked: set[str] = set()
+        self._ids_denied: set[str] = set()
         self._behaviors: list[dict] | None = None
         #: Типы поиска, в которых Meta отказала по правам: на задание, больше не спрашиваем.
         self._refused: dict[str, str] = {}
@@ -362,9 +364,10 @@ class TermResolver:
             return
         for n in todo:
             self._valid_asked.add(norm(n))
-        if ids:
-            self._ids_checked = True
+        self._ids_asked.update(ids)
         for r in rows:
+            if r.get("valid") is False and r.get("id"):
+                self._ids_denied.add(str(r["id"]))
             if r.get("valid") is not False and r.get("id"):
                 self._valid_ids.add(str(r["id"]))
                 nm = str(r.get("name") or "")
@@ -458,6 +461,8 @@ class TermResolver:
                 return {"term": term, "state": "confirmed", "candidates": [], "reason": "",
                         "picks": [p for e in ok for p in picks_of(e)]}
             stale = "the confirmed pick is no longer returned by Meta; confirm it again"
+            stale_ids = {p["id"] for e in saved if self._stale(e) for p in picks_of(e) if p["type"] == "interests"}
+            stale_name = next((p["name"] for e in saved for p in picks_of(e) if p["id"] in stale_ids), term)
         cands: dict[tuple, dict] = {}
         try:
             self._ask_valid([term])
@@ -481,7 +486,13 @@ class TermResolver:
         except _Spent:
             return {"term": term, "state": "unknown", "picks": [], "candidates": [],
                     "reason": UNKNOWN_MESSAGE}
+        if stale:
+            # Повторный Confirm того же id ничего не изменит (Meta его не подтверждает): не предлагаем по кругу.
+            cands = {k: c for k, c in cands.items() if not (c["type"] == "interests" and c["id"] in stale_ids)}
         ranked = sorted(cands.values(), key=lambda c: (-c["score"], c["type"], c["name"]))[:MAX_CANDIDATES]
+        if stale and not ranked:
+            return {"term": term, "state": "rejected", "picks": [], "candidates": [], "action": "remove",
+                    "reason": self._rejected_message(stale_name, term, stale_ids)}
         blind = self._blind_spots()
         if blind:
             note = f"Meta refused the {blind} lookup, so '{term}' could not be checked there"
@@ -493,11 +504,23 @@ class TermResolver:
             stale = f"{stale}; {note}" if stale else note
         return {"term": term, "state": "unresolved", "picks": [], "candidates": ranked, "reason": stale}
 
+    def _unconfirmed(self) -> set[str]:
+        """id интересов, которые спрашивали пакетом, а Meta не подтвердила (нет в ответе или valid=false)."""
+        return self._ids_asked - self._valid_ids
+
     def _stale(self, entry: dict) -> bool:
-        """Интерес из кэша, которого Meta больше не отдаёт (проверено пакетом). Иные типы - доверяем."""
-        if not self._ids_checked:
-            return False
-        return any(p["type"] == "interests" and p["id"] not in self._valid_ids for p in picks_of(entry))
+        """Интерес из кэша, который проверили пакетом и Meta не подтвердила. Не проверяли - доверяем."""
+        bad = self._unconfirmed()
+        return any(p["type"] == "interests" and p["id"] in bad for p in picks_of(entry))
+
+    def _rejected_message(self, name: str, term: str, ids: set[str]) -> str:
+        """Текст (English): Meta явно отказала или проверка не вернула id (не путаем «нет» и «не удалось проверить»)."""
+        if ids & self._ids_denied:
+            return (f"Meta no longer accepts the interest '{name}' for targeting (it may be retired or "
+                    f"restricted). Remove '{term}' from this ad set or pick another interest.")
+        return (f"Could not verify the interest '{name}' with Meta (the validity check did not confirm it), "
+                f"so it cannot be used. Press Check plan again, remove '{term}' from this ad set or pick "
+                f"another interest.")
 
     def resolve(self, term: str) -> dict:
         """Результат по термину: state exact|confirmed|pending|unresolved|unknown."""

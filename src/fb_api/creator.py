@@ -407,7 +407,8 @@ class TargetingUnresolved(PlanError):
         msg: list[str] = []
         if lost:
             msg.append("Detailed targeting not found by Meta: "
-                       + " | ".join(f"{i['term']}{cands(i)}" + (f" ({i['reason']})" if i.get("reason") else "")
+                       + " | ".join(i["reason"] if i.get("state") == "rejected" else
+                                    f"{i['term']}{cands(i)}" + (f" ({i['reason']})" if i.get("reason") else "")
                                     for i in lost))
         if asks:
             msg.append("Detailed targeting needs your confirmation: "
