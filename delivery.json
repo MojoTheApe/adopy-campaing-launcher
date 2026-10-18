@@ -49,6 +49,9 @@
         "tracker-link",
         "Process instructions"
       ]
+    },
+    "task_context": {
+      "schema_version": 1
     }
   },
   "environments": {
