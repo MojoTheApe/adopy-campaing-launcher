@@ -42722,19 +42722,6 @@
         "state": "implementing",
         "started_at": "2026-10-18T08:40:04+00:00",
         "from_status": "status:backlog"
-      },
-      "990": {
-        "actor": "Worker-W1381A",
-        "session": "implementation_audit_20261018_acl1381",
-        "coordinator": "Coordinator-C1818A",
-        "branch": "work/acl-1990-preflight-topics",
-        "worktree": "/private/tmp/acl-owner-pause-20261018/990",
-        "id": "033774fdfb82464eab87583f9e1cc4d7",
-        "issue": 990,
-        "state": "stopping",
-        "started_at": "2026-10-18T19:17:32+00:00",
-        "from_status": "status:idea",
-        "report": "# Owner-requested pause of ACL-1990 (Issue #990)\n\nDate: 2026-10-18. This is administrative recovery only, not implementation or review.\n\nAuthority: the human owner explicitly confirmed that both Windows agents are stopped and requested that only ACL-1990 and ACL-1998 be paused and their implementation capacity released. The confirmation is accepted; Windows access is not required to repeat it.\n\nI am the existing actual Worker-W1381A / implementation_audit_20261018_acl1381 run, acting as administrative recovery Worker under Coordinator-C1818A. No identity of the previous agent is used.\n\nOriginal owner: Worker-PF17Q; original session: S-2f528671; original claim: 0b3da6a8634d4bf8959080dea6038abd; original Coordinator: Coordinator-M1011A.\nPreserved working branch: work/acl-1990-preflight-topics.\nOriginal Windows work location: C:\\acl-1990-preflight-topics.\n\nChecks/results: the current complete Issue, current execution claim, exact be87599d1b5e625058bbddc33c35bda86687b5bf takeover/stop implementation and current unchanged repository recovery instructions were read. Owner confirmation supplies the stopped-process fact. No application source, policy, acceptance criteria, branch or Windows file is changed; no tests or CI are run for this administrative operation.\n\nWork preservation/limits: the Windows local files were not inspected, copied, modified or deleted. Their local commit/uncommitted contents, implementation completeness, test status and readiness remain unknown. The original branch and Windows location above remain the recovery references; takeover history retains the complete original claim. No backup or copied implementation is claimed.\n\nThe administrative work location /tmp/acl-owner-pause-20261018/990 holds this pause report only. It is not a checkout or a copy of the Windows implementation. Its separate location prevents claiming access to the former Windows worktree.\n\nRemaining work: paused at the owner's request, with all original Issue criteria and dependencies retained. Before any future implementation, inspect/reconcile the actual preserved Windows work and existing remote branch through the normal ownership procedure. The current pinned stop mechanism adds To Do and Blocked while recording stopped/Paused; Blocked here records owner-requested pause and unresolved handoff, not a newly discovered product defect.\n\nSupported takeover completed under own claim 033774fdfb82464eab87583f9e1cc4d7. Read-only GitHub reference check found refs/heads/work/acl-1990-preflight-topics at 0257ddb05d2009c1089cbed3f925b62575396c2d. The remote reference was not changed; its relationship to unknown local Windows contents is not asserted."
       }
     },
     "tasks": {
@@ -50226,9 +50213,22 @@
             "session": "implementation_audit_20261018_acl1381"
           }
         ],
-        "state": "implementing",
+        "state": "stopped",
         "worker": "Worker-W1381A",
-        "coordinator": "Coordinator-C1818A"
+        "coordinator": "Coordinator-C1818A",
+        "handoff": {
+          "actor": "Worker-W1381A",
+          "session": "implementation_audit_20261018_acl1381",
+          "coordinator": "Coordinator-C1818A",
+          "branch": "work/acl-1990-preflight-topics",
+          "worktree": "/private/tmp/acl-owner-pause-20261018/990",
+          "id": "033774fdfb82464eab87583f9e1cc4d7",
+          "issue": 990,
+          "state": "stopping",
+          "started_at": "2026-10-18T19:17:32+00:00",
+          "from_status": "status:idea",
+          "report": "# Owner-requested pause of ACL-1990 (Issue #990)\n\nDate: 2026-10-18. This is administrative recovery only, not implementation or review.\n\nAuthority: the human owner explicitly confirmed that both Windows agents are stopped and requested that only ACL-1990 and ACL-1998 be paused and their implementation capacity released. The confirmation is accepted; Windows access is not required to repeat it.\n\nI am the existing actual Worker-W1381A / implementation_audit_20261018_acl1381 run, acting as administrative recovery Worker under Coordinator-C1818A. No identity of the previous agent is used.\n\nOriginal owner: Worker-PF17Q; original session: S-2f528671; original claim: 0b3da6a8634d4bf8959080dea6038abd; original Coordinator: Coordinator-M1011A.\nPreserved working branch: work/acl-1990-preflight-topics.\nOriginal Windows work location: C:\\acl-1990-preflight-topics.\n\nChecks/results: the current complete Issue, current execution claim, exact be87599d1b5e625058bbddc33c35bda86687b5bf takeover/stop implementation and current unchanged repository recovery instructions were read. Owner confirmation supplies the stopped-process fact. No application source, policy, acceptance criteria, branch or Windows file is changed; no tests or CI are run for this administrative operation.\n\nWork preservation/limits: the Windows local files were not inspected, copied, modified or deleted. Their local commit/uncommitted contents, implementation completeness, test status and readiness remain unknown. The original branch and Windows location above remain the recovery references; takeover history retains the complete original claim. No backup or copied implementation is claimed.\n\nThe administrative work location /tmp/acl-owner-pause-20261018/990 holds this pause report only. It is not a checkout or a copy of the Windows implementation. Its separate location prevents claiming access to the former Windows worktree.\n\nRemaining work: paused at the owner's request, with all original Issue criteria and dependencies retained. Before any future implementation, inspect/reconcile the actual preserved Windows work and existing remote branch through the normal ownership procedure. The current pinned stop mechanism adds To Do and Blocked while recording stopped/Paused; Blocked here records owner-requested pause and unresolved handoff, not a newly discovered product defect.\n\nSupported takeover completed under own claim 033774fdfb82464eab87583f9e1cc4d7. Read-only GitHub reference check found refs/heads/work/acl-1990-preflight-topics at 0257ddb05d2009c1089cbed3f925b62575396c2d. The remote reference was not changed; its relationship to unknown local Windows contents is not asserted."
+        }
       },
       "992": {
         "implementers": [
@@ -87128,6 +87128,13 @@
         },
         "claim": "033774fdfb82464eab87583f9e1cc4d7",
         "reason": "Owner explicitly confirmed both Windows agents stopped on 2026-10-18 and authorized only administrative pause/release of ACL-1990 and ACL-1998. Same actual Worker-W1381A run performs recovery only. Preserve original branch work/acl-1990-preflight-topics and Windows location C:\\acl-1990-preflight-topics; local contents uninspected and unknown. New /tmp administrative location contains only the pause report, no copied implementation. No source or policy change."
+      },
+      {
+        "event": "stopped",
+        "at": "2026-10-18T19:18:03+00:00",
+        "issue": 990,
+        "actor": "Worker-W1381A",
+        "report": "# Owner-requested pause of ACL-1990 (Issue #990)\n\nDate: 2026-10-18. This is administrative recovery only, not implementation or review.\n\nAuthority: the human owner explicitly confirmed that both Windows agents are stopped and requested that only ACL-1990 and ACL-1998 be paused and their implementation capacity released. The confirmation is accepted; Windows access is not required to repeat it.\n\nI am the existing actual Worker-W1381A / implementation_audit_20261018_acl1381 run, acting as administrative recovery Worker under Coordinator-C1818A. No identity of the previous agent is used.\n\nOriginal owner: Worker-PF17Q; original session: S-2f528671; original claim: 0b3da6a8634d4bf8959080dea6038abd; original Coordinator: Coordinator-M1011A.\nPreserved working branch: work/acl-1990-preflight-topics.\nOriginal Windows work location: C:\\acl-1990-preflight-topics.\n\nChecks/results: the current complete Issue, current execution claim, exact be87599d1b5e625058bbddc33c35bda86687b5bf takeover/stop implementation and current unchanged repository recovery instructions were read. Owner confirmation supplies the stopped-process fact. No application source, policy, acceptance criteria, branch or Windows file is changed; no tests or CI are run for this administrative operation.\n\nWork preservation/limits: the Windows local files were not inspected, copied, modified or deleted. Their local commit/uncommitted contents, implementation completeness, test status and readiness remain unknown. The original branch and Windows location above remain the recovery references; takeover history retains the complete original claim. No backup or copied implementation is claimed.\n\nThe administrative work location /tmp/acl-owner-pause-20261018/990 holds this pause report only. It is not a checkout or a copy of the Windows implementation. Its separate location prevents claiming access to the former Windows worktree.\n\nRemaining work: paused at the owner's request, with all original Issue criteria and dependencies retained. Before any future implementation, inspect/reconcile the actual preserved Windows work and existing remote branch through the normal ownership procedure. The current pinned stop mechanism adds To Do and Blocked while recording stopped/Paused; Blocked here records owner-requested pause and unresolved handoff, not a newly discovered product defect.\n\nSupported takeover completed under own claim 033774fdfb82464eab87583f9e1cc4d7. Read-only GitHub reference check found refs/heads/work/acl-1990-preflight-topics at 0257ddb05d2009c1089cbed3f925b62575396c2d. The remote reference was not changed; its relationship to unknown local Windows contents is not asserted."
       }
     ],
     "policy": {
