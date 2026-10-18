@@ -110,7 +110,8 @@ _TOPIC_OF = {
     "budget_min": "budget",
     "ad_names_unique": "names",
     "existing_diffs": "names",
-    # Правила этой сборки, которых нет в main (TEST9095: 1896, 1776, 1771, 1774, 1767, 1768).
+    # Правила из соседних задач (ACL-1896, 1776, 1771, 1774, 1767, 1768): на TEST9095 они стоят
+    # вместе с этим PR, и без темы `_r()` падал KeyError — Check plan ломался целиком.
     "instagram_identity": "account",
     "form_template_privacy": "destination",
     "form_template_contacts": "destination",
