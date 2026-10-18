@@ -48809,7 +48809,7 @@
       },
       "26": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       },
       "569": {
         "implementers": [],
@@ -85286,6 +85286,12 @@
         "issue": 992,
         "pr": 993,
         "actor": "Worker-M1992A"
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-18T00:45:45+00:00",
+        "issue": 26,
+        "reason": "Backlog cleanup 2026-10-16: stale idea (undefined scope, untouched since September, premise predates the Graph API / new builder direction). Restore if it becomes relevant again."
       }
     ],
     "policy": {
