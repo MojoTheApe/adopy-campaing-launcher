@@ -458,6 +458,9 @@ class ApiPublisher:
         # Пробный запуск ничего не создаёт — процента сборки у него нет.
         counter = None if self.dry_run else self._counter(plan)
 
+        # Пробный запуск ничего не создаёт — процента сборки у него нет.
+        counter = None if self.dry_run else self._counter(plan)
+
         def step(text: str) -> None:
             self.progress(f"{name}: {text}")
             _record("api_create_step", True, campaign=name, diag={"step": text})
