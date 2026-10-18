@@ -42404,6 +42404,18 @@
         "state": "implementing",
         "started_at": "2026-10-18T08:40:04+00:00",
         "from_status": "status:backlog"
+      },
+      "1007": {
+        "actor": "Worker-OG18",
+        "session": "root-owner-guide-20261018",
+        "coordinator": "Coordinator-OG18",
+        "branch": "codex/acl-2007-owner-guide",
+        "worktree": "/Users/dmitry.o/Documents/Codex/2026-10-17/zip/work/acl-owner-guide",
+        "id": "e98fd3270ddc40b18a7afbf533f2038a",
+        "issue": 1007,
+        "state": "implementing",
+        "started_at": "2026-10-18T16:17:18+00:00",
+        "from_status": "status:idea"
       }
     },
     "tasks": {
@@ -49989,6 +50001,17 @@
         "state": "implementing",
         "worker": "Worker-VP1018",
         "coordinator": "Coordinator-M1011A"
+      },
+      "1007": {
+        "implementers": [
+          {
+            "actor": "Worker-OG18",
+            "session": "root-owner-guide-20261018"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-OG18",
+        "coordinator": "Coordinator-OG18"
       }
     },
     "actors": {
@@ -51970,6 +51993,10 @@
       },
       "Worker-VP1018": {
         "session": "vp1018",
+        "role": "Worker"
+      },
+      "Worker-OG18": {
+        "session": "root-owner-guide-20261018",
         "role": "Worker"
       }
     },
@@ -86271,6 +86298,13 @@
         "event": "included-sources-closed",
         "at": "2026-10-18T09:36:22+00:00",
         "batch_id": "7d14b6df596d43b3b7f89a61ab4d6e9c"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-18T16:17:18+00:00",
+        "issue": 1007,
+        "claim": "e98fd3270ddc40b18a7afbf533f2038a",
+        "actor": "Worker-OG18"
       }
     ],
     "policy": {
