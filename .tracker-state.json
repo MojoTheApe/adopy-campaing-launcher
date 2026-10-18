@@ -54996,7 +54996,19 @@
       377,
       992
     ],
-    "review": null,
+    "review": {
+      "id": "5030663b4f9a4d45b3a8be6f6f4b70b7",
+      "batch_id": "4e142822fa654994b54c97acece5c85e",
+      "pr": 1010,
+      "issues": [
+        381
+      ],
+      "actor": "Reviewer-R1381A",
+      "session": "scope_audit_20261018_acl1381",
+      "coordinator": "Coordinator-C1818A",
+      "state": "reviewing",
+      "started_at": "2026-10-18T17:06:38+00:00"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -86778,6 +86790,23 @@
             "requested_at": "2026-10-18T17:03:51+00:00"
           }
         }
+      },
+      {
+        "event": "batch-review-acquired",
+        "at": "2026-10-18T17:06:38+00:00",
+        "review": {
+          "id": "5030663b4f9a4d45b3a8be6f6f4b70b7",
+          "batch_id": "4e142822fa654994b54c97acece5c85e",
+          "pr": 1010,
+          "issues": [
+            381
+          ],
+          "actor": "Reviewer-R1381A",
+          "session": "scope_audit_20261018_acl1381",
+          "coordinator": "Coordinator-C1818A",
+          "state": "reviewing",
+          "started_at": "2026-10-18T17:06:38+00:00"
+        }
       }
     ],
     "policy": {
@@ -92644,7 +92673,7 @@
       "id": "4e142822fa654994b54c97acece5c85e",
       "actor": "Coordinator-C1818A",
       "session": "root-20261018-acl1381-delivery",
-      "state": "assembling",
+      "state": "reviewing",
       "issues": [
         381
       ],
@@ -92698,7 +92727,7 @@
       "branch": "codex/batch-4e142822fa654994b54c97acece5c85e",
       "intake": "254b7b09971d4f50adc2a4b8d7832266",
       "started_at": "2026-10-18T17:03:51+00:00",
-      "pr": null,
+      "pr": 1010,
       "entered_stage": false,
       "history": [],
       "delivery_request": {
