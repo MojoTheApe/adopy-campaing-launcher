@@ -226,3 +226,22 @@ def delete(cm: str, country: str, countries=None) -> list[dict]:
 
 def known_managers() -> list[str]:
     return sorted(_read(), key=str.casefold)
+
+
+def overview() -> list[dict]:
+    """Read-only list of every manager's stored goals, for the team lead.
+
+    Only people who have saved goals appear: a manager who never edited has just
+    a derived starting list, and showing those would pass off a guess as a target.
+    The caller must check `is_team_lead()` first; this function only reads.
+    """
+    out: list[dict] = []
+    for cm in known_managers():
+        goals = [dict(g) for g in (_read().get(cm) or []) if isinstance(g, dict)]
+        out.append({
+            "cm": cm,
+            "goals": goals,
+            "countries": len(goals),
+            "ftd_total": sum(int(g.get("ftd") or 0) for g in goals),
+        })
+    return out
