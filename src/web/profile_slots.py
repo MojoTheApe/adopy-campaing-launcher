@@ -489,8 +489,15 @@ class OpenProfileProbe:
                 self._want.clear()
         if start:
             if self._background:
-                threading.Thread(target=self._run, args=(batch, gen), daemon=True,
-                                 name="acl-open-profile").start()
+                try:
+                    threading.Thread(target=self._run, args=(batch, gen), daemon=True,
+                                     name="acl-open-profile").start()
+                except Exception as exc:   # поток не стартовал — ответа нет, как при сбое проверки
+                    log.info("open-profile probe could not start: %s", exc)
+                    with self._lock:
+                        self._failed_at = self._clock()
+                        if gen == self._gen:
+                            self._inflight_since = None
             else:
                 self._run(batch, gen)
         with self._lock:
