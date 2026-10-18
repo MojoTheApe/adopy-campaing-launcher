@@ -43078,7 +43078,7 @@
             "session": "S406R"
           }
         ],
-        "state": "archiving",
+        "state": "archived",
         "worker": "Worker-S406R",
         "coordinator": "Coordinator-C930E",
         "handoff": {
@@ -87197,6 +87197,12 @@
         "issue": 1011,
         "claim": "ddb7dcb91c5f4f1abe998440ee9a164d",
         "actor": "Worker-W1381A"
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-18T19:34:11+00:00",
+        "issue": 406,
+        "reason": "2026-10-18 owner-authorized state reconciliation: duplicate/superseded, not independently marked Done. PR #407 was closed as a duplicate of the more targeted PR #405 for ACL-1353 (Issue #353), which is merged and delivery-verified. Evidence: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/407#issuecomment-5912676494 . Preserve the original acceptance criteria, remaining live-run requirement, historical review and saved branch; do not reopen the duplicate PR or re-claim its work."
       }
     ],
     "policy": {
