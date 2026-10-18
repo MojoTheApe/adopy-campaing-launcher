@@ -42876,22 +42876,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "1014": {
-        "actor": "Worker-W1381A",
-        "session": "implementation_audit_20261018_acl1381",
-        "coordinator": "Coordinator-C1818A",
-        "branch": "codex/acl-2014-verification-guidance",
-        "worktree": "/Users/dmitry.o/Documents/Codex/2026-10-17/zip/work/acl-2011-master153",
-        "id": "0221f122e36849178da124441da75d77",
-        "issue": 1014,
-        "state": "handoff",
-        "started_at": "2026-10-18T21:07:52+00:00",
-        "from_status": "status:todo",
-        "pr": 1015,
-        "report": "ACL-2014 source handoff, 2026-10-18.\nActual Worker-W1381A / session implementation_audit_20261018_acl1381; Coordinator-C1818A.\nClaim0221f122e36849178da124441da75d77; branchcodex/acl-2014-verification-guidance.\nReused clean completed isolated worktree /Users/dmitry.o/Documents/Codex/2026-10-17/zip/work/acl-2011-master153; prior2011 branch/history retained.\nPR https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1015\nHead10f8091a0f0e838a364df001329f1a42652712e9, base7c42af2f609ba58f523b97ac4eb729807d257ea3.\n\nComplete scoped source: exactly four regular100644 docs/repository Markdown paths WORKFLOW.md, VERIFICATION.md, OWNER_GUIDE.md, CHANGELOG.md. Clarify agent-requested vs automatic checks, meaningful grouped submissions, valid existing evidence with exact current review/admission intact, one supported final linkage-inclusive check, supported retry evidence and concise observations on owner's ordinary tasks. No technical/settings/pin/policy/code/test/template/helper/product/runtime changes; Master1.5.3 and Trackerbe87599 preserved. Compatible Master prose source reviewed in PR64; no new standard release or consumer adoption.\n\nExisting local evidence: /tmp/acl2014-focused.log 32 process-instruction tests PASS, /tmp/acl2014-links.json 35files159links PASS, /tmp/acl2014-secrets.log tracked scan PASS, diffcheck PASS. No new tests, full product run or package demonstration launched locally. Native source checks pending at handoff.\n\nGenuine different Reviewer must acquire actual source lane and review complete Issue/current head/base/evidence. This is the adopted instruction-only route, subject to exact full diff/current opt-in and idle supported admission checks; hold source lane through directmain merge, do not batch approve, create intake or publish application package. Normal record-review/check-merge/Merged receipt and actual main checks complete this doc task. Owner's subsequent real tasks/feedback are not completion prerequisites. No measured savings claimed. Preserve all foreign tasks/Windows work and earlier scopes."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -50608,9 +50593,25 @@
             "session": "implementation_audit_20261018_acl1381"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1381A",
-        "coordinator": "Coordinator-C1818A"
+        "coordinator": "Coordinator-C1818A",
+        "handoff": {
+          "actor": "Worker-W1381A",
+          "session": "implementation_audit_20261018_acl1381",
+          "coordinator": "Coordinator-C1818A",
+          "branch": "codex/acl-2014-verification-guidance",
+          "worktree": "/Users/dmitry.o/Documents/Codex/2026-10-17/zip/work/acl-2011-master153",
+          "id": "0221f122e36849178da124441da75d77",
+          "issue": 1014,
+          "state": "handoff",
+          "started_at": "2026-10-18T21:07:52+00:00",
+          "from_status": "status:todo",
+          "pr": 1015,
+          "report": "ACL-2014 source handoff, 2026-10-18.\nActual Worker-W1381A / session implementation_audit_20261018_acl1381; Coordinator-C1818A.\nClaim0221f122e36849178da124441da75d77; branchcodex/acl-2014-verification-guidance.\nReused clean completed isolated worktree /Users/dmitry.o/Documents/Codex/2026-10-17/zip/work/acl-2011-master153; prior2011 branch/history retained.\nPR https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1015\nHead10f8091a0f0e838a364df001329f1a42652712e9, base7c42af2f609ba58f523b97ac4eb729807d257ea3.\n\nComplete scoped source: exactly four regular100644 docs/repository Markdown paths WORKFLOW.md, VERIFICATION.md, OWNER_GUIDE.md, CHANGELOG.md. Clarify agent-requested vs automatic checks, meaningful grouped submissions, valid existing evidence with exact current review/admission intact, one supported final linkage-inclusive check, supported retry evidence and concise observations on owner's ordinary tasks. No technical/settings/pin/policy/code/test/template/helper/product/runtime changes; Master1.5.3 and Trackerbe87599 preserved. Compatible Master prose source reviewed in PR64; no new standard release or consumer adoption.\n\nExisting local evidence: /tmp/acl2014-focused.log 32 process-instruction tests PASS, /tmp/acl2014-links.json 35files159links PASS, /tmp/acl2014-secrets.log tracked scan PASS, diffcheck PASS. No new tests, full product run or package demonstration launched locally. Native source checks pending at handoff.\n\nGenuine different Reviewer must acquire actual source lane and review complete Issue/current head/base/evidence. This is the adopted instruction-only route, subject to exact full diff/current opt-in and idle supported admission checks; hold source lane through directmain merge, do not batch approve, create intake or publish application package. Normal record-review/check-merge/Merged receipt and actual main checks complete this doc task. Owner's subsequent real tasks/feedback are not completion prerequisites. No measured savings claimed. Preserve all foreign tasks/Windows work and earlier scopes."
+        },
+        "pr": 1015,
+        "queued_at": "2026-10-18T21:11:23+00:00"
       }
     },
     "actors": {
@@ -55441,7 +55442,8 @@
       871,
       287,
       377,
-      992
+      992,
+      1014
     ],
     "review": null,
     "history": [
@@ -87781,6 +87783,13 @@
         "at": "2026-10-18T21:07:52+00:00",
         "issue": 1014,
         "claim": "0221f122e36849178da124441da75d77",
+        "actor": "Worker-W1381A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-18T21:11:23+00:00",
+        "issue": 1014,
+        "pr": 1015,
         "actor": "Worker-W1381A"
       }
     ],
