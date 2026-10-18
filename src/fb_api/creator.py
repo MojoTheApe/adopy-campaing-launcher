@@ -113,6 +113,8 @@ VIDEO_SINGLE_MAX_BYTES = 200 * 1024 * 1024
 #: Потолок видео на пути кусками: в памяти только кусок. Meta сама принимает до 4 ГБ.
 VIDEO_MAX_BYTES = _wpol.UPLOAD_FILE_MAX
 VIDEO_CHUNK_MAX = _wpol.UPLOAD_CHUNK_MAX
+#: Как часто (с) большая загрузка пишет шаг прогресса, чтобы панель не краснила её как зависшую.
+UPLOAD_STEP_EVERY_S = 12.0
 #: Вызовов на загрузку кусками сверх самих кусков: start, finish, запас на сверку.
 CALLS_UPLOAD_FIXED = 3
 
@@ -1342,6 +1344,10 @@ class CampaignCreator:
         # Предохранитель от бесконечного цикла: не больше вдвое сверх числа кусков.
         guard = 2 * (-(-size // VIDEO_CHUNK_MAX)) + 4
         failures = 0
+        # ACL-1998: большая загрузка идёт минутами; без шагов панель считает её зависшей (idle_s > 180 с).
+        # Шаг «uploaded X/Y MB» - не чаще раза в UPLOAD_STEP_EVERY_S секунд, но не реже каждых 10%.
+        mb_total = max(size // (1024 * 1024), 1)
+        last_step_at, last_step_off = self.clock(), offset
         while offset < size:
             guard -= 1
             if guard < 0:
@@ -1373,6 +1379,11 @@ class CampaignCreator:
                 continue
             failures = 0
             offset, end = self._offsets(body, size, offset, what)
+            now = self.clock()
+            if offset < size and (now - last_step_at >= UPLOAD_STEP_EVERY_S
+                                  or (offset - last_step_off) * 10 >= size):
+                self._step(out, f"{who}: uploaded {offset // (1024 * 1024)}/{mb_total} MB")
+                last_step_at, last_step_off = now, offset
         try:
             done = self._upload_call(out, what, path, {"upload_phase": "finish", "upload_session_id": sid,
                                                         "title": title, "name": title,
