@@ -130,8 +130,8 @@ def maybe_compress(path: str, data: bytes, index: int, step: Callable[[str], Non
         warn(no_ffmpeg_text(index, original_mb))
         return data
 
-    digest = hashlib.sha256(data).hexdigest()
     try:
+        digest = _sha256(path, data)
         folder = cache_dir()
         dst = folder / f"{digest}.mp4"
         if dst.is_file() and 0 < dst.stat().st_size < len(data):
@@ -166,6 +166,18 @@ def maybe_compress(path: str, data: bytes, index: int, step: Callable[[str], Non
         return data
     step(done_text(index, original_mb, len(got) / MB))
     return got
+
+
+def _sha256(path: str, data) -> str:
+    """sha256 оригинала. Тяжёлый файл может прийти не байтами (объект с `len()`,
+    например `LargeFile` в сборке с чанковой загрузкой) — тогда читаем файл с диска блоками."""
+    if isinstance(data, (bytes, bytearray, memoryview)):
+        return hashlib.sha256(data).hexdigest()
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for block in iter(lambda: fh.read(MB), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def _video_kbps(duration_s: float, target_mb: float) -> int:

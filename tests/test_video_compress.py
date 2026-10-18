@@ -128,3 +128,20 @@ def test_creator_compresses_before_the_size_limit(tmp_path):
     assert calls == [("1002_clip.mp4", 3)]
     assert any("compressing video" in s for s in out.steps)
     assert cr.VIDEO_MAX_BYTES < 247 * MB                # без сжатия такой ролик отклонялся бы лимитом
+
+
+def test_non_bytes_large_file_is_hashed_from_disk(tmp_path):
+    src = tmp_path / "clip.mp4"
+    payload = b"q" * (70 * MB)
+    src.write_bytes(payload)
+
+    class Big:                      # как LargeFile: есть len(), но это не bytes
+        def __len__(self):
+            return len(payload)
+
+    env = Env(tmp_path)
+    got = vc.maybe_compress(str(src), Big(), 1, env.steps.append, warn=env.warns.append,
+                            runner=env.runner, ffmpeg=lambda: env.exe,
+                            duration=lambda p, e: env.seconds, cache_dir=lambda: env.cache)
+    assert len(got) == 30 * MB and not env.warns
+    assert (env.cache / f"{hashlib.sha256(payload).hexdigest()}.mp4").is_file()
