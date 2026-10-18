@@ -37404,6 +37404,51 @@
           "workflow": ".github/workflows/complete-delivery.yml",
           "authorization_sha256": "5be6c7851af77fdd05f5c5d7788ee0775855a3284133e71e9bc9cc82f4e753a5"
         }
+      },
+      "1014": {
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "sources": [
+          {
+            "pr": 1015,
+            "merge_sha": "435bc15467e3bedef515534e9fb407642431f435",
+            "tree_sha": "124e2e0e8ed5cb3533ecbca0d083df461263ddc2"
+          }
+        ],
+        "state": "verified",
+        "recorded_at": "2026-10-18T21:20:03+00:00",
+        "process": true,
+        "verification": {
+          "route": "process",
+          "tree_sha": "124e2e0e8ed5cb3533ecbca0d083df461263ddc2",
+          "main_sha": "7c42af2f609ba58f523b97ac4eb729807d257ea3",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "process_policy": "9276adda3c40d4e03e471c96c3a1a4d055b82bd73f282d3b523f329781e3bca5"
+        },
+        "verified_at": "2026-10-18T21:20:03+00:00",
+        "scope": "53ea391f4d4443b5c3ad561e5093094cdd35fe34054ef5ae252c67611913b0d0",
+        "scope_provenance": {
+          "schema_version": 1,
+          "repository": "MojoTheApe/adopy-campaing-launcher",
+          "issue": 1014,
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "target": "ACL stable Windows installer and update channel",
+          "sources": [
+            {
+              "pr": 1015,
+              "merge_sha": "435bc15467e3bedef515534e9fb407642431f435",
+              "tree_sha": "124e2e0e8ed5cb3533ecbca0d083df461263ddc2"
+            }
+          ],
+          "accepted_by": [
+            {
+              "kind": "independent-review",
+              "pr": 1015,
+              "head_sha": "10f8091a0f0e838a364df001329f1a42652712e9",
+              "base_sha": "7c42af2f609ba58f523b97ac4eb729807d257ea3",
+              "tree_sha": "124e2e0e8ed5cb3533ecbca0d083df461263ddc2"
+            }
+          ]
+        }
       }
     },
     "promotions": {
