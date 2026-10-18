@@ -529,11 +529,65 @@ def _plan_in_read_session(account_label: str, drafts: list[Any]) -> list[dict[st
             results.append(pub.publish_draft(draft))
         if client.writes:
             raise AssertionError("Check plan must not write")
+        # Профиль, который подняла проверка, не закрываем сразу: следом идут
+        # повторная проверка или Publish (иначе второе открытие профиля).
+        sess.keep_next, sess.keep_grace_s = True, PLAN_KEEP_WARM_S
     return results
 
 
+#: Сколько секунд профиль, поднятый проверкой плана, ждёт следующего действия
+#: (повторной проверки или Publish), прежде чем закрыться. Человек читает
+#: результат и жмёт Publish — это дольше 30 с `CLOSE_GRACE_S` у чтения стран.
+PLAN_KEEP_WARM_S = 120.0
+
+#: Идущие проверки: ключ → событие и результат. Вторая такая же проверка
+#: ждёт первую, а не открывает профиль заново (Issue #1003).
+_PLAN_FLIGHTS: dict[str, dict[str, Any]] = {}
+_PLAN_FLIGHTS_LOCK = threading.Lock()
+
+
+def _plan_flight_key(slots: list[dict[str, Any]], account_label: str, country: str) -> str:
+    import json
+
+    try:
+        body = json.dumps(slots, sort_keys=True, default=str)
+    except Exception:  # noqa: BLE001 — не сериализуется: не склеиваем
+        return ""
+    return f"{account_label}|{country}|{body}"
+
+
 def check_plan(slots: list[dict[str, Any]], *, account_label: str, country: str) -> dict[str, Any]:
-    """Черновики билдера → план каждой кампании. Ничего не создаёт."""
+    """Черновики билдера → план каждой кампании. Ничего не создаёт.
+
+    Одинаковые проверки одного кабинета, идущие одновременно, склеиваются:
+    вторая получает результат первой, профиль открывается один раз.
+    """
+    key = _plan_flight_key(slots, account_label, country)
+    if not key:
+        return _check_plan_once(slots, account_label=account_label, country=country)
+    with _PLAN_FLIGHTS_LOCK:
+        flight = _PLAN_FLIGHTS.get(key)
+        leader = flight is None
+        if leader:
+            flight = _PLAN_FLIGHTS[key] = {"done": threading.Event(), "result": None}
+    if not leader:
+        flight["done"].wait()
+        _record("api_plan_check_merged", True, diag={"campaigns": len(slots)})
+        result = flight["result"]
+        if result is not None:
+            return dict(result)
+        return _check_plan_once(slots, account_label=account_label, country=country)
+    try:
+        result = _check_plan_once(slots, account_label=account_label, country=country)
+        flight["result"] = result
+        return result
+    finally:
+        with _PLAN_FLIGHTS_LOCK:
+            _PLAN_FLIGHTS.pop(key, None)
+        flight["done"].set()
+
+
+def _check_plan_once(slots: list[dict[str, Any]], *, account_label: str, country: str) -> dict[str, Any]:
     from src.analysis_agent import account_spend as _as
     from src.analysis_agent import account_spend_api as _api
 

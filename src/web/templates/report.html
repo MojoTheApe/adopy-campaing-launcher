@@ -14446,18 +14446,33 @@ window.cbPreflightRun = function (form, slots) {
   var list = slots && slots.length ? slots : Array.prototype.slice.call(form.querySelectorAll('.cb-slot'));
   var revs = Object.create(null);
   list.forEach(function (slot) { revs[cbPfName(slot)] = window.cbPfRev(slot); });
+  /* Проверка этой формы уже идёт (Check plan, «Check» в карточке, Publish all):
+     каждая такая проверка открывала профиль заново. Те же кампании в той же
+     редакции — берём её ответ; иное — ждём её и проверяем только устаревшее. */
+  var live = form._pfFlight;
+  if (live) {
+    var same = list.every(function (slot) { return live.revs[cbPfName(slot)] === revs[cbPfName(slot)]; });
+    if (same) return live.promise;
+    return live.promise.then(function (data) {
+      var stale = list.filter(function (slot) { return !cbPfFresh(slot); });
+      return stale.length ? window.cbPreflightRun(form, stale) : data;
+    });
+  }
   var fd = cbPlanFormData(form, slots && slots.length ? list : null);
   form._pfBusy = true;
   cbPfRefresh();
-  return fetch('/publish-plan', { method: 'POST', body: fd })
+  var promise = fetch('/publish-plan', { method: 'POST', body: fd })
     .then(function (r) { return r.json().catch(function () { return { error: 'The server did not answer' }; }); })
     .catch(function () { return { error: 'The server did not answer' }; })
     .then(function (data) {
       cbPfStore(form, data || {}, revs);
       form._pfBusy = false;
+      form._pfFlight = null;
       cbPfRefresh();
       return data;
     });
+  form._pfFlight = { revs: revs, promise: promise };
+  return promise;
 };
 
 /* Свежи ли серверные вердикты кампании: есть и ревизия та же. */
@@ -14537,10 +14552,16 @@ window.cbPreflightGate = function (items, proceed) {
   if (window.CB_PF_RUNNING) return;       // проверка уже идёт: второе нажатие её не дублирует
   window.CB_PF_RUNNING = true;
   var btn = document.querySelector('.cbd-publish-all');
-  if (btn) { btn.disabled = true; btn.title = 'Checking the plan before publishing…'; }
+  var btnText = btn ? btn.textContent : '';
+  /* Publish all сам запустит сборку, когда проверка пройдёт: говорим это на кнопке. */
+  if (btn) { btn.disabled = true; btn.textContent = 'Checking the plan…'; btn.title = 'Checking the plan before publishing; the build starts by itself if the check passes.'; }
+  function unlock() {
+    window.CB_PF_RUNNING = false;
+    if (btn && btn.textContent === 'Checking the plan…') btn.textContent = btnText;
+  }
   var jobs = pending.map(function (p) { return window.cbPreflightRun(p.form, p.slots); });
-  Promise.all(jobs).then(function () { window.CB_PF_RUNNING = false; tree.refreshAudit(); done(); },
-    function () { window.CB_PF_RUNNING = false; tree.refreshAudit(); });
+  Promise.all(jobs).then(function () { unlock(); tree.refreshAudit(); done(); },
+    function () { unlock(); tree.refreshAudit(); });
 };
 
 /* ── ACL-1761: «Check plan (no writes)» ─────────────────────────────────
