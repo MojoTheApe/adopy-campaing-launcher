@@ -50720,7 +50720,7 @@
             "session": "implementation_audit_20261018_acl1381"
           }
         ],
-        "state": "reviewing",
+        "state": "merged",
         "worker": "Worker-W1381A",
         "coordinator": "Coordinator-C1818A",
         "handoff": {
@@ -55562,6 +55562,19 @@
         "coordinator": "Coordinator-C1818A",
         "state": "reviewing",
         "started_at": "2026-10-18T20:20:25+00:00"
+      },
+      "1015": {
+        "id": "3e554f3477ab482fbf6765450e28a3a4",
+        "pr": 1015,
+        "issues": [
+          1014
+        ],
+        "actor": "Reviewer-PV82A",
+        "session": "pause_review_20261018_acl2011",
+        "coordinator": "Coordinator-C1818A",
+        "started_at": "2026-10-18T21:12:52+00:00",
+        "state": "reviewing",
+        "route": "process"
       }
     },
     "review_queue": [
@@ -87925,6 +87938,26 @@
         "pr": 1015,
         "lane": "3e554f3477ab482fbf6765450e28a3a4",
         "actor": "Reviewer-PV82A"
+      },
+      {
+        "event": "integrated",
+        "at": "2026-10-18T21:20:28+00:00",
+        "review": {
+          "id": "3e554f3477ab482fbf6765450e28a3a4",
+          "pr": 1015,
+          "issues": [
+            1014
+          ],
+          "actor": "Reviewer-PV82A",
+          "session": "pause_review_20261018_acl2011",
+          "coordinator": "Coordinator-C1818A",
+          "started_at": "2026-10-18T21:12:52+00:00",
+          "state": "reviewing",
+          "route": "process"
+        },
+        "prs": [
+          1015
+        ]
       }
     ],
     "policy": {
@@ -94091,21 +94124,7 @@
       "started_at": "2026-10-18T20:09:23+00:00",
       "ineligible": {}
     },
-    "source_reviews": {
-      "1015": {
-        "id": "3e554f3477ab482fbf6765450e28a3a4",
-        "pr": 1015,
-        "issues": [
-          1014
-        ],
-        "actor": "Reviewer-PV82A",
-        "session": "pause_review_20261018_acl2011",
-        "coordinator": "Coordinator-C1818A",
-        "started_at": "2026-10-18T21:12:52+00:00",
-        "state": "reviewing",
-        "route": "process"
-      }
-    },
+    "source_reviews": {},
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
   },
   "maintenance_history": [
