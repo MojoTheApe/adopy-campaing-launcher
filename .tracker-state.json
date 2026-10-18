@@ -341,6 +341,10 @@
       "title": "[Builder] Clearing the creative or Stories/Reels file box leaves the old file in the plan",
       "state": "created",
       "issue": 903
+    },
+    "2c397219becbe08c29f22d60428f3a3019f001cef70b5e84abcd392858d8c880": {
+      "title": "Upload progress steps keep the dashboard from flagging a long video upload as stalled",
+      "state": "creating"
     }
   },
   "delivery_workflow": {
