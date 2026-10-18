@@ -36973,6 +36973,51 @@
           "workflow": ".github/workflows/complete-delivery.yml",
           "authorization_sha256": "dc31c531b4a61d4caf561c494c70d6caf991eba4e38689cfd6e272dd71b59ae0"
         }
+      },
+      "1007": {
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "sources": [
+          {
+            "pr": 1008,
+            "merge_sha": "c90ca46ade5b973998e339f54abb6f2e6d1f2ddf",
+            "tree_sha": "b30966a487bc5d68c0a1cba6ff67258df51215b2"
+          }
+        ],
+        "state": "verified",
+        "recorded_at": "2026-10-18T16:31:05+00:00",
+        "process": true,
+        "verification": {
+          "route": "process",
+          "tree_sha": "b30966a487bc5d68c0a1cba6ff67258df51215b2",
+          "main_sha": "710e388493c2cdb073c477bd9eaba8362e644f41",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "process_policy": "9276adda3c40d4e03e471c96c3a1a4d055b82bd73f282d3b523f329781e3bca5"
+        },
+        "verified_at": "2026-10-18T16:31:05+00:00",
+        "scope": "f646e9f786becd6998372844b0dac16e0f838191021869120c07383d830224b2",
+        "scope_provenance": {
+          "schema_version": 1,
+          "repository": "MojoTheApe/adopy-campaing-launcher",
+          "issue": 1007,
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "target": "ACL stable Windows installer and update channel",
+          "sources": [
+            {
+              "pr": 1008,
+              "merge_sha": "c90ca46ade5b973998e339f54abb6f2e6d1f2ddf",
+              "tree_sha": "b30966a487bc5d68c0a1cba6ff67258df51215b2"
+            }
+          ],
+          "accepted_by": [
+            {
+              "kind": "independent-review",
+              "pr": 1008,
+              "head_sha": "dbabdeced4f388bcc999f3527d01d25fd885f0b4",
+              "base_sha": "710e388493c2cdb073c477bd9eaba8362e644f41",
+              "tree_sha": "b30966a487bc5d68c0a1cba6ff67258df51215b2"
+            }
+          ]
+        }
       }
     },
     "promotions": {
