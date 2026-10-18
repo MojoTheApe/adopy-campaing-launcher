@@ -1,5 +1,15 @@
 # Repository process history
 
+## ACL-2007 — Explain the board and delivery to the owner — 2026-10-18
+
+Add a short owner guide covering task requests, statuses, confirmed pauses, recorded
+capacity, elapsed time, review, blockers, result evidence and ACL related resources.
+Link it from the agent entry point and workflow. Preserve existing commands, policy,
+application behavior and all other task ownership. Checked instruction publication
+completes this documentation task; unavailable Windows sessions and the full
+application pilot remain separate outstanding verification.
+Task: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1007.
+
 ## ACL-1996 — Refresh batch indexes and preserve merge failures — 2026-10-18
 
 Refresh ordinary index stat metadata before each new assembly/rebuild source merge.
