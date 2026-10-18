@@ -100,6 +100,31 @@ currently reports a plan restriction for branch protection/rulesets. Never prese
 an unenforced agent rule as a server-enforced guarantee. Do not purchase a plan or
 make the repository public as an implicit part of adoption.
 
+## Pause and resume
+
+Accept the owner's direct confirmation that an agent has stopped; do not demand
+Windows access solely to reconfirm it. Read the actual claim and use the exact
+pinned `execution stop` under the current real owner. If that owner has stopped,
+use supported `execution takeover --previous-claim ... --stopped --reason ...`
+with the acting Worker's real identity before stopping its new claim. Preserve
+the recorded branch and original owner/worktree in the handoff and transfer
+history. An isolated administrative location must be described honestly; it is
+not a copy of inaccessible Windows work. Keep uninspected contents unknown.
+
+Verify the requested claim is gone and the task is recorded stopped/Paused.
+The current stop command also adds `flag:blocked`. For a purely voluntary pause,
+after checking actual dependencies and obstacles, use the existing
+`python scripts/acl_task_tracker.py set ACL-ID --no-blocked --reason "Owner-requested pause; no remaining blocker"`.
+Do not remove a real blocker, change requirements or bypass a failed ownership
+guard merely to free a slot. Review queue length and reserved capacity do not
+prove that agents are running.
+
+Before resuming implementation, inspect retained work, current scope/main and
+dependencies; use normal supported ownership and preserve the original branch
+where appropriate. Continue individual independent review, Approved integration
+and required package delivery. A pause neither accepts partial work nor removes
+the existing checks or delivery condition.
+
 ## Stage, main and completion
 
 The sequence below applies to ordinary/application work. Proven adopted
