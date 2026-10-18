@@ -157,6 +157,10 @@ def publish_lease(key: str, *, cancelled=None):
     return lease if cancelled is None else lease.holding(cancelled=cancelled, timeout=_pl.PUBLISH_WAIT_SECONDS)
 
 
+#: Сколько чтение ждёт профиль, занятый другой операцией этого или другого процесса.
+READ_WAIT_SECONDS = 600.0
+
+
 def serialized_browser(fn=None, *, key=None, reading=False, on_lease_error=None):
     """Serialize work on one profile; reads share, writes are exclusive.
 
@@ -194,7 +198,10 @@ def serialized_browser(fn=None, *, key=None, reading=False, on_lease_error=None)
                             return func(*args, **kwargs)
                     with publish_lease(resolve(args, kwargs)):
                         return func(*args, **kwargs)
-                with browser_operation.reading(), profile_lock(resolve(args, kwargs)):
+                # Чтение (Check plan, Страницы, спенд) ждёт, пока другая операция на этом
+                # профиле закончится, и подхватывает открытый профиль. Отказ «busy»
+                # через WAIT_SECONDS (120 с) превращал обычную очередь в ошибку плана.
+                with browser_operation.reading(),                         profile_lock(resolve(args, kwargs)).holding(timeout=READ_WAIT_SECONDS):
                     return func(*args, **kwargs)
             except ProfileLeaseError as exc:
                 if on_lease_error is None:
