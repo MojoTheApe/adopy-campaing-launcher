@@ -40677,6 +40677,49 @@
           }
         },
         "recorded_at": "2026-10-15T21:57:49+00:00"
+      },
+      "4e142822fa654994b54c97acece5c85e": {
+        "evidence": {
+          "kind": "post-main-acceptance",
+          "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1010#issuecomment-6252912820",
+          "batch_id": "4e142822fa654994b54c97acece5c85e",
+          "pr": 1010,
+          "merge_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
+          "head_sha": "74400770b8a407384fdaf64b647c7e091d7108ad",
+          "tree_sha": "79829b9c664b03e3ce0772e8a7d2e7490481f34e",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            381
+          ],
+          "source_heads": [
+            "9a4abdc47662f0cbc84b970c8b5456bdbf94f458"
+          ],
+          "issue_scopes": {
+            "381": "edea02ec4148d9ae9244148ad6d4babddc3f4f2a8affc777eeccb28fffb9a102"
+          },
+          "reviewer": "Reviewer-R1381A",
+          "review_session": "scope_audit_20261018_acl1381",
+          "execution_lane": "5030663b4f9a4d45b3a8be6f6f4b70b7",
+          "coordinator": "Coordinator-C1818A",
+          "coordinator_session": "root-20261018-acl1381-delivery",
+          "criteria": {
+            "381": [
+              {
+                "line": 13,
+                "criterion": "- [ ] Labels, placeholder, tooltip and messages as above; nothing else changes (tests updated where they assert the old text).",
+                "result": "passed",
+                "evidence": "Independent exact source and combined reviews (PR1009 comment6252471995; PR1010 comment6252701674), unchanged Issue381 dated reconciliation with accepted ACL-1769, and actual merged tree79829b9c664b03e3ce0772e8a7d2e7490481f34e. Five UI wording changes preserve numbered Primary text1/2, internal names, payload and restoration; 17 actual rendered Builder tests exercise DOM labels, placeholder, tooltip, selected headline, both fields' empty/error states, submission and stacked-card restoration. Detailed post-main report https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1010#issuecomment-6252912820"
+              },
+              {
+                "line": 14,
+                "criterion": "- [ ] Builder browser tests green.",
+                "result": "passed",
+                "evidence": "17 actual rendered Chromium tests passed in tests/test_builder_second_primary_text.py (author evidence output/acl-1381-evidence/handoff.md). Exact source CI https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/39146273543 and full combined CI https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/39147975503 completed success, including Linux3.11/3.13, Windows3.13 and aggregate verification. Merged tree identical to tested combined/source tree; no duplicate local suite. Detailed post-main report https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1010#issuecomment-6252912820"
+              }
+            ]
+          }
+        },
+        "recorded_at": "2026-10-18T17:30:21+00:00"
       }
     },
     "policy_migrations": [
@@ -86832,6 +86875,12 @@
           "state": "reviewing",
           "started_at": "2026-10-18T17:06:38+00:00"
         }
+      },
+      {
+        "event": "post-main-acceptance-recorded",
+        "at": "2026-10-18T17:30:21+00:00",
+        "batch_id": "4e142822fa654994b54c97acece5c85e",
+        "pr": 1010
       }
     ],
     "policy": {
