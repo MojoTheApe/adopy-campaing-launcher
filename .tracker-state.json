@@ -92984,7 +92984,8 @@
         "main_prs": [
           1010
         ],
-        "finished_at": "2026-10-18T17:35:20+00:00"
+        "finished_at": "2026-10-18T17:35:20+00:00",
+        "closing_sources": true
       }
     },
     "integration": null,
