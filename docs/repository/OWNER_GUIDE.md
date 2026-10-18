@@ -99,6 +99,21 @@ restoring access to the Windows computer, and continue any independent work.
 Unavailable Windows access leaves the affected verification open; it does not
 require stopping unrelated documentation or interface work.
 
+## Try the normal workflow
+
+Use your next real ACL task to check whether the instructions make the process
+clearer. No separate demonstration task is needed. The agent should group related
+fixes, arrange independent review and reuse valid evidence where the existing
+project allows it. GitHub will still run its configured automatic checks.
+
+If a check repeats or a transition is confusing, the agent briefly records what
+happened on that task with the relevant PR/run link and the known reason or
+uncertainty. There is no extra report for every job. Tell the agent what felt
+unnecessary; the current instruction update does not itself change Actions,
+settings or software, schedule an audit or claim a measured saving. Further
+investigation follows your requested scope. Your later tasks are not prerequisites
+for completing this instruction update.
+
 ## Main project and related resources
 
 ACL is the main project. **Related Resources** links its **acl-lib** shared targeting/ad-text data and

@@ -81,8 +81,11 @@ For changes before approval, the Reviewer returns review and the author takes a
 fresh implementation claim before editing the original branch. After approval,
 use the owning Coordinator's `batch return`, followed by an author claim, checks,
 handoff and fresh independent approval. Changed code, main/base, task scope or
-policy invalidates earlier evidence. A Reviewer who edits becomes an implementer;
-a different agent must approve. Do not fabricate a second identity for one run.
+policy requires the current exact review/admission evidence enforced by the pinned
+engine. It does not automatically invalidate test results for unchanged inputs
+within the adopted collector's actual coverage. A new agent/session alone needs no
+blanket test rerun. A Reviewer who edits becomes an implementer; a different agent
+must approve. Do not fabricate a second identity for one run.
 
 On an authorized ship request, the Coordinator freezes the current eligible
 Approved intake, then selects sequential batches of up to five. New approvals wait
@@ -94,6 +97,8 @@ assembly, independent combined review and recovery. Execution-v1 source-adoption
 commands remain in force only until the documented old-policy handoff completes.
 
 Use `check-pr N` for early linkage feedback; run `check-merge N` once immediately before merging.
+It includes linkage, so do not repeat a separate immediate `check-pr` call. Keep
+the distinct required review, merge-recording and delivery actions.
 Final admission checks current review, CI and any configured stage evidence. These agent commands are
 not GitHub branch protection. Verify actual GitHub controls; the private repository
 currently reports a plan restriction for branch protection/rulesets. Never present
@@ -172,8 +177,13 @@ Use the requirements and isolation rules in [engineering context](../system/AGEN
 Run focused behavior tests first, then scanner, smoke, the complete required tests
 and packaging checks on the final candidate. CI (Linux and Windows test jobs)
 remains required for code, dependencies, packaging and CI changes. Record success, skip, infrastructure failure
-and unrun manual checks separately. Do not rerun a successful unchanged candidate
-without a new failure, change or unresolved concern.
+and unrun manual checks separately. Group related fixes into a meaningful ready
+submission while preserving useful early feedback. Do not request another run for
+a successful unchanged candidate without a new failure, change or unresolved concern.
+Existing GitHub events still start their configured checks; these instructions
+do not authorize workflow/settings changes. Inspect actual outcomes before retrying
+an uncertain command. Follow [VERIFICATION.md](VERIFICATION.md) for supported reuse
+and short observations on ordinary work.
 
 ### Fast feedback before full applicable checks
 
