@@ -1,5 +1,28 @@
 # Repository process history
 
+## ACL-2011 — Adopt shared pause guidance and current board terminology — 2026-10-18
+
+Select published Master 1.5.3 `6f7e9416e68c66484a3b6c0213eab24847005b8f`
+while retaining Tracker 3.7.1 `be87599d1b5e625058bbddc33c35bda86687b5bf`.
+Use the shared owner-confirmed pause/resume rules and explain the board's existing
+review, release and completion evidence. A voluntary stop alone is not a blocker;
+real dependencies and uninspected Windows work remain explicit.
+
+Resolve the two template overlaps in the project PR by proving the canonical
+old/new change is only the exact standard pin, retaining all local workflow and
+verification controls. Preserve the genuine 82-file pristine target, unchanged
+render inputs, engine/helper bytes, optional-policy selections and delivery gates.
+ACL remains the main project with acl-lib and acl-releases as existing related
+resources; no independent child workflow or pin is introduced.
+
+This changes instructions and their standard pin only. Application, product skills,
+system/runtime behavior, installer/updater, employee data and advertising behavior
+are unchanged; corresponding system/runtime documentation needs no content change.
+Source review and checks do not establish publication or delivery. The normal
+mixed-source batch/main/package acceptance and exact receipt remain required.
+Other pending adoption/pilot criteria retain their original scope and history.
+Task: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1011.
+
 ## ACL-2007 — Explain the board and delivery to the owner — 2026-10-18
 
 Add a short owner guide covering task requests, statuses, confirmed pauses, recorded
