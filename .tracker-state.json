@@ -85894,6 +85894,25 @@
             "approved_at": "2026-10-18T08:47:04+00:00"
           }
         }
+      },
+      {
+        "event": "intake-frozen",
+        "at": "2026-10-18T08:52:20+00:00",
+        "intake": {
+          "id": "ec6fe0fd154d49499057ca153d16bf02",
+          "actor": "Coordinator-WFO3C7A5M",
+          "session": "wfo_20261017_acl_three_source_coordinator",
+          "state": "running",
+          "issues": [
+            996
+          ],
+          "remaining": [
+            996
+          ],
+          "batches": [],
+          "started_at": "2026-10-18T08:52:20+00:00",
+          "ineligible": {}
+        }
       }
     ],
     "policy": {
@@ -91618,20 +91637,19 @@
     },
     "integration": null,
     "intake": {
-      "id": "52d324e9a80c4c029916819029abc7e7",
+      "id": "ec6fe0fd154d49499057ca153d16bf02",
       "actor": "Coordinator-WFO3C7A5M",
       "session": "wfo_20261017_acl_three_source_coordinator",
-      "state": "cancelled",
+      "state": "running",
       "issues": [
-        994
+        996
       ],
       "remaining": [
-        994
+        996
       ],
       "batches": [],
-      "started_at": "2026-10-18T07:27:48+00:00",
-      "ineligible": {},
-      "report": "# ACL-1994: retained singleton; maintained assembly blocked\n\nThe genuine Coordinator completed one explicit intake, one `begin --deliver`, and one same-batch manifest refresh. Exact Source995 approval,1699/c71/tree0c0, full Issue scope and configured package request remain unchanged. Full native comparisons preserve Worker990, all six queued Sources, prior approvals, archives and foreign history.\n\nNo successful combined candidate, push, PR, native combined run, main or package effect exists. The original assembly failed `stash failed`. After bounded local diagnosis, the documented default `git update-index --refresh` repaired the original stat cache without changing recorded content/modes or refs. A supported rebuild first stopped at its retained-manifest prerequisite before creating a worktree; normal refresh then retained that exact manifest. The next actual default rebuild created a detached c71 worktree and failed its first merge with `stash failed`; its abort also failed because MERGE_HEAD was absent. The fresh failure cause is unestablished. No actual content conflict is proved.\n\nThe completed copied-index A/B preceded the Root STOP message; its raw output is retained and is neither assembly success nor cause attribution. No trustctime override was used for apply/rebuild. All further retries, probes and workaround attempts are stopped. Original and rebuilt worktrees, index evidence, the original reserved branch and the maintained local evidence ref remain intact.\n\nA reviewable maintained-tool recovery change may need a supported default stat-refresh/resume boundary and primary-error preservation when MERGE_HEAD is absent. This is a proposal only, not a proven repair. Do not edit combined content or silently expand this exact five-file selection Source. A real tool Source change requires its proper author, scope, independent review and current-policy admission.\n\nIndependent combined review, full seven-cell/installer verification,990 genuine own release before selected main, actual main and published package/native receipt remain unfinished. No maintenance, adoption, parent39 or global acceptance is claimed."
+      "started_at": "2026-10-18T08:52:20+00:00",
+      "ineligible": {}
     },
     "source_reviews": {},
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
