@@ -44085,7 +44085,7 @@
             "session": "run_p1526e_1003"
           }
         ],
-        "state": "archiving",
+        "state": "archived",
         "worker": "Worker-P1526E",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -87203,6 +87203,12 @@
         "at": "2026-10-18T19:34:11+00:00",
         "issue": 406,
         "reason": "2026-10-18 owner-authorized state reconciliation: duplicate/superseded, not independently marked Done. PR #407 was closed as a duplicate of the more targeted PR #405 for ACL-1353 (Issue #353), which is merged and delivery-verified. Evidence: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/407#issuecomment-5912676494 . Preserve the original acceptance criteria, remaining live-run requirement, historical review and saved branch; do not reopen the duplicate PR or re-claim its work."
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-18T19:34:51+00:00",
+        "issue": 526,
+        "reason": "2026-10-18 owner-authorized state reconciliation: superseded, not independently marked Done. PR #527 was closed in owner triage on 2026-10-14 because the tracker engine had already been re-pinned; evidence: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/527#issuecomment-6168957930 . ACL now pins successor be87599d1b5e625058bbddc33c35bda86687b5bf and current native commands read and write the retained state. Preserve the original criteria and branch as history; do not reopen PR #527 or downgrade to its old c89dd82 pin."
       }
     ],
     "policy": {
