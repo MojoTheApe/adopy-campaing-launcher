@@ -42202,6 +42202,18 @@
         "state": "implementing",
         "started_at": "2026-10-17T21:00:31+00:00",
         "from_status": "status:idea"
+      },
+      "994": {
+        "actor": "Worker-B1994",
+        "session": "baseline_review_acl1994_20261018",
+        "coordinator": "Coordinator-WFO06ROOT",
+        "branch": "codex/acl-1994-initial-context-selection",
+        "worktree": "/Users/dmitry.o/Documents/ChatGPT/Master-Repo/workflow-implementation/2026-10-16/work/acl-1994-initial-context-selection",
+        "id": "81aa0bd5c3bd4ed3bff65a83ac17e701",
+        "issue": 994,
+        "state": "implementing",
+        "started_at": "2026-10-18T06:28:11+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -49719,6 +49731,17 @@
         },
         "pr": 993,
         "queued_at": "2026-10-17T21:35:18+00:00"
+      },
+      "994": {
+        "implementers": [
+          {
+            "actor": "Worker-B1994",
+            "session": "baseline_review_acl1994_20261018"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-B1994",
+        "coordinator": "Coordinator-WFO06ROOT"
       }
     },
     "actors": {
@@ -51692,6 +51715,10 @@
       },
       "Worker-M1992A": {
         "session": "acl_1992",
+        "role": "Worker"
+      },
+      "Worker-B1994": {
+        "session": "baseline_review_acl1994_20261018",
         "role": "Worker"
       }
     },
@@ -85328,6 +85355,13 @@
         "at": "2026-10-18T01:09:14+00:00",
         "issue": 654,
         "reason": "Done: delivered in ACL-1652 (PR #667, in main via #716); present in src/web/templates/_account_map.html. Backlog cleanup 2026-10-16."
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-18T06:28:11+00:00",
+        "issue": 994,
+        "claim": "81aa0bd5c3bd4ed3bff65a83ac17e701",
+        "actor": "Worker-B1994"
       }
     ],
     "policy": {
