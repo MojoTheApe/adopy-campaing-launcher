@@ -42876,7 +42876,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "1014": {
+        "actor": "Worker-W1381A",
+        "session": "implementation_audit_20261018_acl1381",
+        "coordinator": "Coordinator-C1818A",
+        "branch": "codex/acl-2014-verification-guidance",
+        "worktree": "/Users/dmitry.o/Documents/Codex/2026-10-17/zip/work/acl-2011-master153",
+        "id": "0221f122e36849178da124441da75d77",
+        "issue": 1014,
+        "state": "implementing",
+        "started_at": "2026-10-18T21:07:52+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -50585,6 +50598,17 @@
         "queued_at": "2026-10-18T19:46:52+00:00",
         "reviewer": "Reviewer-PV82A",
         "batch_id": "c35582fc68a04f1c902f296b52e71788"
+      },
+      "1014": {
+        "implementers": [
+          {
+            "actor": "Worker-W1381A",
+            "session": "implementation_audit_20261018_acl1381"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W1381A",
+        "coordinator": "Coordinator-C1818A"
       }
     },
     "actors": {
@@ -87749,6 +87773,13 @@
         "event": "included-sources-closed",
         "at": "2026-10-18T20:43:52+00:00",
         "batch_id": "c35582fc68a04f1c902f296b52e71788"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-18T21:07:52+00:00",
+        "issue": 1014,
+        "claim": "0221f122e36849178da124441da75d77",
+        "actor": "Worker-W1381A"
       }
     ],
     "policy": {
