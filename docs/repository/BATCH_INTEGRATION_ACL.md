@@ -87,9 +87,22 @@ PR heads. It requires the official ACL origin and a clean checkout, fetches exac
 rechecks ownership and creates a dedicated linked worktree on `codex/batch-BATCH_ID`.
 Merge commits preserve every source tip. It prints the combined PR title/body and
 candidate head/tree; it never pushes, merges into stage/main, publishes or deploys.
-An existing unrelated directory/branch is preserved. A conflict aborts only its own
-unfinished merge, retaining prior assembled work and the claim. Return the affected
+An existing unrelated directory/branch is preserved. Immediately before every new
+source merge, including a detached rebuild, the helper runs ordinary
+`git update-index --refresh` in its new worktree. This refresh re-matches cached stat
+data; it does not stage changed content/modes or suppress genuine modifications.
+A failed refresh stops before merge, preserving its primary command/exit/output.
+Do not add ignore flags, trust-setting changes, resets, stashes or retry loops.
+
+A failed merge preserves its primary command, exit, stdout and stderr. Only an
+exact unfinished `MERGE_HEAD` for the invoked source may be aborted, and observed
+unmerged index entries establish a source-content conflict. Return that affected
 task to its author; no unreviewed conflict resolution belongs in the batch branch.
+Preparation failures, an absent/unreadable marker or a clean-index commit failure
+do not establish a source conflict. Missing metadata does not prove no local effect.
+Keep the worktree, prior assembled commits and claim. Probe/abort failures remain
+separate cleanup uncertainty and cannot replace the primary failure; stop rather
+than discarding evidence or claiming cleanup succeeded.
 The helper accepts matching v2/v3 batch policy. In v3 unrelated source-review
 owners may continue during assembly; an existing integration review still blocks
 reassembly. Exact composition, frozen membership and guarded rebuild proof remain
@@ -127,6 +140,27 @@ After admitted instruction-only main merges, the engine's read-only
 first-parent/scope/policy/tree chain before permitting the next batch. This proof
 changes no branch refs; unexplained or mixed divergence remains blocked. See
 [PROCESS_INSTRUCTIONS.md](PROCESS_INSTRUCTIONS.md).
+
+### ACL-1996 bounded reviewed-tool consumption
+
+ACL-1996 corrects this local assembler without changing operative config, pins or
+shared admission. After genuine independent Source approval and successful required
+exact-head Source CI, its genuine Coordinator may use a clean isolated checkout at
+that exact reviewed tool Source head to prepare its own authorized frozen batch.
+Record the helper blob/head and complete unchanged operative config/engine inputs;
+normal frozen ownership, composition, checks, combined review and admission remain
+mandatory. A dirty overlay, raw manual merge or patch in ACL-1994's combined content
+does not supply this boundary.
+
+Use one genuine changed-code assembly attempt for this supporting Source. If the
+ordinary failure persists, retain it and stop; do not retry historical failed paths
+or start a diagnostic campaign. The cause of the earlier `stash failed` remains
+unestablished. The helper correction is not a claim to repair all filesystem timing.
+Its admitted main still needs the configured stable package, published-channel
+install/update/restart/recovery/data verification and native delivery receipt.
+Later ACL-1994 integration requires legitimate current-base author/review
+reconciliation after this supporting main; its selection, package and owned idle
+activation remain separate. Preserve Worker990, all queued handoffs and archives.
 
 ## Fixes and recovery
 

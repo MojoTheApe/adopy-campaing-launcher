@@ -1,5 +1,28 @@
 # Repository process history
 
+## ACL-1996 — Refresh batch indexes and preserve merge failures — 2026-10-18
+
+Refresh ordinary index stat metadata before each new assembly/rebuild source merge.
+Keep the primary command, exit and output when refresh/merge fails; abort only the
+exact owned unfinished merge. Classify content conflict from actual unmerged index
+entries, retaining separate probe/cleanup failures and all prior graph evidence.
+New real-Git regressions cover stale unchanged cache, local drift/index refusal,
+real conflict, non-conflict merge failure, cleanup uncertainty and current-main guards.
+
+The earlier ACL-1994 `stash failed` cause is still unknown. No historical failed
+path is retried and no freshness setting, staged content/mode, source/main ref or
+ownership/policy is bypassed. The bounded approved-tool consumption needs its real
+Source review/CI, exact clean operative checkout and one authorized changed-code
+assembly attempt; normal combined/main/package verification remains required.
+
+This changes ACL-owned repository orchestration only. Application/system/runtime,
+installer/updater, employee data and advertising behavior remain unchanged; no
+corresponding system/runtime documentation change is needed. Pinned Master/Tracker
+composition, ownership, admission and canonical skill APIs are unchanged, so no
+upstream companion edit or consumer activation belongs here. Task05/06 and the
+separate ACL-1994 selection/delivery/adoption outcomes remain unfinished.
+Task: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/996.
+
 ## ACL-1987 — Released compatible selection-delivery support — 2026-10-17
 
 Advance source support from Master1.2.0/Tracker3.4.0 to published Master1.5.1
