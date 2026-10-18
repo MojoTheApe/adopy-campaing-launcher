@@ -50124,7 +50124,7 @@
             "session": "root-owner-guide-20261018"
           }
         ],
-        "state": "reviewing",
+        "state": "merged",
         "worker": "Worker-OG18",
         "coordinator": "Coordinator-OG18",
         "handoff": {
@@ -54910,6 +54910,21 @@
         "coordinator": "Coordinator-WFO3C7A5M",
         "state": "reviewing",
         "started_at": "2026-10-18T09:03:10+00:00"
+      },
+      "1008": {
+        "id": "7ec8b31b8dc54d77ab7662f660654f58",
+        "pr": 1008,
+        "issues": [
+          1007
+        ],
+        "actor": "Reviewer-OG18",
+        "session": "scope-audit-owner-guide-20261018",
+        "coordinator": "Coordinator-OG18",
+        "started_at": "2026-10-18T16:23:54+00:00",
+        "state": "reviewing",
+        "report": "Independent review: ACL-2007 / PR1008\nReviewer: Reviewer-OG18\nSession: scope-audit-owner-guide-20261018\nCoordinator: Coordinator-OG18\nImplementer: Worker-OG18\nHead: d110c4bb844d9330fda1446c88554134b2ee2491\nBase: 710e388493c2cdb073c477bd9eaba8362e644f41\nTree: 45896c61b9ad89be73cc7b2759e96272d195623e\nVerdict: changes requested\n\nReviewed the full Issue1007, PR1008, all four changed Markdown files, ACL AGENTS.md, selected TRACKER.md, WORKFLOW.md, PROCESS_INSTRUCTIONS_ACL.md, DELIVERY.md and historical completion policy, plus the published Tracker presentation/timing behavior. No source edits or product tests were performed by this independent reviewer.\n\n1. OWNER_GUIDE.md:55-57: Elapsed is described as time since assignment. Actual timing sums completed recorded intervals and adds the current open interval; after a return/reclaim it is not simply time since the latest assignment. Describe it as accumulated recorded time for that workflow activity, including the current assignment, and retain the statement that it is not measured continuous agent runtime.\n2. OWNER_GUIDE.md:31: The Done explanation promises verified package delivery for every application task. ACL intentionally retains historical accepted completions without new package verification (ADOPTION.md:71-88); the Tracker identifies these as Accepted before adoption. Add that narrow historical exception and do not imply installer verification from those older Done entries.\n\nNo other substantive findings. Requirements for request intake, existing IDs, recorded ownership versus live activity, explicit Paused, review/capacity, blockers, related resources and main publication versus package delivery are otherwise covered. The four normal instruction Markdown files preserve workflow, policy, application behavior and other assignments. Windows session verification and the full application pilot remain unfinished. Reuse author local-link/scanner/diff checks and applicable hosted CI; do not run product tests for these wording fixes. Re-review the final exact head before approval.",
+        "keep_lane": true,
+        "route": "process"
       }
     },
     "review_queue": [
@@ -86497,6 +86512,28 @@
         "issue": 1007,
         "pr": 1008,
         "actor": "Worker-OG18"
+      },
+      {
+        "event": "integrated",
+        "at": "2026-10-18T16:31:32+00:00",
+        "review": {
+          "id": "7ec8b31b8dc54d77ab7662f660654f58",
+          "pr": 1008,
+          "issues": [
+            1007
+          ],
+          "actor": "Reviewer-OG18",
+          "session": "scope-audit-owner-guide-20261018",
+          "coordinator": "Coordinator-OG18",
+          "started_at": "2026-10-18T16:23:54+00:00",
+          "state": "reviewing",
+          "report": "Independent review: ACL-2007 / PR1008\nReviewer: Reviewer-OG18\nSession: scope-audit-owner-guide-20261018\nCoordinator: Coordinator-OG18\nImplementer: Worker-OG18\nHead: d110c4bb844d9330fda1446c88554134b2ee2491\nBase: 710e388493c2cdb073c477bd9eaba8362e644f41\nTree: 45896c61b9ad89be73cc7b2759e96272d195623e\nVerdict: changes requested\n\nReviewed the full Issue1007, PR1008, all four changed Markdown files, ACL AGENTS.md, selected TRACKER.md, WORKFLOW.md, PROCESS_INSTRUCTIONS_ACL.md, DELIVERY.md and historical completion policy, plus the published Tracker presentation/timing behavior. No source edits or product tests were performed by this independent reviewer.\n\n1. OWNER_GUIDE.md:55-57: Elapsed is described as time since assignment. Actual timing sums completed recorded intervals and adds the current open interval; after a return/reclaim it is not simply time since the latest assignment. Describe it as accumulated recorded time for that workflow activity, including the current assignment, and retain the statement that it is not measured continuous agent runtime.\n2. OWNER_GUIDE.md:31: The Done explanation promises verified package delivery for every application task. ACL intentionally retains historical accepted completions without new package verification (ADOPTION.md:71-88); the Tracker identifies these as Accepted before adoption. Add that narrow historical exception and do not imply installer verification from those older Done entries.\n\nNo other substantive findings. Requirements for request intake, existing IDs, recorded ownership versus live activity, explicit Paused, review/capacity, blockers, related resources and main publication versus package delivery are otherwise covered. The four normal instruction Markdown files preserve workflow, policy, application behavior and other assignments. Windows session verification and the full application pilot remain unfinished. Reuse author local-link/scanner/diff checks and applicable hosted CI; do not run product tests for these wording fixes. Re-review the final exact head before approval.",
+          "keep_lane": true,
+          "route": "process"
+        },
+        "prs": [
+          1008
+        ]
       }
     ],
     "policy": {
@@ -92331,23 +92368,7 @@
       "started_at": "2026-10-18T08:52:20+00:00",
       "ineligible": {}
     },
-    "source_reviews": {
-      "1008": {
-        "id": "7ec8b31b8dc54d77ab7662f660654f58",
-        "pr": 1008,
-        "issues": [
-          1007
-        ],
-        "actor": "Reviewer-OG18",
-        "session": "scope-audit-owner-guide-20261018",
-        "coordinator": "Coordinator-OG18",
-        "started_at": "2026-10-18T16:23:54+00:00",
-        "state": "reviewing",
-        "report": "Independent review: ACL-2007 / PR1008\nReviewer: Reviewer-OG18\nSession: scope-audit-owner-guide-20261018\nCoordinator: Coordinator-OG18\nImplementer: Worker-OG18\nHead: d110c4bb844d9330fda1446c88554134b2ee2491\nBase: 710e388493c2cdb073c477bd9eaba8362e644f41\nTree: 45896c61b9ad89be73cc7b2759e96272d195623e\nVerdict: changes requested\n\nReviewed the full Issue1007, PR1008, all four changed Markdown files, ACL AGENTS.md, selected TRACKER.md, WORKFLOW.md, PROCESS_INSTRUCTIONS_ACL.md, DELIVERY.md and historical completion policy, plus the published Tracker presentation/timing behavior. No source edits or product tests were performed by this independent reviewer.\n\n1. OWNER_GUIDE.md:55-57: Elapsed is described as time since assignment. Actual timing sums completed recorded intervals and adds the current open interval; after a return/reclaim it is not simply time since the latest assignment. Describe it as accumulated recorded time for that workflow activity, including the current assignment, and retain the statement that it is not measured continuous agent runtime.\n2. OWNER_GUIDE.md:31: The Done explanation promises verified package delivery for every application task. ACL intentionally retains historical accepted completions without new package verification (ADOPTION.md:71-88); the Tracker identifies these as Accepted before adoption. Add that narrow historical exception and do not imply installer verification from those older Done entries.\n\nNo other substantive findings. Requirements for request intake, existing IDs, recorded ownership versus live activity, explicit Paused, review/capacity, blockers, related resources and main publication versus package delivery are otherwise covered. The four normal instruction Markdown files preserve workflow, policy, application behavior and other assignments. Windows session verification and the full application pilot remain unfinished. Reuse author local-link/scanner/diff checks and applicable hosted CI; do not run product tests for these wording fixes. Re-review the final exact head before approval.",
-        "keep_lane": true,
-        "route": "process"
-      }
-    },
+    "source_reviews": {},
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
   },
   "maintenance_history": [
