@@ -49727,7 +49727,7 @@
             "session": "baseline_review_acl1994_20261018"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-B1994",
         "coordinator": "Coordinator-WFO06ROOT",
         "handoff": {
@@ -49745,7 +49745,8 @@
           "report": "# ACL-1994 Source author handoff\n\nWork: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/995, head1699cc934b25e33e4ed240afd95a97afa460ab82, tree0c0b6dce57fe632b8698d002c7e9129aab923787, operative baselinec71a8ece67138f6596748774001f3bc3ab2f04bf. Exactly five100644 paths; matching context1 only and actual82-file renderer provenance.\n\nChecks/results: final stable-head709PASS; pinned draft descriptor, secret scan, adoption audit, isolated local startup,30local links/preservation and real immutable local Git canonical selection_tree allPASS. The first709 run has the explicit commit-timing caveat; the zero-test private CRLF manifest stop and corrected exact physical/native domains remain retained. Current native Source checks are separately observed and must all pass for approval; this report does not promote pending checks.\n\nRemaining risks/outcomes: genuine independent full-scope Source review/approval; current Source CI; exact authorized one-member frozen batch, independent combined review, main admission and configured package/install/update/restart/recovery/data receipt. Worker990 and six retained queued handoffs are not release authority. No main/package/maintenance/adoption/parent39 or global criterion completion. No runtime/installer/pin/helper changes. Preserve every foreign state/history/unknown and use only real current-policy admission."
         },
         "pr": 995,
-        "queued_at": "2026-10-18T06:54:43+00:00"
+        "queued_at": "2026-10-18T06:54:43+00:00",
+        "reviewer": "Reviewer-WFOC984R7"
       }
     },
     "actors": {
@@ -54494,8 +54495,7 @@
       871,
       287,
       377,
-      992,
-      994
+      992
     ],
     "review": null,
     "history": [
@@ -85374,6 +85374,13 @@
         "issue": 994,
         "pr": 995,
         "actor": "Worker-B1994"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-18T07:16:36+00:00",
+        "pr": 995,
+        "lane": "9d0fc0d08ac94c5e8e6c04e59343fae8",
+        "actor": "Reviewer-WFOC984R7"
       }
     ],
     "policy": {
@@ -90894,7 +90901,20 @@
       "started_at": "2026-10-17T20:45:44+00:00",
       "ineligible": {}
     },
-    "source_reviews": {},
+    "source_reviews": {
+      "995": {
+        "id": "9d0fc0d08ac94c5e8e6c04e59343fae8",
+        "pr": 995,
+        "issues": [
+          994
+        ],
+        "actor": "Reviewer-WFOC984R7",
+        "session": "wfo_20261017_acl_combined_review",
+        "coordinator": "Coordinator-WFO06ROOT",
+        "started_at": "2026-10-18T07:16:36+00:00",
+        "state": "reviewing"
+      }
+    },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
   },
   "maintenance_history": [
