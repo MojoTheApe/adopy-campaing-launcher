@@ -50495,7 +50495,7 @@
             "session": "implementation_audit_20261018_acl1381"
           }
         ],
-        "state": "approved",
+        "state": "merged",
         "worker": "Worker-W1381A",
         "coordinator": "Coordinator-C1818A",
         "handoff": {
@@ -50514,7 +50514,8 @@
         },
         "pr": 1012,
         "queued_at": "2026-10-18T19:46:52+00:00",
-        "reviewer": "Reviewer-PV82A"
+        "reviewer": "Reviewer-PV82A",
+        "batch_id": "c35582fc68a04f1c902f296b52e71788"
       }
     },
     "actors": {
@@ -55324,6 +55325,19 @@
         "coordinator": "Coordinator-C1818A",
         "state": "reviewing",
         "started_at": "2026-10-18T17:06:38+00:00"
+      },
+      "1013": {
+        "id": "be89146771994486a489dfca793853d2",
+        "batch_id": "c35582fc68a04f1c902f296b52e71788",
+        "pr": 1013,
+        "issues": [
+          1011
+        ],
+        "actor": "Reviewer-PV82A",
+        "session": "pause_review_20261018_acl2011",
+        "coordinator": "Coordinator-C1818A",
+        "state": "reviewing",
+        "started_at": "2026-10-18T20:20:25+00:00"
       }
     },
     "review_queue": [
@@ -55334,19 +55348,7 @@
       377,
       992
     ],
-    "review": {
-      "id": "be89146771994486a489dfca793853d2",
-      "batch_id": "c35582fc68a04f1c902f296b52e71788",
-      "pr": 1013,
-      "issues": [
-        1011
-      ],
-      "actor": "Reviewer-PV82A",
-      "session": "pause_review_20261018_acl2011",
-      "coordinator": "Coordinator-C1818A",
-      "state": "reviewing",
-      "started_at": "2026-10-18T20:20:25+00:00"
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -87523,6 +87525,156 @@
           "state": "reviewing",
           "started_at": "2026-10-18T20:20:25+00:00"
         }
+      },
+      {
+        "event": "batch-integrated",
+        "at": "2026-10-18T20:42:37+00:00",
+        "batch": {
+          "id": "c35582fc68a04f1c902f296b52e71788",
+          "actor": "Coordinator-C1818A",
+          "session": "root-20261018-acl1381-delivery",
+          "state": "merged",
+          "issues": [
+            1011
+          ],
+          "members": [
+            {
+              "issue": 1011,
+              "pr": 1012,
+              "branch": "codex/acl-2011-master153",
+              "head_sha": "03de2756e9e2ee1fe3c0bcd1bced4041a050e5b1",
+              "base_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
+              "main_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "4d23a6dfcab8a2b9da73519f4be3e0035fc3e9e9629fc9946a013c2a9f62516f",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "implementer": "Worker-W1381A",
+                "reviewer": "Reviewer-PV82A",
+                "head_sha": "03de2756e9e2ee1fe3c0bcd1bced4041a050e5b1",
+                "base_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
+                "tree_sha": "b4de6ea8bdde101f38661920d99ed44b3c180bbd",
+                "execution_lane": "cf3da582514247e4b3500d90ca1e5d75",
+                "review_session": "pause_review_20261018_acl2011",
+                "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1012#pullrequestreview-5564722438",
+                "main_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  1011
+                ],
+                "recorded_at": "2026-10-18T20:07:06+00:00",
+                "issue_scopes": {
+                  "1011": "4d23a6dfcab8a2b9da73519f4be3e0035fc3e9e9629fc9946a013c2a9f62516f"
+                }
+              },
+              "lane": {
+                "id": "cf3da582514247e4b3500d90ca1e5d75",
+                "pr": 1012,
+                "issues": [
+                  1011
+                ],
+                "actor": "Reviewer-PV82A",
+                "session": "pause_review_20261018_acl2011",
+                "coordinator": "Coordinator-C1818A",
+                "started_at": "2026-10-18T19:48:17+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-18T20:07:38+00:00"
+            }
+          ],
+          "main_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
+          "branch": "codex/batch-c35582fc68a04f1c902f296b52e71788",
+          "intake": "dc48f78a44364fa1a772b56723208c73",
+          "started_at": "2026-10-18T20:10:19+00:00",
+          "pr": 1013,
+          "entered_stage": false,
+          "history": [
+            {
+              "members": [
+                {
+                  "issue": 1011,
+                  "pr": 1012,
+                  "branch": "codex/acl-2011-master153",
+                  "head_sha": "03de2756e9e2ee1fe3c0bcd1bced4041a050e5b1",
+                  "base_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
+                  "main_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
+                  "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                  "scope": "4d23a6dfcab8a2b9da73519f4be3e0035fc3e9e9629fc9946a013c2a9f62516f",
+                  "review": {
+                    "kind": "independent-review",
+                    "verdict": "approved",
+                    "implementer": "Worker-W1381A",
+                    "reviewer": "Reviewer-PV82A",
+                    "head_sha": "03de2756e9e2ee1fe3c0bcd1bced4041a050e5b1",
+                    "base_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
+                    "tree_sha": "b4de6ea8bdde101f38661920d99ed44b3c180bbd",
+                    "execution_lane": "cf3da582514247e4b3500d90ca1e5d75",
+                    "review_session": "pause_review_20261018_acl2011",
+                    "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1012#pullrequestreview-5564722438",
+                    "main_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
+                    "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                    "issues": [
+                      1011
+                    ],
+                    "recorded_at": "2026-10-18T20:07:06+00:00",
+                    "issue_scopes": {
+                      "1011": "4d23a6dfcab8a2b9da73519f4be3e0035fc3e9e9629fc9946a013c2a9f62516f"
+                    }
+                  },
+                  "lane": {
+                    "id": "cf3da582514247e4b3500d90ca1e5d75",
+                    "pr": 1012,
+                    "issues": [
+                      1011
+                    ],
+                    "actor": "Reviewer-PV82A",
+                    "session": "pause_review_20261018_acl2011",
+                    "coordinator": "Coordinator-C1818A",
+                    "started_at": "2026-10-18T19:48:17+00:00",
+                    "state": "reviewing"
+                  },
+                  "approved_at": "2026-10-18T20:07:38+00:00"
+                }
+              ],
+              "main_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
+              "pr": null,
+              "at": "2026-10-18T20:12:43+00:00"
+            }
+          ],
+          "delivery_request": {
+            "schema_version": 1,
+            "state": "requested",
+            "batch_id": "c35582fc68a04f1c902f296b52e71788",
+            "issues": [
+              1011
+            ],
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "target": "ACL stable Windows installer and update channel",
+            "workflow": ".github/workflows/complete-delivery.yml",
+            "job": "Verify published Windows package",
+            "actor": "Coordinator-C1818A",
+            "session": "root-20261018-acl1381-delivery",
+            "requested_at": "2026-10-18T20:10:19+00:00"
+          },
+          "review": {
+            "id": "be89146771994486a489dfca793853d2",
+            "batch_id": "c35582fc68a04f1c902f296b52e71788",
+            "pr": 1013,
+            "issues": [
+              1011
+            ],
+            "actor": "Reviewer-PV82A",
+            "session": "pause_review_20261018_acl2011",
+            "coordinator": "Coordinator-C1818A",
+            "state": "reviewing",
+            "started_at": "2026-10-18T20:20:25+00:00"
+          },
+          "main_prs": [
+            1013
+          ],
+          "finished_at": "2026-10-18T20:42:37+00:00"
+        }
       }
     ],
     "policy": {
@@ -93523,149 +93675,167 @@
         "finished_at": "2026-10-18T17:35:20+00:00",
         "closing_sources": false,
         "sources_closed": true
-      }
-    },
-    "integration": {
-      "id": "c35582fc68a04f1c902f296b52e71788",
-      "actor": "Coordinator-C1818A",
-      "session": "root-20261018-acl1381-delivery",
-      "state": "reviewing",
-      "issues": [
-        1011
-      ],
-      "members": [
-        {
-          "issue": 1011,
-          "pr": 1012,
-          "branch": "codex/acl-2011-master153",
-          "head_sha": "03de2756e9e2ee1fe3c0bcd1bced4041a050e5b1",
-          "base_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
-          "main_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "4d23a6dfcab8a2b9da73519f4be3e0035fc3e9e9629fc9946a013c2a9f62516f",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "implementer": "Worker-W1381A",
-            "reviewer": "Reviewer-PV82A",
-            "head_sha": "03de2756e9e2ee1fe3c0bcd1bced4041a050e5b1",
-            "base_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
-            "tree_sha": "b4de6ea8bdde101f38661920d99ed44b3c180bbd",
-            "execution_lane": "cf3da582514247e4b3500d90ca1e5d75",
-            "review_session": "pause_review_20261018_acl2011",
-            "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1012#pullrequestreview-5564722438",
-            "main_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              1011
-            ],
-            "recorded_at": "2026-10-18T20:07:06+00:00",
-            "issue_scopes": {
-              "1011": "4d23a6dfcab8a2b9da73519f4be3e0035fc3e9e9629fc9946a013c2a9f62516f"
-            }
-          },
-          "lane": {
-            "id": "cf3da582514247e4b3500d90ca1e5d75",
-            "pr": 1012,
-            "issues": [
-              1011
-            ],
-            "actor": "Reviewer-PV82A",
-            "session": "pause_review_20261018_acl2011",
-            "coordinator": "Coordinator-C1818A",
-            "started_at": "2026-10-18T19:48:17+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-18T20:07:38+00:00"
-        }
-      ],
-      "main_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
-      "branch": "codex/batch-c35582fc68a04f1c902f296b52e71788",
-      "intake": "dc48f78a44364fa1a772b56723208c73",
-      "started_at": "2026-10-18T20:10:19+00:00",
-      "pr": 1013,
-      "entered_stage": false,
-      "history": [
-        {
-          "members": [
-            {
-              "issue": 1011,
-              "pr": 1012,
-              "branch": "codex/acl-2011-master153",
-              "head_sha": "03de2756e9e2ee1fe3c0bcd1bced4041a050e5b1",
-              "base_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
-              "main_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
-              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-              "scope": "4d23a6dfcab8a2b9da73519f4be3e0035fc3e9e9629fc9946a013c2a9f62516f",
-              "review": {
-                "kind": "independent-review",
-                "verdict": "approved",
-                "implementer": "Worker-W1381A",
-                "reviewer": "Reviewer-PV82A",
-                "head_sha": "03de2756e9e2ee1fe3c0bcd1bced4041a050e5b1",
-                "base_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
-                "tree_sha": "b4de6ea8bdde101f38661920d99ed44b3c180bbd",
-                "execution_lane": "cf3da582514247e4b3500d90ca1e5d75",
-                "review_session": "pause_review_20261018_acl2011",
-                "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1012#pullrequestreview-5564722438",
-                "main_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
-                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-                "issues": [
-                  1011
-                ],
-                "recorded_at": "2026-10-18T20:07:06+00:00",
-                "issue_scopes": {
-                  "1011": "4d23a6dfcab8a2b9da73519f4be3e0035fc3e9e9629fc9946a013c2a9f62516f"
-                }
-              },
-              "lane": {
-                "id": "cf3da582514247e4b3500d90ca1e5d75",
-                "pr": 1012,
-                "issues": [
-                  1011
-                ],
-                "actor": "Reviewer-PV82A",
-                "session": "pause_review_20261018_acl2011",
-                "coordinator": "Coordinator-C1818A",
-                "started_at": "2026-10-18T19:48:17+00:00",
-                "state": "reviewing"
-              },
-              "approved_at": "2026-10-18T20:07:38+00:00"
-            }
-          ],
-          "main_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
-          "pr": null,
-          "at": "2026-10-18T20:12:43+00:00"
-        }
-      ],
-      "delivery_request": {
-        "schema_version": 1,
-        "state": "requested",
-        "batch_id": "c35582fc68a04f1c902f296b52e71788",
+      },
+      "c35582fc68a04f1c902f296b52e71788": {
+        "id": "c35582fc68a04f1c902f296b52e71788",
+        "actor": "Coordinator-C1818A",
+        "session": "root-20261018-acl1381-delivery",
+        "state": "merged",
         "issues": [
           1011
         ],
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "target": "ACL stable Windows installer and update channel",
-        "workflow": ".github/workflows/complete-delivery.yml",
-        "job": "Verify published Windows package",
-        "actor": "Coordinator-C1818A",
-        "session": "root-20261018-acl1381-delivery",
-        "requested_at": "2026-10-18T20:10:19+00:00"
+        "members": [
+          {
+            "issue": 1011,
+            "pr": 1012,
+            "branch": "codex/acl-2011-master153",
+            "head_sha": "03de2756e9e2ee1fe3c0bcd1bced4041a050e5b1",
+            "base_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
+            "main_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "4d23a6dfcab8a2b9da73519f4be3e0035fc3e9e9629fc9946a013c2a9f62516f",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "implementer": "Worker-W1381A",
+              "reviewer": "Reviewer-PV82A",
+              "head_sha": "03de2756e9e2ee1fe3c0bcd1bced4041a050e5b1",
+              "base_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
+              "tree_sha": "b4de6ea8bdde101f38661920d99ed44b3c180bbd",
+              "execution_lane": "cf3da582514247e4b3500d90ca1e5d75",
+              "review_session": "pause_review_20261018_acl2011",
+              "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1012#pullrequestreview-5564722438",
+              "main_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                1011
+              ],
+              "recorded_at": "2026-10-18T20:07:06+00:00",
+              "issue_scopes": {
+                "1011": "4d23a6dfcab8a2b9da73519f4be3e0035fc3e9e9629fc9946a013c2a9f62516f"
+              }
+            },
+            "lane": {
+              "id": "cf3da582514247e4b3500d90ca1e5d75",
+              "pr": 1012,
+              "issues": [
+                1011
+              ],
+              "actor": "Reviewer-PV82A",
+              "session": "pause_review_20261018_acl2011",
+              "coordinator": "Coordinator-C1818A",
+              "started_at": "2026-10-18T19:48:17+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-18T20:07:38+00:00"
+          }
+        ],
+        "main_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
+        "branch": "codex/batch-c35582fc68a04f1c902f296b52e71788",
+        "intake": "dc48f78a44364fa1a772b56723208c73",
+        "started_at": "2026-10-18T20:10:19+00:00",
+        "pr": 1013,
+        "entered_stage": false,
+        "history": [
+          {
+            "members": [
+              {
+                "issue": 1011,
+                "pr": 1012,
+                "branch": "codex/acl-2011-master153",
+                "head_sha": "03de2756e9e2ee1fe3c0bcd1bced4041a050e5b1",
+                "base_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
+                "main_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "scope": "4d23a6dfcab8a2b9da73519f4be3e0035fc3e9e9629fc9946a013c2a9f62516f",
+                "review": {
+                  "kind": "independent-review",
+                  "verdict": "approved",
+                  "implementer": "Worker-W1381A",
+                  "reviewer": "Reviewer-PV82A",
+                  "head_sha": "03de2756e9e2ee1fe3c0bcd1bced4041a050e5b1",
+                  "base_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
+                  "tree_sha": "b4de6ea8bdde101f38661920d99ed44b3c180bbd",
+                  "execution_lane": "cf3da582514247e4b3500d90ca1e5d75",
+                  "review_session": "pause_review_20261018_acl2011",
+                  "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1012#pullrequestreview-5564722438",
+                  "main_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
+                  "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                  "issues": [
+                    1011
+                  ],
+                  "recorded_at": "2026-10-18T20:07:06+00:00",
+                  "issue_scopes": {
+                    "1011": "4d23a6dfcab8a2b9da73519f4be3e0035fc3e9e9629fc9946a013c2a9f62516f"
+                  }
+                },
+                "lane": {
+                  "id": "cf3da582514247e4b3500d90ca1e5d75",
+                  "pr": 1012,
+                  "issues": [
+                    1011
+                  ],
+                  "actor": "Reviewer-PV82A",
+                  "session": "pause_review_20261018_acl2011",
+                  "coordinator": "Coordinator-C1818A",
+                  "started_at": "2026-10-18T19:48:17+00:00",
+                  "state": "reviewing"
+                },
+                "approved_at": "2026-10-18T20:07:38+00:00"
+              }
+            ],
+            "main_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
+            "pr": null,
+            "at": "2026-10-18T20:12:43+00:00"
+          }
+        ],
+        "delivery_request": {
+          "schema_version": 1,
+          "state": "requested",
+          "batch_id": "c35582fc68a04f1c902f296b52e71788",
+          "issues": [
+            1011
+          ],
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "target": "ACL stable Windows installer and update channel",
+          "workflow": ".github/workflows/complete-delivery.yml",
+          "job": "Verify published Windows package",
+          "actor": "Coordinator-C1818A",
+          "session": "root-20261018-acl1381-delivery",
+          "requested_at": "2026-10-18T20:10:19+00:00"
+        },
+        "review": {
+          "id": "be89146771994486a489dfca793853d2",
+          "batch_id": "c35582fc68a04f1c902f296b52e71788",
+          "pr": 1013,
+          "issues": [
+            1011
+          ],
+          "actor": "Reviewer-PV82A",
+          "session": "pause_review_20261018_acl2011",
+          "coordinator": "Coordinator-C1818A",
+          "state": "reviewing",
+          "started_at": "2026-10-18T20:20:25+00:00"
+        },
+        "main_prs": [
+          1013
+        ],
+        "finished_at": "2026-10-18T20:42:37+00:00"
       }
     },
+    "integration": null,
     "intake": {
       "id": "dc48f78a44364fa1a772b56723208c73",
       "actor": "Coordinator-C1818A",
       "session": "root-20261018-acl1381-delivery",
-      "state": "running",
+      "state": "finished",
       "issues": [
         1011
       ],
-      "remaining": [
-        1011
+      "remaining": [],
+      "batches": [
+        "c35582fc68a04f1c902f296b52e71788"
       ],
-      "batches": [],
       "started_at": "2026-10-18T20:09:23+00:00",
       "ineligible": {}
     },
