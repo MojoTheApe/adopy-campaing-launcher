@@ -45,6 +45,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     try:
+        from config.config_unify import prepare_config_dir
+
+        prepare_config_dir()
         from config.paths import (
             ensure_machine_config,
             get_ad_account_map_path,

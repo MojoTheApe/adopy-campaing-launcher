@@ -77,8 +77,8 @@ def get_local_config_dir() -> str:
     """
     explicit = os.environ.get("ACL_CONFIG_DIR", "").strip()
     if explicit:
-        return explicit
-    base = os.environ.get("LOCALAPPDATA", "").strip()
+        return unvirtualize_path(explicit)
+    base = get_real_local_appdata()
     if base:  # Windows — every buyer machine today
         return os.path.join(base, "ACL")
     return os.path.join(os.path.expanduser("~"), ".config", "acl")
@@ -286,6 +286,86 @@ def config_proof(nonce: str, directory: str | os.PathLike | None = None) -> str:
 
     message = b"acl-proof:" + str(nonce).encode("utf-8")
     return hmac.new(_identity_key(directory), message, hashlib.sha256).hexdigest()[:32]
+# --- One settings folder for every launch path (ACL-1680) -------------------
+# A process started from Claude Desktop runs inside its MSIX package, where
+# Windows hands it a *virtualised* %LOCALAPPDATA%:
+#   C:\Users\X\AppData\Local\Packages\<Package>\LocalCache\Local
+# ``ACL`` under that root is a private copy, not the folder Explorer, the
+# installer and the buyer's own shortcut use. Every launcher must therefore
+# resolve the REAL folder the same way; this is that one place.
+_VIRTUAL_APPDATA = re.compile(
+    r"^(?P<real>.+?)[\\/]Packages[\\/][^\\/]+[\\/]LocalCache[\\/]Local(?P<rest>(?:[\\/].*)?)$",
+    re.IGNORECASE,
+)
+
+
+def unvirtualize_path(path: str) -> str:
+    r"""Map a path inside an MSIX package's virtual AppData\Local to the real one.
+
+    Anything that is not such a path is returned unchanged, so an explicit
+    ACL_CONFIG_DIR that points elsewhere (tests, portable installs) is honoured.
+    """
+    match = _VIRTUAL_APPDATA.match(path or "")
+    if not match:
+        return path
+    return match.group("real") + match.group("rest").replace("/", "\\")
+
+
+def get_real_local_appdata() -> str:
+    r"""The real per-user ``AppData\Local``, or "" off Windows / when unknown.
+
+    Starts from %LOCALAPPDATA%; when that is the package-virtualised root the
+    real one is derived from it (``USERPROFILE`` is not virtualised and is the
+    fallback when %LOCALAPPDATA% is missing).
+    """
+    base = os.environ.get("LOCALAPPDATA", "").strip()
+    if base:
+        return unvirtualize_path(base)
+    profile = os.environ.get("USERPROFILE", "").strip()
+    if profile and os.name == "nt":
+        return os.path.join(profile, "AppData", "Local")
+    return ""
+
+
+def is_virtualized_environment() -> bool:
+    """True when this process sees the package-virtualised %LOCALAPPDATA%."""
+    base = os.environ.get("LOCALAPPDATA", "").strip()
+    return bool(base) and unvirtualize_path(base) != base
+
+
+def get_shadow_config_dirs() -> list[str]:
+    r"""Other ``ACL`` folders that may hold a divergent copy of the settings.
+
+    These are the per-package virtual copies
+    (``Packages\*\LocalCache\Local\ACL``) under the real AppData, excluding
+    the folder in use now.
+    """
+    real = get_real_local_appdata()
+    if not real:
+        return []
+    current = os.path.normcase(os.path.normpath(get_local_config_dir()))
+    found: list[str] = []
+    packages = os.path.join(real, "Packages")
+    try:
+        names = sorted(os.listdir(packages))
+    except OSError:
+        return []
+    for name in names:
+        candidate = os.path.join(packages, name, "LocalCache", "Local", "ACL")
+        if os.path.isdir(candidate) and os.path.normcase(os.path.normpath(candidate)) != current:
+            found.append(candidate)
+    return found
+
+
+def pin_config_dir_env() -> str:
+    """Make ACL_CONFIG_DIR explicit for this process and every child it starts.
+
+    Called first by every launcher (exe, serve.py behind start_dashboard.bat,
+    installer scripts) so they all agree on one folder.
+    """
+    resolved = get_local_config_dir()
+    os.environ["ACL_CONFIG_DIR"] = resolved
+    return resolved
 
 
 def get_obsidian_dashboard_dir() -> Path | None:
