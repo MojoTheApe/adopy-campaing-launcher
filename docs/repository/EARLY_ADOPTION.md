@@ -1,5 +1,19 @@
 # ACL early adoption: released support, then separate owned selections
 
+## Current instruction pin
+
+[ACL-2011](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1011)
+selects published Master 1.5.3
+`6f7e9416e68c66484a3b6c0213eab24847005b8f` for common instructions. Tracker 3.7.1
+`be87599d1b5e625058bbddc33c35bda86687b5bf`, the support introduced by ACL-1987,
+activated choices, local checks and package completion remain unchanged.
+This source update still requires its ordinary independent source review, batch,
+main checks and verified package receipt. A source branch is not delivered.
+Use the actual current-main pinned ACL adapter for current ownership and delivery;
+the old operative866 instructions below describe ACL-1987's original source path.
+
+## Retained ACL-1987 support scope
+
 [ACL-1987](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/987)
 updates compatible support to published Master1.5.1
 `622557ec5be09ca45ef795035805fdab0f4a2528` and Tracker3.7.1
@@ -44,7 +58,7 @@ Modern execution4/context2/capture are not selected by this upgrade.
 
 ## Actual authority, readers, writers and recovery
 
-Use the unchanged operative866 actual-main checkout for this support source's
+For ACL-1987's original support source, use the then-operative866 actual-main checkout for its
 author handoff, Source approval, batch ownership, combined review and main
 admission. The be875 candidate cannot authorize itself. After the genuine merge,
 verify the actual official new pin before its maintained completion/delivery.

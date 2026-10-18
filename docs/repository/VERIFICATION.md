@@ -3,7 +3,7 @@
 Read the exact [selected shared guide](TRACKER.md), the [ACL support/cutover plan](EARLY_ADOPTION.md) and the guarded operator mapping in [AGENTS.md](../../AGENTS.md).
 Shared contract references retain canonical bodies; `_ACL` documents preserve the original local cutover history and stronger controls.
 
-Follow the [shared verification policy](https://github.com/MojoTheApe/master-repo/blob/622557ec5be09ca45ef795035805fdab0f4a2528/docs/verification.md)
+Follow the [shared verification policy](https://github.com/MojoTheApe/master-repo/blob/6f7e9416e68c66484a3b6c0213eab24847005b8f/docs/verification.md)
 at this project's exact standard pin. `delivery.json` defines actual product
 commands/required CI names; retain matching Tracker settings, runtime checks and
 local exceptions. Separate fast source feedback, combined-candidate integration
@@ -13,7 +13,7 @@ Keep the project-owned fast/full plan below, with its actual commands,
 platforms and distinct truthful result names. Fast feedback is intermediate;
 ready handoff and admission need all applicable full coverage. Group related
 corrections on the owned task branch and record the real reason/candidate for
-new heavy work. Follow the exact pinned [submission rules](https://github.com/MojoTheApe/master-repo/blob/622557ec5be09ca45ef795035805fdab0f4a2528/docs/verification-submission.md).
+new heavy work. Follow the exact pinned [submission rules](https://github.com/MojoTheApe/master-repo/blob/6f7e9416e68c66484a3b6c0213eab24847005b8f/docs/verification-submission.md).
 
 Preserve the adopted collector's existing bounded reuse rules. Expand context
 proof only through reviewed compatible support/adoption; the common policy alone
@@ -30,7 +30,7 @@ job/dependent proof supported by the adopted collector; otherwise use supported
 bounded fresh behavior or stop. Shared retry/evidence export does not opt ACL in.
 
 For an authorized standard upgrade, use the
-[coordinated procedure](https://github.com/MojoTheApe/master-repo/blob/622557ec5be09ca45ef795035805fdab0f4a2528/docs/workflow-upgrades.md).
+[coordinated procedure](https://github.com/MojoTheApe/master-repo/blob/6f7e9416e68c66484a3b6c0213eab24847005b8f/docs/workflow-upgrades.md).
 Only the exact compatible Tracker guide supplies commands. A newer standard/skill
 cannot activate an unimplemented maintenance or evidence collector.
 
