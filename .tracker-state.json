@@ -85913,6 +85913,87 @@
           "started_at": "2026-10-18T08:52:20+00:00",
           "ineligible": {}
         }
+      },
+      {
+        "event": "batch-frozen",
+        "at": "2026-10-18T08:53:26+00:00",
+        "batch": {
+          "id": "7d14b6df596d43b3b7f89a61ab4d6e9c",
+          "actor": "Coordinator-WFO3C7A5M",
+          "session": "wfo_20261017_acl_three_source_coordinator",
+          "state": "assembling",
+          "issues": [
+            996
+          ],
+          "members": [
+            {
+              "issue": 996,
+              "pr": 997,
+              "branch": "codex/acl-1996-batch-index-refresh",
+              "head_sha": "b8add6c3feb83804107d2ac4d3c417d500bd58d8",
+              "base_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+              "main_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "1aa3919bbb9ae4712f714e635eda9a0377939e8a8fddee1481eeaae8a3c4001b",
+              "review": {
+                "kind": "independent-review",
+                "implementer": "Worker-B1994",
+                "reviewer": "Reviewer-WFO971C4M8",
+                "review_session": "405969e2a0d24390ba648f8f8929b7a1",
+                "execution_lane": "54a9b5486ea34e67a5d1c519a8afbd72",
+                "head_sha": "b8add6c3feb83804107d2ac4d3c417d500bd58d8",
+                "base_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+                "tree_sha": "5816d5ed9afd3c420c3b7228a66786e61562d543",
+                "verdict": "approved",
+                "report": "# ACL-1996 / PR997 independent final Source review\n\n**Approved for the exact ordinary Source Approved queue, with no actionable finding.** This approves the corrected Source content and current applicable Source evidence. Supporting bootstrap, combined/main/package acceptance and full task completion remain pending. PR997 remains approval-only and unmerged.\n\n## Genuine identity, current scope and authority\n\nI am the same continuous non-implementing `/root/acl971_review` run, actor Reviewer-WFO971C4M8, with my original private session and unique actual registered Reviewer role. I authored or edited none of996. Worker-B1994 is the genuine implementing run; I independently rechecked its normal handoff and the complete canonical before/after preservation. I read the full actual Issue/PR, all six original criteria and the whole four-path immutable delta, complete helper/test consequences, relevant local rules and actual released be875 controls. Earlier971/977 reviews supply no review verdict here.\n\nExact Source head `b8add6c3feb83804107d2ac4d3c417d500bd58d8`; sole parent/current main/base `c71a8ece67138f6596748774001f3bc3ab2f04bf`; tree `5816d5ed9afd3c420c3b7228a66786e61562d543`. Whole current Issue996 body SHA256 `1dcfac0612d8547d4e9e172ceca82723980f3daf44b71aeae61895b600716dc7`; factual PR body SHA256 `dd8a62efe9ce696504398cc23c9de8c5c7dd4e1f275e461d428c8ad8f86132a8`. Original251484e4 full body remains a literal prefix and all six original criterion texts/hashes are unchanged. Current canonical scope is `1aa3919bbb9ae4712f714e635eda9a0377939e8a8fddee1481eeaae8a3c4001b`. Fresh actual Issue/PR comments, reviews and diff-comment collections are all empty.\n\nCurrent supported authority remains admitted c71 controls with released Master622557ec5be09ca45ef795035805fdab0f4a2528 / Trackerbe87599d1b5e625058bbddc33c35bda86687b5bf, descriptor2/execution3,5 Workers/5 Source reviews/batch5, no Stage, existing instruction-only selection and package/verified-stable-package target. Optional task-context/completion/retry/CI-evidence/capture policies remain absent. This executable helper/test change uses the mixed Source route. Fresh native registration, original implementer independence, whole scope/head/base/main, completed dependency987 and every current required exact check identity passed before actual maintained Source review-acquire. Only my own997 lane/996 queue/task plus one acquisition audit changed; all foreign state remained exact.\n\nThe task/handoff's existing Coordinator-WFO06ROOT is preserved as its Source hint, not a registered acting batch authority. My first private read-only wrapper added an unsupported registration assertion for that hint and stopped before any claim/intent; its correction/failure record is retained. The maintained Source contract validates the hint format. No actor/session registration, policy or identity was changed. Genuine future integration remains owned by the actual registered Coordinator under its later claim.\n\n## Full Source content and behavioral review\n\nExactly four existing regular100644 paths change: `scripts/acl_batch.py`, `tests/test_acl_batch.py`, `docs/repository/BATCH_INTEGRATION_ACL.md`, `docs/repository/CHANGELOG.md`. All1322 other path/blob/mode entries are identical. Every old helper function is AST-identical except prepare, whose only change is replacement of its old merge-loop handler by merge_source. All previous test/fixture functions are AST-identical. Existing complete process history remains intact. Helper blob `19c8fdb99383cb842e124b53ef840d054ca95c66`, SHA256 `cda5a0c135cf00f72b816edd8cf3ba0d138d9352305dbe0e726ed703e120f532`, is the exact reviewed future-tool identity.\n\nThe ordinary default update-index refresh runs immediately before every first/later source merge, including detached rebuild. It updates stat cache without staging content/modes or changing trust settings. A refresh error preserves command/status/native stdout/stderr/cause and starts neither merge nor abort. Merge failures retain that same primary diagnostic while Git's worktree-aware MERGE_HEAD observation establishes whether the exact invoked source owns an unfinished merge. Only successful actual unmerged-index observation selects the source-content-conflict label. Absent/mismatched/unavailable merge metadata and a clean-index commit failure are not mislabeled. Probe failures and incomplete abort are separately retained; they cannot replace the primary merge failure or claim cleanup success. Earlier assembled commits, worktree/source refs and frozen ownership/composition are preserved.\n\nSix new meaningful test functions cover real stale unchanged cache before both members and initial/detached assembly, real local modification/index refusal, actual pre-merge failure with no unrelated abort, actual non-conflict hook refusal with an unfinished merge, bounded secondary probe/abort failures preserving the real primary hook error, and genuine remote-main drift refusal before worktree creation. The cache regression reads the actual cached stat before refresh and immediately before merge, rather than merely checking command order. Existing real conflict, author/source/owner, previous-manifest, new-destination, composition and atomic leased-publication cases remain unchanged. I ran no additional tests: the retained focused and stable full tooling checks cover this exact unchanged candidate.\n\nThe guide/history match those bounded semantics, preserve the unestablished historical stash-failure cause and add no filesystem workaround or retry campaign. Exact approved-tool consumption waits for real Source approval/current CI, uses the genuine Coordinator's clean isolated checkout with unchanged operative config/pins/engine and original frozen claim/manifest, and allows only the documented single changed-code attempt for this support Source's own batch. Persistent failure stops. No ad-hoc994 edit, manual integration, Source-only delivery exemption or parent completion is introduced. The concrete upstream/system/runtime no-impact rationale is appropriate: this changes ACL-owned orchestration; shared composition/ownership contracts, product/installer/data/runtime and canonical skill bytes are untouched.\n\n## Actual local and native evidence\n\nIndependent original local evidence binding reverified all15 author anchors and primary outputs:729 passed in434.98s, process wall435.552724s, actual14-file adopted tooling on local Python3.12.14; draft descriptor, scanner, adoption audit, startup/import smoke, links and whitespace succeeded. All1326 native/physical/mode records before/after are identical; I independently reconciled every immutable Git blob and current tracked physical byte/size/numeric mode, including12 explicit CRLF/native-LF conversions. Initial51 affected passes and the two expected immutable-old classification failures remain separate dated facts. The author's successful handoff followed by a local trailing-newline comparison error was reconciled through the actual strip contract and GET only; no mutation replay occurred.\n\nAll22 terminal-native anchors and five original complete raw logs were hash/size checked. Original CI39110763083, attempt1, actually passed all7 jobs and their required steps on native virtual merge8d9569de54c13818265877ad1355367aa538e28a, ordered parents c71/b8 and exact tree5816. Tooling729 passed in34.96s. Windows3.13 passed317 with6 warnings; Linux3.13 shards passed2433/2945/2650, retaining1/1/0 skips and27/6/9 warnings. These are four actual Source cells, not a seven-cell combined/main execution. No counts or elapsed times are combined into invented cost/savings.\n\nFresh exact required app15368 checks are descriptor117626214833, latest normal tracker-link117626712993, ACL verification117630142118 and Installer verification117626298622, all SUCCESS. The original ready-event linkage failure117626361414/run39110811257 remains retained with its pre-Review phase refusal; the later normal truthful handoff metadata event succeeded. No dispatch, rerun, cancellation or demonstration workload was issued by this Reviewer.\n\nInstaller truth is bounded: run39110763051's unchanged native classifier reports no-installer-inputs-changed; aggregate SUCCESS, actual Verify build inputs117626299321 and Build/install/repair/uninstall117626299480 SKIPPED, zero artifacts. I read and bound the original classifier, native job/step records and artifact absence. This is valid actual Source non-applicability, with no new installation/build/package receipt. Complete applicable combined/main seven-cell and installer verification plus actual configured published-channel acceptance remain later requirements.\n\n## All six criteria and completion boundaries\n\n1. The exact reviewed code introduces only default per-merge refresh; meaningful synthetic observations and unchanged object/byte/mode/guard evidence support it. No broader historical-cause or universal-filesystem repair is claimed.\n2. Primary errors, actual merge/index-based conflict distinction and separately retained cleanup failure are implemented and covered by the genuine behavior evidence.\n3. Current meaningful local and applicable native Source checks and this complete-scope independent review pass. Actual skips, warnings, pre-Review and local assertion failures remain recorded. Combined/main/full installer evidence is not borrowed from Source proof.\n4. This is the genuine independent Source review under its real own lane; normal maintained recording/approval follows. Future exact-tool bootstrap/one changed-code attempt remains unperformed and requires its actual later frozen commission/claim/result.\n5. Independent combined review, complete combined/main checks, actual admitted main/normal ownership completion, configured stable publication/published-channel install/update/restart/recovery/data and genuine native delivery receipt remain pending. Unknown effects require original-effect GET reconciliation, not duplicate dispatch.\n6. Exact Source and own review preserve994 selection/approval, foreign990, six released handoffs, all other owners/queue/history/archive/receipts and pins/policies/runtime/installer bytes. Later supporting-main advancement requires genuine current-base994 return/author/review reconciliation. Its selection package, owned idle activation and original Task06/05 measurements remain separate unfinished outcomes.\n\nRecord this exact report through maintained record-review preview/apply, then batch approve only996 and verify actual own-lane release/current bodies/main/foreign-state preservation. Source approval does not merge PR997, authorize another tool attempt, admit a combined candidate, deliver a package, activate state or complete all six outcomes. No code, test, configuration, foreign claim or historical failed path was edited by this Reviewer.\n",
+                "main_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  996
+                ],
+                "recorded_at": "2026-10-18T08:46:21+00:00",
+                "issue_scopes": {
+                  "996": "1aa3919bbb9ae4712f714e635eda9a0377939e8a8fddee1481eeaae8a3c4001b"
+                }
+              },
+              "lane": {
+                "id": "54a9b5486ea34e67a5d1c519a8afbd72",
+                "pr": 997,
+                "issues": [
+                  996
+                ],
+                "actor": "Reviewer-WFO971C4M8",
+                "session": "405969e2a0d24390ba648f8f8929b7a1",
+                "coordinator": "Coordinator-WFO06ROOT",
+                "started_at": "2026-10-18T08:43:35+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-18T08:47:04+00:00"
+            }
+          ],
+          "main_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+          "branch": "codex/batch-7d14b6df596d43b3b7f89a61ab4d6e9c",
+          "intake": "ec6fe0fd154d49499057ca153d16bf02",
+          "started_at": "2026-10-18T08:53:26+00:00",
+          "pr": null,
+          "entered_stage": false,
+          "history": [],
+          "delivery_request": {
+            "schema_version": 1,
+            "state": "requested",
+            "batch_id": "7d14b6df596d43b3b7f89a61ab4d6e9c",
+            "issues": [
+              996
+            ],
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "target": "ACL stable Windows installer and update channel",
+            "workflow": ".github/workflows/complete-delivery.yml",
+            "job": "Verify published Windows package",
+            "actor": "Coordinator-WFO3C7A5M",
+            "session": "wfo_20261017_acl_three_source_coordinator",
+            "requested_at": "2026-10-18T08:53:26+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -91635,7 +91716,83 @@
         "report": "# ACL-1994: retained singleton; maintained assembly blocked\n\nThe genuine Coordinator completed one explicit intake, one `begin --deliver`, and one same-batch manifest refresh. Exact Source995 approval,1699/c71/tree0c0, full Issue scope and configured package request remain unchanged. Full native comparisons preserve Worker990, all six queued Sources, prior approvals, archives and foreign history.\n\nNo successful combined candidate, push, PR, native combined run, main or package effect exists. The original assembly failed `stash failed`. After bounded local diagnosis, the documented default `git update-index --refresh` repaired the original stat cache without changing recorded content/modes or refs. A supported rebuild first stopped at its retained-manifest prerequisite before creating a worktree; normal refresh then retained that exact manifest. The next actual default rebuild created a detached c71 worktree and failed its first merge with `stash failed`; its abort also failed because MERGE_HEAD was absent. The fresh failure cause is unestablished. No actual content conflict is proved.\n\nThe completed copied-index A/B preceded the Root STOP message; its raw output is retained and is neither assembly success nor cause attribution. No trustctime override was used for apply/rebuild. All further retries, probes and workaround attempts are stopped. Original and rebuilt worktrees, index evidence, the original reserved branch and the maintained local evidence ref remain intact.\n\nA reviewable maintained-tool recovery change may need a supported default stat-refresh/resume boundary and primary-error preservation when MERGE_HEAD is absent. This is a proposal only, not a proven repair. Do not edit combined content or silently expand this exact five-file selection Source. A real tool Source change requires its proper author, scope, independent review and current-policy admission.\n\nIndependent combined review, full seven-cell/installer verification,990 genuine own release before selected main, actual main and published package/native receipt remain unfinished. No maintenance, adoption, parent39 or global acceptance is claimed."
       }
     },
-    "integration": null,
+    "integration": {
+      "id": "7d14b6df596d43b3b7f89a61ab4d6e9c",
+      "actor": "Coordinator-WFO3C7A5M",
+      "session": "wfo_20261017_acl_three_source_coordinator",
+      "state": "assembling",
+      "issues": [
+        996
+      ],
+      "members": [
+        {
+          "issue": 996,
+          "pr": 997,
+          "branch": "codex/acl-1996-batch-index-refresh",
+          "head_sha": "b8add6c3feb83804107d2ac4d3c417d500bd58d8",
+          "base_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+          "main_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "1aa3919bbb9ae4712f714e635eda9a0377939e8a8fddee1481eeaae8a3c4001b",
+          "review": {
+            "kind": "independent-review",
+            "implementer": "Worker-B1994",
+            "reviewer": "Reviewer-WFO971C4M8",
+            "review_session": "405969e2a0d24390ba648f8f8929b7a1",
+            "execution_lane": "54a9b5486ea34e67a5d1c519a8afbd72",
+            "head_sha": "b8add6c3feb83804107d2ac4d3c417d500bd58d8",
+            "base_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+            "tree_sha": "5816d5ed9afd3c420c3b7228a66786e61562d543",
+            "verdict": "approved",
+            "report": "# ACL-1996 / PR997 independent final Source review\n\n**Approved for the exact ordinary Source Approved queue, with no actionable finding.** This approves the corrected Source content and current applicable Source evidence. Supporting bootstrap, combined/main/package acceptance and full task completion remain pending. PR997 remains approval-only and unmerged.\n\n## Genuine identity, current scope and authority\n\nI am the same continuous non-implementing `/root/acl971_review` run, actor Reviewer-WFO971C4M8, with my original private session and unique actual registered Reviewer role. I authored or edited none of996. Worker-B1994 is the genuine implementing run; I independently rechecked its normal handoff and the complete canonical before/after preservation. I read the full actual Issue/PR, all six original criteria and the whole four-path immutable delta, complete helper/test consequences, relevant local rules and actual released be875 controls. Earlier971/977 reviews supply no review verdict here.\n\nExact Source head `b8add6c3feb83804107d2ac4d3c417d500bd58d8`; sole parent/current main/base `c71a8ece67138f6596748774001f3bc3ab2f04bf`; tree `5816d5ed9afd3c420c3b7228a66786e61562d543`. Whole current Issue996 body SHA256 `1dcfac0612d8547d4e9e172ceca82723980f3daf44b71aeae61895b600716dc7`; factual PR body SHA256 `dd8a62efe9ce696504398cc23c9de8c5c7dd4e1f275e461d428c8ad8f86132a8`. Original251484e4 full body remains a literal prefix and all six original criterion texts/hashes are unchanged. Current canonical scope is `1aa3919bbb9ae4712f714e635eda9a0377939e8a8fddee1481eeaae8a3c4001b`. Fresh actual Issue/PR comments, reviews and diff-comment collections are all empty.\n\nCurrent supported authority remains admitted c71 controls with released Master622557ec5be09ca45ef795035805fdab0f4a2528 / Trackerbe87599d1b5e625058bbddc33c35bda86687b5bf, descriptor2/execution3,5 Workers/5 Source reviews/batch5, no Stage, existing instruction-only selection and package/verified-stable-package target. Optional task-context/completion/retry/CI-evidence/capture policies remain absent. This executable helper/test change uses the mixed Source route. Fresh native registration, original implementer independence, whole scope/head/base/main, completed dependency987 and every current required exact check identity passed before actual maintained Source review-acquire. Only my own997 lane/996 queue/task plus one acquisition audit changed; all foreign state remained exact.\n\nThe task/handoff's existing Coordinator-WFO06ROOT is preserved as its Source hint, not a registered acting batch authority. My first private read-only wrapper added an unsupported registration assertion for that hint and stopped before any claim/intent; its correction/failure record is retained. The maintained Source contract validates the hint format. No actor/session registration, policy or identity was changed. Genuine future integration remains owned by the actual registered Coordinator under its later claim.\n\n## Full Source content and behavioral review\n\nExactly four existing regular100644 paths change: `scripts/acl_batch.py`, `tests/test_acl_batch.py`, `docs/repository/BATCH_INTEGRATION_ACL.md`, `docs/repository/CHANGELOG.md`. All1322 other path/blob/mode entries are identical. Every old helper function is AST-identical except prepare, whose only change is replacement of its old merge-loop handler by merge_source. All previous test/fixture functions are AST-identical. Existing complete process history remains intact. Helper blob `19c8fdb99383cb842e124b53ef840d054ca95c66`, SHA256 `cda5a0c135cf00f72b816edd8cf3ba0d138d9352305dbe0e726ed703e120f532`, is the exact reviewed future-tool identity.\n\nThe ordinary default update-index refresh runs immediately before every first/later source merge, including detached rebuild. It updates stat cache without staging content/modes or changing trust settings. A refresh error preserves command/status/native stdout/stderr/cause and starts neither merge nor abort. Merge failures retain that same primary diagnostic while Git's worktree-aware MERGE_HEAD observation establishes whether the exact invoked source owns an unfinished merge. Only successful actual unmerged-index observation selects the source-content-conflict label. Absent/mismatched/unavailable merge metadata and a clean-index commit failure are not mislabeled. Probe failures and incomplete abort are separately retained; they cannot replace the primary merge failure or claim cleanup success. Earlier assembled commits, worktree/source refs and frozen ownership/composition are preserved.\n\nSix new meaningful test functions cover real stale unchanged cache before both members and initial/detached assembly, real local modification/index refusal, actual pre-merge failure with no unrelated abort, actual non-conflict hook refusal with an unfinished merge, bounded secondary probe/abort failures preserving the real primary hook error, and genuine remote-main drift refusal before worktree creation. The cache regression reads the actual cached stat before refresh and immediately before merge, rather than merely checking command order. Existing real conflict, author/source/owner, previous-manifest, new-destination, composition and atomic leased-publication cases remain unchanged. I ran no additional tests: the retained focused and stable full tooling checks cover this exact unchanged candidate.\n\nThe guide/history match those bounded semantics, preserve the unestablished historical stash-failure cause and add no filesystem workaround or retry campaign. Exact approved-tool consumption waits for real Source approval/current CI, uses the genuine Coordinator's clean isolated checkout with unchanged operative config/pins/engine and original frozen claim/manifest, and allows only the documented single changed-code attempt for this support Source's own batch. Persistent failure stops. No ad-hoc994 edit, manual integration, Source-only delivery exemption or parent completion is introduced. The concrete upstream/system/runtime no-impact rationale is appropriate: this changes ACL-owned orchestration; shared composition/ownership contracts, product/installer/data/runtime and canonical skill bytes are untouched.\n\n## Actual local and native evidence\n\nIndependent original local evidence binding reverified all15 author anchors and primary outputs:729 passed in434.98s, process wall435.552724s, actual14-file adopted tooling on local Python3.12.14; draft descriptor, scanner, adoption audit, startup/import smoke, links and whitespace succeeded. All1326 native/physical/mode records before/after are identical; I independently reconciled every immutable Git blob and current tracked physical byte/size/numeric mode, including12 explicit CRLF/native-LF conversions. Initial51 affected passes and the two expected immutable-old classification failures remain separate dated facts. The author's successful handoff followed by a local trailing-newline comparison error was reconciled through the actual strip contract and GET only; no mutation replay occurred.\n\nAll22 terminal-native anchors and five original complete raw logs were hash/size checked. Original CI39110763083, attempt1, actually passed all7 jobs and their required steps on native virtual merge8d9569de54c13818265877ad1355367aa538e28a, ordered parents c71/b8 and exact tree5816. Tooling729 passed in34.96s. Windows3.13 passed317 with6 warnings; Linux3.13 shards passed2433/2945/2650, retaining1/1/0 skips and27/6/9 warnings. These are four actual Source cells, not a seven-cell combined/main execution. No counts or elapsed times are combined into invented cost/savings.\n\nFresh exact required app15368 checks are descriptor117626214833, latest normal tracker-link117626712993, ACL verification117630142118 and Installer verification117626298622, all SUCCESS. The original ready-event linkage failure117626361414/run39110811257 remains retained with its pre-Review phase refusal; the later normal truthful handoff metadata event succeeded. No dispatch, rerun, cancellation or demonstration workload was issued by this Reviewer.\n\nInstaller truth is bounded: run39110763051's unchanged native classifier reports no-installer-inputs-changed; aggregate SUCCESS, actual Verify build inputs117626299321 and Build/install/repair/uninstall117626299480 SKIPPED, zero artifacts. I read and bound the original classifier, native job/step records and artifact absence. This is valid actual Source non-applicability, with no new installation/build/package receipt. Complete applicable combined/main seven-cell and installer verification plus actual configured published-channel acceptance remain later requirements.\n\n## All six criteria and completion boundaries\n\n1. The exact reviewed code introduces only default per-merge refresh; meaningful synthetic observations and unchanged object/byte/mode/guard evidence support it. No broader historical-cause or universal-filesystem repair is claimed.\n2. Primary errors, actual merge/index-based conflict distinction and separately retained cleanup failure are implemented and covered by the genuine behavior evidence.\n3. Current meaningful local and applicable native Source checks and this complete-scope independent review pass. Actual skips, warnings, pre-Review and local assertion failures remain recorded. Combined/main/full installer evidence is not borrowed from Source proof.\n4. This is the genuine independent Source review under its real own lane; normal maintained recording/approval follows. Future exact-tool bootstrap/one changed-code attempt remains unperformed and requires its actual later frozen commission/claim/result.\n5. Independent combined review, complete combined/main checks, actual admitted main/normal ownership completion, configured stable publication/published-channel install/update/restart/recovery/data and genuine native delivery receipt remain pending. Unknown effects require original-effect GET reconciliation, not duplicate dispatch.\n6. Exact Source and own review preserve994 selection/approval, foreign990, six released handoffs, all other owners/queue/history/archive/receipts and pins/policies/runtime/installer bytes. Later supporting-main advancement requires genuine current-base994 return/author/review reconciliation. Its selection package, owned idle activation and original Task06/05 measurements remain separate unfinished outcomes.\n\nRecord this exact report through maintained record-review preview/apply, then batch approve only996 and verify actual own-lane release/current bodies/main/foreign-state preservation. Source approval does not merge PR997, authorize another tool attempt, admit a combined candidate, deliver a package, activate state or complete all six outcomes. No code, test, configuration, foreign claim or historical failed path was edited by this Reviewer.\n",
+            "main_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              996
+            ],
+            "recorded_at": "2026-10-18T08:46:21+00:00",
+            "issue_scopes": {
+              "996": "1aa3919bbb9ae4712f714e635eda9a0377939e8a8fddee1481eeaae8a3c4001b"
+            }
+          },
+          "lane": {
+            "id": "54a9b5486ea34e67a5d1c519a8afbd72",
+            "pr": 997,
+            "issues": [
+              996
+            ],
+            "actor": "Reviewer-WFO971C4M8",
+            "session": "405969e2a0d24390ba648f8f8929b7a1",
+            "coordinator": "Coordinator-WFO06ROOT",
+            "started_at": "2026-10-18T08:43:35+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-18T08:47:04+00:00"
+        }
+      ],
+      "main_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+      "branch": "codex/batch-7d14b6df596d43b3b7f89a61ab4d6e9c",
+      "intake": "ec6fe0fd154d49499057ca153d16bf02",
+      "started_at": "2026-10-18T08:53:26+00:00",
+      "pr": null,
+      "entered_stage": false,
+      "history": [],
+      "delivery_request": {
+        "schema_version": 1,
+        "state": "requested",
+        "batch_id": "7d14b6df596d43b3b7f89a61ab4d6e9c",
+        "issues": [
+          996
+        ],
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "target": "ACL stable Windows installer and update channel",
+        "workflow": ".github/workflows/complete-delivery.yml",
+        "job": "Verify published Windows package",
+        "actor": "Coordinator-WFO3C7A5M",
+        "session": "wfo_20261017_acl_three_source_coordinator",
+        "requested_at": "2026-10-18T08:53:26+00:00"
+      }
+    },
     "intake": {
       "id": "ec6fe0fd154d49499057ca153d16bf02",
       "actor": "Coordinator-WFO3C7A5M",
