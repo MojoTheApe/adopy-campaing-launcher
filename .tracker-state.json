@@ -48825,7 +48825,7 @@
       },
       "195": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       },
       "34": {
         "implementers": [],
@@ -85298,6 +85298,12 @@
         "at": "2026-10-18T00:50:59+00:00",
         "issue": 569,
         "reason": "Backlog cleanup 2026-10-16: stale live check of the RPA hand-window / stuck-step path; feature merged, path superseded by the Graph-in-profile direction (hand-open reworked in PR #937)."
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-18T00:56:34+00:00",
+        "issue": 195,
+        "reason": "Backlog cleanup 2026-10-16: stale/duplicate; main already has scripts/sentry_triage.py, config/sentry_triage_map.json and SENTRY_TRIAGE.md. A remedy catalogue and metrics belong in #318 / #497."
       }
     ],
     "policy": {
