@@ -42711,18 +42711,6 @@
   },
   "execution": {
     "claims": {
-      "990": {
-        "actor": "Worker-PF17Q",
-        "session": "S-2f528671",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1990-preflight-topics",
-        "worktree": "C:\\acl-1990-preflight-topics",
-        "id": "0b3da6a8634d4bf8959080dea6038abd",
-        "issue": 990,
-        "state": "implementing",
-        "started_at": "2026-10-17T21:00:31+00:00",
-        "from_status": "status:idea"
-      },
       "998": {
         "actor": "Worker-VP1018",
         "session": "vp1018",
@@ -42734,6 +42722,18 @@
         "state": "implementing",
         "started_at": "2026-10-18T08:40:04+00:00",
         "from_status": "status:backlog"
+      },
+      "990": {
+        "actor": "Worker-W1381A",
+        "session": "implementation_audit_20261018_acl1381",
+        "coordinator": "Coordinator-C1818A",
+        "branch": "work/acl-1990-preflight-topics",
+        "worktree": "/private/tmp/acl-owner-pause-20261018/990",
+        "id": "033774fdfb82464eab87583f9e1cc4d7",
+        "issue": 990,
+        "state": "implementing",
+        "started_at": "2026-10-18T19:17:32+00:00",
+        "from_status": "status:idea"
       }
     },
     "tasks": {
@@ -50219,11 +50219,15 @@
           {
             "actor": "Worker-PF17Q",
             "session": "S-2f528671"
+          },
+          {
+            "actor": "Worker-W1381A",
+            "session": "implementation_audit_20261018_acl1381"
           }
         ],
         "state": "implementing",
-        "worker": "Worker-PF17Q",
-        "coordinator": "Coordinator-M1011A"
+        "worker": "Worker-W1381A",
+        "coordinator": "Coordinator-C1818A"
       },
       "992": {
         "implementers": [
@@ -87104,6 +87108,25 @@
         "event": "included-sources-closed",
         "at": "2026-10-18T17:36:52+00:00",
         "batch_id": "4e142822fa654994b54c97acece5c85e"
+      },
+      {
+        "event": "takeover",
+        "at": "2026-10-18T19:17:32+00:00",
+        "issue": 990,
+        "previous": {
+          "actor": "Worker-PF17Q",
+          "session": "S-2f528671",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "work/acl-1990-preflight-topics",
+          "worktree": "C:\\acl-1990-preflight-topics",
+          "id": "0b3da6a8634d4bf8959080dea6038abd",
+          "issue": 990,
+          "state": "implementing",
+          "started_at": "2026-10-17T21:00:31+00:00",
+          "from_status": "status:idea"
+        },
+        "claim": "033774fdfb82464eab87583f9e1cc4d7",
+        "reason": "Owner explicitly confirmed both Windows agents stopped on 2026-10-18 and authorized only administrative pause/release of ACL-1990 and ACL-1998. Same actual Worker-W1381A run performs recovery only. Preserve original branch work/acl-1990-preflight-topics and Windows location C:\\acl-1990-preflight-topics; local contents uninspected and unknown. New /tmp administrative location contains only the pause report, no copied implementation. No source or policy change."
       }
     ],
     "policy": {
