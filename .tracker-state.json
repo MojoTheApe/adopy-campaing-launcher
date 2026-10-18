@@ -44085,7 +44085,7 @@
             "session": "run_p1526e_1003"
           }
         ],
-        "state": "stopped",
+        "state": "archiving",
         "worker": "Worker-P1526E",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
