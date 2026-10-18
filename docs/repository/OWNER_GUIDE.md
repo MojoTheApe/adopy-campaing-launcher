@@ -32,6 +32,9 @@ that same task so earlier requirements and decisions remain visible.
 | Done | The task's required completion evidence has been recorded (the underlying repository status is Merged). For application work this includes the required verified package delivery; repository instructions can finish after checked publication on main. |
 | Blocked | An additional flag: a specific obstacle prevents the next step. Read its reason and required action. |
 
+Historical tasks marked **Accepted before adoption** retain their earlier
+acceptance; they do not prove a verified installer.
+
 An old task or an unavailable computer does not prove that work stopped. The agent
 must confirm the stop before releasing its assignment or recording Paused. If that
 confirmation is unavailable, the next update should say so plainly rather than
@@ -53,8 +56,9 @@ active reviewer still means Review; it does not prove a reviewer is working now.
 - **Integration 0/1** means the single slot for combining approved changes is free.
 
 The counters stay visible. A separate "free" suffix is unnecessary because the
-ratio already shows capacity. **Elapsed** measures time since assignment, not
-hours of continuous work. Paused work has no active elapsed timer.
+ratio already shows capacity. **Elapsed** adds up recorded intervals in that
+workflow activity, including the current assignment. It does not measure
+continuous agent runtime. Paused work has no active elapsed timer.
 
 **Details** contains supporting operational records. A reservation is recorded
 ownership. "Admission not assessed" means eligibility for the next step has not
