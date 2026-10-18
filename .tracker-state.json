@@ -37216,6 +37216,43 @@
           "workflow": ".github/workflows/complete-delivery.yml",
           "authorization_sha256": "fc9e633ef96fb7c2315b75c0f07b48a2f9d34479bb3cbe4483a75f8b56211a31"
         }
+      },
+      "1011": {
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "sources": [
+          {
+            "pr": 1013,
+            "merge_sha": "7c42af2f609ba58f523b97ac4eb729807d257ea3",
+            "tree_sha": "b4de6ea8bdde101f38661920d99ed44b3c180bbd"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-10-18T20:42:24+00:00",
+        "scope": "4d23a6dfcab8a2b9da73519f4be3e0035fc3e9e9629fc9946a013c2a9f62516f",
+        "scope_provenance": {
+          "schema_version": 1,
+          "repository": "MojoTheApe/adopy-campaing-launcher",
+          "issue": 1011,
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "target": "ACL stable Windows installer and update channel",
+          "sources": [
+            {
+              "pr": 1013,
+              "merge_sha": "7c42af2f609ba58f523b97ac4eb729807d257ea3",
+              "tree_sha": "b4de6ea8bdde101f38661920d99ed44b3c180bbd"
+            }
+          ],
+          "accepted_by": [
+            {
+              "kind": "batch-member",
+              "batch_id": "c35582fc68a04f1c902f296b52e71788",
+              "pr": 1013,
+              "head_sha": "03de2756e9e2ee1fe3c0bcd1bced4041a050e5b1",
+              "base_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
+              "tree_sha": "b4de6ea8bdde101f38661920d99ed44b3c180bbd"
+            }
+          ]
+        }
       }
     },
     "promotions": {
@@ -42753,6 +42790,19 @@
         ],
         "source_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
         "recorded_at": "2026-10-18T17:34:18+00:00"
+      },
+      "1013": {
+        "tree_sha": "b4de6ea8bdde101f38661920d99ed44b3c180bbd",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "route": "batch",
+        "main_sha": "6af755e498414fc8b7e83d9cf3911d6816c7c5c2",
+        "batch_id": "c35582fc68a04f1c902f296b52e71788",
+        "pr": 1013,
+        "issues": [
+          1011
+        ],
+        "source_sha": "7c42af2f609ba58f523b97ac4eb729807d257ea3",
+        "recorded_at": "2026-10-18T20:42:27+00:00"
       }
     }
   },
