@@ -42711,22 +42711,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "1011": {
-        "actor": "Worker-W1381A",
-        "session": "implementation_audit_20261018_acl1381",
-        "coordinator": "Coordinator-C1818A",
-        "branch": "codex/acl-2011-master153",
-        "worktree": "/Users/dmitry.o/Documents/Codex/2026-10-17/zip/work/acl-2011-master153",
-        "id": "ddb7dcb91c5f4f1abe998440ee9a164d",
-        "issue": 1011,
-        "state": "handoff",
-        "started_at": "2026-10-18T19:32:57+00:00",
-        "from_status": "status:todo",
-        "pr": 1012,
-        "report": "ACL-2011 source handoff, 2026-10-18\nActual Worker: Worker-W1381A; session implementation_audit_20261018_acl1381.\nClaim: ddb7dcb91c5f4f1abe998440ee9a164d. Coordinator: Coordinator-C1818A.\nBranch codex/acl-2011-master153; isolated worktree /Users/dmitry.o/Documents/Codex/2026-10-17/zip/work/acl-2011-master153.\nPR https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1012.\nHead03de2756e9e2ee1fe3c0bcd1bced4041a050e5b1; base6af755e498414fc8b7e83d9cf3911d6816c7c5c2.\n\nImplemented the complete bounded source scope in 10 files: published Master1.5.3 pin6f7e941, actual canonical82-file pristine baseline, retained Trackerbe87599 and all operational choices, explicit pause/resume guidance, board status meanings, parent resource relation and dated-history clarification. No scripts, application/runtime/product skills, engine/helper bytes, workflow triggers/jobs, optional policy selection or foreign state changes.\nExisting old/new/local upgrade conflicted in exactly two files; canonical delta in both proved pin-only; retained local controls and verification instructions. Existing upstream render/merge/baseline/write_plan/inspect applied the complete genuine pristine result and validated it. Follow-up preview no changes/conflicts.\n\nChecks: 121 existing focused regressions PASS; secret scan PASS; startup smoke PASS; descriptor draft structure valid; existing adoption audit preserves active state and activation_verified=false (no new activation claim); 35 instruction files/158 local links PASS; git diff --check PASS.\nPrivate evidence: /tmp/acl2011-focused.log, /tmp/acl2011-secrets.log, /tmp/acl2011-smoke.log, /tmp/acl2011-links.json, /tmp/acl2011-descriptor.json, /tmp/acl2011-adoption.json, /tmp/acl2011-upgrade-preview.json, /tmp/acl2011-explicit-upgrade.json, /tmp/acl2011-idempotent-preview.json.\nMaster published https://github.com/MojoTheApe/master-repo/releases/tag/v1.5.3; independently reviewed PR62, maintained skill sync PR17/catalog1.0.16 verified (/tmp/mr61-skill-readback.json).\n\nSource CI remains pending at handoff. A genuine different Reviewer must acquire the source lane, review complete Issue scope and all changed files, inspect existing evidence without blind reruns, record review, and approve only after required source CI.\nSource approval is not publication or completion. Root Coordinator must retain ordinary frozen batch, combined independent review, admitted main, applicable CI and published stable Windows install/update/recovery acceptance plus exact delivery receipt. Issue acceptance5 and full completion6 remain pending. ACL main-child resources need no child edits. Inaccessible Windows work, historical tasks and unrelated broader adoption remain preserved."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -50414,9 +50399,25 @@
             "session": "implementation_audit_20261018_acl1381"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1381A",
-        "coordinator": "Coordinator-C1818A"
+        "coordinator": "Coordinator-C1818A",
+        "handoff": {
+          "actor": "Worker-W1381A",
+          "session": "implementation_audit_20261018_acl1381",
+          "coordinator": "Coordinator-C1818A",
+          "branch": "codex/acl-2011-master153",
+          "worktree": "/Users/dmitry.o/Documents/Codex/2026-10-17/zip/work/acl-2011-master153",
+          "id": "ddb7dcb91c5f4f1abe998440ee9a164d",
+          "issue": 1011,
+          "state": "handoff",
+          "started_at": "2026-10-18T19:32:57+00:00",
+          "from_status": "status:todo",
+          "pr": 1012,
+          "report": "ACL-2011 source handoff, 2026-10-18\nActual Worker: Worker-W1381A; session implementation_audit_20261018_acl1381.\nClaim: ddb7dcb91c5f4f1abe998440ee9a164d. Coordinator: Coordinator-C1818A.\nBranch codex/acl-2011-master153; isolated worktree /Users/dmitry.o/Documents/Codex/2026-10-17/zip/work/acl-2011-master153.\nPR https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1012.\nHead03de2756e9e2ee1fe3c0bcd1bced4041a050e5b1; base6af755e498414fc8b7e83d9cf3911d6816c7c5c2.\n\nImplemented the complete bounded source scope in 10 files: published Master1.5.3 pin6f7e941, actual canonical82-file pristine baseline, retained Trackerbe87599 and all operational choices, explicit pause/resume guidance, board status meanings, parent resource relation and dated-history clarification. No scripts, application/runtime/product skills, engine/helper bytes, workflow triggers/jobs, optional policy selection or foreign state changes.\nExisting old/new/local upgrade conflicted in exactly two files; canonical delta in both proved pin-only; retained local controls and verification instructions. Existing upstream render/merge/baseline/write_plan/inspect applied the complete genuine pristine result and validated it. Follow-up preview no changes/conflicts.\n\nChecks: 121 existing focused regressions PASS; secret scan PASS; startup smoke PASS; descriptor draft structure valid; existing adoption audit preserves active state and activation_verified=false (no new activation claim); 35 instruction files/158 local links PASS; git diff --check PASS.\nPrivate evidence: /tmp/acl2011-focused.log, /tmp/acl2011-secrets.log, /tmp/acl2011-smoke.log, /tmp/acl2011-links.json, /tmp/acl2011-descriptor.json, /tmp/acl2011-adoption.json, /tmp/acl2011-upgrade-preview.json, /tmp/acl2011-explicit-upgrade.json, /tmp/acl2011-idempotent-preview.json.\nMaster published https://github.com/MojoTheApe/master-repo/releases/tag/v1.5.3; independently reviewed PR62, maintained skill sync PR17/catalog1.0.16 verified (/tmp/mr61-skill-readback.json).\n\nSource CI remains pending at handoff. A genuine different Reviewer must acquire the source lane, review complete Issue scope and all changed files, inspect existing evidence without blind reruns, record review, and approve only after required source CI.\nSource approval is not publication or completion. Root Coordinator must retain ordinary frozen batch, combined independent review, admitted main, applicable CI and published stable Windows install/update/recovery acceptance plus exact delivery receipt. Issue acceptance5 and full completion6 remain pending. ACL main-child resources need no child edits. Inaccessible Windows work, historical tasks and unrelated broader adoption remain preserved."
+        },
+        "pr": 1012,
+        "queued_at": "2026-10-18T19:46:52+00:00"
       }
     },
     "actors": {
@@ -55230,7 +55231,8 @@
       871,
       287,
       377,
-      992
+      992,
+      1011
     ],
     "review": null,
     "history": [
@@ -87211,6 +87213,13 @@
         "at": "2026-10-18T19:34:51+00:00",
         "issue": 526,
         "reason": "2026-10-18 owner-authorized state reconciliation: superseded, not independently marked Done. PR #527 was closed in owner triage on 2026-10-14 because the tracker engine had already been re-pinned; evidence: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/527#issuecomment-6168957930 . ACL now pins successor be87599d1b5e625058bbddc33c35bda86687b5bf and current native commands read and write the retained state. Preserve the original criteria and branch as history; do not reopen PR #527 or downgrade to its old c89dd82 pin."
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-18T19:46:52+00:00",
+        "issue": 1011,
+        "pr": 1012,
+        "actor": "Worker-W1381A"
       }
     ],
     "policy": {
