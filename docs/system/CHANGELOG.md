@@ -1,5 +1,13 @@
 # System history
 
+## ACL-1381 — Consistent Builder ad-text wording — 2026-10-18
+
+Complete the older text-label request while preserving ACL-1769's later numbered
+Primary text 1/2 interface and separate Headline display. Search/help and empty/error
+messages now refer to ad texts consistently. Library keys, copy/copy2 fields,
+selection, draft restoration and submission behavior are unchanged.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/381).
+
 ## ACL-1971 — Explicit tooling fast/full plan — 2026-10-17
 
 Document the existing tooling check's exact commands, omissions and correction
