@@ -42413,9 +42413,11 @@
         "worktree": "/Users/dmitry.o/Documents/Codex/2026-10-17/zip/work/acl-owner-guide",
         "id": "8b63b7dbfea8468e87722c5f8962388a",
         "issue": 1007,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-18T16:22:32+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 1008,
+        "report": "Final author correction for ACL-2007 / PR1008 addresses both independent findings: Elapsed sums recorded activity intervals rather than measuring continuous runtime; historical Accepted before adoption tasks retain earlier acceptance without implying installer verification. No other scope change. Existing instruction/link check passes (35 files/158 links), diff checks pass. Previous hosted instruction tooling passed and heavy product/installer jobs were inapplicable; current head needs its normal hosted evidence. Resume actual retained Reviewer-OG18 lane7ec8b31b8dc54d77ab7662f660654f58 for final review. Worker-OG18/root-owner-guide-20261018 hands off actual claim8b63b7dbfea8468e87722c5f8962388a. Windows sessions and full product pilot remain open."
       }
     },
     "tasks": {
