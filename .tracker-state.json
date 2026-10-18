@@ -85569,6 +85569,140 @@
         "event": "batch-refreshed",
         "at": "2026-10-18T07:36:30+00:00",
         "batch_id": "6ef5a9fae3414b33a549240cc391024f"
+      },
+      {
+        "event": "batch-cancelled",
+        "at": "2026-10-18T07:40:25+00:00",
+        "batch": {
+          "id": "6ef5a9fae3414b33a549240cc391024f",
+          "actor": "Coordinator-WFO3C7A5M",
+          "session": "wfo_20261017_acl_three_source_coordinator",
+          "state": "cancelled",
+          "issues": [
+            994
+          ],
+          "members": [
+            {
+              "issue": 994,
+              "pr": 995,
+              "branch": "codex/acl-1994-initial-context-selection",
+              "head_sha": "1699cc934b25e33e4ed240afd95a97afa460ab82",
+              "base_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+              "main_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "db2558002b59bb84e82c0ca4a52fee81f46fa77aed619fcd7fc457e0c2f4e533",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-WFOC984R7",
+                "implementer": "Worker-B1994",
+                "head_sha": "1699cc934b25e33e4ed240afd95a97afa460ab82",
+                "base_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+                "tree_sha": "0c0b6dce57fe632b8698d002c7e9129aab923787",
+                "execution_lane": "9d0fc0d08ac94c5e8e6c04e59343fae8",
+                "review_session": "wfo_20261017_acl_combined_review",
+                "report": "Independent exact full-scope ACL1994 Source review approved; no open findings. Private durable report SHA256 b2f19641d42e20cfdf1be18ff0ca34b00c24f635aeb231ca9c7127fa062371f8. Actual current Source required checks and all selected Linux/Windows cells plus candidate installer/update/recovery passed. Approval-only Source: genuine separate combined/main review, authorized singleton package, published-channel acceptance/native receipt and separate owned activation/parent39 outcomes remain pending.",
+                "main_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  994
+                ],
+                "recorded_at": "2026-10-18T07:19:13+00:00",
+                "issue_scopes": {
+                  "994": "db2558002b59bb84e82c0ca4a52fee81f46fa77aed619fcd7fc457e0c2f4e533"
+                }
+              },
+              "lane": {
+                "id": "9d0fc0d08ac94c5e8e6c04e59343fae8",
+                "pr": 995,
+                "issues": [
+                  994
+                ],
+                "actor": "Reviewer-WFOC984R7",
+                "session": "wfo_20261017_acl_combined_review",
+                "coordinator": "Coordinator-WFO06ROOT",
+                "started_at": "2026-10-18T07:16:36+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-18T07:20:25+00:00"
+            }
+          ],
+          "main_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+          "branch": "codex/batch-6ef5a9fae3414b33a549240cc391024f",
+          "intake": "52d324e9a80c4c029916819029abc7e7",
+          "started_at": "2026-10-18T07:28:44+00:00",
+          "pr": null,
+          "entered_stage": false,
+          "history": [
+            {
+              "members": [
+                {
+                  "issue": 994,
+                  "pr": 995,
+                  "branch": "codex/acl-1994-initial-context-selection",
+                  "head_sha": "1699cc934b25e33e4ed240afd95a97afa460ab82",
+                  "base_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+                  "main_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+                  "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                  "scope": "db2558002b59bb84e82c0ca4a52fee81f46fa77aed619fcd7fc457e0c2f4e533",
+                  "review": {
+                    "kind": "independent-review",
+                    "verdict": "approved",
+                    "reviewer": "Reviewer-WFOC984R7",
+                    "implementer": "Worker-B1994",
+                    "head_sha": "1699cc934b25e33e4ed240afd95a97afa460ab82",
+                    "base_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+                    "tree_sha": "0c0b6dce57fe632b8698d002c7e9129aab923787",
+                    "execution_lane": "9d0fc0d08ac94c5e8e6c04e59343fae8",
+                    "review_session": "wfo_20261017_acl_combined_review",
+                    "report": "Independent exact full-scope ACL1994 Source review approved; no open findings. Private durable report SHA256 b2f19641d42e20cfdf1be18ff0ca34b00c24f635aeb231ca9c7127fa062371f8. Actual current Source required checks and all selected Linux/Windows cells plus candidate installer/update/recovery passed. Approval-only Source: genuine separate combined/main review, authorized singleton package, published-channel acceptance/native receipt and separate owned activation/parent39 outcomes remain pending.",
+                    "main_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+                    "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                    "issues": [
+                      994
+                    ],
+                    "recorded_at": "2026-10-18T07:19:13+00:00",
+                    "issue_scopes": {
+                      "994": "db2558002b59bb84e82c0ca4a52fee81f46fa77aed619fcd7fc457e0c2f4e533"
+                    }
+                  },
+                  "lane": {
+                    "id": "9d0fc0d08ac94c5e8e6c04e59343fae8",
+                    "pr": 995,
+                    "issues": [
+                      994
+                    ],
+                    "actor": "Reviewer-WFOC984R7",
+                    "session": "wfo_20261017_acl_combined_review",
+                    "coordinator": "Coordinator-WFO06ROOT",
+                    "started_at": "2026-10-18T07:16:36+00:00",
+                    "state": "reviewing"
+                  },
+                  "approved_at": "2026-10-18T07:20:25+00:00"
+                }
+              ],
+              "main_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+              "pr": null,
+              "at": "2026-10-18T07:36:30+00:00"
+            }
+          ],
+          "delivery_request": {
+            "schema_version": 1,
+            "state": "requested",
+            "batch_id": "6ef5a9fae3414b33a549240cc391024f",
+            "issues": [
+              994
+            ],
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "target": "ACL stable Windows installer and update channel",
+            "workflow": ".github/workflows/complete-delivery.yml",
+            "job": "Verify published Windows package",
+            "actor": "Coordinator-WFO3C7A5M",
+            "session": "wfo_20261017_acl_three_source_coordinator",
+            "requested_at": "2026-10-18T07:28:44+00:00"
+          },
+          "report": "# ACL-1994: retained singleton; maintained assembly blocked\n\nThe genuine Coordinator completed one explicit intake, one `begin --deliver`, and one same-batch manifest refresh. Exact Source995 approval,1699/c71/tree0c0, full Issue scope and configured package request remain unchanged. Full native comparisons preserve Worker990, all six queued Sources, prior approvals, archives and foreign history.\n\nNo successful combined candidate, push, PR, native combined run, main or package effect exists. The original assembly failed `stash failed`. After bounded local diagnosis, the documented default `git update-index --refresh` repaired the original stat cache without changing recorded content/modes or refs. A supported rebuild first stopped at its retained-manifest prerequisite before creating a worktree; normal refresh then retained that exact manifest. The next actual default rebuild created a detached c71 worktree and failed its first merge with `stash failed`; its abort also failed because MERGE_HEAD was absent. The fresh failure cause is unestablished. No actual content conflict is proved.\n\nThe completed copied-index A/B preceded the Root STOP message; its raw output is retained and is neither assembly success nor cause attribution. No trustctime override was used for apply/rebuild. All further retries, probes and workaround attempts are stopped. Original and rebuilt worktrees, index evidence, the original reserved branch and the maintained local evidence ref remain intact.\n\nA reviewable maintained-tool recovery change may need a supported default stat-refresh/resume boundary and primary-error preservation when MERGE_HEAD is absent. This is a proposal only, not a proven repair. Do not edit combined content or silently expand this exact five-file selection Source. A real tool Source change requires its proper author, scope, independent review and current-policy admission.\n\nIndependent combined review, full seven-cell/installer verification,990 genuine own release before selected main, actual main and published package/native receipt remain unfinished. No maintenance, adoption, parent39 or global acceptance is claimed."
+        }
       }
     ],
     "policy": {
@@ -91115,137 +91249,139 @@
         "finished_at": "2026-10-17T21:20:21+00:00",
         "closing_sources": false,
         "sources_closed": true
-      }
-    },
-    "integration": {
-      "id": "6ef5a9fae3414b33a549240cc391024f",
-      "actor": "Coordinator-WFO3C7A5M",
-      "session": "wfo_20261017_acl_three_source_coordinator",
-      "state": "assembling",
-      "issues": [
-        994
-      ],
-      "members": [
-        {
-          "issue": 994,
-          "pr": 995,
-          "branch": "codex/acl-1994-initial-context-selection",
-          "head_sha": "1699cc934b25e33e4ed240afd95a97afa460ab82",
-          "base_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
-          "main_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "db2558002b59bb84e82c0ca4a52fee81f46fa77aed619fcd7fc457e0c2f4e533",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-WFOC984R7",
-            "implementer": "Worker-B1994",
-            "head_sha": "1699cc934b25e33e4ed240afd95a97afa460ab82",
-            "base_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
-            "tree_sha": "0c0b6dce57fe632b8698d002c7e9129aab923787",
-            "execution_lane": "9d0fc0d08ac94c5e8e6c04e59343fae8",
-            "review_session": "wfo_20261017_acl_combined_review",
-            "report": "Independent exact full-scope ACL1994 Source review approved; no open findings. Private durable report SHA256 b2f19641d42e20cfdf1be18ff0ca34b00c24f635aeb231ca9c7127fa062371f8. Actual current Source required checks and all selected Linux/Windows cells plus candidate installer/update/recovery passed. Approval-only Source: genuine separate combined/main review, authorized singleton package, published-channel acceptance/native receipt and separate owned activation/parent39 outcomes remain pending.",
-            "main_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              994
-            ],
-            "recorded_at": "2026-10-18T07:19:13+00:00",
-            "issue_scopes": {
-              "994": "db2558002b59bb84e82c0ca4a52fee81f46fa77aed619fcd7fc457e0c2f4e533"
-            }
-          },
-          "lane": {
-            "id": "9d0fc0d08ac94c5e8e6c04e59343fae8",
-            "pr": 995,
-            "issues": [
-              994
-            ],
-            "actor": "Reviewer-WFOC984R7",
-            "session": "wfo_20261017_acl_combined_review",
-            "coordinator": "Coordinator-WFO06ROOT",
-            "started_at": "2026-10-18T07:16:36+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-18T07:20:25+00:00"
-        }
-      ],
-      "main_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
-      "branch": "codex/batch-6ef5a9fae3414b33a549240cc391024f",
-      "intake": "52d324e9a80c4c029916819029abc7e7",
-      "started_at": "2026-10-18T07:28:44+00:00",
-      "pr": null,
-      "entered_stage": false,
-      "history": [
-        {
-          "members": [
-            {
-              "issue": 994,
-              "pr": 995,
-              "branch": "codex/acl-1994-initial-context-selection",
-              "head_sha": "1699cc934b25e33e4ed240afd95a97afa460ab82",
-              "base_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
-              "main_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
-              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-              "scope": "db2558002b59bb84e82c0ca4a52fee81f46fa77aed619fcd7fc457e0c2f4e533",
-              "review": {
-                "kind": "independent-review",
-                "verdict": "approved",
-                "reviewer": "Reviewer-WFOC984R7",
-                "implementer": "Worker-B1994",
-                "head_sha": "1699cc934b25e33e4ed240afd95a97afa460ab82",
-                "base_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
-                "tree_sha": "0c0b6dce57fe632b8698d002c7e9129aab923787",
-                "execution_lane": "9d0fc0d08ac94c5e8e6c04e59343fae8",
-                "review_session": "wfo_20261017_acl_combined_review",
-                "report": "Independent exact full-scope ACL1994 Source review approved; no open findings. Private durable report SHA256 b2f19641d42e20cfdf1be18ff0ca34b00c24f635aeb231ca9c7127fa062371f8. Actual current Source required checks and all selected Linux/Windows cells plus candidate installer/update/recovery passed. Approval-only Source: genuine separate combined/main review, authorized singleton package, published-channel acceptance/native receipt and separate owned activation/parent39 outcomes remain pending.",
-                "main_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
-                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-                "issues": [
-                  994
-                ],
-                "recorded_at": "2026-10-18T07:19:13+00:00",
-                "issue_scopes": {
-                  "994": "db2558002b59bb84e82c0ca4a52fee81f46fa77aed619fcd7fc457e0c2f4e533"
-                }
-              },
-              "lane": {
-                "id": "9d0fc0d08ac94c5e8e6c04e59343fae8",
-                "pr": 995,
-                "issues": [
-                  994
-                ],
-                "actor": "Reviewer-WFOC984R7",
-                "session": "wfo_20261017_acl_combined_review",
-                "coordinator": "Coordinator-WFO06ROOT",
-                "started_at": "2026-10-18T07:16:36+00:00",
-                "state": "reviewing"
-              },
-              "approved_at": "2026-10-18T07:20:25+00:00"
-            }
-          ],
-          "main_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
-          "pr": null,
-          "at": "2026-10-18T07:36:30+00:00"
-        }
-      ],
-      "delivery_request": {
-        "schema_version": 1,
-        "state": "requested",
-        "batch_id": "6ef5a9fae3414b33a549240cc391024f",
+      },
+      "6ef5a9fae3414b33a549240cc391024f": {
+        "id": "6ef5a9fae3414b33a549240cc391024f",
+        "actor": "Coordinator-WFO3C7A5M",
+        "session": "wfo_20261017_acl_three_source_coordinator",
+        "state": "cancelled",
         "issues": [
           994
         ],
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "target": "ACL stable Windows installer and update channel",
-        "workflow": ".github/workflows/complete-delivery.yml",
-        "job": "Verify published Windows package",
-        "actor": "Coordinator-WFO3C7A5M",
-        "session": "wfo_20261017_acl_three_source_coordinator",
-        "requested_at": "2026-10-18T07:28:44+00:00"
+        "members": [
+          {
+            "issue": 994,
+            "pr": 995,
+            "branch": "codex/acl-1994-initial-context-selection",
+            "head_sha": "1699cc934b25e33e4ed240afd95a97afa460ab82",
+            "base_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+            "main_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "db2558002b59bb84e82c0ca4a52fee81f46fa77aed619fcd7fc457e0c2f4e533",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-WFOC984R7",
+              "implementer": "Worker-B1994",
+              "head_sha": "1699cc934b25e33e4ed240afd95a97afa460ab82",
+              "base_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+              "tree_sha": "0c0b6dce57fe632b8698d002c7e9129aab923787",
+              "execution_lane": "9d0fc0d08ac94c5e8e6c04e59343fae8",
+              "review_session": "wfo_20261017_acl_combined_review",
+              "report": "Independent exact full-scope ACL1994 Source review approved; no open findings. Private durable report SHA256 b2f19641d42e20cfdf1be18ff0ca34b00c24f635aeb231ca9c7127fa062371f8. Actual current Source required checks and all selected Linux/Windows cells plus candidate installer/update/recovery passed. Approval-only Source: genuine separate combined/main review, authorized singleton package, published-channel acceptance/native receipt and separate owned activation/parent39 outcomes remain pending.",
+              "main_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                994
+              ],
+              "recorded_at": "2026-10-18T07:19:13+00:00",
+              "issue_scopes": {
+                "994": "db2558002b59bb84e82c0ca4a52fee81f46fa77aed619fcd7fc457e0c2f4e533"
+              }
+            },
+            "lane": {
+              "id": "9d0fc0d08ac94c5e8e6c04e59343fae8",
+              "pr": 995,
+              "issues": [
+                994
+              ],
+              "actor": "Reviewer-WFOC984R7",
+              "session": "wfo_20261017_acl_combined_review",
+              "coordinator": "Coordinator-WFO06ROOT",
+              "started_at": "2026-10-18T07:16:36+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-18T07:20:25+00:00"
+          }
+        ],
+        "main_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+        "branch": "codex/batch-6ef5a9fae3414b33a549240cc391024f",
+        "intake": "52d324e9a80c4c029916819029abc7e7",
+        "started_at": "2026-10-18T07:28:44+00:00",
+        "pr": null,
+        "entered_stage": false,
+        "history": [
+          {
+            "members": [
+              {
+                "issue": 994,
+                "pr": 995,
+                "branch": "codex/acl-1994-initial-context-selection",
+                "head_sha": "1699cc934b25e33e4ed240afd95a97afa460ab82",
+                "base_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+                "main_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "scope": "db2558002b59bb84e82c0ca4a52fee81f46fa77aed619fcd7fc457e0c2f4e533",
+                "review": {
+                  "kind": "independent-review",
+                  "verdict": "approved",
+                  "reviewer": "Reviewer-WFOC984R7",
+                  "implementer": "Worker-B1994",
+                  "head_sha": "1699cc934b25e33e4ed240afd95a97afa460ab82",
+                  "base_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+                  "tree_sha": "0c0b6dce57fe632b8698d002c7e9129aab923787",
+                  "execution_lane": "9d0fc0d08ac94c5e8e6c04e59343fae8",
+                  "review_session": "wfo_20261017_acl_combined_review",
+                  "report": "Independent exact full-scope ACL1994 Source review approved; no open findings. Private durable report SHA256 b2f19641d42e20cfdf1be18ff0ca34b00c24f635aeb231ca9c7127fa062371f8. Actual current Source required checks and all selected Linux/Windows cells plus candidate installer/update/recovery passed. Approval-only Source: genuine separate combined/main review, authorized singleton package, published-channel acceptance/native receipt and separate owned activation/parent39 outcomes remain pending.",
+                  "main_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+                  "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                  "issues": [
+                    994
+                  ],
+                  "recorded_at": "2026-10-18T07:19:13+00:00",
+                  "issue_scopes": {
+                    "994": "db2558002b59bb84e82c0ca4a52fee81f46fa77aed619fcd7fc457e0c2f4e533"
+                  }
+                },
+                "lane": {
+                  "id": "9d0fc0d08ac94c5e8e6c04e59343fae8",
+                  "pr": 995,
+                  "issues": [
+                    994
+                  ],
+                  "actor": "Reviewer-WFOC984R7",
+                  "session": "wfo_20261017_acl_combined_review",
+                  "coordinator": "Coordinator-WFO06ROOT",
+                  "started_at": "2026-10-18T07:16:36+00:00",
+                  "state": "reviewing"
+                },
+                "approved_at": "2026-10-18T07:20:25+00:00"
+              }
+            ],
+            "main_sha": "c71a8ece67138f6596748774001f3bc3ab2f04bf",
+            "pr": null,
+            "at": "2026-10-18T07:36:30+00:00"
+          }
+        ],
+        "delivery_request": {
+          "schema_version": 1,
+          "state": "requested",
+          "batch_id": "6ef5a9fae3414b33a549240cc391024f",
+          "issues": [
+            994
+          ],
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "target": "ACL stable Windows installer and update channel",
+          "workflow": ".github/workflows/complete-delivery.yml",
+          "job": "Verify published Windows package",
+          "actor": "Coordinator-WFO3C7A5M",
+          "session": "wfo_20261017_acl_three_source_coordinator",
+          "requested_at": "2026-10-18T07:28:44+00:00"
+        },
+        "report": "# ACL-1994: retained singleton; maintained assembly blocked\n\nThe genuine Coordinator completed one explicit intake, one `begin --deliver`, and one same-batch manifest refresh. Exact Source995 approval,1699/c71/tree0c0, full Issue scope and configured package request remain unchanged. Full native comparisons preserve Worker990, all six queued Sources, prior approvals, archives and foreign history.\n\nNo successful combined candidate, push, PR, native combined run, main or package effect exists. The original assembly failed `stash failed`. After bounded local diagnosis, the documented default `git update-index --refresh` repaired the original stat cache without changing recorded content/modes or refs. A supported rebuild first stopped at its retained-manifest prerequisite before creating a worktree; normal refresh then retained that exact manifest. The next actual default rebuild created a detached c71 worktree and failed its first merge with `stash failed`; its abort also failed because MERGE_HEAD was absent. The fresh failure cause is unestablished. No actual content conflict is proved.\n\nThe completed copied-index A/B preceded the Root STOP message; its raw output is retained and is neither assembly success nor cause attribution. No trustctime override was used for apply/rebuild. All further retries, probes and workaround attempts are stopped. Original and rebuilt worktrees, index evidence, the original reserved branch and the maintained local evidence ref remain intact.\n\nA reviewable maintained-tool recovery change may need a supported default stat-refresh/resume boundary and primary-error preservation when MERGE_HEAD is absent. This is a proposal only, not a proven repair. Do not edit combined content or silently expand this exact five-file selection Source. A real tool Source change requires its proper author, scope, independent review and current-policy admission.\n\nIndependent combined review, full seven-cell/installer verification,990 genuine own release before selected main, actual main and published package/native receipt remain unfinished. No maintenance, adoption, parent39 or global acceptance is claimed."
       }
     },
+    "integration": null,
     "intake": {
       "id": "52d324e9a80c4c029916819029abc7e7",
       "actor": "Coordinator-WFO3C7A5M",
