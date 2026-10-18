@@ -1,22 +1,26 @@
 # Portable export contract 1
 
 TT-143 makes Tracker the technical owner of the portable CI frontend, helper
-bytes and structural CI policy. Source version 3.4.0 is a candidate until its
-immutable release is published. Export, installation and publication adopt no
+bytes and structural CI policy. Version3.4.0 is the published9/18-helper baseline;
+the version3.5.0 candidate adds generic accounting and a fixed canonical retry
+validator (11/22 helpers) plus portable wire6 validation and engine-owned bounded
+dispatch. Export, installation and publication adopt no
 project policy, capacity, state or product delivery.
 
 ## Exact output and runtimes
 
 `export-template --helper-layout raw|separated` defaults to the existing raw
-standalone layout. Raw emits nine implementations in `scripts/`; separated emits
-nine implementations in `.workflow/tools/` and nine compatible scripts forwards.
+standalone layout. Raw emits eleven implementations in `scripts/`; separated emits
+eleven implementations in `.workflow/tools/` and eleven compatible scripts forwards.
 Master requests separated output and consumes these helper bytes unchanged.
 Only the author client and PR checker have their known root-depth expression
 adapted before emission. Both old and current CI command paths keep working.
 
 `tracker/export-contract.json` has format version 1, the exact official engine
 pin, supported policy/producer versions, Python floors and SHA-256 maps for both
-actual layouts. Its bytes do not vary by selected project policy or output
+actual layouts. The fixed `retry_validator` source/hash and `ci_retry_policy`
+capability add structural retry support while the original `validator` stays
+unchanged. Its bytes do not vary by selected project policy or output
 layout. It includes no timestamps, selected config, receipt or self-hash. Source
 exports verify the actual clean official checkout/revision and canonical helper
 Git blob bytes; a declared SHA alone does not establish provenance. Low-level
@@ -28,6 +32,13 @@ own repository read token, without cloning the private engine or a warm cache.
 Narrow LF attributes preserve actual helper/manifest bytes through Windows Git
 checkout. Existing attributes conflicts are normal reviewed upgrade conflicts;
 never overwrite project-owned files to force an upgrade.
+
+The candidate changes canonical ci_evidence.py bytes while preserving emit output.
+Existing selected CI profiles need a reviewed project source PR refreshing the
+actual producer copy and its producer_files Git blob hashes, plus workflow/policy
+references as applicable. Preserving a policy through ordinary upgrade proves
+selection only, not current native producer readiness. Never relabel old proof or
+keep an old producer hash as though it identifies the new canonical module.
 
 ## CI frontend and preserved proof
 
@@ -54,7 +65,8 @@ Read [native proof](CI_REUSE.md), [delivery](DELIVERY_POLICY.md) and
 
 ## Trusted validation and release order
 
-Master's compatible source keeps the exact canonical `ci_evidence.py` snapshot
+Master's compatible source keeps the exact canonical `ci_evidence.py` and
+`ci_retry.py` snapshots
 and generated expected contract record under fixed `scripts/vendor/` paths. Its
 structural validator delegates only to that trusted snapshot. Consumer helpers,
 plugins, environment overrides or latest upstream are never imported by Master
@@ -72,8 +84,8 @@ its original meaning. Completion/task-context fences and unknown old receipts
 remain strict. No current Issue body is reconstructed as old reviewed proof.
 
 A maintained source gate exercises actual raw/separated exports and engine-free
-Python 3.9 clients. An immutable public Master peer is only a test input; candidate
-engine overrides are explicitly provisional. Final compatible-pair acceptance
+Python 3.9 clients. The immutable previous public Master is a negative test input:
+its unchanged trusted record must refuse the changed manifest. Final compatible-pair acceptance
 uses clean actual Master/Tracker pins with no override, real export/init/upgrade,
 local-control preservation and adversarial contract drift. Tracker support is
 reviewed/released first, then the exact compatible Master and canonical skill
@@ -83,22 +95,23 @@ service migration and consumer activation are separate facts.
 ## Maintained checks and saved fixtures
 
 `Portable source conformance` runs for relevant helper/export/test changes. It
-uses the actual engine checkout plus immutable public Master 1.1.1
-`c396e64222cb334780096a2f9e283a78c92b3829` as a **provisional test peer**. The
-candidate engine override is recorded, never labelled final published-pair proof.
+uses the actual engine checkout plus immutable published Master1.2.0
+`864ca7a5814e703dd6e61207362d24cbc26dc9ad` as a **negative trusted peer**.
+There is no override or positive pair claim in this source gate.
 The source command is:
 
 ```sh
 python tests/verify_portable_contract.py --master /clean/public/master-peer \
-  --old-master /clean/public/master-peer --old-tracker /clean/tracker-3.3.1 \
   --python39 /actual/python3.9 --output /evidence/portable-source.json
 ```
 
-It verifies both layouts, six actual selected Master initializations, genuine
-Task03 old-base upgrades, unchanged local controls/exceptions, attributes conflicts
-without writes and engine-free Python 3.9 plan/gate clients. Structural policy
-boundary comparisons detect a changed authoritative rule against the peer. This
-source-only test peer creates no circular installed/runtime Master dependency.
+It verifies both layouts for six selected source configurations, engine-free
+Python3.9 native plan/gate and actual accounting CLI paths, and positive/negative
+portable retry-state fences. The old peer's own unchanged anchored validator
+refuses the new manifest. Positive actual Master init/upgrades and adversarial
+canonical rule drift stay in the single final paired harness; no duplicate
+source-side three-way upgrade implementation remains. This creates no circular
+installed/runtime Master pin or self-SHA-dependent positive test input.
 
 `Final immutable portable pair` is a separate maintained input workflow for full
 reviewed public Master and actually published Tracker commit IDs. Its read-only
@@ -106,9 +119,10 @@ release guard resolves the stable release's actual tag commit (including annotat
 tags), rather than trusting `target_commitish`. It refuses an unpublished/moved
 engine or a mismatched Master pin. It then invokes Master's single maintained
 `tests/verify_completion_pair.py` with `--portable-contract --bounded
---require-pinned --selected-instructions`, real Python 3.9 and the genuine older
-`0249474c265c22d386f0a1aaa915b0a345321bbd` Master /
-`2c01481a86ee8e8af31736378574a91505c7f94f` Tracker source pair. No candidate
+--require-pinned --selected-instructions --retry-contract --direct-contract
+--selection-delivery-contract`, real Python3.9 and
+the genuine previous released `37090f0cf11eca5203a40932e2192f7eb47e2566` Master /
+`0b317d99997a4d3ef35b637bd6d19244630539f9` Tracker source pair. No candidate
 override can supply final acceptance. Native runs retain their JSON artifact and
 run/attempt identity. Required GitHub protection versus maintained admission is
 still the project's actual configuration; adding a workflow does not claim that
@@ -123,3 +137,16 @@ file before/after. The clock is necessary so saved native test data does not exp
 with tomorrow's wall time. Engine imports exist only inside the author-side data
 generator; public consumers use the saved JSON and stdlib runner, never that
 generator or private source. No fixture response is an actual runtime receipt.
+
+`tests/fixtures/portable_selection.json` is the one canonical synthetic selection
+package dataset. Its four real author-generated v2/v3 cases cover context,
+completion after context4, retry after completion5 and completion retaining
+retry6. Each records pending-package, recorded-package and owned-adopted phases.
+`portable_fixture.exercise_selection(root, python, layout, row)` executes the
+actual exported receipt CLI parser/resolver/recorder with transport-only saved
+same-repository GET responses and one exact expected receipt PUT. It has no gh
+binary/token or engine package and changes no consumer files. Missing freeze,
+changed scope and malformed fences refuse before a write. No native/business
+publication effect is performed by this fixture. Source tests additionally retain
+the exact complete3.7.0 portable writer with immutable blob/hash provenance, so
+old-writer refusal is reproducible in shallow checkouts without hidden history.
