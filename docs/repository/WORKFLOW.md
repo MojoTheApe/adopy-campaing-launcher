@@ -1,5 +1,7 @@
 # ACL repository workflow
 
+For a plain-language owner overview, read [the owner guide](OWNER_GUIDE.md).
+
 Read the exact [selected shared guide](TRACKER.md), the [ACL support/cutover plan](EARLY_ADOPTION.md) and the guarded operator mapping in [AGENTS.md](../../AGENTS.md).
 Shared contract references retain canonical bodies; `_ACL` documents preserve the original local cutover history and stronger controls.
 

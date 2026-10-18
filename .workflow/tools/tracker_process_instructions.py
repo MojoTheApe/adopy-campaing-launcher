@@ -203,6 +203,9 @@ def idle(shared, config):
 
 
 def admit(request, config, pr, numbers, shared):
+    if config.get('execution_policy',{}).get('schema_version')==4:
+        direct=rules.direct_module()
+        return direct.admit(request,config,pr,direct.linkage(pr.get('body'),config),shared)
     proof = classify(request, config, pr)
     if not proof or len(numbers) != 1:
         raise ValueError('Process admission requires exactly one genuine instruction-only task')

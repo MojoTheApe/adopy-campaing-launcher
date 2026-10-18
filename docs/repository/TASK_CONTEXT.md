@@ -100,8 +100,11 @@ It uses outer protocol 4, retaining execution state 2. Old writers reject it.
 Maintenance can wrap protocol 4 and resume it without dropping the fence.
 
 For an existing project, first integrate matching reviewed descriptor/config and
-publish compatible actual writers/projection. Under genuine owned maintenance,
-drain active owners/intake/stage, then preview/apply `task-context adopt` using the
+publish compatible actual writers/projection. A selected package source must
+complete its authorized target delivery before maintenance; use the bounded
+[one-policy package continuation](DELIVERY_POLICY.md#one-policy-selection-package-before-activation)
+only where its exact prior-baseline/main contract qualifies. Under genuine owned maintenance,
+drain active owners/intake/stage and pending delivery, then preview/apply `task-context adopt` using the
 actual Maintainer actor/session/claim/report. It verifies official current-main
 config and preserves queues, old approvals, delivery receipts and history without
 rehashing them. Old full-body evidence stays conservative; later newly reviewed
