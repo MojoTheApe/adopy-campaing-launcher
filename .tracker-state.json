@@ -87314,6 +87314,25 @@
             "approved_at": "2026-10-18T20:07:38+00:00"
           }
         }
+      },
+      {
+        "event": "intake-frozen",
+        "at": "2026-10-18T20:09:23+00:00",
+        "intake": {
+          "id": "dc48f78a44364fa1a772b56723208c73",
+          "actor": "Coordinator-C1818A",
+          "session": "root-20261018-acl1381-delivery",
+          "state": "running",
+          "issues": [
+            1011
+          ],
+          "remaining": [
+            1011
+          ],
+          "batches": [],
+          "started_at": "2026-10-18T20:09:23+00:00",
+          "ineligible": {}
+        }
       }
     ],
     "policy": {
@@ -93318,18 +93337,18 @@
     },
     "integration": null,
     "intake": {
-      "id": "254b7b09971d4f50adc2a4b8d7832266",
+      "id": "dc48f78a44364fa1a772b56723208c73",
       "actor": "Coordinator-C1818A",
       "session": "root-20261018-acl1381-delivery",
-      "state": "finished",
+      "state": "running",
       "issues": [
-        381
+        1011
       ],
-      "remaining": [],
-      "batches": [
-        "4e142822fa654994b54c97acece5c85e"
+      "remaining": [
+        1011
       ],
-      "started_at": "2026-10-18T17:03:04+00:00",
+      "batches": [],
+      "started_at": "2026-10-18T20:09:23+00:00",
       "ineligible": {}
     },
     "source_reviews": {},
