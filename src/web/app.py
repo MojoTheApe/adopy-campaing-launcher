@@ -81,7 +81,6 @@ from src.campaign_bridge.open_rec_mapper import parse_creative_from_ad_title
 from config.paths import (
     get_ad_account_map_path,
     get_creatives_root,
-    get_draft_status_path,
     get_upload_fb_excel_path,
     update_machine_env,
     write_csv_atomic,
@@ -228,16 +227,10 @@ def _write_link_to_excel(account_name: str, link: str) -> str | None:
 
 
 def _load_draft_status() -> dict:
-    """Load the machine's last explicit ready/blocked campaign verdict."""
-    path = Path(get_draft_status_path())
-    if not path.is_file():
-        return {}
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
+    """Load current build verdicts, including interrupted and unverified runs."""
+    from src.web.publish_jobs import load_draft_status
+
+    return load_draft_status()
 
 
 def _get_upload_ref_cached() -> dict:

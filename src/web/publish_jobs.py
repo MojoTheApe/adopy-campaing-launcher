@@ -12,6 +12,8 @@ form fields and violated the product's manual-final-publish boundary.
 from __future__ import annotations
 
 import contextlib
+import hashlib
+import json
 import logging
 import os
 import threading
@@ -30,6 +32,7 @@ from src.fb_ads_rpa.operations import publish_lease
 from src.fb_ads_rpa.profile_lease import ProfileLeaseError
 from src.web.keep_awake import keep_display_awake
 from src.web.profile_slots import ProfileSlots
+from src.web import draft_status
 
 # ── In-memory job store ────────────────────────────────────────────────
 _jobs: dict[str, dict[str, Any]] = {}
@@ -157,6 +160,10 @@ def create_job(
                 raise DuplicateJobError(account_label, str(other.get("job_id") or ""))
         _jobs[job_id] = {
             "job_id": job_id,
+            "plan_revision": hashlib.sha256(json.dumps(
+                {"country": country, "slots": slots, "campaign_names": campaign_names},
+                sort_keys=True, ensure_ascii=False, default=str,
+            ).encode("utf-8")).hexdigest(),
             "account_label": account_label,
             "country": country,
             "via_multilogin": via_multilogin,
@@ -180,6 +187,14 @@ def create_job(
             "done_count": 0,
             "cancel_requested": False,
         }
+        snapshot = _status_snapshot_locked(_jobs[job_id])
+    # Reserve the account before I/O; a duplicate cannot invalidate it. Admit
+    # only after durable invalidation, without holding up cancellation of other jobs.
+    error = _persist_job(snapshot, state="running", begin=True)
+    if error:
+        with _jobs_lock:
+            _jobs.pop(job_id)
+        raise RuntimeError(error)
     return job_id
 
 
@@ -301,11 +316,13 @@ def _abandon_job(job_id: str) -> bool:
         job.pop("queue", None)
         account_label = job.get("account_label", "")
         _active_publishers.pop(job_id, None)
+        snapshot = _status_snapshot_locked(job)
     if _rt is not None:
         _rt.abandon_job(job_id)
     if _claim_slot(job_id):
         _slots.release(job_id)
     _slots.wake()
+    _persist_job(snapshot, state="stopped")
     # Замок профиля НЕ трогаем (решение по ревью PR #622, вариант (b)): зависший
     # поток, возможно, ещё держит браузер, и два робота на одном браузере
     # недопустимы. Задания того же профиля ждут, пока поток не выйдет сам
@@ -805,6 +822,8 @@ def _append_result(job_id: str, res: dict[str, Any]) -> None:
             return   # ACL-1614: брошенный поток в закрытое задание не пишет
         _jobs[job_id]["results"].append(res)
         _jobs[job_id]["done_count"] += 1
+        snapshot = _status_snapshot_locked(_jobs[job_id])
+    _persist_job(snapshot, state="running")
 
 
 def _mlx_text(job_id: str, msg: str) -> str:
@@ -828,11 +847,8 @@ def _fatal(job_id: str, msg: str) -> None:
         _jobs[job_id]["errors"].append(msg)
         _jobs[job_id]["status"] = "done"
         _jobs[job_id]["finished_at"] = _now_iso()
-        account_label = _jobs[job_id].get("account_label", "")
-        results = list(_jobs[job_id].get("results", []))
-        errors = list(_jobs[job_id].get("errors", []))
-        expected_total = int(_jobs[job_id].get("total") or 0)
-    _write_draft_status(account_label, results, errors, expected_total=expected_total)
+        snapshot = _status_snapshot_locked(_jobs[job_id])
+    _persist_job(snapshot)
 
 
 def _result_is_publishable(result: dict[str, Any]) -> bool:
@@ -892,38 +908,51 @@ def _write_draft_status(
     errors: list[str] | None = None,
     *,
     expected_total: int | None = None,
-) -> None:
-    """Persist a truthful verdict in durable machine-local state."""
-    import json as _json
-    from pathlib import Path as _Path
-
+    job_id: str = "",
+    plan_revision: str = "",
+    status_revision: int = 0,
+    state: str = "",
+    begin: bool = False,
+) -> str | None:
+    """Persist a verdict; return a visible error instead of silently losing it."""
     if not account_label:
         return
-    path = _Path(get_draft_status_path())
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        existing: dict = {}
-        if path.is_file():
-            try:
-                with open(path, encoding="utf-8") as f:
-                    existing = _json.load(f)
-            except Exception:
-                existing = {}
-        existing[account_label] = _summarize_results(
-            results,
-            errors,
-            expected_total=expected_total,
-        )
-        temp_path = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-        with open(temp_path, "w", encoding="utf-8") as f:
-            _json.dump(existing, f, ensure_ascii=False, indent=2)
-            f.flush()
-            import os as _os
+    verdict = _summarize_results(results, errors, expected_total=expected_total)
+    if job_id:
+        verdict.update(job_id=job_id, plan_revision=plan_revision, status_revision=status_revision)
+    if state:
+        verdict["state"] = state
+    return draft_status.save(get_draft_status_path(), account_label, verdict, begin=begin)
 
-            _os.fsync(f.fileno())
-        temp_path.replace(path)
-    except Exception:
-        pass  # Non-fatal
+
+def _status_snapshot_locked(job: dict) -> dict:
+    """Number updates under _jobs_lock; storage I/O happens outside that lock."""
+    job["status_revision"] = job.get("status_revision", 0) + 1
+    return {**job, "results": list(job["results"]), "errors": list(job["errors"])}
+
+
+def _persist_job(job: dict, *, state: str = "", begin: bool = False) -> str | None:
+    """The store fences reordered snapshots, including late abandoned workers."""
+    error = _write_draft_status(
+        job.get("account_label", ""), list(job.get("results", [])), list(job.get("errors", [])),
+        expected_total=int(job.get("total") or 0), job_id=job["job_id"],
+        plan_revision=job.get("plan_revision", ""), status_revision=job["status_revision"],
+        state=state, begin=begin,
+    )
+    if error:
+        with _jobs_lock:
+            current = _jobs.get(job["job_id"])
+            if (current and current.get("status_revision") == job["status_revision"]
+                    and error not in current["errors"]):
+                current["errors"].append(error)
+    return error
+
+
+def load_draft_status() -> dict:
+    """Read for the report; unfinished jobs absent from this process are unknown."""
+    with _jobs_lock:
+        active = {jid for jid, job in _jobs.items() if job.get("status") in _LIVE_STATUSES}
+    return draft_status.load(get_draft_status_path(), active_jobs=active)
 
 
 def _finish(job_id: str, *, cancelled: bool = False) -> None:
@@ -931,20 +960,12 @@ def _finish(job_id: str, *, cancelled: bool = False) -> None:
         if _abandoned(job_id):
             _active_publishers.pop(job_id, None)
             return   # ACL-1614: задание уже закрыто сроком Stop
+        cancelled = cancelled or bool(_jobs[job_id].get("cancel_requested"))
         _jobs[job_id]["status"] = "cancelled" if cancelled else "done"
         _jobs[job_id]["finished_at"] = _now_iso()
-        account_label = _jobs[job_id].get("account_label", "")
-        results = list(_jobs[job_id].get("results", []))
-        errors = list(_jobs[job_id].get("errors", []))
-        expected_total = int(_jobs[job_id].get("total") or 0)
         _active_publishers.pop(job_id, None)
-    if not cancelled:
-        _write_draft_status(
-            account_label,
-            results,
-            errors,
-            expected_total=expected_total,
-        )
+        snapshot = _status_snapshot_locked(_jobs[job_id])
+    _persist_job(snapshot, state="stopped" if cancelled else "")
 
 
 def _run_rpa(
@@ -1645,5 +1666,6 @@ def _start_job(
         t.start()
     except BaseException:
         _job_ended.pop(job_id, None)
+        _fatal(job_id, "Build worker could not start; no campaigns were sent.")
         raise
     return job_id
