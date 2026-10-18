@@ -4267,6 +4267,84 @@
         "issue_scopes": {
           "996": "1aa3919bbb9ae4712f714e635eda9a0377939e8a8fddee1481eeaae8a3c4001b"
         }
+      },
+      "1008": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-OG18",
+        "implementer": "Worker-OG18",
+        "head_sha": "dbabdeced4f388bcc999f3527d01d25fd885f0b4",
+        "base_sha": "710e388493c2cdb073c477bd9eaba8362e644f41",
+        "tree_sha": "b30966a487bc5d68c0a1cba6ff67258df51215b2",
+        "execution_lane": "7ec8b31b8dc54d77ab7662f660654f58",
+        "review_session": "scope-audit-owner-guide-20261018",
+        "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1008#issuecomment-6252255209",
+        "main_sha": "710e388493c2cdb073c477bd9eaba8362e644f41",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          1007
+        ],
+        "recorded_at": "2026-10-18T16:26:01+00:00",
+        "issue_scopes": {
+          "1007": "f646e9f786becd6998372844b0dac16e0f838191021869120c07383d830224b2"
+        },
+        "process_policy": "9276adda3c40d4e03e471c96c3a1a4d055b82bd73f282d3b523f329781e3bca5",
+        "process_proof": {
+          "base_sha": "710e388493c2cdb073c477bd9eaba8362e644f41",
+          "head_sha": "dbabdeced4f388bcc999f3527d01d25fd885f0b4",
+          "tree_sha": "b30966a487bc5d68c0a1cba6ff67258df51215b2",
+          "files": [
+            {
+              "path": "AGENTS.md",
+              "before": {
+                "sha": "5da86bb999a0e7d4cd2e35c5fe6540fa13f3caeb",
+                "mode": "100644",
+                "type": "blob"
+              },
+              "after": {
+                "sha": "39a32a055cfde508ad3ffaaf30fb846c73d77d8b",
+                "mode": "100644",
+                "type": "blob"
+              }
+            },
+            {
+              "path": "docs/repository/CHANGELOG.md",
+              "before": {
+                "sha": "ee20057d496393cd1e36dc3d81c656f3a9ad86bf",
+                "mode": "100644",
+                "type": "blob"
+              },
+              "after": {
+                "sha": "b299211dc80fccbf3805f652485c2caef2e47049",
+                "mode": "100644",
+                "type": "blob"
+              }
+            },
+            {
+              "path": "docs/repository/OWNER_GUIDE.md",
+              "before": null,
+              "after": {
+                "sha": "786f044c364a1dc70d24501451fd6ab387d6f2d8",
+                "mode": "100644",
+                "type": "blob"
+              }
+            },
+            {
+              "path": "docs/repository/WORKFLOW.md",
+              "before": {
+                "sha": "4edd3a7e5f0e8742b1898ff3ba16f3fd36321a89",
+                "mode": "100644",
+                "type": "blob"
+              },
+              "after": {
+                "sha": "cc582550d843b14a94ea90e00bc7a89a40156f84",
+                "mode": "100644",
+                "type": "blob"
+              }
+            }
+          ],
+          "diff_sha256": "725c02368b38b48ef0c828a32f12450efc1f255de546df16d53bfe733212128b"
+        }
       }
     },
     "stage": {
