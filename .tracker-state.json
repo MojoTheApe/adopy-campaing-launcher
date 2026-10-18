@@ -48849,7 +48849,7 @@
       },
       "654": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       },
       "696": {
         "implementers": [],
@@ -85322,6 +85322,12 @@
         "at": "2026-10-18T01:06:27+00:00",
         "issue": 480,
         "reason": "Backlog cleanup 2026-10-16: stale two-week-old visual checklist; anything still wrong should be its own bug."
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-18T01:09:14+00:00",
+        "issue": 654,
+        "reason": "Done: delivered in ACL-1652 (PR #667, in main via #716); present in src/web/templates/_account_map.html. Backlog cleanup 2026-10-16."
       }
     ],
     "policy": {
