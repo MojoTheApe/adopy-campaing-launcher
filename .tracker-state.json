@@ -48813,7 +48813,7 @@
       },
       "569": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       },
       "32": {
         "implementers": [],
@@ -85292,6 +85292,12 @@
         "at": "2026-10-18T00:45:45+00:00",
         "issue": 26,
         "reason": "Backlog cleanup 2026-10-16: stale idea (undefined scope, untouched since September, premise predates the Graph API / new builder direction). Restore if it becomes relevant again."
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-18T00:50:59+00:00",
+        "issue": 569,
+        "reason": "Backlog cleanup 2026-10-16: stale live check of the RPA hand-window / stuck-step path; feature merged, path superseded by the Graph-in-profile direction (hand-open reworked in PR #937)."
       }
     ],
     "policy": {
