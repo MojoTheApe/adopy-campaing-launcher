@@ -2269,7 +2269,10 @@ def _alias_without_id_suffix(label: str, known) -> str:
 
 def _compact_account_key(name) -> str:
     """`account_key` без разделителей: `Facebook_6540` и `Facebook6540` равны (ACL-1377)."""
-    return re.sub(r"[^0-9a-z]", "", _account_key(name))
+    key = _account_key(name)
+    if re.match(r"rule\d+:", key):
+        return ""  # ключ по явному правилу имён не сжимаем: rule1:0x и rule10:x разные
+    return re.sub(r"[^0-9a-z]", "", key)
 
 
 def _alias_by_tail(label: str, known: dict) -> str:
