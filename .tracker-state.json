@@ -54599,7 +54599,19 @@
       377,
       992
     ],
-    "review": null,
+    "review": {
+      "id": "3e5c9c2613d7462592d1652853ceea59",
+      "batch_id": "7d14b6df596d43b3b7f89a61ab4d6e9c",
+      "pr": 1002,
+      "issues": [
+        996
+      ],
+      "actor": "Reviewer-TT142I",
+      "session": "root_tt142_implementation",
+      "coordinator": "Coordinator-WFO3C7A5M",
+      "state": "reviewing",
+      "started_at": "2026-10-18T09:03:10+00:00"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -85994,6 +86006,23 @@
             "requested_at": "2026-10-18T08:53:26+00:00"
           }
         }
+      },
+      {
+        "event": "batch-review-acquired",
+        "at": "2026-10-18T09:03:10+00:00",
+        "review": {
+          "id": "3e5c9c2613d7462592d1652853ceea59",
+          "batch_id": "7d14b6df596d43b3b7f89a61ab4d6e9c",
+          "pr": 1002,
+          "issues": [
+            996
+          ],
+          "actor": "Reviewer-TT142I",
+          "session": "root_tt142_implementation",
+          "coordinator": "Coordinator-WFO3C7A5M",
+          "state": "reviewing",
+          "started_at": "2026-10-18T09:03:10+00:00"
+        }
       }
     ],
     "policy": {
@@ -91720,7 +91749,7 @@
       "id": "7d14b6df596d43b3b7f89a61ab4d6e9c",
       "actor": "Coordinator-WFO3C7A5M",
       "session": "wfo_20261017_acl_three_source_coordinator",
-      "state": "assembling",
+      "state": "reviewing",
       "issues": [
         996
       ],
@@ -91774,7 +91803,7 @@
       "branch": "codex/batch-7d14b6df596d43b3b7f89a61ab4d6e9c",
       "intake": "ec6fe0fd154d49499057ca153d16bf02",
       "started_at": "2026-10-18T08:53:26+00:00",
-      "pr": null,
+      "pr": 1002,
       "entered_stage": false,
       "history": [],
       "delivery_request": {
