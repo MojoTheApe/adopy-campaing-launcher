@@ -25,9 +25,11 @@ that same task so earlier requirements and decisions remain visible.
 | To Do | Selected work that has not started. |
 | In Progress | An implementer has taken the task. Check the latest update to confirm what they are doing now. |
 | Paused | A stop has been explicitly recorded. The card appears with planned work and has no active elapsed timer; it can be resumed through the existing ownership procedure. |
-| Review | A change is ready for an independent check. It may still be waiting for a reviewer. |
+| Review / Ready for Review | A change is ready for an independent check. It may still be waiting for a reviewer. |
+| In Review | An independent reviewer holds the review assignment. |
 | Approved | The source change passed review and is waiting to be combined and delivered. This is not yet a finished application update. |
-| Merged | The task's required completion evidence has been recorded. For application work this includes the required verified package delivery; repository instructions can finish after checked publication on main. |
+| Integrating / Awaiting Delivery | Approved work is being combined, or the required delivery is still pending. |
+| Done | The task's required completion evidence has been recorded (the underlying repository status is Merged). For application work this includes the required verified package delivery; repository instructions can finish after checked publication on main. |
 | Blocked | An additional flag: a specific obstacle prevents the next step. Read its reason and required action. |
 
 An old task or an unavailable computer does not prove that work stopped. The agent
@@ -82,8 +84,8 @@ require stopping unrelated documentation or interface work.
 
 ## Main project and related resources
 
-ACL is the main project. **Related Resources** links its **acl-lib** library and
-**acl-releases** release repository. Those links help find supporting code and
+ACL is the main project. **Related Resources** links its **acl-lib** shared targeting/ad-text data and
+**acl-releases** release repository. Those links help find supporting data and
 published packages; they do not claim separate active tasks or completed tests.
 The current rollout is limited to this ACL family. Other projects are deferred;
 React Forge and The Source are excluded from the requested connections.
