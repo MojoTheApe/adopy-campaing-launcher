@@ -1,5 +1,7 @@
 # ACL project instructions
 
+Owner overview: [requesting work and reading the Tracker](docs/repository/OWNER_GUIDE.md).
+
 **Use the selected shared workflow on `main`; permanent `stage` is retained.**
 The temporary [direct-main and post-main delivery selection](docs/repository/POST_MAIN_DELIVERY.md)
 is active through its recorded idle cutover. Its initial source used the old
