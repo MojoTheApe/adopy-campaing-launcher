@@ -585,7 +585,7 @@
        Шапку всё равно сдвигаем из-под него, пока есть куда: иначе Refresh и
        тема прятались бы под панелью. */
     @media (max-width: 1100px) and (min-width: 760px) {
-      body.cbd-open .head-top { padding-right: calc(var(--cbd-w) + var(--cbd-handle-w) + 1.5rem); }
+      body.cbd-open:not(.cbd-overlay) .head-top { padding-right: calc(var(--cbd-w) + var(--cbd-handle-w) + 1.5rem); }
     }
     @media (pointer: coarse) {
       .head-btn, .head-refresh { min-height: 44px; }
@@ -2844,23 +2844,41 @@
     .cbd-root > * { pointer-events: auto; }
 
     /* Язычок: единственное, что видно, пока ящик закрыт. */
-    .cbd-handle {
-      align-self: center;
-      width: var(--cbd-handle-w); box-sizing: border-box;
-      writing-mode: vertical-rl;
-      display: flex; flex-direction: column; align-items: center; gap: 0.4rem;
-      padding: 0.75rem 0.3rem;
-      background: var(--bg-elev); color: var(--muted);
+    .cbd-tab {
+      align-self: center; width: var(--cbd-handle-w); box-sizing: border-box;
+      display: flex; flex-direction: column;
+      background: var(--bg-elev);
       border: 1px solid var(--border); border-right: none;
       border-radius: var(--radius-md) 0 0 var(--radius-md);
       box-shadow: var(--shadow-md);
+    }
+    .cbd-root.cbd-dragging { transition: none; }
+    body.cbd-resizing { user-select: none; }
+    .cbd-handle {
+      width: 100%; box-sizing: border-box;
+      touch-action: none;
+      writing-mode: vertical-rl;
+      display: flex; flex-direction: column; align-items: center; gap: 0.4rem;
+      padding: 0.75rem 0.3rem;
+      background: none; color: var(--muted);
+      border: none; border-radius: var(--radius-md) 0 0 0;
       font: inherit; font-size: var(--adopy-text-sm); font-weight: 600;
       letter-spacing: 0.03em;
-      cursor: pointer;
+      cursor: col-resize;
       transition: color 160ms var(--ease-out), border-color 160ms var(--ease-out);
     }
-    .cbd-handle:hover { color: var(--accent); border-color: var(--accent); }
+    .cbd-handle:hover { color: var(--accent); }
     .cbd-handle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .cbd-presets { display: flex; flex-direction: column; border-top: 1px solid var(--border); }
+    .cbd-preset {
+      display: flex; align-items: center; justify-content: center;
+      width: 100%; height: 2.25rem; padding: 0;
+      background: none; border: none; color: var(--muted); cursor: pointer;
+    }
+    .cbd-preset + .cbd-preset { border-top: 1px solid var(--border); }
+    .cbd-preset:hover { color: var(--accent); }
+    .cbd-preset[aria-pressed="true"] { color: var(--accent); background: var(--adopy-selected-bg, transparent); }
+    .cbd-preset:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
     .cbd-handle-arrow {
       writing-mode: horizontal-tb;
       font-size: 0.9rem; line-height: 1;
@@ -2903,14 +2921,7 @@
       border-radius: var(--radius-sm); padding: 0.1rem 0.35rem;
     }
     .cbd-close:hover { color: var(--bad); border-color: var(--bad); }
-    .cbd-expand {
-      align-self: center;
-      background: none; border: 1px solid var(--border-strong); color: var(--text);
-      font: inherit; font-size: var(--adopy-text-sm); font-weight: 600; line-height: 1.2;
-      border-radius: var(--radius-sm); padding: 0.2rem 0.55rem; cursor: pointer;
-    }
-    .cbd-expand:hover { color: var(--accent); border-color: var(--accent); }
-    .cbd-expand:focus-visible, .cbd-close:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+    .cbd-close:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
     .cbd-body { flex: 1; overflow-y: auto; padding: var(--space-md); }
     .cbd-empty {
       color: var(--muted); font-size: var(--adopy-text-table); line-height: 1.6;
@@ -3351,10 +3362,8 @@
     /* Растянутая панель: та же панель на ширину окна, страница под ней не
        сдвигается (двигать её некуда). Закрытая — снова у края, шириной в
        обычную. */
-    .cbd-root[data-expanded="1"][data-open="1"] .cbd-panel {
-      width: min(1100px, calc(100vw - var(--cbd-handle-w)));
-    }
-    body.cbd-open.cbd-expanded { padding-right: 0; }
+    /* Шире обычной и странице не остаётся места — панель ложится поверх. */
+    body.cbd-open.cbd-overlay { padding-right: 0; }
 
     .cbd-cols {
       flex: 1; min-height: 0; display: grid;
@@ -5593,24 +5602,36 @@ async function dashRefresh(ev) {
    ящик, стоящий рядом с ними, переживает переход сам собой — и открытым.
    Один на страницу: панелей «по копии на страну» здесь уже хватило. #}
 <div id="cbd-root" class="cbd-root" data-open="0">
-  <button type="button" class="cbd-handle" id="cbd-handle"
-          aria-controls="cbd-panel" aria-expanded="false"
-          title="Campaign builder">
-    <span class="cbd-handle-arrow" aria-hidden="true">‹</span>
-    <span class="cbd-handle-text">Builder</span>
-    <span class="cbd-handle-count" id="cbd-count" hidden>0</span>
-  </button>
+  {#- ACL-1871: язычок = подпись (клик закрывает/открывает, тяга меняет ширину)
+      и три кнопки под ней: закрыть / обычная / широкая. -#}
+  <div class="cbd-tab">
+    <button type="button" class="cbd-handle" id="cbd-handle"
+            aria-controls="cbd-panel" aria-expanded="false"
+            title="Campaign builder (drag to resize)">
+      <span class="cbd-handle-arrow" aria-hidden="true">‹</span>
+      <span class="cbd-handle-text">Builder</span>
+      <span class="cbd-handle-count" id="cbd-count" hidden>0</span>
+    </button>
+    <div class="cbd-presets" role="group" aria-label="Builder size">
+      <button type="button" class="cbd-preset" id="cbd-preset-closed" aria-pressed="true"
+              aria-controls="cbd-panel" title="Close the builder" aria-label="Close the builder">
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M13 3v10" stroke="currentColor" stroke-width="1.3"/></svg>
+      </button>
+      <button type="button" class="cbd-preset" id="cbd-preset-normal" aria-pressed="false"
+              aria-controls="cbd-panel" title="Normal width" aria-label="Normal width">
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="9" y="3.2" width="5" height="9.6" fill="currentColor"/></svg>
+      </button>
+      <button type="button" class="cbd-preset" id="cbd-preset-wide" aria-pressed="false"
+              aria-controls="cbd-panel" title="Wide" aria-label="Wide">
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="4" y="3.2" width="10" height="9.6" fill="currentColor"/></svg>
+      </button>
+    </div>
+  </div>
   <aside class="cbd-panel" id="cbd-panel" role="complementary"
          aria-label="Campaign builder">
     <div class="cbd-head">
       <span class="cbd-title">Builder</span>
       <span class="cbd-sub" id="cbd-sub"></span>
-      {#- ACL-1769: «Expand» растягивает ту же панель, «Dock right» возвращает
-          её к краю. Закрытие по-прежнему только прячет: черновики и идущие
-          задания остаются. -#}
-      <button type="button" class="cbd-expand" id="cbd-expand"
-              aria-pressed="false" aria-controls="cbd-panel"
-              title="Make the builder wider">Expand</button>
       <button type="button" class="cbd-close" id="cbd-close"
               title="Close the builder" aria-label="Close the builder">×</button>
     </div>
@@ -5779,8 +5800,11 @@ window.cbSrv = (function () {
  */
 window.cbDrawer = (function () {
   var KEY = 'acl.builder.open';
-  /* ACL-1769: растянутая панель — отдельное запоминаемое состояние. */
-  var WIDE_KEY = 'acl.builder.expanded';
+  /* ACL-1871: размер ящика — отдельная запись: 'wide', 'normal' или число
+     пикселей после перетаскивания. Закрытие размер не сбрасывает. */
+  var SIZE_KEY = 'acl.builder.width';
+  var NORMAL_W = 480, MIN_W = 320, WIDE_AT = 800, DRAG_PX = 4, STEP = 40;
+  var HANDLE_W = 40, EDGE = 16;
 
   var root = document.getElementById('cbd-root');
   if (!root) return null;
@@ -5788,8 +5812,13 @@ window.cbDrawer = (function () {
   var handle = document.getElementById('cbd-handle');
   var countEl = document.getElementById('cbd-count');
   var subEl = document.getElementById('cbd-sub');
-  var expandBtn = document.getElementById('cbd-expand');
+  var presetClosed = document.getElementById('cbd-preset-closed');
+  var presetNormal = document.getElementById('cbd-preset-normal');
+  var presetWide = document.getElementById('cbd-preset-wide');
   var count = 0;
+  var mode = 'normal';          /* normal | wide | custom */
+  var custom = NORMAL_W;        /* ширина в px для режима custom */
+  var lastExpanded = false;
 
   /* Хранилище бывает закрыто: приватное окно, запрет на данные сайта.
      Тогда ящик просто не помнит состояние — но работает. */
@@ -5800,46 +5829,56 @@ window.cbDrawer = (function () {
   function remembered() {
     try { return localStorage.getItem(KEY) === '1'; } catch (e) { return false; }
   }
+  function rememberSize() {
+    try { localStorage.setItem(SIZE_KEY, mode === 'custom' ? String(custom) : mode); } catch (e) { /* не помним */ }
+    if (window.cbSrv) window.cbSrv.note('ui');   // ACL-1681: ширина ящика переживает и смену адреса
+  }
+  /* Мусор в записи — не повод падать: берём обычную ширину. */
+  function readSize() {
+    var v;
+    try { v = localStorage.getItem(SIZE_KEY); } catch (e) { return; }
+    if (v === 'wide') { mode = 'wide'; return; }
+    if (typeof v === 'string' && /^\d{3,4}$/.test(v)) { mode = 'custom'; custom = +v; }
+  }
 
   function isOpen() { return root.getAttribute('data-open') === '1'; }
-
-  function rememberedWide() {
-    try { return localStorage.getItem(WIDE_KEY) === '1'; } catch (e) { return false; }
+  function viewport() { return (window.innerWidth | 0) || 1280; }
+  /* Почти всё окно, но язычок остаётся на виду — за него ящик и тянут. */
+  function maxWidth() { return Math.max(240, viewport() - HANDLE_W - EDGE); }
+  function clamp(w) { return Math.max(Math.min(MIN_W, maxWidth()), Math.min(maxWidth(), w)); }
+  function width() {
+    if (mode === 'wide') return Math.max(maxWidth(), Math.min(NORMAL_W, Math.max(240, viewport() - HANDLE_W)));
+    if (mode === 'custom') return clamp(custom);
+    return Math.min(NORMAL_W, Math.max(240, viewport() - HANDLE_W));
   }
-  function isExpanded() { return root.getAttribute('data-expanded') === '1'; }
+  function isExpanded() { return width() >= WIDE_AT; }
 
-  /* Expand / Dock right: та же панель, те же две колонки, выбор и данные —
-     меняется только ширина. Закрытие панели состояние не сбрасывает. */
-  function applyWide(wide) {
+  function pressed(btn, on) { if (btn) btn.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+  function applySize() {
+    var w = width(), wide = w >= WIDE_AT;
+    document.documentElement.style.setProperty('--cbd-w', w + 'px');
     root.setAttribute('data-expanded', wide ? '1' : '0');
     document.body.classList.toggle('cbd-expanded', wide);
-    if (expandBtn) {
-      expandBtn.textContent = wide ? 'Dock right' : 'Expand';
-      expandBtn.setAttribute('aria-pressed', wide ? 'true' : 'false');
-      expandBtn.title = wide ? 'Dock the builder on the right' : 'Make the builder wider';
+    document.body.classList.toggle('cbd-overlay', w > NORMAL_W && viewport() - w - HANDLE_W < 600);
+    var open = isOpen();
+    pressed(presetClosed, !open);
+    pressed(presetNormal, open && mode === 'normal');
+    pressed(presetWide, open && mode === 'wide');
+    if (wide !== lastExpanded) {
+      lastExpanded = wide;
+      document.dispatchEvent(new CustomEvent('acl:builder-expanded', { detail: { expanded: wide } }));
     }
-  }
-
-  function setExpanded(wide, save) {
-    wide = !!wide;
-    if (wide === isExpanded()) return wide;
-    applyWide(wide);
-    if (save !== false) {
-      try { localStorage.setItem(WIDE_KEY, wide ? '1' : '0'); } catch (e) { /* не помним */ }
-      if (window.cbSrv) window.cbSrv.note('ui');
-    }
-    document.dispatchEvent(new CustomEvent('acl:builder-expanded', { detail: { expanded: wide } }));
-    return wide;
   }
 
   function apply(open) {
     root.setAttribute('data-open', open ? '1' : '0');
     handle.setAttribute('aria-expanded', open ? 'true' : 'false');
-    handle.title = open ? 'Close the builder' : 'Campaign builder';
+    handle.title = open ? 'Click to close, drag to resize' : 'Campaign builder (drag to resize)';
     /* Закрытый ящик стоит за краем экрана: убрать его из обхода клавишей
        Tab и от чтения с экрана, иначе фокус уезжает в невидимое. */
     panel.inert = !open;
     document.body.classList.toggle('cbd-open', open);
+    applySize();
   }
 
   function set(open, save) {
@@ -5849,6 +5888,16 @@ window.cbDrawer = (function () {
     if (save !== false) remember(open);
     document.dispatchEvent(new CustomEvent('acl:builder-drawer', { detail: { open: open } }));
     return open;
+  }
+
+  /* Три кнопки на язычке: закрыть / обычная / широкая. */
+  function setPreset(name) {
+    if (name === 'closed') return set(false);
+    mode = name === 'wide' ? 'wide' : 'normal';
+    rememberSize();
+    set(true);
+    applySize();
+    return true;
   }
 
   /* Сколько кампаний собирается прямо сейчас. Ноль — значка нет вовсе:
@@ -5861,26 +5910,89 @@ window.cbDrawer = (function () {
     return count;
   }
 
-  handle.addEventListener('click', function () { set(!isOpen()); });
-  document.getElementById('cbd-close').addEventListener('click', function () { set(false); });
-  if (expandBtn) expandBtn.addEventListener('click', function () { setExpanded(!isExpanded()); });
+  /* Перетаскивание язычка: тянем влево — шире. Клик после протяжки гасится,
+     иначе отпускание мыши закрыло бы только что растянутый ящик. */
+  var drag = null, swallowClick = false;
+  function dragMove(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    var dx = drag.x - e.clientX;
+    if (!drag.moved) {
+      if (Math.abs(dx) < DRAG_PX) return;
+      drag.moved = true;
+      swallowClick = true;
+      root.classList.add('cbd-dragging');
+      document.body.classList.add('cbd-resizing');
+      if (!isOpen()) set(true);
+    }
+    mode = 'custom';
+    custom = clamp(Math.round(drag.w + dx));
+    applySize();
+  }
+  function dragEnd(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    var moved = drag.moved;
+    if (e.type === 'pointercancel') swallowClick = false;
+    drag = null;
+    root.classList.remove('cbd-dragging');
+    document.body.classList.remove('cbd-resizing');
+    if (moved) rememberSize();
+  }
+  handle.addEventListener('pointerdown', function (e) {
+    if (e.button) return;
+    swallowClick = false;
+    drag = { id: e.pointerId, x: e.clientX, w: isOpen() ? width() : 0, moved: false };
+    try { handle.setPointerCapture(e.pointerId); } catch (err) { /* не критично */ }
+  });
+  handle.addEventListener('pointermove', dragMove);
+  handle.addEventListener('pointerup', dragEnd);
+  handle.addEventListener('pointercancel', dragEnd);
+  handle.setAttribute('aria-keyshortcuts', 'ArrowLeft ArrowRight');
+  handle.addEventListener('click', function () {
+    if (swallowClick) { swallowClick = false; return; }
+    set(!isOpen());
+  });
+  /* С клавиатуры: стрелки подстраивают ширину открытого ящика. */
+  handle.addEventListener('keydown', function (e) {
+    if (!isOpen() || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+    var next = clamp(width() + (e.key === 'ArrowLeft' ? STEP : -STEP));
+    mode = 'custom';
+    custom = next;
+    applySize();
+    rememberSize();
+    if (e.preventDefault) e.preventDefault();
+  });
 
-  applyWide(rememberedWide());
+  document.getElementById('cbd-close').addEventListener('click', function () { set(false); });
+  if (presetClosed) presetClosed.addEventListener('click', function () { setPreset('closed'); });
+  if (presetNormal) presetNormal.addEventListener('click', function () { setPreset('normal'); });
+  if (presetWide) presetWide.addEventListener('click', function () { setPreset('wide'); });
+  /* Окно сузилось — сохранённая ширина не должна его переросить. */
+  if (window.addEventListener) window.addEventListener('resize', applySize);
+
+  readSize();
+  lastExpanded = isExpanded();
   apply(remembered());
   setCount(0);
 
   /* ACL-1681: открыт ли ящик и растянут ли он — тоже на сервере, чтобы после
      краха Chrome или смены адреса он встал как был. */
   if (window.cbSrv) window.cbSrv.register('ui', {
-    snapshot: function () { return { open: isOpen(), expanded: isExpanded() }; },
+    snapshot: function () {
+      return { open: isOpen(), expanded: isExpanded(), size: mode === 'custom' ? String(custom) : mode };
+    },
     legacyAt: function () { return 0; },
     apply: function (doc) {
       var d = doc.data || {};
       set(d.open === true, false);
-      setExpanded(d.expanded === true, false);
+      /* ACL-1871: ширина пресетом или в px; старая запись знала только expanded. */
+      var size = typeof d.size === 'string' ? d.size : (d.expanded === true ? 'wide' : 'normal');
+      if (size === 'wide') mode = 'wide';
+      else if (/^\d{3,4}$/.test(size)) { mode = 'custom'; custom = +size; }
+      else mode = 'normal';
+      applySize();
       try {
         localStorage.setItem(KEY, d.open === true ? '1' : '0');
-        localStorage.setItem(WIDE_KEY, d.expanded === true ? '1' : '0');
+        localStorage.setItem(SIZE_KEY, mode === 'custom' ? String(custom) : mode);
       } catch (e) { /* не помним */ }
     }
   });
@@ -5890,9 +6002,11 @@ window.cbDrawer = (function () {
     close: function () { return set(false); },
     toggle: function () { return set(!isOpen()); },
     isOpen: isOpen,
-    expand: function () { return setExpanded(true); },
-    dock: function () { return setExpanded(false); },
+    expand: function () { return setPreset('wide'); },
+    dock: function () { return setPreset('normal'); },
     isExpanded: isExpanded,
+    preset: setPreset,
+    width: width,
     setCount: setCount,
     count: function () { return count; },
     body: function () { return document.getElementById('cbd-body'); },
