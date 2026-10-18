@@ -200,7 +200,7 @@ def serialized_browser(fn=None, *, key=None, reading=False, on_lease_error=None)
                         return func(*args, **kwargs)
                 # Чтение (Check plan, Страницы, спенд) ждёт, пока другая операция на этом
                 # профиле закончится, и подхватывает открытый профиль. Отказ «busy»
-                # через 120 с (ACL-1853) превращал обычную очередь в ошибку плана.
+                # через WAIT_SECONDS (120 с) превращал обычную очередь в ошибку плана.
                 with browser_operation.reading(),                         profile_lock(resolve(args, kwargs)).holding(timeout=READ_WAIT_SECONDS):
                     return func(*args, **kwargs)
             except ProfileLeaseError as exc:
