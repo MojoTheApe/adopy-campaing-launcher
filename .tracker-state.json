@@ -49997,7 +49997,7 @@
             "session": "root-owner-guide-20261018"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-OG18",
         "coordinator": "Coordinator-OG18",
         "handoff": {
@@ -50015,7 +50015,8 @@
           "report": "ACL-2007 owner guide is ready for independent review in PR1008. Scope: AGENTS.md and three docs/repository Markdown files only. Current requirements are the full Issue1007 body. Existing instruction/link check passed (35 files/158 links), staged secret scan passed, diff checks passed. Latest adjustment aligns Done/review/delivery labels and acl-lib operational-data description with the published Tracker source; hosted checks must use the final head. No application change or Windows pilot completion is claimed. Worker-OG18/root-owner-guide-20261018 hands off to Coordinator-OG18 and a distinct actual reviewer."
         },
         "pr": 1008,
-        "queued_at": "2026-10-18T16:19:57+00:00"
+        "queued_at": "2026-10-18T16:19:57+00:00",
+        "reviewer": "Reviewer-OG18"
       }
     },
     "actors": {
@@ -52002,6 +52003,10 @@
       "Worker-OG18": {
         "session": "root-owner-guide-20261018",
         "role": "Worker"
+      },
+      "Reviewer-OG18": {
+        "session": "scope-audit-owner-guide-20261018",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -54785,8 +54790,7 @@
       871,
       287,
       377,
-      992,
-      1007
+      992
     ],
     "review": null,
     "history": [
@@ -86317,6 +86321,13 @@
         "issue": 1007,
         "pr": 1008,
         "actor": "Worker-OG18"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-18T16:21:20+00:00",
+        "pr": 1008,
+        "lane": "7ec8b31b8dc54d77ab7662f660654f58",
+        "actor": "Reviewer-OG18"
       }
     ],
     "policy": {
@@ -92151,7 +92162,21 @@
       "started_at": "2026-10-18T08:52:20+00:00",
       "ineligible": {}
     },
-    "source_reviews": {},
+    "source_reviews": {
+      "1008": {
+        "id": "7ec8b31b8dc54d77ab7662f660654f58",
+        "pr": 1008,
+        "issues": [
+          1007
+        ],
+        "actor": "Reviewer-OG18",
+        "session": "scope-audit-owner-guide-20261018",
+        "coordinator": "Coordinator-OG18",
+        "started_at": "2026-10-18T16:21:20+00:00",
+        "state": "reviewing",
+        "route": "process"
+      }
+    },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
   },
   "maintenance_history": [
