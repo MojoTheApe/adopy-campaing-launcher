@@ -713,3 +713,9 @@ def test_the_retry_of_an_unanswered_submission_goes_through_the_gate():
     assert "window.cbPreflightGate([{ form: e.form, slots: slots }]" in body
     assert body.index("cbPreflightGate") < body.index("post(e, fd, skipped, sentNames)")
     assert "typeof window.cbPreflightGate !== 'function'" in body and "Pre-flight audit unavailable" in body
+
+
+def test_a_rule_without_a_topic_lands_in_the_meta_topic():
+    """Правило соседней задачи без строки в _TOPIC_OF не роняет таблицу (TEST9095, 18.10)."""
+    rule = pf._r("rule_from_another_task", "Label", "error", "server", "hint")
+    assert rule["topic"] == "meta"
