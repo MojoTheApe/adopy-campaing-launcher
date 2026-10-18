@@ -15,6 +15,16 @@ Initial source ACL-1924 used old-stage admission before its recorded idle transi
 Retired master clients and one-time activation pauses are historical only;
 package publication and employee updates retain their separate release rules.
 
+## Initial task-context selection: activation pending
+
+[ACL-1994](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/994) selects the released context1 policy in matching descriptor/config objects and the genuine existing pristine template. The [selected Tracker guide](TRACKER.md#selected-task-context) and [canonical task-context reference](TASK_CONTEXT.md) describe its current-main readiness, strict terminal journal and independently owned Approved-source compatibility review. This process selection changes no application behavior, system specification, installer/updater, machine data or runtime procedure; existing system and runtime documents remain applicable.
+
+Selection is not adoption. Preserve the existing execution3 5/5/5 limits, one integration reservation, Stage-off package target, instruction-only exception and every owner, queue, historical receipt and archive record. Current unselected operative authority supplies this Source's author/review/combined/main admission. Selection-main must wait for legitimate old-owner drain whenever admitting it would strand that owner; the portable package's bounded prior-policy view is not a generic owner/admission fallback.
+
+Use the exact one-member selection-package sequence in [DELIVERY_POLICY.md](DELIVERY_POLICY.md#one-policy-selection-package-before-activation) and [EARLY_ADOPTION.md](EARLY_ADOPTION.md#separate-selection-package-then-owned-idle-activation). Retain genuine authorized frozen delivery, complete independent Source/combined/main review and all applicable native checks. Verify actual stable publication and published-channel installation/update/restart/recovery/data acceptance, then record its exact receipt. Pending, failed or unknown delivery remains unfinished; do not dispatch again after uncertainty or reserve maintenance to deliver the package.
+
+Only a separate owned safe idle operation may recheck every reader/writer and full intended-fence recovery, drain real owners and pending operations/deliveries, adopt context1, verify protocol4 retaining execution3, resume the same Maintainer and verify a fresh normal project projection. Until that operation succeeds, these documents do not claim active task-context state, pilot behavior, parent39 completion or measured improvement. Completion, retry, shared CI evidence, modern execution/context2, captures and public ownership remain unselected. The exact terminal-journal and independent compatibility rules apply only at their genuinely adopted boundary; never rewrite old whole-body hashes, infer compatibility from disjoint paths or bypass combined review.
+
 ## Select the route by actual changed files
 
 Read [PROCESS_INSTRUCTIONS.md](PROCESS_INSTRUCTIONS_ACL.md). Once its explicit policy
