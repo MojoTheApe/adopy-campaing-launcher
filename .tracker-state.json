@@ -50014,7 +50014,7 @@
             "session": "claude-w1855b-20261019"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-W1855B",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -92557,6 +92557,68 @@
             "approved_at": "2026-10-19T17:36:36+00:00"
           }
         }
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-19T17:40:44+00:00",
+        "issue": 855,
+        "pr": 927,
+        "review": {
+          "id": "8919de673fad444cbf5716783f18b91f",
+          "pr": 927,
+          "issues": [
+            855
+          ],
+          "actor": "Reviewer-R1855X",
+          "session": "reviewer-r1855x-20261019",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-19T14:42:50+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 855,
+            "pr": 927,
+            "branch": "work/acl-1855-durable-intent",
+            "head_sha": "f96934cb274bea67fa620ff39f77bc4db09d4321",
+            "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+            "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "a1c5335428b3f33c420132d25b8a2c5cb6061e075b76ecc2f0456302a91a3700",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-R1855X",
+              "review_session": "reviewer-r1855x-20261019",
+              "execution_lane": "8919de673fad444cbf5716783f18b91f",
+              "implementer": "Worker-W1855B",
+              "head_sha": "f96934cb274bea67fa620ff39f77bc4db09d4321",
+              "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+              "tree_sha": "8dc33fdba137c6673bf2db0e0a7299bb8f66dad0",
+              "issues": [
+                855
+              ],
+              "report": "PR #927 (work/acl-1855-durable-intent) changes src/fb_api/commands.py, src/web/static/acm_commands.js, docs/system/CHANGELOG.md and adds tests/test_acl1855_durable_intent.py. OperationStore._persist no longer swallows OSError: it appends in binary mode, flushes and fsyncs, and raises HistoryUnavailable on any failure (mkdir/append/flush/fsync); a separate try_save() is used only for best-effort saves after a POST may have left or when nothing was sent. Criterion 1: execute() refuses with CommandRefused(503, code=storage, 'Nothing was sent') if the Running record cannot be persisted, and _run requires store.save of the per-object 'sending' snapshot before each client.post, otherwise the object is marked not_sent with a history note and no POST is issued (tests inject append/flush/fsync faults at the Running and first sending save, one-shot and persistent, asserting zero posts and a visible failure). Criterion 2: a failed sending save for a later object sets stop_rest, so that object and the rest are not sent while earlier confirmed writes stay 'saved' and the message carries HISTORY_FAILED plus 'N of M saved' (or Unknown when the final save also fails). Criterion 3: load() now concludes interrupted RUNNING/VERIFYING ops from per-object results (saved/mismatch no longer degrade to not_sent; sending/sent become unknown; pending becomes not_attempted), torn last lines including mid-UTF-8 cuts are skipped and a new line is never glued to a torn one; a replay test truncates the journal after every line for normal, lost and applied-but-lost runs and asserts a final truthful state, the same op_id/revision/idempotency key, and no new POST when the same key is executed after restart. Criterion 4: lost responses are still reconciled by readback only, and re-execution with the same key after restart posts nothing. Criterion 5: I verified that test_original_bug_reproduction_without_test_seams and test_restart_after_readback_keeps_the_confirmed_results fail against current main's commands.py and pass on the PR source; ACL-1800 command tests remain green. Preview confirmation, the write allowlist, stale re-read, readback and idempotency logic are unchanged; no Meta/Multilogin access, no activation and no polling in tests (FakeMeta only), no secrets. The page maps code 'storage' and history-failure messages to a clear reason, using 'Not sent' only when nothing reached Meta. The PR merges cleanly into current main 1c6ab78e (git merge-tree clean); main moved 26 commits since the PR base 435bc154 but none touch the four files in the diff. Tests run locally on the PR head: tests/test_acl1855_durable_intent.py, test_acl1800_campaign_commands.py, test_acl1826_mlx_session_lost.py, test_static_scripts_from_disk.py, test_acl1800_home_wiring.py, test_acl1800_home_commands_browser.py, test_acl1798_home_campaigns_browser.py: 331 passed, 1 skipped. CI on head f493fd9a: all checks SUCCESS (linux tests shards 1-3, windows tests, ACL verification, tracker-link, process instructions; installer build jobs skipped as not applicable); mergeable MERGEABLE. Non-blocking nits: when fsync fails after the bytes were appended, the journal may hold a 'sending' line for an object that was never posted, so a restart before any later successful save shows Unknown rather than Failed (conservative, acceptable); the page relies on matching server message text ('history could not be saved', 'nothing was sent/written') for non-coded results, which is brittle if wording changes; the storage-refusal path in execute calls try_save which will usually also fail, harmless. Delta re-review: the branch was updated with current main 1c6ab78e via merge commit f96934cb; git diff work/main...f96934cb is byte-identical to the previously reviewed diff (merge brings only main, tree 8dc33fdb equals the earlier clean merge-tree result), the same touched tests re-run on f96934cb gave 331 passed, 1 skipped, and CI on f96934cb (run 39277363094) finished all green: linux tests shards 1-3, windows tests, ACL verification, Process instructions, tracker-link, descriptor, installer classification/verification pass, installer build jobs skipped as not applicable; mergeable MERGEABLE. No live checks claimed.",
+              "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "recorded_at": "2026-10-19T17:39:00+00:00",
+              "issue_scopes": {
+                "855": "a1c5335428b3f33c420132d25b8a2c5cb6061e075b76ecc2f0456302a91a3700"
+              }
+            },
+            "lane": {
+              "id": "8919de673fad444cbf5716783f18b91f",
+              "pr": 927,
+              "issues": [
+                855
+              ],
+              "actor": "Reviewer-R1855X",
+              "session": "reviewer-r1855x-20261019",
+              "coordinator": "Coordinator-M1011A",
+              "started_at": "2026-10-19T14:42:50+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-19T17:39:44+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -95066,6 +95128,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-19T17:36:36+00:00"
+      },
+      "855": {
+        "issue": 855,
+        "pr": 927,
+        "branch": "work/acl-1855-durable-intent",
+        "head_sha": "f96934cb274bea67fa620ff39f77bc4db09d4321",
+        "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+        "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "a1c5335428b3f33c420132d25b8a2c5cb6061e075b76ecc2f0456302a91a3700",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-R1855X",
+          "review_session": "reviewer-r1855x-20261019",
+          "execution_lane": "8919de673fad444cbf5716783f18b91f",
+          "implementer": "Worker-W1855B",
+          "head_sha": "f96934cb274bea67fa620ff39f77bc4db09d4321",
+          "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+          "tree_sha": "8dc33fdba137c6673bf2db0e0a7299bb8f66dad0",
+          "issues": [
+            855
+          ],
+          "report": "PR #927 (work/acl-1855-durable-intent) changes src/fb_api/commands.py, src/web/static/acm_commands.js, docs/system/CHANGELOG.md and adds tests/test_acl1855_durable_intent.py. OperationStore._persist no longer swallows OSError: it appends in binary mode, flushes and fsyncs, and raises HistoryUnavailable on any failure (mkdir/append/flush/fsync); a separate try_save() is used only for best-effort saves after a POST may have left or when nothing was sent. Criterion 1: execute() refuses with CommandRefused(503, code=storage, 'Nothing was sent') if the Running record cannot be persisted, and _run requires store.save of the per-object 'sending' snapshot before each client.post, otherwise the object is marked not_sent with a history note and no POST is issued (tests inject append/flush/fsync faults at the Running and first sending save, one-shot and persistent, asserting zero posts and a visible failure). Criterion 2: a failed sending save for a later object sets stop_rest, so that object and the rest are not sent while earlier confirmed writes stay 'saved' and the message carries HISTORY_FAILED plus 'N of M saved' (or Unknown when the final save also fails). Criterion 3: load() now concludes interrupted RUNNING/VERIFYING ops from per-object results (saved/mismatch no longer degrade to not_sent; sending/sent become unknown; pending becomes not_attempted), torn last lines including mid-UTF-8 cuts are skipped and a new line is never glued to a torn one; a replay test truncates the journal after every line for normal, lost and applied-but-lost runs and asserts a final truthful state, the same op_id/revision/idempotency key, and no new POST when the same key is executed after restart. Criterion 4: lost responses are still reconciled by readback only, and re-execution with the same key after restart posts nothing. Criterion 5: I verified that test_original_bug_reproduction_without_test_seams and test_restart_after_readback_keeps_the_confirmed_results fail against current main's commands.py and pass on the PR source; ACL-1800 command tests remain green. Preview confirmation, the write allowlist, stale re-read, readback and idempotency logic are unchanged; no Meta/Multilogin access, no activation and no polling in tests (FakeMeta only), no secrets. The page maps code 'storage' and history-failure messages to a clear reason, using 'Not sent' only when nothing reached Meta. The PR merges cleanly into current main 1c6ab78e (git merge-tree clean); main moved 26 commits since the PR base 435bc154 but none touch the four files in the diff. Tests run locally on the PR head: tests/test_acl1855_durable_intent.py, test_acl1800_campaign_commands.py, test_acl1826_mlx_session_lost.py, test_static_scripts_from_disk.py, test_acl1800_home_wiring.py, test_acl1800_home_commands_browser.py, test_acl1798_home_campaigns_browser.py: 331 passed, 1 skipped. CI on head f493fd9a: all checks SUCCESS (linux tests shards 1-3, windows tests, ACL verification, tracker-link, process instructions; installer build jobs skipped as not applicable); mergeable MERGEABLE. Non-blocking nits: when fsync fails after the bytes were appended, the journal may hold a 'sending' line for an object that was never posted, so a restart before any later successful save shows Unknown rather than Failed (conservative, acceptable); the page relies on matching server message text ('history could not be saved', 'nothing was sent/written') for non-coded results, which is brittle if wording changes; the storage-refusal path in execute calls try_save which will usually also fail, harmless. Delta re-review: the branch was updated with current main 1c6ab78e via merge commit f96934cb; git diff work/main...f96934cb is byte-identical to the previously reviewed diff (merge brings only main, tree 8dc33fdb equals the earlier clean merge-tree result), the same touched tests re-run on f96934cb gave 331 passed, 1 skipped, and CI on f96934cb (run 39277363094) finished all green: linux tests shards 1-3, windows tests, ACL verification, Process instructions, tracker-link, descriptor, installer classification/verification pass, installer build jobs skipped as not applicable; mergeable MERGEABLE. No live checks claimed.",
+          "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "recorded_at": "2026-10-19T17:39:00+00:00",
+          "issue_scopes": {
+            "855": "a1c5335428b3f33c420132d25b8a2c5cb6061e075b76ecc2f0456302a91a3700"
+          }
+        },
+        "lane": {
+          "id": "8919de673fad444cbf5716783f18b91f",
+          "pr": 927,
+          "issues": [
+            855
+          ],
+          "actor": "Reviewer-R1855X",
+          "session": "reviewer-r1855x-20261019",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-19T14:42:50+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-19T17:39:44+00:00"
       }
     },
     "batches": {
@@ -99765,62 +99871,6 @@
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-19T13:01:50+00:00",
         "state": "reviewing"
-      },
-      "927": {
-        "id": "8919de673fad444cbf5716783f18b91f",
-        "pr": 927,
-        "issues": [
-          855
-        ],
-        "actor": "Reviewer-R1855X",
-        "session": "reviewer-r1855x-20261019",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-19T14:42:50+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 855,
-          "pr": 927,
-          "branch": "work/acl-1855-durable-intent",
-          "head_sha": "f96934cb274bea67fa620ff39f77bc4db09d4321",
-          "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-          "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "a1c5335428b3f33c420132d25b8a2c5cb6061e075b76ecc2f0456302a91a3700",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-R1855X",
-            "review_session": "reviewer-r1855x-20261019",
-            "execution_lane": "8919de673fad444cbf5716783f18b91f",
-            "implementer": "Worker-W1855B",
-            "head_sha": "f96934cb274bea67fa620ff39f77bc4db09d4321",
-            "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-            "tree_sha": "8dc33fdba137c6673bf2db0e0a7299bb8f66dad0",
-            "issues": [
-              855
-            ],
-            "report": "PR #927 (work/acl-1855-durable-intent) changes src/fb_api/commands.py, src/web/static/acm_commands.js, docs/system/CHANGELOG.md and adds tests/test_acl1855_durable_intent.py. OperationStore._persist no longer swallows OSError: it appends in binary mode, flushes and fsyncs, and raises HistoryUnavailable on any failure (mkdir/append/flush/fsync); a separate try_save() is used only for best-effort saves after a POST may have left or when nothing was sent. Criterion 1: execute() refuses with CommandRefused(503, code=storage, 'Nothing was sent') if the Running record cannot be persisted, and _run requires store.save of the per-object 'sending' snapshot before each client.post, otherwise the object is marked not_sent with a history note and no POST is issued (tests inject append/flush/fsync faults at the Running and first sending save, one-shot and persistent, asserting zero posts and a visible failure). Criterion 2: a failed sending save for a later object sets stop_rest, so that object and the rest are not sent while earlier confirmed writes stay 'saved' and the message carries HISTORY_FAILED plus 'N of M saved' (or Unknown when the final save also fails). Criterion 3: load() now concludes interrupted RUNNING/VERIFYING ops from per-object results (saved/mismatch no longer degrade to not_sent; sending/sent become unknown; pending becomes not_attempted), torn last lines including mid-UTF-8 cuts are skipped and a new line is never glued to a torn one; a replay test truncates the journal after every line for normal, lost and applied-but-lost runs and asserts a final truthful state, the same op_id/revision/idempotency key, and no new POST when the same key is executed after restart. Criterion 4: lost responses are still reconciled by readback only, and re-execution with the same key after restart posts nothing. Criterion 5: I verified that test_original_bug_reproduction_without_test_seams and test_restart_after_readback_keeps_the_confirmed_results fail against current main's commands.py and pass on the PR source; ACL-1800 command tests remain green. Preview confirmation, the write allowlist, stale re-read, readback and idempotency logic are unchanged; no Meta/Multilogin access, no activation and no polling in tests (FakeMeta only), no secrets. The page maps code 'storage' and history-failure messages to a clear reason, using 'Not sent' only when nothing reached Meta. The PR merges cleanly into current main 1c6ab78e (git merge-tree clean); main moved 26 commits since the PR base 435bc154 but none touch the four files in the diff. Tests run locally on the PR head: tests/test_acl1855_durable_intent.py, test_acl1800_campaign_commands.py, test_acl1826_mlx_session_lost.py, test_static_scripts_from_disk.py, test_acl1800_home_wiring.py, test_acl1800_home_commands_browser.py, test_acl1798_home_campaigns_browser.py: 331 passed, 1 skipped. CI on head f493fd9a: all checks SUCCESS (linux tests shards 1-3, windows tests, ACL verification, tracker-link, process instructions; installer build jobs skipped as not applicable); mergeable MERGEABLE. Non-blocking nits: when fsync fails after the bytes were appended, the journal may hold a 'sending' line for an object that was never posted, so a restart before any later successful save shows Unknown rather than Failed (conservative, acceptable); the page relies on matching server message text ('history could not be saved', 'nothing was sent/written') for non-coded results, which is brittle if wording changes; the storage-refusal path in execute calls try_save which will usually also fail, harmless. Delta re-review: the branch was updated with current main 1c6ab78e via merge commit f96934cb; git diff work/main...f96934cb is byte-identical to the previously reviewed diff (merge brings only main, tree 8dc33fdb equals the earlier clean merge-tree result), the same touched tests re-run on f96934cb gave 331 passed, 1 skipped, and CI on f96934cb (run 39277363094) finished all green: linux tests shards 1-3, windows tests, ACL verification, Process instructions, tracker-link, descriptor, installer classification/verification pass, installer build jobs skipped as not applicable; mergeable MERGEABLE. No live checks claimed.",
-            "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "recorded_at": "2026-10-19T17:39:00+00:00",
-            "issue_scopes": {
-              "855": "a1c5335428b3f33c420132d25b8a2c5cb6061e075b76ecc2f0456302a91a3700"
-            }
-          },
-          "lane": {
-            "id": "8919de673fad444cbf5716783f18b91f",
-            "pr": 927,
-            "issues": [
-              855
-            ],
-            "actor": "Reviewer-R1855X",
-            "session": "reviewer-r1855x-20261019",
-            "coordinator": "Coordinator-M1011A",
-            "started_at": "2026-10-19T14:42:50+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-19T17:39:44+00:00"
-        }
       },
       "843": {
         "id": "eb0c8d9eba93438f886e993859f16f32",
