@@ -646,7 +646,9 @@ def main(  # noqa: PLR0913
     filter_lines: List[str] = []
 
     def build_report_text() -> str:
-        df = pd.read_excel(excel_path)
+        from src.analysis_agent.stats_workbook import read_stats_workbook
+
+        df = read_stats_workbook(excel_path)
 
         if asset_filter:
             mask = df["Ad Asset"].fillna("").astype(str).str.lower() == asset_filter.lower()
