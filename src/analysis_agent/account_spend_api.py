@@ -42,6 +42,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from src.analysis_agent import account_spend as _as
+from src.fb_ads_rpa.operations import browser_operation
 from src.fb_api import profile as _fb_profile
 from src.fb_api import telemetry as _tm
 from src.fb_api.graph import (
@@ -928,6 +929,19 @@ def _turn_off_in_session(out: "_as.TurnOffResult", sess: "_Session", parent_id: 
     except GraphError as exc:
         out.error = f"Meta could not read this {level} (Graph error {exc.code}); nothing was changed."
         return
+    if level == "campaign":
+        # Поля чтения кампании есть и у группы объявлений: id группы прошёл бы как
+        # кампания. `objective` бывает только у кампании.
+        try:
+            kind = client.get(f"/{oid}", {"fields": "objective"})
+        except GraphStop:
+            raise
+        except GraphError as exc:
+            out.error = f"Meta could not confirm this is a campaign (Graph error {exc.code}); nothing was changed."
+            return
+        if not str((kind or {}).get("objective") or "").strip():
+            out.error = "Meta does not confirm that this id is a campaign; nothing was touched."
+            return
     out.name = snap["name"]
     if expected_name and _as.clean_object_name(expected_name)[:160] != _as.clean_object_name(snap["name"])[:160]:
         out.error = (f"Meta shows \"{snap['name']}\" under this id, but the dashboard showed "
@@ -978,11 +992,11 @@ def _turn_off_in_session(out: "_as.TurnOffResult", sess: "_Session", parent_id: 
         out.state = "unconfirmed"
         out.error = f"The change was sent but could not be read back: {exc}"[:300]
         return
-    if unknown:
-        client.reconciled(path)
     effective = back["effective_status"]
     out.delivery = _delivery_word(effective)
     if back["status"] == "PAUSED" and effective not in _STILL_RUNNING:
+        if unknown:
+            client.reconciled(path)
         out.state = "off"
         out.how = f"graph api: POST status=PAUSED, read back status=PAUSED effective={effective or '?'}"
     elif back["status"] == "PAUSED":
@@ -1023,7 +1037,8 @@ def _turn_off_locked(account: str, level: str, object_id: str, *, parent_id: str
         return _record_api_turn_off(out)
     wrote = [False]
     try:
-        with _session(account, commands=True) as sess:
+        # Читатель браузера: обновление программы видит запись в полёте (как у команд ACL-1800).
+        with browser_operation.reading(), _session(account, commands=True) as sess:
             _turn_off_in_session(out, sess, parent_id, expected_name, wrote)
     except Exception as exc:  # noqa: BLE001 — любой исход оставляет след в журнале
         if out.state not in ("off", "already_off"):

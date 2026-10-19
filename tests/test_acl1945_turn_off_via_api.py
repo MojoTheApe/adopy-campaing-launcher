@@ -29,7 +29,7 @@ from src.fb_api import write_policy as wp  # noqa: E402
 ACT = "act_1234567890"
 ACT_DIGITS = "1234567890"
 ACCOUNT = "Acc"
-CAMP, CAMP2, AD = "1000001", "1000002", "3000001"
+CAMP, CAMP2, AD, ADSET = "1000001", "1000002", "3000001", "2000001"
 
 
 class FakeMeta:
@@ -39,8 +39,9 @@ class FakeMeta:
         self.posts: list[tuple[str, dict]] = []
         self.fail_next: dict[str, str] = {}      # id → applied | lost | refuse | drop | lag
         self.objs = {
-            CAMP: self._o(CAMP, "Camp One", "ACTIVE", "ACTIVE"),
-            CAMP2: self._o(CAMP2, "Camp One", "ACTIVE", "ACTIVE"),       # то же имя, другой id
+            CAMP: {**self._o(CAMP, "Camp One", "ACTIVE", "ACTIVE"), "objective": "OUTCOME_LEADS"},
+            CAMP2: {**self._o(CAMP2, "Camp One", "ACTIVE", "ACTIVE"), "objective": "OUTCOME_LEADS"},
+            ADSET: self._o(ADSET, "Camp One", "ACTIVE", "ACTIVE"),       # группа с именем кампании
             AD: {**self._o(AD, "Ad one", "ACTIVE", "ACTIVE"),
                  "campaign": {"id": CAMP, "name": "Camp One", "status": "ACTIVE", "effective_status": "ACTIVE"}},
         }
@@ -359,3 +360,10 @@ def test_the_journal_line_is_valid_json_with_the_new_field(meta):
     off()
     line = sp._turn_off_log().read_text(encoding="utf-8").splitlines()[-1]
     assert json.loads(line)["matched_by"] == "id"
+
+
+def test_an_ad_set_id_sent_as_a_campaign_is_refused_even_with_the_same_name(meta):
+    out = off("campaign", ADSET, expected_name="Camp One")
+
+    assert out.state == "failed" and "does not confirm" in out.error
+    assert meta.posts == [] and meta.objs[ADSET]["status"] == "ACTIVE"
