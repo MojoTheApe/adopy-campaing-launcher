@@ -43233,6 +43233,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T12:49:40+00:00",
         "from_status": "status:todo"
+      },
+      "29": {
+        "actor": "Worker-W123C",
+        "session": "w123c-20261016",
+        "coordinator": "Coordinator-C1016A",
+        "branch": "codex/acl-123-disabled-next-step",
+        "worktree": "C:\\acl-123-c",
+        "id": "d448aadd8f7d441c8acc29b1209c5e2b",
+        "issue": 29,
+        "state": "implementing",
+        "started_at": "2026-10-19T12:50:20+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -49679,9 +49691,13 @@
           {
             "actor": "Worker-W123C",
             "session": "w123c-20261016"
+          },
+          {
+            "actor": "Worker-W123C",
+            "session": "w123c-20261016"
           }
         ],
-        "state": "stopped",
+        "state": "implementing",
         "worker": "Worker-W123C",
         "coordinator": "Coordinator-C1016A",
         "handoff": {
@@ -49700,7 +49716,6 @@
         },
         "pr": 954,
         "queued_at": "2026-10-16T14:39:06+00:00",
-        "reviewer": "Reviewer-R123D",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -90193,6 +90208,13 @@
         "issue": 165,
         "claim": "70ec71ce168f4b43b4d7f6143cb96f84",
         "actor": "Worker-W144D"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T12:50:20+00:00",
+        "issue": 29,
+        "claim": "d448aadd8f7d441c8acc29b1209c5e2b",
+        "actor": "Worker-W123C"
       }
     ],
     "policy": {
