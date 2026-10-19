@@ -44134,9 +44134,11 @@
         "worktree": "C:\\acl-1379-main",
         "id": "917c7b0ab8734bd28a43d9d9b6d32e4a",
         "issue": 379,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T20:01:45+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 943,
+        "report": "Revived after the conflict return: merged work/main (only docs/system/CHANGELOG.md conflicted; both entries kept), pushed. Touched tests pass: test_turn_off_route_by_name, test_turn_off_by_name_browser, test_the_account_tree_on_screen (168 passed). Full suite left to CI. Not verified live."
       }
     },
     "tasks": {
