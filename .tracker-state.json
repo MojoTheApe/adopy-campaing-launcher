@@ -44126,20 +44126,6 @@
   },
   "execution": {
     "claims": {
-      "175": {
-        "actor": "Worker-R1019175",
-        "session": "run_r1019_175",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1175-install-guide",
-        "worktree": "C:\\acl-1175-guide",
-        "id": "47cec4a2eaaa4b879080690b940741c4",
-        "issue": 175,
-        "state": "handoff",
-        "started_at": "2026-10-19T19:58:12+00:00",
-        "from_status": "status:todo",
-        "pr": 930,
-        "report": "Revived after the conflict return: merged work/main (clean). The merge brought new Stats workbook refusals that test_setup_guide requires the guide to explain, so docs/SETUP-NEW-PC.md now lists them (duplicated columns, Missing columns in Excel, empty/not usable). test_setup_guide: 11 passed. Full suite left to CI. Not verified live."
-      },
       "379": {
         "actor": "Worker-R1019379",
         "session": "run_r1019_379",
@@ -52225,9 +52211,25 @@
             "session": "run_r1019_175"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-R1019175",
-        "coordinator": "Coordinator-M1011A"
+        "coordinator": "Coordinator-M1011A",
+        "handoff": {
+          "actor": "Worker-R1019175",
+          "session": "run_r1019_175",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "work/acl-1175-install-guide",
+          "worktree": "C:\\acl-1175-guide",
+          "id": "47cec4a2eaaa4b879080690b940741c4",
+          "issue": 175,
+          "state": "handoff",
+          "started_at": "2026-10-19T19:58:12+00:00",
+          "from_status": "status:todo",
+          "pr": 930,
+          "report": "Revived after the conflict return: merged work/main (clean). The merge brought new Stats workbook refusals that test_setup_guide requires the guide to explain, so docs/SETUP-NEW-PC.md now lists them (duplicated columns, Missing columns in Excel, empty/not usable). test_setup_guide: 11 passed. Full suite left to CI. Not verified live."
+        },
+        "pr": 930,
+        "queued_at": "2026-10-19T20:04:44+00:00"
       }
     },
     "actors": {
@@ -57400,7 +57402,8 @@
       309,
       836,
       990,
-      992
+      992,
+      175
     ],
     "review": {
       "id": "71d08f944d4646c69ba2c95edd8d2464",
@@ -93705,6 +93708,13 @@
         "issue": 379,
         "claim": "917c7b0ab8734bd28a43d9d9b6d32e4a",
         "actor": "Worker-R1019379"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T20:04:44+00:00",
+        "issue": 175,
+        "pr": 930,
+        "actor": "Worker-R1019175"
       }
     ],
     "policy": {
