@@ -4542,6 +4542,27 @@
         "issue_scopes": {
           "287": "f817108928cba547d3fd6e63b12f35cd88eb8f08363ff15c3818dedc8d9770ce"
         }
+      },
+      "985": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-E19864",
+        "implementer": "Worker-E19864",
+        "head_sha": "c5e499312fcbcb9be063915cb2134189f588d485",
+        "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+        "tree_sha": "dc6a9f72911300fdb5d4d2b6f3fc25cbf6c011d6",
+        "execution_lane": "d8c403d18d1c47a0b345a988efd49d74",
+        "review_session": "r864-c0a1de70",
+        "report": "ACL-1864 / PR #985 source review (Reviewer-E19864, session r864-c0a1de70).\n\nPhase 1 (head 216df94b vs main 435bc154): full-scope review against Issue #864. Shared header selection lives in src/analysis_agent/stats_workbook.py (first_content_row / find_stats_header_row / read_stats_workbook). The header is the first non-empty row of the first sheet; only None/empty/whitespace/NaN cells count as blank, so 0 and False are content. All ten Stats columns are required; duplicated names (case-insensitive, edge spaces stripped) and missing names are rejected; there is no search past an invalid first content row. Used by morning_service, morning_report, analyze_fb_stats, stats_correlator, export_report, the setup wizard and settings validation. Row-1 compatibility, extra Date/Variant columns and column order are preserved. Tests (tests/test_stats_workbook_header.py) use synthetic workbooks: 515 formatted empty rows load identically to a row-1 workbook through both _load_enriched_df and build_morning_report; partial, wrong and duplicate headers, 0/False before a later header, whitespace-only and empty sheets are covered; the SHA-256 of the workbook bytes is unchanged after load and validation. No secrets; user-facing text is English. Trial merge into main was clean; 55 affected tests passed locally. The review returned only for the main refresh. Blocking findings: none.\n\nPhase 2 (head c5e49931): the delta since 216df94b is a single merge commit with parents 216df94b and 435bc154. Its tree is identical to git merge-tree of those parents (no extra edits), and the PR diff against main is unchanged (same 9 files, +247/-36; range-diff shows the 3 commits identical). The merged tree is the same one I tested in phase 1. The author reports 34 + 21 affected tests passed, scanner clean, smoke OK. Source CI on c5e49931 is all green, including tracker-link after the coordinator re-ran the stale job.\n\nNon-blocking notes: scripts/_ecuador_targets_report.py:17 still uses raw pd.read_excel for Stats (ad-hoc script); STATS_COLUMNS duplicates STATS_REQUIRED_COLUMNS; the settings error shows a Python list repr; .xls is no longer readable by direct entry points (settings already restrict to .xlsx/.xlsm).",
+        "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          864
+        ],
+        "recorded_at": "2026-10-19T08:12:36+00:00",
+        "issue_scopes": {
+          "864": "5a82d9fa0b21a5416b83b567f37b0e00f9e158450379e8e3f899ad5cd92863db"
+        }
       }
     },
     "stage": {
