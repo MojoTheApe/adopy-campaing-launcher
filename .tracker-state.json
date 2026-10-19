@@ -43591,9 +43591,11 @@
         "worktree": "C:\\acl-142-c",
         "id": "3d8ff597c5a845c7af1bdef948b3dcdd",
         "issue": 72,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T14:21:47+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 958,
+        "report": "CI fix for ACL-142, head 43ee0e61 (no main merge). Root cause: test_one_connect_button.py builds its page from report.html between \"var _mlxCache =\" and amapAddThisCountry; my dialog helpers (amapAskAccount etc.) sat before that slice, so amapConnect hit a ReferenceError. Fix: moved the dialog block to just before amapConnect (inside the slice). The tests also answered the ad account via window.prompt, which the in-page dialog intentionally replaces, so test_one_connect_button.py now drives the dialog (tick a good read / type after a failed read, press Connect); this is the only test change. Local, py3.14: test_one_connect_button 5 passed, test_the_account_tree_on_screen 107 passed, test_acl_142 13, test_connect_without_act 13. CI: linux 3.11/3.13 shard 2 (has test_one_connect_button) passed, windows passed; other linux shards still running at handoff; tracker-link fails only because the task was not in Review."
       },
       "886": {
         "actor": "Worker-RF1019X",
