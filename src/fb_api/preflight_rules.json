@@ -79,12 +79,51 @@
         "level": "ad",
         "sel": ".cb-form-select"
       },
-      "hint": "choose one of the Page's forms in the ad",
+      "hint": "choose one of the Page's forms or a template in the ad",
       "id": "form_chosen",
       "label": "Instant Form chosen",
       "severity": "error",
       "side": "client",
       "unit": "ad"
+    },
+    {
+      "applies": "instant_form",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-form-template-select"
+      },
+      "hint": "the template needs a privacy policy URL that starts with https://",
+      "id": "form_template_privacy",
+      "label": "Form template: privacy policy URL (https)",
+      "severity": "error",
+      "side": "client",
+      "unit": "ad"
+    },
+    {
+      "applies": "instant_form",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-form-template-select"
+      },
+      "hint": "the template needs at least one contact field (name, email or phone)",
+      "id": "form_template_contacts",
+      "label": "Form template: a contact field",
+      "severity": "error",
+      "side": "client",
+      "unit": "ad"
+    },
+    {
+      "applies": "instant_form",
+      "field": {
+        "level": "campaign",
+        "sel": ""
+      },
+      "hint": "accept the Lead Ads terms for this Page in Meta (the robot never accepts them), then check again",
+      "id": "form_terms",
+      "label": "Lead Ads terms accepted on the Page",
+      "severity": "error",
+      "side": "server",
+      "unit": "campaign"
     },
     {
       "applies": "always",
@@ -352,9 +391,9 @@
         "level": "campaign",
         "sel": ""
       },
-      "hint": "a campaign with this name already exists with other settings: rename yours or fix it in Meta",
+      "hint": "if a different campaign already has this name, the robot publishes as NAME_2, NAME_3 ... (up to _20); an error only when all 20 names are taken: rename the campaign",
       "id": "existing_diffs",
-      "label": "No existing campaign with different settings",
+      "label": "Campaign name is free, or gets a _2, _3 suffix",
       "severity": "error",
       "side": "server",
       "unit": "campaign"
