@@ -44398,9 +44398,11 @@
         "worktree": "C:\\acl-1822-wt",
         "id": "250c530e89d948bea7865b14c1dcc079",
         "issue": 822,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T21:36:02+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 823,
+        "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main (stack carries ACL-1816 and the rules UI). Conflicts resolved keeping both intents: src/web/app.py (the /rules/* endpoints and main's /warm/* endpoints), _campaign_table.html (rulesCells state + main's warm state; Rules-cell click handler kept, main's narrower selector), tests/test_acl1800_account_scoped_table.py (took main's version: main removed that harness), test_acl1800_account_tree.py (Rules column added to the expected header order). The browser test test_acl1822_rules_browser.py was adapted to main's account tree (open the account row first, per-account .hc-scroll). Tests: test_acl1822_rules_api 28, test_acl1816_rules_evaluate 67, test_rules_store 86, test_acl1800_account_tree 53, test_acl1800_home_wiring 22, test_acl1822_rules_page 15, test_acl1800_account_scoped_table 11, test_acl1822_rules_browser 17 - all passed. Read-only opus review of the merge resolution: no defects. Not run: test_acl1800_home_commands_browser and other main-owned browser files. No live runs."
       }
     },
     "tasks": {
