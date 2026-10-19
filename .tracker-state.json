@@ -44160,9 +44160,11 @@
         "worktree": "C:\\acl-1309-v2",
         "id": "63b5915c5ea04513a2e3dc7ab5779695",
         "issue": 309,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T19:50:25+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 929,
+        "report": "Revived after the conflict return: merged work/main (only docs/system/CHANGELOG.md conflicted; both entries kept), pushed. Touched tests pass: launcher/local_dashboard/integration_fixes, test_the_dashboard_says_whose_it_is, test_release_updates (84 passed). Full suite left to CI. Not verified live."
       }
     },
     "tasks": {
