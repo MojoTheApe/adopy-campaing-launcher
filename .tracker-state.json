@@ -44296,9 +44296,11 @@
         "worktree": "C:\\acl-1841-wt",
         "id": "13c1ca850b834ef5b33e616519c551df",
         "issue": 841,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T20:28:15+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 848,
+        "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main. Conflicts resolved: _account_map_country.html (kept main's ACL-1800 campaigns section above the table and hc-after footer mount below it, outside the scroll region; our scroll wrapper kept around the table only) and CHANGELOG. Added the review's minor request: a test with campaign_table_api true that checks the order (campaigns section, scroller with only the table, footer mount), no page overflow and reachable actions at 1280/1024/768/390 on Home and Manage. Tests are now explicit about scrolling to the end (End key scrolls vertically, which made the 1024 case flaky on the new main layout). tests/test_account_table_responsive.py: 24 collected, 1024 cases re-run green (6 passed); 1280/768/390 passed earlier in the run.\nNOT DONE: review finding 2 (issue #841 criteria for search/filter, expansion, column settings and batch-command grouping, and footer/builder handle not covering actions, in the integrated toolbar). This remains a partial slice (as the CHANGELOG says). Needs the coordinator to accept it as a partial slice with a follow-up Issue, or a separate task for the toolbar grouping; it should not close #841."
       }
     },
     "tasks": {
