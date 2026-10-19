@@ -3407,7 +3407,6 @@
     .cbd-host[data-level="campaign"] .cb-lvl:not(.cb-lvl-campaign),
     .cbd-host[data-level="adset"] .cb-lvl:not(.cb-lvl-adset),
     .cbd-host[data-level="ad"] .cb-lvl:not(.cb-lvl-ad) { display: none; }
-    .cbd-host .cb-ad-row.cbd-ad-off { display: none; }
     /* ACL-1768: показан только выбранный набор. */
     .cbd-host .cb-adset-sec.cbd-set-off { display: none; }
     .cb-adsets { display: block; }
@@ -3430,8 +3429,8 @@
     .cbd-ed-actions { gap: var(--space-xs); }
     .cbd-ed-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
     .cbd-ed-note { font-size: 0.75rem; color: var(--text-muted, #8a8f98); margin-top: var(--space-xs); }
-    .cbd-ed-adlist { display: flex; flex-wrap: wrap; gap: var(--space-xs); align-items: center; }
-    .cbd-ed-adlist .cbd-ed-adlist-label { color: var(--muted); font-size: var(--adopy-text-sm); }
+    .cbd-ed-inset { display: flex; flex-wrap: wrap; gap: var(--space-xs); align-items: center; }
+    .cbd-ed-inset .cbd-ed-inset-label { color: var(--muted); font-size: var(--adopy-text-sm); }
     /* Настройка аккаунта (ссылка, поля карты) — контекст кампании, не набора и не объявления. */
     .cbd-host[data-level="adset"] .cb-preflight, .cbd-host[data-level="ad"] .cb-preflight { display: none; }
     .cbd-host .cb-lvl { padding-top: var(--space-xs); }
@@ -6881,8 +6880,8 @@ window.cbTree = (function () {
           mine.push('<button type="button" class="cbd-add" data-act="open-ad" data-ad="' + i + '">Ad ' + (i + 1) + '</button>');
         }
       });
-      pick += '<div class="cbd-ed-pick cbd-ed-adlist"><span class="cbd-ed-adlist-label">Ads in this ad set</span>'
-        + (mine.length ? mine.join('') : '<span class="cbd-ed-adlist-label">none yet</span>') + '</div>';
+      pick += '<div class="cbd-ed-pick cbd-ed-inset"><span class="cbd-ed-inset-label">Ads in this ad set</span>'
+        + (mine.length ? mine.join('') : '<span class="cbd-ed-inset-label">none yet</span>') + '</div>';
     }
     return '<div class="cbd-ed-crumb" title="' + aclEscHtml(found.account.account + ' › ' + (c.name || 'Untitled campaign')) + '">'
       + '<strong>' + aclEscHtml(found.account.account) + '</strong> › ' + aclEscHtml(c.name || 'Untitled campaign') + '</div>'
@@ -13621,7 +13620,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
         }
       }
     });
-    if (instant) window.cbLoadFormTemplates();
+    if (Object.keys(instantOf).some(function (k) { return instantOf[k]; })) window.cbLoadFormTemplates();
     window.cbFillFormSelects(slot);
     window.cbFillTemplateSelects(slot);
     window.cbSyncApiOnly(slot);
