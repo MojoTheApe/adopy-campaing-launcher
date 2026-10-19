@@ -44577,6 +44577,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T22:18:31+00:00",
         "from_status": "status:todo"
+      },
+      "680": {
+        "actor": "Worker-H19680",
+        "session": "wh680-c0a1de70",
+        "coordinator": "Coordinator-E1019A",
+        "branch": "work/acl-1680-one-config-dir",
+        "worktree": "C:\\wk20-680",
+        "id": "e07c836f3f274acf994524be87a3358b",
+        "issue": 680,
+        "state": "implementing",
+        "started_at": "2026-10-19T22:19:46+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -51652,10 +51664,14 @@
           {
             "actor": "Worker-F19680",
             "session": "wf680-c0a1de70"
+          },
+          {
+            "actor": "Worker-H19680",
+            "session": "wh680-c0a1de70"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-F19680",
+        "state": "implementing",
+        "worker": "Worker-H19680",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
           "actor": "Worker-F19680",
@@ -51679,14 +51695,7 @@
           "at": "2026-10-17T16:30:39.578092+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-Y19B",
         "return_operation": {
-          "id": "55483130812c4a71b3579ce89ee528d2",
-          "actor": "Coordinator-E1019A",
-          "session": "coord-c0a1de70",
-          "report": "# Return for a main refresh\n\nMain moved to c6150160 (batch #1018 merged after #1016). The existing source approval is bound to the previous main baseline and cannot enter the next intake. No scope change and no defect is requested: merge current origin/main into the original branch, re-run the affected checks, hand off again and get a fresh independent review."
-        },
-        "return": {
           "id": "55483130812c4a71b3579ce89ee528d2",
           "actor": "Coordinator-E1019A",
           "session": "coord-c0a1de70",
@@ -55201,6 +55210,10 @@
       },
       "Worker-H19401": {
         "session": "wh401-c0a1de70",
+        "role": "Worker"
+      },
+      "Worker-H19680": {
+        "session": "wh680-c0a1de70",
         "role": "Worker"
       }
     },
@@ -95530,6 +95543,13 @@
           "report": "# Return for a main refresh\n\nMain moved to c6150160 (batch #1018 merged after #1016). The existing source approval is bound to the previous main baseline and cannot enter the next intake. No scope change and no defect is requested: merge current origin/main into the original branch, re-run the affected checks, hand off again and get a fresh independent review."
         },
         "batch_id": null
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T22:19:46+00:00",
+        "issue": 680,
+        "claim": "e07c836f3f274acf994524be87a3358b",
+        "actor": "Worker-H19680"
       }
     ],
     "policy": {
