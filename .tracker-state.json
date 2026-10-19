@@ -44296,9 +44296,11 @@
         "worktree": "C:\\acl-1840-wt",
         "id": "7f676b12e8e1478a81f819e7994f5e0e",
         "issue": 840,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T20:25:58+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 846,
+        "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main (only conflict: docs/system/CHANGELOG.md, kept both). Addressed the review's CHANGELOG request: the \"dormant on main\" sentence is replaced, the footer mount now exists on main. tests/test_country_campaign_footer_layout.py: 19 passed. Not done (optional in the review): the fixture still carries its own copy of the .hc CSS; it matches main's rules line by line today."
       }
     },
     "tasks": {
