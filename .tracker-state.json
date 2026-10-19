@@ -3152,20 +3152,20 @@
       "887": {
         "kind": "independent-review",
         "verdict": "approved",
-        "reviewer": "Reviewer-DV1019D",
-        "review_session": "dv1019d-887",
-        "execution_lane": "599ff1dd05cc4393b86d30e8731746bb",
-        "implementer": "Worker-RF1019W",
-        "head_sha": "3f04816505d1830a8be5c2d7c495e5fa925548da",
-        "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
-        "tree_sha": "4a8665fe82247f9756889ea697e51743d7df4b29",
-        "report": "Delta re-review after main merge. Head 3f048165 has parents a484aaa1 (previous approved) and 435bc154 (current work/main, contained in head). Remerge diff shows only the docs/system/PROJECT.md conflict, resolved keeping both the Graph read failure diagnostics and CI feedback and admission sections once each, no conflict markers, no duplicate headings, structure intact; no code resolution. All six code/test/fixture files (graph.py, catalogue, fixtures, test_acl1886_graph_error_context.py) are byte-identical to the previously approved head; the head vs main diff is exactly the PR's original 8 files. Affected tests tests/test_acl1886_graph_error_context.py: 37 passed. CI all green (linux 1-3, windows, tooling, tracker-link, installer, process instructions). Earlier full review had no blockers. No live checks claimed.",
-        "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+        "reviewer": "Reviewer-DV1019H",
+        "review_session": "dv1019h-887",
+        "execution_lane": "6b988ae9b41b4d84afe3b7bdbd88a486",
+        "implementer": "Worker-RF1019X",
+        "head_sha": "e64308889035cb5682c607cd64474121822840c5",
+        "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+        "tree_sha": "718f4d407a5f8e9d23135e613fc1f04d380b93c9",
+        "report": "Delta re-review of ACL-1886 (PR 887) after merging main 1c6ab78e into previously approved 3f048165. Verified merge parents (3f048165 + 1c6ab78e), head contains current work/main, remerge-diff is empty (no code resolution), and the per-file patch-ids of the 3f048165..e6430888 diff are identical to those of main 435bc154..1c6ab78e for all 27 files (no extra code, no doc changes beyond main's). Ran tests/test_acl1886_graph_error_context.py: 37 passed. CI all green (tracker-link, windows tests, linux tests 1-3, installer/tooling checks). Earlier full review had no blockers. No live checks claimed.",
+        "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
         "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
         "issues": [
           886
         ],
-        "recorded_at": "2026-10-19T13:12:36+00:00",
+        "recorded_at": "2026-10-19T15:08:37+00:00",
         "issue_scopes": {
           "886": "291706aa97fea07f175753abc951ee231d86a7ea2d52cd679f94cf2db3f7bf9d"
         }
