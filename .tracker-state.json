@@ -44576,9 +44576,11 @@
         "worktree": "C:\\wk20-602",
         "id": "96c117b9e58746eaba1cd6ca3bb3fe1e",
         "issue": 70,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T22:20:47+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 982,
+        "report": "Pure refresh: merged origin/main (c6150160) into work/acl-602-lead-goals-overview, clean merge, no conflicts, no scope change.\nChecks: test_goals, build_progress_model, acl_test_platform, every_change_leaves_a_record, acl_ci_scope, acl_batch_ci_scope, report_scripts_parse pass; scan_secrets OK; smoke OK. 5 failures (3 in test_web_form_endpoints, 2 in test_one_button_reads_what_is_needed: HTTP 500 on form routes) reproduce identically on main in C:\\acl-integration, so not caused by this branch."
       },
       "770": {
         "actor": "Worker-B1019770",
