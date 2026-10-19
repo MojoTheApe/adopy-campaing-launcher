@@ -43003,7 +43003,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "864": {
+        "actor": "Worker-E19864",
+        "session": "w864-c0a1de70",
+        "coordinator": "Coordinator-E1019A",
+        "branch": "work/acl-1864-stats-header-rows",
+        "worktree": "C:\\wk19-864",
+        "id": "d8137835052048f986bb128167fcda2c",
+        "issue": 864,
+        "state": "implementing",
+        "started_at": "2026-10-19T07:36:07+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -47909,11 +47922,15 @@
           {
             "actor": "Worker-ACL1864",
             "session": "acl1864-s1"
+          },
+          {
+            "actor": "Worker-E19864",
+            "session": "w864-c0a1de70"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-ACL1864",
-        "coordinator": "Coordinator-M1011A",
+        "state": "implementing",
+        "worker": "Worker-E19864",
+        "coordinator": "Coordinator-E1019A",
         "handoff": {
           "actor": "Worker-ACL1864",
           "session": "acl1864-s1",
@@ -47935,8 +47952,7 @@
           "remote_process_stopped_verified": false
         },
         "pr": 985,
-        "queued_at": "2026-10-17T19:21:46+00:00",
-        "reviewer": "Reviewer-E19864"
+        "queued_at": "2026-10-17T19:21:46+00:00"
       },
       "865": {
         "implementers": [
@@ -52778,6 +52794,10 @@
       "Reviewer-E19287": {
         "session": "r287-c0a1de70",
         "role": "Reviewer"
+      },
+      "Worker-E19864": {
+        "session": "w864-c0a1de70",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -88070,6 +88090,13 @@
           "report": "# ACL-1864 / PR #985 \u2014 source review return (Reviewer-E19864)\n\nReviewed head 216df94b against main 435bc154. Full-scope review done; a trial merge of the PR into current main was clean, and the affected tests passed on that merge (55 passed: test_stats_workbook_header, test_report_loading_stages, test_machine_paths, test_dashboard_stays_responsive_while_report_builds, packaging/windows/tests/{test_setup_wizard,test_machine_config,test_integration_fixes}).\n\n## (a) Required before approval\n- The PR head is 29 commits behind main. Merge current origin/main into work/acl-1864-stats-header-rows (do not rebase), re-run the affected tests listed above plus the scanner/import smoke, push, and send a refreshed handoff.\n\n## (b) Blocking findings\n- None.\n\n## (c) Non-blocking notes\n1. scripts/_ecuador_targets_report.py:17 still calls `pd.read_excel(get_excel_path())` to read the Stats workbook directly. It is an ad-hoc underscore script, so this is optional, but switching it to `read_stats_workbook` would make \"every actual Stats reader\" literally true. Alternatively, note it as out of scope in the PR body.\n2. src/analysis_agent/stats_workbook.py: `STATS_COLUMNS` (set) and `STATS_REQUIRED_COLUMNS` (list) now hold the same ten names twice. Derive the set from the list so the two cannot drift.\n3. src/analysis_agent/stats_workbook.py, check_stats_headers: the settings/wizard error now shows a Python list repr (\"Stats workbook is not usable: Missing columns in Excel: ['CM']\"). It is English and acceptable; a comma-joined list would read better in the UI.\n4. The duplicate check is case-insensitive while the required-column check is case-sensitive. This matches earlier behaviour, but a header written \"country\" is reported as missing rather than as wrong case. Informational only.\n5. read_stats_workbook always goes through openpyxl, so legacy .xls can no longer be read by the direct analyze_fb_stats/export_report entry points (pandas used to pick an engine itself). Settings already accept only .xlsx/.xlsm, so this is informational.\n\nSpec coverage checked: shared header selection used by validation and every main reader (morning_service, morning_report, analyze_fb_stats, stats_correlator, export_report, setup wizard, settings validation); 0/False count as content; no search past an invalid first content row; empty sheet, partial, wrong and duplicate headers rejected; row-1 compatibility, extra Date/Variant columns and column order kept; regression with 515 formatted empty rows compares both the loader and the report builder against a row-1 workbook; the byte hash is unchanged; fixtures are synthetic; no secrets; user-facing text is English.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T07:36:07+00:00",
+        "issue": 864,
+        "claim": "d8137835052048f986bb128167fcda2c",
+        "actor": "Worker-E19864"
       }
     ],
     "policy": {
