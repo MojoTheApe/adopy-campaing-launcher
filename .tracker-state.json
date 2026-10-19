@@ -44287,6 +44287,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T20:10:40+00:00",
         "from_status": "status:todo"
+      },
+      "854": {
+        "actor": "Worker-R1019854",
+        "session": "run_r1019_854",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "codex/acl-1854-current-draft-status",
+        "worktree": "C:\\acl-1854-wt",
+        "id": "8ed5474077a24ef0af7a92f863e035c5",
+        "issue": 854,
+        "state": "implementing",
+        "started_at": "2026-10-19T20:30:34+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -49319,11 +49331,15 @@
           {
             "actor": "Worker-SR1012",
             "session": "connection_sr1012_worker"
+          },
+          {
+            "actor": "Worker-R1019854",
+            "session": "run_r1019_854"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-SR1012",
-        "coordinator": "Coordinator-CR1012",
+        "state": "implementing",
+        "worker": "Worker-R1019854",
+        "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-SR1012",
           "session": "connection_sr1012_worker",
@@ -49341,14 +49357,7 @@
         "pr": 869,
         "queued_at": "2026-10-13T09:52:42+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
-        "reviewer": "Reviewer-RS1012",
         "return_operation": {
-          "id": "91201340047f423fa6a6747b1c5dc404",
-          "actor": "Coordinator-FLOW513",
-          "session": "flow_five_reviews_coordinator_01a134f0_20261013",
-          "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
-        },
-        "return": {
           "id": "91201340047f423fa6a6747b1c5dc404",
           "actor": "Coordinator-FLOW513",
           "session": "flow_five_reviews_coordinator_01a134f0_20261013",
@@ -54728,6 +54737,10 @@
       },
       "Worker-R1019841": {
         "session": "run_r1019_841",
+        "role": "Worker"
+      },
+      "Worker-R1019854": {
+        "session": "run_r1019_854",
         "role": "Worker"
       }
     },
@@ -93973,6 +93986,13 @@
         "issue": 841,
         "pr": 848,
         "actor": "Worker-R1019841"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T20:30:34+00:00",
+        "issue": 854,
+        "claim": "8ed5474077a24ef0af7a92f863e035c5",
+        "actor": "Worker-R1019854"
       }
     ],
     "policy": {
