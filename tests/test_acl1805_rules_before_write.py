@@ -120,3 +120,10 @@ def test_blocked_codes_stop_the_client_and_explain(tmp_path, code):
     assert out.error.startswith("Graph API stopped:") and "blocked raw" not in out.error
     assert out.problems and out.problems[0]["action"]
     assert f"({code})" in str(client.stopped)
+
+
+def test_blocked_code_as_subcode_also_stops_and_explains(tmp_path):
+    meta = RefusingMeta({"code": 100, "error_subcode": 1404078, "message": "blocked raw"})
+    out, client = _run(meta, _draft(tmp_path))
+    assert out.stop_kind == "policy_block" and isinstance(client.stopped, g.PolicyBlocked)
+    assert "temporarily blocked" in out.error

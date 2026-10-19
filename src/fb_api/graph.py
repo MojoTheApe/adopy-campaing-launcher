@@ -177,12 +177,12 @@ _NOT_SENT = {"write_refused", "read_only", "no_file", "bad_option", "no_fetch", 
              "bad_path", "forbidden_param"}
 
 
-def classify(code: int | None) -> str:
+def classify(code: int | None, subcode: int | None = None) -> str:
     if code in TOKEN_CODES:
         return "token"
     if code in RATE_CODES:
         return "rate_limit"
-    if code in POLICY_CODES or code in BLOCK_CODES:
+    if code in POLICY_CODES or code in BLOCK_CODES or subcode in BLOCK_CODES:
         return "policy"
     return "other"
 
@@ -346,7 +346,7 @@ class GraphClient:
             msg = str(gerr.get("message") or "Graph API error")
             details = error_details(gerr, reply)
             msg = _with_details(msg, details)
-            kind = classify(code)
+            kind = classify(code, sub)
             if kind == "policy":
                 raise self._stop(PolicyBlocked(f"Graph API refused ({code}): {msg}", code=code, subcode=sub))
             if kind == "rate_limit":
@@ -430,7 +430,7 @@ class GraphClient:
             sub = _int(gerr.get("error_subcode"))
             details = error_details(gerr, reply)
             msg = _with_details(str(gerr.get("message") or "Graph API error"), details)
-            kind = classify(code)
+            kind = classify(code, sub)
             if kind == "policy":
                 raise self._stop(PolicyBlocked(f"Graph API refused ({code}): {msg}", code=code, subcode=sub))
             if kind == "rate_limit":

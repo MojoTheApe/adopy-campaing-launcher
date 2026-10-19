@@ -114,7 +114,7 @@ class PlanError(ValueError):
     """Черновик нельзя создать через API; к Meta ничего не писали."""
 
     #: Список проблем для дашборда (как у RPA, ACL-1437); у обычного отказа плана пуст.
-    problems: list = []
+    problems: tuple = ()
 
 
 class RulesViolation(PlanError):
