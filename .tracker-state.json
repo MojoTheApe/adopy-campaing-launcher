@@ -52073,7 +52073,7 @@
       },
       "1020": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       }
     },
     "actors": {
@@ -93066,6 +93066,12 @@
         "issue": 903,
         "claim": "61874486549148ae87e52928e32a4509",
         "actor": "Worker-R1019903"
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-19T18:56:33+00:00",
+        "issue": 1020,
+        "reason": "Folded into ACL-1768 (PR #833): the ad set controls exist only in that PR, so the compact layout ships with it. Patch: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/833#issuecomment-6274773332"
       }
     ],
     "policy": {
