@@ -52469,7 +52469,7 @@
             "session": "wh602-c0a1de70"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-H19602",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
@@ -52499,7 +52499,8 @@
           "actor": "Coordinator-E1019A",
           "session": "coord-c0a1de70",
           "report": "# Return for a main refresh\n\nMain moved to c6150160 (batch #1018 merged after #1016). The existing source approval is bound to the previous main baseline and cannot enter the next intake. No scope change and no defect is requested: merge current origin/main into the original branch, re-run the affected checks, hand off again and get a fresh independent review."
-        }
+        },
+        "reviewer": "Reviewer-X20982"
       },
       "142": {
         "implementers": [
@@ -55498,6 +55499,10 @@
       "Worker-ACT174A": {
         "session": "act174a-78a5f7133f0f4cfbad8ecebf63811c02",
         "role": "Worker"
+      },
+      "Reviewer-X20982": {
+        "session": "rx982-1c30cbbe",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -58378,7 +58383,6 @@
       896,
       768,
       401,
-      70,
       202,
       47,
       770,
@@ -95950,6 +95954,13 @@
         "issue": 1026,
         "claim": "c75dfe62ba9c4c118a40471dc46a618e",
         "actor": "Worker-ACT174A"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-19T23:19:51+00:00",
+        "pr": 982,
+        "lane": "a930a10c05b34ae59dcca59c7dde6308",
+        "actor": "Reviewer-X20982"
       }
     ],
     "policy": {
@@ -103541,6 +103552,18 @@
         "session": "rev-y19b-s1",
         "coordinator": "Coordinator-E1019A",
         "started_at": "2026-10-19T22:32:46+00:00",
+        "state": "reviewing"
+      },
+      "982": {
+        "id": "a930a10c05b34ae59dcca59c7dde6308",
+        "pr": 982,
+        "issues": [
+          70
+        ],
+        "actor": "Reviewer-X20982",
+        "session": "rx982-1c30cbbe",
+        "coordinator": "Coordinator-E1019A",
+        "started_at": "2026-10-19T23:19:51+00:00",
         "state": "reviewing"
       }
     },
