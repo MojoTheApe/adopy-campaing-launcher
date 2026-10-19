@@ -2935,21 +2935,21 @@
       },
       "530": {
         "kind": "independent-review",
-        "reviewer": "Reviewer-C530",
-        "implementer": "Worker-W530R",
         "verdict": "approved",
-        "head_sha": "bcbe152e5b1bcbb595f23760f5334d7b89058e36",
-        "base_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
-        "tree_sha": "d93e985f3f1cd4695c2d138589bba604d7bb4138",
-        "execution_lane": "7270033898de4ad799d859a6b2cd2b59",
-        "review_session": "codex-source530-20261013",
-        "report": "Independent source review by actual /root/source_review_530, Reviewer-C530, of PR530 headbcbe152e5b1bcbb595f23760f5334d7b89058e36 treed93e985f3f1cd4695c2d138589bba604d7bb4138 currentmain/base7cee2857d4b374bc564c5ca84b9f6ede69f96430. Reviewed complete original issue529 requirements, preserved author history/owner no-clip-no-scale exception, fresh genuine Worker main7cee handoff, full eleven-path currentmain scope and clean merge parentsc459+7cee. Own isolated clean review worktree ACL-Review-530-main7cee; no source edits. Screenshot implementation and three related fixture/template files byte-identical to prior independent113passing fixtures, retain plain CDP formatpng/captureBeyondViewportfalse only, no clip/scale/metrics mutation, Pillow postcrop2600cap, bounded error/hidden/timeout handling and detach. Defaultoff screenshot guards and owner-hidden CopyGroup flags unchanged. status_shot model remains hold diagnostic. Currentmain882 browser-first allocation composed with preserved deterministic cost-postpass: no file omissions/duplicates, no changed platform policy or testthresholds; prior independent146model/shard/platformpassed. Current own compatibility rerun was launched but has not reported completion at review recording, so no local current-run pass claimed. Worker reports181assertionspassed with explicit owned syntheticChrome teardown intervention plus23opt-in/defaultofftests; not represented as unassisted cleanup. Actual fresh hosted required CI independently confirmed all16 current effective checks SUCCESS by ghprchecks: sixLinux3.11/3.13shards, Windows3.13, ACLverification run38466991847; build/install/repair/uninstall and Installerverification run38466991917; descriptor, current reruntrackerlink38466991840, classifiers/process/buildinputs. Earlier prehandoff tracker failure replaced by actual successful samehead rerun, no waiver/historicaltree reuse. No blocking findings, exact-source approval accepted. Owner readability/liveMultilogin/package receipt remains pending/unclaimed. No liveMeta/profile/clipboard/ad/deploy/otherbatch mutation.",
-        "main_sha": "7cee2857d4b374bc564c5ca84b9f6ede69f96430",
-        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "reviewer": "Reviewer-R1529Y",
+        "review_session": "reviewer-r1529y-20261019",
+        "execution_lane": "b30f33cdb8634786ad22668116bbe726",
+        "implementer": "Worker-R1019529",
+        "head_sha": "975e4f0609b9dc255f6bffb27194316ef3bbf335",
+        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "tree_sha": "8b36fc6c2a97f0783ad4f03826fcb2fff41d054e",
         "issues": [
           529
         ],
-        "recorded_at": "2026-10-13T21:22:44+00:00",
+        "report": "PR #530 removes the red header band from Copy for group: amapCopyGroup in report.html now fetches the stored status shot and copies it as is, after amapTrimShot cuts empty white margins on the right and bottom (covers old shots), with the disabled state and the new-tab/view fallback unchanged and data-head kept only as the fallback tab title. New status shots (account_spend._status_shot -> _full_view_shot) are taken with a plain CDP Page.captureScreenshot (no clip, no scale; the owner-approved fingerprint-safe decision replacing the issue's scale-2 idea, documented in code and CHANGELOG), then cropped in Python with Pillow: the top (account selector, banner, table header) is never cut, the bottom is cut 24 CSS px under the last table text, white margins are trimmed, width is capped at 2600 px; hidden pages are not captured, the frame/capture work has a 10 s deadline, a CDP failure leaves no shot (no page.screenshot reset of profile metrics), non-CDP pages keep the old fallback. Capture stays inside the page via CDP (nothing outside the Multilogin profile), failures go to Sentry scrubbed and rate-limited, the status_shot diagnostic maps to the hold stage, Pillow becomes a runtime requirement (optional at run time), and the Linux sharder gets a browser-count rebalance without loosening coverage. Merge with current main c6150160 is clean; no ids/tokens/secrets found in the diff or tests; user-facing text is English. Acceptance criteria: no band, copied PNG is the cropped shot, crop keeps selector/header/rows/banner and removes white margins (fixture tests in tests/test_copy_for_group.py, test_status_screenshot.py); the scale-2 wording is met by the owner-approved no-clip/no-scale decision (output is the native-resolution shot, capped at 2600 px); owner readability check of fresh 9943/Doc20/6540 pictures remains outstanding. Tests run locally (Windows, venv Python): test_copy_for_group, test_status_screenshot, test_acl_test_shard, test_build_progress_model - 162 passed. CI on this exact head is all green (linux 3.11/3.13 x3 shards, windows 3.13, installer build/verify, tracker-link, process instructions). Non-blocking nits: comments are in Russian per repo convention; the Pillow try/except ImportError silently keeps an uncropped shot, so a missing Pillow would go unnoticed; the sharder rebalance is somewhat intricate for a feature PR. No live checks claimed.",
+        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "recorded_at": "2026-10-19T21:28:46+00:00",
         "issue_scopes": {
           "529": "d2a578fc8422a76cdb13d415f870c385f45e611e31569057e69edab3a2b33eac"
         }
