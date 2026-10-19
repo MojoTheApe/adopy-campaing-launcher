@@ -1646,9 +1646,11 @@ class CampaignCreator:
                           rec.get("vertical_video_id") or rec.get("vertical_image_hash")))
         for slot, name, path, made in wants:
             got = bound[slot] or ""
-            if made:
-                check(aobj, name, str(made), got)
             data = files.get(path, b"")
+            # Видео в ленте ассетов Meta отдаёт копией под новым id (живой прогон 19.10); тогда файл
+            # доказывает название с md5 ниже, а равенство id сверяем только без такой проверки.
+            if made and not (ad.kind == "video" and data and got):
+                check(aobj, name, str(made), got)
             if not (data and got):
                 continue
             if ad.kind == "video":
