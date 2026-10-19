@@ -165,10 +165,17 @@ class StubTab:
             if self.call_exc:
                 raise self.call_exc
             return self.call_reply
+        if ".startCall(" in expr:
+            # ACL-1899: запись с файлом - задание в помощнике, опрос прогресса.
+            if self.call_exc:
+                raise self.call_exc
+            return {"job": "j1"}
+        if ".poll(" in expr:
+            return {"state": "done", "sent": 10, "total": 10, "result": self.call_reply}
         raise AssertionError(expr[:60])
 
     def calls(self):
-        return [e for e in self.exprs if ".call(" in e]
+        return [e for e in self.exprs if ".call(" in e or ".startCall(" in e]
 
 
 def test_read_mode_page_cannot_write():
@@ -238,7 +245,7 @@ def test_the_write_carries_the_expected_size_and_sha256():
     tab = StubTab(call_reply={"status": 200, "body": {"images": {"a.png": {"hash": "h"}}}})
     t = tc.InPageGraph(tab, allow_writes=True, write_act=ACT)
     t.write(f"/{ACT}/adimages", {}, files={"filename": b"0123456789"}, filename="a.png")
-    spec = json.loads(tab.calls()[0].split(".call(", 1)[1].rsplit(")", 1)[0])
+    spec = json.loads(tab.calls()[0].split("(", 1)[1].rsplit(")", 1)[0])
     assert spec["expect"] == {"bytes": 10, "sha256": hashlib.sha256(b"0123456789").hexdigest()}
     assert list(spec["files"]) == ["filename"] and spec["files"]["filename"].startswith("f")
 
@@ -251,7 +258,7 @@ class ScriptedTransport:
         self.gets: list[tuple] = []
         self.reacquired = 0
 
-    def write(self, path, params, files=None, filename=""):
+    def write(self, path, params, files=None, filename="", **_k):
         self.writes.append((path, params))
         return self.replies.pop(0)
 
@@ -428,7 +435,7 @@ class FakeMeta:
             p.pop("adlabels", None)
         return self._new(kind, **p)
 
-    def write(self, path, params, files=None, filename="", on_ad=False):
+    def write(self, path, params, files=None, filename="", on_ad=False, **_k):
         wp.check(ACT, "POST", path, params, files, on_ad=on_ad)       # та же политика, что у страницы
         self.posts.append((path, dict(params)))
         self.on_ad_posts.append((path, bool(on_ad)))
@@ -513,13 +520,21 @@ class FakeMeta:
                 rows = [self._out(o) for o in reversed(self._of("creative"))]      # новые первыми
                 return self._page(rows, params)
             want = params["filtering"][0]["value"]
-            return {"data": [self._out(o) for o in self._of("campaign") if want in o.get("name", "")]}
+            live = params.get("effective_status")      # как Meta: удалённые/архивные в выдачу не попадают
+            equal = params["filtering"][0].get("operator") == "EQUAL"
+            return {"data": [self._out(o) for o in self._of("campaign")
+                             if (o.get("name", "") == want if equal else want in o.get("name", ""))
+                             and (not live or o.get("status") in live)]}
         oid = parts[0]
         if len(parts) == 2:
             if parts[1] == "adsets":
                 return {"data": [self._out(o) for o in self._of("adset", "campaign_id", oid)]}
             if parts[1] == "ads":
                 rows = []
+                parent = self.objects.get(oid, {})
+                if parent.get("_kind") == "campaign":      # /{campaign}/ads - объявления всех его групп
+                    sets = {a["id"] for a in self._of("adset", "campaign_id", oid)}
+                    return {"data": [self._out(o) for o in self._of("ad") if o.get("adset_id") in sets]}
                 for o in self._of("ad", "adset_id", oid):
                     row = self._out(o)
                     cre = self._out(self.objects[o["creative"]["creative_id"]])
@@ -692,9 +707,12 @@ def test_video_wait_respects_the_time_limit(tmp_path):
 
 def test_existing_campaign_with_the_same_name_but_not_ours_is_not_touched(tmp_path):
     meta = FakeMeta()
-    meta._new("campaign", name="MX Leads 1", status="ACTIVE")
+    foreign = meta._new("campaign", name="MX Leads 1", status="ACTIVE")
     out, _ = _run(meta, _draft(tmp_path, ads=1))
-    assert out.stop_kind == "name_taken" and meta.posts == []
+    # ACL-1902: чужую не трогаем и не блокируемся - публикуем под свободным именем.
+    assert out.error == "" and out.published_as == "MX Leads 1_2"
+    assert meta.objects[foreign]["status"] == "ACTIVE"
+    assert not any(o.get("campaign_id") == foreign for o in meta.objects.values())
 
 
 def test_no_delete_and_only_allowlisted_writes(tmp_path):

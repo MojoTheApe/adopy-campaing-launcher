@@ -252,11 +252,94 @@ _HELPER_JS = r"""
     return checked;
   }
 
-  async function write(spec) {
+  // ACL-1776: отдельная цепочка создания формы лидов (зеркало
+  // write_policy.check_form_create). Возвращает null (можно) или короткую причину.
+  function checkForm(spec) {
+    const F = WRITE && WRITE.form_create;
+    if (!F) return 'form_policy';
+    const m = new RegExp('^/([0-9]{1,25})/' + F.edge + '$').exec(String(spec.path || ''));
+    if (!m) return 'form_path';
+    // Страница закреплена на сессию (WRITE.form_create.page), а не берётся у вызывающего.
+    if (!F.page || !/^[0-9]{1,25}$/.test(String(F.page))) return 'form_no_page';
+    if (m[1] !== String(F.page)) return 'form_page';
+    if (String(spec.form_page || '') !== m[1]) return 'form_page';
+    if (spec.files && Object.keys(spec.files).length) return 'form_file';
+    const params = spec.params || {};
+    const txt = (x) => typeof x === 'string' && x.trim().length > 0 && x.length <= F.max_text;
+    const url = (x) => typeof x === 'string' && new RegExp(F.url_re, 'i').test(x.trim());
+    const bad = (value) => {
+      if (Array.isArray(value)) return value.some(bad);
+      if (value && typeof value === 'object') {
+        return Object.keys(value).some((k) => {
+          const low = String(k).toLowerCase();
+          const parts = low.split(/[^a-z0-9]+/);
+          return F.forbidden.indexOf(low) >= 0 || parts.indexOf('tos') >= 0
+            || parts.indexOf('terms') >= 0 || low.indexOf('tos_accepted') >= 0 || bad(value[k]);
+        });
+      }
+      return false;
+    };
+    if (bad(params)) return 'form_forbidden';
+    const keys = Object.keys(params);
+    for (const k of keys) if (!KEY_RE.test(k) || F.keys.indexOf(k) < 0) return 'form_key';
+    for (const k of ['name', 'questions', 'locale']) if (!(k in params)) return 'form_key';
+    const c = Object.assign({}, params);
+    for (const k of F.json_keys) {
+      if (!(k in params)) continue;
+      let v = params[k];
+      if (typeof v === 'string') { try { v = JSON.parse(v); } catch (e) { return 'form_json'; } }
+      c[k] = v;
+    }
+    if (bad(c)) return 'form_forbidden';
+    const only = (obj, kind) => obj && typeof obj === 'object' && !Array.isArray(obj)
+      && Object.keys(obj).every((k) => F.nested[kind].indexOf(k) >= 0);
+    if (!txt(c.name) || c.name.length > 200 || !new RegExp(F.name_re).test(c.name)) return 'form_name';
+    if (!new RegExp(F.locale_re).test(String(c.locale))) return 'form_locale';
+    const qs = c.questions;
+    if (!Array.isArray(qs) || qs.length < 1 || qs.length > F.max_questions) return 'form_questions';
+    for (const q of qs) {
+      if (!only(q, 'question') || F.question_types.indexOf(q.type) < 0) return 'form_questions';
+      if (q.type === 'CUSTOM') { if (!txt(q.key) || !txt(q.label)) return 'form_questions'; }
+      else if (Object.keys(q).length !== 1) return 'form_questions';
+      if ('options' in q) {
+        if (q.type !== 'CUSTOM' || !Array.isArray(q.options) || q.options.length < 1
+            || q.options.length > F.max_options) return 'form_questions';
+        for (const o of q.options) if (!only(o, 'option') || !txt(o.key) || !txt(o.value)) return 'form_questions';
+      }
+    }
+    if ('question_page_custom_headline' in c && !txt(c.question_page_custom_headline)) return 'form_headline';
+    if ('follow_up_action_url' in c && !url(c.follow_up_action_url)) return 'form_url';
+    if ('privacy_policy' in c) {
+      const p = c.privacy_policy;
+      if (!only(p, 'privacy_policy') || !url(p.url) || !txt(p.link_text)) return 'form_privacy';
+    }
+    if ('thank_you_page' in c) {
+      const t = c.thank_you_page;
+      if (!only(t, 'thank_you_page') || !txt(t.title)) return 'form_thanks';
+      if ('body' in t && !txt(t.body)) return 'form_thanks';
+      if ('button_text' in t && !txt(t.button_text)) return 'form_thanks';
+      if ('button_type' in t && F.button_types.indexOf(t.button_type) < 0) return 'form_thanks';
+      if ('website_url' in t && !url(t.website_url)) return 'form_thanks';
+    }
+    if ('context_card' in c) {
+      const x = c.context_card;
+      if (!only(x, 'context_card') || !txt(x.title) || F.card_styles.indexOf(x.style) < 0) return 'form_card';
+      if (!Array.isArray(x.content) || !x.content.length || !x.content.every(txt)) return 'form_card';
+    }
+    return null;
+  }
+
+  async function write(spec, job) {
     const refused = (why) => ({ error: 'write_refused', why: why });
     if (!WRITE) return { error: 'read_only' };
     if (spec.method !== 'POST') return { error: 'read_only' };
     const path = String(spec.path || '');
+    // ACL-1776: путь Страницы идёт ТОЛЬКО по цепочке форм; путь act_X - только по своей.
+    if (/\/leadgen_forms$/.test(path)) {
+      const why = checkForm(spec);
+      if (why) return refused(why);
+      return post(path, spec.params || {}, undefined, null, spec, {}, null);
+    }
     // ACL-1800: правка существующего объекта — отдельная узкая политика. Помощник
     // создателя (без `object_update`) пути объекта не принимает; помощник правок
     // (без рёбер) пути создания не принимает.
@@ -348,6 +431,79 @@ _HELPER_JS = r"""
         if (hex !== String(expect.sha256 || '')) return refused('file_hash');
       } catch (e) { return refused('file_hash'); }
     }
+    return post(path, params, want, blob, spec, files, job || null);
+  }
+
+  // ACL-1899: отправка файла (XHR: abort и проверка перенаправления). Без собственного таймаута: ждём ответ,
+  // сетевую ошибку или `abort()` (Stop у покупателя).
+  function sendXhr(url, body, cred, job) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      job.xhr = xhr;
+      xhr.open('POST', url, true);
+      xhr.withCredentials = (cred === 'include');
+      // ВАЖНО: на `xhr.upload` НЕ вешаем ни одного слушателя (ни onprogress, ни addEventListener).
+      // Любой слушатель загрузки по спецификации включает CORS-preflight; Graph отвечает на
+      // OPTIONS с `Access-Control-Allow-Origin: *` без `Allow-Credentials`, и запрос с
+      // куками (`withCredentials`) браузер режет: тело не уходит, приходит `network`.
+      // Поэтому байтового прогресса нет - Python показывает прошедшее время.
+      // Остаточный риск: XHR сам идёт по 307/308 и мог УЖЕ переотправить тело (с токеном)
+      // по новому адресу до этой проверки. Рвём запрос, как только заголовки пришли не с
+      // нашего адреса, и считаем результат НЕИЗВЕСТНЫМ. Graph-хосты не перенаправляют.
+      const wrongUrl = () => !!xhr.responseURL && xhr.responseURL !== url;
+      xhr.onreadystatechange = () => {
+        if (xhr.readyState === 2 && wrongUrl()) {
+          reject(new Error('redirect'));
+          try { xhr.abort(); } catch (e) {}
+        }
+      };
+      xhr.onload = () => {
+        if (wrongUrl()) { reject(new Error('redirect')); return; }
+        resolve({ status: xhr.status, text: String(xhr.responseText || ''), url: xhr.responseURL || '' });
+      };
+      xhr.onerror = () => reject(new Error('network'));
+      xhr.onabort = () => reject(new Error('aborted'));
+      xhr.send(body);
+    });
+  }
+
+  // Задания записи с файлом: `startCall` сразу отдаёт id, `poll` читает прогресс
+  // (локально, к Meta не ходит), `abort` рвёт отправку. Проверки политики — те же
+  // (`write(spec, job)`), здесь ничего не ослаблено.
+  const jobs = {};
+  let jobSeq = 0;
+  function startCall(spec) {
+    if (retired) return { error: 'retired' };
+    if (!WRITE || !spec || spec.method !== 'POST') return { error: 'read_only' };
+    if (!spec.files || !Object.keys(spec.files).length) return { error: 'bad_option' };
+    for (const k of Object.keys(jobs)) {
+      if (jobs[k].state !== 'running' && Object.keys(jobs).length > 8) delete jobs[k];
+    }
+    for (const k of Object.keys(jobs)) if (jobs[k].state === 'running') return { error: 'bad_option' };
+    const id = 'j' + (++jobSeq);
+    const job = { state: 'running', xhr: null, aborted: false, result: null };
+    jobs[id] = job;
+    write(spec, job).then(
+      (r) => { job.result = r; job.state = (r && r.error) ? 'error' : 'done'; },
+      () => { job.result = { error: 'network' }; job.state = 'error'; });
+    return { job: id };
+  }
+  function poll(id) {
+    const j = jobs[String(id)];
+    if (!j) return { state: 'error', result: { error: 'no_job' } };
+    if (j.state === 'running') return { state: 'running' };
+    return { state: j.state, result: j.result };
+  }
+  function abort(id) {
+    const j = jobs[String(id)];
+    if (!j) return { ok: false };
+    j.aborted = true;
+    try { if (j.xhr) j.xhr.abort(); } catch (e) {}
+    return { ok: true };
+  }
+
+  // Общая отправка записи: политика уже проверена (цепочка act_X или цепочка форм).
+  async function post(path, params, want, blob, spec, files, job) {
     scanFast(); scanHtml();
     if (!token) return { error: 'no_token', state: state() };
     if (typeof fetch !== 'function') return { error: 'no_fetch' };
@@ -378,16 +534,33 @@ _HELPER_JS = r"""
     const url = 'https://' + useHost + (version ? '/' + version : '') + path;
     const endpoint = { host: useHost, version: version, credentials: cred };
     let resp = null;
-    try {
-      resp = await fetch(url, { method: 'POST', body: body, credentials: cred, mode: 'cors',
-                                cache: 'no-store', redirect: 'error' });
-    } catch (e) {
-      if (want) unstage(files[want]);
-      return { error: 'network', state: state(), endpoint: endpoint };
-    }
-    if (want) unstage(files[want]);
     let text = '';
-    try { text = await resp.text(); } catch (e) { return { error: 'network', status: resp.status }; }
+    if (job && blob) {
+      // ACL-1899: файл уходит через XMLHttpRequest — он отдаёт `upload.onprogress`.
+      // Те же правила, что у fetch: один запрос, без повтора, без перенаправлений.
+      if (typeof XMLHttpRequest !== 'function') { unstage(files[want]); return { error: 'no_fetch' }; }
+      if (job.aborted) { unstage(files[want]); return { error: 'aborted' }; }
+      let got = null;
+      try { got = await sendXhr(url, body, cred, job); }
+      catch (e) {
+        unstage(files[want]);
+        const why = job.aborted ? 'aborted' : (e && e.message === 'redirect' ? 'redirected' : 'network');
+        return { error: why, state: state(), endpoint: endpoint };
+      }
+      unstage(files[want]);
+      resp = { status: got.status };
+      text = got.text;
+    } else {
+      try {
+        resp = await fetch(url, { method: 'POST', body: body, credentials: cred, mode: 'cors',
+                                  cache: 'no-store', redirect: 'error' });
+      } catch (e) {
+        if (want) unstage(files[want]);
+        return { error: 'network', state: state(), endpoint: endpoint };
+      }
+      if (want) unstage(files[want]);
+      try { text = await resp.text(); } catch (e) { return { error: 'network', status: resp.status }; }
+    }
     text = clean(text);
     let parsed;
     try { parsed = JSON.parse(text); } catch (e) { parsed = { non_json: text.slice(0, 300) }; }
@@ -448,7 +621,8 @@ _HELPER_JS = r"""
   function retire() { retired = true; token = null; return true; }
 
   g[NAME] = Object.freeze({ call: call, state: state, probe: probe, retire: retire,
-                          stage: stage, unstage: unstage });
+                          stage: stage, unstage: unstage,
+                          startCall: startCall, poll: poll, abort: abort });
 })();
 """
 
@@ -478,6 +652,7 @@ class InPageGraph:
     def __init__(self, tab: Any, *, name: str | None = None,
                  graph_host: str = "captured", credentials: str = "captured",
                  allow_writes: bool = False, write_act: str | None = None,
+                 write_page: str | None = None,
                  allow_object_updates: bool = False,
                  sleep: Callable[[float], None] = time.sleep,
                  clock: Callable[[], float] = time.monotonic):
@@ -489,6 +664,7 @@ class InPageGraph:
         self.object_updates = bool(allow_object_updates)
         self.allow_writes = bool(allow_writes) or self.object_updates
         self.write_act = None
+        self.write_page: str | None = None
         self._write_policy: dict | None = None
         if self.allow_writes:
             from src.fb_api import write_policy as _wp
@@ -497,8 +673,11 @@ class InPageGraph:
             if not m:
                 raise ValueError("allow_writes needs the verified act_<id>")
             self.write_act = str(write_act)
+            if write_page and not re.fullmatch(r"[0-9]{1,25}", str(write_page)):
+                raise ValueError("write_page must be the numeric Page id of the plan")
+            self.write_page = str(write_page) if write_page else None
             self._write_policy = (_wp.policy_for_commands(self.write_act) if self.object_updates
-                                  else _wp.policy_for_page(self.write_act))
+                                  else _wp.policy_for_page(self.write_act, self.write_page or ""))
         if graph_host not in GRAPH_HOST_MODES:
             raise ValueError(f"graph_host must be one of {sorted(GRAPH_HOST_MODES)}")
         if credentials not in CREDENTIAL_MODES:
@@ -552,6 +731,30 @@ class InPageGraph:
             raise stop from exc
 
     # -- отдельный мир и помощник
+    def pin_page(self, page: str, *, timeout: float = 30.0) -> dict:
+        """Закрепить Страницу плана на сессию (ACL-1776), как `write_act` закреплён на кабинет.
+
+        Один раз: повторно - только то же значение. Помощник переустанавливается
+        в новом мире уже с этой Страницей в политике форм. После сброса мира ждём токен
+        (`wait_ready`): свежий мир мог не найти его в буфере Resource Timing. Возвращает
+        состояние страницы; без токена вызывающий не пишет.
+        """
+        if not self.allow_writes:
+            raise ValueError("read-only: writes are not enabled for this page")
+        page = str(page or "")
+        if not re.fullmatch(r"[0-9]{1,25}", page):
+            raise ValueError("the Page to pin must be a numeric Page id")
+        if self.write_page:
+            if self.write_page != page:
+                raise ValueError("a different Page is already pinned for this session")
+            return {"kind": "ads_manager", "has_token": True, "pinned": True}
+        from src.fb_api import write_policy as _wp
+
+        self.write_page = page
+        self._write_policy = _wp.policy_for_page(self.write_act, page)
+        self._reset_world()
+        return self.wait_ready(timeout=timeout)
+
     def _reset_world(self) -> None:
         self._ctx = None
         self._injected = False
@@ -741,13 +944,23 @@ class InPageGraph:
         raise CdpError("staging failed")  # недостижимо
 
     def write(self, path: str, params: dict | None = None, *, files: dict | None = None,
-              filename: str = "", timeout: float = 120.0, on_ad: bool = False) -> dict:
+              filename: str = "", timeout: float = 120.0, on_ad: bool = False,
+              form_page: str = "", progress: Callable[[float], None] | None = None,
+              cancelled: Callable[[], bool] | None = None) -> dict:
         """POST в разрешённое ребро. РОВНО один раз; сбой после отправки — `call_unknown`.
 
         `files` — {поле: bytes}. Файл складывается в помощник прямо перед
         вызовом, в том же мире; помощник сверяет размер и SHA-256 перед
         отправкой. Политика проверяется здесь (`write_policy.check`) и ещё раз
         в помощнике.
+
+        ACL-1899: запись С ФАЙЛОМ не имеет общего срока (`timeout` к ней не
+        относится): задание стартует в помощнике, а Python раз в `UPLOAD_POLL_S`
+        спрашивает состояние (только локальный CDP, к Meta не ходит) и отдаёт
+        прошедшие секунды в `progress` (байтового прогресса нет: слушатель
+        `xhr.upload` включил бы CORS-preflight, который Graph не пропускает). Кончается ответом, ошибкой сети или
+        пропажей страницы (`call_unknown`); на `cancelled()` рвём отправку.
+        Запись без файла — прежний короткий `timeout`.
         """
         if not self.allow_writes:
             raise ValueError("read-only: writes are not enabled for this page")
@@ -755,13 +968,18 @@ class InPageGraph:
 
         from src.fb_api import write_policy as _wp
 
-        if self.object_updates:
+        if form_page:
+            # ACL-1776: цепочка форм - Страница плана; цепочка act_X для такого пути не годится.
+            _wp.check_form_create(form_page, "POST", path, params, files, self.write_page or "")
+        elif self.object_updates:
             _wp.check_object_update("POST", path, params, files)
         else:
             _wp.check(self.write_act, "POST", path, params, files, on_ad=on_ad)
         spec: dict[str, Any] = {"method": "POST", "path": path, "params": params or {}, "files": {},
                                 "filename": filename, "host": self.graph_host,
                                 "credentials": self.credentials}
+        if form_page:
+            spec["form_page"] = str(form_page)
         if on_ad:
             # ACL-1775: набор плана ON_AD — вторая линия политики пропустит форму в креативе.
             spec["on_ad"] = True
@@ -779,6 +997,8 @@ class InPageGraph:
         else:
             self._ready_for_call()
             ctx = self._ensure()
+        if files:
+            return self._write_file_job(ctx, spec, progress, cancelled)
         expr = f"globalThis[{json.dumps(self.name)}].call({json.dumps(spec)})"
         try:
             got = strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout))
@@ -786,6 +1006,68 @@ class InPageGraph:
             # Запрос мог уйти: результат неизвестен, повтора нет — сверка чтением.
             return {"error": "call_unknown"}
         return got if isinstance(got, dict) else {"error": "call_unknown"}
+
+    #: Как часто спрашивать у помощника прогресс отправки файла (ACL-1899).
+    UPLOAD_POLL_S = 1.0
+    #: Срок ОДНОГО локального опроса/старта/обрыва; общего срока у загрузки нет.
+    UPLOAD_CDP_TIMEOUT_S = 15.0
+    #: Сколько таймаутов ОПРОСА подряд терпим (повторно файл не шлём никогда).
+    MAX_POLL_TIMEOUTS = 3
+
+    def _write_file_job(self, ctx: int, spec: dict, progress, cancelled) -> dict:
+        """Запись с файлом без общего срока: старт, опрос раз в секунду, обрыв по Stop."""
+        def run(method: str, arg: str = "") -> Any:
+            expr = f"globalThis[{json.dumps(self.name)}].{method}({arg})"
+            return strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=self.UPLOAD_CDP_TIMEOUT_S))
+
+        try:
+            started = run("startCall", json.dumps(spec))
+        except (CdpTimeout, StaleContextError, PageError, CdpError, TimeoutError):
+            return {"error": "call_unknown"}
+        if not isinstance(started, dict):
+            return {"error": "call_unknown"}
+        if started.get("error"):
+            return started                              # отказ ДО отправки (политика/состояние)
+        job = started.get("job")
+        if not isinstance(job, str) or not re.fullmatch(r"j[0-9]{1,6}", job):
+            return {"error": "call_unknown"}
+        poll_timeouts = 0
+        began = self._clock()
+        while True:
+            if cancelled is not None and cancelled():
+                try:
+                    run("abort", json.dumps(job))
+                except (CdpTimeout, StaleContextError, PageError, CdpError, TimeoutError):
+                    pass
+                # Результат неизвестен: дальше обычная сверка чтением, повторной загрузки нет.
+                return {"error": "call_unknown", "why": "cancelled"}
+            try:
+                got = run("poll", json.dumps(job))
+            except (CdpTimeout, TimeoutError):
+                # Один опрос не ответил - не конец загрузки: терпим подряд до MAX_POLL_TIMEOUTS.
+                poll_timeouts += 1
+                if poll_timeouts > self.MAX_POLL_TIMEOUTS:
+                    return {"error": "call_unknown"}
+                self._sleep(self.UPLOAD_POLL_S)
+                continue
+            except (StaleContextError, PageError, CdpError):
+                return {"error": "call_unknown"}
+            poll_timeouts = 0
+            if not isinstance(got, dict):
+                return {"error": "call_unknown"}
+            state = got.get("state")
+            if state == "running":
+                if progress is not None:
+                    try:
+                        progress(max(0.0, self._clock() - began))
+                    except Exception:                    # noqa: BLE001 — показ не должен ронять запись
+                        pass
+                self._sleep(self.UPLOAD_POLL_S)
+                continue
+            result = got.get("result")
+            if state in ("done", "error") and isinstance(result, dict):
+                return result
+            return {"error": "call_unknown"}
 
     def reacquire(self, *, timeout: float = 90.0) -> dict:
         """Переснять токен: гасим помощника, перезагружаем вкладку, новый мир."""
