@@ -568,8 +568,9 @@ class InPageGraph:
             raise self._connection_stop
         for attempt in (0, 1):
             try:
-                if self._session_recovered:
-                    self.tab.verify_url(self._expected_url)
+                with self._timeouts_as_stops():
+                    if self._session_recovered:
+                        self.tab.verify_url(self._expected_url)
                 ctx = self._ensure()
                 with self._timeouts_as_stops():
                     return strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout))
