@@ -45,16 +45,54 @@ def test_active_flag_without_cutover_evidence_is_not_enough(prepared):
         acl_adoption.guard_tracker(['work', 'ACL-1248'], prepared)
 
 
-@pytest.mark.parametrize('client', ['scripts/task_tracker.py', '.workflow/tools/task_tracker.py'])
-def test_both_client_entrypoints_stop_before_loading_engine(client, prepared):
-    for name in ('scripts/task_tracker.py', 'scripts/acl_adoption.py', '.workflow/tools/task_tracker.py'):
+def test_guarded_acl_adapter_stops_before_loading_shared_engine(prepared):
+    for name in ('scripts/acl_task_tracker.py', 'scripts/task_tracker.py', 'scripts/acl_adoption.py',
+                 '.workflow/tools/task_tracker.py'):
         target = prepared / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / name, target)
-    result = subprocess.run([sys.executable, str(prepared / client), 'set', 'ACL-1248', '--status', 'merged'],
+    result = subprocess.run([sys.executable, str(prepared / 'scripts/acl_task_tracker.py'),
+                             'set', 'ACL-1248', '--status', 'merged'],
                             cwd=ROOT, capture_output=True, text=True)
     assert result.returncode != 0
     assert 'not active' in result.stderr
+
+
+@pytest.mark.parametrize('marker', [None, '{', '{"schema_version":1,"state":"unknown"}',
+                                   '{"schema_version":1,"state":"active","evidence":{}}'])
+def test_guarded_adapter_rejects_missing_or_corrupt_marker_before_delegation(prepared, monkeypatch, marker):
+    from scripts import acl_task_tracker
+    path = prepared / '.workflow/adoption.json'
+    if marker is None:
+        path.unlink()
+    else:
+        path.write_text(marker)
+    actual_guard = acl_adoption.guard_tracker
+    monkeypatch.setattr(acl_adoption, 'guard_tracker', lambda args: actual_guard(args, prepared))
+    monkeypatch.setitem(sys.modules, 'acl_adoption', acl_adoption)
+    monkeypatch.setattr(sys, 'argv', ['acl_task_tracker.py', 'work', 'ACL-1248'])
+    monkeypatch.setattr(acl_task_tracker.runpy, 'run_path',
+                        lambda *a, **k: pytest.fail('invalid marker reached shared engine/transport'))
+    before = sorted(p.relative_to(prepared).as_posix() for p in prepared.rglob('*'))
+    assert acl_task_tracker.main() == 1
+    assert sorted(p.relative_to(prepared).as_posix() for p in prepared.rglob('*')) == before
+
+
+def test_active_guarded_adapter_delegates_same_arguments_to_canonical_client(prepared, monkeypatch):
+    from scripts import acl_task_tracker
+    path = prepared / '.workflow/adoption.json'
+    state = json.loads(path.read_text())
+    state.update(state='active', evidence={k: 'retained actual cutover proof' for k in acl_adoption.ACTIVATION_EVIDENCE})
+    path.write_text(json.dumps(state))
+    actual_guard = acl_adoption.guard_tracker
+    monkeypatch.setattr(acl_adoption, 'guard_tracker', lambda args: actual_guard(args, prepared))
+    monkeypatch.setitem(sys.modules, 'acl_adoption', acl_adoption)
+    argv = ['acl_task_tracker.py', 'guide']
+    monkeypatch.setattr(sys, 'argv', argv)
+    calls = []
+    monkeypatch.setattr(acl_task_tracker.runpy, 'run_path', lambda path, **kwargs: calls.append((path, kwargs, sys.argv[:])))
+    assert acl_task_tracker.main() == 0
+    assert calls == [(str(ROOT / 'scripts/task_tracker.py'), {'run_name': '__main__'}, argv)]
 
 
 @pytest.mark.parametrize('arguments', [
@@ -130,7 +168,7 @@ def test_existing_ids_and_modules_are_preserved():
     new = json.loads((ROOT / 'tracker/config.json').read_text())
     assert new['project'] == dict(old['project'], base_branch='main')
     assert new['modules'] == old['modules']
-    assert new['workflow'] == old['workflow'][:-1] + ['approved', 'stage', 'merged']
+    assert new['workflow'] == old['workflow'][:-1] + ['approved', 'merged']
     assert new['execution_policy'] == {'schema_version':3, 'implementation_limit':5, 'review_limit':5, 'batch_limit':5}
 
 
@@ -141,10 +179,29 @@ def test_five_review_policy_keeps_descriptor_engine_and_delivery_contract_consis
     lock = json.loads((ROOT / 'tracker/engine.json').read_text())
     assert descriptor['workflow']['execution'] == rules.execution_policy(config)
     assert lock['revision'] == descriptor['tracker']['revision']
+    assert 'ci_evidence_policy' not in config  # Exported support cannot opt ACL into the native V1 protocol.
     action = yaml.safe_load((ROOT / '.github/workflows/delivery-check.yml').read_text())
     steps = action['jobs']['descriptor']['steps']
     assert any(step.get('uses') == 'MojoTheApe/master-repo@' + descriptor['standard']['revision'] for step in steps)
-    assert rules.fingerprint(config) == '302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21'
+    assert not descriptor['workflow']['staging'] and not rules.policy(config)['staging']['enabled']
+    assert descriptor['workflow']['stage_branch'] == rules.policy(config)['staging']['branch'] == 'stage'
+    assert 'stage' not in config['workflow']
+
+
+def test_policy_candidate_cannot_select_its_own_new_admission_route(monkeypatch):
+    candidate = json.loads((ROOT / 'tracker/config.json').read_text())
+    base = copy.deepcopy(candidate)
+    base['delivery_policy']['staging']['enabled'] = True
+    base['workflow'].insert(-1, 'stage')
+    repo = candidate['project']['repository']
+    pr = {'base': {'sha': 'a' * 40, 'ref': 'stage'}}
+    def request(path):
+        if '/pulls/' in path: return pr
+        assert path == f'repos/{repo}/contents/tracker/config.json?ref=' + 'a' * 40
+        return {'content': base64.b64encode(json.dumps(base).encode()).decode(), 'encoding': 'base64'}
+    monkeypatch.setattr(acl_pr_check.shared, 'check', lambda request, config, number: config)
+    selected = acl_pr_check.check(request, 930)
+    assert selected == base and selected != candidate
 
 
 @pytest.mark.parametrize('workflow,success_fields', [

@@ -806,7 +806,8 @@ class FakeLauncher:
         self.started.append(profile_id)
         from src.meta_campaign_agent.multilogin_launcher import StartedProfile
 
-        return StartedProfile(profile_id, folder_id or "F", port=self.start_port)
+        return StartedProfile(profile_id, folder_id or "F", port=self.start_port,
+                              newly_started=True)
 
     def stop_profile(self, profile_id, folder_id=None):
         self.stopped.append(profile_id)
@@ -895,7 +896,7 @@ def test_local_debug_port_requires_the_process_to_listen_on_the_port():
     procs = [_Proc(MIMIC, ["chrome.exe", f"--user-data-dir={_udd(PID)}", "--remote-debugging-port=63405"])]
     got = prof.local_debug_port(PID, process_iter=lambda: procs, accepting=lambda p: True,
                                 listens=lambda proc, port: False)
-    assert got == ("no_port", None)               # порт не его — не цепляемся
+    assert got == ("closing", 63405)              # порт не его — не цепляемся (профиль закрывается)
 
 
 def test_local_debug_port_hand_opened_has_no_port():

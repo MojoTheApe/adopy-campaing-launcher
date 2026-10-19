@@ -8,6 +8,7 @@ The result is a plain dict — no external rendering dependencies.
 """
 from __future__ import annotations
 
+import logging
 import os
 import re
 import sys
@@ -2026,8 +2027,18 @@ def build_country_section(
     cm_comparison = build_cm_comparison(df, country, my_cm)
     my_totals = _my_cm_totals(cm_comparison)
 
+    # ACL-1799: Country Workbench. Новый вид не должен ронять отчёт: если срез
+    # не собрался, страна остаётся с прежними разделами.
+    try:
+        from src.analysis_agent.country_workbench import build_country_workbench
+        workbench = build_country_workbench(df, country, my_cm)
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger(__name__).warning("country workbench %s: %s", country, exc)
+        workbench = {}
+
     return {
         "country": country,
+        "workbench": workbench,
         "cm_comparison": cm_comparison,
         "my_totals": my_totals,
         "my_spend": my_totals["spend"],
@@ -2130,14 +2141,9 @@ def build_morning_report(
     if df is None:
         if not excel_path:
             raise ValueError("build_morning_report: excel_path or df required")
-        required_cols = [
-            "Country", "Account Alias", "Adset Name", "Ad Title",
-            "# Leads", "# FTDs", "$ Spend", "CM", "Ad Asset", "$ Net",
-        ]
-        df_raw = pd.read_excel(excel_path)
-        missing = [c for c in required_cols if c not in df_raw.columns]
-        if missing:
-            raise ValueError(f"Missing columns in Excel: {missing}")
+        from src.analysis_agent.stats_workbook import read_stats_workbook
+
+        df_raw = read_stats_workbook(excel_path)
         df = compute_metrics(df_raw)
         df = apply_variant_backfill(enrich_structure(df))
 
