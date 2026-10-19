@@ -49424,7 +49424,7 @@
             "session": "acl1138_resume_1019"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-P1138B",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -49443,7 +49443,7 @@
         },
         "pr": 947,
         "queued_at": "2026-10-19T11:37:51+00:00",
-        "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
+        "review_report": "Returned for a one-line fix: CI guard tests/test_build_progress_model.py::test_every_step_the_robot_names_maps_to_a_stage fails on the new telemetry step proxy_gate_unchecked (needs a cb-build-model rule in src/web/templates/report.html). Review of the rest stands as reported; a fresh approval of the new head is required.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578050+00:00",
@@ -89943,6 +89943,24 @@
         "issue": 853,
         "claim": "bb23000d64bf4b93be5b5492b0a40edb",
         "actor": "Worker-W853D"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-19T11:59:39+00:00",
+        "review": {
+          "id": "82cec9d7a4ae4c9eabb30424216b8700",
+          "pr": 947,
+          "issues": [
+            138
+          ],
+          "actor": "Reviewer-R1138",
+          "session": "acl1138_review_1019",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-19T11:41:37+00:00",
+          "state": "returning",
+          "report": "Returned for a one-line fix: CI guard tests/test_build_progress_model.py::test_every_step_the_robot_names_maps_to_a_stage fails on the new telemetry step proxy_gate_unchecked (needs a cb-build-model rule in src/web/templates/report.html). Review of the rest stands as reported; a fresh approval of the new head is required.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -96597,22 +96615,7 @@
       "started_at": "2026-10-19T10:50:45+00:00",
       "ineligible": {}
     },
-    "source_reviews": {
-      "947": {
-        "id": "82cec9d7a4ae4c9eabb30424216b8700",
-        "pr": 947,
-        "issues": [
-          138
-        ],
-        "actor": "Reviewer-R1138",
-        "session": "acl1138_review_1019",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-19T11:41:37+00:00",
-        "state": "returning",
-        "report": "Returned for a one-line fix: CI guard tests/test_build_progress_model.py::test_every_step_the_robot_names_maps_to_a_stage fails on the new telemetry step proxy_gate_unchecked (needs a cb-build-model rule in src/web/templates/report.html). Review of the rest stands as reported; a fresh approval of the new head is required.",
-        "keep_lane": false
-      }
-    },
+    "source_reviews": {},
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
   },
   "maintenance_history": [
