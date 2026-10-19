@@ -310,3 +310,69 @@ def check_job(job: Any, ruleset: RuleSet | None = None, *, skip_kinds: tuple[str
 def format_violations(violations: list[Violation]) -> list[str]:
     """Строки для показа человеку: причина и источник."""
     return [f"Meta rules: {v.message_en} (rule {v.rule_id}, source: {v.source_url})" for v in violations]
+
+
+# ── Допустимые значения для формы билдера (ACL-1807) ────────────────────
+
+#: Значения билдера -> код destination_type в реестре (Website / Instant Form).
+BUILDER_DESTINATIONS = {"website": "WEBSITE", "instant_form": "ON_AD"}
+
+
+def _ga_lists(ruleset: RuleSet, kind: str) -> list[tuple[dict[str, Any], list[str]]]:
+    return [(r, list(r["allowed"])) for r in ruleset.rules if r["kind"] == kind and r["status"] == "ga"]
+
+
+def _uniq(items: Any) -> list[str]:
+    seen: dict[str, None] = {}
+    for x in items:
+        seen.setdefault(str(x), None)
+    return list(seen)
+
+
+def capabilities(ruleset: RuleSet | None = None) -> dict[str, Any]:
+    """Что реестр разрешает выбрать в билдере: только значения со статусом `ga`.
+
+    {objectives: {OUTCOME_X: {goals: {GOAL: [billing events]}, ctas: [...]}},
+     destination_types: [...], builder_destinations: {website: {...}}, ...}.
+    Если для цели оптимизации/CTA у objective нет своего правила, берётся общий
+    enum; если нет и его — список пуст, а `restricted` = False (форма не режет:
+    чего реестр не знает, того не проверяем — как и `check_job`).
+    """
+    rs = ruleset or load_rules()
+    billing_by_goal: dict[str, list[str]] = {}
+    for r, allowed in _ga_lists(rs, "billing_event_by_goal"):
+        goal = str(r["applies_to"].get("optimization_goal") or "")
+        if goal:
+            billing_by_goal.setdefault(_norm(goal), []).extend(allowed)
+    goal_enum = _uniq(a for _, al in _ga_lists(rs, "optimization_goal_enum") for a in al)
+    billing_enum = _uniq(a for _, al in _ga_lists(rs, "billing_event_enum") for a in al)
+    cta_enum = _uniq(a for _, al in _ga_lists(rs, "cta_enum") for a in al)
+    dest_enum = _uniq(a for _, al in _ga_lists(rs, "destination_type_enum") for a in al)
+    objectives: dict[str, Any] = {}
+    for r, allowed in _ga_lists(rs, "objective"):
+        for code in allowed:
+            objectives.setdefault(code, {"goals": {}, "ctas": [], "restricted_goals": False, "restricted_ctas": False})
+    for code, entry in objectives.items():
+        goals: list[str] = []
+        ctas: list[str] = []
+        for kind, bucket in (("optimization_goal_by_objective", goals), ("cta_by_objective", ctas)):
+            for r, allowed in _ga_lists(rs, kind):
+                if _matches(r, {"objective": code}):
+                    bucket.extend(allowed)
+        entry["restricted_goals"] = bool(goals)
+        entry["restricted_ctas"] = bool(ctas)
+        goals = _uniq(goals) or goal_enum
+        # Цели без своего правила billing_event_by_goal не режутся: общий enum.
+        entry["goals"] = {g: _uniq(billing_by_goal.get(_norm(g), [])) or billing_enum for g in goals}
+        entry["ctas"] = _uniq(ctas) or cta_enum
+    return {
+        "api_version": rs.meta["api_version_current"],
+        "checked_date": rs.meta["checked_date"],
+        "objectives": objectives,
+        "destination_types": dest_enum,
+        "builder_destinations": {
+            key: {"destination_type": code, "allowed": (not dest_enum) or code in dest_enum}
+            for key, code in BUILDER_DESTINATIONS.items()
+        },
+        "billing_events": billing_enum,
+    }
