@@ -43158,20 +43158,6 @@
         "started_at": "2026-10-19T11:01:08+00:00",
         "from_status": "status:todo"
       },
-      "202": {
-        "actor": "Worker-G19202",
-        "session": "wg202-c0a1de70",
-        "coordinator": "Coordinator-E1019A",
-        "branch": "work/acl-1202-overview-profile-search",
-        "worktree": "C:\\wk19-202",
-        "id": "ad52aab87c9f4ee8bd17f18081b006a0",
-        "issue": 202,
-        "state": "handoff",
-        "started_at": "2026-10-19T11:02:10+00:00",
-        "from_status": "status:todo",
-        "pr": 976,
-        "report": "# ACL-1202 handoff - Worker-G19202 (wg202-c0a1de70)\nPR #976, head 728489279502a6738da2b2d17d431f317290c29f: fresh claim after the pause lifted, current origin/main merged (clean, no conflicts). No code changes beyond the merge.\nChecks (headless): 1202 new tests + touched suites (1588, review_ui_regressions, accounts tab/connect/manage/one-connect/country/hidden) + guards test_build_progress_model, test_acl_test_platform, test_report_scripts_parse + report.html-related guards: 203 + 19 passed. acl_scan_secrets OK, acl_smoke OK. Full suite left to CI.\nNot verified live (no real Multilogin). serve.py restart needed after merge."
-      },
       "681": {
         "actor": "Worker-G19681",
         "session": "wg681-c0a1de70",
@@ -50430,25 +50416,25 @@
             "session": "wg202-c0a1de70"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-G19202",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
-          "actor": "Worker-W1202A",
-          "session": "w1202a-s1",
-          "coordinator": "Coordinator-T1004Q",
+          "actor": "Worker-G19202",
+          "session": "wg202-c0a1de70",
+          "coordinator": "Coordinator-E1019A",
           "branch": "work/acl-1202-overview-profile-search",
-          "worktree": "C:\\acl-1202",
-          "id": "9eb8e649a5e846cb939cbb76b3e7197e",
+          "worktree": "C:\\wk19-202",
+          "id": "ad52aab87c9f4ee8bd17f18081b006a0",
           "issue": 202,
           "state": "handoff",
-          "started_at": "2026-10-17T11:36:51+00:00",
+          "started_at": "2026-10-19T11:02:10+00:00",
           "from_status": "status:todo",
           "pr": 976,
-          "report": "# ACL-1202 handoff report\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/976 (branch work/acl-1202-overview-profile-search)\n\nEach Accounts overview row gets a name search backed by the shared cached amapProfiles -> /multilogin-search. Open profiles first and labelled open; found profiles labelled closed and saved with folder_id and Multilogin slot. Suggestion keys on search results via server-side profile_name_key (key on search answers, label_key on overview rows). Empty answer says \"X is not in Multilogin\"; catalogue failure keeps open profiles and says it did not answer.\n\nPR #950 (ACL-1151) is still open and not in main, so its profile_connection module is not available; this change reuses only code that exists on main and is not rewritten by #950 (amapProfiles, amapRank, profile_name_key). Expect a small report.html conflict with #950 in the Accounts IIFE.\n\nTests: tests/test_acl_1202_overview_profile_search.py (4 new, node harness included); touched suites 66 passed. Full suite left to CI. Not verified live; serve.py restart needed."
+          "report": "# ACL-1202 handoff - Worker-G19202 (wg202-c0a1de70)\nPR #976, head 728489279502a6738da2b2d17d431f317290c29f: fresh claim after the pause lifted, current origin/main merged (clean, no conflicts). No code changes beyond the merge.\nChecks (headless): 1202 new tests + touched suites (1588, review_ui_regressions, accounts tab/connect/manage/one-connect/country/hidden) + guards test_build_progress_model, test_acl_test_platform, test_report_scripts_parse + report.html-related guards: 203 + 19 passed. acl_scan_secrets OK, acl_smoke OK. Full suite left to CI.\nNot verified live (no real Multilogin). serve.py restart needed after merge."
         },
         "pr": 976,
-        "queued_at": "2026-10-17T11:57:14+00:00",
+        "queued_at": "2026-10-19T11:10:08+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -55925,7 +55911,8 @@
     "review_queue": [
       377,
       401,
-      680
+      680,
+      202
     ],
     "review": {
       "id": "b49c262d383b4011a4e6891181162ac5",
@@ -89425,6 +89412,13 @@
         "issue": 680,
         "pr": 966,
         "actor": "Worker-F19680"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T11:10:08+00:00",
+        "issue": 202,
+        "pr": 976,
+        "actor": "Worker-G19202"
       }
     ],
     "policy": {
