@@ -52277,7 +52277,7 @@
             "session": "wh202-c0a1de70"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-H19202",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
@@ -96056,6 +96056,68 @@
         "pr": 1027,
         "lane": "653626d99fe24572a85ee6f0036ab108",
         "actor": "Reviewer-ACT174R"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-19T23:26:53+00:00",
+        "issue": 202,
+        "pr": 976,
+        "review": {
+          "id": "84ef96e04f654a3c9c927d9dc0dda9a9",
+          "pr": 976,
+          "issues": [
+            202
+          ],
+          "actor": "Reviewer-X20976",
+          "session": "rx976-1c30cbbe",
+          "coordinator": "Coordinator-E1019A",
+          "started_at": "2026-10-19T23:23:17+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 202,
+            "pr": 976,
+            "branch": "work/acl-1202-overview-profile-search",
+            "head_sha": "294f4120d70f31d603fb55d1acb0e6788c892c2c",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "874916528a5e419af368f88079d8af38988995625b9d8492c34a8c8ce7d6c3f7",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-X20976",
+              "implementer": "Worker-H19202",
+              "head_sha": "294f4120d70f31d603fb55d1acb0e6788c892c2c",
+              "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "tree_sha": "5a945757e1fd56b7deb3a5cb793d42b37094cd57",
+              "execution_lane": "84ef96e04f654a3c9c927d9dc0dda9a9",
+              "review_session": "rx976-1c30cbbe",
+              "report": "# ACL-1202 / PR #976 \u2014 refresh-round source review (Reviewer-X20976)\n\nSeparate reviewer session `rx976-1c30cbbe`; I implemented none of this work.\nHead `294f4120d70f31d603fb55d1acb0e6788c892c2c`, base main `c61501607ce1`.\nPreviously approved head `728489279502a6738da2b2d17d431f317290c29f` (source-approved\n2026-10-19T11:53:43Z, base main 435bc154).\n\n## Delta check\n\n- New head is one merge commit with parents 72848927 (previous approved head) and\n  c6150160 (current main). Its tree `5a945757` equals `git merge-tree --write-tree`\n  of those parents: clean merge, no extra edits.\n- PR diff vs main is unchanged (same 4 files: src/web/app.py, report.html,\n  tests/acl_1202_overview_search_harness.cjs, tests/test_acl_1202_overview_profile_search.py,\n  +301/-5); `git diff 435bc154 72848927` and `git diff c6150160 294f4120` are identical\n  apart from blob index lines and hunk headers.\n- Interaction with what main gained since the previous approval (batch 1016: ACL-1871\n  drawer in report.html, ACL-1356 FastAPI/Starlette + read_form in app.py; batch 1018):\n  the app.py change only adds `label_key`/`key` fields to JSON answers\n  (`profile_name_key` imported in both places); no new form parsing, no\n  `request.form()` outside `read_form`. The report.html change does not touch the\n  cbd drawer.\n\n## Checks\n\n- Local on 294f4120 with the current pins: `node tests/acl_1202_overview_search_harness.cjs`\n  exit 0, `node tests/builder_drawer_harness.cjs` ok; pytest\n  test_acl_1202_overview_profile_search, test_acl1871_side_tab_browser,\n  test_request_limits \u2014 51 passed.\n- Required CI on 294f4120 (`gh pr checks 976`): ACL verification, project tooling,\n  installer classify/verification, process instructions, descriptor, linux 3.13 x3,\n  windows 3.13, tracker-link \u2014 all pass; installer build jobs skipped.\n- Author's two local failures (test_acl_1588 fails identically on main; an order-dependent\n  currency test) are outside this diff; CI full suite is green.\n\nBlocking findings: none. Verdict: approved.\n",
+              "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                202
+              ],
+              "recorded_at": "2026-10-19T23:25:32+00:00",
+              "issue_scopes": {
+                "202": "874916528a5e419af368f88079d8af38988995625b9d8492c34a8c8ce7d6c3f7"
+              }
+            },
+            "lane": {
+              "id": "84ef96e04f654a3c9c927d9dc0dda9a9",
+              "pr": 976,
+              "issues": [
+                202
+              ],
+              "actor": "Reviewer-X20976",
+              "session": "rx976-1c30cbbe",
+              "coordinator": "Coordinator-E1019A",
+              "started_at": "2026-10-19T23:23:17+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-19T23:25:50+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -98961,6 +99023,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-19T23:22:19+00:00"
+      },
+      "202": {
+        "issue": 202,
+        "pr": 976,
+        "branch": "work/acl-1202-overview-profile-search",
+        "head_sha": "294f4120d70f31d603fb55d1acb0e6788c892c2c",
+        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "874916528a5e419af368f88079d8af38988995625b9d8492c34a8c8ce7d6c3f7",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-X20976",
+          "implementer": "Worker-H19202",
+          "head_sha": "294f4120d70f31d603fb55d1acb0e6788c892c2c",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "tree_sha": "5a945757e1fd56b7deb3a5cb793d42b37094cd57",
+          "execution_lane": "84ef96e04f654a3c9c927d9dc0dda9a9",
+          "review_session": "rx976-1c30cbbe",
+          "report": "# ACL-1202 / PR #976 \u2014 refresh-round source review (Reviewer-X20976)\n\nSeparate reviewer session `rx976-1c30cbbe`; I implemented none of this work.\nHead `294f4120d70f31d603fb55d1acb0e6788c892c2c`, base main `c61501607ce1`.\nPreviously approved head `728489279502a6738da2b2d17d431f317290c29f` (source-approved\n2026-10-19T11:53:43Z, base main 435bc154).\n\n## Delta check\n\n- New head is one merge commit with parents 72848927 (previous approved head) and\n  c6150160 (current main). Its tree `5a945757` equals `git merge-tree --write-tree`\n  of those parents: clean merge, no extra edits.\n- PR diff vs main is unchanged (same 4 files: src/web/app.py, report.html,\n  tests/acl_1202_overview_search_harness.cjs, tests/test_acl_1202_overview_profile_search.py,\n  +301/-5); `git diff 435bc154 72848927` and `git diff c6150160 294f4120` are identical\n  apart from blob index lines and hunk headers.\n- Interaction with what main gained since the previous approval (batch 1016: ACL-1871\n  drawer in report.html, ACL-1356 FastAPI/Starlette + read_form in app.py; batch 1018):\n  the app.py change only adds `label_key`/`key` fields to JSON answers\n  (`profile_name_key` imported in both places); no new form parsing, no\n  `request.form()` outside `read_form`. The report.html change does not touch the\n  cbd drawer.\n\n## Checks\n\n- Local on 294f4120 with the current pins: `node tests/acl_1202_overview_search_harness.cjs`\n  exit 0, `node tests/builder_drawer_harness.cjs` ok; pytest\n  test_acl_1202_overview_profile_search, test_acl1871_side_tab_browser,\n  test_request_limits \u2014 51 passed.\n- Required CI on 294f4120 (`gh pr checks 976`): ACL verification, project tooling,\n  installer classify/verification, process instructions, descriptor, linux 3.13 x3,\n  windows 3.13, tracker-link \u2014 all pass; installer build jobs skipped.\n- Author's two local failures (test_acl_1588 fails identically on main; an order-dependent\n  currency test) are outside this diff; CI full suite is green.\n\nBlocking findings: none. Verdict: approved.\n",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            202
+          ],
+          "recorded_at": "2026-10-19T23:25:32+00:00",
+          "issue_scopes": {
+            "202": "874916528a5e419af368f88079d8af38988995625b9d8492c34a8c8ce7d6c3f7"
+          }
+        },
+        "lane": {
+          "id": "84ef96e04f654a3c9c927d9dc0dda9a9",
+          "pr": 976,
+          "issues": [
+            202
+          ],
+          "actor": "Reviewer-X20976",
+          "session": "rx976-1c30cbbe",
+          "coordinator": "Coordinator-E1019A",
+          "started_at": "2026-10-19T23:23:17+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-19T23:25:50+00:00"
       }
     },
     "batches": {
@@ -103692,62 +103798,6 @@
         "coordinator": "Coordinator-E1019A",
         "started_at": "2026-10-19T22:32:46+00:00",
         "state": "reviewing"
-      },
-      "976": {
-        "id": "84ef96e04f654a3c9c927d9dc0dda9a9",
-        "pr": 976,
-        "issues": [
-          202
-        ],
-        "actor": "Reviewer-X20976",
-        "session": "rx976-1c30cbbe",
-        "coordinator": "Coordinator-E1019A",
-        "started_at": "2026-10-19T23:23:17+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 202,
-          "pr": 976,
-          "branch": "work/acl-1202-overview-profile-search",
-          "head_sha": "294f4120d70f31d603fb55d1acb0e6788c892c2c",
-          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "874916528a5e419af368f88079d8af38988995625b9d8492c34a8c8ce7d6c3f7",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-X20976",
-            "implementer": "Worker-H19202",
-            "head_sha": "294f4120d70f31d603fb55d1acb0e6788c892c2c",
-            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-            "tree_sha": "5a945757e1fd56b7deb3a5cb793d42b37094cd57",
-            "execution_lane": "84ef96e04f654a3c9c927d9dc0dda9a9",
-            "review_session": "rx976-1c30cbbe",
-            "report": "# ACL-1202 / PR #976 \u2014 refresh-round source review (Reviewer-X20976)\n\nSeparate reviewer session `rx976-1c30cbbe`; I implemented none of this work.\nHead `294f4120d70f31d603fb55d1acb0e6788c892c2c`, base main `c61501607ce1`.\nPreviously approved head `728489279502a6738da2b2d17d431f317290c29f` (source-approved\n2026-10-19T11:53:43Z, base main 435bc154).\n\n## Delta check\n\n- New head is one merge commit with parents 72848927 (previous approved head) and\n  c6150160 (current main). Its tree `5a945757` equals `git merge-tree --write-tree`\n  of those parents: clean merge, no extra edits.\n- PR diff vs main is unchanged (same 4 files: src/web/app.py, report.html,\n  tests/acl_1202_overview_search_harness.cjs, tests/test_acl_1202_overview_profile_search.py,\n  +301/-5); `git diff 435bc154 72848927` and `git diff c6150160 294f4120` are identical\n  apart from blob index lines and hunk headers.\n- Interaction with what main gained since the previous approval (batch 1016: ACL-1871\n  drawer in report.html, ACL-1356 FastAPI/Starlette + read_form in app.py; batch 1018):\n  the app.py change only adds `label_key`/`key` fields to JSON answers\n  (`profile_name_key` imported in both places); no new form parsing, no\n  `request.form()` outside `read_form`. The report.html change does not touch the\n  cbd drawer.\n\n## Checks\n\n- Local on 294f4120 with the current pins: `node tests/acl_1202_overview_search_harness.cjs`\n  exit 0, `node tests/builder_drawer_harness.cjs` ok; pytest\n  test_acl_1202_overview_profile_search, test_acl1871_side_tab_browser,\n  test_request_limits \u2014 51 passed.\n- Required CI on 294f4120 (`gh pr checks 976`): ACL verification, project tooling,\n  installer classify/verification, process instructions, descriptor, linux 3.13 x3,\n  windows 3.13, tracker-link \u2014 all pass; installer build jobs skipped.\n- Author's two local failures (test_acl_1588 fails identically on main; an order-dependent\n  currency test) are outside this diff; CI full suite is green.\n\nBlocking findings: none. Verdict: approved.\n",
-            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              202
-            ],
-            "recorded_at": "2026-10-19T23:25:32+00:00",
-            "issue_scopes": {
-              "202": "874916528a5e419af368f88079d8af38988995625b9d8492c34a8c8ce7d6c3f7"
-            }
-          },
-          "lane": {
-            "id": "84ef96e04f654a3c9c927d9dc0dda9a9",
-            "pr": 976,
-            "issues": [
-              202
-            ],
-            "actor": "Reviewer-X20976",
-            "session": "rx976-1c30cbbe",
-            "coordinator": "Coordinator-E1019A",
-            "started_at": "2026-10-19T23:23:17+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-19T23:25:50+00:00"
-        }
       },
       "1027": {
         "id": "653626d99fe24572a85ee6f0036ab108",
