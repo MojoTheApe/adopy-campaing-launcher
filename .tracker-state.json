@@ -44568,20 +44568,6 @@
         "pr": 976,
         "report": "Pure refresh, no defect/scope change: merged origin/main (c6150160) into work/acl-1202-overview-profile-search (merge commit 294f4120, clean, no conflicts in report.html/app.py). Tests: PR tests + 8 related suites + build_progress_model, acl_test_platform, report_scripts_parse: 214 passed, 2 failed. test_acl_1588 test_a_second_open_of_the_same_profile_does_not_start fails identically on origin/main (pre-existing). test_country_totals_for_the_dashboard::test_currencies_are_never_added_together fails only in the big combined run (order-dependent), passes alone and in subset on both main and branch. acl_scan_secrets OK, acl_smoke OK."
       },
-      "70": {
-        "actor": "Worker-H19602",
-        "session": "wh602-c0a1de70",
-        "coordinator": "Coordinator-E1019A",
-        "branch": "work/acl-602-lead-goals-overview",
-        "worktree": "C:\\wk20-602",
-        "id": "96c117b9e58746eaba1cd6ca3bb3fe1e",
-        "issue": 70,
-        "state": "handoff",
-        "started_at": "2026-10-19T22:20:47+00:00",
-        "from_status": "status:todo",
-        "pr": 982,
-        "report": "Pure refresh: merged origin/main (c6150160) into work/acl-602-lead-goals-overview, clean merge, no conflicts, no scope change.\nChecks: test_goals, build_progress_model, acl_test_platform, every_change_leaves_a_record, acl_ci_scope, acl_batch_ci_scope, report_scripts_parse pass; scan_secrets OK; smoke OK. 5 failures (3 in test_web_form_endpoints, 2 in test_one_button_reads_what_is_needed: HTTP 500 on form routes) reproduce identically on main in C:\\acl-integration, so not caused by this branch."
-      },
       "770": {
         "actor": "Worker-B1019770",
         "session": "run_b1019_770",
@@ -52232,25 +52218,25 @@
             "session": "wh602-c0a1de70"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-H19602",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
-          "actor": "Worker-G19602",
-          "session": "wg602-c0a1de70",
+          "actor": "Worker-H19602",
+          "session": "wh602-c0a1de70",
           "coordinator": "Coordinator-E1019A",
           "branch": "work/acl-602-lead-goals-overview",
-          "worktree": "C:\\wk19-602",
-          "id": "23c87fcf133a4a47b873076fefdbe79d",
+          "worktree": "C:\\wk20-602",
+          "id": "96c117b9e58746eaba1cd6ca3bb3fe1e",
           "issue": 70,
           "state": "handoff",
-          "started_at": "2026-10-19T11:01:08+00:00",
+          "started_at": "2026-10-19T22:20:47+00:00",
           "from_status": "status:todo",
           "pr": 982,
-          "report": "ACL-602 fresh claim after pause lift. Merged current origin/main into work/acl-602-lead-goals-overview (clean, no conflicts); no new code. Checks: tests/test_goals.py + test_build_progress_model + test_acl_test_platform (151 passed); test_every_change_leaves_a_record, test_web_form_endpoints, test_one_button_reads_what_is_needed, test_acl_ci_scope, test_acl_batch_ci_scope (305 passed); acl_scan_secrets OK; acl_smoke OK. Scope: goals.overview(), GET /goals/overview (ACL_TEAM_LEAD only, 403 else), GET /goals?cm=other needs flag. API only, no UI."
+          "report": "Pure refresh: merged origin/main (c6150160) into work/acl-602-lead-goals-overview, clean merge, no conflicts, no scope change.\nChecks: test_goals, build_progress_model, acl_test_platform, every_change_leaves_a_record, acl_ci_scope, acl_batch_ci_scope, report_scripts_parse pass; scan_secrets OK; smoke OK. 5 failures (3 in test_web_form_endpoints, 2 in test_one_button_reads_what_is_needed: HTTP 500 on form routes) reproduce identically on main in C:\\acl-integration, so not caused by this branch."
         },
         "pr": 982,
-        "queued_at": "2026-10-19T11:11:58+00:00",
+        "queued_at": "2026-10-19T22:28:41+00:00",
         "review_report": "# Return for a main refresh\n\nMain moved to c6150160 (batch #1018 merged after #1016). The existing source approval is bound to the previous main baseline and cannot enter the next intake. No scope change and no defect is requested: merge current origin/main into the original branch, re-run the affected checks, hand off again and get a fresh independent review.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -58122,7 +58108,8 @@
       896,
       768,
       401,
-      680
+      680,
+      70
     ],
     "review": null,
     "history": [
@@ -95629,6 +95616,13 @@
         "issue": 47,
         "claim": "4c582a02a1c94920809d0a2596a593d1",
         "actor": "Worker-H19341"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T22:28:41+00:00",
+        "issue": 70,
+        "pr": 982,
+        "actor": "Worker-H19602"
       }
     ],
     "policy": {
