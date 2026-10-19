@@ -211,9 +211,6 @@ _HELPER_JS = r"""
     return true;
   }
 
-  // ACL-1775: единственное место, где разрешён lead_gen_form_id (зеркало
-  // write_policy._without_lead_form). Возвращает копию без ключа, null — отказ,
-  // исходный объект — формы нет. Ключ в другом месте остаётся и ловится statusOk.
   // ACL-1891: зеркало write_policy._check_upload - фазы загрузки видео кусками.
   function digitsOf(v) {
     const U = WRITE.upload;
@@ -250,6 +247,9 @@ _HELPER_JS = r"""
     else if (fk.length) return 'file';
     return null;
   }
+  // ACL-1775: единственное место, где разрешён lead_gen_form_id (зеркало
+  // write_policy._without_lead_form). Возвращает копию без ключа, null — отказ,
+  // исходный объект — формы нет. Ключ в другом месте остаётся и ловится statusOk.
   function withoutLeadForm(edge, checked, onAd) {
     const LF = WRITE.lead_form;
     if (!LF || edge !== LF.edge) return checked;
