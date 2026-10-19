@@ -4749,27 +4749,6 @@
           "138": "dda7a0c1e14a09401c053051c5b626d8f01198c7b16ec8fff13e387c006d31b6"
         }
       },
-      "863": {
-        "kind": "independent-review",
-        "verdict": "approved",
-        "reviewer": "Reviewer-R853E",
-        "review_session": "r853e-20261019",
-        "execution_lane": "ebdd6b2b6eb340749fbf6e85cf6cb913",
-        "implementer": "Worker-W853D",
-        "head_sha": "3ad52a3f61c430c47098ba9577a85a3426f5fcc9",
-        "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
-        "tree_sha": "d2b973aa2276e7f364a6420ef9189033d322a0b0",
-        "issues": [
-          853
-        ],
-        "report": "Independent source re-review of ACL-1853 (PR 863) at head 3ad52a3f against main 435bc154 (merge-base = main). Implementers: Worker-W853D, historical Worker-W1853C, Worker-T1853A, Worker-N7Q4; reviewer did not implement. Delta since the first review (Reviewer-R1853D, head 914a5b05, no blockers): profile_lease.py and config/paths.py are byte-identical; the only non-main source change is 366d6580 in src/fb_ads_rpa/operations.py (READ_WAIT_SECONDS = 600; reads use profile_lock(...).holding(timeout=READ_WAIT_SECONDS); writes and publish_lease unchanged) plus tests/test_acl1853_read_wait.py; everything else is main 435bc154 merged without conflicts. Read-wait analysis: the lease acquire loop takes the RLock only non-blocking and releases it on failure, so a waiting read holds no lease and cannot block a publish or close; 600 s is below the 1800 s acquire cap. check_nested_profile forbids taking a second profile under a held lease, so no cross-profile lock-order deadlock. While waiting the read holds browser_operation.reading(); no src code takes the exclusive gate blocking (only _apply_release_update non-blocking), so no deadlock, but an update can be refused as busy for up to 10 min. Reads run off the event loop (asyncio.to_thread for Check plan/forms, a thread for country split). Cancellation: job_cancel.check() runs every poll, so a read inside a cancelled job stops waiting; reads started from HTTP have no Stop and wait up to 600 s. Issue 853 scope re-checked: all items are covered as in the first review. CI run 39249908455 on head 3ad52a3f is green (linux 3.11/3.13 x3, windows 3.13, verification, tooling, tracker-link). Re-ran tests/test_profile_process_lease.py once on Python 3.14: 43 passed in 68 s. The worker's flake is test timing, not a lease race: after terminate() it gives the OS 1 s (lock.acquire(timeout=1)) to release the dead process's byte-range lock, and Windows can release it late under load. The lease's crash-release guarantee holds. Non-blocking follow-ups: (1) publish_jobs.close_profile stop_log key is the canonical UUID but readers use the raw profile_id; (2) close_account_profile checks the lease only with the Multilogin key; (3) reads queued behind a long publish fail after 600 s; polling gives no FIFO fairness, so many waiting reads can starve one another or a publish; long waits each occupy a default-executor thread; (4) raise the termination test's post-terminate acquire timeout (e.g. 10 s) to remove the flake. No live profile or Meta checks claimed.",
-        "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "recorded_at": "2026-10-19T13:17:24+00:00",
-        "issue_scopes": {
-          "853": "48bbd0ada92f4fbd4f162a258be49f4b8cd417a35330115cf8bcbca2bf418ab5"
-        }
-      },
       "1016": {
         "kind": "independent-review",
         "verdict": "approved",
@@ -98111,7 +98090,9 @@
         "session": "r853e-20261019",
         "coordinator": "Coordinator-C1016A",
         "started_at": "2026-10-19T12:45:25+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "# Returned only to release the review lane: the review baseline is stale\n\nMain moved to 1c6ab78e after the review (batch #1016 merged), so the independent review no longer matches the frozen baseline and `batch approve` is refused. The code review itself found no blocking problems, and the evidence stays on record in the review notes.\n\nNext step for the author: when the coordinator says this task's batch turn is near, merge the then-current main into the original branch, run the affected tests, hand off, and get a short fresh review of the delta (content was already reviewed).",
+        "keep_lane": false
       },
       "820": {
         "id": "c2ff818609fd44c99998f17deee0ad08",
