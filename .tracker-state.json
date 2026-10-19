@@ -44410,9 +44410,11 @@
         "worktree": "C:\\acl-1897",
         "id": "0b951ded8d624b41b82c93473fb4d482",
         "issue": 897,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T21:40:33+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 1025,
+        "report": "ACL-1897: Automatic Page now takes the first Page of promote_pages (one or several); zero Pages still refuses; chosen/map Page must be among promote_pages. page_for (Instant Forms) follows. Tests: 5 touched files in full, 349 passed. Opus review: no HIGH/MEDIUM; two LOWs noted in PR. No live Meta/Multilogin calls."
       }
     },
     "tasks": {
