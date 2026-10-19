@@ -52283,7 +52283,7 @@
             "session": "run_s1019_807"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1019807",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -52301,7 +52301,8 @@
           "report": "Builder reads the Meta rules registry (ga only): capabilities endpoint, Conversion location filtering, blocking Meta-rules audit line with the server's reason text. Tests: test_acl1807_valid_combos (13) + 1781/1819/1769 suites pass. Opus review: no HIGH; fixed intersect-with-enums and 503 handling. Note: builder has no goal/billing/CTA selectors yet (ACL-1767), so those lists are ready but not yet wired to controls."
         },
         "pr": 1021,
-        "queued_at": "2026-10-19T19:05:03+00:00"
+        "queued_at": "2026-10-19T19:05:03+00:00",
+        "reviewer": "Reviewer-R1807Y"
       },
       "945": {
         "implementers": [
@@ -54726,6 +54727,10 @@
       "Worker-R1019854": {
         "session": "run_r1019_854",
         "role": "Worker"
+      },
+      "Reviewer-R1807Y": {
+        "session": "reviewer-r1807y-20261019",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -57577,7 +57582,6 @@
     "review_queue": [
       681,
       805,
-      807,
       184,
       273,
       920,
@@ -94063,6 +94067,13 @@
             "approved_at": "2026-10-19T20:36:19+00:00"
           }
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-19T20:38:22+00:00",
+        "pr": 1021,
+        "lane": "5688d26ff9a54a5a98c6bcff00b0db57",
+        "actor": "Reviewer-R1807Y"
       }
     ],
     "policy": {
@@ -101614,6 +101625,18 @@
         "session": "reviewer-r1945y-20261019",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-19T19:59:58+00:00",
+        "state": "reviewing"
+      },
+      "1021": {
+        "id": "5688d26ff9a54a5a98c6bcff00b0db57",
+        "pr": 1021,
+        "issues": [
+          807
+        ],
+        "actor": "Reviewer-R1807Y",
+        "session": "reviewer-r1807y-20261019",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-19T20:38:22+00:00",
         "state": "reviewing"
       }
     },
