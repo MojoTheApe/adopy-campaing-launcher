@@ -98758,7 +98758,51 @@
         "session": "dv1019g-904",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-19T15:10:23+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 902,
+          "pr": 904,
+          "branch": "work/acl-1902-campaign-name-suffix",
+          "head_sha": "ef09410a24ec8b618a5867eb899e266ac7b4bdc3",
+          "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+          "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "5ea254204ad12b6db316af984425614260f436776360cc83218fbe5157c7b05d",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-DV1019G",
+            "review_session": "dv1019g-904",
+            "execution_lane": "a7163e131a404867815c5d452b797df2",
+            "implementer": "Worker-RF1019X",
+            "head_sha": "ef09410a24ec8b618a5867eb899e266ac7b4bdc3",
+            "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+            "tree_sha": "e135dc2b958cdb4bcfabeb5625a10797d9abb8eb",
+            "report": "Delta re-review after main merge. Head ef09410a has parents bfa6fd21 (previous approved) and 94ab91c2 (new 899 head) and contains work/main 1c6ab78e; git show --remerge-diff is empty (no conflict resolution). Non-doc diff from the previous approved head to the new head matches main 435bc154..1c6ab78e per file by patch-id, plus one test-only change in tests/test_acl1776_create_forms.py (fake request form() accepts parse limits, via 776); no extra code. Ran test_acl1902_name_suffix, test_acl1761_existing_check, test_acl1761_api_create: 153 passed. All PR checks green (tracker-link, windows, linux 1/2/3, instructions). Earlier full content review of ACL-1902 stands; no live checks claimed.",
+            "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              902
+            ],
+            "recorded_at": "2026-10-19T15:11:07+00:00",
+            "issue_scopes": {
+              "902": "5ea254204ad12b6db316af984425614260f436776360cc83218fbe5157c7b05d"
+            }
+          },
+          "lane": {
+            "id": "a7163e131a404867815c5d452b797df2",
+            "pr": 904,
+            "issues": [
+              902
+            ],
+            "actor": "Reviewer-DV1019G",
+            "session": "dv1019g-904",
+            "coordinator": "Coordinator-M1011A",
+            "started_at": "2026-10-19T15:10:23+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-19T15:11:33+00:00"
+        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
