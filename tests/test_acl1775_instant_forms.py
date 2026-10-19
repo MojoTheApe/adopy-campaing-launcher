@@ -719,7 +719,7 @@ class _Req:
     def __init__(self, fields):
         self._f = dict(fields)
 
-    async def form(self):
+    async def form(self, **_limits):  # read_form передаёт пределы разбора
         return self._f
 
 
