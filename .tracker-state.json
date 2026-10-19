@@ -43594,6 +43594,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T14:13:30+00:00",
         "from_status": "status:todo"
+      },
+      "72": {
+        "actor": "Worker-W142C",
+        "session": "w142c-20261016",
+        "coordinator": "Coordinator-C1016A",
+        "branch": "codex/acl-142-account-add-remove",
+        "worktree": "C:\\acl-142-c",
+        "id": "3d8ff597c5a845c7af1bdef948b3dcdd",
+        "issue": 72,
+        "state": "implementing",
+        "started_at": "2026-10-19T14:21:47+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -50148,9 +50160,13 @@
           {
             "actor": "Worker-W142C",
             "session": "w142c-20261016"
+          },
+          {
+            "actor": "Worker-W142C",
+            "session": "w142c-20261016"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-W142C",
         "coordinator": "Coordinator-C1016A",
         "handoff": {
@@ -50174,8 +50190,7 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578066+00:00",
           "remote_process_stopped_verified": false
-        },
-        "reviewer": "Reviewer-R142E"
+        }
       },
       "48": {
         "implementers": [],
@@ -91381,6 +91396,13 @@
           "report": "# Returned only to release the review lane: the review baseline is stale\n\nMain moved to 1c6ab78e after the review (batch #1016 merged), so the independent review no longer matches the frozen baseline and `batch approve` is refused. The code review itself found no blocking problems, and the evidence stays on record in the review notes.\n\nNext step for the author: when the coordinator says this task's batch turn is near, merge the then-current main into the original branch, run the affected tests, hand off, and get a short fresh review of the delta (content was already reviewed).",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T14:21:47+00:00",
+        "issue": 72,
+        "claim": "3d8ff597c5a845c7af1bdef948b3dcdd",
+        "actor": "Worker-W142C"
       }
     ],
     "policy": {
