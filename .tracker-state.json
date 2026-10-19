@@ -50265,7 +50265,7 @@
             "session": "run_w1019_959"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-W1019959",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -91515,6 +91515,68 @@
         "issue": 886,
         "pr": 887,
         "actor": "Worker-RF1019X"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-19T14:57:39+00:00",
+        "issue": 959,
+        "pr": 1017,
+        "review": {
+          "id": "e592aa2dc3d4452793d0e584f93355ec",
+          "pr": 1017,
+          "issues": [
+            959
+          ],
+          "actor": "Reviewer-R1959X",
+          "session": "reviewer-r1959x-20261019",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-19T14:39:37+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 959,
+            "pr": 1017,
+            "branch": "work/acl-1959-mlx-stop-error",
+            "head_sha": "5bb600527e6196454dec94bc912022481554101e",
+            "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+            "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "be2f2bbe234602b7fe56e7a2f4f993cb805957cdcf59c48788d3dc2afd315188",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-R1959X",
+              "review_session": "reviewer-r1959x-20261019",
+              "execution_lane": "e592aa2dc3d4452793d0e584f93355ec",
+              "implementer": "Worker-W1019959",
+              "head_sha": "5bb600527e6196454dec94bc912022481554101e",
+              "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+              "tree_sha": "7b889025ad2695d3eb58cc677c672ad3d5f39c48",
+              "issues": [
+                959
+              ],
+              "report": "PR #1017 changes only MultiloginLauncher.stop_profile (src/meta_campaign_agent/multilogin_launcher.py), adds tests/test_acl1959_stop_transport_error.py and a CHANGELOG entry. The candidate loop now gives the primary address v1/profile/stop/p/{id} two tries: a transport exception on the first try logs a warning, sleeps _STOP_RETRY_PAUSE_S (5 s) and asks the same address once more; a response on the retry goes through the unchanged status handling, so 'already stopped' (any status) returns as done. If both tries raise, it raises MultiloginLauncherError('Stop profile failed (v1/profile/stop/p/<id>): <ExcType>: <text>') immediately and the legacy tail is not consulted, so a legacy 404 can no longer overwrite the real error. A 404 on the primary address still logs 'not served here' and walks the v2 folder / v2 / v1 legacy tail exactly as before; legacy addresses keep a single try. Criteria: (1) retry once on transport error, already-stopped on retry = stopped - met and tested (ConnectionError and ReadTimeout parametrized, plus already-stopped 500 on retry); (2) the raised error names the primary failure and not the tail 404 - met, test asserts exception type/text and the address are in the message, '404' is not, and only the primary was asked; (3) tail kept only for a primary 404 - met, test asserts 4 calls with no repeat of the primary. (4) Nothing new is killed or opened: callers in src/fb_ads_rpa/browser.py (_stop_profile with allow_kill=False, the lock-conflict restart path) and multilogin_session.py are untouched and still only catch MultiloginLauncherError; no plain-browser fallback, no polling, no secrets (logs carry only the API path with the profile id, as the existing 404 log already did). Tests run locally (affected only): tests/test_acl1959_stop_transport_error.py, test_the_api_stop_is_asked_first.py, test_acl1826_mlx_session_lost.py, test_a_hand_opened_profile_is_never_stopped.py, test_a_reopen_retries_while_multilogin_holds_the_profile.py, test_a_finished_clean_profile_closes_itself.py, test_acl1756_fb_api.py, test_acl1760_api_read.py - 303 passed. CI on head 5bb60052: all checks completed SUCCESS (linux tests shards 1-3, windows tests, ACL verification, tooling, tracker-link; installer build jobs SKIPPED as not applicable); PR is MERGEABLE. Non-blocking nits: worst-case stop now takes up to 2 x timeout + 5 s (about 245 s with the default 120 s) on a dead launcher, which callers already tolerate but is worth knowing; the retry still uses the broad 'except Exception' inherited from the old code, so a non-transport bug would also be retried once; if the retry itself returns 404 the code walks the tail and the final error becomes that tail 404 (edge case, not seen in the incident). No live checks claimed.",
+              "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "recorded_at": "2026-10-19T14:56:09+00:00",
+              "issue_scopes": {
+                "959": "be2f2bbe234602b7fe56e7a2f4f993cb805957cdcf59c48788d3dc2afd315188"
+              }
+            },
+            "lane": {
+              "id": "e592aa2dc3d4452793d0e584f93355ec",
+              "pr": 1017,
+              "issues": [
+                959
+              ],
+              "actor": "Reviewer-R1959X",
+              "session": "reviewer-r1959x-20261019",
+              "coordinator": "Coordinator-M1011A",
+              "started_at": "2026-10-19T14:39:37+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-19T14:57:01+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -93760,6 +93822,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-19T12:59:03+00:00"
+      },
+      "959": {
+        "issue": 959,
+        "pr": 1017,
+        "branch": "work/acl-1959-mlx-stop-error",
+        "head_sha": "5bb600527e6196454dec94bc912022481554101e",
+        "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+        "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "be2f2bbe234602b7fe56e7a2f4f993cb805957cdcf59c48788d3dc2afd315188",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-R1959X",
+          "review_session": "reviewer-r1959x-20261019",
+          "execution_lane": "e592aa2dc3d4452793d0e584f93355ec",
+          "implementer": "Worker-W1019959",
+          "head_sha": "5bb600527e6196454dec94bc912022481554101e",
+          "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+          "tree_sha": "7b889025ad2695d3eb58cc677c672ad3d5f39c48",
+          "issues": [
+            959
+          ],
+          "report": "PR #1017 changes only MultiloginLauncher.stop_profile (src/meta_campaign_agent/multilogin_launcher.py), adds tests/test_acl1959_stop_transport_error.py and a CHANGELOG entry. The candidate loop now gives the primary address v1/profile/stop/p/{id} two tries: a transport exception on the first try logs a warning, sleeps _STOP_RETRY_PAUSE_S (5 s) and asks the same address once more; a response on the retry goes through the unchanged status handling, so 'already stopped' (any status) returns as done. If both tries raise, it raises MultiloginLauncherError('Stop profile failed (v1/profile/stop/p/<id>): <ExcType>: <text>') immediately and the legacy tail is not consulted, so a legacy 404 can no longer overwrite the real error. A 404 on the primary address still logs 'not served here' and walks the v2 folder / v2 / v1 legacy tail exactly as before; legacy addresses keep a single try. Criteria: (1) retry once on transport error, already-stopped on retry = stopped - met and tested (ConnectionError and ReadTimeout parametrized, plus already-stopped 500 on retry); (2) the raised error names the primary failure and not the tail 404 - met, test asserts exception type/text and the address are in the message, '404' is not, and only the primary was asked; (3) tail kept only for a primary 404 - met, test asserts 4 calls with no repeat of the primary. (4) Nothing new is killed or opened: callers in src/fb_ads_rpa/browser.py (_stop_profile with allow_kill=False, the lock-conflict restart path) and multilogin_session.py are untouched and still only catch MultiloginLauncherError; no plain-browser fallback, no polling, no secrets (logs carry only the API path with the profile id, as the existing 404 log already did). Tests run locally (affected only): tests/test_acl1959_stop_transport_error.py, test_the_api_stop_is_asked_first.py, test_acl1826_mlx_session_lost.py, test_a_hand_opened_profile_is_never_stopped.py, test_a_reopen_retries_while_multilogin_holds_the_profile.py, test_a_finished_clean_profile_closes_itself.py, test_acl1756_fb_api.py, test_acl1760_api_read.py - 303 passed. CI on head 5bb60052: all checks completed SUCCESS (linux tests shards 1-3, windows tests, ACL verification, tooling, tracker-link; installer build jobs SKIPPED as not applicable); PR is MERGEABLE. Non-blocking nits: worst-case stop now takes up to 2 x timeout + 5 s (about 245 s with the default 120 s) on a dead launcher, which callers already tolerate but is worth knowing; the retry still uses the broad 'except Exception' inherited from the old code, so a non-transport bug would also be retried once; if the retry itself returns 404 the code walks the tail and the final error becomes that tail 404 (edge case, not seen in the incident). No live checks claimed.",
+          "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "recorded_at": "2026-10-19T14:56:09+00:00",
+          "issue_scopes": {
+            "959": "be2f2bbe234602b7fe56e7a2f4f993cb805957cdcf59c48788d3dc2afd315188"
+          }
+        },
+        "lane": {
+          "id": "e592aa2dc3d4452793d0e584f93355ec",
+          "pr": 1017,
+          "issues": [
+            959
+          ],
+          "actor": "Reviewer-R1959X",
+          "session": "reviewer-r1959x-20261019",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-19T14:39:37+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-19T14:57:01+00:00"
       }
     },
     "batches": {
@@ -98243,62 +98349,6 @@
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-19T13:01:50+00:00",
         "state": "reviewing"
-      },
-      "1017": {
-        "id": "e592aa2dc3d4452793d0e584f93355ec",
-        "pr": 1017,
-        "issues": [
-          959
-        ],
-        "actor": "Reviewer-R1959X",
-        "session": "reviewer-r1959x-20261019",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-19T14:39:37+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 959,
-          "pr": 1017,
-          "branch": "work/acl-1959-mlx-stop-error",
-          "head_sha": "5bb600527e6196454dec94bc912022481554101e",
-          "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-          "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "be2f2bbe234602b7fe56e7a2f4f993cb805957cdcf59c48788d3dc2afd315188",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-R1959X",
-            "review_session": "reviewer-r1959x-20261019",
-            "execution_lane": "e592aa2dc3d4452793d0e584f93355ec",
-            "implementer": "Worker-W1019959",
-            "head_sha": "5bb600527e6196454dec94bc912022481554101e",
-            "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-            "tree_sha": "7b889025ad2695d3eb58cc677c672ad3d5f39c48",
-            "issues": [
-              959
-            ],
-            "report": "PR #1017 changes only MultiloginLauncher.stop_profile (src/meta_campaign_agent/multilogin_launcher.py), adds tests/test_acl1959_stop_transport_error.py and a CHANGELOG entry. The candidate loop now gives the primary address v1/profile/stop/p/{id} two tries: a transport exception on the first try logs a warning, sleeps _STOP_RETRY_PAUSE_S (5 s) and asks the same address once more; a response on the retry goes through the unchanged status handling, so 'already stopped' (any status) returns as done. If both tries raise, it raises MultiloginLauncherError('Stop profile failed (v1/profile/stop/p/<id>): <ExcType>: <text>') immediately and the legacy tail is not consulted, so a legacy 404 can no longer overwrite the real error. A 404 on the primary address still logs 'not served here' and walks the v2 folder / v2 / v1 legacy tail exactly as before; legacy addresses keep a single try. Criteria: (1) retry once on transport error, already-stopped on retry = stopped - met and tested (ConnectionError and ReadTimeout parametrized, plus already-stopped 500 on retry); (2) the raised error names the primary failure and not the tail 404 - met, test asserts exception type/text and the address are in the message, '404' is not, and only the primary was asked; (3) tail kept only for a primary 404 - met, test asserts 4 calls with no repeat of the primary. (4) Nothing new is killed or opened: callers in src/fb_ads_rpa/browser.py (_stop_profile with allow_kill=False, the lock-conflict restart path) and multilogin_session.py are untouched and still only catch MultiloginLauncherError; no plain-browser fallback, no polling, no secrets (logs carry only the API path with the profile id, as the existing 404 log already did). Tests run locally (affected only): tests/test_acl1959_stop_transport_error.py, test_the_api_stop_is_asked_first.py, test_acl1826_mlx_session_lost.py, test_a_hand_opened_profile_is_never_stopped.py, test_a_reopen_retries_while_multilogin_holds_the_profile.py, test_a_finished_clean_profile_closes_itself.py, test_acl1756_fb_api.py, test_acl1760_api_read.py - 303 passed. CI on head 5bb60052: all checks completed SUCCESS (linux tests shards 1-3, windows tests, ACL verification, tooling, tracker-link; installer build jobs SKIPPED as not applicable); PR is MERGEABLE. Non-blocking nits: worst-case stop now takes up to 2 x timeout + 5 s (about 245 s with the default 120 s) on a dead launcher, which callers already tolerate but is worth knowing; the retry still uses the broad 'except Exception' inherited from the old code, so a non-transport bug would also be retried once; if the retry itself returns 404 the code walks the tail and the final error becomes that tail 404 (edge case, not seen in the incident). No live checks claimed.",
-            "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "recorded_at": "2026-10-19T14:56:09+00:00",
-            "issue_scopes": {
-              "959": "be2f2bbe234602b7fe56e7a2f4f993cb805957cdcf59c48788d3dc2afd315188"
-            }
-          },
-          "lane": {
-            "id": "e592aa2dc3d4452793d0e584f93355ec",
-            "pr": 1017,
-            "issues": [
-              959
-            ],
-            "actor": "Reviewer-R1959X",
-            "session": "reviewer-r1959x-20261019",
-            "coordinator": "Coordinator-M1011A",
-            "started_at": "2026-10-19T14:39:37+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-19T14:57:01+00:00"
-        }
       },
       "927": {
         "id": "8919de673fad444cbf5716783f18b91f",
