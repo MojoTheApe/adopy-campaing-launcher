@@ -1,0 +1,1758 @@
+{
+  "provenance": {
+    "repository": "MojoTheApe/adopy-campaing-launcher",
+    "run_id": 38707841668,
+    "native_jobs_endpoint": "/repos/MojoTheApe/adopy-campaing-launcher/actions/runs/38707841668/jobs?filter=all",
+    "retained_raw_pages_sha256": "860a3fc8b5175bdc8b27efa806b4b27907a7ac05c7f717e85bb433c813a31e10",
+    "scope": "Sanitized projection of one retained native run. Not repository history, billing or a savings sample. Actor/token/log fields omitted; identity/times/steps preserved."
+  },
+  "run": {
+    "id": 38707841668,
+    "name": "CI",
+    "path": ".github/workflows/ci.yml",
+    "workflow_id": 345733245,
+    "event": "pull_request",
+    "created_at": "2026-10-15T08:44:37Z",
+    "updated_at": "2026-10-15T09:15:44Z",
+    "run_started_at": "2026-10-15T09:12:04Z",
+    "run_attempt": 2,
+    "head_sha": "d8bdcecfbd2311d00fc56a0dacb767f62f8a63e3",
+    "head_branch": "codex/batch-b2772e6f3da0420895f57066ce4339ff",
+    "html_url": "https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38707841668",
+    "pull_requests": []
+  },
+  "jobs": [
+    {
+      "id": 116331579586,
+      "run_id": 38707841668,
+      "run_attempt": 1,
+      "name": "Classify and check project tooling",
+      "started_at": "2026-10-15T08:44:41Z",
+      "completed_at": "2026-10-15T08:45:45Z",
+      "created_at": "2026-10-15T08:44:37Z",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000019043,
+      "runner_name": "GitHub Actions 1000019043",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-15T08:44:42Z",
+          "completed_at": "2026-10-15T08:44:44Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-15T08:44:44Z",
+          "completed_at": "2026-10-15T08:45:00Z"
+        },
+        {
+          "name": "Run python3 scripts/acl_ci_scope.py --workflow ci.yml",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-15T08:45:00Z",
+          "completed_at": "2026-10-15T08:45:02Z"
+        },
+        {
+          "name": "Scan all tracked inputs",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-15T08:45:02Z",
+          "completed_at": "2026-10-15T08:45:03Z"
+        },
+        {
+          "name": "Install lightweight test dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-10-15T08:45:03Z",
+          "completed_at": "2026-10-15T08:45:06Z"
+        },
+        {
+          "name": "Verify project tooling and tracker metadata",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-15T08:45:06Z",
+          "completed_at": "2026-10-15T08:45:42Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-10-15T08:45:42Z",
+          "completed_at": "2026-10-15T08:45:42Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-10-15T08:45:42Z",
+          "completed_at": "2026-10-15T08:45:42Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/MojoTheApe/adopy-campaing-launcher/check-runs/116331579586"
+    },
+    {
+      "id": 116332039102,
+      "run_id": 38707841668,
+      "run_attempt": 1,
+      "name": "linux tests (3.11, 1)",
+      "started_at": "2026-10-15T08:45:48Z",
+      "completed_at": "2026-10-15T08:59:50Z",
+      "created_at": "2026-10-15T08:45:45Z",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000019047,
+      "runner_name": "GitHub Actions 1000019047",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-15T08:45:49Z",
+          "completed_at": "2026-10-15T08:45:52Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-15T08:45:52Z",
+          "completed_at": "2026-10-15T08:46:07Z"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-15T08:46:07Z",
+          "completed_at": "2026-10-15T08:46:11Z"
+        },
+        {
+          "name": "Install dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-15T08:46:11Z",
+          "completed_at": "2026-10-15T08:46:33Z"
+        },
+        {
+          "name": "Install Chromium for isolated DOM tests",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-10-15T08:46:33Z",
+          "completed_at": "2026-10-15T08:47:00Z"
+        },
+        {
+          "name": "Tests (Linux shard 1 of 3)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-15T08:47:00Z",
+          "completed_at": "2026-10-15T08:59:47Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-10-15T08:59:47Z",
+          "completed_at": "2026-10-15T08:59:47Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-10-15T08:59:47Z",
+          "completed_at": "2026-10-15T08:59:48Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-10-15T08:59:48Z",
+          "completed_at": "2026-10-15T08:59:48Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/MojoTheApe/adopy-campaing-launcher/check-runs/116332039102"
+    },
+    {
+      "id": 116332039127,
+      "run_id": 38707841668,
+      "run_attempt": 1,
+      "name": "windows tests (3.13)",
+      "started_at": "2026-10-15T08:45:51Z",
+      "completed_at": "2026-10-15T08:51:15Z",
+      "created_at": "2026-10-15T08:45:45Z",
+      "status": "completed",
+      "conclusion": "failure",
+      "runner_id": 1000019054,
+      "runner_name": "GitHub Actions 1000019054",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions",
+      "labels": [
+        "windows-latest"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-15T08:45:54Z",
+          "completed_at": "2026-10-15T08:45:56Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-15T08:45:56Z",
+          "completed_at": "2026-10-15T08:46:48Z"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-15T08:46:48Z",
+          "completed_at": "2026-10-15T08:46:52Z"
+        },
+        {
+          "name": "Install dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-15T08:46:52Z",
+          "completed_at": "2026-10-15T08:48:06Z"
+        },
+        {
+          "name": "Data and secret scan",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-10-15T08:48:06Z",
+          "completed_at": "2026-10-15T08:48:08Z"
+        },
+        {
+          "name": "Smoke check (does ACL start on Windows?)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-15T08:48:08Z",
+          "completed_at": "2026-10-15T08:48:11Z"
+        },
+        {
+          "name": "Install Chromium for isolated DOM tests",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-10-15T08:48:11Z",
+          "completed_at": "2026-10-15T08:48:36Z"
+        },
+        {
+          "name": "Tests (windows_only files and the Windows smoke set)",
+          "status": "completed",
+          "conclusion": "failure",
+          "number": 8,
+          "started_at": "2026-10-15T08:48:36Z",
+          "completed_at": "2026-10-15T08:51:06Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 15,
+          "started_at": "2026-10-15T08:51:06Z",
+          "completed_at": "2026-10-15T08:51:06Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16,
+          "started_at": "2026-10-15T08:51:06Z",
+          "completed_at": "2026-10-15T08:51:13Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17,
+          "started_at": "2026-10-15T08:51:13Z",
+          "completed_at": "2026-10-15T08:51:13Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/MojoTheApe/adopy-campaing-launcher/check-runs/116332039127"
+    },
+    {
+      "id": 116332039154,
+      "run_id": 38707841668,
+      "run_attempt": 1,
+      "name": "linux tests (3.11, 3)",
+      "started_at": "2026-10-15T08:45:48Z",
+      "completed_at": "2026-10-15T09:03:35Z",
+      "created_at": "2026-10-15T08:45:45Z",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000019048,
+      "runner_name": "GitHub Actions 1000019048",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-15T08:45:49Z",
+          "completed_at": "2026-10-15T08:45:50Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-15T08:45:50Z",
+          "completed_at": "2026-10-15T08:46:07Z"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-15T08:46:07Z",
+          "completed_at": "2026-10-15T08:46:12Z"
+        },
+        {
+          "name": "Install dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-15T08:46:12Z",
+          "completed_at": "2026-10-15T08:46:35Z"
+        },
+        {
+          "name": "Install Chromium for isolated DOM tests",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-10-15T08:46:35Z",
+          "completed_at": "2026-10-15T08:47:01Z"
+        },
+        {
+          "name": "Tests (Linux shard 3 of 3)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-15T08:47:01Z",
+          "completed_at": "2026-10-15T09:03:32Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-10-15T09:03:32Z",
+          "completed_at": "2026-10-15T09:03:32Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-10-15T09:03:32Z",
+          "completed_at": "2026-10-15T09:03:33Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-10-15T09:03:33Z",
+          "completed_at": "2026-10-15T09:03:33Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/MojoTheApe/adopy-campaing-launcher/check-runs/116332039154"
+    },
+    {
+      "id": 116332039157,
+      "run_id": 38707841668,
+      "run_attempt": 1,
+      "name": "Process instructions",
+      "started_at": "2026-10-15T08:45:48Z",
+      "completed_at": "2026-10-15T08:46:12Z",
+      "created_at": "2026-10-15T08:45:45Z",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000019049,
+      "runner_name": "GitHub Actions 1000019049",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-15T08:45:49Z",
+          "completed_at": "2026-10-15T08:45:50Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-15T08:45:50Z",
+          "completed_at": "2026-10-15T08:46:09Z"
+        },
+        {
+          "name": "Check process policy and repository instruction links",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-15T08:46:09Z",
+          "completed_at": "2026-10-15T08:46:09Z"
+        },
+        {
+          "name": "Require the tooling and secret checks",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-15T08:46:09Z",
+          "completed_at": "2026-10-15T08:46:09Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-10-15T08:46:09Z",
+          "completed_at": "2026-10-15T08:46:09Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-10-15T08:46:09Z",
+          "completed_at": "2026-10-15T08:46:09Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/MojoTheApe/adopy-campaing-launcher/check-runs/116332039157"
+    },
+    {
+      "id": 116332039290,
+      "run_id": 38707841668,
+      "run_attempt": 1,
+      "name": "linux tests (3.11, 2)",
+      "started_at": "2026-10-15T08:45:48Z",
+      "completed_at": "2026-10-15T09:01:49Z",
+      "created_at": "2026-10-15T08:45:45Z",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000019050,
+      "runner_name": "GitHub Actions 1000019050",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-15T08:45:50Z",
+          "completed_at": "2026-10-15T08:45:50Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-15T08:45:50Z",
+          "completed_at": "2026-10-15T08:46:08Z"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-15T08:46:08Z",
+          "completed_at": "2026-10-15T08:46:14Z"
+        },
+        {
+          "name": "Install dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-15T08:46:14Z",
+          "completed_at": "2026-10-15T08:46:39Z"
+        },
+        {
+          "name": "Install Chromium for isolated DOM tests",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-10-15T08:46:39Z",
+          "completed_at": "2026-10-15T08:47:10Z"
+        },
+        {
+          "name": "Tests (Linux shard 2 of 3)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-15T08:47:10Z",
+          "completed_at": "2026-10-15T09:01:45Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-10-15T09:01:45Z",
+          "completed_at": "2026-10-15T09:01:46Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-10-15T09:01:46Z",
+          "completed_at": "2026-10-15T09:01:46Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-10-15T09:01:46Z",
+          "completed_at": "2026-10-15T09:01:46Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/MojoTheApe/adopy-campaing-launcher/check-runs/116332039290"
+    },
+    {
+      "id": 116332039368,
+      "run_id": 38707841668,
+      "run_attempt": 1,
+      "name": "linux tests (3.13, 3)",
+      "started_at": "2026-10-15T08:45:48Z",
+      "completed_at": "2026-10-15T09:03:38Z",
+      "created_at": "2026-10-15T08:45:45Z",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000019051,
+      "runner_name": "GitHub Actions 1000019051",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-15T08:45:49Z",
+          "completed_at": "2026-10-15T08:45:50Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-15T08:45:50Z",
+          "completed_at": "2026-10-15T08:46:10Z"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-15T08:46:10Z",
+          "completed_at": "2026-10-15T08:46:13Z"
+        },
+        {
+          "name": "Install dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-15T08:46:13Z",
+          "completed_at": "2026-10-15T08:46:42Z"
+        },
+        {
+          "name": "Install Chromium for isolated DOM tests",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-10-15T08:46:42Z",
+          "completed_at": "2026-10-15T08:47:07Z"
+        },
+        {
+          "name": "Tests (Linux shard 3 of 3)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-15T08:47:07Z",
+          "completed_at": "2026-10-15T09:03:35Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-10-15T09:03:35Z",
+          "completed_at": "2026-10-15T09:03:35Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-10-15T09:03:35Z",
+          "completed_at": "2026-10-15T09:03:36Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-10-15T09:03:36Z",
+          "completed_at": "2026-10-15T09:03:36Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/MojoTheApe/adopy-campaing-launcher/check-runs/116332039368"
+    },
+    {
+      "id": 116332039395,
+      "run_id": 38707841668,
+      "run_attempt": 1,
+      "name": "linux tests (3.13, 1)",
+      "started_at": "2026-10-15T08:45:48Z",
+      "completed_at": "2026-10-15T09:00:38Z",
+      "created_at": "2026-10-15T08:45:45Z",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000019052,
+      "runner_name": "GitHub Actions 1000019052",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-15T08:45:49Z",
+          "completed_at": "2026-10-15T08:45:50Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-15T08:45:50Z",
+          "completed_at": "2026-10-15T08:46:08Z"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-15T08:46:08Z",
+          "completed_at": "2026-10-15T08:46:12Z"
+        },
+        {
+          "name": "Install dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-15T08:46:12Z",
+          "completed_at": "2026-10-15T08:46:35Z"
+        },
+        {
+          "name": "Install Chromium for isolated DOM tests",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-10-15T08:46:35Z",
+          "completed_at": "2026-10-15T08:47:01Z"
+        },
+        {
+          "name": "Tests (Linux shard 1 of 3)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-15T08:47:01Z",
+          "completed_at": "2026-10-15T09:00:35Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-10-15T09:00:35Z",
+          "completed_at": "2026-10-15T09:00:35Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-10-15T09:00:35Z",
+          "completed_at": "2026-10-15T09:00:35Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-10-15T09:00:35Z",
+          "completed_at": "2026-10-15T09:00:35Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/MojoTheApe/adopy-campaing-launcher/check-runs/116332039395"
+    },
+    {
+      "id": 116332039446,
+      "run_id": 38707841668,
+      "run_attempt": 1,
+      "name": "linux tests (3.13, 2)",
+      "started_at": "2026-10-15T08:45:48Z",
+      "completed_at": "2026-10-15T08:59:19Z",
+      "created_at": "2026-10-15T08:45:45Z",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000019053,
+      "runner_name": "GitHub Actions 1000019053",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-15T08:45:49Z",
+          "completed_at": "2026-10-15T08:45:50Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-15T08:45:50Z",
+          "completed_at": "2026-10-15T08:46:01Z"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-15T08:46:01Z",
+          "completed_at": "2026-10-15T08:46:03Z"
+        },
+        {
+          "name": "Install dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-15T08:46:03Z",
+          "completed_at": "2026-10-15T08:46:23Z"
+        },
+        {
+          "name": "Install Chromium for isolated DOM tests",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-10-15T08:46:23Z",
+          "completed_at": "2026-10-15T08:46:50Z"
+        },
+        {
+          "name": "Tests (Linux shard 2 of 3)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-15T08:46:50Z",
+          "completed_at": "2026-10-15T08:59:16Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-10-15T08:59:16Z",
+          "completed_at": "2026-10-15T08:59:16Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-10-15T08:59:16Z",
+          "completed_at": "2026-10-15T08:59:16Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-10-15T08:59:16Z",
+          "completed_at": "2026-10-15T08:59:16Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/MojoTheApe/adopy-campaing-launcher/check-runs/116332039446"
+    },
+    {
+      "id": 116339221916,
+      "run_id": 38707841668,
+      "run_attempt": 1,
+      "name": "ACL verification",
+      "started_at": "2026-10-15T09:03:41Z",
+      "completed_at": "2026-10-15T09:03:44Z",
+      "created_at": "2026-10-15T09:03:38Z",
+      "status": "completed",
+      "conclusion": "failure",
+      "runner_id": 1000019062,
+      "runner_name": "GitHub Actions 1000019062",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-15T09:03:42Z",
+          "completed_at": "2026-10-15T09:03:42Z"
+        },
+        {
+          "name": "Require every applicable check",
+          "status": "completed",
+          "conclusion": "failure",
+          "number": 2,
+          "started_at": "2026-10-15T09:03:42Z",
+          "completed_at": "2026-10-15T09:03:43Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-15T09:03:43Z",
+          "completed_at": "2026-10-15T09:03:43Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/MojoTheApe/adopy-campaing-launcher/check-runs/116339221916"
+    },
+    {
+      "id": 116342684720,
+      "run_id": 38707841668,
+      "run_attempt": 2,
+      "name": "Classify and check project tooling",
+      "started_at": "2026-10-15T08:44:41Z",
+      "completed_at": "2026-10-15T08:45:45Z",
+      "created_at": "2026-10-15T09:12:09Z",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000019043,
+      "runner_name": "GitHub Actions 1000019043",
+      "runner_group_id": null,
+      "runner_group_name": "GitHub Actions",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-15T08:44:42Z",
+          "completed_at": "2026-10-15T08:44:44Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-15T08:44:44Z",
+          "completed_at": "2026-10-15T08:45:00Z"
+        },
+        {
+          "name": "Run python3 scripts/acl_ci_scope.py --workflow ci.yml",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-15T08:45:00Z",
+          "completed_at": "2026-10-15T08:45:02Z"
+        },
+        {
+          "name": "Scan all tracked inputs",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-15T08:45:02Z",
+          "completed_at": "2026-10-15T08:45:03Z"
+        },
+        {
+          "name": "Install lightweight test dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-10-15T08:45:03Z",
+          "completed_at": "2026-10-15T08:45:06Z"
+        },
+        {
+          "name": "Verify project tooling and tracker metadata",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-15T08:45:06Z",
+          "completed_at": "2026-10-15T08:45:42Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-10-15T08:45:42Z",
+          "completed_at": "2026-10-15T08:45:42Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-10-15T08:45:42Z",
+          "completed_at": "2026-10-15T08:45:42Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/MojoTheApe/adopy-campaing-launcher/check-runs/116342684720"
+    },
+    {
+      "id": 116342700082,
+      "run_id": 38707841668,
+      "run_attempt": 2,
+      "name": "windows tests (3.13)",
+      "started_at": "2026-10-15T09:12:15Z",
+      "completed_at": "2026-10-15T09:15:37Z",
+      "created_at": "2026-10-15T09:12:11Z",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000019070,
+      "runner_name": "GitHub Actions 1000019070",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions",
+      "labels": [
+        "windows-latest"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-15T09:12:15Z",
+          "completed_at": "2026-10-15T09:12:16Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-15T09:12:16Z",
+          "completed_at": "2026-10-15T09:12:33Z"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-15T09:12:33Z",
+          "completed_at": "2026-10-15T09:12:39Z"
+        },
+        {
+          "name": "Install dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-15T09:12:39Z",
+          "completed_at": "2026-10-15T09:13:36Z"
+        },
+        {
+          "name": "Data and secret scan",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-10-15T09:13:36Z",
+          "completed_at": "2026-10-15T09:13:38Z"
+        },
+        {
+          "name": "Smoke check (does ACL start on Windows?)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-15T09:13:38Z",
+          "completed_at": "2026-10-15T09:13:39Z"
+        },
+        {
+          "name": "Install Chromium for isolated DOM tests",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7,
+          "started_at": "2026-10-15T09:13:39Z",
+          "completed_at": "2026-10-15T09:13:50Z"
+        },
+        {
+          "name": "Tests (windows_only files and the Windows smoke set)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-10-15T09:13:50Z",
+          "completed_at": "2026-10-15T09:15:26Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 15,
+          "started_at": "2026-10-15T09:15:26Z",
+          "completed_at": "2026-10-15T09:15:32Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 16,
+          "started_at": "2026-10-15T09:15:32Z",
+          "completed_at": "2026-10-15T09:15:35Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 17,
+          "started_at": "2026-10-15T09:15:35Z",
+          "completed_at": "2026-10-15T09:15:35Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/MojoTheApe/adopy-campaing-launcher/check-runs/116342700082"
+    },
+    {
+      "id": 116342701488,
+      "run_id": 38707841668,
+      "run_attempt": 2,
+      "name": "Process instructions",
+      "started_at": "2026-10-15T08:45:48Z",
+      "completed_at": "2026-10-15T08:46:12Z",
+      "created_at": "2026-10-15T09:12:11Z",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000019049,
+      "runner_name": "GitHub Actions 1000019049",
+      "runner_group_id": null,
+      "runner_group_name": "GitHub Actions",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-15T08:45:49Z",
+          "completed_at": "2026-10-15T08:45:50Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-15T08:45:50Z",
+          "completed_at": "2026-10-15T08:46:09Z"
+        },
+        {
+          "name": "Check process policy and repository instruction links",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-15T08:46:09Z",
+          "completed_at": "2026-10-15T08:46:09Z"
+        },
+        {
+          "name": "Require the tooling and secret checks",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-15T08:46:09Z",
+          "completed_at": "2026-10-15T08:46:09Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-10-15T08:46:09Z",
+          "completed_at": "2026-10-15T08:46:09Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-10-15T08:46:09Z",
+          "completed_at": "2026-10-15T08:46:09Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/MojoTheApe/adopy-campaing-launcher/check-runs/116342701488"
+    },
+    {
+      "id": 116342702028,
+      "run_id": 38707841668,
+      "run_attempt": 2,
+      "name": "linux tests (3.11, 2)",
+      "started_at": "2026-10-15T08:45:48Z",
+      "completed_at": "2026-10-15T09:01:49Z",
+      "created_at": "2026-10-15T09:12:11Z",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000019050,
+      "runner_name": "GitHub Actions 1000019050",
+      "runner_group_id": null,
+      "runner_group_name": "GitHub Actions",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-15T08:45:50Z",
+          "completed_at": "2026-10-15T08:45:50Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-15T08:45:50Z",
+          "completed_at": "2026-10-15T08:46:08Z"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-15T08:46:08Z",
+          "completed_at": "2026-10-15T08:46:14Z"
+        },
+        {
+          "name": "Install dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-15T08:46:14Z",
+          "completed_at": "2026-10-15T08:46:39Z"
+        },
+        {
+          "name": "Install Chromium for isolated DOM tests",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-10-15T08:46:39Z",
+          "completed_at": "2026-10-15T08:47:10Z"
+        },
+        {
+          "name": "Tests (Linux shard 2 of 3)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-15T08:47:10Z",
+          "completed_at": "2026-10-15T09:01:45Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-10-15T09:01:45Z",
+          "completed_at": "2026-10-15T09:01:46Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-10-15T09:01:46Z",
+          "completed_at": "2026-10-15T09:01:46Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-10-15T09:01:46Z",
+          "completed_at": "2026-10-15T09:01:46Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/MojoTheApe/adopy-campaing-launcher/check-runs/116342702028"
+    },
+    {
+      "id": 116342702125,
+      "run_id": 38707841668,
+      "run_attempt": 2,
+      "name": "linux tests (3.11, 3)",
+      "started_at": "2026-10-15T08:45:48Z",
+      "completed_at": "2026-10-15T09:03:35Z",
+      "created_at": "2026-10-15T09:12:11Z",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000019048,
+      "runner_name": "GitHub Actions 1000019048",
+      "runner_group_id": null,
+      "runner_group_name": "GitHub Actions",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-15T08:45:49Z",
+          "completed_at": "2026-10-15T08:45:50Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-15T08:45:50Z",
+          "completed_at": "2026-10-15T08:46:07Z"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-15T08:46:07Z",
+          "completed_at": "2026-10-15T08:46:12Z"
+        },
+        {
+          "name": "Install dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-15T08:46:12Z",
+          "completed_at": "2026-10-15T08:46:35Z"
+        },
+        {
+          "name": "Install Chromium for isolated DOM tests",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-10-15T08:46:35Z",
+          "completed_at": "2026-10-15T08:47:01Z"
+        },
+        {
+          "name": "Tests (Linux shard 3 of 3)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-15T08:47:01Z",
+          "completed_at": "2026-10-15T09:03:32Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-10-15T09:03:32Z",
+          "completed_at": "2026-10-15T09:03:32Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-10-15T09:03:32Z",
+          "completed_at": "2026-10-15T09:03:33Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-10-15T09:03:33Z",
+          "completed_at": "2026-10-15T09:03:33Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/MojoTheApe/adopy-campaing-launcher/check-runs/116342702125"
+    },
+    {
+      "id": 116342702210,
+      "run_id": 38707841668,
+      "run_attempt": 2,
+      "name": "linux tests (3.11, 1)",
+      "started_at": "2026-10-15T08:45:48Z",
+      "completed_at": "2026-10-15T08:59:50Z",
+      "created_at": "2026-10-15T09:12:11Z",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000019047,
+      "runner_name": "GitHub Actions 1000019047",
+      "runner_group_id": null,
+      "runner_group_name": "GitHub Actions",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-15T08:45:49Z",
+          "completed_at": "2026-10-15T08:45:52Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-15T08:45:52Z",
+          "completed_at": "2026-10-15T08:46:07Z"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-15T08:46:07Z",
+          "completed_at": "2026-10-15T08:46:11Z"
+        },
+        {
+          "name": "Install dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-15T08:46:11Z",
+          "completed_at": "2026-10-15T08:46:33Z"
+        },
+        {
+          "name": "Install Chromium for isolated DOM tests",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-10-15T08:46:33Z",
+          "completed_at": "2026-10-15T08:47:00Z"
+        },
+        {
+          "name": "Tests (Linux shard 1 of 3)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-15T08:47:00Z",
+          "completed_at": "2026-10-15T08:59:47Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-10-15T08:59:47Z",
+          "completed_at": "2026-10-15T08:59:47Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-10-15T08:59:47Z",
+          "completed_at": "2026-10-15T08:59:48Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-10-15T08:59:48Z",
+          "completed_at": "2026-10-15T08:59:48Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/MojoTheApe/adopy-campaing-launcher/check-runs/116342702210"
+    },
+    {
+      "id": 116342702310,
+      "run_id": 38707841668,
+      "run_attempt": 2,
+      "name": "linux tests (3.13, 2)",
+      "started_at": "2026-10-15T08:45:48Z",
+      "completed_at": "2026-10-15T08:59:19Z",
+      "created_at": "2026-10-15T09:12:11Z",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000019053,
+      "runner_name": "GitHub Actions 1000019053",
+      "runner_group_id": null,
+      "runner_group_name": "GitHub Actions",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-15T08:45:49Z",
+          "completed_at": "2026-10-15T08:45:50Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-15T08:45:50Z",
+          "completed_at": "2026-10-15T08:46:01Z"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-15T08:46:01Z",
+          "completed_at": "2026-10-15T08:46:03Z"
+        },
+        {
+          "name": "Install dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-15T08:46:03Z",
+          "completed_at": "2026-10-15T08:46:23Z"
+        },
+        {
+          "name": "Install Chromium for isolated DOM tests",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-10-15T08:46:23Z",
+          "completed_at": "2026-10-15T08:46:50Z"
+        },
+        {
+          "name": "Tests (Linux shard 2 of 3)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-15T08:46:50Z",
+          "completed_at": "2026-10-15T08:59:16Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-10-15T08:59:16Z",
+          "completed_at": "2026-10-15T08:59:16Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-10-15T08:59:16Z",
+          "completed_at": "2026-10-15T08:59:16Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-10-15T08:59:16Z",
+          "completed_at": "2026-10-15T08:59:16Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/MojoTheApe/adopy-campaing-launcher/check-runs/116342702310"
+    },
+    {
+      "id": 116342702661,
+      "run_id": 38707841668,
+      "run_attempt": 2,
+      "name": "linux tests (3.13, 1)",
+      "started_at": "2026-10-15T08:45:48Z",
+      "completed_at": "2026-10-15T09:00:38Z",
+      "created_at": "2026-10-15T09:12:11Z",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000019052,
+      "runner_name": "GitHub Actions 1000019052",
+      "runner_group_id": null,
+      "runner_group_name": "GitHub Actions",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-15T08:45:49Z",
+          "completed_at": "2026-10-15T08:45:50Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-15T08:45:50Z",
+          "completed_at": "2026-10-15T08:46:08Z"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-15T08:46:08Z",
+          "completed_at": "2026-10-15T08:46:12Z"
+        },
+        {
+          "name": "Install dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-15T08:46:12Z",
+          "completed_at": "2026-10-15T08:46:35Z"
+        },
+        {
+          "name": "Install Chromium for isolated DOM tests",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-10-15T08:46:35Z",
+          "completed_at": "2026-10-15T08:47:01Z"
+        },
+        {
+          "name": "Tests (Linux shard 1 of 3)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-15T08:47:01Z",
+          "completed_at": "2026-10-15T09:00:35Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-10-15T09:00:35Z",
+          "completed_at": "2026-10-15T09:00:35Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-10-15T09:00:35Z",
+          "completed_at": "2026-10-15T09:00:35Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-10-15T09:00:35Z",
+          "completed_at": "2026-10-15T09:00:35Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/MojoTheApe/adopy-campaing-launcher/check-runs/116342702661"
+    },
+    {
+      "id": 116342703545,
+      "run_id": 38707841668,
+      "run_attempt": 2,
+      "name": "linux tests (3.13, 3)",
+      "started_at": "2026-10-15T08:45:48Z",
+      "completed_at": "2026-10-15T09:03:38Z",
+      "created_at": "2026-10-15T09:12:12Z",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000019051,
+      "runner_name": "GitHub Actions 1000019051",
+      "runner_group_id": null,
+      "runner_group_name": "GitHub Actions",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-15T08:45:49Z",
+          "completed_at": "2026-10-15T08:45:50Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-15T08:45:50Z",
+          "completed_at": "2026-10-15T08:46:10Z"
+        },
+        {
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-15T08:46:10Z",
+          "completed_at": "2026-10-15T08:46:13Z"
+        },
+        {
+          "name": "Install dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-10-15T08:46:13Z",
+          "completed_at": "2026-10-15T08:46:42Z"
+        },
+        {
+          "name": "Install Chromium for isolated DOM tests",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-10-15T08:46:42Z",
+          "completed_at": "2026-10-15T08:47:07Z"
+        },
+        {
+          "name": "Tests (Linux shard 3 of 3)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6,
+          "started_at": "2026-10-15T08:47:07Z",
+          "completed_at": "2026-10-15T09:03:35Z"
+        },
+        {
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11,
+          "started_at": "2026-10-15T09:03:35Z",
+          "completed_at": "2026-10-15T09:03:35Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 12,
+          "started_at": "2026-10-15T09:03:35Z",
+          "completed_at": "2026-10-15T09:03:36Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 13,
+          "started_at": "2026-10-15T09:03:36Z",
+          "completed_at": "2026-10-15T09:03:36Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/MojoTheApe/adopy-campaing-launcher/check-runs/116342703545"
+    },
+    {
+      "id": 116344126023,
+      "run_id": 38707841668,
+      "run_attempt": 2,
+      "name": "ACL verification",
+      "started_at": "2026-10-15T09:15:40Z",
+      "completed_at": "2026-10-15T09:15:44Z",
+      "created_at": "2026-10-15T09:15:37Z",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 1000019071,
+      "runner_name": "GitHub Actions 1000019071",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-10-15T09:15:41Z",
+          "completed_at": "2026-10-15T09:15:41Z"
+        },
+        {
+          "name": "Require every applicable check",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-10-15T09:15:41Z",
+          "completed_at": "2026-10-15T09:15:42Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-10-15T09:15:42Z",
+          "completed_at": "2026-10-15T09:15:42Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/MojoTheApe/adopy-campaing-launcher/check-runs/116344126023"
+    }
+  ]
+}
