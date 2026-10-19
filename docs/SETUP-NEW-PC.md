@@ -165,7 +165,8 @@ The messages in the middle column are what ACL shows, word for word.
 | Local files | *Stats workbook does not exist.* | Pick the file again with **Browse…**. |
 | Local files | *Stats workbook must be an .xlsx or .xlsm file.* | You picked a different file. Pick the Stats workbook. |
 | Local files | *Stats workbook cannot be opened: …* | Close the workbook in Excel, then click **Next** again. |
-| Local files | *Stats workbook is missing columns: …* or *Stats workbook is missing CM or Account Alias columns.* | You picked a different Excel file. Pick the Stats workbook. |
+| Local files | *Stats workbook is missing columns: …*, *Missing columns in Excel: …*, *Stats workbook has duplicated columns: …* or *Stats workbook is missing CM or Account Alias columns.* | You picked a different Excel file. Pick the Stats workbook. |
+| Local files | *Stats workbook is empty: no header row found* or *Stats workbook is not usable: …* | The file has no table in it, or is not the real workbook. Pick the Stats workbook again with **Browse…**. |
 | Local files | *No accounts were found for this campaign manager in the Stats workbook.* | Your name does not match the CM column. Click **Back** and copy it from the workbook exactly. |
 | Local files | *Creatives folder could not be created: …* | Pick another folder with **Browse…**. |
 | Local files | *Creatives folder does not exist.* or *Creatives folder is not readable.* | Pick another folder with **Browse…**, or keep the suggested `Documents\ACL\Creatives`. |
