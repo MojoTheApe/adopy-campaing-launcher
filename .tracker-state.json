@@ -4933,6 +4933,27 @@
         "issue_scopes": {
           "73": "3a25372ae9c718cc8f08a1c2cf0a72178f1d6ee782f7356fba460f6033aa2db0"
         }
+      },
+      "954": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R123X",
+        "review_session": "reviewer-r123x-20261019",
+        "execution_lane": "24d5fdb6d5ab4f9a8477d7c7a5855d81",
+        "implementer": "Worker-W123C",
+        "head_sha": "36638a31be48d2e23a4b0cbb44ce857b448c728d",
+        "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+        "tree_sha": "fa19efd3613b8cdac60b4085f01fe4839a469aaa",
+        "issues": [
+          29
+        ],
+        "report": "PR #954 adds src/analysis_agent/account_next_step.py: next_step(status,status_text) maps the Meta disable_reason parsed from the Graph status text ('(Meta API: ..., reason X)') to one plain-English next step. All 15 reason names from account_spend_api._DISABLE_REASONS have a concrete step (Account Quality/appeal, Billing, ask the account provider, replacement); PERMANENT_CLOSE promises no recovery. Unknown code says 'reason this tool does not recognise (N). The cause is unknown' plus the generic step; page reads without reason say 'The reason was not reported by this read'; restricted/review get generic steps; clear/unknown/empty give nothing, so no diagnosis is invented and no automatic recovery is promised. account_spend.get_status and SpendReading.to_dict carry next_step; _account_map_country.html and amapStatusTail in report.html render it as escaped text under the status word, in the same row as the account name (identity stays visible), also after a live Read; CHANGELOG entry added. All user-facing text is English. Tests (tests/test_account_next_step.py, 11 tests) cover every reason code, policy/permanent-close/unknown/page-read cases, healthy states, template row with account name+status+step, get_status/to_dict, and a Playwright live-read test (escaping, hidden for clear). Locally on the exact head: 10 non-browser tests passed; the Playwright test and the pre-existing tests/test_copy_status_text.py live-read test both fail locally with a Playwright driver/timeout problem on this machine (environmental, not caused by the diff). CI on head 36638a31: all checks pass (ACL verification, project tooling, process instructions, tracker-link, descriptor, installer verification, linux tests 1/2/3, windows tests); installer build jobs skipped as not applicable. Non-blocking nits: the owner-agreed reason list is the _DISABLE_REASONS set, guidance wording is not owner-confirmed with real account examples (open decision in the Issue); _next_step wrapper uses a lazy import without need. No live checks claimed.",
+        "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "recorded_at": "2026-10-19T19:28:57+00:00",
+        "issue_scopes": {
+          "29": "7352ef354e14e77a8664335a0a4d1e9e7f5aa69d4bd7775c2f323a1b02673646"
+        }
       }
     },
     "stage": {
