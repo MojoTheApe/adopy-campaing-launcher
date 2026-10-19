@@ -1,8 +1,11 @@
 # ACL delivery contract
 
+Read the exact [selected shared guide](TRACKER.md), the [ACL support/cutover plan](EARLY_ADOPTION.md) and the guarded operator mapping in [AGENTS.md](../../AGENTS.md).
+Shared contract references retain canonical bodies; `_ACL` documents preserve the original local cutover history and stronger controls.
+
 Read [ADOPTION.md](ADOPTION.md) for actual cutover evidence and the one-time
 activation gate before any live operation. Main/stage and the shared board exist;
-the descriptor remains draft because the pinned standard has no published release.
+the published support pair is pinned, while the descriptor remains draft pending the separately verified early-adoption pilot.
 
 `delivery.json` is the project-specific delivery description. `tracker/config.json`
 is the matching Tracker configuration. The standard and engine use exact commit
@@ -15,7 +18,7 @@ source PRs stay approval-only. Read [POST_MAIN_DELIVERY.md](POST_MAIN_DELIVERY.m
 for the one-request release continuation, exact native proof, initial old-policy
 source admission, separately verified idle activation and restoring Stage.
 
-The explicitly opted-in [instruction-only route](PROCESS_INSTRUCTIONS.md) admits
+The explicitly opted-in [instruction-only route](PROCESS_INSTRUCTIONS_ACL.md) admits
 normal repository-process Markdown directly from Review into main after independent
 review and its applicable checks. Its verified reviewed-merge receipt completes that
 bounded task without package delivery. Application/mixed/config/automation changes,
@@ -62,6 +65,18 @@ adoption. For repository-only work, label stage evidence as Git checks; consult 
 branch-to-environment connections require their own explicit setup.
 A partially implemented ticket stays active. Never substitute a closed Issue or
 non-code completion for missing code/delivery evidence.
+
+## Optional-policy selection packages
+
+The released support pin supplies the bounded Stage-off execution-v2/v3
+one-policy selection package described in [DELIVERY_POLICY.md](DELIVERY_POLICY.md#one-policy-selection-package-before-activation).
+Prepare only its genuine separately reviewed one-member selection, retain the
+original authorization, complete actual published-package verification and
+record its exact native receipt before reserving maintenance for owned idle
+activation. Do not co-select policies or deliver through held maintenance.
+Other pending deliveries, unresolved effects and real owners still block
+adoption. [EARLY_ADOPTION.md](EARLY_ADOPTION.md) retains reader/every-writer,
+full recovery and separate pilot gates; this support source activates nothing.
 
 ## Procedure references
 
