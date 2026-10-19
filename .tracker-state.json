@@ -47855,7 +47855,7 @@
             "session": "rf1019w-20261019"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-RF1019W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -47874,7 +47874,7 @@
         },
         "pr": 831,
         "queued_at": "2026-10-19T11:31:33+00:00",
-        "review_report": "Owner lifted the 2026-10-17 exclusive pause for ACL-1776, ACL-1899, ACL-1902 and ACL-1886 on 2026-10-19 (instruction in the review session: refresh onto current main, re-review, ship a new batch with release after the current one). Batch afaeca3e was cancelled by that pause; the old approval used main af0ade29 and is stale vs main 435bc154. Return for a main merge and fresh independent approval.",
+        "review_report": "Main moved to 1c6ab78e (batch #1016). Approval on 435bc154 is stale; return for a main merge and fresh delta approval. Owner instruction 2026-10-19: ship these four in the next batch with release.",
         "return_operation": {
           "id": "5f4dd2e912fc41e6a57d1253f8677c84",
           "actor": "Coordinator-M1011A",
@@ -91321,6 +91321,18 @@
           "report": "# ACL-142 (PR #958) returned to the author: required CI is red on the refreshed head\n\nHead 7f1f4c7ed6cbf21e9dc493a75defd8ae5641be2d. CI run 39253888282: \"linux tests (3.13, 2)\" failed with 4 failures and \"ACL verification\" failed as a result.\n\nFailing tests, all in `tests/test_one_connect_button.py` (the file the author could not run locally because of the 300 s limit):\n- test_a_found_profile_has_one_button: Playwright wait_for_function timeout (5000 ms)\n- test_connect_opens_the_profile_before_reading_its_account: same timeout\n- test_a_failed_open_does_not_cancel_connecting: `/account-map-patch` was never called after a failed profile open (\"a failed open cancelled the connecting\")\n- test_a_second_click_while_it_works_does_not_open_twice: same timeout\n\nThe new in-page account dialog (or the locked input / confirmation tick) changes the Connect flow that these tests exercise. Required: update the code so these flows behave as before (or, only where the old behaviour is intentionally replaced, update the tests to the new dialog and say so in the handoff), then run the whole `tests/test_one_connect_button.py` file locally in the background (it is slow), plus `tests/test_the_account_tree_on_screen.py`, which was also not re-run.\n\nEverything else from the previous review is unchanged and considered fixed. The removal decision was confirmed by the owner (Issue #72 comment).",
           "keep_lane": false
         }
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-19T14:17:30+00:00",
+        "issue": 776,
+        "operation": {
+          "id": "5f4dd2e912fc41e6a57d1253f8677c84",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "report": "Main moved to 1c6ab78e (batch #1016). Approval on 435bc154 is stale; return for a main merge and fresh delta approval. Owner instruction 2026-10-19: ship these four in the next batch with release."
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -93522,50 +93534,6 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-19T11:34:46+00:00"
-      },
-      "776": {
-        "issue": 776,
-        "pr": 831,
-        "branch": "codex/acl-1776-create-forms",
-        "head_sha": "9da094c7e6be136bc7e7671bc46dfdc67c10ce40",
-        "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
-        "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "scope": "3d95a7528bc437c6b9f8409335a38ea74c548d2fc21e480d381655f55e7bc220",
-        "review": {
-          "kind": "independent-review",
-          "verdict": "approved",
-          "reviewer": "Reviewer-DV1019A",
-          "review_session": "dv1019a-831",
-          "execution_lane": "6730539b1fe2423dafdf45e928f165be",
-          "implementer": "Worker-RF1019W",
-          "head_sha": "9da094c7e6be136bc7e7671bc46dfdc67c10ce40",
-          "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
-          "tree_sha": "582bdc1442fa24c52309c9cd1ff64e7d22834b19",
-          "report": "Delta re-review of ACL-1776 after merging work/main 435bc154 (parents cd1da59b previous approved + 435bc154). Head contains current main; git show --remerge-diff is empty (no conflict resolution, no code edits). Non-doc diff cd1da59b..9da094c7 (76 files) has the same file set and identical +/- line content as af0ade29..435bc154; only CHANGELOG/PROJECT docs additionally touched, both sides kept. Ran tests/test_acl1776_create_forms.py, test_acl1775_builder_forms.py, test_acl1819_preflight.py: 214 passed. gh pr checks 831 all green (linux 1-3, windows, tracker-link, verification). Earlier full review had no blockers; no live checks claimed.",
-          "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "issues": [
-            776
-          ],
-          "recorded_at": "2026-10-19T12:37:12+00:00",
-          "issue_scopes": {
-            "776": "3d95a7528bc437c6b9f8409335a38ea74c548d2fc21e480d381655f55e7bc220"
-          }
-        },
-        "lane": {
-          "id": "6730539b1fe2423dafdf45e928f165be",
-          "pr": 831,
-          "issues": [
-            776
-          ],
-          "actor": "Reviewer-DV1019A",
-          "session": "dv1019a-831",
-          "coordinator": "Coordinator-M1011A",
-          "started_at": "2026-10-19T12:21:05+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-19T12:38:46+00:00"
       },
       "138": {
         "issue": 138,
