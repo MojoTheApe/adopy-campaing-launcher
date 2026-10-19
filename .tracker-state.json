@@ -43067,9 +43067,11 @@
         "worktree": "C:\\wk19-401",
         "id": "8a5abe1c7fd84311890a424a8e7c02d7",
         "issue": 401,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T10:04:35+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 960,
+        "report": "### Handoff (2026-10-19, Worker-E19401)\n- PR #960 brought up to main: merged origin/main 435bc154 into work/acl-1401-mlx-not-running (clean merge, no conflicts, no extra edits); new head dc4dc59d.\n- Checks on merged head: tests/test_publish_stops_when_multilogin_is_not_running.py plus profile-stop, Sentry, failure_policy and triage tests: 218 passed. scripts/acl_scan_secrets.py clean; scripts/acl_smoke.py OK. Full suite left to CI. No live account used.\n- Remaining: independent review."
       },
       "305": {
         "actor": "Worker-E19305",
