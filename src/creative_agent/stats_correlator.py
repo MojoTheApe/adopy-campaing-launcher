@@ -20,6 +20,7 @@ import pandas as pd
 
 from config.paths import get_excel_path
 from src.analysis_agent.analyze_fb_stats import compute_metrics, enrich_structure
+from src.analysis_agent.stats_workbook import read_stats_workbook
 from src.analysis_agent.morning_report import (
     _safe_float,
     _safe_int,
@@ -32,7 +33,7 @@ def _load_df(excel_path: Optional[str] = None) -> Optional[pd.DataFrame]:
     if not path or not Path(path).is_file():
         return None
     try:
-        df_raw = pd.read_excel(path)
+        df_raw = read_stats_workbook(path)
         df = compute_metrics(df_raw)
         df = enrich_structure(df)
         return df
