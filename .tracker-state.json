@@ -44148,9 +44148,11 @@
         "worktree": "C:\\acl-1836",
         "id": "2441527c16924c619a6a923fce875b9c",
         "issue": 836,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T19:48:27+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 837,
+        "report": "# ACL-1836 handoff (2026-10-19)\n\nSource PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/837 , head 1ab1af9d. PR was returned for conflicts with main; merged current main, resolved src/fb_api/graph.py and src/fb_api/token_capture.py by keeping both session-loss recovery (ACL-1836) and timeout-to-stop classification (ACL-1761). One review nit fixed: verify_url after recovery now runs inside _timeouts_as_stops.\nLocal checks: tests for 1836 recovery, 1761 hang/logout (61), 1756 (103), 1760 (79), 1761 create (121), 1812 warm (89), 1800 commands (200) all passed. Full suite left to CI.\nRead-only Opus review of the merge resolution: nothing blocking; no Graph request is replayed by the recovery path.\nNo live profile or Meta operations."
       },
       "309": {
         "actor": "Worker-R1019309",
