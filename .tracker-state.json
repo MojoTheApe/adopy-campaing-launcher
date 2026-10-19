@@ -44287,6 +44287,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T20:10:40+00:00",
         "from_status": "status:todo"
+      },
+      "841": {
+        "actor": "Worker-R1019841",
+        "session": "run_r1019_841",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "codex/acl-1841-account-table-responsive",
+        "worktree": "C:\\acl-1841-wt",
+        "id": "13c1ca850b834ef5b33e616519c551df",
+        "issue": 841,
+        "state": "implementing",
+        "started_at": "2026-10-19T20:28:15+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -49003,11 +49015,15 @@
           {
             "actor": "Worker-T8L621",
             "session": "table-fix-01a133d7-1841"
+          },
+          {
+            "actor": "Worker-R1019841",
+            "session": "run_r1019_841"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-T8L621",
-        "coordinator": "Coordinator-D7K413",
+        "state": "implementing",
+        "worker": "Worker-R1019841",
+        "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-T8L621",
           "session": "table-fix-01a133d7-1841",
@@ -49025,7 +49041,6 @@
         "pr": 848,
         "queued_at": "2026-10-13T08:20:59+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
-        "reviewer": "Reviewer-RV1015F",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578009+00:00",
@@ -54721,6 +54736,10 @@
       },
       "Worker-R1019840": {
         "session": "run_r1019_840",
+        "role": "Worker"
+      },
+      "Worker-R1019841": {
+        "session": "run_r1019_841",
         "role": "Worker"
       }
     },
@@ -93951,6 +93970,13 @@
         "issue": 840,
         "pr": 846,
         "actor": "Worker-R1019840"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T20:28:15+00:00",
+        "issue": 841,
+        "claim": "13c1ca850b834ef5b33e616519c551df",
+        "actor": "Worker-R1019841"
       }
     ],
     "policy": {
