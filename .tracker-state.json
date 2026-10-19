@@ -43193,6 +43193,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T11:01:40+00:00",
         "from_status": "status:todo"
+      },
+      "202": {
+        "actor": "Worker-G19202",
+        "session": "wg202-c0a1de70",
+        "coordinator": "Coordinator-E1019A",
+        "branch": "work/acl-1202-overview-profile-search",
+        "worktree": "C:\\wk19-202",
+        "id": "ad52aab87c9f4ee8bd17f18081b006a0",
+        "issue": 202,
+        "state": "implementing",
+        "started_at": "2026-10-19T11:02:10+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -50431,11 +50443,15 @@
           {
             "actor": "Worker-W1202A",
             "session": "w1202a-s1"
+          },
+          {
+            "actor": "Worker-G19202",
+            "session": "wg202-c0a1de70"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-W1202A",
-        "coordinator": "Coordinator-T1004Q",
+        "state": "implementing",
+        "worker": "Worker-G19202",
+        "coordinator": "Coordinator-E1019A",
         "handoff": {
           "actor": "Worker-W1202A",
           "session": "w1202a-s1",
@@ -53085,6 +53101,10 @@
       },
       "Worker-F19680": {
         "session": "wf680-c0a1de70",
+        "role": "Worker"
+      },
+      "Worker-G19202": {
+        "session": "wg202-c0a1de70",
         "role": "Worker"
       }
     },
@@ -89383,6 +89403,13 @@
         "issue": 680,
         "claim": "839dc76f0e3645d5a5dda5ef74cd27de",
         "actor": "Worker-F19680"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T11:02:10+00:00",
+        "issue": 202,
+        "claim": "ad52aab87c9f4ee8bd17f18081b006a0",
+        "actor": "Worker-G19202"
       }
     ],
     "policy": {
