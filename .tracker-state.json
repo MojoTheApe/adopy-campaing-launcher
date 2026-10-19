@@ -51922,7 +51922,7 @@
             "session": "wh680-c0a1de70"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-H19680",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
@@ -51952,7 +51952,8 @@
           "actor": "Coordinator-E1019A",
           "session": "coord-c0a1de70",
           "report": "# Return for a main refresh\n\nMain moved to c6150160 (batch #1018 merged after #1016). The existing source approval is bound to the previous main baseline and cannot enter the next intake. No scope change and no defect is requested: merge current origin/main into the original branch, re-run the affected checks, hand off again and get a fresh independent review."
-        }
+        },
+        "reviewer": "Reviewer-Y19B"
       },
       "287": {
         "implementers": [
@@ -58362,7 +58363,6 @@
       896,
       768,
       401,
-      680,
       70,
       202,
       47,
@@ -95908,6 +95908,13 @@
         "issue": 771,
         "claim": "28eb07cec66b4d3b9ed05b20907e0bf7",
         "actor": "Worker-B1019771"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-19T22:32:46+00:00",
+        "pr": 966,
+        "lane": "4d6b0c393e44486483099c2672682425",
+        "actor": "Reviewer-Y19B"
       }
     ],
     "policy": {
@@ -103485,6 +103492,18 @@
         "session": "r1816v-20261019",
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-19T13:01:50+00:00",
+        "state": "reviewing"
+      },
+      "966": {
+        "id": "4d6b0c393e44486483099c2672682425",
+        "pr": 966,
+        "issues": [
+          680
+        ],
+        "actor": "Reviewer-Y19B",
+        "session": "rev-y19b-s1",
+        "coordinator": "Coordinator-E1019A",
+        "started_at": "2026-10-19T22:32:46+00:00",
         "state": "reviewing"
       }
     },
