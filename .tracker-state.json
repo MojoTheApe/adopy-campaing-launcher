@@ -53077,7 +53077,7 @@
             "session": "act174a-78a5f7133f0f4cfbad8ecebf63811c02"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-ACT174A",
         "coordinator": "Coordinator-ACT174",
         "handoff": {
@@ -96277,6 +96277,68 @@
         "pr": 980,
         "lane": "21d1a5e5136949018b9b159a7e186381",
         "actor": "Reviewer-Y19B"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-19T23:46:40+00:00",
+        "issue": 1026,
+        "pr": 1027,
+        "review": {
+          "id": "653626d99fe24572a85ee6f0036ab108",
+          "pr": 1027,
+          "issues": [
+            1026
+          ],
+          "actor": "Reviewer-ACT174R",
+          "session": "bab3ffa025194f6295928e0ce3aca6cc",
+          "coordinator": "Coordinator-ACT174",
+          "started_at": "2026-10-19T23:23:53+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 1026,
+            "pr": 1027,
+            "branch": "codex/acl-2026-shared-executor-activity",
+            "head_sha": "ca9a650db33dcae8f32976cf7fdd900b72e28dd9",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "1bea4d58e45f845fc670218b36d74f6295f360fff1dd234699f996c52f113532",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "implementer": "Worker-ACT174A",
+              "reviewer": "Reviewer-ACT174R",
+              "head_sha": "ca9a650db33dcae8f32976cf7fdd900b72e28dd9",
+              "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "tree_sha": "8c9589638cf35df29172a1ea0cd333d75858f2f4",
+              "execution_lane": "653626d99fe24572a85ee6f0036ab108",
+              "review_session": "bab3ffa025194f6295928e0ce3aca6cc",
+              "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1027#issuecomment-6279820016",
+              "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                1026
+              ],
+              "recorded_at": "2026-10-19T23:45:29+00:00",
+              "issue_scopes": {
+                "1026": "1bea4d58e45f845fc670218b36d74f6295f360fff1dd234699f996c52f113532"
+              }
+            },
+            "lane": {
+              "id": "653626d99fe24572a85ee6f0036ab108",
+              "pr": 1027,
+              "issues": [
+                1026
+              ],
+              "actor": "Reviewer-ACT174R",
+              "session": "bab3ffa025194f6295928e0ce3aca6cc",
+              "coordinator": "Coordinator-ACT174",
+              "started_at": "2026-10-19T23:23:53+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-19T23:46:10+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -99314,6 +99376,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-19T23:39:24+00:00"
+      },
+      "1026": {
+        "issue": 1026,
+        "pr": 1027,
+        "branch": "codex/acl-2026-shared-executor-activity",
+        "head_sha": "ca9a650db33dcae8f32976cf7fdd900b72e28dd9",
+        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "1bea4d58e45f845fc670218b36d74f6295f360fff1dd234699f996c52f113532",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "implementer": "Worker-ACT174A",
+          "reviewer": "Reviewer-ACT174R",
+          "head_sha": "ca9a650db33dcae8f32976cf7fdd900b72e28dd9",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "tree_sha": "8c9589638cf35df29172a1ea0cd333d75858f2f4",
+          "execution_lane": "653626d99fe24572a85ee6f0036ab108",
+          "review_session": "bab3ffa025194f6295928e0ce3aca6cc",
+          "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1027#issuecomment-6279820016",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            1026
+          ],
+          "recorded_at": "2026-10-19T23:45:29+00:00",
+          "issue_scopes": {
+            "1026": "1bea4d58e45f845fc670218b36d74f6295f360fff1dd234699f996c52f113532"
+          }
+        },
+        "lane": {
+          "id": "653626d99fe24572a85ee6f0036ab108",
+          "pr": 1027,
+          "issues": [
+            1026
+          ],
+          "actor": "Reviewer-ACT174R",
+          "session": "bab3ffa025194f6295928e0ce3aca6cc",
+          "coordinator": "Coordinator-ACT174",
+          "started_at": "2026-10-19T23:23:53+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-19T23:46:10+00:00"
       }
     },
     "batches": {
@@ -104033,62 +104139,6 @@
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-19T13:01:50+00:00",
         "state": "reviewing"
-      },
-      "1027": {
-        "id": "653626d99fe24572a85ee6f0036ab108",
-        "pr": 1027,
-        "issues": [
-          1026
-        ],
-        "actor": "Reviewer-ACT174R",
-        "session": "bab3ffa025194f6295928e0ce3aca6cc",
-        "coordinator": "Coordinator-ACT174",
-        "started_at": "2026-10-19T23:23:53+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 1026,
-          "pr": 1027,
-          "branch": "codex/acl-2026-shared-executor-activity",
-          "head_sha": "ca9a650db33dcae8f32976cf7fdd900b72e28dd9",
-          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "1bea4d58e45f845fc670218b36d74f6295f360fff1dd234699f996c52f113532",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "implementer": "Worker-ACT174A",
-            "reviewer": "Reviewer-ACT174R",
-            "head_sha": "ca9a650db33dcae8f32976cf7fdd900b72e28dd9",
-            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-            "tree_sha": "8c9589638cf35df29172a1ea0cd333d75858f2f4",
-            "execution_lane": "653626d99fe24572a85ee6f0036ab108",
-            "review_session": "bab3ffa025194f6295928e0ce3aca6cc",
-            "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1027#issuecomment-6279820016",
-            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              1026
-            ],
-            "recorded_at": "2026-10-19T23:45:29+00:00",
-            "issue_scopes": {
-              "1026": "1bea4d58e45f845fc670218b36d74f6295f360fff1dd234699f996c52f113532"
-            }
-          },
-          "lane": {
-            "id": "653626d99fe24572a85ee6f0036ab108",
-            "pr": 1027,
-            "issues": [
-              1026
-            ],
-            "actor": "Reviewer-ACT174R",
-            "session": "bab3ffa025194f6295928e0ce3aca6cc",
-            "coordinator": "Coordinator-ACT174",
-            "started_at": "2026-10-19T23:23:53+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-19T23:46:10+00:00"
-        }
       },
       "980": {
         "id": "21d1a5e5136949018b9b159a7e186381",
