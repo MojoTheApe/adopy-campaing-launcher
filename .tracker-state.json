@@ -44137,6 +44137,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T19:58:12+00:00",
         "from_status": "status:todo"
+      },
+      "992": {
+        "actor": "Worker-R1019992",
+        "session": "run_r1019_992",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1992-api-build-percent",
+        "worktree": "C:\\acl-1992-wt",
+        "id": "65d64514edec4788b290eb0040dc975a",
+        "issue": 992,
+        "state": "implementing",
+        "started_at": "2026-10-19T19:59:07+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -51856,10 +51868,14 @@
           {
             "actor": "Worker-M1992A",
             "session": "acl_1992"
+          },
+          {
+            "actor": "Worker-R1019992",
+            "session": "run_r1019_992"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-M1992A",
+        "state": "implementing",
+        "worker": "Worker-R1019992",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-M1992A",
@@ -51877,7 +51893,6 @@
         },
         "pr": 993,
         "queued_at": "2026-10-17T21:35:18+00:00",
-        "reviewer": "Reviewer-E19992",
         "review_report": "PR #993 (ACL-1992) conflicts with current main 435bc154 in docs/system/CHANGELOG.md (content conflict; src/web/templates/report.html auto-merges cleanly). Head a62a352f. Author must merge current origin/main into the original branch, resolve, re-run affected checks and hand off again."
       },
       "994": {
@@ -54507,6 +54522,10 @@
       },
       "Worker-R1019175": {
         "session": "run_r1019_175",
+        "role": "Worker"
+      },
+      "Worker-R1019992": {
+        "session": "run_r1019_992",
         "role": "Worker"
       }
     },
@@ -93643,6 +93662,13 @@
         "issue": 175,
         "claim": "47cec4a2eaaa4b879080690b940741c4",
         "actor": "Worker-R1019175"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T19:59:07+00:00",
+        "issue": 992,
+        "claim": "65d64514edec4788b290eb0040dc975a",
+        "actor": "Worker-R1019992"
       }
     ],
     "policy": {
