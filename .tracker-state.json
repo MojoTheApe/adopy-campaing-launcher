@@ -44125,22 +44125,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "379": {
-        "actor": "Worker-R1019379",
-        "session": "run_r1019_379",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1379-turnoff-by-name",
-        "worktree": "C:\\acl-1379-main",
-        "id": "917c7b0ab8734bd28a43d9d9b6d32e4a",
-        "issue": 379,
-        "state": "handoff",
-        "started_at": "2026-10-19T20:01:45+00:00",
-        "from_status": "status:todo",
-        "pr": 943,
-        "report": "Revived after the conflict return: merged work/main (only docs/system/CHANGELOG.md conflicted; both entries kept), pushed. Touched tests pass: test_turn_off_route_by_name, test_turn_off_by_name_browser, test_the_account_tree_on_screen (168 passed). Full suite left to CI. Not verified live."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -50299,25 +50284,25 @@
             "session": "run_r1019_379"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-R1019379",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-W1015T",
-          "session": "c2c6b65e-1379",
+          "actor": "Worker-R1019379",
+          "session": "run_r1019_379",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1379-turnoff-by-name",
           "worktree": "C:\\acl-1379-main",
-          "id": "6b50af5af7c14a218f9e3797792e2e81",
+          "id": "917c7b0ab8734bd28a43d9d9b6d32e4a",
           "issue": 379,
           "state": "handoff",
-          "started_at": "2026-10-16T10:00:15+00:00",
+          "started_at": "2026-10-19T20:01:45+00:00",
           "from_status": "status:todo",
           "pr": 943,
-          "report": "Branch work/acl-1379-turnoff-by-name, PR #943 into main, head d826c617 on main af0ade29.\nScope: the 29.09 ACL-1379 work (cherry-picked) adapted to ACL-1395 clean names and ACL-1504 stale rows, plus review follow-ups (busy refusal journaled as by-name, CHANGELOG).\nChecks: affected tests 422 passed (12 files: account_spend, acl1800 table/tree, browser_boundary_contract, every_change_leaves_a_record, meta_name_labels, publish_safety_contract, review_spend_regressions, the_account_tree_on_screen, turn_off_by_name_browser, turn_off_route_by_name, turn_off_safety_browser). Full suite left to CI.\nPre-review (Sonnet, read-only, not the official Reviewer): no HIGH/MEDIUM; remaining LOW: empty page data skips the second duplicate check silently.\nRemaining: independent source review; live first press on Doc19/20/21 by the owner (not on the allowed test-account list)."
+          "report": "Revived after the conflict return: merged work/main (only docs/system/CHANGELOG.md conflicted; both entries kept), pushed. Touched tests pass: test_turn_off_route_by_name, test_turn_off_by_name_browser, test_the_account_tree_on_screen (168 passed). Full suite left to CI. Not verified live."
         },
         "pr": 943,
-        "queued_at": "2026-10-16T10:06:41+00:00",
+        "queued_at": "2026-10-19T20:05:43+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -57405,7 +57390,8 @@
       836,
       990,
       992,
-      175
+      175,
+      379
     ],
     "review": {
       "id": "71d08f944d4646c69ba2c95edd8d2464",
@@ -93717,6 +93703,13 @@
         "issue": 175,
         "pr": 930,
         "actor": "Worker-R1019175"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T20:05:43+00:00",
+        "issue": 379,
+        "pr": 943,
+        "actor": "Worker-R1019379"
       }
     ],
     "policy": {
