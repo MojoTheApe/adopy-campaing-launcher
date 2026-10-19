@@ -43209,20 +43209,6 @@
   },
   "execution": {
     "claims": {
-      "839": {
-        "actor": "Worker-R1839C",
-        "session": "refresh_acl1839_20261019",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1839-connection-panel-layout",
-        "worktree": "C:\\acl-1839-refresh",
-        "id": "5aa698fac214484e9c5879758fb1202f",
-        "issue": 839,
-        "state": "handoff",
-        "started_at": "2026-10-19T11:43:22+00:00",
-        "from_status": "status:todo",
-        "pr": 843,
-        "report": "ACL-1839 current-main refresh \u2014 2026-10-19, resumed on explicit owner instruction after the 17 October administrative pause. Actual author Worker-R1839C / session refresh_acl1839_20261019, Coordinator-M1011A, claim 5aa698fac214484e9c5879758fb1202f on the original branch codex/acl-1839-connection-panel-layout (worktree C:\\acl-1839-refresh).\n\nPR 843 head 02a9f8a8 includes current main 435bc154. The only conflict was the top of docs/system/CHANGELOG.md; the ACL-1839 entry and all upstream entries (including ACL-1381) are preserved. Earlier refresh merges aabcee4b/c1cbbd4f keep main's .amap-ml font-size token plus min-width: 0 and overflow-wrap: anywhere. The diff against main is exactly the original four files (CHANGELOG, _account_map_add.html, report.html, tests/test_account_connection_layout.py), +102/-4; no new product behavior.\n\nLocal Windows/Python 3.14 checks on 02a9f8a8 with an isolated ACL_CONFIG_DIR and synthetic data: test_account_connection_layout, test_account_map_view, test_account_map_patch, test_account_map_columns, test_multilogin_connect_chooses_workspace \u2014 50 passed (real Chromium, 280/720/1040 px, both themes, three hosts). git diff --check passed. Hosted CI on 02a9f8a8 is running (Windows, installer, descriptor, process and tooling checks already passed); tracker-link is re-run after this handoff.\n\nA non-implementing read-only pre-review of the previous refresh c1cbbd4f found no findings; the only change since is the CHANGELOG conflict resolution. This is not a formal approval. Remaining: formal independent source review on the current main baseline, batch approval, integration and delivery. No production profiles, Multilogin actions or advertising writes were used."
-      },
       "73": {
         "actor": "Worker-W144D",
         "session": "w144d-20261019",
@@ -47884,25 +47870,25 @@
             "session": "refresh_acl1839_20261019"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-R1839C",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-R1839B",
-          "session": "refresh_acl1839_20261015",
+          "actor": "Worker-R1839C",
+          "session": "refresh_acl1839_20261019",
           "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1839-connection-panel-layout",
           "worktree": "C:\\acl-1839-refresh",
-          "id": "1bb368008a1147da883d37312bfe49c7",
+          "id": "5aa698fac214484e9c5879758fb1202f",
           "issue": 839,
           "state": "handoff",
-          "started_at": "2026-10-16T10:43:42+00:00",
+          "started_at": "2026-10-19T11:43:22+00:00",
           "from_status": "status:todo",
           "pr": 843,
-          "report": "ACL-1839 current-main refresh \u2014 2026-10-16. Actual author Worker-R1839B / session refresh_acl1839_20261015, Coordinator-M1011A, claim 1bb368008a1147da883d37312bfe49c7 on the original branch codex/acl-1839-connection-panel-layout (worktree C:\\acl-1839-refresh), after Reviewer-RV1015F returned the stale source.\n\nPR 843 head c1cbbd4f includes current main af0ade29 via merge commits aabcee4b (main 3ee7c6d9) and c1cbbd4f (main af0ade29). Conflicts resolved as the return report asked: docs/system/CHANGELOG.md keeps the ACL-1839, ACL-1924 and ACL-1819 entries; the .amap-ml rule in src/web/templates/report.html keeps main's font-size var(--adopy-text-sm) and adds min-width: 0 and overflow-wrap: anywhere. Main's .amap-add select/input font-size token is untouched. The diff against main is exactly the original four files (CHANGELOG, _account_map_add.html, report.html, tests/test_account_connection_layout.py), +102/-4; no new product behavior.\n\nLocal Windows/Python 3.14 checks on c1cbbd4f with an isolated ACL_CONFIG_DIR and synthetic data: test_account_connection_layout, test_account_map_view, test_account_map_patch, test_account_map_columns, test_multilogin_connect_chooses_workspace \u2014 50 passed (real Chromium, 280/720/1040 px, both themes, three hosts). git diff --check passed. Hosted CI on c1cbbd4f: product, Windows, Linux x3, installer, descriptor and process checks passed; tracker-link fails only because the task is not yet in Review and must be re-run after this handoff.\n\nA non-implementing read-only pre-review of c1cbbd4f vs af0ade29 found no findings. It is not a formal approval. Remaining: formal independent source review on the current main baseline, batch approval, integration and delivery. No production profiles, Multilogin actions or advertising writes were used."
+          "report": "ACL-1839 current-main refresh \u2014 2026-10-19, resumed on explicit owner instruction after the 17 October administrative pause. Actual author Worker-R1839C / session refresh_acl1839_20261019, Coordinator-M1011A, claim 5aa698fac214484e9c5879758fb1202f on the original branch codex/acl-1839-connection-panel-layout (worktree C:\\acl-1839-refresh).\n\nPR 843 head 02a9f8a8 includes current main 435bc154. The only conflict was the top of docs/system/CHANGELOG.md; the ACL-1839 entry and all upstream entries (including ACL-1381) are preserved. Earlier refresh merges aabcee4b/c1cbbd4f keep main's .amap-ml font-size token plus min-width: 0 and overflow-wrap: anywhere. The diff against main is exactly the original four files (CHANGELOG, _account_map_add.html, report.html, tests/test_account_connection_layout.py), +102/-4; no new product behavior.\n\nLocal Windows/Python 3.14 checks on 02a9f8a8 with an isolated ACL_CONFIG_DIR and synthetic data: test_account_connection_layout, test_account_map_view, test_account_map_patch, test_account_map_columns, test_multilogin_connect_chooses_workspace \u2014 50 passed (real Chromium, 280/720/1040 px, both themes, three hosts). git diff --check passed. Hosted CI on 02a9f8a8 is running (Windows, installer, descriptor, process and tooling checks already passed); tracker-link is re-run after this handoff.\n\nA non-implementing read-only pre-review of the previous refresh c1cbbd4f found no findings; the only change since is the CHANGELOG conflict resolution. This is not a formal approval. Remaining: formal independent source review on the current main baseline, batch approval, integration and delivery. No production profiles, Multilogin actions or advertising writes were used."
         },
         "pr": 843,
-        "queued_at": "2026-10-16T11:08:10+00:00",
+        "queued_at": "2026-10-19T12:06:24+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -56072,7 +56058,8 @@
       899,
       902,
       855,
-      886
+      886,
+      839
     ],
     "review": {
       "id": "b49c262d383b4011a4e6891181162ac5",
@@ -89985,6 +89972,13 @@
         "issue": 816,
         "claim": "f5821f262c824574820b4be3a8426f65",
         "actor": "Worker-RS1816"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T12:06:24+00:00",
+        "issue": 839,
+        "pr": 843,
+        "actor": "Worker-R1839C"
       }
     ],
     "policy": {
