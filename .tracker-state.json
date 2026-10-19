@@ -103797,7 +103797,51 @@
         "session": "rev-y19b-s1",
         "coordinator": "Coordinator-E1019A",
         "started_at": "2026-10-19T22:32:46+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 680,
+          "pr": 966,
+          "branch": "work/acl-1680-one-config-dir",
+          "head_sha": "04c179278bb9d0e0cdf1c8456bf0b04b6583b08a",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "503e07e2c8a0717c8914ace1daad97c1516a28140c4528063b28e8ab786dbafb",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-Y19B",
+            "implementer": "Worker-H19680",
+            "head_sha": "04c179278bb9d0e0cdf1c8456bf0b04b6583b08a",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "tree_sha": "014a55492c8bedca0e598ab99a9653f6f8c25204",
+            "execution_lane": "4d6b0c393e44486483099c2672682425",
+            "review_session": "rev-y19b-s1",
+            "report": "Independent source review (refresh) of PR 966 (ACL-1680, Issue 680), head 04c17927, base main c6150160. I approved b9684b1a earlier; this head is a clean merge of main into it.\nDelta check: files that differ between b9684b1a and 04c17927 are exactly files changed on main between 435bc154 and c6150160; none of the PR's own files (config/paths.py, config/config_unify.py, launcher.py, serve.py, scripts/acl_migrate_config.py, README, tests/test_acl1680_one_config_dir.py) overlaps with main's changes, so the reviewed content is unchanged.\nCI on this exact head: all required checks pass. The Windows installer job \"Build, install, repair, and uninstall\" hit the 25-minute limit once (cancelled, same code passed in 12.5 minutes on the previous head); after one `gh run rerun --failed` it completed successfully, so it was a runner stall.\nVerdict: approved.\n",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              680
+            ],
+            "recorded_at": "2026-10-19T23:37:00+00:00",
+            "issue_scopes": {
+              "680": "503e07e2c8a0717c8914ace1daad97c1516a28140c4528063b28e8ab786dbafb"
+            }
+          },
+          "lane": {
+            "id": "4d6b0c393e44486483099c2672682425",
+            "pr": 966,
+            "issues": [
+              680
+            ],
+            "actor": "Reviewer-Y19B",
+            "session": "rev-y19b-s1",
+            "coordinator": "Coordinator-E1019A",
+            "started_at": "2026-10-19T22:32:46+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-19T23:37:23+00:00"
+        }
       },
       "1027": {
         "id": "653626d99fe24572a85ee6f0036ab108",
