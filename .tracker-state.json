@@ -43253,6 +43253,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T11:47:02+00:00",
         "from_status": "status:todo"
+      },
+      "855": {
+        "actor": "Worker-W1855B",
+        "session": "claude-w1855b-20261019",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1855-durable-intent",
+        "worktree": "C:\\acl-1855-durable-intent",
+        "id": "3596961efe2345d3b5b557bad32cd7ae",
+        "issue": 855,
+        "state": "implementing",
+        "started_at": "2026-10-19T11:53:01+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -49242,10 +49254,14 @@
           {
             "actor": "Worker-W1855A",
             "session": "821e4a97-45d7-466a-b9ea-56309769a6f1"
+          },
+          {
+            "actor": "Worker-W1855B",
+            "session": "claude-w1855b-20261019"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-W1855A",
+        "state": "implementing",
+        "worker": "Worker-W1855B",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-W1855A",
@@ -53202,6 +53218,10 @@
       },
       "Worker-R1839C": {
         "session": "refresh_acl1839_20261019",
+        "role": "Worker"
+      },
+      "Worker-W1855B": {
+        "session": "claude-w1855b-20261019",
         "role": "Worker"
       }
     },
@@ -89831,6 +89851,13 @@
         "issue": 886,
         "claim": "c7bd4c38dd2b4afebe08d2766e676a0f",
         "actor": "Worker-RF1019W"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T11:53:01+00:00",
+        "issue": 855,
+        "claim": "3596961efe2345d3b5b557bad32cd7ae",
+        "actor": "Worker-W1855B"
       }
     ],
     "policy": {
