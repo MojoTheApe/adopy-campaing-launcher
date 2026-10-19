@@ -32,6 +32,9 @@ from src.fb_api.telemetry import scrub
 TOKEN_CODES = {102, 190}
 RATE_CODES = {4, 17, 32, 613} | set(range(80000, 80015))
 POLICY_CODES = {368}
+#: Meta временно заблокировала действие (1404078, 2859015) или запретила аккаунту рекламу
+#: (1404163): каталог ошибок помечает их неповторяемыми, значит продолжать прогон нельзя (ACL-1805).
+BLOCK_CODES = {1404078, 2859015, 1404163}
 #: Подкоды 190, при которых сессия стоит на checkpoint: перезагрузка Ads
 #: Manager не поможет, только лишний заход в кабинет — стоп сразу (ревью O3).
 CHECKPOINT_SUBCODES = {459, 464}
@@ -179,7 +182,7 @@ def classify(code: int | None) -> str:
         return "token"
     if code in RATE_CODES:
         return "rate_limit"
-    if code in POLICY_CODES:
+    if code in POLICY_CODES or code in BLOCK_CODES:
         return "policy"
     return "other"
 
@@ -345,7 +348,7 @@ class GraphClient:
             msg = _with_details(msg, details)
             kind = classify(code)
             if kind == "policy":
-                raise self._stop(PolicyBlocked(f"Graph API refused (368): {msg}", code=code, subcode=sub))
+                raise self._stop(PolicyBlocked(f"Graph API refused ({code}): {msg}", code=code, subcode=sub))
             if kind == "rate_limit":
                 raise self._stop(RateLimited(f"Graph API rate limit ({code}): {msg}", code=code,
                                              subcode=sub, retry_after_s=usage["wait_s"] or None))
@@ -429,7 +432,7 @@ class GraphClient:
             msg = _with_details(str(gerr.get("message") or "Graph API error"), details)
             kind = classify(code)
             if kind == "policy":
-                raise self._stop(PolicyBlocked(f"Graph API refused (368): {msg}", code=code, subcode=sub))
+                raise self._stop(PolicyBlocked(f"Graph API refused ({code}): {msg}", code=code, subcode=sub))
             if kind == "rate_limit":
                 raise self._stop(RateLimited(f"Graph API rate limit ({code}): {msg}", code=code, subcode=sub))
             if kind == "token":

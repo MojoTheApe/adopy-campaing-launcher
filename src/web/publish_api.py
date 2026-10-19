@@ -178,7 +178,7 @@ def dry_run_result(outcome: Outcome) -> dict[str, Any]:
         "campaign_name": outcome.campaign_name, "backend": "api", "dry_run": True, "status": "",
         "success": ok, "publishable": False,
         "warnings": list(outcome.warnings) + (["Dry run: nothing was created"] if ok else []),
-        "blocking_failures": [], "problems": [], "run_id": None, "campaign_id": None,
+        "blocking_failures": [], "problems": list(outcome.problems), "run_id": None, "campaign_id": None,
         "adset_id": None, "creative_id": None, "ad_id": None, "ad_ids": [],
         "error": outcome.error or None, "steps_completed": list(outcome.steps), "screenshots": [],
         "readback": {}, "plan": outcome.plan, "created": {}, "reused": {}, "ts": _now_iso(),
@@ -206,8 +206,8 @@ def result_dict(outcome: Outcome, *, error: str = "") -> dict[str, Any]:
         "publishable": success and readback_ok and not blocking,
         "warnings": list(outcome.warnings),
         "blocking_failures": blocking,
-        # Текстовая отрисовка панели (список проблем RPA здесь не нужен).
-        "problems": [],
+        # ACL-1805: отказы Meta и правил - списком ACL-1437 (причина и что делать).
+        "problems": list(outcome.problems),
         "run_id": None,
         "campaign_id": outcome.campaign_id or None,
         "adset_id": outcome.adset_ids[0] if outcome.adset_ids else None,
