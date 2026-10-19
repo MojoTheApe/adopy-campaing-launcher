@@ -203,10 +203,12 @@ def batch_context(root, event_name, event):
             or not 1 <= execution["implementation_limit"] <= 16
             or type(execution["batch_limit"]) is not int
             or not 1 <= execution["batch_limit"] <= (5 if version == 3 else 16)
-            or data["workflow"]["staging"] is not True):
+            or type(data["workflow"]["staging"]) is not bool):
         raise ValueError("Invalid explicit batch policy")
     config = json.loads(config_path.read_text(encoding="utf-8"))
-    if config.get("execution_policy") != execution or "approved" not in config["workflow"]:
+    if (config.get("execution_policy") != execution or "approved" not in config["workflow"]
+            or config.get("delivery_policy", {}).get("staging", {}).get("enabled", True) != data["workflow"]["staging"]
+            or ("stage" in config["workflow"]) != data["workflow"]["staging"]):
         raise ValueError("Descriptor and Tracker batch policies differ")
     if event_name != "pull_request":
         return "full"

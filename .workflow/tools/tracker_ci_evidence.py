@@ -54,7 +54,7 @@ def policy(config):
     if value is None:
         return None
     if (not isinstance(value, dict) or set(value) != {'schema_version', 'profiles'}
-            or type(value['schema_version']) is not int or value['schema_version'] != VERSION
+            or type(value['schema_version']) is not int or value['schema_version'] not in (1, 2)
             or not isinstance(value['profiles'], dict) or not value['profiles']):
         raise ValueError('Invalid ci_evidence_policy version/fields')
     for key, p in value['profiles'].items():
@@ -122,7 +122,8 @@ def adopted(request, config, key):
     _, raw = contents(request, root, 'tracker/config.json', main)
     current = json.loads(raw)
     if (current.get('project') != config.get('project') or policy(current) != policy(config)
-            or any(current.get(k) != config.get(k) for k in ('delivery_policy', 'execution_policy', 'process_instructions'))):
+            or any(current.get(k) != config.get(k) for k in ('delivery_policy', 'execution_policy', 'process_instructions',
+                                                           'task_context_policy', 'completion_policy', 'ci_retry_policy'))):
         raise ValueError('CI policy must match the actual immutable current-main adoption')
     return profile(current, key)
 
@@ -131,7 +132,7 @@ def command(key, name, job):
     return ' '.join(shlex.quote(x) for x in ('python3', '-I', job['producer_path'], 'emit-context', '--profile', key, '--job', name))
 
 
-def trusted_workflow(request, root, ref, p, key):
+def trusted_workflow(request, root, ref, p, key, protocol=1):
     row, raw = contents(request, root, p['workflow_path'], ref)
     if row.get('sha') != p['workflow_blob_sha']:
         raise ValueError('CI producer workflow is not the reviewed immutable workflow')
@@ -152,7 +153,8 @@ def trusted_workflow(request, root, ref, p, key):
         labels = [labels] if isinstance(labels, str) else labels
         if (actual.get('name', job['workflow_job']) != name or actual.get('container') != job['context']['container']
                 or labels != job['runner_labels'] or actual.get('strategy') or actual.get('uses')
-                or any(actual.get(x) for x in ('env', 'defaults', 'if', 'continue-on-error', 'services', 'environment')) or len(steps) < 3):
+                or any(actual.get(x) for x in ('env', 'defaults', 'continue-on-error', 'services', 'environment'))
+                or protocol == 1 and actual.get('if') or len(steps) < 3):
             raise ValueError('CI native job does not match the fixed reviewed profile')
         checkout, producer = steps[:2]
         # Only the immutable official checkout runs before context collection.
@@ -196,17 +198,25 @@ def native_context(log, step):
     return found[0]
 
 
-def tested(request, root, run, source_pr):
+def tested(request, root, run, source_pr, retained=None):
     if source_pr is not None:
         pr = request(root + f'/pulls/{source_pr}')
-        if (run.get('event') != 'pull_request' or pr.get('state') != 'open' or pr.get('merged') or pr.get('draft')
+        historical = bool(retained and pr.get('state') == 'closed' and pr.get('merged'))
+        if (run.get('event') != 'pull_request' or not historical and (pr.get('state') != 'open' or pr.get('merged')) or pr.get('draft')
                 or pr['head']['sha'] != run['head_sha'] or pr['head']['repo']['full_name'] != run['repository']['full_name']
-                or source_pr not in [r['number'] for r in run.get('pull_requests', [])]):
+                or source_pr not in [r['number'] for r in run.get('pull_requests', [])]
+                    and not (historical and run.get('pull_requests') == [])):
             raise ValueError('CI source proof needs the actual unchanged open official PR')
-        sha = pr.get('merge_commit_sha')
+        sha = retained['tested_sha'] if historical else pr.get('merge_commit_sha')
         commit = request(root + '/git/commits/' + str(sha))
-        if [p['sha'] for p in commit.get('parents', [])] != [pr['base']['sha'], pr['head']['sha']]:
+        base = retained['source_binding']['base_sha'] if historical else pr['base']['sha']
+        if [p['sha'] for p in commit.get('parents', [])] != [base, pr['head']['sha']]:
             raise ValueError('CI synthetic checkout does not contain the exact current PR base/head')
+        if historical:
+            merged = request(root + '/git/commits/' + str(pr.get('merge_commit_sha')))
+            if (not merged.get('parents') or merged['parents'][0]['sha'] != base
+                    or merged['tree']['sha'] != commit['tree']['sha']):
+                raise ValueError('CI retained source differs from its actual admitted merge')
         return sha, commit['tree']['sha']
     if run.get('event') not in ('push', 'workflow_dispatch'):
         raise ValueError('CI PR runs need explicit current source PR binding')
@@ -214,17 +224,22 @@ def tested(request, root, run, source_pr):
     return sha, request(root + '/git/commits/' + sha)['tree']['sha']
 
 
-def collect(request, read_log, config, key, run_id, source_pr=None):
+def collect(request, read_log, config, key, run_id, source_pr=None, *, retained=None, _job_gate=False):
     p = adopted(request, config, key)
     root = 'repos/' + config['project']['repository']
     run = request(root + f'/actions/runs/{int(run_id)}')
     if (run.get('repository', {}).get('full_name') != config['project']['repository']
             or run.get('head_repository', {}).get('full_name') != config['project']['repository']
-            or run.get('path') != p['workflow_path'] or run.get('status') != 'completed'
-            or run.get('conclusion') != 'success' or type(run.get('run_attempt')) is not int):
+            or run.get('path') != p['workflow_path']
+            or not _job_gate and (run.get('status') != 'completed' or run.get('conclusion') != 'success')
+            or _job_gate and (run.get('status') not in ('in_progress', 'completed')
+                or run.get('status') == 'completed' and run.get('conclusion') != 'success')
+            or type(run.get('run_attempt')) is not int):
         raise ValueError('CI proof needs a successful official run of the reviewed workflow')
-    checkout, tree = tested(request, root, run, source_pr)
-    trusted_workflow(request, root, checkout, p, key)
+    if retained and policy(config)['schema_version'] != 2:
+        raise ValueError('Historical CI revalidation requires explicitly adopted protocol 2')
+    checkout, tree = tested(request, root, run, source_pr, retained)
+    trusted_workflow(request, root, checkout, p, key, policy(config)['schema_version'])
     producer_blobs = {}
     for path, expected in p['producer_files'].items():
         row, raw = contents(request, root, path, checkout)
@@ -270,6 +285,11 @@ def collect(request, read_log, config, key, run_id, source_pr=None):
                     'job': name, 'run_id': int(run_id), 'run_attempt': run['run_attempt'],
                     'workflow_sha': checkout, 'checkout_sha': checkout, 'tree_sha': tree,
                     'context': job['context']}
+        if policy(config)['schema_version'] == 2:
+            # GitHub empties a merged run's PR list. The maintained producer
+            # binds its original actual PR ref inside the native step log.
+            expected['native_ref'] = (f'refs/pull/{source_pr}/merge' if source_pr is not None
+                                      else 'refs/heads/' + str(run.get('head_branch')))
         if (context != expected or any(type(context.get(k)) is not int for k in ('schema_version', 'run_id', 'run_attempt'))):
             raise ValueError('CI producer context/checkout/attempt does not match independent native proof')
         for group in ('dependencies', 'build_inputs', 'fixtures'):
@@ -290,9 +310,11 @@ def collect(request, read_log, config, key, run_id, source_pr=None):
             import tracker_delivery_policy as rules
         pr = request(root + f'/pulls/{source_pr}')
         source_binding = {'head_sha': pr['head']['sha'], 'base_sha': pr['base']['sha'], 'branch': pr['head']['ref'],
-                          'scope': {str(n): batch_policy.scope(request(root + f'/issues/{n}'))
+                          'scope': {str(n): batch_policy.scope(request(root + f'/issues/{n}'), config)
                                     for n in pr_checks.linked_numbers(pr.get('body'), config)},
                           'delivery_policy': rules.fingerprint(config), 'execution_policy': rules.execution_policy(config)}
+        if retained and pr.get('merged'):
+            source_binding['base_sha'] = retained['source_binding']['base_sha']
     return {'schema_version': VERSION, 'repository': config['project']['repository'], 'profile': key,
             'policy': digest(policy(config)), 'profile_digest': digest(p), 'tested_sha': checkout, 'tree_sha': tree,
             'source_pr': source_pr, 'source_binding': source_binding, 'run_id': int(run_id), 'attempt': run['run_attempt'], 'producer_blobs': producer_blobs,
@@ -318,16 +340,31 @@ def save(api, config, store, args):
 
 
 def coverage(request, read_log, config, state, key, number, expected_head, context='source'):
+    try:
+        from . import delivery_policy as rules
+    except ImportError:
+        import tracker_delivery_policy as rules
+    rules.execution_state(state, config)
     p = adopted(request, config, key)
     root = 'repos/' + config['project']['repository']
     pr = request(root + f'/pulls/{int(number)}')
-    if (pr['head']['sha'] != expected_head or pr.get('state') != 'open' or pr.get('merged') or pr.get('draft')
-            or pr['head']['repo']['full_name'] != config['project']['repository']):
+    main = context == 'main'
+    if (pr['head']['repo']['full_name'] != config['project']['repository']
+            or pr.get('base', {}).get('repo', {}).get('full_name', config['project']['repository']) != config['project']['repository']):
+        raise ValueError('CI coverage needs official source and base repositories')
+    if main:
+        if (not pr.get('merged') or pr.get('state') != 'closed' or pr.get('merge_commit_sha') != expected_head
+                or pr['base']['ref'] != config['project']['base_branch']):
+            raise ValueError('Main coverage requires the actual merged PR and exact merge commit')
+        comparison = request(root + '/compare/' + expected_head + '...' + quote(config['project']['base_branch'], safe=''))
+        if comparison.get('status') not in ('ahead', 'identical'):
+            raise ValueError('Main coverage candidate is not included in actual main')
+    elif (pr['head']['sha'] != expected_head or pr.get('state') != 'open' or pr.get('merged') or pr.get('draft')):
         raise ValueError('CI coverage needs the actual current ready PR/head')
     result = {'schema_version': VERSION, 'head_sha': expected_head, 'covered': {}, 'missing': list(p['jobs']),
               'required_checks_unchanged': True, 'runtime_acceptance_unchanged': True, 'advisory': True, 'rejected': []}
-    if context not in ('source', 'integration'):
-        result['reason'] = 'Manual, release and runtime/promotion contexts require their actual full checks'
+    if context not in ('source', 'integration', 'main') or main and policy(config)['schema_version'] != 2:
+        result['reason'] = 'This context requires actual fresh checks under the adopted protocol'
         return result
     try:
         from . import delivery_policy as rules, batch_policy, pr_checks
@@ -344,22 +381,41 @@ def coverage(request, read_log, config, state, key, number, expected_head, conte
         numbers = pr_checks.linked_numbers(pr.get('body'), config)
         batch_policy.validate_candidate(request, config, pr, numbers, batch, state)
         allowed_prs = {m['pr'] for m in batch['members']}
-    target_tree = rules.tree(request, root, expected_head)
+        if policy(config)['schema_version'] == 2: allowed_prs.add(int(number))
+    target_sha = expected_head
+    if not main and policy(config)['schema_version'] == 2:
+        target_sha = pr.get('merge_commit_sha')
+        synthetic = request(root + '/git/commits/' + str(target_sha))
+        if [x['sha'] for x in synthetic.get('parents', [])] != [pr['base']['sha'], expected_head]:
+            raise ValueError('Coverage needs the actual current synthetic candidate')
+    target_tree = rules.tree(request, root, target_sha)
     retained = state.get('ci_evidence', {})
     if retained and (retained.get('schema_version') != VERSION or not isinstance(retained.get('records'), dict)):
         raise ValueError('Unsupported retained CI evidence protocol')
     for identity, record in retained.get('records', {}).items():
         if (not isinstance(record, dict) or digest(record) != identity or record.get('profile') != key
-                or record.get('policy') != digest(policy(config)) or record.get('source_pr') not in allowed_prs):
+                or record.get('policy') != digest(policy(config))
+                or not main and record.get('source_pr') not in allowed_prs):
             continue
         if (record.get('tree_sha') != target_tree
-                or p['metadata_mode'] == 'commit' and record.get('tested_sha') != expected_head):
+                or p['metadata_mode'] == 'commit' and record.get('tested_sha') != target_sha):
             continue
         # Stored JSON is a reference, never producer trust. Revalidate all actual
         # native jobs/logs, the current PR and immutable context on every read.
         try:
-            fresh = collect(request, read_log, config, key, record['run_id'], record['source_pr'])
-        except ValueError:
+            if main:
+                if not record.get('source_pr'): continue
+                source = request(root + f'/pulls/{record["source_pr"]}')
+                if record['source_pr'] != int(number):
+                    stage = config.get('delivery_policy', {}).get('staging', {})
+                    if (not stage.get('enabled') or source['base']['ref'] != stage['branch']
+                            or not source.get('merged') or source.get('merge_commit_sha') != pr['head']['sha']):
+                        continue
+                source_numbers = pr_checks.linked_numbers(source.get('body'), config)
+                if set(source_numbers) != set(pr_checks.linked_numbers(pr.get('body'), config)): continue
+            fresh = collect(request, read_log, config, key, record['run_id'], record['source_pr'],
+                            retained=record if main else None)
+        except (ValueError, KeyError, TypeError):
             result['rejected'].append({'evidence_id': identity, 'reason': 'Native producer/context proof no longer valid; run missing jobs'})
             continue
         if fresh != record:
@@ -370,7 +426,7 @@ def coverage(request, read_log, config, state, key, number, expected_head, conte
             matched = True
             for group in ('dependencies', 'build_inputs', 'fixtures'):
                 for path, expected in spec['context'][group].items():
-                    row, _ = contents(request, root, path, expected_head)
+                    row, _ = contents(request, root, path, target_sha)
                     matched &= row.get('sha') == expected
             # Entire tree equality binds workflow/helper/code; context is derived
             # from the adopted profile/target, never copied from old evidence.
@@ -380,12 +436,99 @@ def coverage(request, read_log, config, state, key, number, expected_head, conte
     return result
 
 
+def plan(request, read_log, config, state, key, number, expected_head, context='source'):
+    """Read-only native proof plan; callers execute all named missing jobs."""
+    if context == 'main' and not number:
+        root = 'repos/' + config['project']['repository']
+        rows = request(root + '/commits/' + expected_head + '/pulls?per_page=100')
+        matches = [row for row in rows if row.get('merge_commit_sha') == expected_head and row.get('merged_at')
+                   and row.get('base', {}).get('ref') == config['project']['base_branch']
+                   and row.get('head', {}).get('repo', {}).get('full_name') == config['project']['repository']]
+        if len(rows) >= 100 or len(matches) != 1:
+            p = adopted(request, config, key)
+            result = {'schema_version': VERSION, 'head_sha': expected_head, 'covered': {}, 'missing': list(p['jobs']),
+                      'required_checks_unchanged': True, 'runtime_acceptance_unchanged': True, 'advisory': True,
+                      'rejected': [], 'context': context, 'target_pr': None,
+                      'reason': 'No unique actual merged PR; all checks must run fresh'}
+            result['missing_json'] = json.dumps(result['missing'], separators=(',', ':'))
+            return result
+        number = matches[0]['number']
+    result = coverage(request, read_log, config, state, key, number, expected_head, context)
+    result['context'] = context
+    result['target_pr'] = number
+    result['missing_json'] = json.dumps(result['missing'], separators=(',', ':'))
+    return result
+
+
+def gate(request, read_log, config, state, key, number, expected_head, run_id, context='source'):
+    """Recompute coverage and verify the current native run after all jobs.
+
+    This is a CI aggregate, never admission, independent review or delivery.
+    Explicit adoption must make its exact name required; skipped product names
+    cannot remain required checks expecting success. Never reinterpret skips in
+    the existing admission checker.
+    """
+    if policy(config)['schema_version'] != 2:
+        raise ValueError('The maintained CI gate requires explicitly adopted protocol 2')
+    if context not in ('source', 'integration', 'main', 'promotion'):
+        raise ValueError('CI gate supports only source, integration, main or promotion candidate runs')
+    result = plan(request, read_log, config, state, key, number, expected_head, context)
+    number = result['target_pr']
+    p = profile(config, key); root = 'repos/' + config['project']['repository']
+    run = request(root + f'/actions/runs/{int(run_id)}')
+    if (run.get('id') != int(run_id) or run.get('head_sha') != expected_head
+            or run.get('repository', {}).get('full_name') != config['project']['repository']
+            or run.get('head_repository', {}).get('full_name') != config['project']['repository']
+            or run.get('path') != p['workflow_path']
+            or context == 'main' and (run.get('event') != 'push' or run.get('head_branch') != config['project']['base_branch'])
+            or context in ('source', 'integration', 'promotion') and (run.get('event') != 'pull_request'
+                or int(number) not in [r['number'] for r in run.get('pull_requests', [])])):
+        raise ValueError('CI gate must inspect its actual official candidate run')
+    proof = collect(request, read_log, config, key, run_id,
+                    int(number) if run.get('event') == 'pull_request' else None, _job_gate=True)
+    proven = {j['name'] for j in proof['jobs']}
+    rows = request(root + f'/actions/runs/{int(run_id)}/attempts/{run["run_attempt"]}/jobs?per_page=100')['jobs']
+    if len(rows) >= 100 or len({j['name'] for j in rows}) != len(rows):
+        raise ValueError('CI gate requires a complete unambiguous native job list')
+    failures = []
+    fresh = []
+    for name, spec in p['jobs'].items():
+        actual = [row for row in rows if row.get('name') == name]
+        if len(actual) != 1:
+            failures.append(name); continue
+        actual = actual[0]
+        if (actual.get('run_id') != int(run_id) or actual.get('run_attempt') != run['run_attempt']
+                or actual.get('head_sha') != expected_head or actual.get('status') != 'completed'):
+            failures.append(name); continue
+        if actual.get('conclusion') == 'skipped' and name in result['covered']:
+            continue
+        if (actual.get('conclusion') != 'success'
+                or any(s.get('conclusion') in ('failure', 'cancelled', 'timed_out', 'action_required') for s in actual.get('steps', []))
+                or spec['mode'] == 'fixed' and name not in proven):
+            failures.append(name); continue
+        check = request(actual['check_run_url'].replace('https://api.github.com/', ''))
+        if (check.get('app', {}).get('slug') != 'github-actions' or check.get('name') != name
+                or check.get('head_sha') != expected_head or check.get('status') != 'completed'
+                or check.get('conclusion') != 'success' or check.get('details_url') != actual.get('html_url')):
+            failures.append(name); continue
+        fresh.append(name)
+    if failures:
+        raise ValueError('CI gate has missing/failed/cancelled/unproved jobs: '+', '.join(failures))
+    result.update(passed=True, fresh=fresh, native_run_id=int(run_id), native_attempt=run['run_attempt'])
+    return result
+
+
 def emit(config, key, name, run=subprocess.run, environ=None):
     env = os.environ if environ is None else environ
     p = profile(config, key); job = p['jobs'].get(name)
     if not job or job['mode'] != 'fixed':
         raise ValueError('CI context emission requires the explicit fixed job profile')
     def output(argv):
+        if argv[:2] == ['git', 'rev-parse']:
+            # Actions container checkouts can be owned by the host runner. Scope
+            # this read-only invocation to its exact working directory; never
+            # persist config or trust a wildcard/another repository.
+            argv = ['git', '-c', 'safe.directory=' + str(Path.cwd()), *argv[1:]]
         result = run(argv, text=True, capture_output=True, check=True)
         return result.stdout.strip()
     repository = config['project']['repository']
@@ -409,9 +552,17 @@ def emit(config, key, name, run=subprocess.run, environ=None):
         for path, expected in job['context'][group].items():
             if output(['git', 'rev-parse', 'HEAD:' + path]) != expected:
                 raise ValueError('CI actual resolved input differs from fixed context')
-    return {'schema_version': VERSION, 'repository': repository, 'profile': key, 'job': name,
-            'run_id': int(env['GITHUB_RUN_ID']), 'run_attempt': int(env['GITHUB_RUN_ATTEMPT']),
-            'workflow_sha': checkout, 'checkout_sha': checkout, 'tree_sha': tree, 'context': copy.deepcopy(job['context'])}
+    result = {'schema_version': VERSION, 'repository': repository, 'profile': key, 'job': name,
+              'run_id': int(env['GITHUB_RUN_ID']), 'run_attempt': int(env['GITHUB_RUN_ATTEMPT']),
+              'workflow_sha': checkout, 'checkout_sha': checkout, 'tree_sha': tree, 'context': copy.deepcopy(job['context'])}
+    if policy(config)['schema_version'] == 2:
+        reference = env.get('GITHUB_REF', '')
+        event = env.get('GITHUB_EVENT_NAME')
+        if not (event == 'pull_request' and re.fullmatch(r'refs/pull/[1-9]\d*/merge', reference)
+                or event in ('push', 'workflow_dispatch') and reference.startswith('refs/heads/') and reference[11:]):
+            raise ValueError('CI protocol 2 needs its actual native event/ref')
+        result['native_ref'] = reference
+    return result
 
 
 def main():
