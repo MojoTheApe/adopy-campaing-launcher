@@ -50,6 +50,10 @@ def _dropped():
     return requests.ConnectionError("Connection aborted: RemoteDisconnected")
 
 
+def _timed_out():
+    return requests.ReadTimeout("Read timed out. (read timeout=120)")
+
+
 @pytest.fixture
 def launcher(monkeypatch):
     """Лаунчер с подменённой сетью: по каждому адресу — очередь ответов."""
@@ -75,8 +79,9 @@ def launcher(monkeypatch):
     return {"launcher": MultiloginLauncher(cfg), "asked": asked, "script": script, "pauses": pauses}
 
 
-def test_a_dropped_stop_is_asked_once_more_and_succeeds(launcher):
-    launcher["script"][STOP] = [_dropped(), _Reply(200, {"status": {"http_code": 200}})]
+@pytest.mark.parametrize("failure", [_dropped, _timed_out], ids=["connection", "timeout"])
+def test_a_dropped_stop_is_asked_once_more_and_succeeds(launcher, failure):
+    launcher["script"][STOP] = [failure(), _Reply(200, {"status": {"http_code": 200}})]
     launcher["launcher"].stop_profile(PROFILE, folder_id=FOLDER)
     assert launcher["asked"] == [STOP, STOP]
     assert len(launcher["pauses"]) == 1 and launcher["pauses"][0] > 0, "повтор — после паузы"

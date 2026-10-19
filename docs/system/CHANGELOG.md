@@ -11,6 +11,7 @@
   wrong slot or URL (TEST9095, 16.10: 9403A, Doc124, B90; windows left open after a read).
 - A 404 on the real address still walks the legacy tail. Callers are unchanged:
   `allow_kill=False` still closes nothing beyond the API.
+
 ## ACL-1381 — Consistent Builder ad-text wording — 2026-10-18
 
 Complete the older text-label request while preserving ACL-1769's later numbered
