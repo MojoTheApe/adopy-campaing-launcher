@@ -92209,6 +92209,31 @@
             "approved_at": "2026-10-19T15:11:33+00:00"
           }
         }
+      },
+      {
+        "event": "intake-frozen",
+        "at": "2026-10-19T15:17:09+00:00",
+        "intake": {
+          "id": "036ef28964f04bc3bfbf35bc4dd66068",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "state": "running",
+          "issues": [
+            776,
+            899,
+            902,
+            886
+          ],
+          "remaining": [
+            776,
+            899,
+            902,
+            886
+          ],
+          "batches": [],
+          "started_at": "2026-10-19T15:17:09+00:00",
+          "ineligible": {}
+        }
       }
     ],
     "policy": {
@@ -99127,22 +99152,24 @@
     },
     "integration": null,
     "intake": {
-      "id": "a696245e23ac46aeb3a4e14c995dc330",
-      "actor": "Coordinator-E1019A",
-      "session": "coord-c0a1de70",
-      "state": "finished",
+      "id": "036ef28964f04bc3bfbf35bc4dd66068",
+      "actor": "Coordinator-M1011A",
+      "session": "coord-m1011a-20261015",
+      "state": "running",
       "issues": [
-        864,
-        871,
-        356,
-        787,
-        287
+        776,
+        899,
+        902,
+        886
       ],
-      "remaining": [],
-      "batches": [
-        "a12a28c2b40d481db2305e6bb020724d"
+      "remaining": [
+        776,
+        899,
+        902,
+        886
       ],
-      "started_at": "2026-10-19T10:50:45+00:00",
+      "batches": [],
+      "started_at": "2026-10-19T15:17:09+00:00",
       "ineligible": {}
     },
     "source_reviews": {
