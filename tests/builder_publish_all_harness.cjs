@@ -206,9 +206,12 @@ function runQueue(accounts, opts = {}) {
     sandbox);
   // ACL-1604: проверка аккаунтов живёт на window; без неё подтверждение открывается сразу.
   if (opts.preflight) sandbox.window.cbPreflightFetch = opts.preflight;
+  // ACL-1819: ворота pre-flight audit — заглушка; сам гейт проверяют preflight_gate_harness.cjs.
+  const gated = [];
+  sandbox.window.cbPreflightGate = (items, go) => { gated.push(items); if (!opts.gateRefuses) go(); };
   sandbox.window.cbPreflightDecision = (queued, skipped, anyway) => { events.push('decision'); (opts.decisions || []).push({ queued, skipped, anyway }); };
   sandbox.window.cbPublishAll(() => {});
-  return { events, said, pending, sandbox, forms, keys };
+  return { events, said, pending, sandbox, forms, keys, gated };
 }
 
 // Запрос уходит через микрозадачи — без этого проверка смотрит на «ещё
@@ -387,6 +390,7 @@ const posts = (q) => q.events.filter((e) => e === 'POST').length;
   // Retry у A — тот же ключ; сервер ответил, за заданием следят.
   assert.equal(q.sandbox.window.CB_QUEUE.retry('|A'), true);
   await flush();
+  assert.equal(q.gated.length, 1, 'the retry skipped the pre-flight gate');
   assert.equal(posts(q), 3);
   assert.equal(q.keys[2], q.keys[0], 'retry used a new key: the server could start a second job');
   assert.equal(q.pending.length, 1, 'the retried job is not being watched');
@@ -403,6 +407,14 @@ const posts = (q) => q.events.filter((e) => e === 'POST').length;
   // Ревью PR #408, R9: Dismiss освобождает аккаунт, не дожидаясь повтора, —
   // а следующая его отправка идёт с ТЕМ ЖЕ ключом: если первая всё же дошла,
   // сервер вернёт её задание, второго не будет.
+  // ACL-1819: ворота не пустили — повтор ничего не шлёт.
+  q = runQueue(['A'], { fail: 1, gateRefuses: true });
+  await flush();
+  assert.equal(posts(q), 1);
+  q.sandbox.window.CB_QUEUE.retry('|A');
+  await flush();
+  assert.equal(posts(q), 1, 'a refused gate still let the retry post');
+  assert.equal(q.gated.length, 1);
   q = runQueue(['A', 'B'], { fail: 2 });
   await flush();
   assert.equal(q.sandbox.window.CB_QUEUE.dismiss('|B'), true);

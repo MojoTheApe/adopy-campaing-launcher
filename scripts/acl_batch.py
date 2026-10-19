@@ -23,20 +23,70 @@ def git(root, *args):
     return subprocess.check_output(["git", "-C", str(root), *args], text=True).strip()
 
 
+def merge_source(worktree, head):
+    """Prepare one new merge and preserve its primary error and owned evidence."""
+    def run(*args):
+        return subprocess.run(["git", "-C", str(worktree), *args], text=True,
+                              capture_output=True, check=True)
+
+    def diagnostic(error):
+        return (f"command={error.cmd!r}; exit={error.returncode}; "
+                f"stdout={error.stdout!r}; stderr={error.stderr!r}")
+
+    # Re-match ordinary cached stat data; genuine content/mode changes still fail.
+    # A refresh failure must not start a merge or abort an unrelated operation.
+    try:
+        run("update-index", "--refresh")
+    except subprocess.CalledProcessError as error:
+        raise ValueError("Index refresh failed; worktree and graph retained. " + diagnostic(error)) from error
+    try:
+        run("-c", "commit.gpgsign=false", "merge", "--no-ff", "--no-edit", head)
+    except subprocess.CalledProcessError as error:
+        conflict = False
+        cleanup = "No abort attempted; unfinished merge state is unknown."
+        try:
+            marker = subprocess.run(["git", "-C", str(worktree), "rev-parse", "--verify", "--quiet", "MERGE_HEAD"],
+                                    text=True, capture_output=True)
+            if marker.returncode == 1 and not marker.stdout:
+                cleanup = "No unfinished merge marker observed; no abort attempted."
+            elif marker.returncode == 0 and marker.stdout.strip() == head:
+                # Only this exact newly invoked source merge may be aborted.
+                try:
+                    conflict = bool(run("ls-files", "--unmerged", "-z").stdout)
+                    cleanup = ""
+                except subprocess.CalledProcessError as probe:
+                    cleanup = "Unmerged-index observation failed: " + diagnostic(probe) + ". "
+                try:
+                    run("merge", "--abort")
+                    cleanup += "Owned unfinished merge aborted."
+                except (OSError, subprocess.SubprocessError) as abort:
+                    detail = diagnostic(abort) if isinstance(abort, subprocess.CalledProcessError) else repr(abort)
+                    cleanup += "Owned merge abort failed; cleanup is incomplete: " + detail
+            else:
+                cleanup += (f" Merge-marker observation: exit={marker.returncode}; "
+                            f"stdout={marker.stdout!r}; stderr={marker.stderr!r}")
+        except (OSError, subprocess.SubprocessError) as probe:
+            cleanup += " Merge-state observation failed: " + repr(probe)
+        reason = ("Merge conflict: return the affected author; do not resolve implementation changes in the batch branch. "
+                  if conflict else "Merge failed; source-content conflict is not established. ")
+        raise ValueError(reason + "Worktree and prior graph retained. Primary failure: "
+                         + diagnostic(error) + ". " + cleanup) from error
+
+
 def github(path):
     return json.loads(subprocess.check_output(["gh", "api", "repos/" + REPOSITORY + path], text=True))
 
 
 def execution(root):
-    result = subprocess.check_output([sys.executable, str(root / "scripts/task_tracker.py"),
+    result = subprocess.check_output([sys.executable, str(root / "scripts/acl_task_tracker.py"),
                                       "execution", "show"], cwd=root, text=True)
     return json.loads(result)["execution"]
 
 
 def owned_batch(section, config, actor, session, claim):
-    policy = config["execution_policy"]
+    policy = proof.rules.execution_policy(config)
     batch = section.get("integration")
-    if (policy.get("schema_version") != 2 or section.get("policy") != policy
+    if (not policy or policy.get("schema_version") not in (2, 3) or section.get("policy") != policy
             or not batch or (batch.get("actor"), batch.get("session"), batch.get("id")) != (actor, session, claim)
             or not re.fullmatch(r"[0-9a-f]{32}", claim)
             or batch.get("branch") != "codex/batch-" + claim
@@ -135,7 +185,8 @@ def prepare(root, destination, actor, session, claim, *, apply=False, rebuild=Fa
         raise ValueError("Use a new isolated worktree path; existing work is preserved")
     ids = [config["project"].get("legacy_task_ids", {}).get(str(n),
            config["project"]["id_prefix"] + "-" + str(n + config["project"].get("id_offset", 0))) for n in batch["issues"]]
-    result = {"applied": False, "branch": batch["branch"], "base": "stage", "main_sha": batch["main_sha"],
+    target = config["delivery_policy"]["staging"]["branch"] if config["delivery_policy"]["staging"]["enabled"] else config["project"]["base_branch"]
+    result = {"applied": False, "branch": batch["branch"], "base": target, "main_sha": batch["main_sha"],
               "title": "[" + ", ".join(ids) + "] Integrate approved tasks",
               "body": "Tracker issues: " + ", ".join(ids) + "\nTracker batch: " + batch["id"] + "\n\n"
                       + "Frozen approved sources: " + ", ".join("#" + str(m["pr"]) for m in batch["members"])
@@ -181,14 +232,7 @@ def prepare(root, destination, actor, session, claim, *, apply=False, rebuild=Fa
     else:
         git(root, "worktree", "add", "-b", batch["branch"], str(destination), batch["main_sha"])
     for member in batch["members"]:
-        try:
-            git(destination, "-c", "commit.gpgsign=false", "merge", "--no-ff", "--no-edit", member["head_sha"])
-        except subprocess.CalledProcessError as error:
-            # This helper owns this new worktree. Abort only its unfinished merge;
-            # preserve prior assembled commits, source branches and the batch claim.
-            git(destination, "merge", "--abort")
-            raise ValueError("Merge conflict: the worktree is preserved. Return the affected author; "
-                             "do not resolve implementation changes in the batch branch") from error
+        merge_source(destination, member["head_sha"])
     if owned_batch(read(root), config, actor, session, claim) != batch:
         raise ValueError("Batch changed during assembly; preserve the local worktree and inspect")
     validate_remote(batch, request)
