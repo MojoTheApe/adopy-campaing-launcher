@@ -51738,7 +51738,7 @@
             "session": "wg681-c0a1de70"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-G19681",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
@@ -51757,7 +51757,7 @@
         },
         "pr": 970,
         "queued_at": "2026-10-19T11:13:29+00:00",
-        "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
+        "review_report": "Base moved to c6150160 (main advanced after batch PRs 1016 and 1018); author merges main and re-hands off. No defects found so far in the quick pass over PR 970 (ACL-1681) at head 25c8824e; full re-review on the refreshed head.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578094+00:00",
@@ -95468,6 +95468,24 @@
         "pr": 970,
         "lane": "38f8ce97fc4d48ce99f575f68379f7fb",
         "actor": "Reviewer-Y19B"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-19T22:18:04+00:00",
+        "review": {
+          "id": "38f8ce97fc4d48ce99f575f68379f7fb",
+          "pr": 970,
+          "issues": [
+            681
+          ],
+          "actor": "Reviewer-Y19B",
+          "session": "rev-y19b-s1",
+          "coordinator": "Coordinator-E1019A",
+          "started_at": "2026-10-19T22:17:33+00:00",
+          "state": "returning",
+          "report": "Base moved to c6150160 (main advanced after batch PRs 1016 and 1018); author merges main and re-hands off. No defects found so far in the quick pass over PR 970 (ACL-1681) at head 25c8824e; full re-review on the refreshed head.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -103090,20 +103108,6 @@
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-19T13:01:50+00:00",
         "state": "reviewing"
-      },
-      "970": {
-        "id": "38f8ce97fc4d48ce99f575f68379f7fb",
-        "pr": 970,
-        "issues": [
-          681
-        ],
-        "actor": "Reviewer-Y19B",
-        "session": "rev-y19b-s1",
-        "coordinator": "Coordinator-E1019A",
-        "started_at": "2026-10-19T22:17:33+00:00",
-        "state": "returning",
-        "report": "Base moved to c6150160 (main advanced after batch PRs 1016 and 1018); author merges main and re-hands off. No defects found so far in the quick pass over PR 970 (ACL-1681) at head 25c8824e; full re-review on the refreshed head.",
-        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
