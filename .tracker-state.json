@@ -44562,9 +44562,11 @@
         "worktree": "C:\\wk20-680",
         "id": "e07c836f3f274acf994524be87a3358b",
         "issue": 680,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T22:19:46+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 966,
+        "report": "Pure refresh: merged origin/main (c6150160) into work/acl-1680-one-config-dir, clean merge, no conflicts, no scope change. New head 04c17927.\nTests: test_acl_test_platform, test_acl1680_one_config_dir, test_machine_paths, test_windows_launcher_contract, packaging/windows/tests: 180 passed. acl_scan_secrets OK, acl_smoke OK."
       },
       "202": {
         "actor": "Worker-H19202",
