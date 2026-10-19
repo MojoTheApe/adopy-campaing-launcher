@@ -52277,7 +52277,7 @@
             "session": "wh202-c0a1de70"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-H19202",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
@@ -52307,7 +52307,8 @@
           "actor": "Coordinator-E1019A",
           "session": "coord-c0a1de70",
           "report": "# Return for a main refresh\n\nMain moved to c6150160 (batch #1018 merged after #1016). The existing source approval is bound to the previous main baseline and cannot enter the next intake. No scope change and no defect is requested: merge current origin/main into the original branch, re-run the affected checks, hand off again and get a fresh independent review."
-        }
+        },
+        "reviewer": "Reviewer-X20976"
       },
       "591": {
         "implementers": [],
@@ -55506,6 +55507,10 @@
       "Reviewer-X20982": {
         "session": "rx982-1c30cbbe",
         "role": "Reviewer"
+      },
+      "Reviewer-X20976": {
+        "session": "rx976-1c30cbbe",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -58386,7 +58391,6 @@
       896,
       768,
       401,
-      202,
       47,
       770,
       771,
@@ -96034,6 +96038,13 @@
             "approved_at": "2026-10-19T23:22:19+00:00"
           }
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-19T23:23:17+00:00",
+        "pr": 976,
+        "lane": "84ef96e04f654a3c9c927d9dc0dda9a9",
+        "actor": "Reviewer-X20976"
       }
     ],
     "policy": {
@@ -103669,6 +103680,18 @@
         "session": "rev-y19b-s1",
         "coordinator": "Coordinator-E1019A",
         "started_at": "2026-10-19T22:32:46+00:00",
+        "state": "reviewing"
+      },
+      "976": {
+        "id": "84ef96e04f654a3c9c927d9dc0dda9a9",
+        "pr": 976,
+        "issues": [
+          202
+        ],
+        "actor": "Reviewer-X20976",
+        "session": "rx976-1c30cbbe",
+        "coordinator": "Coordinator-E1019A",
+        "started_at": "2026-10-19T23:23:17+00:00",
         "state": "reviewing"
       }
     },
