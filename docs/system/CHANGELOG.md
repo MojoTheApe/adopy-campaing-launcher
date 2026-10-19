@@ -6,7 +6,7 @@
   scoped padding from the country-card stylesheet, aligned with the workbook
   notice and connection form. The footer has explicit space above and below;
   long history text and disclosure labels wrap inside narrow cards.
-- This additive rule is dormant on main until ACL-1798's campaign footer mounts.
+- The rule applies to the campaign footer that ACL-1798 mounts in the account page (`<section class="hc hc-after" data-hc-after>`); it is no longer dormant.
   Verification uses sanitized markup/CSS from preview
   `5542e6ffb33512cb8a3c5572e1b56f8aaf3d519d`, real Chromium geometry and keyboard
   disclosure at 1280, 1024 and 320 px in both themes. It does not import the
