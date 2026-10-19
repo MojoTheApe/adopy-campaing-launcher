@@ -171,11 +171,18 @@ class ApiPublishError(RuntimeError):
         self.code = code
 
 
+def _published_as(outcome: Outcome) -> str:
+    """ACL-1902: имя в Meta, только если оно не совпадает с именем из билдера (иначе пусто)."""
+    chosen = str(outcome.published_as or "")
+    return chosen if chosen and chosen != outcome.campaign_name else ""
+
+
 def dry_run_result(outcome: Outcome) -> dict[str, Any]:
     """Итог пробного запуска: план и предпроверка, ничего не создано (ревью M3)."""
     ok = not outcome.error
     return {
-        "campaign_name": outcome.campaign_name, "backend": "api", "dry_run": True, "status": "",
+        "campaign_name": outcome.campaign_name, "published_as": _published_as(outcome),
+        "backend": "api", "dry_run": True, "status": "",
         "success": ok, "publishable": False,
         "warnings": list(outcome.warnings) + (["Dry run: nothing was created"] if ok else []),
         "blocking_failures": [], "problems": [], "run_id": None, "campaign_id": None,
@@ -202,6 +209,7 @@ def result_dict(outcome: Outcome, *, error: str = "") -> dict[str, Any]:
     success = created and not error
     return {
         "campaign_name": outcome.campaign_name,
+        "published_as": _published_as(outcome),
         "backend": "api",
         "status": "PAUSED" if created else "",
         "success": success,
@@ -396,6 +404,18 @@ class ApiPublisher:
             return result_dict(Outcome(campaign_name=name),
                                error="The draft's ad account differs from the verified one. Nothing was created.")
         assert self._client is not None and self._facts is not None and self._resolver is not None
+        if not self.dry_run and any(ad.form_template for s_ in plan.ad_sets for ad in s_.ads):
+            # ACL-1776: Страница плана закрепляется на сессию до первой записи формы.
+            try:
+                pinned = self._client.transport.pin_page(plan.page_id)
+            except ValueError as exc:
+                return result_dict(Outcome(campaign_name=name),
+                                   error=f"The Page of this draft cannot be used in this run ({exc}). "
+                                         "Nothing was created.")
+            if isinstance(pinned, dict) and not pinned.get("has_token"):
+                return result_dict(Outcome(campaign_name=name), error=(
+                    "Ads Manager did not give the session back after pinning the Page "
+                    f"({pinned.get('kind') or 'no token'}). Nothing was created; run again."))
         self._client.reset_budget(int(_env_number(CREATE_MAX_CALLS_ENV, DEFAULT_CREATE_MAX_CALLS, 20, 250)))
 
         def step(text: str) -> None:
@@ -403,7 +423,8 @@ class ApiPublisher:
             _record("api_create_step", True, campaign=name, diag={"step": text})
 
         creator = CampaignCreator(self._client, self._facts, self._resolver,
-                                  cancelled=self.cancelled, progress=step, sleep=self.sleep)
+                                  cancelled=self.cancelled, progress=step, sleep=self.sleep,
+                                  live_progress=lambda text: self.progress(f"{name}: {text}"))
         if self.dry_run:
             outcome = creator.plan_only(plan)
             if self._client.writes:

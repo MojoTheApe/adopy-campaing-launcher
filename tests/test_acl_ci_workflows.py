@@ -144,6 +144,22 @@ def test_tracker_link_runs_only_on_pull_requests():
     assert set(workflow("tracker-link.yml")[True]) == {"pull_request"}
 
 
+@pytest.mark.parametrize("activity,expected", [
+    ("edited", {"tracker-link.yml"}),
+    ("synchronize", set(ALL)),
+])
+def test_pr_metadata_feedback_does_not_restart_candidate_verification(activity, expected):
+    # GitHub defaults an absent types filter to opened/synchronize/reopened:
+    # https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request
+    defaults = {"opened", "synchronize", "reopened"}
+    triggered = set()
+    for name in ALL:
+        event = workflow(name)[True]["pull_request"] or {}
+        if activity in event.get("types", defaults):
+            triggered.add(name)
+    assert triggered == expected
+
+
 # --- the Python matrix ------------------------------------------------------------------------------
 
 def test_scope_publishes_the_python_list_and_the_matrix_uses_it():
@@ -314,7 +330,7 @@ RETRY = re.compile(r"gh\s+run\s+rerun|nick-fields/retry|retry-action|run_attempt
 def test_no_workflow_reruns_or_retries_itself(name):
     text = (ROOT / ".github/workflows" / name).read_text(encoding="utf-8")
     assert not RETRY.search(text), name
-    assert "workflow_run" not in workflow(name)[True]          # nothing chains full workflows after each other
+    assert "workflow_run" not in workflow(name)[True]          # verification never reruns itself; authorized delivery has its own guarded workflow
 
 
 def test_the_scope_job_runs_the_chain_tests_too():
