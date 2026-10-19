@@ -43209,20 +43209,6 @@
   },
   "execution": {
     "claims": {
-      "902": {
-        "actor": "Worker-RF1019W",
-        "session": "rf1019w-20261019",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1902-campaign-name-suffix",
-        "worktree": "C:\\rf19-902",
-        "id": "b064e06ecf0d4da89ec86da94ea52f59",
-        "issue": 902,
-        "state": "handoff",
-        "started_at": "2026-10-19T11:40:09+00:00",
-        "from_status": "status:todo",
-        "pr": 904,
-        "report": "Merged 899 head 24e36087 (includes 776 and main 435bc154) into 971bb3bf (new head bfa6fd21). Conflicts: none. No code change. Tests: test_acl1902_name_suffix + test_acl1761_existing_check: 32 passed. Needs a delta review of the merge only."
-      },
       "839": {
         "actor": "Worker-R1839C",
         "session": "refresh_acl1839_20261019",
@@ -48753,24 +48739,25 @@
             "session": "rf1019w-20261019"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RF1019W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-E19902",
-          "session": "w902-c0a1de70",
-          "coordinator": "Coordinator-E1019A",
+          "actor": "Worker-RF1019W",
+          "session": "rf1019w-20261019",
+          "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1902-campaign-name-suffix",
-          "worktree": "C:\\wk19-902",
-          "id": "a6eec428eda64027861a7fa87f54fc34",
+          "worktree": "C:\\rf19-902",
+          "id": "b064e06ecf0d4da89ec86da94ea52f59",
           "issue": 902,
-          "state": "stopping",
-          "started_at": "2026-10-19T07:27:15+00:00",
+          "state": "handoff",
+          "started_at": "2026-10-19T11:40:09+00:00",
           "from_status": "status:todo",
-          "report": "Not refreshed on 2026-10-19: PR #904 is stacked on open ACL-1899 (#900) and ACL-1776; its diff vs main 435bc154 carries their commits. Resume after those merge, then merge main and hand off ACL-1902 alone."
+          "pr": 904,
+          "report": "Merged 899 head 24e36087 (includes 776 and main 435bc154) into 971bb3bf (new head bfa6fd21). Conflicts: none. No code change. Tests: test_acl1902_name_suffix + test_acl1761_existing_check: 32 passed. Needs a delta review of the merge only."
         },
         "pr": 904,
-        "queued_at": "2026-10-16T10:29:02+00:00",
+        "queued_at": "2026-10-19T11:45:51+00:00",
         "review_report": "Owner lifted the 2026-10-17 exclusive pause for ACL-1776, ACL-1899, ACL-1902 and ACL-1886 on 2026-10-19 (instruction in the review session: refresh onto current main, re-review, ship a new batch with release after the current one). Batch afaeca3e was cancelled by that pause; the old approval used main af0ade29 and is stale vs main 435bc154. Return for a main merge and fresh independent approval.",
         "return_operation": {
           "id": "4cc0c514b8d84c4bb4186cdc24c2b05d",
@@ -56022,7 +56009,8 @@
       70,
       681,
       776,
-      899
+      899,
+      902
     ],
     "review": {
       "id": "b49c262d383b4011a4e6891181162ac5",
@@ -89799,6 +89787,13 @@
         "issue": 839,
         "claim": "5aa698fac214484e9c5879758fb1202f",
         "actor": "Worker-R1839C"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T11:45:51+00:00",
+        "issue": 902,
+        "pr": 904,
+        "actor": "Worker-RF1019W"
       }
     ],
     "policy": {
