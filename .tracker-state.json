@@ -44576,9 +44576,11 @@
         "worktree": "C:\\wk20-341",
         "id": "4c582a02a1c94920809d0a2596a593d1",
         "issue": 47,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T22:25:46+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 980,
+        "report": "Refresh only, no defect or scope change. Merged origin/main (c6150160) into work/acl-341-recipe-player-tests; clean merge commit, no conflicts. New head adf74b65.\nTests: test_recipe_player_sequences.py, test_build_progress_model.py, test_acl_test_platform.py: 150 passed, 2 xfailed. acl_scan_secrets.py OK, acl_smoke.py OK.\nPR #980 body keeps exactly one \"Tracker issues:\" line."
       }
     },
     "tasks": {
