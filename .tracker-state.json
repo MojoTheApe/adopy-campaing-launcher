@@ -44287,20 +44287,6 @@
         "state": "implementing",
         "started_at": "2026-10-19T20:10:40+00:00",
         "from_status": "status:todo"
-      },
-      "840": {
-        "actor": "Worker-R1019840",
-        "session": "run_r1019_840",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1840-country-footer-inset",
-        "worktree": "C:\\acl-1840-wt",
-        "id": "7f676b12e8e1478a81f819e7994f5e0e",
-        "issue": 840,
-        "state": "handoff",
-        "started_at": "2026-10-19T20:25:58+00:00",
-        "from_status": "status:todo",
-        "pr": 846,
-        "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main (only conflict: docs/system/CHANGELOG.md, kept both). Addressed the review's CHANGELOG request: the \"dormant on main\" sentence is replaced, the footer mount now exists on main. tests/test_country_campaign_footer_layout.py: 19 passed. Not done (optional in the review): the fixture still carries its own copy of the .hc CSS; it matches main's rules line by line today."
       }
     },
     "tasks": {
@@ -48982,25 +48968,25 @@
             "session": "run_r1019_840"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-R1019840",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-F8Q620",
-          "session": "footer_fix-01a133d7-20261013",
-          "coordinator": "Coordinator-D7K413",
+          "actor": "Worker-R1019840",
+          "session": "run_r1019_840",
+          "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1840-country-footer-inset",
-          "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-1840-2026-10-13",
-          "id": "7115a3978b764986b51c80f9b41119ca",
+          "worktree": "C:\\acl-1840-wt",
+          "id": "7f676b12e8e1478a81f819e7994f5e0e",
           "issue": 840,
           "state": "handoff",
-          "started_at": "2026-10-13T08:12:12+00:00",
+          "started_at": "2026-10-19T20:25:58+00:00",
           "from_status": "status:todo",
           "pr": 846,
-          "report": "ACL-1840 / PR846 refreshed source handoff, 2026-10-13.\n\nGenuine Worker-F8Q620, session footer_fix-01a133d7-20261013, Coordinator-D7K413.\nFresh author claim 7115a3978b764986b51c80f9b41119ca.\nPR https://github.com/MojoTheApe/adopy-campaing-launcher/pull/846\nRetained branch codex/acl-1840-country-footer-inset\nHead fe58cef0c357488c3ca2696b4e4b89b03f0f8d9d\nCurrent base 3327465fcbd46ccff9b64eb7c574ff5b84b99b80\n\nResponded to genuine independent baseline return by merging verified current main into the original branch without force-push. Resolved only system-changelog conflict, preserving both ACL-1840 and ACL-1824 entries. Production CSS, sanitized fixture and regression tests are unchanged; diff to current main remains four intended task files, 136 added lines.\n\nWindows/Python 3.13 checks rerun on refreshed source: 19 real Chromium geometry/disclosure regressions passed (1280/1024/320, both themes, empty/populated/filtered synthetic descriptions, long history and original-bug reproduction); secret scanner passed; dashboard/RPA import smoke passed; diff check passed; worktree clean. Complete applicable platform tests remain required CI on this head. No official source review lane acquired or approval recorded by the author.\n\nScope/dependency retained: additive country-footer rule remains dormant until ACL-1798's pending campaign component is admitted. Fixture provenance remains preview 5542e6ffb33512cb8a3c5572e1b56f8aaf3d519d; no unrelated shared-preview commits imported or edited. Full integrated footer mount/cascade, whole-page inventory/filter behavior, isolated staging/package delivery and original acceptance completion remain pending. Previous screenshot evidence is unchanged CSS/fixture evidence, not refreshed integrated-runtime proof. No live ad actions, stage/main admission, publication or installation performed.\n\nNext: independent exact-head/current-base/scope source review and required CI, then the repository's eligible batch integration route subject to preserved upstream dependency."
+          "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main (only conflict: docs/system/CHANGELOG.md, kept both). Addressed the review's CHANGELOG request: the \"dormant on main\" sentence is replaced, the footer mount now exists on main. tests/test_country_campaign_footer_layout.py: 19 passed. Not done (optional in the review): the fixture still carries its own copy of the .hc CSS; it matches main's rules line by line today."
         },
         "pr": 846,
-        "queued_at": "2026-10-13T08:20:10+00:00",
+        "queued_at": "2026-10-19T20:27:32+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -57597,7 +57583,8 @@
       992,
       175,
       379,
-      739
+      739,
+      840
     ],
     "review": {
       "id": "71d08f944d4646c69ba2c95edd8d2464",
@@ -93956,6 +93943,13 @@
         "at": "2026-10-19T20:25:58+00:00",
         "issue": 840,
         "claim": "7f676b12e8e1478a81f819e7994f5e0e",
+        "actor": "Worker-R1019840"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T20:27:32+00:00",
+        "issue": 840,
+        "pr": 846,
         "actor": "Worker-R1019840"
       }
     ],
