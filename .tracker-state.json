@@ -43234,20 +43234,6 @@
         "started_at": "2026-10-19T11:57:41+00:00",
         "from_status": "status:todo"
       },
-      "816": {
-        "actor": "Worker-RS1816",
-        "session": "wrs1816-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1816-rules-evaluate",
-        "worktree": "C:\\wk-rs1816",
-        "id": "f5821f262c824574820b4be3a8426f65",
-        "issue": 816,
-        "state": "handoff",
-        "started_at": "2026-10-19T12:01:14+00:00",
-        "from_status": "status:todo",
-        "pr": 820,
-        "report": "# ACL-1816 resume handoff (Worker-RS1816)\nResumed on the owner instruction of 2026-10-19 after the 17.10 exclusive-workflow pause.\nHead: 39019630 on codex/acl-1816-rules-evaluate, merge of origin/main 435bc154 (process docs/tracker/CI accounting only). Merge only, no conflicts, no 1816 code changed since the reviewed 76b5accb.\nTests: test_acl1816_rules_evaluate, test_rules_store, test_acl1815_rules_evidence, test_shared_file_locks, test_goals: 220 passed. scripts/acl_scan_secrets.py clean.\nFull suite not run locally."
-      },
       "827": {
         "actor": "Worker-RS1827",
         "session": "wrs1827-20261015",
@@ -47349,7 +47335,7 @@
             "session": "wrs1816-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RS1816",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -47358,16 +47344,16 @@
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1816-rules-evaluate",
           "worktree": "C:\\wk-rs1816",
-          "id": "27b8a02766c045c980d33dfbb7162649",
+          "id": "f5821f262c824574820b4be3a8426f65",
           "issue": 816,
           "state": "handoff",
-          "started_at": "2026-10-16T10:07:22+00:00",
+          "started_at": "2026-10-19T12:01:14+00:00",
           "from_status": "status:todo",
           "pr": 820,
-          "report": "# ACL-1816 refresh handoff (Worker-RS1816)\nHead: 76b5accb on codex/acl-1816-rules-evaluate, merge of origin/main af0ade29 (ACL-1923/1924 no-stage delivery: process docs, workflows, delivery scripts). Merge only, no conflicts, no 1816 code changed since the reviewed 4d2f8edd.\nTests: test_acl1816_rules_evaluate, test_rules_store, test_acl1815_rules_evidence, test_shared_file_locks, test_goals: 220 passed. scripts/acl_scan_secrets.py clean.\nFull suite not run locally."
+          "report": "# ACL-1816 resume handoff (Worker-RS1816)\nResumed on the owner instruction of 2026-10-19 after the 17.10 exclusive-workflow pause.\nHead: 39019630 on codex/acl-1816-rules-evaluate, merge of origin/main 435bc154 (process docs/tracker/CI accounting only). Merge only, no conflicts, no 1816 code changed since the reviewed 76b5accb.\nTests: test_acl1816_rules_evaluate, test_rules_store, test_acl1815_rules_evidence, test_shared_file_locks, test_goals: 220 passed. scripts/acl_scan_secrets.py clean.\nFull suite not run locally."
         },
         "pr": 820,
-        "queued_at": "2026-10-16T10:17:10+00:00",
+        "queued_at": "2026-10-19T12:25:15+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -56089,7 +56075,8 @@
       902,
       855,
       886,
-      839
+      839,
+      816
     ],
     "review": {
       "id": "b49c262d383b4011a4e6891181162ac5",
@@ -90051,6 +90038,13 @@
         "pr": 831,
         "lane": "6730539b1fe2423dafdf45e928f165be",
         "actor": "Reviewer-DV1019A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T12:25:15+00:00",
+        "issue": 816,
+        "pr": 820,
+        "actor": "Worker-RS1816"
       }
     ],
     "policy": {
