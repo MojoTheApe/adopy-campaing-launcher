@@ -44553,22 +44553,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "770": {
-        "actor": "Worker-B1019770",
-        "session": "run_b1019_770",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1770-page-pixel-levels",
-        "worktree": "C:\\acl-1770",
-        "id": "94db45b07f7e46ad9f60bdf4a0c559e8",
-        "issue": 770,
-        "state": "handoff",
-        "started_at": "2026-10-19T22:22:57+00:00",
-        "from_status": "status:todo",
-        "pr": 979,
-        "report": "# ACL-1770 handoff\n\n- Merged current work/main into work/acl-1770-page-pixel-levels (5 files, 11 conflict blocks, both sides kept; Page/Link fields placed after the closing div of the Instant Form block).\n- Independent read-only Opus review of the resolution: no defects.\n- Touched tests passed locally: test_acl1770_page_pixel_levels 22, test_acl1776_create_forms 120, test_acl1775_instant_forms 86, test_acl1775_builder_forms 10, test_acl1761_api_create 121, test_acl1769_two_column_layout 12, test_builder_second_primary_text 17, test_acl1819_preflight 84. Full suite left to CI. No live runs.\n- Note: ACL-1768 (#833) also adds a per-set pixel_id; a follow-up merge will be needed when it lands."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -52149,25 +52134,25 @@
             "session": "run_b1019_770"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-B1019770",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-W1770A",
-          "session": "w1770a-s1",
-          "coordinator": "Coordinator-T1004Q",
+          "actor": "Worker-B1019770",
+          "session": "run_b1019_770",
+          "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1770-page-pixel-levels",
           "worktree": "C:\\acl-1770",
-          "id": "ccaaf16c570b4a139601356ba2723732",
+          "id": "94db45b07f7e46ad9f60bdf4a0c559e8",
           "issue": 770,
           "state": "handoff",
-          "started_at": "2026-10-17T13:11:10+00:00",
+          "started_at": "2026-10-19T22:22:57+00:00",
           "from_status": "status:todo",
           "pr": 979,
-          "report": "## Result\n\nPage and link are now per ad, the pixel is per ad set, and a buyer's pick is saved to the account map (PR #979, branch work/acl-1770-page-pixel-levels).\n\n## Checks\n\n- tests/test_acl1770_page_pixel_levels.py: 22 passed (two Pages, ad picks the second -> readback Page OK; empty link names the ad; pixel per set; saved choice used next time; RPA refusal; map write keeps columns and never overwrites a different value).\n- Related: test_acl1761_api_create / plan_check / parity / creative_lookup, test_acl1766_map_pixel, test_acl1769_two_column_layout, test_acl1775_instant_forms, test_acl1819_preflight, test_builder_duplicate_buttons, test_builder_second_primary_text: all pass. builder_layout_harness.cjs: ok.\n- Not run: full suite (CI). tests/test_acl1775_builder_forms.py::test_the_page_code_behaves_in_node fails only on a CRLF checkout (harness slices on LF); it passes on the LF content.\n\n## Not done\n\n- No live check on the 9095 dashboard (needs owner yes and test accounts).\n- Several ad sets per campaign (ACL-1768, PR #833) not in this branch: the pixel select is per slot today and will follow when that merges."
+          "report": "# ACL-1770 handoff\n\n- Merged current work/main into work/acl-1770-page-pixel-levels (5 files, 11 conflict blocks, both sides kept; Page/Link fields placed after the closing div of the Instant Form block).\n- Independent read-only Opus review of the resolution: no defects.\n- Touched tests passed locally: test_acl1770_page_pixel_levels 22, test_acl1776_create_forms 120, test_acl1775_instant_forms 86, test_acl1775_builder_forms 10, test_acl1761_api_create 121, test_acl1769_two_column_layout 12, test_builder_second_primary_text 17, test_acl1819_preflight 84. Full suite left to CI. No live runs.\n- Note: ACL-1768 (#833) also adds a per-set pixel_id; a follow-up merge will be needed when it lands."
         },
         "pr": 979,
-        "queued_at": "2026-10-17T13:25:25+00:00",
+        "queued_at": "2026-10-19T22:30:58+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -58087,7 +58072,8 @@
       680,
       70,
       202,
-      47
+      47,
+      770
     ],
     "review": null,
     "history": [
@@ -95615,6 +95601,13 @@
         "issue": 47,
         "pr": 980,
         "actor": "Worker-H19341"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T22:30:58+00:00",
+        "issue": 770,
+        "pr": 979,
+        "actor": "Worker-B1019770"
       }
     ],
     "policy": {
