@@ -43221,20 +43221,6 @@
         "state": "implementing",
         "started_at": "2026-10-19T11:56:42+00:00",
         "from_status": "status:todo"
-      },
-      "853": {
-        "actor": "Worker-W853D",
-        "session": "w853d-20261019",
-        "coordinator": "Coordinator-C1016A",
-        "branch": "codex/acl-1853-profile-process-lease",
-        "worktree": "C:\\acl-1853-r2",
-        "id": "bb23000d64bf4b93be5b5492b0a40edb",
-        "issue": 853,
-        "state": "handoff",
-        "started_at": "2026-10-19T11:57:41+00:00",
-        "from_status": "status:todo",
-        "pr": 863,
-        "report": "ACL-1853 refreshed onto origin/main 435bc154 (merge commit 3ad52a3f, no conflicts). Includes 366d6580 (reads wait up to 600 s for a busy profile instead of failing at 120 s; matches the Issue intent, kept).\nTests (py 3.14, affected files, 1291 tests): all pass; test_profile_process_lease.py::test_process_termination_releases_without_removing_lock_file failed once in a 900-test run, passed 43/43 in isolation (flaky under load). CI: all test jobs and checks pass except tracker-link, which needed the handoff.\nNon-blocking, not fixed: publish_jobs.close_profile writes stop_log under canonical UUID while readers use raw profile_id (touches several modules); close_account_profile checks lease only with the Multilogin key."
       }
     },
     "tasks": {
@@ -48118,25 +48104,25 @@
             "session": "w853d-20261019"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W853D",
         "coordinator": "Coordinator-C1016A",
         "handoff": {
-          "actor": "Worker-W1853C",
-          "session": "w1853c-20261016",
+          "actor": "Worker-W853D",
+          "session": "w853d-20261019",
           "coordinator": "Coordinator-C1016A",
           "branch": "codex/acl-1853-profile-process-lease",
           "worktree": "C:\\acl-1853-r2",
-          "id": "414a40577add41138c6bd0b1a56b05dd",
+          "id": "bb23000d64bf4b93be5b5492b0a40edb",
           "issue": 853,
           "state": "handoff",
-          "started_at": "2026-10-16T10:27:01+00:00",
+          "started_at": "2026-10-19T11:57:41+00:00",
           "from_status": "status:todo",
           "pr": 863,
-          "report": "# ACL-1853 refresh onto main\n\n- Merged origin/main (af0ade29) into codex/acl-1853-profile-process-lease (merge commit, no rebase). New head 914a5b05. Scope unchanged.\n- One conflict: docs/system/CHANGELOG.md (ACL-1853 entry vs main's ACL-1924 entry). Resolved by keeping both, main's newer entry first.\n- Tests: 41 affected test files (git diff --name-only origin/main...HEAD, tests/ only): 1330 passed, 0 failed (local, Python 3.14; sentry_sdk installed to run the sentry snapshot test).\n- Source PR #863 CI on 914a5b05: all test, verification and process jobs pass. Only tracker-link failed, because the task was not yet in Review (\"start and implement the task, then move it to Review\"); it is expected to clear after this handoff."
+          "report": "ACL-1853 refreshed onto origin/main 435bc154 (merge commit 3ad52a3f, no conflicts). Includes 366d6580 (reads wait up to 600 s for a busy profile instead of failing at 120 s; matches the Issue intent, kept).\nTests (py 3.14, affected files, 1291 tests): all pass; test_profile_process_lease.py::test_process_termination_releases_without_removing_lock_file failed once in a 900-test run, passed 43/43 in isolation (flaky under load). CI: all test jobs and checks pass except tracker-link, which needed the handoff.\nNon-blocking, not fixed: publish_jobs.close_profile writes stop_log under canonical UUID while readers use raw profile_id (touches several modules); close_account_profile checks lease only with the Multilogin key."
         },
         "pr": 863,
-        "queued_at": "2026-10-16T11:15:03+00:00",
+        "queued_at": "2026-10-19T12:31:55+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "return_operation": {
           "id": "e26bf4c9096b4a088993fde43345eaa5",
@@ -56071,7 +56057,8 @@
       855,
       839,
       816,
-      827
+      827,
+      853
     ],
     "review": {
       "id": "b49c262d383b4011a4e6891181162ac5",
@@ -90054,6 +90041,13 @@
         "pr": 887,
         "lane": "599ff1dd05cc4393b86d30e8731746bb",
         "actor": "Reviewer-DV1019D"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T12:31:55+00:00",
+        "issue": 853,
+        "pr": 863,
+        "actor": "Worker-W853D"
       }
     ],
     "policy": {
