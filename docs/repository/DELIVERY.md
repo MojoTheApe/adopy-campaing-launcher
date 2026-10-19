@@ -1,25 +1,24 @@
 # ACL delivery contract
 
+Read the exact [selected shared guide](TRACKER.md), the [ACL support/cutover plan](EARLY_ADOPTION.md) and the guarded operator mapping in [AGENTS.md](../../AGENTS.md).
+Shared contract references retain canonical bodies; `_ACL` documents preserve the original local cutover history and stronger controls.
+
 Read [ADOPTION.md](ADOPTION.md) for actual cutover evidence and the one-time
 activation gate before any live operation. Main/stage and the shared board exist;
-the descriptor remains draft because the pinned standard has no published release.
+the published support pair is pinned, while the descriptor remains draft pending the separately verified early-adoption pilot.
 
 `delivery.json` is the project-specific delivery description. `tracker/config.json`
 is the matching Tracker configuration. The standard and engine use exact commit
 pins; neither automatically follows main. Populate actual procedures and verify
 registration before changing adoption from draft to ready.
 
-For ordinary/application work, execution schema 2 selects Review -> Approved -> Stage -> Merged.
-Independent source approval releases the review lane; one separate Coordinator
-integration claim covers a frozen batch of 1..batch_limit tasks. The recommended
-limit is five, independent of Worker capacity. Preserve each member's author,
-source PR/current approval and scope; verify the combined stage candidate before
-unchanged promotion. Ship-all snapshots intake and processes sequential batches,
-rechecking remaining approvals after each main change. A single task may ship
-without filling the batch. Execution-v1 commands remain in force only through the guarded source cutover;
-follow the old pinned guide for that route. Completion and runtime authorization remain project-specific.
+The selected temporary no-stage route keeps Approved and 5/5/5 source/batch
+capacity. A reserved independently reviewed batch targets main, while ordinary
+source PRs stay approval-only. Read [POST_MAIN_DELIVERY.md](POST_MAIN_DELIVERY.md)
+for the one-request release continuation, exact native proof, initial old-policy
+source admission, separately verified idle activation and restoring Stage.
 
-The explicitly opted-in [instruction-only route](PROCESS_INSTRUCTIONS.md) admits
+The explicitly opted-in [instruction-only route](PROCESS_INSTRUCTIONS_ACL.md) admits
 normal repository-process Markdown directly from Review into main after independent
 review and its applicable checks. Its verified reviewed-merge receipt completes that
 bounded task without package delivery. Application/mixed/config/automation changes,
@@ -37,22 +36,17 @@ record the normal reviewed `merged` transition. Hold its review lane through tha
 merge. Its verified process receipt completes the instruction task; do not create
 Stage, installer or package-delivery evidence for it.
 
-For ordinary/application work, execution schema 2 keeps one task per source PR,
+For ordinary/application work, execution schemas 2/3 keep one task per source PR,
 independently reviewed into Approved. Approval releases source review ownership; it does not merge or deliver.
 A separate Coordinator freezes intake and one batch of up to five. Assemble exact
-approved source tips in the reserved integration branch, acquire independent
-combined review, run complete applicable checks and merge only that candidate
-into permanent stage. All members become Stage and share exact-tree target
-verification. Promote the same members/content into main, then record per-task
-Merged. Preserve each source Worker/Reviewer and source branch. See
-[BATCH_INTEGRATION.md](BATCH_INTEGRATION.md) for current commands and guarded adoption.
-
-The source-adoption child completes its existing execution-v1 stage/main route
-before live state changes. Existing legacy/v1 consumers keep their pinned lifecycle.
-No direct ordinary batch-source merge, added promotion fix, stage reset or silent member removal
-is allowed. After stage entry retain the claim and same-member rebuild through
-actual author fixes, independent review and fresh verification. Package delivery,
-release authorization, installation/update and recovery stay separate.
+approved sources, review their combined candidate independently and run full
+applicable checks before the main merge. Record actual Merged scope. Under the
+standing owner policy, integration approval includes delivery unless
+explicitly source-only/skip-release; the agent adds `batch begin --deliver`, which
+retains its genuine exact request. The durable continuation publishes and verifies the package before recording
+Delivered. Failure or missing acceptance retains pending delivery. Do not tick
+unfinished business criteria to force completion. Initial source ACL-1924 still
+uses the old stage/main policy; no source change activates its own shortcut.
 
 Run the pinned client's guide, `check-pr N`, `record-review`, `check-merge N`,
 `stage`, `verify-stage` and `merged ... --reviewed-complete --apply` at the matching
@@ -72,7 +66,25 @@ branch-to-environment connections require their own explicit setup.
 A partially implemented ticket stays active. Never substitute a closed Issue or
 non-code completion for missing code/delivery evidence.
 
+## Optional-policy selection packages
+
+The released support pin supplies the bounded Stage-off execution-v2/v3
+one-policy selection package described in [DELIVERY_POLICY.md](DELIVERY_POLICY.md#one-policy-selection-package-before-activation).
+Prepare only its genuine separately reviewed one-member selection, retain the
+original authorization, complete actual published-package verification and
+record its exact native receipt before reserving maintenance for owned idle
+activation. Do not co-select policies or deliver through held maintenance.
+Other pending deliveries, unresolved effects and real owners still block
+adoption. [EARLY_ADOPTION.md](EARLY_ADOPTION.md) retains reader/every-writer,
+full recovery and separate pilot gates; this support source activates nothing.
+
 ## Procedure references
+
+Follow [VERIFICATION.md](VERIFICATION.md) for common check selection and coordinated
+upgrades, while preserving ACL's affected-source selection, actual required names,
+full applicable integration/platform/installer gates and bounded local collector.
+TT-107's optional native protocol cannot replace those Windows/matrix/installer
+proofs. No optional CI evidence policy or maintenance interval is enabled here.
 
 Use `docs/runtime/DELIVERY.md` for actual environment identities, access,
 release authorization, rollback and backup. The descriptor links those procedures. A disabled

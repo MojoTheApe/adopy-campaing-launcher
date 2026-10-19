@@ -10,11 +10,6 @@ import sys
 
 def main():
     root = Path(__file__).resolve().parents[2]
-    # Project-owned guard: calling the shared helper directly must not activate
-    # the prepared policy against live historical Issues either.
-    sys.path.insert(0, str(root / 'scripts'))
-    from acl_adoption import guard_tracker
-    guard_tracker(sys.argv[1:], root)
     lock = json.loads((root / 'tracker/engine.json').read_text(encoding='utf-8'))
     repo, revision = lock['repository'], lock['revision']
     if repo != 'MojoTheApe/task-tracker' or not re.fullmatch(r'[0-9a-f]{40}', revision):

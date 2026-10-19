@@ -339,6 +339,7 @@ def test_delayed_tree_repaint_keeps_typing_focus_and_selection(ui):
     p, _ = ui
     p.evaluate("""() => {
       document.querySelector('[data-act=\"add-picked\"]').click();
+      cbTree.setLevel('adset');   // ACL-1769: таргетинг лежит в разделе Ad set
       const x=document.querySelector('.cb-in-drawer .cb-targeting-search');
       x.focus();x.value='typed targeting';x.setSelectionRange(2,7);
       x.dispatchEvent(new Event('input',{bubbles:true}));

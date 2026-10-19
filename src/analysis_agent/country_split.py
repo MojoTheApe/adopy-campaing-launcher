@@ -45,7 +45,6 @@ from src.analysis_agent.account_spend import (
     _read_status,
     _shoot,
     _sleep,
-    reopening_by_hand,
     LOGGED_OUT_CODE,
     _ReadOpen,
     _finish_started,
@@ -188,6 +187,13 @@ def running_now() -> list[str]:
         return sorted({k.split("|")[0] for k in _RUNNING})
 
 
+def default_reader():
+    """Чем читать страны: `insights?breakdowns=country` (ACL-1760) или отчёт Ads Manager."""
+    from src.analysis_agent import account_spend_api
+
+    return account_spend_api.read_country_split_via_api if account_spend_api.api_enabled() else read_country_split
+
+
 def start_split(
     account: str,
     date_from: str,
@@ -222,7 +228,7 @@ def start_split(
             _RUNNING.discard(key)
             raise
 
-    fn = reader or read_country_split
+    fn = reader or default_reader()
 
     def run() -> None:
         try:
@@ -1233,7 +1239,7 @@ def read_country_split(account: str, date_from: str, date_to: str = "") -> Count
         expected_act = "act_" + act.removeprefix("act_")
         # ACL-1518: окно, открытое руками, переоткрывается путём Publish.
         # ACL-1580: закрытый профиль чтение запускает само и потом закрывает.
-        with reopening_by_hand(), opening_closed_profile(held):
+        with opening_closed_profile(held):
             conn = _attach_only(entry, account)
         page = conn.page
         try:
@@ -1362,6 +1368,13 @@ def read_country_split(account: str, date_from: str, date_to: str = "") -> Count
         out.state, out.rows = "failed", []
         out.error = str(exc) or type(exc).__name__
         out.error_code = str(getattr(exc, "code", "") or "") if isinstance(exc, ProfileNotAttachable) else ""
+        if not out.error_code:
+            # ACL-1826: вход в прокси читается одной фразой.
+            from src.fb_api import mlx_session as _mlx
+
+            _text, _code = _mlx.humanize(exc, "", account)
+            if _code:
+                out.error, out.error_code = _text, _code
     finally:
         # Persist failures too: a failed retry must not expose an old success.
         try:

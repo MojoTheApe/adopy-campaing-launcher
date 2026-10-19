@@ -7,14 +7,15 @@ import pytest
 from scripts.acl_ci_scope import select
 
 
-@pytest.fixture
-def candidate(tmp_path):
+@pytest.fixture(params=[2, 3], ids=["v2", "v3-five-reviews"])
+def candidate(tmp_path, request):
     def git(*args):
         return subprocess.check_output(["git", *args], cwd=tmp_path, text=True).strip()
     git("init", "-q")
     git("config", "user.name", "Batch CI fixture")
     git("config", "user.email", "batch-ci@example.invalid")
-    policy = {"schema_version": 2, "implementation_limit": 5, "review_limit": 1, "batch_limit": 5}
+    policy = {"schema_version": request.param, "implementation_limit": 5,
+              "review_limit": 5 if request.param == 3 else 1, "batch_limit": 5}
     (tmp_path / "tracker").mkdir()
     (tmp_path / "delivery.json").write_text(json.dumps({"workflow": {"staging": True, "execution": policy}}))
     (tmp_path / "tracker/config.json").write_text(json.dumps({
@@ -65,7 +66,7 @@ def test_combined_promotion_and_unknown_routes_require_every_check_even_for_docs
 
 
 @pytest.mark.parametrize("branch", ["stage", "main", "master"])
-def test_v2_push_proves_complete_actual_branch(candidate, branch):
+def test_batch_push_proves_complete_actual_branch(candidate, branch):
     root, base, change, _ = candidate
     payload = {"before": base, "after": change("docs/note.md")}
     result = select(root, "push", payload, ref="refs/heads/" + branch)
@@ -97,7 +98,7 @@ def test_existing_v1_route_keeps_prior_selection(candidate):
     for path, key in (("delivery.json", "workflow"), ("tracker/config.json", None)):
         data = json.loads((root / path).read_text())
         policy = data["workflow"]["execution"] if key else data["execution_policy"]
-        policy.pop("batch_limit"); policy["schema_version"] = 1
+        policy.pop("batch_limit"); policy["schema_version"] = 1; policy["review_limit"] = 1
         (root / path).write_text(json.dumps(data))
     assert select(root, "pull_request", payload)["python"] == ["3.13"]
     payload["pull_request"]["base"]["ref"] = "main"
@@ -110,3 +111,66 @@ def test_malformed_descriptor_shape_falls_back_to_complete_checks(candidate):
     (root / "delivery.json").write_text(json.dumps({"workflow": []}))
     result = select(root, "pull_request", payload)
     assert result["windows"] and result["linux"] and result["python"] == ["3.11", "3.13"]
+
+
+@pytest.mark.parametrize("field,value", [
+    ("review_limit", 0), ("review_limit", 6), ("review_limit", True),
+    ("batch_limit", 6), ("batch_limit", True), ("schema_version", 4),
+])
+def test_invalid_v3_policy_keeps_full_checks_even_when_mirrored(candidate, field, value):
+    root, _, change, event = candidate
+    payload = event(change("docs/note.md"))
+    for name in ("delivery.json", "tracker/config.json"):
+        path = root / name
+        data = json.loads(path.read_text())
+        policy = data["workflow"]["execution"] if name == "delivery.json" else data["execution_policy"]
+        policy.update(schema_version=3, review_limit=5, batch_limit=5)
+        policy[field] = value
+        path.write_text(json.dumps(data))
+    result = select(root, "pull_request", payload)
+    assert result["reason"] == "classification-unavailable-run-full"
+    assert result["windows"] and result["linux"] and result["python"] == ["3.11", "3.13"]
+    assert select(root, "pull_request", payload, workflow="windows-installer.yml")["windows"]
+
+
+@pytest.mark.parametrize("missing", ["policy", "file"])
+def test_missing_descriptor_policy_cannot_hide_schema3_tracker(candidate, missing):
+    root, _, change, event = candidate
+    payload = event(change("docs/note.md"))
+    path = root / "delivery.json"
+    if missing == "file":
+        path.unlink()
+    else:
+        data = json.loads(path.read_text()); data["workflow"].pop("execution")
+        path.write_text(json.dumps(data))
+    path = root / "tracker/config.json"
+    data = json.loads(path.read_text()); data["execution_policy"].update(schema_version=3, review_limit=5)
+    path.write_text(json.dumps(data))
+    result = select(root, "pull_request", payload)
+    assert result["reason"] == "classification-unavailable-run-full" and result["windows"]
+
+
+def test_no_stage_keeps_source_affected_and_main_batch_full_checks(candidate):
+    root, _, change, event = candidate
+    path = root / "delivery.json"
+    data = json.loads(path.read_text()); data["workflow"]["staging"] = False
+    path.write_text(json.dumps(data))
+    path = root / "tracker/config.json"
+    data = json.loads(path.read_text()); data["workflow"].remove("stage")
+    data["delivery_policy"] = {"staging": {"enabled": False}}
+    path.write_text(json.dumps(data))
+    head = change()
+    assert select(root, "pull_request", event(head))["python"] == ["3.13"]
+    result = select(root, "pull_request", event(head, "codex/batch-" + "a" * 32, "main"))
+    assert result["python"] == ["3.11", "3.13"] and result["windows"]
+    assert select(root, "pull_request", event(head, "codex/batch-" + "a" * 32, "main"),
+                  workflow="windows-installer.yml")["windows"]
+
+
+def test_no_stage_drift_never_reduces_checks(candidate):
+    root, _, change, event = candidate
+    head = change("docs/note.md")
+    path = root / "delivery.json"
+    data = json.loads(path.read_text()); data["workflow"]["staging"] = False
+    path.write_text(json.dumps(data))
+    assert select(root, "pull_request", event(head))["reason"] == "classification-unavailable-run-full"
