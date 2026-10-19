@@ -44051,6 +44051,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T17:53:46+00:00",
         "from_status": "status:todo"
+      },
+      "151": {
+        "actor": "Worker-R1019151",
+        "session": "run_r1019_151",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1151-map-pick-profile",
+        "worktree": "C:\\acl-1151",
+        "id": "7d17c8549b0a47ab83dd5e6a21125baa",
+        "issue": 151,
+        "state": "implementing",
+        "started_at": "2026-10-19T18:31:06+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -50375,10 +50387,14 @@
           {
             "actor": "Worker-W1151M",
             "session": "worker_acl1151_20261016"
+          },
+          {
+            "actor": "Worker-R1019151",
+            "session": "run_r1019_151"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-W1151M",
+        "state": "implementing",
+        "worker": "Worker-R1019151",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-W1151M",
@@ -54250,6 +54266,10 @@
       "Reviewer-R1165X": {
         "session": "reviewer-r1165x-20261019",
         "role": "Reviewer"
+      },
+      "Worker-R1019151": {
+        "session": "run_r1019_151",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -92882,6 +92902,13 @@
         "issue": 805,
         "pr": 1019,
         "actor": "Worker-S1019805"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T18:31:06+00:00",
+        "issue": 151,
+        "claim": "7d17c8549b0a47ab83dd5e6a21125baa",
+        "actor": "Worker-R1019151"
       }
     ],
     "policy": {
