@@ -6684,7 +6684,7 @@ window.cbTree = (function () {
         line.hidden = !entry;
         /* Только при изменении: запись в textContent — мутация формы, её слушает
            наблюдатель дерева, и безусловная запись зациклила бы страницу. */
-        var want = entry ? 'Headline: ' + (entry.headline || entry.ad_title) + ', from the ad-title library' : '';
+        var want = entry ? 'Headline: ' + (entry.headline || entry.ad_title) + ', from the ad-text library' : '';
         if (line.textContent !== want) line.textContent = want;
       }
     }
@@ -12630,12 +12630,12 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     var version = ++adTitlesVersion;
     return fetch('/api/ad-copy').then(async function(r) {
       var d = await r.json();
-      if (!r.ok) throw new Error(d.error || 'Could not load ad titles');
+      if (!r.ok) throw new Error(d.error || 'Could not load ad texts');
       if (version === adTitlesVersion) replaceAdTitles(d.rows || []);
     }).catch(function(e) {
       if (version !== adTitlesVersion) return;
       AD_TITLES = [];
-      AD_TITLES_ERROR = e.message || 'Could not load ad titles';
+      AD_TITLES_ERROR = e.message || 'Could not load ad texts';
       cbpRenderAll();
     });
   }
@@ -12854,7 +12854,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
         '</div>';
     }).join('');
     if (!html) html = '<div class="cb-sel-opt" style="color:var(--muted);font-size:var(--adopy-text-sm);pointer-events:none">'
-      + aclEscHtml(AD_TITLES_ERROR || 'No ad titles found') + '</div>';
+      + aclEscHtml(AD_TITLES_ERROR || 'No ad texts found') + '</div>';
 
     dropdown.innerHTML = html;
     dropdown.hidden = false;
@@ -13350,7 +13350,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
          не менялось. Заголовок записи показан строкой ниже, чтобы он не прятался. */
       '<span class="cb-label">Primary text 1</span>' +
       '<div class="cb-sel-wrap cb-adtitle-sel-wrap">' +
-      '<input type="text" class="cb-sel-text cb-adtitle-search" placeholder="— type to search primary text —" autocomplete="off" value="" oninput="cbAdTitleSearch(this)" title="Pick a text from the ad-title library: it gives the primary text, the headline and the description">' +
+      '<input type="text" class="cb-sel-text cb-adtitle-search" placeholder="— type to search ad text —" autocomplete="off" value="" oninput="cbAdTitleSearch(this)" title="The chosen ad text gives the primary text, the headline and the description">' +
       '<div class="cb-sel-dropdown" hidden></div>' +
       '<input type="hidden" name="' + pfx + 'copy" value="">' +
       '<div class="cb-headline-line" data-headline hidden></div>' +
