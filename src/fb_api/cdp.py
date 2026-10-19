@@ -45,6 +45,17 @@ __all__ = ["CdpError", "CdpTimeout", "PageError", "StaleContextError",
 
 #: Срок одного служебного вызова CDP (создать вкладку, подключиться, …).
 CALL_S = 10.0
+#: Срок вопроса браузеру об URL вкладки после таймаута (рендерер мог зависнуть).
+TARGET_INFO_S = 5.0
+
+
+def host_and_path(url: str) -> str:
+    """`host/path` без query, фрагмента и логина: в текст ошибки токены не попадают."""
+    try:
+        parts = urllib.parse.urlsplit(url or "")
+        return f"{parts.hostname or ''}{parts.path or ''}"
+    except ValueError:
+        return ""
 
 
 class PageError(CdpError):
@@ -150,8 +161,10 @@ class PageTab:
             return tab
         except BaseException:
             if target_id:
+                # F4: на пути ошибки тоже не закрываем последнюю вкладку браузера
+                # (Chrome и профиль Multilogin ушли бы вместе с ней).
                 try:
-                    cdp.call("Target.closeTarget", {"targetId": target_id}, timeout=call_s)
+                    cls._close_unless_last(cdp, target_id, call_s)
                 except Exception:
                     pass
             try:
@@ -159,6 +172,30 @@ class PageTab:
             except Exception:
                 pass
             raise
+
+    @staticmethod
+    def _close_unless_last(cdp: Any, target_id: str, call_s: float) -> None:
+        """Закрыть цель, если в браузере есть другие вкладки; единственную не трогаем.
+
+        Список вкладок не получен — тоже не закрываем: лучше оставить
+        пустую about:blank, чем уронить браузер.
+        """
+        infos = (cdp.call("Target.getTargets", timeout=call_s) or {}).get("targetInfos") or []
+        pages = [t for t in infos if t.get("type") == "page" and not t.get("subtype")]
+        if len(pages) > 1:
+            cdp.call("Target.closeTarget", {"targetId": target_id}, timeout=call_s)
+
+    def browser_url(self, timeout: float = TARGET_INFO_S) -> str:
+        """URL нашей цели от БРАУЗЕРНОГО процесса (`Target.getTargetInfo`, без sessionId).
+
+        Браузер отвечает, даже когда рендерер вкладки завис. Не ответил — пустая
+        строка (вызывающий оставляет исходный `CdpTimeout`).
+        """
+        try:
+            got = self._cdp.call("Target.getTargetInfo", {"targetId": self.target_id}, timeout=timeout)
+            return str(((got or {}).get("targetInfo") or {}).get("url") or "")
+        except Exception:
+            return ""
 
     # -- вызовы во вкладку
     @property
@@ -301,6 +338,24 @@ class PageTab:
 
     def reload(self, *, timeout: float = 30.0) -> None:
         self.call("Page.reload", {"ignoreCache": False}, timeout=timeout)
+
+    def close_target(self, target_id: str) -> bool:
+        """Закрыть ЧУЖУЮ нашу прежнюю вкладку (осталась от прошлого запуска дешборда).
+
+        Только если в браузере есть другие вкладки (наша живая — одна из них);
+        единственную не закрываем. Любая ошибка — False, ничего не ломаем.
+        """
+        if self.closed or not target_id or target_id == self.target_id:
+            return False
+        try:
+            infos = (self._cdp.call("Target.getTargets", timeout=CALL_S) or {}).get("targetInfos") or []
+            pages = [t for t in infos if t.get("type") == "page" and not t.get("subtype")]
+            if len(pages) < 2 or not any(t.get("targetId") == target_id for t in pages):
+                return False
+            self._cdp.call("Target.closeTarget", {"targetId": target_id}, timeout=CALL_S)
+            return True
+        except Exception:
+            return False
 
     # -- закрытие
     def close(self) -> None:

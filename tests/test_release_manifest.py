@@ -77,6 +77,7 @@ def test_the_script_writes_all_three_files_from_a_real_tag_range(tmp_path, monke
     installer.write_bytes(b"MZ")
 
     monkeypatch.chdir(repo)
+    monkeypatch.setattr(rm, "previous_published_release", lambda repo, tag: {"tag": "acl-release-2026-09-03e"})
     monkeypatch.setattr(rm, "_pull_request", lambda source, n: {
         "number": n, "title": "Team library", "body": "Tracker issues: ACL-1241"})
     out = tmp_path / "out"
@@ -88,3 +89,45 @@ def test_the_script_writes_all_three_files_from_a_real_tag_range(tmp_path, monke
     assert release["fixed"][0]["issue"] == "ACL-1241"
     assert (out / "Setup.exe.sha256").read_text(encoding="utf-8").endswith("  Setup.exe\n")
     assert "ACL-1241" in (out / "release-notes.md").read_text(encoding="utf-8")
+
+
+def test_recovery_uses_real_stable_publication_and_preserves_orphan_tags(tmp_path, monkeypatch):
+    from src.web import release_updates
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.name", "T")
+    _git(repo, "config", "user.email", "t@example.invalid")
+    (repo / "a").write_text("stable")
+    _git(repo, "add", "a"); _git(repo, "commit", "-qm", "stable")
+    _git(repo, "tag", "-a", "acl-release-stable", "-m", "published")
+    stable_sha = _git(repo, "rev-parse", "HEAD")
+    for name in ("orphan", "draft", "recovery"):
+        (repo / "a").write_text(name)
+        _git(repo, "commit", "-qam", name)
+        _git(repo, "tag", "-a", "acl-release-" + name, "-m", name)
+    before = _git(repo, "show-ref", "--tags")
+    monkeypatch.chdir(repo)
+    monkeypatch.setenv("ACL_RELEASES_READ_TOKEN", "synthetic-read-token")
+    original = subprocess.check_output
+    def execute(args, **kwargs):
+        if args[:3] == ["gh", "release", "list"]:
+            return json.dumps([{"tagName": "acl-release-draft", "isDraft": True, "isPrerelease": False},
+                               {"tagName": "acl-release-stable", "isDraft": False, "isPrerelease": False}])
+        return original(args, **kwargs)
+    monkeypatch.setattr(subprocess, "check_output", execute)
+    monkeypatch.setattr(release_updates, "fetch_latest", lambda channel: (
+        {"tag": "acl-release-stable", "commit": stable_sha},
+        {"id": 42, "tag_name": "acl-release-stable", "html_url": "https://example.invalid/stable",
+         "draft": False, "prerelease": False, "_acl_signature": {"status": "valid"}}))
+    baseline = rm.previous_published_release("example/releases", "acl-release-recovery")
+    assert baseline["tag"] == "acl-release-stable" and baseline["commit"] == stable_sha
+    assert _git(repo, "show-ref", "--tags") == before
+    installer = tmp_path / "Setup.exe"
+    installer.write_bytes(b"MZ")
+    monkeypatch.setattr(rm, "_pull_request", lambda source, number: {})
+    out = tmp_path / "out"
+    assert rm.main(["--tag", "acl-release-recovery", "--installer", str(installer),
+                    "--repo", "example/releases", "--out", str(out)]) == 0
+    result = json.loads((out / "release.json").read_text())
+    assert result["previous_release"] == baseline and result["previous_tag"] == "acl-release-stable"

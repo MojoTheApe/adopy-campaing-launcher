@@ -22,6 +22,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from _design_tokens import tokens  # noqa: E402
+
 ROOT = Path(__file__).resolve().parent.parent
 TPL = ROOT / "src" / "web" / "templates" / "report.html"
 
@@ -41,11 +43,8 @@ def _block(selector: str) -> str:
 
 
 def _tokens(theme: str) -> dict[str, str]:
-    """Токены темы: тёмная перекрывает светлую, как в браузере."""
-    light = dict(re.findall(r"(--[\w-]+):\s*([^;]+);", _block(LIGHT)))
-    if theme == "light":
-        return light
-    return {**light, **dict(re.findall(r"(--[\w-]+):\s*([^;]+);", _block(DARK)))}
+    """Токены темы с раскрытыми var() — как их считает браузер (ACL-1797)."""
+    return tokens(theme)
 
 
 def _rgb(colour: str) -> tuple[float, float, float]:
@@ -101,19 +100,24 @@ def test_the_focus_ring_is_visible(theme):
 
 
 def test_the_dark_greys_climb_in_steps():
-    """Фон < карточка < подложка группы < наведённая строка < поле.
+    """Фон < карточка < подложка группы < наведённая строка; поле светлее карточки.
 
     Прежде фон, карточка и поле были одним почти чёрным. Каждая ступень
     светлее предыдущей, а соседние различимы — не одно и то же число.
+    ACL-1797: лестница теперь из токенов Adopy; поле — «приподнятая»
+    поверхность (surface-raised), а не самая светлая ступень, потому что у
+    наведённой строки (surface-hover) светлота выше. Рамку поля к любой
+    поверхности держит соседний тест — 3:1.
     """
     t = _tokens("dark")
-    steps = ["--bg", "--bg-elev", "--bg-subtle", "--bg-hover", "--field-bg"]
+    steps = ["--bg", "--bg-elev", "--bg-subtle", "--bg-hover"]
     for lower, upper in zip(steps, steps[1:]):
         got = _ratio(t[upper], t[lower])
         assert _lum(t[upper]) > _lum(t[lower]), f"{upper} не светлее {lower}"
         assert got >= 1.05, f"{lower} → {upper}: {got:.3f}:1 — ступень не видна"
     assert _ratio(t["--bg-elev"], t["--bg"]) >= 1.1, "ящик и карточки сливаются со страницей"
-    assert _ratio(t["--field-bg"], t["--bg-elev"]) >= 1.25, "поле сливается с карточкой"
+    assert _lum(t["--field-bg"]) > _lum(t["--bg-elev"]), "поле не светлее карточки"
+    assert _ratio(t["--field-bg"], t["--bg-elev"]) >= 1.15, "поле сливается с карточкой"
 
 
 # Правила полей, которые раньше брали фон страницы или карточки и тихую
