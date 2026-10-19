@@ -44314,9 +44314,11 @@
         "worktree": "C:\\acl-1845-wt",
         "id": "cfb922d7daa24c9d855ac71aa04fdcf8",
         "issue": 845,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T20:55:16+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 850,
+        "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main; resolved 4 report.html hunks and CHANGELOG. Review findings addressed: (1) blocking zero-count overwrite: showQueue() and applyGate() now also disable the button when no campaign is available (count of tick.send / tick.open), so a queue update or the preflight gate cannot re-enable it; (2) main's ACL-1761 publishLabel kept (PAUSED/drafts), only the count (open campaigns) differs; main's Check plan button, account-state refresh and the sfc confirmation dialog kept (dialog keeps this PR's classes with main's font-size tokens); CHANGELOG sentences about the gate and API label updated. Tests: test_publish_button_design_browser 12, test_builder_multi_publish_browser 12, test_builder_publish_selected_browser 12, test_drawer_review_browser 13 passed. NOTE: no new dedicated regression test for the zero-count/showQueue fix; covered only by the existing browser tests (they pass)."
       }
     },
     "tasks": {
