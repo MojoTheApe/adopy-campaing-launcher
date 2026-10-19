@@ -43230,22 +43230,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "29": {
-        "actor": "Worker-W123C",
-        "session": "w123c-20261016",
-        "coordinator": "Coordinator-C1016A",
-        "branch": "codex/acl-123-disabled-next-step",
-        "worktree": "C:\\acl-123-c",
-        "id": "d448aadd8f7d441c8acc29b1209c5e2b",
-        "issue": 29,
-        "state": "handoff",
-        "started_at": "2026-10-19T12:50:20+00:00",
-        "from_status": "status:todo",
-        "pr": 954,
-        "report": "ACL-123 refreshed: merged origin/main (only CHANGELOG conflicted, both kept; heading now dated). _REASON_RE anchored to the \"(Meta API: ..., reason X)\" suffix; added a Playwright live-Read (amapStatusTail) test. blocked status left out (out of scope). Tests (py 3.14, one file at a time): next_step 11, copy_status_text 20, disabled_account_status 17, account_spend 62 - all pass."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -49699,7 +49684,7 @@
             "session": "w123c-20261016"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W123C",
         "coordinator": "Coordinator-C1016A",
         "handoff": {
@@ -49708,16 +49693,16 @@
           "coordinator": "Coordinator-C1016A",
           "branch": "codex/acl-123-disabled-next-step",
           "worktree": "C:\\acl-123-c",
-          "id": "0de60cd03b6a4ccb8f5ca7e0ef566136",
+          "id": "d448aadd8f7d441c8acc29b1209c5e2b",
           "issue": 29,
           "state": "handoff",
-          "started_at": "2026-10-16T14:33:23+00:00",
-          "from_status": "status:backlog",
+          "started_at": "2026-10-19T12:50:20+00:00",
+          "from_status": "status:todo",
           "pr": 954,
-          "report": "ACL-123: the account map row shows a plain-English next step under a disabled/restricted/review status, derived from the Meta disable_reason when the Graph read supplied it; page reads say the reason was not reported; unknown codes say the cause is unknown. Account name stays in the same row. Tests: tests/test_account_next_step.py (9 passed), plus test_account_spend and test_disabled_account_status passing. CI not run (startup_failure)."
+          "report": "ACL-123 refreshed: merged origin/main (only CHANGELOG conflicted, both kept; heading now dated). _REASON_RE anchored to the \"(Meta API: ..., reason X)\" suffix; added a Playwright live-Read (amapStatusTail) test. blocked status left out (out of scope). Tests (py 3.14, one file at a time): next_step 11, copy_status_text 20, disabled_account_status 17, account_spend 62 - all pass."
         },
         "pr": 954,
-        "queued_at": "2026-10-16T14:39:06+00:00",
+        "queued_at": "2026-10-19T13:14:54+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -56120,7 +56105,8 @@
       839,
       72,
       73,
-      165
+      165,
+      29
     ],
     "review": {
       "id": "b49c262d383b4011a4e6891181162ac5",
@@ -90511,6 +90497,13 @@
         "pr": 955,
         "lane": "30da9f63ac2f4410aadec254c84c931a",
         "actor": "Reviewer-R106E"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T13:14:54+00:00",
+        "issue": 29,
+        "pr": 954,
+        "actor": "Worker-W123C"
       }
     ],
     "policy": {
