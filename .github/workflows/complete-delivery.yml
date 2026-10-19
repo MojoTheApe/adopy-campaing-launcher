@@ -1,0 +1,247 @@
+name: Complete authorized delivery
+
+# CI completion is a wake-up only. The durable actual Tracker --deliver request
+# and admitted main receipt are the authority; unrelated pushes produce no release.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ci_run:
+        description: "Successful exact-main CI run for a pending authorized batch"
+        required: false
+        type: string
+      receipt_run:
+        description: "Receipt-only recovery: original run whose package verification passed"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: acl-stable-delivery
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: Resolve admitted delivery request
+    if: ${{ inputs.receipt_run == '' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event != 'pull_request')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: write
+      issues: read
+      pull-requests: read
+      actions: read
+      checks: read
+    outputs:
+      eligible: ${{ steps.request.outputs.eligible }}
+      tag: ${{ steps.request.outputs.tag }}
+      merge_sha: ${{ steps.request.outputs.merge_sha }}
+      request_artifact: ${{ steps.request.outputs.request_artifact }}
+    steps:
+      # workflow_run executes the current trusted default-branch workflow.
+      # Never check out an untrusted event payload ref with a writer token.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - id: request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_RUN: ${{ inputs.ci_run || github.event.workflow_run.id }}
+          EVENT_SHA: ${{ github.event.workflow_run.head_sha }}
+          SOURCE_REPO: ${{ github.repository }}
+          NATIVE_RUN: ${{ github.run_id }}
+          NATIVE_ATTEMPT: ${{ github.run_attempt }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha=$(git rev-parse HEAD)
+          if [ -n "$EVENT_SHA" ] && [ "$EVENT_SHA" != "$sha" ]; then
+            echo "Superseded CI event: preserve the pending request and resume its exact current-main run."
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          mkdir -p delivery
+          for attempt in $(seq 1 20); do
+            set +e
+            python scripts/tracker_delivery_receipt.py resolve --repository "$SOURCE_REPO" --merge-sha "$sha" --ci-run "$CI_RUN" --output delivery/request.json
+            result=$?
+            set -e
+            if [ "$result" = 0 ]; then break; fi
+            if [ "$result" != 75 ]; then exit "$result"; fi
+            if [ "$attempt" = 20 ]; then
+              echo "Authorized request is waiting for its admitted merged handoff or policy activation. Resume this workflow with the same successful CI run."
+              exit 75
+            fi
+            sleep 15
+          done
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from scripts.acl_complete_delivery import ensure_tag
+          path = Path('delivery/request.json')
+          request = json.loads(path.read_text())
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('eligible=' + str(request.get('eligible') is True).lower() + '\n')
+              if request.get('eligible') is True:
+                  tag = ensure_tag(request, int(os.environ['CI_RUN']))
+                  Path('delivery/release-request.json').write_text(json.dumps(dict(request, tag=tag), indent=2) + '\n')
+                  output.write('tag=' + tag + '\nmerge_sha=' + request['merge_sha'] + '\n')
+                  output.write('request_artifact=acl-delivery-request-' + os.environ['NATIVE_RUN'] + '-' + os.environ['NATIVE_ATTEMPT'] + '\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: steps.request.outputs.eligible == 'true'
+        with:
+          name: ${{ steps.request.outputs.request_artifact }}
+          path: delivery/*.json
+          retention-days: 30
+
+  publish:
+    needs: resolve
+    if: needs.resolve.outputs.eligible == 'true'
+    permissions:
+      contents: write
+      pull-requests: read
+      actions: read
+      checks: read
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.resolve.outputs.tag }}
+      continuation: true
+    secrets:
+      ACL_RELEASES_TOKEN: ${{ secrets.ACL_RELEASES_TOKEN }}
+      ACL_RELEASE_SIGNING_KEY: ${{ secrets.ACL_RELEASE_SIGNING_KEY }}
+      ACL_UPDATE_TOKEN: ${{ secrets.ACL_UPDATE_TOKEN }}
+
+  verify:
+    name: Verify published Windows package
+    needs: [resolve, publish]
+    runs-on: windows-latest
+    timeout-minutes: 20
+    outputs:
+      evidence_artifact: ${{ steps.evidence.outputs.evidence_artifact }}
+    env:
+      ACL_NO_TELEMETRY: "1"
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.merge_sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.resolve.outputs.request_artifact }}
+          path: delivery
+      - name: Install updater trust and isolated acceptance dependencies
+        run: python -m pip install cryptography==50.0.1 psutil==7.2.2
+      - name: Download actual published packages and verify installation, update, restart and recovery
+        env:
+          ACL_RELEASES_REPO: ${{ vars.ACL_RELEASES_REPO || github.repository }}
+          ACL_UPDATE_TOKEN: ${{ secrets.ACL_UPDATE_TOKEN }}
+          ACL_RELEASE_SIGNATURES: ${{ (vars.ACL_REQUIRE_RELEASE_SIGNATURE == 'true' || vars.ACL_ENFORCE_RELEASE_SIGNATURES == 'true') && 'enforce' || '' }}
+        run: python packaging/windows/test_update_cycle.py --published-request delivery/release-request.json
+      - name: Emit the successful native delivery receipt
+        id: evidence
+        shell: pwsh
+        run: |
+          python scripts/acl_delivery_evidence.py --request delivery/release-request.json --report packaging/windows/.artifacts/update-cycle-logs/report.json --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" --output delivery/evidence.json --artifact-name "acl-delivery-evidence-${{ github.run_id }}-${{ github.run_attempt }}"
+          if ($LASTEXITCODE -ne 0) { throw "Native delivery acceptance receipt failed." }
+          "evidence_artifact=acl-delivery-evidence-${{ github.run_id }}-${{ github.run_attempt }}" | Out-File -Append $env:GITHUB_OUTPUT
+      - name: Keep isolated package acceptance and delivery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acl-delivery-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            delivery/request.json
+            delivery/evidence.json
+          retention-days: 30
+          if-no-files-found: warn
+      - name: Keep acceptance logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acl-delivery-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: packaging/windows/.artifacts/update-cycle-logs/
+          retention-days: 30
+          if-no-files-found: warn
+
+  record:
+    name: Record exact verified package delivery
+    needs: [resolve, verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      issues: read
+      pull-requests: read
+      actions: read
+      checks: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.merge_sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.verify.outputs.evidence_artifact }}
+          path: delivery
+      - name: Validate native completed acceptance job and CAS-record exact task delivery
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          SOURCE_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          job=$(python -c 'import os; from scripts import tracker_delivery_receipt as r; repo=os.environ["SOURCE_REPO"]; run=int(os.environ["RUN_ID"]); native=r.github(f"repos/{repo}/actions/runs/{run}"); job,attempt=r.verification_job(r.github,repo,run,"Verify published Windows package",native["run_attempt"]); print(job["id"])')
+          python scripts/tracker_delivery_receipt.py record --request delivery/request.json --evidence delivery/evidence.json --verification-run "$RUN_ID" --verification-job "$job" --apply
+
+  resume-receipt:
+    name: Resume verified receipt without reinstalling
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.receipt_run != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      issues: read
+      pull-requests: read
+      actions: read
+      checks: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Revalidate and record original successful native evidence only
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RECEIPT_RUN: ${{ inputs.receipt_run }}
+          SOURCE_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$RECEIPT_RUN" in ''|*[!0-9]*) echo "A real original native run ID is required"; exit 1;; esac
+          read job artifact < <(python -c 'import os; from scripts import tracker_delivery_receipt as r; from scripts.acl_complete_delivery import producer_artifact; repo=os.environ["SOURCE_REPO"]; run=int(os.environ["RECEIPT_RUN"]); native=r.github(f"repos/{repo}/actions/runs/{run}"); job,attempt=r.verification_job(r.github,repo,run,"Verify published Windows package",native["run_attempt"]); print(job["id"],producer_artifact(r.github("repos/"+repo+"/actions/jobs/"+str(job["id"])+"/logs"),run))')
+          test -n "$job" && test -n "$artifact"
+          mkdir -p delivery
+          gh run download "$RECEIPT_RUN" --repo "$SOURCE_REPO" --name "$artifact" --dir delivery
+          python scripts/tracker_delivery_receipt.py record --request delivery/request.json --evidence delivery/evidence.json --verification-run "$RECEIPT_RUN" --verification-job "$job" --apply
