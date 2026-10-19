@@ -52391,7 +52391,7 @@
             "session": "wh341-c0a1de70"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-H19341",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
@@ -96339,6 +96339,68 @@
             "approved_at": "2026-10-19T23:46:10+00:00"
           }
         }
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-19T23:48:03+00:00",
+        "issue": 47,
+        "pr": 980,
+        "review": {
+          "id": "21d1a5e5136949018b9b159a7e186381",
+          "pr": 980,
+          "issues": [
+            47
+          ],
+          "actor": "Reviewer-Y19B",
+          "session": "rev-y19b-s1",
+          "coordinator": "Coordinator-E1019A",
+          "started_at": "2026-10-19T23:40:37+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 47,
+            "pr": 980,
+            "branch": "work/acl-341-recipe-player-tests",
+            "head_sha": "adf74b65b877c17b6f442ab0a00ffb39458a3f56",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "be9479208e9a0731a6c08e48e1baa5ada1999d8e5201c15b07423025fe9b60df",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-Y19B",
+              "implementer": "Worker-H19341",
+              "head_sha": "adf74b65b877c17b6f442ab0a00ffb39458a3f56",
+              "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "tree_sha": "6685a699bc70e4680aee945f51d09b361dd041d3",
+              "execution_lane": "21d1a5e5136949018b9b159a7e186381",
+              "review_session": "rev-y19b-s1",
+              "report": "Independent source review (refresh) of PR 980 (ACL-341, Issue 47), head adf74b65, base main c6150160. I approved 7d89abc6 earlier; this head is a clean merge of main into it.\nDelta check: files that differ between 7d89abc6 and adf74b65 are exactly files changed on main between 435bc154 and c6150160; the PR's only file, tests/test_recipe_player_sequences.py (+307), does not overlap with main's changes, so the reviewed content is unchanged.\nCI on this exact head: the first run failed \"windows tests (3.13)\" on tests/test_a_stopped_profile_never_spins_the_robot.py::test_a_poll_round_is_never_shorter_than_its_step (\"neighbour thread got 46% CPU\"), a CPU-timing test unrelated to this test-only PR; ACL verification failed only as a consequence. After one `gh run rerun --failed` every required check passes (linux shards 1-3, windows tests, ACL verification, Process instructions, Classify, Installer verification, tracker-link, descriptor).\nVerdict: approved.\n",
+              "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                47
+              ],
+              "recorded_at": "2026-10-19T23:47:12+00:00",
+              "issue_scopes": {
+                "47": "be9479208e9a0731a6c08e48e1baa5ada1999d8e5201c15b07423025fe9b60df"
+              }
+            },
+            "lane": {
+              "id": "21d1a5e5136949018b9b159a7e186381",
+              "pr": 980,
+              "issues": [
+                47
+              ],
+              "actor": "Reviewer-Y19B",
+              "session": "rev-y19b-s1",
+              "coordinator": "Coordinator-E1019A",
+              "started_at": "2026-10-19T23:40:37+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-19T23:47:34+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -99420,6 +99482,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-19T23:46:10+00:00"
+      },
+      "47": {
+        "issue": 47,
+        "pr": 980,
+        "branch": "work/acl-341-recipe-player-tests",
+        "head_sha": "adf74b65b877c17b6f442ab0a00ffb39458a3f56",
+        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "be9479208e9a0731a6c08e48e1baa5ada1999d8e5201c15b07423025fe9b60df",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-Y19B",
+          "implementer": "Worker-H19341",
+          "head_sha": "adf74b65b877c17b6f442ab0a00ffb39458a3f56",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "tree_sha": "6685a699bc70e4680aee945f51d09b361dd041d3",
+          "execution_lane": "21d1a5e5136949018b9b159a7e186381",
+          "review_session": "rev-y19b-s1",
+          "report": "Independent source review (refresh) of PR 980 (ACL-341, Issue 47), head adf74b65, base main c6150160. I approved 7d89abc6 earlier; this head is a clean merge of main into it.\nDelta check: files that differ between 7d89abc6 and adf74b65 are exactly files changed on main between 435bc154 and c6150160; the PR's only file, tests/test_recipe_player_sequences.py (+307), does not overlap with main's changes, so the reviewed content is unchanged.\nCI on this exact head: the first run failed \"windows tests (3.13)\" on tests/test_a_stopped_profile_never_spins_the_robot.py::test_a_poll_round_is_never_shorter_than_its_step (\"neighbour thread got 46% CPU\"), a CPU-timing test unrelated to this test-only PR; ACL verification failed only as a consequence. After one `gh run rerun --failed` every required check passes (linux shards 1-3, windows tests, ACL verification, Process instructions, Classify, Installer verification, tracker-link, descriptor).\nVerdict: approved.\n",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            47
+          ],
+          "recorded_at": "2026-10-19T23:47:12+00:00",
+          "issue_scopes": {
+            "47": "be9479208e9a0731a6c08e48e1baa5ada1999d8e5201c15b07423025fe9b60df"
+          }
+        },
+        "lane": {
+          "id": "21d1a5e5136949018b9b159a7e186381",
+          "pr": 980,
+          "issues": [
+            47
+          ],
+          "actor": "Reviewer-Y19B",
+          "session": "rev-y19b-s1",
+          "coordinator": "Coordinator-E1019A",
+          "started_at": "2026-10-19T23:40:37+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-19T23:47:34+00:00"
       }
     },
     "batches": {
@@ -104139,62 +104245,6 @@
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-19T13:01:50+00:00",
         "state": "reviewing"
-      },
-      "980": {
-        "id": "21d1a5e5136949018b9b159a7e186381",
-        "pr": 980,
-        "issues": [
-          47
-        ],
-        "actor": "Reviewer-Y19B",
-        "session": "rev-y19b-s1",
-        "coordinator": "Coordinator-E1019A",
-        "started_at": "2026-10-19T23:40:37+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 47,
-          "pr": 980,
-          "branch": "work/acl-341-recipe-player-tests",
-          "head_sha": "adf74b65b877c17b6f442ab0a00ffb39458a3f56",
-          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "be9479208e9a0731a6c08e48e1baa5ada1999d8e5201c15b07423025fe9b60df",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-Y19B",
-            "implementer": "Worker-H19341",
-            "head_sha": "adf74b65b877c17b6f442ab0a00ffb39458a3f56",
-            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-            "tree_sha": "6685a699bc70e4680aee945f51d09b361dd041d3",
-            "execution_lane": "21d1a5e5136949018b9b159a7e186381",
-            "review_session": "rev-y19b-s1",
-            "report": "Independent source review (refresh) of PR 980 (ACL-341, Issue 47), head adf74b65, base main c6150160. I approved 7d89abc6 earlier; this head is a clean merge of main into it.\nDelta check: files that differ between 7d89abc6 and adf74b65 are exactly files changed on main between 435bc154 and c6150160; the PR's only file, tests/test_recipe_player_sequences.py (+307), does not overlap with main's changes, so the reviewed content is unchanged.\nCI on this exact head: the first run failed \"windows tests (3.13)\" on tests/test_a_stopped_profile_never_spins_the_robot.py::test_a_poll_round_is_never_shorter_than_its_step (\"neighbour thread got 46% CPU\"), a CPU-timing test unrelated to this test-only PR; ACL verification failed only as a consequence. After one `gh run rerun --failed` every required check passes (linux shards 1-3, windows tests, ACL verification, Process instructions, Classify, Installer verification, tracker-link, descriptor).\nVerdict: approved.\n",
-            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              47
-            ],
-            "recorded_at": "2026-10-19T23:47:12+00:00",
-            "issue_scopes": {
-              "47": "be9479208e9a0731a6c08e48e1baa5ada1999d8e5201c15b07423025fe9b60df"
-            }
-          },
-          "lane": {
-            "id": "21d1a5e5136949018b9b159a7e186381",
-            "pr": 980,
-            "issues": [
-              47
-            ],
-            "actor": "Reviewer-Y19B",
-            "session": "rev-y19b-s1",
-            "coordinator": "Coordinator-E1019A",
-            "started_at": "2026-10-19T23:40:37+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-19T23:47:34+00:00"
-        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
