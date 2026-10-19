@@ -44134,9 +44134,11 @@
         "worktree": "C:\\wk-1920",
         "id": "4fe32f5f0d724b0793cededdf67e4e3e",
         "issue": 920,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T19:07:51+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 921,
+        "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main into the branch; conflicts only in docs/system/CHANGELOG.md (kept both entries). Re-ran the touched tests: test_acl1920_search_refused 23, test_acl1771_targeting_resolver 50, test_acl1819_preflight 78 passed. No functional change beyond the merge; no live runs."
       },
       "836": {
         "actor": "Worker-U1019836",
