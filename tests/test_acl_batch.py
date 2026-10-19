@@ -1,16 +1,35 @@
 """Actual Git assembly preserves approved tips and stops conflicts/foreign owners."""
 import copy
 import json
+import os
 from pathlib import Path
+import re
 import subprocess
+import shutil
 
 import pytest
 
 from scripts import acl_batch
 
 
-@pytest.fixture
-def fixture(tmp_path, monkeypatch):
+def test_batch_state_reader_keeps_acl_preflight_before_shared_client(tmp_path, monkeypatch, capfd):
+    source = Path(__file__).resolve().parents[1]
+    for name in ('scripts/acl_task_tracker.py', 'scripts/task_tracker.py',
+                 'scripts/acl_adoption.py', '.workflow/tools/task_tracker.py'):
+        target = tmp_path / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source / name, target)
+    (tmp_path / '.workflow/adoption.json').write_text(json.dumps({'schema_version': 1, 'state': 'prepared'}))
+    monkeypatch.setenv('PYTHONDONTWRITEBYTECODE', '1')
+    before = sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob('*'))
+    with pytest.raises(subprocess.CalledProcessError):
+        acl_batch.execution(tmp_path)
+    assert 'not active' in capfd.readouterr().err
+    assert sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob('*')) == before
+
+
+@pytest.fixture(params=[2, 3], ids=["v2", "v3-five-reviews"])
+def fixture(tmp_path, monkeypatch, request):
     root = tmp_path / "checkout"
     root.mkdir()
     def git(*args):
@@ -18,10 +37,13 @@ def fixture(tmp_path, monkeypatch):
     git("init", "-q", "-b", "main")
     git("config", "user.name", "Independent source fixture")
     git("config", "user.email", "batch@example.invalid")
-    policy = {"schema_version": 2, "implementation_limit": 5, "review_limit": 1, "batch_limit": 5}
+    policy = {"schema_version": request.param, "implementation_limit": 5,
+              "review_limit": 5 if request.param == 3 else 1, "batch_limit": 5}
     (root / "tracker").mkdir()
     (root / "tracker/config.json").write_text(json.dumps({"execution_policy": policy,
-        "project": {"repository": acl_batch.REPOSITORY, "id_prefix": "ACL", "id_offset": 1000}}))
+        "delivery_policy": {"schema_version": 1, "staging": {"enabled": True, "branch": "stage", "target": "test stage"},
+            "completion": "verified-stable-package", "required_checks": ["ACL verification"], "delivery_target": "test installer"},
+        "project": {"repository": acl_batch.REPOSITORY, "base_branch": "main", "id_prefix": "ACL", "id_offset": 1000}}))
     (root / "app.py").write_text("base\n")
     git("add", "."); git("commit", "-qm", "base")
     baseline = git("rev-parse", "HEAD")
@@ -48,6 +70,9 @@ def fixture(tmp_path, monkeypatch):
     batch = {"id": "a"*32, "actor": "Coordinator-TEST", "session": "coordinator_test", "state": "assembling",
         "branch": "codex/batch-" + "a"*32, "main_sha": baseline, "issues": [1,2], "members": sources, "pr": None}
     section = {"policy": policy, "integration": batch, "review": None}
+    if request.param == 3:
+        section["source_reviews"] = {str(100+n): {"id": str(n) * 32, "actor": "Reviewer-POOL" + str(n),
+            "session": "source_review_" + str(n), "pr": 100+n, "issues": [100+n]} for n in range(1, 6)}
     prs = {m["pr"]: {"state": "open", "merged": False, "draft": False,
         "head": {"sha": m["head_sha"], "ref": m["branch"], "repo": {"full_name": acl_batch.REPOSITORY}}} for m in sources}
     def request(path):
@@ -65,6 +90,7 @@ def fixture(tmp_path, monkeypatch):
 def test_real_two_author_assembly_preserves_exact_source_commits(fixture):
     root, _, section, _, assemble = fixture
     original = acl_batch.git(root, "rev-parse", "main")
+    original_owners = copy.deepcopy(section.get("source_reviews"))
     plan = assemble()
     assert not plan["applied"] and "Tracker issues: ACL-1001, ACL-1002" in plan["body"]
     result = assemble(apply=True)
@@ -75,6 +101,29 @@ def test_real_two_author_assembly_preserves_exact_source_commits(fixture):
         subprocess.run(["git", "-C", str(worktree), "merge-base", "--is-ancestor", member["head_sha"], "HEAD"], check=True)
         assert acl_batch.git(root, "rev-parse", member["branch"]) == member["head_sha"]
     assert len(acl_batch.git(worktree, "rev-list", "--merges", original + "..HEAD").splitlines()) == 2
+    assert section.get("source_reviews") == original_owners
+
+
+def test_no_stage_uses_same_frozen_composition_and_targets_main(fixture):
+    root, _, section, _, assemble = fixture
+    path = root / "tracker/config.json"
+    config = json.loads(path.read_text())
+    config["delivery_policy"]["staging"]["enabled"] = False
+    config["delivery_policy"]["staging"]["target"] = "disabled"
+    path.write_text(json.dumps(config))
+    # Preview reads the selected policy without changing frozen source tips.
+    result = assemble()
+    assert result["base"] == "main"
+    assert result["main_sha"] == section["integration"]["main_sha"]
+    assert "Tracker batch: " + section["integration"]["id"] in result["body"]
+
+
+def test_held_integration_review_still_blocks_assembly(fixture):
+    root, _, section, _, assemble = fixture
+    section["review"] = {"id": "b" * 32, "batch_id": section["integration"]["id"]}
+    with pytest.raises(ValueError, match="Finish the active review"):
+        assemble(apply=True)
+    assert not (root.parent / "integration").exists()
 
 
 def test_foreign_or_changed_claim_stops_before_any_worktree(fixture):
@@ -92,6 +141,18 @@ def test_changed_source_does_not_assemble_stale_approval(fixture):
     with pytest.raises(ValueError, match="Source PR changed"):
         assemble(apply=True)
     assert not (root.parent / "integration").exists()
+
+
+def test_actual_changed_main_ref_stops_before_worktree_and_preserves_frozen_claim(fixture):
+    root, remote, section, _, assemble = fixture
+    before = copy.deepcopy(section)
+    changed = section["integration"]["members"][0]["head_sha"]
+    subprocess.run(["git", "--git-dir", str(remote), "update-ref", "refs/heads/main", changed], check=True)
+    with pytest.raises(ValueError, match="Main changed"):
+        assemble(apply=True)
+    assert not (root.parent / "integration").exists()
+    assert section == before
+    assert acl_batch.git(root, "rev-parse", "main") == before["integration"]["main_sha"]
 
 
 def test_conflict_aborts_only_own_merge_and_preserves_sources(fixture):
@@ -113,6 +174,161 @@ def test_conflict_aborts_only_own_merge_and_preserves_sources(fixture):
     for member in section["integration"]["members"]:
         assert acl_batch.git(root, "rev-parse", member["branch"]) == member["head_sha"]
     assert section["integration"]["state"] == "assembling"
+
+
+@pytest.mark.parametrize("rebuild", [False, True], ids=["first-assembly", "detached-rebuild"])
+def test_each_merge_refreshes_real_stale_cache_without_changing_content(fixture, monkeypatch, rebuild):
+    root, _, section, _, assemble = fixture
+    first = refresh(fixture) if rebuild else None
+    real_merge = acl_batch.merge_source
+    real_run = subprocess.run
+    expected = {}
+    observed = []
+
+    def stale_then_merge(worktree, head):
+        path = worktree / "app.py"
+        before = (path.read_bytes(), path.stat().st_mode, acl_batch.git(worktree, "ls-files", "--stage", "app.py"))
+        modified = path.stat().st_mtime_ns - 17_000_000_000
+        os.utime(path, ns=(path.stat().st_atime_ns, modified))
+        debug = acl_batch.git(worktree, "ls-files", "--debug", "app.py")
+        match = re.search(r"mtime: (\d+):(\d+)", debug)
+        assert match and int(match[1]) * 1_000_000_000 + int(match[2]) != path.stat().st_mtime_ns
+        expected[str(worktree)] = path.stat().st_mtime_ns
+        real_merge(worktree, head)
+        assert (path.read_bytes(), path.stat().st_mode, acl_batch.git(worktree, "ls-files", "--stage", "app.py")) == before
+
+    def observe_merge(argv, **kwargs):
+        if argv[3:8] == ["-c", "commit.gpgsign=false", "merge", "--no-ff", "--no-edit"]:
+            # Inspect the real cache BEFORE Git merge itself can refresh it.
+            debug = acl_batch.git(Path(argv[2]), "ls-files", "--debug", "app.py")
+            match = re.search(r"mtime: (\d+):(\d+)", debug)
+            assert int(match[1]) * 1_000_000_000 + int(match[2]) == expected[argv[2]]
+            observed.append(argv[-1])
+        return real_run(argv, **kwargs)
+
+    monkeypatch.setattr(acl_batch, "merge_source", stale_then_merge)
+    monkeypatch.setattr(subprocess, "run", observe_merge)
+    options = {"rebuild": True, "previous_head": first["head_sha"], "worktree": root.parent / "fresh"} if rebuild else {}
+    result = assemble(apply=True, **options)
+    assert observed == [m["head_sha"] for m in section["integration"]["members"]]
+    assert result["applied"] and acl_batch.git(root, "rev-parse", "main") == section["integration"]["main_sha"]
+    if rebuild:
+        assert acl_batch.git(Path(first["worktree"]), "rev-parse", "HEAD") == first["head_sha"]
+
+
+@pytest.mark.parametrize("failure", ["changed-content", "index-unavailable"])
+def test_refresh_failure_preserves_primary_and_never_merges_or_aborts(fixture, monkeypatch, failure):
+    root, _, section, _, assemble = fixture
+    real_merge = acl_batch.merge_source
+    real_run = subprocess.run
+    commands = []
+
+    def disturb(worktree, head):
+        if failure == "changed-content":
+            (worktree / "app.py").write_text("uncommitted local evidence\n")
+        else:
+            index = Path(acl_batch.git(worktree, "rev-parse", "--git-path", "index"))
+            Path(str(index) + ".lock").write_text("synthetic external lock\n")
+        real_merge(worktree, head)
+
+    def record(argv, **kwargs):
+        commands.append(argv[3:])
+        return real_run(argv, **kwargs)
+
+    monkeypatch.setattr(acl_batch, "merge_source", disturb)
+    monkeypatch.setattr(subprocess, "run", record)
+    with pytest.raises(ValueError, match="Index refresh failed") as caught:
+        assemble(apply=True)
+    primary = caught.value.__cause__
+    assert isinstance(primary, subprocess.CalledProcessError) and primary.returncode != 0
+    assert "update-index" in str(caught.value) and "stderr=" in str(caught.value)
+    assert not any("merge" in command for command in commands)
+    worktree = root.parent / "integration"
+    assert acl_batch.git(worktree, "rev-parse", "HEAD") == section["integration"]["main_sha"]
+    if failure == "changed-content":
+        assert (worktree / "app.py").read_text() == "uncommitted local evidence\n"
+        assert acl_batch.git(worktree, "diff", "--cached") == ""
+    else:
+        index = Path(acl_batch.git(worktree, "rev-parse", "--git-path", "index"))
+        assert Path(str(index) + ".lock").read_text() == "synthetic external lock\n"
+
+
+def test_actual_premerge_index_failure_has_no_marker_or_unrelated_abort(fixture, monkeypatch):
+    root, _, section, _, assemble = fixture
+    real_run = subprocess.run
+    aborted = []
+
+    def lock_before_merge(argv, **kwargs):
+        if argv[3:6] == ["-c", "commit.gpgsign=false", "merge"]:
+            index = Path(acl_batch.git(Path(argv[2]), "rev-parse", "--git-path", "index"))
+            Path(str(index) + ".lock").write_text("new synthetic lock\n")
+        if argv[3:] == ["merge", "--abort"]:
+            aborted.append(argv)
+        return real_run(argv, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", lock_before_merge)
+    with pytest.raises(ValueError, match="source-content conflict is not established") as caught:
+        assemble(apply=True)
+    assert not aborted and "No unfinished merge marker observed" in str(caught.value)
+    assert caught.value.__cause__.stderr and "index.lock" in caught.value.__cause__.stderr
+    assert repr(caught.value.__cause__.stderr) in str(caught.value)
+    assert acl_batch.git(root.parent / "integration", "rev-parse", "HEAD") == section["integration"]["main_sha"]
+
+
+def test_nonconflict_unfinished_merge_aborts_without_blaming_source(fixture):
+    root, _, section, _, assemble = fixture
+    hooks = Path(acl_batch.git(root, "rev-parse", "--git-path", "hooks"))
+    if not hooks.is_absolute():
+        hooks = root / hooks
+    hook = hooks / "pre-merge-commit"
+    hook.write_text("#!/bin/sh\nprintf 'synthetic pre-merge refusal\\n' >&2\nexit 73\n")
+    hook.chmod(0o755)
+    with pytest.raises(ValueError, match="source-content conflict is not established") as caught:
+        assemble(apply=True)
+    assert "Owned unfinished merge aborted" in str(caught.value)
+    assert "synthetic pre-merge refusal" in caught.value.__cause__.stderr
+    worktree = root.parent / "integration"
+    assert acl_batch.git(worktree, "rev-parse", "HEAD") == section["integration"]["main_sha"]
+    assert acl_batch.git(worktree, "status", "--porcelain") == ""
+
+
+@pytest.mark.parametrize("secondary", ["marker-probe", "unmerged-probe", "abort"])
+def test_secondary_failure_cannot_replace_actual_primary_merge_error(fixture, monkeypatch, secondary):
+    root, _, section, _, assemble = fixture
+    hooks = Path(acl_batch.git(root, "rev-parse", "--git-path", "hooks"))
+    if not hooks.is_absolute():
+        hooks = root / hooks
+    hook = hooks / "pre-merge-commit"
+    hook.write_text("#!/bin/sh\nprintf 'primary synthetic hook refusal\\n' >&2\nexit 73\n")
+    hook.chmod(0o755)
+    real_run = subprocess.run
+    commands = []
+
+    def fail_secondary(argv, **kwargs):
+        args = argv[3:]
+        commands.append(args)
+        selected = {"marker-probe": ["rev-parse", "--verify", "--quiet", "MERGE_HEAD"],
+                    "unmerged-probe": ["ls-files", "--unmerged", "-z"], "abort": ["merge", "--abort"]}[secondary]
+        if args == selected:
+            result = subprocess.CompletedProcess(argv, 128, "", "secondary synthetic refusal\n")
+            if kwargs.get("check"):
+                raise subprocess.CalledProcessError(128, argv, output=result.stdout, stderr=result.stderr)
+            return result
+        return real_run(argv, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", fail_secondary)
+    with pytest.raises(ValueError) as caught:
+        assemble(apply=True)
+    assert "primary synthetic hook refusal" in caught.value.__cause__.stderr
+    assert "secondary synthetic refusal" in str(caught.value)
+    assert "Merge conflict:" not in str(caught.value)
+    assert acl_batch.git(root.parent / "integration", "rev-parse", "HEAD") == section["integration"]["main_sha"]
+    if secondary == "marker-probe":
+        assert ["merge", "--abort"] not in commands
+    if secondary == "abort":
+        assert "cleanup is incomplete" in str(caught.value)
+    if secondary != "unmerged-probe":
+        assert acl_batch.git(root.parent / "integration", "rev-parse", "MERGE_HEAD") == section["integration"]["members"][0]["head_sha"]
 
 
 def refresh(fixture):

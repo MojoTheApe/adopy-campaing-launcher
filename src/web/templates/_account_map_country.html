@@ -10,7 +10,23 @@
       <div class="amap-toolbar">
         <button type="button" class="amap-btn amap-read-all" onclick="amapReadAll(this)"
                 title="Read every connected account in {{ mc.country }} for the period on screen — one at a time">Read all spend in {{ mc.country }}</button>
+        {%- if campaign_table_api is defined and campaign_table_api() %}
+        {#- Опись кампаний той же страны: аккаунты читаются по очереди, одним нажатием.
+            Раскрытие блока страны ничего не читает у Meta — только эта кнопка и
+            «Read campaigns» в строке аккаунта внутри таблицы (ACL-1800). -#}
+        <button type="button" class="amap-btn amap-read-campaigns" onclick="amapReadCampaigns(this)"
+                title="Read campaigns, ad sets and ads of every connected account in {{ mc.country }} for the period on screen — one at a time">Read campaigns in {{ mc.country }}</button>
+        {%- endif %}
       </div>
+      {#- ACL-1800: дерево аккаунтов. Тулбар и вкладки страны стоят над списком аккаунтов; строка аккаунта — родитель,
+          под ней раскрывается таблица её кампаний (создаётся JS при первом показе блока, `amapCampaignMount`).
+          Вкладки ведут в разделы этой же страны, если они есть на странице. Раскрытие ничего не читает у Meta. -#}
+      {%- if campaign_table_api is defined and campaign_table_api() %}
+      <section class="hc hc-scoped amap-campaigns" data-country="{{ mc.country | e }}" aria-label="Campaigns in {{ mc.country | e }}">
+        <nav class="hc-tabs" data-hc-tabs aria-label="{{ mc.country | e }} workspace sections"></nav>
+        <div class="hc-mount" data-hc-mount></div>
+      </section>
+      {%- endif %}
       <div class="amap-table-scroll" tabindex="0" role="region" aria-label="Accounts in {{ mc.country | e }} — scroll horizontally for more columns">
       <table class="amap-grid" data-country-name="{{ mc.country | e }}">
         {#- Колонок и долей поровну, в сумме ровно 100%. Когда-то доль было на
@@ -240,6 +256,9 @@ screenshot: {{ sr.shot }}{% endif %}">{{ sr.error | truncate(40, True, '…') }}
         </tbody>
       </table>
       </div>
+      {%- if campaign_table_api is defined and campaign_table_api() %}
+      <section class="hc hc-after" data-hc-after></section>
+      {%- endif %}
       {% set blank = mc.rows | rejectattr('has_data') | list | length %}
       {% if blank %}
       <div class="amap-empty">{{ blank }} of {{ mc.rows | length }} accounts have no rows in the workbook for this date.</div>
