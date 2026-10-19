@@ -44134,9 +44134,11 @@
         "worktree": "C:\\acl-1175-guide",
         "id": "47cec4a2eaaa4b879080690b940741c4",
         "issue": 175,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T19:58:12+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 930,
+        "report": "Revived after the conflict return: merged work/main (clean). The merge brought new Stats workbook refusals that test_setup_guide requires the guide to explain, so docs/SETUP-NEW-PC.md now lists them (duplicated columns, Missing columns in Excel, empty/not usable). test_setup_guide: 11 passed. Full suite left to CI. Not verified live."
       },
       "379": {
         "actor": "Worker-R1019379",
