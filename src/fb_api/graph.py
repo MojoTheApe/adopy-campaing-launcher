@@ -91,6 +91,28 @@ def _with_details(text: str, details: dict) -> str:
     return text + " [" + ", ".join(f"{k}={v}" for k, v in details.items()) + "]"
 
 
+def _read_context(path: str, params: dict | None) -> dict[str, str]:
+    """Only finite local categories may leave the request as diagnostics.
+
+    Do not parse URLs, decode paths or copy parameters: malformed/unknown input
+    stays unknown, rather than allowing a request value to become error text.
+    """
+    context = {"method": "GET", "operation": "unknown"}
+    if not isinstance(path, str) or len(path) > 128:
+        return context
+    if path == "/search":
+        context["operation"] = "search"
+        search_type = params.get("type") if isinstance(params, dict) else None
+        if isinstance(search_type, str) and search_type in {"adgeolocation", "adlocale", "adinterest"}:
+            context["search_type"] = search_type
+    elif path == "/me/adaccounts":
+        context["operation"] = "adaccounts"
+    elif match := re.fullmatch(r"/act_[0-9]{1,32}/(campaigns|promote_pages|adspixels|insights)", path):
+        context["operation"] = match.group(1)
+    elif re.fullmatch(r"/[0-9]{1,32}/leadgen_forms", path):
+        context["operation"] = "leadgen_forms"
+    return context
+
 
 class GraphStop(RuntimeError):
     """Остановка: дальше этот клиент не зовёт Graph вовсе."""
@@ -345,6 +367,7 @@ class GraphClient:
             sub = _int(gerr.get("error_subcode"))
             msg = str(gerr.get("message") or "Graph API error")
             details = error_details(gerr, reply)
+            details.update(_read_context(path, params))
             msg = _with_details(msg, details)
             kind = classify(code, sub)
             if kind == "policy":
@@ -379,7 +402,9 @@ class GraphClient:
 
     # -- одна запись (ACL-1761)
     def post(self, path: str, params: dict | None = None, *, files: dict | None = None,
-             filename: str = "", on_ad: bool = False) -> dict:
+             filename: str = "", on_ad: bool = False, form_page: str = "",
+             progress: Callable[[float], None] | None = None,
+             cancelled: Callable[[], bool] | None = None) -> dict:
         """POST ровно один раз. Никаких повторов, пересъёмки токена и т.п.
 
         - отказ до отправки (политика, нет токена) — стоп, к Meta ничего не ушло;
@@ -402,6 +427,14 @@ class GraphClient:
         try:
             # `on_ad` (ACL-1775) передаём, только когда он есть: прежние транспорты его не знают.
             extra = {"on_ad": True} if on_ad else {}
+            # ACL-1776: создание формы Страницы - своя цепочка политики, Страница плана.
+            if form_page:
+                extra["form_page"] = str(form_page)
+            # ACL-1899: прогресс и Stop нужны только записи с файлом; прежние транспорты их не знают.
+            if files and progress is not None:
+                extra["progress"] = progress
+            if files and cancelled is not None:
+                extra["cancelled"] = cancelled
             reply = self.transport.write(path, params or {}, files=files, filename=filename, **extra)
         except ValueError as exc:
             # Политика Python: ничего не отправлено.

@@ -26,11 +26,13 @@ import hashlib
 import json
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable
 
 from src.fb_api import error_catalog as _catalog
+from src.fb_api import form_create as _fc
+from src.fb_api import form_templates as _ft
 from src.fb_api import forms as _forms
 from src.fb_api.graph import GraphClient, GraphError, GraphStop, WritesBlocked, WriteUnknown, normalize_act
 
@@ -99,15 +101,43 @@ VIDEO_POLL_S = 15.0
 VIDEO_MAX_POLLS = 20
 #: Пауза перед сверкой неизвестной записи: запрос мог ещё лететь (ревью, minor 3).
 RECONCILE_WAIT_S = 5.0
+#: Сверка после неизвестной загрузки ФАЙЛА (ACL-1899): видео могло долететь позже.
+#: Паузы перед каждым чтением = RECONCILE_WAIT_S × эти множители (5, 10, 20, 30, 30, 30 с ≈ 2 мин);
+#: каждое чтение идёт через клиента и считается в потолке вызовов кампании.
+UPLOAD_RECONCILE_FACTORS = (1, 2, 4, 6, 6, 6)
+#: Не чаще раза в секунду показываем процент загрузки файла.
+UPLOAD_PROGRESS_EVERY_S = 1.0
+#: Страниц списка в ПОВТОРНЫХ чтениях сверки загрузки (поиск до загрузки и первое чтение - полные).
+UPLOAD_RECONCILE_PAGES = 3
 #: Сколько страниц (по 100) свежих креативов кабинета смотреть в поиске своего.
 CREATIVE_LOOKUP_PAGES = 3
 #: Цель кампании из билдера, которую умеет API-путь (как у RPA: Leads → сайт).
 SUPPORTED_OBJECTIVES = frozenset({"leads"})
 
+#: ACL-1902: имя кампании занято - пробуем NAME, NAME_2 ... NAME_20 (всего столько кандидатов).
+NAME_SUFFIX_MAX = 20
+#: Столько строк даёт поиск кампаний по подстроке (2 страницы по 100): при полной выдаче
+#: суффиксов за её пределами могло не быть видно - тогда ищем каждое имя отдельно.
+CAMPAIGN_SEARCH_ROWS = 200
+#: Не больше стольких своих кампаний с похожими именами сверяем с билдером (потолок чтений).
+NAME_SCAN_MAX_OURS = 6
+#: Консервативная защита от слишком длинного имени (точный предел Meta не проверен).
+CAMPAIGN_NAME_MAX = 400
+
 #: Что таблица показывает (архив и удалённое не считаем «существующим»).
 LIVE_STATES = ["ACTIVE", "PAUSED", "PENDING_REVIEW", "DISAPPROVED", "PREAPPROVED",
                "PENDING_BILLING_INFO", "CAMPAIGN_PAUSED", "ADSET_PAUSED", "IN_PROCESS",
                "WITH_ISSUES"]
+
+
+#: Id-пустышка формы для проверки политики и показа плана (формы ещё нет; 5-25 цифр).
+FORM_ID_PLACEHOLDER = "0000000"
+
+
+def _wp_form_edge() -> str:
+    from src.fb_api import write_policy as _wp
+
+    return _wp.FORM_EDGE
 
 
 class PlanError(ValueError):
@@ -153,6 +183,8 @@ class AdPlan:
     description: str
     #: Id существующей формы Страницы (только у Instant Form; иначе пусто).
     form_id: str = ""
+    #: Шаблон формы (ACL-1776): форму создаёт робот при публикации; `form_id` заполняется тогда же.
+    form_template: dict | None = None
 
 
 @dataclass
@@ -223,8 +255,12 @@ def _source(draft: Any, what: str) -> str:
     return "draft" if str(getattr(draft, f"{what}_id", "") or "").strip() else ""
 
 
-def plan_from_draft(draft: Any) -> CampaignPlan:
-    """`CampaignDraft` (после `enrich_campaign_drafts`) → план. Ошибки — `PlanError`."""
+def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | None = None) -> CampaignPlan:
+    """`CampaignDraft` (после `enrich_campaign_drafts`) → план. Ошибки — `PlanError`.
+
+    `template_loader` - поиск шаблона формы по id (ACL-1776); по умолчанию - локальная библиотека.
+    """
+    load_template = template_loader or _ft.get
     problems: list[str] = list(getattr(draft, "errors", None) or [])
     raw_act = str(getattr(draft, "ad_account_id", "") or "").strip()
     try:
@@ -275,8 +311,23 @@ def plan_from_draft(draft: Any) -> CampaignPlan:
                 path=path, title=str(ad.ad_title or "").strip(), body=str(ad.ad_body or "").strip(),
                 description=str(ad.ad_link_description or "").strip(),
                 form_id=(str(getattr(ad, "lead_form_id", "") or "").strip() if plan_set.instant else "")))
-            if plan_set.instant and not plan_set.ads[-1].form_id:
-                problems.append(f"Ad {i}: no Instant Form selected (pick one of the Page's forms)")
+            template_id = (str(getattr(ad, "lead_form_template", "") or "").strip() if plan_set.instant else "")
+            if template_id and plan_set.ads[-1].form_id:
+                problems.append(f"Ad {i}: choose either an existing form or a template, not both")
+            elif template_id:
+                tpl = load_template(template_id)
+                if tpl is None:
+                    problems.append(f"Ad {i}: the form template was not found in the Forms library")
+                else:
+                    clean, errs = _ft.validate(tpl)
+                    if errs:
+                        problems.append(f"Ad {i}: form template {clean.get('name') or template_id!r} is not valid: "
+                                        + "; ".join(errs))
+                    else:
+                        plan_set.ads[-1].form_template = clean
+            elif plan_set.instant and not plan_set.ads[-1].form_id:
+                problems.append(f"Ad {i}: no Instant Form selected (pick one of the Page's forms "
+                                "or a template)")
         ad_sets.append(plan_set)
     # Ревью M2: одинаковые имена схлопнули бы объявления (поиск, сверка, повтор).
     set_names = [x.name for x in ad_sets]
@@ -555,6 +606,8 @@ def video_title(tag: str, data: bytes) -> str:
 @dataclass
 class Outcome:
     campaign_name: str
+    #: Имя, под которым кампания опубликована (ACL-1902); `campaign_name` остаётся именем из билдера.
+    published_as: str = ""
     created: dict = field(default_factory=dict)        # что создано ЭТИМ запуском
     reused: dict = field(default_factory=dict)         # что нашлось с прошлого запуска
     campaign_id: str = ""
@@ -579,6 +632,21 @@ class Outcome:
         return list(self.readback.get("mismatches") or [])
 
 
+@dataclass
+class NameChoice:
+    """Итог выбора имени кампании (ACL-1902): план с итоговым именем и меткой, до первой записи."""
+    plan: CampaignPlan
+    #: Своя совпавшая с билдером кампания (возобновление/повтор) - её переиспользуем; иначе None.
+    existing: dict | None = None
+    found_sets: list = field(default_factory=list)
+    #: Пропущенные кандидаты: {"name", "reason": "different"|"foreign", "differences": [...]}.
+    skipped: list = field(default_factory=list)
+
+    @property
+    def renamed(self) -> bool:
+        return bool(self.skipped)
+
+
 class CampaignCreator:
     """Создать одну кампанию по плану — идемпотентно, PAUSED, со сверкой."""
 
@@ -590,7 +658,8 @@ class CampaignCreator:
                  video_wait_s: float = VIDEO_WAIT_S, video_poll_s: float = VIDEO_POLL_S,
                  video_max_polls: int = VIDEO_MAX_POLLS,
                  reconcile_wait_s: float | None = None,
-                 progress: Callable[[str], None] = lambda _s: None):
+                 progress: Callable[[str], None] = lambda _s: None,
+                 live_progress: Callable[[str], None] = lambda _s: None):
         self.client = client
         self.facts = facts
         self.resolver = resolver
@@ -606,7 +675,12 @@ class CampaignCreator:
         self._creatives: dict[str, str] | None = None
         #: Формы Страницы плана (читаются раз на кампанию, только у Instant Form).
         self._page_forms: _forms.FormsRead | None = None
+        #: Шаблоны форм плана -> что с ними будет (ACL-1776); читается в `_check_forms`.
+        self._form_steps: dict[str, _fc.FormStep] = {}
+        self._form_warnings: list[str] = []
         self.progress = progress
+        #: Живой процент загрузки файла (ACL-1899): только на панель задания, без шагов и телеметрии.
+        self.live_progress = live_progress
 
     # -- служебное
     def _step(self, out: Outcome, text: str) -> None:
@@ -617,28 +691,96 @@ class CampaignCreator:
         if self.cancelled():
             raise CreationStopped("Stopped by the user", created=out.created, kind="cancelled")
 
+    def _upload_progress(self, ad_index: int, kind: str, size: int) -> Callable[[float], None]:
+        """Показ «ad 1: uploading video (180 MB), 1m 20s» - не чаще раза в секунду.
+
+        Байтового прогресса нет (слушатель `xhr.upload` включает CORS-preflight): размер
+        известен из складирования, время - от старта загрузки. Процент придёт с кусками (ACL-891).
+        """
+        last = [None]
+
+        def show(elapsed_s: float) -> None:
+            now = self.clock()
+            if last[0] is not None and now - last[0] < UPLOAD_PROGRESS_EVERY_S:
+                return
+            last[0] = now
+            secs = int(max(0, elapsed_s))
+            if secs >= 3600:
+                span = f"{secs // 3600}h {secs % 3600 // 60:02d}m"
+            elif secs >= 60:
+                span = f"{secs // 60}m {secs % 60:02d}s"
+            else:
+                span = f"{secs}s"
+            self.live_progress(f"ad {ad_index}: uploading {kind} ({max(1, size // (1024 * 1024))} MB), {span}")
+        return show
+
     def _write(self, out: Outcome, what: str, path: str, params: dict, find: Callable[[], str | None],
                *, files: dict | None = None, filename: str = "", id_of=lambda b: b.get("id"),
-               on_ad: bool = False) -> str:
-        """Одна запись; неизвестный результат — сверка `find()` чтением."""
+               on_ad: bool = False, form_page: str = "",
+               upload: tuple[int, str] | None = None) -> str:
+        """Одна запись; неизвестный результат — сверка `find()` чтением.
+
+        `upload` = (номер объявления, «video»/«image») - запись с файлом: без срока,
+        с показом процента и Stop; неизвестный результат сверяется несколько раз.
+        """
         self._check_cancel(out)
         try:
-            # `on_ad` — только креатив Instant Form при наборе ON_AD (ACL-1775).
-            body = (self.client.post(path, params, files=files, filename=filename, on_ad=True) if on_ad
-                    else self.client.post(path, params, files=files, filename=filename))
+            # `on_ad` — только креатив Instant Form при наборе ON_AD (ACL-1775);
+            # `form_page` — создание формы на Странице плана, своя цепочка политики (ACL-1776).
+            extra: dict[str, Any] = {}
+            if on_ad:
+                extra["on_ad"] = True
+            if form_page:
+                extra["form_page"] = form_page
+            if upload and files:
+                size = len(next(iter(files.values())))
+                extra["progress"] = self._upload_progress(upload[0], upload[1], size)
+                extra["cancelled"] = self.cancelled
+            body = self.client.post(path, params, files=files, filename=filename, **extra)
         except WriteUnknown as exc:
             # `WritesBlocked` сюда не попадает: та запись не уходила (ревью M4).
+            stopped = bool(upload) and self.cancelled()
             self._step(out, f"{what}: result unknown — reconciling by readback")
-            if self.reconcile_wait_s > 0:
-                self.sleep(self.reconcile_wait_s)
+            # Файл мог долететь позже: несколько чтений с растущими паузами (≈ 2 мин).
+            # После Stop загрузка оборвана — одно чтение без ожидания.
+            if upload and stopped:
+                # Тело могло уйти целиком, а Meta ещё обрабатывает: два чтения (5 и 20 с).
+                waits = [self.reconcile_wait_s, self.reconcile_wait_s * 4]
+            elif upload:
+                waits = [self.reconcile_wait_s * f for f in UPLOAD_RECONCILE_FACTORS]
+            else:
+                waits = [self.reconcile_wait_s]
+            found = None
             try:
-                found = find()
+                for n, wait in enumerate(waits):
+                    # Stop посреди сверки: останавливаемся; метка `unreconciled` остаётся.
+                    if upload and not stopped and self.cancelled():
+                        raise CreationStopped(
+                            f"Stopped by the user while checking the {what} result. Meta may still be "
+                            "processing the upload: wait a few minutes before publishing again.",
+                            created=out.created, kind="cancelled")
+                    if wait > 0:
+                        self.sleep(wait)
+                    if upload and not stopped and self.cancelled():
+                        raise CreationStopped(
+                            f"Stopped by the user while checking the {what} result. Meta may still be "
+                            "processing the upload: wait a few minutes before publishing again.",
+                            created=out.created, kind="cancelled")
+                    # Повторные чтения дешевле: свежий файл в первых страницах списка.
+                    found = find(pages=UPLOAD_RECONCILE_PAGES) if (upload and n > 0) else find()
+                    if found:
+                        break
             except (GraphStop, GraphError) as rexc:
                 raise CreationStopped(
                     f"{what}: the write result is unknown ({exc}) and the readback failed ({rexc}). "
                     "Nothing else was written; check Ads Manager, then publish again "
                     "(a re-run does not duplicate).", created=out.created, kind="unknown") from rexc
             if not found:
+                if stopped:
+                    raise CreationStopped("Stopped by the user during the upload; nothing was found "
+                                          "in the ad account yet. Meta may still be processing the "
+                                          "upload: wait a few minutes before publishing again.",
+                                          created=out.created, kind="cancelled") from exc
                 raise CreationStopped(
                     f"{what}: the write result is unknown ({exc}) and nothing was found by readback. "
                     "Nothing else was written; publish again later (a re-run does not duplicate).",
@@ -686,6 +828,87 @@ class CampaignCreator:
                 kind="name_taken")
         return None
 
+    def _campaign_rows(self, act: str, name: str) -> list[dict]:
+        """Живые кампании кабинета, чьё имя содержит `name` (одно чтение, максимум 2 страницы)."""
+        return self.client.get_all(f"/{act}/campaigns", {
+            "fields": "id,name,status,adlabels{name}",
+            "filtering": [{"field": "name", "operator": "CONTAIN", "value": name}],
+            "effective_status": LIVE_STATES, "limit": 100}, max_pages=2)
+
+    def _name_rows(self, act: str, name: str, base_rows: list[dict], truncated: bool) -> list[dict]:
+        """Строки с этим именем: из общего поиска, а если он мог обрезаться - точным запросом по имени.
+
+        Точный запрос (EQUAL) тоже полный на 200 строках - тогда доверять нечему, стоп до записей.
+        """
+        if not truncated:
+            return base_rows
+        rows = self.client.get_all(f"/{act}/campaigns", {
+            "fields": "id,name,status,adlabels{name}",
+            "filtering": [{"field": "name", "operator": "EQUAL", "value": name}],
+            "effective_status": LIVE_STATES, "limit": 100}, max_pages=2)
+        if len(rows) >= CAMPAIGN_SEARCH_ROWS:
+            raise CreationStopped(
+                f"Cannot tell whether the campaign name {name!r} is free: the ad account has too many "
+                "campaigns with that name. Nothing was created; rename the campaign in the builder.",
+                kind="name_unsure")
+        return rows
+
+    def _ad_names_fit(self, cand: CampaignPlan, campaign_id: str) -> bool:
+        """Для NAME_2...: кампания с чужими объявлениями (построена билдером с таким именем) - не наша."""
+        have = {str(r.get("name") or "").strip() for r in self._children(campaign_id, "ads", "id,name")}
+        want = {ad.name for s in cand.ad_sets for ad in s.ads}
+        return have <= want
+
+    def _resolve_name(self, plan: CampaignPlan, targetings: list[dict]) -> NameChoice:
+        """ACL-1902: имя кампании до любой записи - и в боевом запуске, и в Check plan.
+
+        Кандидаты NAME, NAME_2 ... NAME_20 (суффикс всегда к полному имени, чужие цифры не разбираем):
+        нет живой кампании с таким именем - берём; наша (метка кандидата) и без расхождений с билдером -
+        переиспользуем (возобновление не плодит дубль); наша, но другая, или чужая (без метки) - дальше.
+        Метка считается от имени кандидата, поэтому у NAME_2 своя метка и свои креативы.
+        Только чтения: один поиск по подстроке на все кандидаты + сверка найденных своих.
+        """
+        rows = self._campaign_rows(plan.act, plan.name)
+        truncated = len(rows) >= CAMPAIGN_SEARCH_ROWS
+        skipped: list[dict] = []
+        scans = 0
+        for n in range(1, NAME_SUFFIX_MAX + 1):
+            name = plan.name if n == 1 else f"{plan.name}_{n}"
+            if len(name) > CAMPAIGN_NAME_MAX:
+                raise CreationStopped(
+                    f"The campaign name {name!r} would be longer than the Meta limit of "
+                    f"{CAMPAIGN_NAME_MAX} characters. Nothing was created; shorten the campaign name "
+                    "in the builder.", kind="name_too_long")
+            cand = plan if n == 1 else replace(plan, name=name, tag=campaign_tag(plan.act, name))
+            hits = self._name_rows(plan.act, name, rows, truncated)
+            same = [r for r in hits if str(r.get("name") or "").strip() == name]
+            if not same:
+                return NameChoice(cand, None, [None] * len(plan.ad_sets), skipped)
+            ours = [r for r in same if cand.label in _labels(r)]
+            if not ours:
+                skipped.append({"name": name, "reason": "foreign", "differences": []})
+                continue
+            scans += 1
+            if scans > NAME_SCAN_MAX_OURS:
+                raise CreationStopped(
+                    f"Too many earlier campaigns named like {plan.name!r} to check them all within the "
+                    "call budget. Nothing was created; rename the campaign in the builder or remove "
+                    "old ones in Ads Manager.", kind="name_scan_limit")
+            campaign_id = str(ours[0]["id"])
+            found_sets = self._find_sets(cand, campaign_id)
+            bad = self._existing_differences(cand, targetings, campaign_id, found_sets)
+            if not bad and n > 1 and not self._ad_names_fit(cand, campaign_id):
+                skipped.append({"name": name, "reason": "other_ads", "differences": []})
+                continue
+            if not bad:
+                return NameChoice(cand, ours[0], found_sets, skipped)
+            skipped.append({"name": name, "reason": "different", "differences": bad})
+        raise CreationStopped(
+            f"All {NAME_SUFFIX_MAX} campaign names are taken: {plan.name!r} and {plan.name}_2 ... "
+            f"{plan.name}_{NAME_SUFFIX_MAX} already exist on the ad account (not ours, or ours with different "
+            "settings). Nothing was created; rename the campaign in the builder or remove the old ones "
+            "in Ads Manager.", kind="name_taken")
+
     def _children(self, parent_id: str, edge: str, fields: str) -> list[dict]:
         return self.client.get_all(f"/{parent_id}/{edge}", {
             "fields": fields, "effective_status": LIVE_STATES, "limit": 100}, max_pages=2)
@@ -731,9 +954,9 @@ class CampaignCreator:
     def _image_hash(self, out: Outcome, plan: CampaignPlan, ad: AdPlan, data: bytes) -> str:
         md5 = _md5(data)
 
-        def find() -> str | None:
+        def find(pages: int = 1) -> str | None:
             rows = self.client.get_all(f"/{plan.act}/adimages", {"hashes": [md5], "fields": "hash"},
-                                       max_pages=1)
+                                       max_pages=min(1, pages))
             return md5 if any(str(r.get("hash")) == md5 for r in rows) else None
 
         if find():
@@ -748,7 +971,8 @@ class CampaignCreator:
 
         # Имя в библиотеке несёт md5 файла: по нему сверка узнаёт картинку и при повторе.
         got = self._write(out, f"ad {ad.index}: image upload", f"/{plan.act}/adimages", {}, find,
-                          files={"filename": data}, filename=image_name(ad.path, data), id_of=hash_of)
+                          files={"filename": data}, filename=image_name(ad.path, data), id_of=hash_of,
+                          upload=(ad.index, "image"))
         out.created.setdefault("images", []).append(got)
         self._step(out, f"ad {ad.index}: image uploaded")
         return got
@@ -756,9 +980,9 @@ class CampaignCreator:
     def _video(self, out: Outcome, plan: CampaignPlan, ad: AdPlan, data: bytes) -> tuple[str, str]:
         title = video_title(plan.tag, data)
 
-        def find() -> str | None:
+        def find(pages: int = 10) -> str | None:
             rows = self.client.get_all(f"/{plan.act}/advideos", {"fields": "id,title", "limit": 100},
-                                       max_pages=10)
+                                       max_pages=pages)
             hit = next((r for r in rows if str(r.get("title") or "") == title), None)
             return str(hit["id"]) if hit else None
 
@@ -768,7 +992,7 @@ class CampaignCreator:
         else:
             vid = self._write(out, f"ad {ad.index}: video upload", f"/{plan.act}/advideos",
                               {"name": title, "title": title}, find, files={"source": data},
-                              filename=Path(ad.path).name)
+                              filename=Path(ad.path).name, upload=(ad.index, "video"))
             out.created.setdefault("videos", []).append(vid)
             self._step(out, f"ad {ad.index}: video uploaded")
         return vid, self._wait_video(out, ad, vid)
@@ -971,9 +1195,15 @@ class CampaignCreator:
         targetings = [targeting_for(plan, s, self.resolver) for s in plan.ad_sets]
         self._step(out, "preflight: targeting resolved")
         self._page_forms = None
+        self._form_steps = {}
+        self._form_warnings = []
         if any(s.instant for s in plan.ad_sets):
             self._check_forms(plan)
+            out.warnings += self._form_warnings
             self._step(out, "preflight: Instant Forms belong to the Page")
+            for step in self._form_steps.values():
+                self._step(out, f"preflight: form will be created: {step.form_name}" if step.action == "create"
+                           else f"preflight: form found on the Page, will be reused: {step.form_name}")
         files: dict[str, bytes] = {}
         for s in plan.ad_sets:
             for ad in s.ads:
@@ -1001,10 +1231,14 @@ class CampaignCreator:
         if not read.ok:
             raise PlanError(read.message + ".")
         known = read.by_id()
+        templates: dict[str, dict] = {}
         for ad_set in plan.ad_sets:
             if not ad_set.instant:
                 continue
             for ad in ad_set.ads:
+                if ad.form_template:
+                    templates.setdefault(ad.form_template["id"], ad.form_template)
+                    continue
                 form = known.get(ad.form_id)
                 if form is None:
                     raise PlanError(f"Ad {ad.index}: the Instant Form {ad.form_id} is not a form of this "
@@ -1013,7 +1247,100 @@ class CampaignCreator:
                     raise PlanError(f"Ad {ad.index}: the Instant Form {form.name!r} is "
                                     f"{form.status.lower() or 'of unknown status'} (only ACTIVE forms can be "
                                     "used); pick another form.")
+        self._form_steps = {}
+        for tid, tpl in templates.items():
+            existing, why = _fc.match_existing(read, tpl)
+            if why:
+                raise PlanError(why + ".")
+            fname = _ft.form_name(tpl)
+            if existing:
+                _fc.clear_pending(plan.act, plan.page_id, fname)
+            elif _fc.is_pending(plan.act, plan.page_id, fname):
+                # Список только что перечитан и формы в нём нет: прошлая запись могла дойти.
+                raise PlanError(_fc.MSG_PENDING + ".")
+            self._form_steps[tid] = _fc.FormStep(template_id=tid, template_name=tpl["name"],
+                                                 form_name=_ft.form_name(tpl), existing_id=existing)
+        if any(step.action == "create" for step in self._form_steps.values()):
+            # Условия Lead Ads: робот их не принимает никогда; без них - остановка до записи.
+            if _forms.page_terms_accepted(self.client, plan.page_id) is False:
+                raise PlanError(_fc.MSG_TERMS_STOP + ".")
+            self._check_form_permission()
         self._page_forms = read
+
+    def _check_form_permission(self) -> None:
+        """Право `pages_manage_ads` у снятого токена: только предупреждение (ACL-1776).
+
+        Токен Ads Manager - не обычное приложение, список прав может не отражать
+        реальность, поэтому отсутствие права не блокирует, а предупреждает; окончательный
+        ответ даст сама запись (отказ Meta -> понятный текст). Чужие токены не просим.
+        """
+        try:
+            rows = self.client.get_all("/me/permissions", {"limit": 100}, max_pages=1)
+        except GraphError:
+            return
+        granted = {str(r.get("permission")) for r in rows if str(r.get("status")) == "granted"}
+        if rows and "pages_manage_ads" not in granted:
+            self._form_warnings.append(_fc.MSG_NO_PERMISSION + " (this is a warning: Meta decides when the form is created)")
+
+    @staticmethod
+    def _planned(ad: AdPlan, placeholder: str) -> AdPlan:
+        """Копия объявления для плана/проверки политики: у шаблонной формы id ещё нет."""
+        if ad.form_template and not ad.form_id:
+            return replace(ad, form_id=placeholder)
+        return ad
+
+    def _find_form_id(self, plan: CampaignPlan, tpl: dict) -> str | None:
+        """Сверка чтением списка форм Страницы: id своей формы по точному имени."""
+        read = _forms.read_page_forms(self.client, plan.page_id)
+        if not read.ok:
+            raise GraphError(read.message)
+        existing, _why = _fc.match_existing(read, tpl)
+        return existing or None
+
+    def _verify_form(self, out: Outcome, plan: CampaignPlan, tpl: dict, form_id: str) -> None:
+        """Форма ACTIVE, на нашей Странице, вопросы как в шаблоне; иначе стоп."""
+        row = self.client.get(f"/{form_id}", {"fields": _fc.READBACK_FIELDS})
+        bad = _fc.compare_form(tpl, plan.page_id, row)
+        if bad:
+            raise CreationStopped(f"The form {_ft.form_name(tpl)!r} was read back with differences ("
+                                  + "; ".join(bad) + "). Nothing that depends on it was created.",
+                                  created=out.created, kind="form_mismatch")
+
+    def _ensure_form(self, out: Outcome, plan: CampaignPlan, ad: AdPlan) -> None:
+        """Форма шаблона объявления: найти свою или создать ОДИН раз; `ad.form_id` - её id."""
+        tpl = ad.form_template
+        if not tpl or ad.form_id:
+            return
+        step = self._form_steps.get(tpl["id"])
+        if step is None:
+            raise PlanError("the form template was not checked before publishing; run Check plan")
+        if not step.form_id:
+            if step.existing_id:
+                step.form_id = step.existing_id
+                out.reused.setdefault("forms", []).append(step.form_id)
+                self._step(out, f"form {step.form_name!r}: found on the Page, reused")
+            else:
+                try:
+                    # Метка ДО записи: без неё повторный запуск может создать вторую форму.
+                    _fc.record_pending(plan.act, plan.page_id, step.form_name)
+                except OSError as exc:
+                    raise CreationStopped(_fc.MSG_NO_STATE, created=out.created,
+                                          kind="form_state") from exc
+                try:
+                    step.form_id = self._write(
+                        out, f"form {step.form_name!r}", f"/{plan.page_id}/{_wp_form_edge()}",
+                        _ft.form_params(tpl), lambda: self._find_form_id(plan, tpl),
+                        form_page=plan.page_id)
+                except GraphError as exc:
+                    _fc.clear_pending(plan.act, plan.page_id, step.form_name)   # Meta отказала: формы нет
+                    raise CreationStopped(_fc.refused_message(exc), created=out.created,
+                                          kind="form_refused") from exc
+                _fc.clear_pending(plan.act, plan.page_id, step.form_name)
+                out.created.setdefault("forms", []).append(step.form_id)
+                self._step(out, f"form {step.form_name!r}: created")
+            self._verify_form(out, plan, tpl, step.form_id)
+            self._step(out, f"form {step.form_name!r}: read back, ACTIVE, on the Page, questions match")
+        ad.form_id = step.form_id
 
     def _check_planned(self, plan: CampaignPlan, targetings: list[dict]) -> None:
         """Политика записи над КАЖДЫМ запланированным объектом — до первой записи (R2-B1).
@@ -1031,9 +1358,21 @@ class CampaignCreator:
                 raise PlanError(f"{what}: {exc}") from exc
 
         ok("campaigns", self.campaign_params(plan), "campaign")
+        done_forms: set[str] = set()
+        for ad_set in plan.ad_sets:
+            for ad in ad_set.ads:
+                tpl = ad.form_template
+                if tpl and tpl["id"] not in done_forms:
+                    done_forms.add(tpl["id"])
+                    try:
+                        _wp.check_form_create(plan.page_id, "POST", f"/{plan.page_id}/{_wp.FORM_EDGE}",
+                                              _ft.form_params(tpl), None, plan.page_id)
+                    except _wp.WriteRefused as exc:
+                        raise PlanError(f"form {tpl['name']!r}: {exc}") from exc
         for ad_set, targeting in zip(plan.ad_sets, targetings):
             ok("adsets", self.adset_params(plan, ad_set, "0", targeting), f"ad set {ad_set.name!r}")
             for ad in ad_set.ads:
+                ad = self._planned(ad, FORM_ID_PLACEHOLDER)
                 media = ({"video_id": "0", "thumb": "https://example.invalid/t.jpg"} if ad.kind == "video"
                          else {"image_hash": "0"})
                 ok("adcreatives", {"name": f"{ad.name} #{ad.index} [{plan.label}]",
@@ -1100,12 +1439,18 @@ class CampaignCreator:
         out = Outcome(campaign_name=plan.name, warnings=list(plan.warnings))
         differences: list | None = None
         files: dict | None = None
+        renamed = name_error = ""
+        requested, skipped = plan.name, []
         try:
             targetings, files = self._prepare(plan, out)
-            existing = self._find_campaign(plan)
-            differences = (self._existing_differences(plan, targetings, str(existing["id"]),
-                                                      self._find_sets(plan, str(existing["id"])))
-                           if existing else [])
+            choice = self._resolve_name(plan, targetings)
+            plan, existing, skipped = choice.plan, choice.existing, choice.skipped
+            out.published_as = plan.name
+            self._check_planned(plan, targetings)
+            differences = []
+            if choice.renamed:
+                renamed = _rename_message(requested, plan.name, skipped, future=True)
+                out.warnings.append(renamed)
             sets = []
             for ad_set, targeting in zip(plan.ad_sets, targetings):
                 ads = []
@@ -1113,6 +1458,7 @@ class CampaignCreator:
                     data = files[ad.path]
                     media = ({"video_id": "<uploaded video>", "thumb": "<video thumbnail>"} if ad.kind == "video"
                              else {"image_hash": "<uploaded image>"})
+                    ad = self._planned(ad, "<form to be created>")
                     ads.append({"name": ad.name, "status": PAUSED, "format": ad.kind,
                                 "file": Path(ad.path).name, "bytes": len(data),
                                 "library_name": (video_title(plan.tag, data) if ad.kind == "video"
@@ -1124,10 +1470,13 @@ class CampaignCreator:
                         "ad_sets": sets,
                         "summary": self.plan_summary(plan, targetings, files,
                                                      existing=bool(existing),
-                                                     existing_differences=differences)}
+                                                     existing_differences=differences,
+                                                     requested_name=requested if skipped else "")}
             self._step(out, "dry run: preflight passed, nothing was written")
         except CreationStopped as exc:
             out.error, out.stop_kind = str(exc), exc.kind
+            if exc.kind == "name_taken":
+                name_error = str(exc)
         except PlanError as exc:
             out.error, out.stop_kind = str(exc), "plan"
             out.problems = list(exc.problems)
@@ -1137,22 +1486,24 @@ class CampaignCreator:
         except GraphError as exc:
             out.error, out.stop_kind = f"Meta refused: {_catalog.problem_line(exc)}", "graph_error"
             out.problems = [graph_problem(exc)]
-        self._audit(plan, out, existing=differences, checked=differences is not None, files=files)
+        self._audit(plan, out, existing=differences, checked=differences is not None, files=files,
+                    renamed=renamed, name_error=name_error)
         return out
 
     def _audit(self, plan: CampaignPlan, out: Outcome, *, existing: list | None, checked: bool,
-               files: dict | None) -> None:
+               files: dict | None, renamed: str = "", name_error: str = "") -> None:
         """Pre-flight audit (ACL-1819): независимые вердикты серверных правил, только чтения.
 
         Не идёт после остановки Graph (лимит/блокировка): новых чтений там быть не должно.
         Сбой самого аудита не ломает план: вердиктов просто нет.
         """
-        if out.stop_kind not in ("", "plan", "graph_error"):
+        if out.stop_kind not in ("", "plan", "graph_error", "name_taken"):
             return
         from src.fb_api import preflight_rules as _pf
 
         try:
-            out.audit = _pf.server_verdicts(self, plan, existing=existing, existing_checked=checked, files=files)
+            out.audit = _pf.server_verdicts(self, plan, existing=existing, existing_checked=checked, files=files,
+                                       renamed=renamed, name_error=name_error)
         except Exception:  # noqa: BLE001 — аудит вспомогательный, план от него не зависит
             import logging
 
@@ -1160,7 +1511,8 @@ class CampaignCreator:
             out.audit = []
 
     def plan_summary(self, plan: CampaignPlan, targetings: list[dict], files: dict[str, bytes], *,
-                     existing: bool = False, existing_differences: list[dict] | None = None) -> dict:
+                     existing: bool = False, existing_differences: list[dict] | None = None,
+                     requested_name: str = "") -> dict:
         """Что увидит человек в «Check plan»: читаемые поля, без сырых спецификаций."""
         sets = []
         for ad_set, t in zip(plan.ad_sets, targetings):
@@ -1194,7 +1546,16 @@ class CampaignCreator:
                     form = known.get(ad.form_id)
                     item["form_id"] = ad.form_id
                     item["form_name"] = form.name if form else ""
-        return {
+                    if ad.form_template:
+                        step = self._form_steps.get(ad.form_template["id"])
+                        item["form_template"] = ad.form_template["name"]
+                        if step is not None:
+                            item["form_name"] = step.form_name
+                            item["form_id"] = step.existing_id
+                            item["form_action"] = step.action
+                            item["form_note"] = (f"form will be created: {step.form_name}" if step.action == "create"
+                                                 else f"form found on the Page, reused: {step.form_name}")
+        summary = {
             "campaign": plan.name, "status": PAUSED, "objective": OBJECTIVE,
             "daily_budget": plan.daily_budget, "currency": self.facts.currency,
             "budget_minor": budget_minor(plan.daily_budget, self.facts.currency),
@@ -1203,25 +1564,34 @@ class CampaignCreator:
             "existing": existing, "existing_differences": list(existing_differences or []),
             "tag": plan.label, "ad_sets": sets,
         }
+        if requested_name:
+            # ACL-1902: имя из билдера занято - публикуем под выбранным (`campaign`), прежнее здесь.
+            summary["requested_name"] = requested_name
+        if self._form_steps:
+            # Только у планов с шаблонами форм: сайтовый план не меняется ни байтом (ACL-1775).
+            summary["forms"] = [st.as_dict() for st in self._form_steps.values()]
+        return summary
 
     def _run(self, plan: CampaignPlan, out: Outcome) -> None:
         # 1. Всё, что можно проверить до записи.
         targetings, files = self._prepare(plan, out)
 
-        # 2. Кампания (наша — по имени и метке).
-        existing = self._find_campaign(plan)
+        # 2. Имя (ACL-1902: NAME, NAME_2 ...) и кампания (наша - по имени и метке).
+        #    Найденные свои кампания/группы уже сверены с билдером внутри выбора имени - до записей.
+        choice = self._resolve_name(plan, targetings)
+        requested, plan = plan.name, choice.plan
+        out.published_as = plan.name
+        self._check_planned(plan, targetings)
+        if choice.renamed:
+            out.warnings.append(_rename_message(requested, plan.name, choice.skipped, future=False))
+            self._step(out, f"campaign name {requested!r} is taken: using {plan.name!r}")
+        existing, found_sets = choice.existing, choice.found_sets
         if existing:
             out.campaign_id = str(existing["id"])
             out.reused["campaign"] = out.campaign_id
             self._step(out, "campaign: found from a previous run")
-            # Прежде чем что-то добавлять под найденную кампанию/группы — сверить их с планом.
-            found_sets = self._find_sets(plan, out.campaign_id)
-            bad = self._existing_differences(plan, targetings, out.campaign_id, found_sets)
-            if bad:
-                raise CreationStopped(_existing_message(bad), created=out.created, kind="existing_differs")
             self._step(out, "existing campaign and ad sets match the builder")
         else:
-            found_sets = [None] * len(plan.ad_sets)
             out.campaign_id = self._write(
                 out, "campaign", f"/{plan.act}/campaigns", self.campaign_params(plan),
                 lambda: (self._find_campaign(plan, after_unknown=True) or {}).get("id"))
@@ -1270,6 +1640,8 @@ class CampaignCreator:
                 if creative_id:
                     self._step(out, f"ad {ad.index}: creative found from a previous run")
                 else:
+                    # ACL-1776: форма из шаблона - ровно перед креативом, которому она нужна.
+                    self._ensure_form(out, plan, ad)
                     creative_id = self._write(
                         out, f"ad {ad.index}: creative", f"/{plan.act}/adcreatives",
                         {"name": creative_name,
@@ -1344,6 +1716,10 @@ class CampaignCreator:
                 by_name.setdefault(str(a.get("name") or "").strip(), []).append(a)
             for ad in ad_set.ads:
                 aobj = f"ad {ad.index} ({ad.name})"
+                if ad.form_template and not ad.form_id:
+                    # Объявление найдено с прошлого запуска: форма шаблона - та, что нашли по имени.
+                    step = self._form_steps.get(ad.form_template["id"])
+                    ad.form_id = (step.form_id or step.existing_id) if step else ""
                 rec = out.ad_media.get(ad.index) or {}
                 rows = by_name.get(ad.name) or []
                 check(aobj, "count", 1, len(rows))
@@ -1471,11 +1847,20 @@ def _describe_diffs(checks: list[dict]) -> list[str]:
     return out
 
 
-def _existing_message(found: list[dict]) -> str:
-    parts = [f"Existing {f['object']} from an earlier run differs from the builder: "
-             + "; ".join(f["differences"]) + "." for f in found]
-    return (" ".join(parts) + " Nothing was written and nothing in Meta was changed. Delete or rename "
-            "the old campaign in Ads Manager, or rename the campaign in the builder.")
+def _rename_message(requested: str, chosen: str, skipped: list[dict], *, future: bool) -> str:
+    """Почему кампания пойдёт под другим именем (ACL-1902); одна строка для плана, итога и аудита."""
+    why = []
+    for item in skipped:
+        if item["reason"] == "foreign":
+            why.append(f"{item['name']!r} is already used by another campaign")
+        elif item["reason"] == "other_ads":
+            why.append(f"{item['name']!r} is a campaign with other ads")
+        else:
+            parts = [f"{f['object']}: " + "; ".join(f["differences"]) for f in item["differences"]]
+            why.append(f"{item['name']!r} (earlier campaign) is left as is; it already exists with different "
+                       "settings (" + " | ".join(parts) + ")")
+    head = "Will be published as" if future else "Published as"
+    return f"{head} {chosen!r}: " + "; ".join(why) + "."
 
 
 def _flex_ids(spec: Any) -> list[list[str]]:

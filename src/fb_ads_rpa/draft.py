@@ -46,6 +46,8 @@ class AdDraft:
     ad_body2: str = ""
     # ACL-1775: id существующей формы Страницы (только Instant Form, только API-бэкенд).
     lead_form_id: str = ""
+    # ACL-1776: id шаблона формы из библиотеки (форму создаёт робот; только API-бэкенд).
+    lead_form_template: str = ""
 
     def ad_name(self) -> str:
         """Name for the ad in Ads Manager: "<creative> [<variant>] - <text>".
@@ -90,6 +92,8 @@ class AdDraft:
             out["ad_body2"] = (self.ad_body2 or "")[:80]
         if self.lead_form_id:
             out["lead_form_id"] = self.lead_form_id
+        if self.lead_form_template:
+            out["lead_form_template"] = self.lead_form_template
         return out
 
 
