@@ -44146,9 +44146,11 @@
         "worktree": "C:\\acl-1273",
         "id": "075c1efe814f41e8a29ddcae3721ffb3",
         "issue": 273,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T19:47:58+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 948,
+        "report": "Revived after the conflict return: merged work/main (only docs/system/CHANGELOG.md conflicted; both entries kept), pushed. Touched test passes: test_report_delivery_review (10 passed). Full suite left to CI. Not verified live."
       },
       "836": {
         "actor": "Worker-U1019836",
