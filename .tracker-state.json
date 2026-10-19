@@ -43220,6 +43220,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T11:40:09+00:00",
         "from_status": "status:todo"
+      },
+      "839": {
+        "actor": "Worker-R1839C",
+        "session": "refresh_acl1839_20261019",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "codex/acl-1839-connection-panel-layout",
+        "worktree": "C:\\acl-1839-refresh",
+        "id": "5aa698fac214484e9c5879758fb1202f",
+        "issue": 839,
+        "state": "implementing",
+        "started_at": "2026-10-19T11:43:22+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -47837,10 +47849,14 @@
           {
             "actor": "Worker-R1839B",
             "session": "refresh_acl1839_20261015"
+          },
+          {
+            "actor": "Worker-R1839C",
+            "session": "refresh_acl1839_20261019"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-R1839B",
+        "state": "implementing",
+        "worker": "Worker-R1839C",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-R1839B",
@@ -53164,6 +53180,10 @@
       "Reviewer-R1138": {
         "session": "acl1138_review_1019",
         "role": "Reviewer"
+      },
+      "Worker-R1839C": {
+        "session": "refresh_acl1839_20261019",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -89770,6 +89790,13 @@
         "pr": 947,
         "lane": "82cec9d7a4ae4c9eabb30424216b8700",
         "actor": "Reviewer-R1138"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T11:43:22+00:00",
+        "issue": 839,
+        "claim": "5aa698fac214484e9c5879758fb1202f",
+        "actor": "Worker-R1839C"
       }
     ],
     "policy": {
