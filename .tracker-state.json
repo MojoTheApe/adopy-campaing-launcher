@@ -94212,7 +94212,9 @@
         "session": "r992-c0a1de70",
         "coordinator": "Coordinator-E1019A",
         "started_at": "2026-10-19T07:29:26+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "PR #993 (ACL-1992) conflicts with current main 435bc154 in docs/system/CHANGELOG.md (content conflict; src/web/templates/report.html auto-merges cleanly). Head a62a352f. Author must merge current origin/main into the original branch, resolve, re-run affected checks and hand off again.",
+        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
