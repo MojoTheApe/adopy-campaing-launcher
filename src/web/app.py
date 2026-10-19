@@ -3375,8 +3375,9 @@ def _creative_not_modified(request: Request | None, resolved: Path) -> Response 
 
 
 def _creative_range_response(request: Request | None, resolved: Path, media_type: str) -> Response | None:
-    """Range для видео. Starlette 0.36 (fastapi 0.110) сам Range не умеет и
-    отдавал файл целиком, а без 206 браузер не перематывает ролик. Поддержан
+    """Range для видео. Исторически (Starlette 0.36) FileResponse Range не умел и
+    отдавал файл целиком, а без 206 браузер не перематывает ролик; Starlette 1.x
+    умеет, но свой обработчик оставлен. Поддержан
     один диапазон (`bytes=a-b`, `a-`, `-n`); остальное — обычный 200."""
     if request is None:
         return None
