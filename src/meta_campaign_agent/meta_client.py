@@ -8,6 +8,12 @@ from typing import Any
 import requests
 
 
+# Версия Marketing API по умолчанию (ACL-1783). v22.0 уже не в списке поддерживаемых,
+# v24.0 снят с поддержки 2026-10-06. Переопределяется env META_GRAPH_API_VERSION;
+# позже значение будет читаться из реестра правил Meta (config/meta_rules/meta.json).
+DEFAULT_GRAPH_VERSION = "v26.0"
+
+
 class MetaGraphError(RuntimeError):
     def __init__(self, message: str, *, status_code: int | None = None, meta_code: Any = None):
         super().__init__(message)
@@ -18,7 +24,7 @@ class MetaGraphError(RuntimeError):
 @dataclass
 class MetaClientConfig:
     access_token: str
-    graph_version: str = "v22.0"
+    graph_version: str = DEFAULT_GRAPH_VERSION
     timeout: float = 120.0
     proxies: dict[str, str] | None = None
 
@@ -32,7 +38,7 @@ class MetaClient:
 
     @property
     def base_url(self) -> str:
-        version = self.config.graph_version.strip().lstrip("/") or "v22.0"
+        version = self.config.graph_version.strip().lstrip("/") or DEFAULT_GRAPH_VERSION
         return f"https://graph.facebook.com/{version}"
 
     def _extract_error(self, payload: dict[str, Any]) -> str | None:
@@ -193,5 +199,5 @@ def meta_client_from_env(*, proxies: dict[str, str] | None = None) -> MetaClient
     token = (os.environ.get("META_ACCESS_TOKEN") or "").strip()
     if not token:
         raise MetaGraphError("META_ACCESS_TOKEN is not set in .env")
-    version = (os.environ.get("META_GRAPH_API_VERSION") or "v22.0").strip()
+    version = (os.environ.get("META_GRAPH_API_VERSION") or DEFAULT_GRAPH_VERSION).strip()
     return MetaClient(MetaClientConfig(access_token=token, graph_version=version, proxies=proxies))

@@ -146,8 +146,12 @@ def test_the_page_and_the_server_agree_on_destinations_and_form_statuses():
 def test_the_page_never_names_a_way_to_create_a_form_or_accept_terms():
     glue = _code("window.cbForms = window.cbForms || {};", "// ── Ad row HTML builder")
     low = glue.lower()
-    for bad in ("leadgen_forms", "tos_accepted", "leadgen_tos", "create form", "accept"):
+    # ACL-1776: владелец разрешил роботу создавать формы ИЗ ШАБЛОНА, но не принимать условия.
+    # Страница не знает ни ребра Graph, ни ключей условий, ни обработчика «accept».
+    for bad in ("leadgen_forms", "tos_accepted", "leadgen_tos", "cbaccept", "acceptterms", "accept_terms"):
         assert bad not in low, bad
+    assert "fetch('/api/form-templates'" in glue and "/api/page-forms" in glue
+    assert "graph.facebook" not in low
 
 
 # ───────────────────────────── ссылка отслеживания ─────────────────────────────

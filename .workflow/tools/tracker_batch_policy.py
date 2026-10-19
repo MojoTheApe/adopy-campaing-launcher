@@ -3,8 +3,6 @@
 Exported beside the PR checker. Independent review is an attestation; GitHub
 permissions and protection remain authoritative, as for the v1 contract.
 """
-import hashlib
-import json
 import re
 from urllib.parse import quote
 try:
@@ -14,15 +12,11 @@ except ImportError:
     import tracker_pr_check as pr_checks
 
 
-def scope(issue):
-    labels = sorted(x['name'] for x in issue['labels']
-                    if not x['name'].startswith(('status:', 'priority:', 'release:')))
-    # Status writes, scheduling and release rollover do not edit accepted scope.
-    return hashlib.sha256(json.dumps({k: issue.get(k) for k in ('number', 'title', 'body')}
-                                   | {'labels': labels}, sort_keys=True).encode()).hexdigest()
+def scope(issue, config=None):
+    return rules.task_scope(issue, config)
 
 
-def source(request, config, approval, baseline, *, phases=('approved',), pending=False, completed=False, frozen=False):
+def source(request, config, approval, baseline, *, phases=('approved',), pending=False, completed=False, frozen=False, included_in=None):
     root = 'repos/' + config['project']['repository']
     number = approval['issue']
     issue = request(root + f'/issues/{number}')
@@ -39,27 +33,41 @@ def source(request, config, approval, baseline, *, phases=('approved',), pending
             or 'flag:blocked' in labels or 'flag:archived' in labels
             or issue.get('state_reason') == 'not_planned' or 'pull_request' in issue
             or issue.get('state') == 'closed' and not completed
-            or scope(issue) != approval.get('scope')):
+            or not rules.scope_matches(issue, approval.get('scope'), config)):
         raise ValueError(f'#{number}: approved scope/status changed; return to its author and review again')
     pr = request(root + f'/pulls/{approval["pr"]}')
     review = approval.get('review', {})
-    if (pr.get('merged') or pr.get('draft') or pr.get('state') != 'open' and not completed
+    compatible = (approval.get('main_sha') != baseline and 'task_context_policy' in config
+                  and rules.context_module().compatible(request, config, approval, baseline))
+    included_merge = bool(pr.get('merged') and included_in)
+    if (pr.get('merged') and not included_merge or pr.get('draft')
+            or pr.get('state') != 'open' and not (completed or included_merge)
             or rules.route(config, pr, request) != 'approval'
             or pr_checks.linked_numbers(pr.get('body'), config) != [number]
             or pr['head']['ref'] != approval.get('branch')
             or pr['head']['sha'] != approval.get('head_sha')
-            or not frozen and pr['base']['sha'] != approval.get('base_sha')
-            or approval.get('main_sha') != baseline
+            or not frozen and (rules.tree(request, root, pr['base']['sha']) != rules.tree(request, root, baseline)
+                               if compatible else pr['base']['sha'] != approval.get('base_sha'))
+            or approval.get('main_sha') != baseline and not compatible
             or approval.get('policy') != rules.fingerprint(config)):
         raise ValueError(f'#{number}: source approval is stale for its PR, main or policy')
+    # GitHub auto-marks main-targeted sources merged when promotion contains their
+    # tips. Only post-main proof (or a completed batch's archived stage proof)
+    # may accept that state. Its merge_commit_sha is not the batch admission
+    # evidence. Bind inclusion to the frozen head instead.
+    if included_in:
+        comparison = request(root + '/compare/' + approval['head_sha'] + '...' + included_in)
+        if comparison.get('status') not in ('ahead', 'identical'):
+            raise ValueError(f'#{number}: approved source head is not included in the batch main merge')
     rules.naming(config, pr, [number], request)
     content = rules.tree(request, root, pr['head']['sha'])
     # A PR's live base follows main after promotion. Frozen member proof retains
     # its reviewed baseline; a later intake must revalidate the new live base.
     frozen = dict(pr, base=dict(pr['base'], sha=approval['base_sha']))
-    if (rules.tree(request, root, approval['base_sha']) != rules.tree(request, root, baseline)
+    reviewed_main = approval['main_sha'] if compatible else baseline
+    if (rules.tree(request, root, approval['base_sha']) != rules.tree(request, root, reviewed_main)
             or not rules.review_matches(review, config, frozen, content, [number])
-            or review.get('main_sha') != baseline):
+            or review.get('main_sha') != reviewed_main):
         raise ValueError(f'#{number}: independent source review does not match the frozen baseline')
     if not completed:
         rules.checked(request, root, pr['head']['sha'], rules.policy(config)['required_checks'])
@@ -111,25 +119,33 @@ def validate_candidate(request, config, pr, numbers, batch, shared, *, completed
             or not numbers or len(numbers) > rules.execution_policy(config)['batch_limit']):
         raise ValueError('Candidate does not match the frozen task set or configured batch limit')
     direction = rules.route(config, pr, request)
-    if direction == 'stage' and pr['head']['ref'] != batch.get('branch'):
+    if direction in ('stage', 'batch') and pr['head']['ref'] != batch.get('branch'):
         raise ValueError('Candidate must use the reserved integration branch')
-    if direction == 'stage' and not completed and batch.get('state') == 'fixing':
+    if direction in ('stage', 'batch') and not completed and batch.get('state') == 'fixing':
         raise ValueError('Refresh returned member approvals before reviewing a rebuilt batch')
     baseline = batch['main_sha']
     if not completed:
         current = request(root + '/git/ref/heads/' + quote(config['project']['base_branch'], safe=''))['object']['sha']
-        if direction == 'stage' and current != baseline:
+        if direction in ('stage', 'batch') and current != baseline:
             recovered = (pr.get('merged') and rules.tree(request, root, current) == rules.pr_tree(request, root, pr)
                          and request(root + '/compare/' + pr['merge_commit_sha'] + '...' + current).get('status') in ('ahead', 'identical'))
+            if direction == 'batch':
+                recovered = bool(pr.get('merged') and request(root + '/compare/' + pr['merge_commit_sha'] + '...' + current).get('status') in ('ahead', 'identical'))
             if not recovered:
                 raise ValueError('Main changed; refresh member approvals and rebuild the held batch')
     for member in batch['members']:
         source(request, config, member, baseline, phases=('approved', 'stage', 'merged'),
-               pending=bool(pr.get('merged')), completed=completed, frozen=True)
+               pending=bool(pr.get('merged')), completed=completed, frozen=True,
+               included_in=pr['merge_commit_sha'] if pr.get('merged') and (direction in ('promotion', 'batch') or completed) else None)
     if not completed:
         dependencies_ready(request, config, numbers, shared)
-    if direction == 'stage':
+    if direction in ('stage', 'batch'):
         composition(request, root, pr['head']['sha'], baseline, [m['head_sha'] for m in batch['members']])
+        if direction == 'batch':
+            base = rules.merge_base(request, root, pr) if pr.get('merged') else pr['base']['sha']
+            if base != baseline:
+                raise ValueError('Direct-main batch must use its exact frozen main baseline')
+            return direction
         stage = shared.get('delivery_workflow', {}).get('stage', {})
         if stage and stage.get('state') != 'promoted' and stage.get('batch_id') != batch['id']:
             raise ValueError('Another candidate owns stage')
@@ -144,7 +160,9 @@ def validate_candidate(request, config, pr, numbers, batch, shared, *, completed
 def admit(request, config, pr, numbers, shared):
     direction = rules.route(config, pr, request)
     if direction == 'approval':
-        raise ValueError('Source PRs are approved independently; merge the frozen batch into stage')
+        raise ValueError('Source PRs are approved independently; merge only the frozen batch')
+    if direction not in ('stage', 'promotion', 'batch'):
+        raise ValueError('Batch admission requires its configured integration route')
     section = rules.execution_state(shared, config)
     batch = section.get('integration')
     completed = section['batches'].get(batch_id(pr)) if pr.get('merged') else None
@@ -167,11 +185,11 @@ def admit(request, config, pr, numbers, shared):
             or reviewed.get('batch_id') != batch['id']
             or reviewed.get('source_heads') != [m['head_sha'] for m in batch['members']]):
         raise ValueError('Combined content requires the current independent integration review')
-    if direction == 'stage':
+    if direction in ('stage', 'batch'):
         if batch.get('pr') != pr['number'] or not rules.review_matches(reviewed, config, pr, content, numbers):
             raise ValueError('Combined candidate review is missing or stale')
         if pr.get('merged') and rules.merge_base(request, root, pr) != reviewed['base_sha']:
-            raise ValueError('Actual stage merge differs from the reviewed base')
+            raise ValueError('Actual integration merge differs from the reviewed base')
     else:
         receipt = shared.get('delivery_workflow', {}).get('promotions', {}).get(str(pr['number']), {}) if pr.get('merged') else {}
         receipt = receipt or shared.get('delivery_workflow', {}).get('stage', {})
@@ -192,4 +210,4 @@ def admit(request, config, pr, numbers, shared):
     else:
         raise ValueError('Too many commits to verify safely')
     return {'tree_sha': content, 'policy': rules.fingerprint(config), 'route': direction,
-            'main_sha': batch['main_sha'] if direction == 'stage' else None, 'batch_id': batch['id']}
+            'main_sha': batch['main_sha'] if direction in ('stage', 'batch') else None, 'batch_id': batch['id']}

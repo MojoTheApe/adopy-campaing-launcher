@@ -17,7 +17,8 @@ bridge described in the cutover runbook.
 
 ## Stable release
 
-After verified stage promotion, obtain successful full Windows CI on the exact main
+After the admitted configured route (temporary direct main; Stage when re-enabled),
+obtain successful full Windows CI on the exact main
 release commit. Record scope and limitations in the release ledger. Create the
 existing annotated acl-release-* tag with its genuine SHA/success/run URL under the
 project's release authorization. scripts/acl_publish_release.py verifies tag, HEAD,
@@ -30,12 +31,26 @@ replace releases, accept stale evidence or treat a merge waiver as release autho
 The release workflow builds/tests the package, stages its assets as a draft and
 publishes only verified complete artifacts. Preserve the existing checks.
 
-The configured release repository and tokens are operational setup, not committed
-values. At migration intake no Actions variables/secrets are configured in ACL and
-no release has been published there. Confirm the actual intended release repository
-and permitted access through the existing owner setup; never invent credentials or
-bake a source-repository write token into an employee installer. Do not expose token
-values in logs. Product update and shared-library access are distinct permissions.
+The verified release repository is `MojoTheApe/acl-releases`; the source Actions
+variable `ACL_RELEASES_REPO` selects it. On 2026-10-15, read-only setup inspection
+confirmed the names `ACL_RELEASES_TOKEN`, `ACL_RELEASE_SIGNING_KEY` and
+`ACL_UPDATE_TOKEN` exist; no secret values were read. Existing stable publications
+include signed `acl-release-2026-10-08b`. Keep the read-only updater token scoped to
+that release channel; source/library access remains separate. Actual permission,
+trust and download success are proven by a real run, not a secret-name inventory.
+
+Standing owner approval of ACL integration/main merge includes package delivery
+unless explicitly source-only/skip-release. The agent records `batch begin --deliver` with
+`.github/workflows/complete-delivery.yml` and job `Verify published Windows package`.
+After actual main admission and successful exact-main CI, this durable workflow
+uses the existing reusable publisher and then downloads previous/current published
+installers through the configured updater trust path. It verifies actual isolated
+Windows update/restart/recovery and preserved data before a native-log-validated
+Tracker receipt records the frozen tasks’ delivery. Use [the repository runbook](../repository/POST_MAIN_DELIVERY.md)
+for exact scope, pending/failure recovery and the separately recorded source/live
+activation boundary. `workflow_dispatch` with the same successful CI run resumes
+an existing authorized request; it grants no new scope. Missing/failed checks never
+produce Delivered. Preserve immutable tags/releases and inspect incomplete drafts.
 
 Complete the agreed Windows installation/update/restart/recovery check before recording
 verified package delivery. Keep a real report for the exact release. `record-delivery`

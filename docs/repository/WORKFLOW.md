@@ -1,25 +1,32 @@
 # ACL repository workflow
 
+For a plain-language owner overview, read [the owner guide](OWNER_GUIDE.md).
+
+Read the exact [selected shared guide](TRACKER.md), the [ACL support/cutover plan](EARLY_ADOPTION.md) and the guarded operator mapping in [AGENTS.md](../../AGENTS.md).
+Shared contract references retain canonical bodies; `_ACL` documents preserve the original local cutover history and stronger controls.
+
 ## Adoption boundary
 
 The owner selected an installed Windows application with automatic updates, not
-manual Git delivery. Target profile: `package`, with permanent `stage` and `main`.
-The source and Tracker cutover is recorded in [ADOPTION.md](ADOPTION.md).
-Use the pinned shared client and the stage/main route below. The one-time
-activation keeps ordinary admissions paused until its verified promotion and
-normal Tracker `merged` handoff. Retired master clients are historical only;
+manual Git delivery. Target profile: `package`, with temporary no-stage batches into `main`; retain
+permanent `stage` for later re-enablement. Read [POST_MAIN_DELIVERY.md](POST_MAIN_DELIVERY.md)
+for the selected contract and separately verified activation boundary.
+The completed source and Tracker cutover is recorded in [ADOPTION.md](ADOPTION.md).
+Use the pinned guarded ACL adapter and the currently activated route below.
+Initial source ACL-1924 used old-stage admission before its recorded idle transition.
+Retired master clients and one-time activation pauses are historical only;
 package publication and employee updates retain their separate release rules.
 
 ## Select the route by actual changed files
 
-Read [PROCESS_INSTRUCTIONS.md](PROCESS_INSTRUCTIONS.md). Once its explicit policy
+Read [PROCESS_INSTRUCTIONS.md](PROCESS_INSTRUCTIONS_ACL.md). Once its explicit policy
 is already adopted in main, normal `AGENTS.md`, `CLAUDE.md` and repository-process
 Markdown changes can use one-task Review -> independently reviewed/checks -> main
 -> Merged. They hold the source review lane through merge and do not enter Approved.
 No active integration/stage candidate may be displaced. Runtime/system/product,
-unknown/mixed, policy/helper/CI/config changes retain the batch/stage route below.
-Initial adoption itself cannot enable its own shortcut. Current source and live
-activation remain distinct; follow the existing cutover gates.
+unknown/mixed, policy/helper/CI/config changes retain the reviewed frozen-batch route below.
+Initial adoption itself cannot enable its own shortcut. Source changes and any
+separately authorized live activation remain distinct.
 
 ## Tasks, branches and review
 
@@ -27,16 +34,17 @@ Ideas start Idea; accepted tasks start Backlog. The owner selects To Do. Startin
 development requires an explicit request, a real Issue, verified In Progress and
 an implementation claim under the matching five-slot execution policy. Read the entire Description and Specifications plus
 linked context. Classify by the existing six modules, preserve dependencies and
-release membership, and never steal another Worker's claim. Ordinary admissions
-remain paused until [the explicit batch cutover](BATCH_INTEGRATION.md) is complete.
+release membership, and never steal another Worker's claim. The completed
+[batch cutover](BATCH_INTEGRATION_ACL.md) and [schema-3 activation](SOURCE_REVIEWS.md)
+retain their dated evidence; current work preserves actual held ownership.
 
 Keep the existing ACL IDs: 71 historical aliases plus Issue number + 1000 for new
 IDs. Copy IDs from the Tracker. Branch: `work/acl-1234-short-name`, or
 `codex/acl-1234-short-name` when the host requires that prefix. PR title:
-`[ACL-1234] Summary`. Execution v1 and v2 require exactly one task per source PR.
+`[ACL-1234] Summary`. Execution v1/v2/v3 requires exactly one task per source PR.
 The PR body has exactly one `Tracker issues: ACL-1234` line and that Issue links back to
 it. Combined v2 integration/promotion PRs instead list the frozen members and one
-`Tracker batch: ID` line; see [batch integration](BATCH_INTEGRATION.md). GitHub PR numbers are separate. No automatic issue-closing keywords in commits
+`Tracker batch: ID` line; see [batch integration](BATCH_INTEGRATION_ACL.md). GitHub PR numbers are separate. No automatic issue-closing keywords in commits
 or PRs. Old IDs and history are not renamed during migration.
 
 Implement in an isolated task worktree, self-check and update relevant system and
@@ -47,9 +55,9 @@ create their PRs and explicitly hand off their claims, freeing implementation sl
 Review labels alone do not release claims. Record Worker, Coordinator and Reviewer
 separately with neutral opaque identities; GitHub Assignees remain real accounts.
 
-For ordinary/application work, execution schema 2 separates source approval from
+For ordinary/application work, execution schemas 2/3 separate source approval from
 integration. A separate real,
-non-implementing Reviewer acquires the single source-review lane and reviews the
+non-implementing Reviewer acquires a source-review lane and reviews the
 complete current scope/head/base. Record the report, keep required source checks,
 then use `batch approve` to move Review -> Approved and release that lane. Each
 source keeps its genuine Worker and independent Reviewer. Labels cannot approve
@@ -57,54 +65,90 @@ work. Ordinary batch source PRs target main and remain open; their direct merge 
 The proven instruction-only route is the explicit exception described above.
 Existing queued stage-targeted PRs become approval-only after the supported migration.
 
+The active schema-3 policy permits five source Reviewer runs independently of
+five Workers, one integration Coordinator and one combined-batch Reviewer. Use the
+PR/claim to identify each source lane; returning, resuming or approving one source
+preserves all other owners. Source review/approval may continue during batch review.
+Instruction-only reviews consume source capacity and still block new intake/batch
+creation; their main admission waits for existing intake/integration/stage ownership.
+See [SOURCE_REVIEWS.md](SOURCE_REVIEWS.md) for the completed ACL-1874/1875 source,
+publication, idle migration and fresh-board evidence. That runbook retains the
+historical old-v2 completion recovery; it is not the current policy. Compatible
+standard/engine upgrades preserve genuine current-policy ownership through their
+handoff and do not migrate state or reserve maintenance merely to change pins.
+
 For changes before approval, the Reviewer returns review and the author takes a
 fresh implementation claim before editing the original branch. After approval,
 use the owning Coordinator's `batch return`, followed by an author claim, checks,
 handoff and fresh independent approval. Changed code, main/base, task scope or
-policy invalidates earlier evidence. A Reviewer who edits becomes an implementer;
-a different agent must approve. Do not fabricate a second identity for one run.
+policy requires the current exact review/admission evidence enforced by the pinned
+engine. It does not automatically invalidate test results for unchanged inputs
+within the adopted collector's actual coverage. A new agent/session alone needs no
+blanket test rerun. A Reviewer who edits becomes an implementer; a different agent
+must approve. Do not fabricate a second identity for one run.
 
 On an authorized ship request, the Coordinator freezes the current eligible
 Approved intake, then selects sequential batches of up to five. New approvals wait
 for another intake. One urgent task is valid; the Approved backlog has no size cap.
 One separate Coordinator claim holds the frozen batch through integration review,
-checks, stage and main. Preserve every source author, tip, review and member ID.
-Follow [BATCH_INTEGRATION.md](BATCH_INTEGRATION.md) and the exact pinned guide for
+checks and the configured integration route. Preserve every source author, tip, review and member ID.
+Follow [BATCH_INTEGRATION.md](BATCH_INTEGRATION_ACL.md) and the exact pinned guide for
 assembly, independent combined review and recovery. Execution-v1 source-adoption
 commands remain in force only until the documented old-policy handoff completes.
 
-Run `check-pr N` and `check-merge N` immediately before merging.
-The latter checks current review, CI and stage evidence. These agent commands are
+Use `check-pr N` for early linkage feedback; run `check-merge N` once immediately before merging.
+It includes linkage, so do not repeat a separate immediate `check-pr` call. Keep
+the distinct required review, merge-recording and delivery actions.
+Final admission checks current review, CI and any configured stage evidence. These agent commands are
 not GitHub branch protection. Verify actual GitHub controls; the private repository
 currently reports a plan restriction for branch protection/rulesets. Never present
 an unenforced agent rule as a server-enforced guarantee. Do not purchase a plan or
 make the repository public as an implicit part of adoption.
+
+## Pause and resume
+
+Accept the owner's direct confirmation that an agent has stopped; do not demand
+Windows access solely to reconfirm it. Read the actual claim and use the exact
+pinned `execution stop` under the current real owner. If that owner has stopped,
+use supported `execution takeover --previous-claim ... --stopped --reason ...`
+with the acting Worker's real identity before stopping its new claim. Preserve
+the recorded branch and original owner/worktree in the handoff and transfer
+history. An isolated administrative location must be described honestly; it is
+not a copy of inaccessible Windows work. Keep uninspected contents unknown.
+
+Verify the requested claim is gone and the task is recorded stopped/Paused.
+The current stop command also adds `flag:blocked`. For a purely voluntary pause,
+after checking actual dependencies and obstacles, use the existing
+`python scripts/acl_task_tracker.py set ACL-ID --no-blocked --reason "Owner-requested pause; no remaining blocker"`.
+Do not remove a real blocker, change requirements or bypass a failed ownership
+guard merely to free a slot. Review queue length and reserved capacity do not
+prove that agents are running.
+
+Before resuming implementation, inspect retained work, current scope/main and
+dependencies; use normal supported ownership and preserve the original branch
+where appropriate. Continue individual independent review, Approved integration
+and required package delivery. A pause neither accepts partial work nor removes
+the existing checks or delivery condition.
 
 ## Stage, main and completion
 
 The sequence below applies to ordinary/application work. Proven adopted
 instruction-only tasks hold their independent source review through direct main
 admission and complete with the normal verified process receipt, as described in
-[PROCESS_INSTRUCTIONS.md](PROCESS_INSTRUCTIONS.md). They do not enter Stage or
+[PROCESS_INSTRUCTIONS.md](PROCESS_INSTRUCTIONS_ACL.md). They do not enter Stage or
 require an application installer/delivery receipt.
 
 Approved ordinary source branches -> reserved `codex/batch-ID` integration branch ->
-permanent stage -> permanent main. Only the frozen integration PR enters stage,
-after additional independent combined review and complete applicable CI. Record
-all members as Stage, then verify the exact isolated Windows target/tree in
-[STAGING.md](../runtime/STAGING.md). Promote unchanged content and members; no
-extra fix or member joins the promotion. Keep permanent and original source branches.
-
-Before actual stage entry, cancel a failed candidate and select a smaller subset
-of the same intake to leave a failed task for later. After stage entry keep the
-Coordinator claim and same member set through author fixes, fresh approvals,
-rebuild, independent review and stage verification. Do not reset stage or drop
-already integrated work. Reconcile stage/main and revalidate source approvals
-before the next batch. A gap caused only by admitted process merges uses the pinned
-read-only `stage_base_compatible` receipt/first-parent/tree proof described in
-[PROCESS_INSTRUCTIONS.md](PROCESS_INSTRUCTIONS.md); it does not rewrite stage.
-Exact tree reuse prevents redundant successful test runs.
-The adoption source child still finishes its old v1 route before live migration.
+main, after independent combined review and full applicable CI. Ordinary one-task
+sources stay approval-only. Standing owner policy includes package delivery when
+integration/main merge is approved; the agent automatically records the genuine request through
+`batch begin --deliver` unless the owner explicitly requests source-only/skip-release.
+Main CI then continues publication,
+actual published Windows package verification and exact-task delivery without a
+second routine approval. Failed or missing delivery remains unfinished. Follow
+[POST_MAIN_DELIVERY.md](POST_MAIN_DELIVERY.md) for commands, serialization, safe
+retries, initial old-policy source admission and re-enabling Stage. Keep original
+source branches and the permanent stage branch/history.
 
 Merged means all of a ticket's implemented code scope is actually included in main.
 For ordinary/application tasks, package completion additionally requires an immutable published installer and the
@@ -122,12 +166,33 @@ For historical tasks follow the explicit reconciliation in ADOPTION.md.
 
 ## Verification and collaboration
 
+Follow [VERIFICATION.md](VERIFICATION.md) for the pinned common verification and
+coordinated-upgrade guidance. Keep ACL's existing bounded `acl_ci_reuse.py`
+collector and its actual proof rules. The optional TT-107 native protocol does not
+cover ACL's dynamic YAML, Windows matrices or installer acceptance; exported helper
+support enables no `ci_evidence_policy`. Reuse only covered applicable jobs and
+retain independent composition, exact-stage and package-delivery checks.
+
 Use the requirements and isolation rules in [engineering context](../system/AGENT_CONTEXT.md).
 Run focused behavior tests first, then scanner, smoke, the complete required tests
 and packaging checks on the final candidate. CI (Linux and Windows test jobs)
 remains required for code, dependencies, packaging and CI changes. Record success, skip, infrastructure failure
-and unrun manual checks separately. Do not rerun a successful unchanged candidate
-without a new failure, change or unresolved concern.
+and unrun manual checks separately. Group related fixes into a meaningful ready
+submission while preserving useful early feedback. Do not request another run for
+a successful unchanged candidate without a new failure, change or unresolved concern.
+Existing GitHub events still start their configured checks; these instructions
+do not authorize workflow/settings changes. Inspect actual outcomes before retrying
+an uncertain command. Follow [VERIFICATION.md](VERIFICATION.md) for supported reuse
+and short observations on ordinary work.
+
+### Fast feedback before full applicable checks
+
+Use the project-owned [fast/full plan](VERIFICATION.md#fast-feedback-and-full-verification)
+for the exact `Classify and check project tooling` commands and omissions.
+Its tooling feedback helps group local corrections; it does not replace
+`ACL verification`, `Installer verification` or actual delivery acceptance.
+Metadata edits retain linkage-only feedback; new code candidates keep normal
+applicable checks and only superseded same-PR runs cancel.
 
 ### Running the test suite
 
@@ -169,10 +234,10 @@ A reuse proof or a release needs every Linux shard, the Windows job and
 Windows, before ACL-1582) are refused, not translated: a release of a tree that
 only has such a run needs a fresh `ci.yml` run on main.
 
-Python versions: under execution schema 2, ordinary one-task approval sources
+Python versions: under execution schemas 2/3, ordinary one-task approval sources
 into main (and retained v1 stage sources) keep the affected-check selection: 3.13,
 with both Linux versions and installer when dependency/packaging inputs change.
-A combined batch into stage, stage/main pushes, promotion, manual run and any
+A combined batch into configured stage or main, stage/main pushes, promotion, manual run and any
 unknown route require Linux 3.11/3.13, Windows 3.13 and installer. Source docs-only
 classification remains bounded; combined docs-only batches still require the full
 applicable checks. Execution-v1 selection remains unchanged. The scope job reads
@@ -222,7 +287,7 @@ The owner's past CI exceptions apply only to their exact recorded PRs/commits.
 Unavailable required CI blocks this migration's merge unless the owner explicitly
 approves a concrete new exception. A source exception never promotes a release.
 Merge within the authorized task after valid checks/review; do not add a routine
-extra permission round. Runtime work retains its separate authorization.
+extra permission round. Runtime work outside the approved package delivery retains its separate authorization.
 
 Preserve other worktrees, machine configuration and active file ownership. Never
 stash/reset/clean another session, stage all files blindly or infer abandonment.

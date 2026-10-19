@@ -132,6 +132,8 @@ def slots_to_campaign_drafts(
                     copy2_name=(s.get("copy2") or "").strip(),
                     lead_form_id=(s.get("lead_form_id") or "").strip() if destination == "instant_form" else "",
                     cta=(s.get("cta") or "").strip(),
+                    lead_form_template=((s.get("lead_form_template") or "").strip()
+                                        if destination == "instant_form" else ""),
                 )
                 for s in sgroup if not s.get("no_ad")
             ]

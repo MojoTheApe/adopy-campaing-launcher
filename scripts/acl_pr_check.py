@@ -32,7 +32,14 @@ def check(request, number, root=ROOT):
         result = shared.check(request, legacy, number)
         result['policy'] = 'legacy linkage only; migration admission and activation remain pending'
         return result
-    return shared.check(request, config, number)
+    # A policy adoption cannot grant its own route from the candidate checkout.
+    # The actual target base selects admission until that source is merged and
+    # the separately guarded live transition has happened.
+    base = request(f"repos/{repo}/contents/tracker/config.json?ref={pr['base']['sha']}")
+    admitted_config = json.loads(shared.delivery_policy.file_bytes(request, f'repos/{repo}', base))
+    if admitted_config.get('project', {}).get('repository') != repo:
+        raise ValueError('PR base does not describe the official ACL project')
+    return shared.check(request, admitted_config, number)
 
 
 def main():

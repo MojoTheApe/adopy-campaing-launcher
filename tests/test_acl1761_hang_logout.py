@@ -252,8 +252,8 @@ def _udd(pid=PID):
 
 
 def test_local_debug_port_matches_short_8_3_user_data_dir(monkeypatch):
-    long_dir = r"C:\Users\evgenisedin\mlx\profiles\ws\folder" + "\\" + PID
-    short = r"C:\Users\EVGENI~1\mlx\profiles\WS~1\FOLDER~1" + "\\" + PID
+    long_dir = r"C:\Users\evgenisedin\mlx\profiles\ws\folder" + "\\" + PID  # linux-ok: fake Windows path passed as data, the code under test only string-compares it
+    short = r"C:\Users\EVGENI~1\mlx\profiles\WS~1\FOLDER~1" + "\\" + PID  # linux-ok: fake Windows 8.3 path passed as data, the code under test only string-compares it
     monkeypatch.setattr(prof.os.path, "realpath", lambda p: p)          # realpath не помог
     monkeypatch.setattr(prof, "_long_path", lambda p: long_dir if "~" in p else p)
     procs = [_Proc(MIMIC, ["chrome.exe", f"--user-data-dir={short}", "--remote-debugging-port=63405"])]
@@ -265,14 +265,14 @@ def test_local_debug_port_matches_short_8_3_user_data_dir(monkeypatch):
     assert prof._norm(short) == prof._norm(long_dir)
 
 
-@pytest.mark.skipif(os.name != "nt", reason="GetLongPathNameW exists only on Windows")
+@pytest.mark.skipif(os.name != "nt", reason="GetLongPathNameW exists only on Windows")  # linux-ok: the test is skipped off Windows, so it never touches the API on Linux
 def test_long_path_expands_a_real_8_3_name(tmp_path):
     import ctypes
 
     folder = tmp_path / "a-rather-long-directory-name"
     folder.mkdir()
     buf = ctypes.create_unicode_buffer(1024)
-    if not ctypes.windll.kernel32.GetShortPathNameW(str(folder), buf, len(buf)) or "~" not in buf.value:
+    if not ctypes.windll.kernel32.GetShortPathNameW(str(folder), buf, len(buf)) or "~" not in buf.value:  # linux-ok: only reached on Windows: the test is skipped by the skipif above
         pytest.skip("8.3 names are disabled on this volume")
     assert prof._long_path(buf.value).lower() == str(folder).lower()
 
@@ -301,7 +301,7 @@ def test_open_profile_goes_on_when_the_closing_profile_is_gone(monkeypatch):
         config = None
 
         def start_profile(self, folder, pid, headless=False):
-            return SimpleNamespace(port=7777, folder_id="f", ws_endpoint=None)
+            return SimpleNamespace(port=7777, folder_id="f", ws_endpoint=None, newly_started=True)
 
     monkeypatch.setattr(prof, "running_state", lambda launcher, pid: ("not_running", None))
     got = prof.open_profile(PID, "", "A", local_probe=lambda pid: next(answers),
@@ -452,7 +452,7 @@ def test_publisher_is_blocked_after_non_json_post_and_hung_page(monkeypatch, tmp
                 raise g.PageUnresponsive("the Ads Manager tab stopped answering")
             return super().state()
 
-        def write(self, path, params, files=None, filename=""):
+        def write(self, path, params, files=None, filename="", **_k):
             if path.endswith("/campaigns"):
                 self.hang = True
                 return {"status": 200, "body": {"non_json": "<html>"}}

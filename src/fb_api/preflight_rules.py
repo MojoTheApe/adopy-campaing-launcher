@@ -89,8 +89,17 @@ RULES: list[dict[str, Any]] = [
        "pick an ACTIVE form of this Page (Refresh forms)", sel=".cb-form-select", level="ad",
        applies="instant_form", unit="ad"),
     _r("form_chosen", "Instant Form chosen", ERROR, "client",
-       "choose one of the Page's forms in the ad", sel=".cb-form-select", level="ad",
+       "choose one of the Page's forms or a template in the ad", sel=".cb-form-select", level="ad",
        applies="instant_form", unit="ad"),
+    _r("form_template_privacy", "Form template: privacy policy URL (https)", ERROR, "client",
+       "the template needs a privacy policy URL that starts with https://", sel=".cb-form-template-select",
+       level="ad", applies="instant_form", unit="ad"),
+    _r("form_template_contacts", "Form template: a contact field", ERROR, "client",
+       "the template needs at least one contact field (name, email or phone)",
+       sel=".cb-form-template-select", level="ad", applies="instant_form", unit="ad"),
+    _r("form_terms", "Lead Ads terms accepted on the Page", ERROR, "server",
+       "accept the Lead Ads terms for this Page in Meta (the robot never accepts them), then check again",
+       applies="instant_form"),
     _r("country_set", "Country", ERROR, "client", "pick the country in the account",
        sel="", level="campaign"),
     _r("country_resolves", "Country found in Meta targeting", ERROR, "server",
@@ -148,8 +157,9 @@ RULES: list[dict[str, Any]] = [
        "give every ad set of the campaign its own name", sel=".cb-adset-name", level="adset"),
     _r("adset_has_ads", "Every ad set has an ad", ERROR, "client",
        "add an ad to the ad set or remove the ad set", sel="", level="ad"),
-    _r("existing_diffs", "No existing campaign with different settings", ERROR, "server",
-       "a campaign with this name already exists with other settings: rename yours or fix it in Meta"),
+    _r("existing_diffs", "Campaign name is free, or gets a _2, _3 suffix", ERROR, "server",
+       "if a different campaign already has this name, the robot publishes as NAME_2, NAME_3 ... "
+       "(up to _20); an error only when all 20 names are taken: rename the campaign"),
 ]
 RULE_BY_ID = {r["id"]: r for r in RULES}
 CLIENT_IDS = [r["id"] for r in RULES if r["side"] == "client"]
@@ -181,7 +191,7 @@ def load_json() -> dict[str, Any]:
 # Вход аудита (одна кампания; ACL-1768: наборы - `ad_sets`, плоский вход = один набор):
 #   {"destination": "website"|"instant_form", "objective": "leads", "link": str, "country": str,
 #    "budget": number|None, "age_min": int, "age_max": int,
-#    "ads": [{"name": str, "file": str, "form_id": str, "body": str, "headline": str, "cta": str}],
+#    "ads": [{"name": str, "file": str, "form_id": str, "template": {"privacy_url": str, "contact_fields": [str]}|None, "body": str, "headline": str, "cta": str}],
 #    ACL-1767 (необязательные): "os": "All"|"iOS"|"Android", "device": ""|"mobile"|"desktop",
 #    "os_min": str, "start_time": "YYYY-MM-DDTHH:MM", "now": "YYYY-MM-DDTHH:MM" (часы страницы)}
 
@@ -269,7 +279,13 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         rid = rule["id"]
         if rid == "form_chosen":
-            out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("form_id")), only_dest="instant_form"))
+            out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("form_id")) and not a.get("template"), only_dest="instant_form"))
+        elif rid == "form_template_privacy":
+            out.append(_per_ad(rid, inp, lambda a, st: bool(a.get("template"))
+                               and not re.match(_LINK_RE, _s((a.get("template") or {}).get("privacy_url")), re.I)))
+        elif rid == "form_template_contacts":
+            out.append(_per_ad(rid, inp, lambda a, st: bool(a.get("template"))
+                               and not (a.get("template") or {}).get("contact_fields")))
         elif rid == "country_set":
             out.append(_v(rid, OK if _s(inp.get("country")) else ERROR))
         elif rid == "link_https":
@@ -446,7 +462,8 @@ def min_budget_for(currency: str) -> float | None:
 
 
 def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = None,
-                    existing_checked: bool = False, files: dict[str, bytes] | None = None) -> list[dict[str, Any]]:
+                    existing_checked: bool = False, files: dict[str, bytes] | None = None,
+                    renamed: str = "", name_error: str = "") -> list[dict[str, Any]]:
     """Серверные вердикты кампании. Только чтения: ни одного POST (клиент без права записи).
 
     Каждая проверка независима — отказ одной не гасит остальные. Остановка Graph
@@ -491,6 +508,25 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
         put("form_active", OK)
     if any(s.instant for s in plan.ad_sets):
         guarded("form_active", forms)
+
+    def terms() -> None:
+        # Условия Lead Ads (ACL-1776): нужны только если форму придётся создать. Только чтение.
+        steps = getattr(creator, "_form_steps", None)
+        templated = any(a.form_template for s in plan.ad_sets for a in s.ads)
+        if not templated or (steps and all(st.action == "reuse" for st in steps.values())):
+            put("form_terms", OK, "not needed")
+            return
+        from src.fb_api import forms as _forms
+
+        got = _forms.page_terms_accepted(creator.client, plan.page_id)
+        if got is False:
+            put("form_terms", ERROR, _forms.MSG_TERMS)
+        elif got is None:
+            put("form_terms", UNKNOWN, "The Page's Lead Ads terms could not be read; Meta will tell when the form is created")
+        else:
+            put("form_terms", OK)
+    if any(s.instant for s in plan.ad_sets):
+        guarded("form_terms", terms)
 
     resolver = creator.resolver
     guarded("country_resolves", lambda: (resolver.country(plan.country), put("country_resolves", OK)))
@@ -578,10 +614,14 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
     else:
         put("budget_min", OK)
 
-    if not existing_checked:
+    if name_error:
+        # ACL-1902: заняты все NAME ... NAME_20 - публикация остановилась бы до записи.
+        put("existing_diffs", ERROR, name_error)
+    elif not existing_checked:
         put("existing_diffs", UNKNOWN, "Not checked: fix the errors above first")
-    elif existing:
-        put("existing_diffs", ERROR, cr._existing_message(existing))
+    elif renamed:
+        # ACL-1902: имя занято другой кампанией - робот возьмёт свободное, это не блокирует публикацию.
+        put("existing_diffs", WARNING, renamed)
     else:
         put("existing_diffs", OK)
 

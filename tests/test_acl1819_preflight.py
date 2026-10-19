@@ -178,6 +178,23 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
     "form_partly_missing": (_with(destination="instant_form", ads=_ad(0, form_id="7")), "form_chosen", "error", [2]),
     "form_all_ok": (_with(destination="instant_form",
                           ads=[{**a, "form_id": "7"} for a in _ok_input()["ads"]]), "form_chosen", "ok", []),
+    "tpl_counts_as_a_chosen_form": (_with(destination="instant_form", ads=[
+        {**a, "form_id": "", "template": {"privacy_url": "https://x.example.com/p", "contact_fields": ["email"]}}
+        for a in _ok_input()["ads"]]), "form_chosen", "ok", []),
+    "tpl_privacy_ok": (_with(destination="instant_form", ads=[
+        {**a, "template": {"privacy_url": "https://x.example.com/p", "contact_fields": ["email"]}}
+        for a in _ok_input()["ads"]]), "form_template_privacy", "ok", []),
+    "tpl_privacy_http": (_with(destination="instant_form", ads=_ad(
+        0, template={"privacy_url": "http://x.example.com/p", "contact_fields": ["email"]})),
+        "form_template_privacy", "error", [1]),
+    "tpl_privacy_missing": (_with(destination="instant_form", ads=_ad(
+        1, template={"privacy_url": "", "contact_fields": ["email"]})), "form_template_privacy", "error", [2]),
+    "tpl_contacts_ok": (_with(destination="instant_form", ads=[
+        {**a, "template": {"privacy_url": "https://x.example.com/p", "contact_fields": ["phone"]}}
+        for a in _ok_input()["ads"]]), "form_template_contacts", "ok", []),
+    "tpl_contacts_none": (_with(destination="instant_form", ads=_ad(
+        0, template={"privacy_url": "https://x.example.com/p", "contact_fields": []})),
+        "form_template_contacts", "error", [1]),
     "instant_has_no_link_rules": (_with(destination="instant_form", link="",
                                         ads=[{**a, "form_id": "7"} for a in _ok_input()["ads"]]),
                                   "link_https", None, []),
@@ -367,7 +384,7 @@ def test_page_not_on_the_account(tmp_path):
     d = _draft(tmp_path, ads=1)
     d.page_id = "999"
     out = _audit(AuditMeta(), d)
-    assert _by(out)["page_ok"]["status"] == "error" and "cannot advertise" in _by(out)["page_ok"]["detail"]
+    assert _by(out)["page_ok"]["status"] == "error" and "is not among the pages this ad account can advertise from" in _by(out)["page_ok"]["detail"]
     assert _by(out)["pixel_ok"]["status"] == "ok", "остальные проверки независимы"
 
 
@@ -467,7 +484,7 @@ def test_the_budget_minimum_by_currency_is_documented_and_unknown_when_unlisted(
     assert not pf.blocks([got]), "неизвестный минимум не блокирует"
 
 
-def test_an_existing_campaign_with_other_settings_is_an_error(tmp_path):
+def test_an_existing_campaign_with_other_settings_is_a_rename_warning(tmp_path):
     from tests.test_acl1761_api_create import _run
 
     meta = AuditMeta()
@@ -481,7 +498,9 @@ def test_an_existing_campaign_with_other_settings_is_an_error(tmp_path):
     d2 = _draft(tmp_path, ads=1)
     d2.ad_sets[0].daily_budget = 35.0
     got = _by(_audit(meta, d2))["existing_diffs"]
-    assert got["status"] == "error" and "campaign" in got["detail"]
+    # ACL-1902: другая кампания с этим именем - не ошибка, а предупреждение: робот возьмёт NAME_2.
+    assert got["status"] == "warning" and "Will be published as" in got["detail"]
+    assert "daily budget" in got["detail"] and not pf.blocks([got])
 
 
 def test_existing_check_is_unknown_when_an_earlier_check_failed(tmp_path):
@@ -619,7 +638,7 @@ def test_mutating_the_gate_makes_its_test_fail(tmp_path, old, new, label):
 def test_the_publish_buttons_are_wrapped_by_the_gate_and_the_originals_are_untouched():
     page = TPL.read_text(encoding="utf-8")
     assert "window.cbPreflightGate([{ form: form, slots: slots }], function () { origOne(form); });" in page
-    assert "window.cbPreflightGate(items, function () { origAll(onProgress, picked); });" in page
+    assert "window.cbPreflightGate(items, function () { origAll(onProgress, picked, onlyKeys); });" in page
     assert "origAll = window.cbPublishAll, origOne = window.cbPublish" in page
     assert page.index("window.cbPublish = function(form) {") < page.index("origAll = window.cbPublishAll")
     # серверные проверки идут только по кнопке и перед Publish: ни таймера, ни события ввода
@@ -636,7 +655,7 @@ def test_the_publish_buttons_are_wrapped_by_the_gate_and_the_originals_are_untou
 NAME_CASES = [
     ("2046 1.jpg", "Text A"), ("2046 1.mp4", "Text A"), ("1_es_2403_post.mp4", "Text B"),
     ("1000_img.png", "Text0"), ("coffee.mp4", "Text C"), ("1080x1080-17.png", "Text D"),
-    (r"C:\files\2403_square.JPG", "Text E"), ("", "Only text"), ("2046.png", ""), ("", ""),
+    (r"C:\files\2403_square.JPG", "Text E"), ("", "Only text"), ("2046.png", ""), ("", ""),  # linux-ok: Windows path is only data for the name function, which must take the basename of backslash paths too
     ("12_2403.png", "T"), ("2403x1080_3011.png", "T"),
 ]
 
