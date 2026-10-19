@@ -43154,9 +43154,11 @@
         "worktree": "C:\\wk19-602",
         "id": "23c87fcf133a4a47b873076fefdbe79d",
         "issue": 70,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T11:01:08+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 982,
+        "report": "ACL-602 fresh claim after pause lift. Merged current origin/main into work/acl-602-lead-goals-overview (clean, no conflicts); no new code. Checks: tests/test_goals.py + test_build_progress_model + test_acl_test_platform (151 passed); test_every_change_leaves_a_record, test_web_form_endpoints, test_one_button_reads_what_is_needed, test_acl_ci_scope, test_acl_batch_ci_scope (305 passed); acl_scan_secrets OK; acl_smoke OK. Scope: goals.overview(), GET /goals/overview (ACL_TEAM_LEAD only, 403 else), GET /goals?cm=other needs flag. API only, no UI."
       },
       "681": {
         "actor": "Worker-G19681",
