@@ -44825,7 +44825,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "771": {
+        "actor": "Worker-B1019771",
+        "session": "run_b1019_771",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "codex/acl-1771-targeting-resolver",
+        "worktree": "C:\\acl-1771",
+        "id": "28eb07cec66b4d3b9ed05b20907e0bf7",
+        "issue": 771,
+        "state": "implementing",
+        "started_at": "2026-10-19T22:31:50+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -49226,11 +49239,15 @@
           {
             "actor": "Worker-S1771A",
             "session": "run_s1771a_1012"
+          },
+          {
+            "actor": "Worker-B1019771",
+            "session": "run_b1019_771"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-S1771A",
-        "coordinator": "Coordinator-C0930A",
+        "state": "implementing",
+        "worker": "Worker-B1019771",
+        "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-S1771A",
           "session": "run_s1771a_1012",
@@ -55460,6 +55477,10 @@
       },
       "Worker-H19341": {
         "session": "wh341-c0a1de70",
+        "role": "Worker"
+      },
+      "Worker-B1019771": {
+        "session": "run_b1019_771",
         "role": "Worker"
       }
     },
@@ -95880,6 +95901,13 @@
         "issue": 770,
         "pr": 979,
         "actor": "Worker-B1019770"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T22:31:50+00:00",
+        "issue": 771,
+        "claim": "28eb07cec66b4d3b9ed05b20907e0bf7",
+        "actor": "Worker-B1019771"
       }
     ],
     "policy": {
