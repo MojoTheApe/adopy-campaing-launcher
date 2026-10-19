@@ -43058,6 +43058,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T10:01:02+00:00",
         "from_status": "status:todo"
+      },
+      "787": {
+        "actor": "Worker-E19787",
+        "session": "w787-c0a1de70",
+        "coordinator": "Coordinator-E1019A",
+        "branch": "codex/acl-1787-ad-rules-research",
+        "worktree": "C:\\wk19-787",
+        "id": "efbcd7436d9a462a8a769477e492b1b5",
+        "issue": 787,
+        "state": "implementing",
+        "started_at": "2026-10-19T10:02:20+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -49555,11 +49567,15 @@
           {
             "actor": "Worker-W1787C",
             "session": "w1787c-20261016"
+          },
+          {
+            "actor": "Worker-E19787",
+            "session": "w787-c0a1de70"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-W1787C",
-        "coordinator": "Coordinator-C1016A",
+        "state": "implementing",
+        "worker": "Worker-E19787",
+        "coordinator": "Coordinator-E1019A",
         "handoff": {
           "actor": "Worker-W1787C",
           "session": "w1787c-20261016",
@@ -49576,7 +49592,6 @@
         },
         "pr": 956,
         "queued_at": "2026-10-16T14:53:45+00:00",
-        "reviewer": "Reviewer-R1787D",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -52876,6 +52891,10 @@
       },
       "Worker-E19341": {
         "session": "w341-c0a1de70",
+        "role": "Worker"
+      },
+      "Worker-E19787": {
+        "session": "w787-c0a1de70",
         "role": "Worker"
       }
     },
@@ -88450,6 +88469,13 @@
         "issue": 47,
         "claim": "c4ff1b5ae0bf42b2b5074e3897516845",
         "actor": "Worker-E19341"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T10:02:20+00:00",
+        "issue": 787,
+        "claim": "efbcd7436d9a462a8a769477e492b1b5",
+        "actor": "Worker-E19787"
       }
     ],
     "policy": {
