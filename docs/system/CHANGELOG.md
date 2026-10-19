@@ -28,6 +28,34 @@ receipt only on success. Existing same-candidate mechanism tests and employee
 update behavior are preserved; live rollout and business pilot are not asserted.
 Parent ACL-1923 retains actual activation and publication verification.
 
+## API backend: no time limit on file uploads, upload progress on the dashboard - ACL-1899
+
+- Bug (live 2026-10-14): a video upload hit the generic 120 s write timeout, Python stopped waiting
+  (`call_unknown`), one readback 5 s later found nothing and the run stopped, while the page's request
+  could still reach Meta. Owner decision: no time limit for file uploads.
+- File writes (`advideos`, `adimages`) now run as a job in the page helper (`XMLHttpRequest`); Python polls it ~once per second with a short per-poll CDP timeout and no overall
+  deadline. Network, HTTP and Meta errors, a lost page, or Stop end the wait. Writes without a file are
+  unchanged (short timeout). The write policy and the size + SHA-256 check before sending are unchanged.
+- Dashboard: the job panel shows `ad 1: uploading video (180 MB), 1m 20s` (images too), at most once per
+  second. There is no byte progress: a listener on `xhr.upload` makes the browser send a CORS preflight,
+  Graph answers it with `Access-Control-Allow-Origin: *` and no `Allow-Credentials`, and the credentialed
+  request is blocked (live failure on TEST9095: `network`, body never sent). So the helper registers no
+  upload listener; a real percentage comes with chunked upload (ACL-891).
+- Stop during an upload aborts the request in the page, reads back once and stops; a re-run reuses an
+  already uploaded video and never uploads twice.
+- After an unknown upload result the readback is repeated (6 reads with waits of 5, 10, 20, 30, 30, 30 s,
+  about 2 minutes), counted in the per-campaign call budget; other writes keep one readback.
+- Redirects: the old `fetch` used `redirect: 'error'`; XHR follows redirects. The helper aborts the
+  request as soon as the response URL differs from the requested one and reports `redirected`, which
+  counts as an unknown result (reconcile), never as not sent. Residual risk: the browser may already have
+  re-sent the body to the redirect target before the check. Graph hosts do not redirect.
+- Review fixes: up to 3 consecutive poll timeouts are tolerated (never a re-send); Stop during the
+  readback ends the run as cancelled and keeps the write marked unreconciled; Stop during an upload reads
+  back twice (5 s, 20 s) and tells the buyer to wait a few minutes before publishing again; repeated
+  readbacks read at most 3 pages.
+- Stacked on ACL-1776 (depends on the ACL-1761...1776 stack). Chunked upload for files over 200 MB
+  (ACL-891) can reuse the job / progress plumbing.
+
 ## Builder: Instant Forms - the robot creates a form from a template (API backend) - ACL-1776
 
 - Owner decision 2026-10-12: the robot MAY create an Instant Form on a Page from a saved template. It

@@ -413,7 +413,8 @@ class ApiPublisher:
             _record("api_create_step", True, campaign=name, diag={"step": text})
 
         creator = CampaignCreator(self._client, self._facts, self._resolver,
-                                  cancelled=self.cancelled, progress=step, sleep=self.sleep)
+                                  cancelled=self.cancelled, progress=step, sleep=self.sleep,
+                                  live_progress=lambda text: self.progress(f"{name}: {text}"))
         if self.dry_run:
             outcome = creator.plan_only(plan)
             if self._client.writes:

@@ -312,7 +312,7 @@ _HELPER_JS = r"""
     return null;
   }
 
-  async function write(spec) {
+  async function write(spec, job) {
     const refused = (why) => ({ error: 'write_refused', why: why });
     if (!WRITE) return { error: 'read_only' };
     if (spec.method !== 'POST') return { error: 'read_only' };
@@ -321,7 +321,7 @@ _HELPER_JS = r"""
     if (/\/leadgen_forms$/.test(path)) {
       const why = checkForm(spec);
       if (why) return refused(why);
-      return post(path, spec.params || {}, undefined, null, spec, {});
+      return post(path, spec.params || {}, undefined, null, spec, {}, null);
     }
     // ACL-1800: правка существующего объекта — отдельная узкая политика. Помощник
     // создателя (без `object_update`) пути объекта не принимает; помощник правок
@@ -413,11 +413,79 @@ _HELPER_JS = r"""
         if (hex !== String(expect.sha256 || '')) return refused('file_hash');
       } catch (e) { return refused('file_hash'); }
     }
-    return post(path, params, want, blob, spec, files);
+    return post(path, params, want, blob, spec, files, job || null);
+  }
+
+  // ACL-1899: отправка файла (XHR: abort и проверка перенаправления). Без собственного таймаута: ждём ответ,
+  // сетевую ошибку или `abort()` (Stop у покупателя).
+  function sendXhr(url, body, cred, job) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      job.xhr = xhr;
+      xhr.open('POST', url, true);
+      xhr.withCredentials = (cred === 'include');
+      // ВАЖНО: на `xhr.upload` НЕ вешаем ни одного слушателя (ни onprogress, ни addEventListener).
+      // Любой слушатель загрузки по спецификации включает CORS-preflight; Graph отвечает на
+      // OPTIONS с `Access-Control-Allow-Origin: *` без `Allow-Credentials`, и запрос с
+      // куками (`withCredentials`) браузер режет: тело не уходит, приходит `network`.
+      // Поэтому байтового прогресса нет - Python показывает прошедшее время.
+      // Остаточный риск: XHR сам идёт по 307/308 и мог УЖЕ переотправить тело (с токеном)
+      // по новому адресу до этой проверки. Рвём запрос, как только заголовки пришли не с
+      // нашего адреса, и считаем результат НЕИЗВЕСТНЫМ. Graph-хосты не перенаправляют.
+      const wrongUrl = () => !!xhr.responseURL && xhr.responseURL !== url;
+      xhr.onreadystatechange = () => {
+        if (xhr.readyState === 2 && wrongUrl()) {
+          reject(new Error('redirect'));
+          try { xhr.abort(); } catch (e) {}
+        }
+      };
+      xhr.onload = () => {
+        if (wrongUrl()) { reject(new Error('redirect')); return; }
+        resolve({ status: xhr.status, text: String(xhr.responseText || ''), url: xhr.responseURL || '' });
+      };
+      xhr.onerror = () => reject(new Error('network'));
+      xhr.onabort = () => reject(new Error('aborted'));
+      xhr.send(body);
+    });
+  }
+
+  // Задания записи с файлом: `startCall` сразу отдаёт id, `poll` читает прогресс
+  // (локально, к Meta не ходит), `abort` рвёт отправку. Проверки политики — те же
+  // (`write(spec, job)`), здесь ничего не ослаблено.
+  const jobs = {};
+  let jobSeq = 0;
+  function startCall(spec) {
+    if (retired) return { error: 'retired' };
+    if (!WRITE || !spec || spec.method !== 'POST') return { error: 'read_only' };
+    if (!spec.files || !Object.keys(spec.files).length) return { error: 'bad_option' };
+    for (const k of Object.keys(jobs)) {
+      if (jobs[k].state !== 'running' && Object.keys(jobs).length > 8) delete jobs[k];
+    }
+    for (const k of Object.keys(jobs)) if (jobs[k].state === 'running') return { error: 'bad_option' };
+    const id = 'j' + (++jobSeq);
+    const job = { state: 'running', xhr: null, aborted: false, result: null };
+    jobs[id] = job;
+    write(spec, job).then(
+      (r) => { job.result = r; job.state = (r && r.error) ? 'error' : 'done'; },
+      () => { job.result = { error: 'network' }; job.state = 'error'; });
+    return { job: id };
+  }
+  function poll(id) {
+    const j = jobs[String(id)];
+    if (!j) return { state: 'error', result: { error: 'no_job' } };
+    if (j.state === 'running') return { state: 'running' };
+    return { state: j.state, result: j.result };
+  }
+  function abort(id) {
+    const j = jobs[String(id)];
+    if (!j) return { ok: false };
+    j.aborted = true;
+    try { if (j.xhr) j.xhr.abort(); } catch (e) {}
+    return { ok: true };
   }
 
   // Общая отправка записи: политика уже проверена (цепочка act_X или цепочка форм).
-  async function post(path, params, want, blob, spec, files) {
+  async function post(path, params, want, blob, spec, files, job) {
     scanFast(); scanHtml();
     if (!token) return { error: 'no_token', state: state() };
     if (typeof fetch !== 'function') return { error: 'no_fetch' };
@@ -448,16 +516,33 @@ _HELPER_JS = r"""
     const url = 'https://' + useHost + (version ? '/' + version : '') + path;
     const endpoint = { host: useHost, version: version, credentials: cred };
     let resp = null;
-    try {
-      resp = await fetch(url, { method: 'POST', body: body, credentials: cred, mode: 'cors',
-                                cache: 'no-store', redirect: 'error' });
-    } catch (e) {
-      if (want) unstage(files[want]);
-      return { error: 'network', state: state(), endpoint: endpoint };
-    }
-    if (want) unstage(files[want]);
     let text = '';
-    try { text = await resp.text(); } catch (e) { return { error: 'network', status: resp.status }; }
+    if (job && blob) {
+      // ACL-1899: файл уходит через XMLHttpRequest — он отдаёт `upload.onprogress`.
+      // Те же правила, что у fetch: один запрос, без повтора, без перенаправлений.
+      if (typeof XMLHttpRequest !== 'function') { unstage(files[want]); return { error: 'no_fetch' }; }
+      if (job.aborted) { unstage(files[want]); return { error: 'aborted' }; }
+      let got = null;
+      try { got = await sendXhr(url, body, cred, job); }
+      catch (e) {
+        unstage(files[want]);
+        const why = job.aborted ? 'aborted' : (e && e.message === 'redirect' ? 'redirected' : 'network');
+        return { error: why, state: state(), endpoint: endpoint };
+      }
+      unstage(files[want]);
+      resp = { status: got.status };
+      text = got.text;
+    } else {
+      try {
+        resp = await fetch(url, { method: 'POST', body: body, credentials: cred, mode: 'cors',
+                                  cache: 'no-store', redirect: 'error' });
+      } catch (e) {
+        if (want) unstage(files[want]);
+        return { error: 'network', state: state(), endpoint: endpoint };
+      }
+      if (want) unstage(files[want]);
+      try { text = await resp.text(); } catch (e) { return { error: 'network', status: resp.status }; }
+    }
     text = clean(text);
     let parsed;
     try { parsed = JSON.parse(text); } catch (e) { parsed = { non_json: text.slice(0, 300) }; }
@@ -518,7 +603,8 @@ _HELPER_JS = r"""
   function retire() { retired = true; token = null; return true; }
 
   g[NAME] = Object.freeze({ call: call, state: state, probe: probe, retire: retire,
-                          stage: stage, unstage: unstage });
+                          stage: stage, unstage: unstage,
+                          startCall: startCall, poll: poll, abort: abort });
 })();
 """
 
@@ -841,13 +927,22 @@ class InPageGraph:
 
     def write(self, path: str, params: dict | None = None, *, files: dict | None = None,
               filename: str = "", timeout: float = 120.0, on_ad: bool = False,
-              form_page: str = "") -> dict:
+              form_page: str = "", progress: Callable[[float], None] | None = None,
+              cancelled: Callable[[], bool] | None = None) -> dict:
         """POST в разрешённое ребро. РОВНО один раз; сбой после отправки — `call_unknown`.
 
         `files` — {поле: bytes}. Файл складывается в помощник прямо перед
         вызовом, в том же мире; помощник сверяет размер и SHA-256 перед
         отправкой. Политика проверяется здесь (`write_policy.check`) и ещё раз
         в помощнике.
+
+        ACL-1899: запись С ФАЙЛОМ не имеет общего срока (`timeout` к ней не
+        относится): задание стартует в помощнике, а Python раз в `UPLOAD_POLL_S`
+        спрашивает состояние (только локальный CDP, к Meta не ходит) и отдаёт
+        прошедшие секунды в `progress` (байтового прогресса нет: слушатель
+        `xhr.upload` включил бы CORS-preflight, который Graph не пропускает). Кончается ответом, ошибкой сети или
+        пропажей страницы (`call_unknown`); на `cancelled()` рвём отправку.
+        Запись без файла — прежний короткий `timeout`.
         """
         if not self.allow_writes:
             raise ValueError("read-only: writes are not enabled for this page")
@@ -884,6 +979,8 @@ class InPageGraph:
         else:
             self._ready_for_call()
             ctx = self._ensure()
+        if files:
+            return self._write_file_job(ctx, spec, progress, cancelled)
         expr = f"globalThis[{json.dumps(self.name)}].call({json.dumps(spec)})"
         try:
             got = strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout))
@@ -891,6 +988,68 @@ class InPageGraph:
             # Запрос мог уйти: результат неизвестен, повтора нет — сверка чтением.
             return {"error": "call_unknown"}
         return got if isinstance(got, dict) else {"error": "call_unknown"}
+
+    #: Как часто спрашивать у помощника прогресс отправки файла (ACL-1899).
+    UPLOAD_POLL_S = 1.0
+    #: Срок ОДНОГО локального опроса/старта/обрыва; общего срока у загрузки нет.
+    UPLOAD_CDP_TIMEOUT_S = 15.0
+    #: Сколько таймаутов ОПРОСА подряд терпим (повторно файл не шлём никогда).
+    MAX_POLL_TIMEOUTS = 3
+
+    def _write_file_job(self, ctx: int, spec: dict, progress, cancelled) -> dict:
+        """Запись с файлом без общего срока: старт, опрос раз в секунду, обрыв по Stop."""
+        def run(method: str, arg: str = "") -> Any:
+            expr = f"globalThis[{json.dumps(self.name)}].{method}({arg})"
+            return strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=self.UPLOAD_CDP_TIMEOUT_S))
+
+        try:
+            started = run("startCall", json.dumps(spec))
+        except (CdpTimeout, StaleContextError, PageError, CdpError, TimeoutError):
+            return {"error": "call_unknown"}
+        if not isinstance(started, dict):
+            return {"error": "call_unknown"}
+        if started.get("error"):
+            return started                              # отказ ДО отправки (политика/состояние)
+        job = started.get("job")
+        if not isinstance(job, str) or not re.fullmatch(r"j[0-9]{1,6}", job):
+            return {"error": "call_unknown"}
+        poll_timeouts = 0
+        began = self._clock()
+        while True:
+            if cancelled is not None and cancelled():
+                try:
+                    run("abort", json.dumps(job))
+                except (CdpTimeout, StaleContextError, PageError, CdpError, TimeoutError):
+                    pass
+                # Результат неизвестен: дальше обычная сверка чтением, повторной загрузки нет.
+                return {"error": "call_unknown", "why": "cancelled"}
+            try:
+                got = run("poll", json.dumps(job))
+            except (CdpTimeout, TimeoutError):
+                # Один опрос не ответил - не конец загрузки: терпим подряд до MAX_POLL_TIMEOUTS.
+                poll_timeouts += 1
+                if poll_timeouts > self.MAX_POLL_TIMEOUTS:
+                    return {"error": "call_unknown"}
+                self._sleep(self.UPLOAD_POLL_S)
+                continue
+            except (StaleContextError, PageError, CdpError):
+                return {"error": "call_unknown"}
+            poll_timeouts = 0
+            if not isinstance(got, dict):
+                return {"error": "call_unknown"}
+            state = got.get("state")
+            if state == "running":
+                if progress is not None:
+                    try:
+                        progress(max(0.0, self._clock() - began))
+                    except Exception:                    # noqa: BLE001 — показ не должен ронять запись
+                        pass
+                self._sleep(self.UPLOAD_POLL_S)
+                continue
+            result = got.get("result")
+            if state in ("done", "error") and isinstance(result, dict):
+                return result
+            return {"error": "call_unknown"}
 
     def reacquire(self, *, timeout: float = 90.0) -> dict:
         """Переснять токен: гасим помощника, перезагружаем вкладку, новый мир."""

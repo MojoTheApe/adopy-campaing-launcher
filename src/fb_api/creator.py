@@ -97,6 +97,14 @@ VIDEO_POLL_S = 15.0
 VIDEO_MAX_POLLS = 20
 #: Пауза перед сверкой неизвестной записи: запрос мог ещё лететь (ревью, minor 3).
 RECONCILE_WAIT_S = 5.0
+#: Сверка после неизвестной загрузки ФАЙЛА (ACL-1899): видео могло долететь позже.
+#: Паузы перед каждым чтением = RECONCILE_WAIT_S × эти множители (5, 10, 20, 30, 30, 30 с ≈ 2 мин);
+#: каждое чтение идёт через клиента и считается в потолке вызовов кампании.
+UPLOAD_RECONCILE_FACTORS = (1, 2, 4, 6, 6, 6)
+#: Не чаще раза в секунду показываем процент загрузки файла.
+UPLOAD_PROGRESS_EVERY_S = 1.0
+#: Страниц списка в ПОВТОРНЫХ чтениях сверки загрузки (поиск до загрузки и первое чтение - полные).
+UPLOAD_RECONCILE_PAGES = 3
 #: Сколько страниц (по 100) свежих креативов кабинета смотреть в поиске своего.
 CREATIVE_LOOKUP_PAGES = 3
 #: Цель кампании из билдера, которую умеет API-путь (как у RPA: Leads → сайт).
@@ -606,7 +614,8 @@ class CampaignCreator:
                  video_wait_s: float = VIDEO_WAIT_S, video_poll_s: float = VIDEO_POLL_S,
                  video_max_polls: int = VIDEO_MAX_POLLS,
                  reconcile_wait_s: float | None = None,
-                 progress: Callable[[str], None] = lambda _s: None):
+                 progress: Callable[[str], None] = lambda _s: None,
+                 live_progress: Callable[[str], None] = lambda _s: None):
         self.client = client
         self.facts = facts
         self.resolver = resolver
@@ -626,6 +635,8 @@ class CampaignCreator:
         self._form_steps: dict[str, _fc.FormStep] = {}
         self._form_warnings: list[str] = []
         self.progress = progress
+        #: Живой процент загрузки файла (ACL-1899): только на панель задания, без шагов и телеметрии.
+        self.live_progress = live_progress
 
     # -- служебное
     def _step(self, out: Outcome, text: str) -> None:
@@ -636,10 +647,38 @@ class CampaignCreator:
         if self.cancelled():
             raise CreationStopped("Stopped by the user", created=out.created, kind="cancelled")
 
+    def _upload_progress(self, ad_index: int, kind: str, size: int) -> Callable[[float], None]:
+        """Показ «ad 1: uploading video (180 MB), 1m 20s» - не чаще раза в секунду.
+
+        Байтового прогресса нет (слушатель `xhr.upload` включает CORS-preflight): размер
+        известен из складирования, время - от старта загрузки. Процент придёт с кусками (ACL-891).
+        """
+        last = [None]
+
+        def show(elapsed_s: float) -> None:
+            now = self.clock()
+            if last[0] is not None and now - last[0] < UPLOAD_PROGRESS_EVERY_S:
+                return
+            last[0] = now
+            secs = int(max(0, elapsed_s))
+            if secs >= 3600:
+                span = f"{secs // 3600}h {secs % 3600 // 60:02d}m"
+            elif secs >= 60:
+                span = f"{secs // 60}m {secs % 60:02d}s"
+            else:
+                span = f"{secs}s"
+            self.live_progress(f"ad {ad_index}: uploading {kind} ({max(1, size // (1024 * 1024))} MB), {span}")
+        return show
+
     def _write(self, out: Outcome, what: str, path: str, params: dict, find: Callable[[], str | None],
                *, files: dict | None = None, filename: str = "", id_of=lambda b: b.get("id"),
-               on_ad: bool = False, form_page: str = "") -> str:
-        """Одна запись; неизвестный результат — сверка `find()` чтением."""
+               on_ad: bool = False, form_page: str = "",
+               upload: tuple[int, str] | None = None) -> str:
+        """Одна запись; неизвестный результат — сверка `find()` чтением.
+
+        `upload` = (номер объявления, «video»/«image») - запись с файлом: без срока,
+        с показом процента и Stop; неизвестный результат сверяется несколько раз.
+        """
         self._check_cancel(out)
         try:
             # `on_ad` — только креатив Instant Form при наборе ON_AD (ACL-1775);
@@ -649,20 +688,55 @@ class CampaignCreator:
                 extra["on_ad"] = True
             if form_page:
                 extra["form_page"] = form_page
+            if upload and files:
+                size = len(next(iter(files.values())))
+                extra["progress"] = self._upload_progress(upload[0], upload[1], size)
+                extra["cancelled"] = self.cancelled
             body = self.client.post(path, params, files=files, filename=filename, **extra)
         except WriteUnknown as exc:
             # `WritesBlocked` сюда не попадает: та запись не уходила (ревью M4).
+            stopped = bool(upload) and self.cancelled()
             self._step(out, f"{what}: result unknown — reconciling by readback")
-            if self.reconcile_wait_s > 0:
-                self.sleep(self.reconcile_wait_s)
+            # Файл мог долететь позже: несколько чтений с растущими паузами (≈ 2 мин).
+            # После Stop загрузка оборвана — одно чтение без ожидания.
+            if upload and stopped:
+                # Тело могло уйти целиком, а Meta ещё обрабатывает: два чтения (5 и 20 с).
+                waits = [self.reconcile_wait_s, self.reconcile_wait_s * 4]
+            elif upload:
+                waits = [self.reconcile_wait_s * f for f in UPLOAD_RECONCILE_FACTORS]
+            else:
+                waits = [self.reconcile_wait_s]
+            found = None
             try:
-                found = find()
+                for n, wait in enumerate(waits):
+                    # Stop посреди сверки: останавливаемся; метка `unreconciled` остаётся.
+                    if upload and not stopped and self.cancelled():
+                        raise CreationStopped(
+                            f"Stopped by the user while checking the {what} result. Meta may still be "
+                            "processing the upload: wait a few minutes before publishing again.",
+                            created=out.created, kind="cancelled")
+                    if wait > 0:
+                        self.sleep(wait)
+                    if upload and not stopped and self.cancelled():
+                        raise CreationStopped(
+                            f"Stopped by the user while checking the {what} result. Meta may still be "
+                            "processing the upload: wait a few minutes before publishing again.",
+                            created=out.created, kind="cancelled")
+                    # Повторные чтения дешевле: свежий файл в первых страницах списка.
+                    found = find(pages=UPLOAD_RECONCILE_PAGES) if (upload and n > 0) else find()
+                    if found:
+                        break
             except (GraphStop, GraphError) as rexc:
                 raise CreationStopped(
                     f"{what}: the write result is unknown ({exc}) and the readback failed ({rexc}). "
                     "Nothing else was written; check Ads Manager, then publish again "
                     "(a re-run does not duplicate).", created=out.created, kind="unknown") from rexc
             if not found:
+                if stopped:
+                    raise CreationStopped("Stopped by the user during the upload; nothing was found "
+                                          "in the ad account yet. Meta may still be processing the "
+                                          "upload: wait a few minutes before publishing again.",
+                                          created=out.created, kind="cancelled") from exc
                 raise CreationStopped(
                     f"{what}: the write result is unknown ({exc}) and nothing was found by readback. "
                     "Nothing else was written; publish again later (a re-run does not duplicate).",
@@ -755,9 +829,9 @@ class CampaignCreator:
     def _image_hash(self, out: Outcome, plan: CampaignPlan, ad: AdPlan, data: bytes) -> str:
         md5 = _md5(data)
 
-        def find() -> str | None:
+        def find(pages: int = 1) -> str | None:
             rows = self.client.get_all(f"/{plan.act}/adimages", {"hashes": [md5], "fields": "hash"},
-                                       max_pages=1)
+                                       max_pages=min(1, pages))
             return md5 if any(str(r.get("hash")) == md5 for r in rows) else None
 
         if find():
@@ -772,7 +846,8 @@ class CampaignCreator:
 
         # Имя в библиотеке несёт md5 файла: по нему сверка узнаёт картинку и при повторе.
         got = self._write(out, f"ad {ad.index}: image upload", f"/{plan.act}/adimages", {}, find,
-                          files={"filename": data}, filename=image_name(ad.path, data), id_of=hash_of)
+                          files={"filename": data}, filename=image_name(ad.path, data), id_of=hash_of,
+                          upload=(ad.index, "image"))
         out.created.setdefault("images", []).append(got)
         self._step(out, f"ad {ad.index}: image uploaded")
         return got
@@ -780,9 +855,9 @@ class CampaignCreator:
     def _video(self, out: Outcome, plan: CampaignPlan, ad: AdPlan, data: bytes) -> tuple[str, str]:
         title = video_title(plan.tag, data)
 
-        def find() -> str | None:
+        def find(pages: int = 10) -> str | None:
             rows = self.client.get_all(f"/{plan.act}/advideos", {"fields": "id,title", "limit": 100},
-                                       max_pages=10)
+                                       max_pages=pages)
             hit = next((r for r in rows if str(r.get("title") or "") == title), None)
             return str(hit["id"]) if hit else None
 
@@ -792,7 +867,7 @@ class CampaignCreator:
         else:
             vid = self._write(out, f"ad {ad.index}: video upload", f"/{plan.act}/advideos",
                               {"name": title, "title": title}, find, files={"source": data},
-                              filename=Path(ad.path).name)
+                              filename=Path(ad.path).name, upload=(ad.index, "video"))
             out.created.setdefault("videos", []).append(vid)
             self._step(out, f"ad {ad.index}: video uploaded")
         return vid, self._wait_video(out, ad, vid)
