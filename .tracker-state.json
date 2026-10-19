@@ -43217,9 +43217,11 @@
         "worktree": "C:\\acl-1839-refresh",
         "id": "5aa698fac214484e9c5879758fb1202f",
         "issue": 839,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T11:43:22+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 843,
+        "report": "ACL-1839 current-main refresh \u2014 2026-10-19, resumed on explicit owner instruction after the 17 October administrative pause. Actual author Worker-R1839C / session refresh_acl1839_20261019, Coordinator-M1011A, claim 5aa698fac214484e9c5879758fb1202f on the original branch codex/acl-1839-connection-panel-layout (worktree C:\\acl-1839-refresh).\n\nPR 843 head 02a9f8a8 includes current main 435bc154. The only conflict was the top of docs/system/CHANGELOG.md; the ACL-1839 entry and all upstream entries (including ACL-1381) are preserved. Earlier refresh merges aabcee4b/c1cbbd4f keep main's .amap-ml font-size token plus min-width: 0 and overflow-wrap: anywhere. The diff against main is exactly the original four files (CHANGELOG, _account_map_add.html, report.html, tests/test_account_connection_layout.py), +102/-4; no new product behavior.\n\nLocal Windows/Python 3.14 checks on 02a9f8a8 with an isolated ACL_CONFIG_DIR and synthetic data: test_account_connection_layout, test_account_map_view, test_account_map_patch, test_account_map_columns, test_multilogin_connect_chooses_workspace \u2014 50 passed (real Chromium, 280/720/1040 px, both themes, three hosts). git diff --check passed. Hosted CI on 02a9f8a8 is running (Windows, installer, descriptor, process and tooling checks already passed); tracker-link is re-run after this handoff.\n\nA non-implementing read-only pre-review of the previous refresh c1cbbd4f found no findings; the only change since is the CHANGELOG conflict resolution. This is not a formal approval. Remaining: formal independent source review on the current main baseline, batch approval, integration and delivery. No production profiles, Multilogin actions or advertising writes were used."
       },
       "73": {
         "actor": "Worker-W144D",
