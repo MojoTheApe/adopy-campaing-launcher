@@ -43187,22 +43187,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "776": {
-        "actor": "Worker-RF1019W",
-        "session": "rf1019w-20261019",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1776-create-forms",
-        "worktree": "C:\\rf19-776",
-        "id": "2a0a9c7b6c9f432ea8583c166ad35384",
-        "issue": 776,
-        "state": "handoff",
-        "started_at": "2026-10-19T11:24:12+00:00",
-        "from_status": "status:todo",
-        "pr": 831,
-        "report": "Merged main 435bc154 into cd1da59b (new head 9da094c7). Conflicts: none. No code change. Tests: test_acl1776_create_forms, test_acl1775_builder_forms, test_acl1819_preflight: 214 passed. Needs a delta review of the merge only."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -47416,25 +47401,25 @@
             "session": "rf1019w-20261019"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RF1019W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-RF1016W",
-          "session": "rf1016w-20261016",
+          "actor": "Worker-RF1019W",
+          "session": "rf1019w-20261019",
           "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1776-create-forms",
-          "worktree": "C:\\rf-776",
-          "id": "8aeef0575dbc446db146d616450fa5b7",
+          "worktree": "C:\\rf19-776",
+          "id": "2a0a9c7b6c9f432ea8583c166ad35384",
           "issue": 776,
           "state": "handoff",
-          "started_at": "2026-10-16T10:18:05+00:00",
+          "started_at": "2026-10-19T11:24:12+00:00",
           "from_status": "status:todo",
           "pr": 831,
-          "report": "Merged main af0ade29 into the previously approved head 271113df; only CHANGELOG conflicted, resolved by keeping both sides; no code change; 130 tests passed. Needs a delta review of the merge only."
+          "report": "Merged main 435bc154 into cd1da59b (new head 9da094c7). Conflicts: none. No code change. Tests: test_acl1776_create_forms, test_acl1775_builder_forms, test_acl1819_preflight: 214 passed. Needs a delta review of the merge only."
         },
         "pr": 831,
-        "queued_at": "2026-10-16T10:21:33+00:00",
+        "queued_at": "2026-10-19T11:31:33+00:00",
         "review_report": "Owner lifted the 2026-10-17 exclusive pause for ACL-1776, ACL-1899, ACL-1902 and ACL-1886 on 2026-10-19 (instruction in the review session: refresh onto current main, re-review, ship a new batch with release after the current one). Batch afaeca3e was cancelled by that pause; the old approval used main af0ade29 and is stale vs main 435bc154. Return for a main merge and fresh independent approval.",
         "return_operation": {
           "id": "4eee273524d746a39a39ad6874cf9c40",
@@ -55971,7 +55956,8 @@
     "review_queue": [
       377,
       70,
-      681
+      681,
+      776
     ],
     "review": {
       "id": "b49c262d383b4011a4e6891181162ac5",
@@ -89692,6 +89678,13 @@
         "pr": 976,
         "lane": "3efb6c7788344ff7b35bf4c3d4eee2d2",
         "actor": "Reviewer-Y19B"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T11:31:33+00:00",
+        "issue": 776,
+        "pr": 831,
+        "actor": "Worker-RF1019W"
       }
     ],
     "policy": {
