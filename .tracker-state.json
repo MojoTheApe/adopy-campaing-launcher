@@ -43230,9 +43230,11 @@
         "worktree": "C:\\acl-142-c",
         "id": "7b750aad087d483889adce3317a62811",
         "issue": 72,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T12:34:58+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 958,
+        "report": "Review fixes for ACL-142 (head 7f1f4c7e, merged origin/main): (1) /account-map-remove with also_unlink now unlinks placements even with no map row (404 only if neither), so a retry after a partial failure completes; tests added incl. no-row, case, no map file, retry. (2) \"leave this empty to connect now\" guidance restored. (3) dialog input disabled during the first read. (4) ACL-1872 conflict gone; PR #950 not merged yet, previously merged cleanly. Tests (py3.14, per file): acl_142 13, connect_without_act 13, review_ui_regressions 7, report_scripts_parse 3, account_map_patch 4, accounts_tab_connects 10, connect_empty_country 11, account_spend 62, all passed. Not run: test_one_connect_button, test_the_account_tree_on_screen (timed out on laptop earlier), test_connecting_an_account_is_one_place (_design_tokens env failure). Node harnesses pass."
       }
     },
     "tasks": {
