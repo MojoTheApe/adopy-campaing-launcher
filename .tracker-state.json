@@ -44126,20 +44126,6 @@
   },
   "execution": {
     "claims": {
-      "184": {
-        "actor": "Worker-R1019184",
-        "session": "run_r1019_184",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1184-hand-open-message",
-        "worktree": "C:\\acl-1184",
-        "id": "c4d6b287bb7b4f8bb6e34c7260b032f9",
-        "issue": 184,
-        "state": "handoff",
-        "started_at": "2026-10-19T19:06:13+00:00",
-        "from_status": "status:todo",
-        "pr": 937,
-        "report": "Revived after the conflict return: merged work/main (clean, no conflicts), pushed. Touched tests pass: test_acl1184_hand_open_message, test_acl1812_warm_sessions (100 passed). Full suite left to CI. Not verified live."
-      },
       "920": {
         "actor": "Worker-R1019920",
         "session": "run_r1019_920",
@@ -52178,9 +52164,25 @@
             "session": "run_r1019_184"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-R1019184",
-        "coordinator": "Coordinator-M1011A"
+        "coordinator": "Coordinator-M1011A",
+        "handoff": {
+          "actor": "Worker-R1019184",
+          "session": "run_r1019_184",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "work/acl-1184-hand-open-message",
+          "worktree": "C:\\acl-1184",
+          "id": "c4d6b287bb7b4f8bb6e34c7260b032f9",
+          "issue": 184,
+          "state": "handoff",
+          "started_at": "2026-10-19T19:06:13+00:00",
+          "from_status": "status:todo",
+          "pr": 937,
+          "report": "Revived after the conflict return: merged work/main (clean, no conflicts), pushed. Touched tests pass: test_acl1184_hand_open_message, test_acl1812_warm_sessions (100 passed). Full suite left to CI. Not verified live."
+        },
+        "pr": 937,
+        "queued_at": "2026-10-19T19:47:23+00:00"
       }
     },
     "actors": {
@@ -57315,7 +57317,8 @@
       681,
       805,
       945,
-      807
+      807,
+      184
     ],
     "review": {
       "id": "71d08f944d4646c69ba2c95edd8d2464",
@@ -93497,6 +93500,13 @@
         "pr": 950,
         "lane": "8d00de9887014aa68193aca908a71d6f",
         "actor": "Reviewer-R1151Y"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T19:47:23+00:00",
+        "issue": 184,
+        "pr": 937,
+        "actor": "Worker-R1019184"
       }
     ],
     "policy": {
