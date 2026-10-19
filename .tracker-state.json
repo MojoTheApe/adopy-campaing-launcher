@@ -43146,19 +43146,6 @@
   },
   "execution": {
     "claims": {
-      "305": {
-        "actor": "Worker-E19305",
-        "session": "w305-c0a1de70",
-        "coordinator": "Coordinator-E1019A",
-        "branch": "work/acl-1305-setup-name-check",
-        "worktree": "C:\\wk19-305",
-        "id": "2c76bc2be6d345c28cd79fb37a134b58",
-        "issue": 305,
-        "state": "stopping",
-        "started_at": "2026-10-19T10:06:40+00:00",
-        "from_status": "status:todo",
-        "report": "Parked 2026-10-19: PR #965 merged with main (head a448e2f7) but packaging/windows/tests/test_setup_wizard.py::test_manual_setup_discovers_only_this_managers_accounts line 95 expects 'No accounts' while the new CM-column check now says 'is not in the CM column'; one-line expectation change needs owner approval. Everything else passes."
-      },
       "70": {
         "actor": "Worker-G19602",
         "session": "wg602-c0a1de70",
@@ -50198,22 +50185,21 @@
             "session": "w305-c0a1de70"
           }
         ],
-        "state": "implementing",
+        "state": "stopped",
         "worker": "Worker-E19305",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
-          "actor": "Worker-W1305A",
-          "session": "w1305a-20261017",
-          "coordinator": "Coordinator-T1004Q",
+          "actor": "Worker-E19305",
+          "session": "w305-c0a1de70",
+          "coordinator": "Coordinator-E1019A",
           "branch": "work/acl-1305-setup-name-check",
-          "worktree": "C:\\acl-1305",
-          "id": "8b7a99851f734457949fef925fc0e8d6",
+          "worktree": "C:\\wk19-305",
+          "id": "2c76bc2be6d345c28cd79fb37a134b58",
           "issue": 305,
-          "state": "handoff",
-          "started_at": "2026-10-17T07:17:01+00:00",
+          "state": "stopping",
+          "started_at": "2026-10-19T10:06:40+00:00",
           "from_status": "status:todo",
-          "pr": 965,
-          "report": "## Result\nPR #965. Setup now checks the name against the workbook CM column (case-insensitive; close matches named), explains where the Stats workbook comes from when missing/not chosen, and pre-fills the path when a workbook exists in the usual place.\n\n## Verification\ntests/test_setup_checks_name_against_workbook.py (one-letter-off, case-only, unknown name, missing workbook, prefill) + test_multilogin_is_connected_in_the_dashboard.py + test_acl_ci_scope.py: 197 passed. Full suite left to CI.\n\n## Not done\nNo live wizard GUI walkthrough (tk not exercised)."
+          "report": "Parked 2026-10-19: PR #965 merged with main (head a448e2f7) but packaging/windows/tests/test_setup_wizard.py::test_manual_setup_discovers_only_this_managers_accounts line 95 expects 'No accounts' while the new CM-column check now says 'is not in the CM column'; one-line expectation change needs owner approval. Everything else passes."
         },
         "pr": 965,
         "queued_at": "2026-10-17T07:20:10+00:00",
@@ -89407,6 +89393,13 @@
         "issue": 401,
         "pr": 960,
         "actor": "Worker-F19401"
+      },
+      {
+        "event": "stopped",
+        "at": "2026-10-19T11:05:07+00:00",
+        "issue": 305,
+        "actor": "Worker-E19305",
+        "report": "Parked 2026-10-19: PR #965 merged with main (head a448e2f7) but packaging/windows/tests/test_setup_wizard.py::test_manual_setup_discovers_only_this_managers_accounts line 95 expects 'No accounts' while the new CM-column check now says 'is not in the CM column'; one-line expectation change needs owner approval. Everything else passes."
       }
     ],
     "policy": {
