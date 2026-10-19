@@ -49719,7 +49719,7 @@
             "session": "w401-c0a1de70"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-E19401",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
@@ -49738,7 +49738,7 @@
         },
         "pr": 960,
         "queued_at": "2026-10-19T10:14:04+00:00",
-        "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
+        "review_report": "Returned for one blocking fix (ACL-1401, PR 960, head dc4dc59d).\nThe change itself reads correctly: launcher_unreachable walks the cause chain for a requests connection error (refused or connect timeout, not read timeout) to launcher.mlx.yt:45001, _ensure_browser raises ProfileStop(MLX_NOT_RUNNING) before the DirectCDP and attach-only branches, the message is English, and the policy, retry, Sentry and triage-map entries are consistent. No secrets.\nBLOCKER: required CI check \"linux tests (3.13, 2)\" fails on this head: tests/test_build_progress_model.py::test_every_step_the_robot_names_maps_to_a_stage -> \"add these to cb-build-model rules: ['multilogin_not_running']\". The PR adds multilogin_not_running to retry_policy.BLOCKING_REVIEW_STEPS, and that test requires every robot step name to map to a stage in the build-progress model. The PR does not touch scripts/acl_build_progress_model.py or the cb-build-model rules.\nFix: map multilogin_not_running to the \"profile\" stage (as the other profile_* stop steps) in the cb-build-model rules, then re-run tests/test_build_progress_model.py and tests/test_campaign_build_progress.py, and push so that all Linux shards pass. No other change needed.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578084+00:00",
@@ -88751,6 +88751,24 @@
         "pr": 960,
         "lane": "6f6985e5dcf44afd9f01606d7770d033",
         "actor": "Reviewer-Y19B"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-19T10:41:41+00:00",
+        "review": {
+          "id": "6f6985e5dcf44afd9f01606d7770d033",
+          "pr": 960,
+          "issues": [
+            401
+          ],
+          "actor": "Reviewer-Y19B",
+          "session": "rev-y19b-s1",
+          "coordinator": "Coordinator-E1019A",
+          "started_at": "2026-10-19T10:40:56+00:00",
+          "state": "returning",
+          "report": "Returned for one blocking fix (ACL-1401, PR 960, head dc4dc59d).\nThe change itself reads correctly: launcher_unreachable walks the cause chain for a requests connection error (refused or connect timeout, not read timeout) to launcher.mlx.yt:45001, _ensure_browser raises ProfileStop(MLX_NOT_RUNNING) before the DirectCDP and attach-only branches, the message is English, and the policy, retry, Sentry and triage-map entries are consistent. No secrets.\nBLOCKER: required CI check \"linux tests (3.13, 2)\" fails on this head: tests/test_build_progress_model.py::test_every_step_the_robot_names_maps_to_a_stage -> \"add these to cb-build-model rules: ['multilogin_not_running']\". The PR adds multilogin_not_running to retry_policy.BLOCKING_REVIEW_STEPS, and that test requires every robot step name to map to a stage in the build-progress model. The PR does not touch scripts/acl_build_progress_model.py or the cb-build-model rules.\nFix: map multilogin_not_running to the \"profile\" stage (as the other profile_* stop steps) in the cb-build-model rules, then re-run tests/test_build_progress_model.py and tests/test_campaign_build_progress.py, and push so that all Linux shards pass. No other change needed.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -95105,20 +95123,6 @@
         "coordinator": "Coordinator-E1019A",
         "started_at": "2026-10-19T10:40:22+00:00",
         "state": "reviewing"
-      },
-      "960": {
-        "id": "6f6985e5dcf44afd9f01606d7770d033",
-        "pr": 960,
-        "issues": [
-          401
-        ],
-        "actor": "Reviewer-Y19B",
-        "session": "rev-y19b-s1",
-        "coordinator": "Coordinator-E1019A",
-        "started_at": "2026-10-19T10:40:56+00:00",
-        "state": "returning",
-        "report": "Returned for one blocking fix (ACL-1401, PR 960, head dc4dc59d).\nThe change itself reads correctly: launcher_unreachable walks the cause chain for a requests connection error (refused or connect timeout, not read timeout) to launcher.mlx.yt:45001, _ensure_browser raises ProfileStop(MLX_NOT_RUNNING) before the DirectCDP and attach-only branches, the message is English, and the policy, retry, Sentry and triage-map entries are consistent. No secrets.\nBLOCKER: required CI check \"linux tests (3.13, 2)\" fails on this head: tests/test_build_progress_model.py::test_every_step_the_robot_names_maps_to_a_stage -> \"add these to cb-build-model rules: ['multilogin_not_running']\". The PR adds multilogin_not_running to retry_policy.BLOCKING_REVIEW_STEPS, and that test requires every robot step name to map to a stage in the build-progress model. The PR does not touch scripts/acl_build_progress_model.py or the cb-build-model rules.\nFix: map multilogin_not_running to the \"profile\" stage (as the other profile_* stop steps) in the cb-build-model rules, then re-run tests/test_build_progress_model.py and tests/test_campaign_build_progress.py, and push so that all Linux shards pass. No other change needed.",
-        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
