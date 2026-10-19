@@ -95910,6 +95910,11 @@
         "issue": 771,
         "pr": 832,
         "actor": "Worker-B1019771"
+      },
+      {
+        "event": "included-sources-closed",
+        "at": "2026-10-19T22:40:25+00:00",
+        "batch_id": "a69b4124493f41c481095d71c27cc55a"
       }
     ],
     "policy": {
@@ -103455,7 +103460,8 @@
           1018
         ],
         "finished_at": "2026-10-19T22:13:07+00:00",
-        "closing_sources": true
+        "closing_sources": false,
+        "sources_closed": true
       }
     },
     "integration": null,
