@@ -44284,22 +44284,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "529": {
-        "actor": "Worker-R1019529",
-        "session": "run_r1019_529",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1529-sharp-shot",
-        "worktree": "C:\\acl-1529-sharpshot",
-        "id": "81a6ec5e2293417cafc7ed10d771571d",
-        "issue": 529,
-        "state": "handoff",
-        "started_at": "2026-10-19T20:10:40+00:00",
-        "from_status": "status:todo",
-        "pr": 530,
-        "report": "Revived after the conflict return: fast-forwarded the local branch to work/codex/acl-1529-sharp-shot (it was 172 commits behind), merged work/main. One conflict, in the build-progress rules line of report.html: kept main's api_read$ and the branch's status_shot$ (combined in one alternation). Touched tests pass: test_status_screenshot, test_build_progress_model, test_acl_test_shard, test_copy_for_group (162 passed). Full suite left to CI. Not verified live. Note: batch PR #890 ignored as instructed."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -45741,25 +45726,25 @@
             "session": "run_r1019_529"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-R1019529",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-W530R",
-          "session": "worker530refresh20261013",
-          "coordinator": "Coordinator-DLV13",
+          "actor": "Worker-R1019529",
+          "session": "run_r1019_529",
+          "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1529-sharp-shot",
-          "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACL-Worker-530-Refresh",
-          "id": "250c3eeee7bf4cb5ae0f28c7daccabf9",
+          "worktree": "C:\\acl-1529-sharpshot",
+          "id": "81a6ec5e2293417cafc7ed10d771571d",
           "issue": 529,
           "state": "handoff",
-          "started_at": "2026-10-13T20:55:12+00:00",
+          "started_at": "2026-10-19T20:10:40+00:00",
           "from_status": "status:todo",
           "pr": 530,
-          "report": "# ACL-1529 current-main refresh handoff \u2014 2026-10-14\n\nActual Worker-W530R / sessionworker530refresh20261013 / actualagent/root/worker_refresh_530. Coordinator-DLV13. Fresh claim250c3eeee7bf4cb5ae0f28c7daccabf9 acquired after genuine Coordinator return; original Worker-S1529C history and codex/acl-1529-sharp-shot branch preserved.\n\nPR530 mainbase7cee2857d4b374bc564c5ca84b9f6ede69f96430; finalheadbcbe152e5b1bcbb595f23760f5334d7b89058e36; treed93e985f3f1cd4695c2d138589bba604d7bb4138. Current main merged cleanly into prior sourcec459673; no additional compatibility code edits required. Original scope and all owner-hidden/default-off/fingerprint-safe guards retained. Main browser-first sharder plus source post-pass compose; status_shot remains hold. No held batch, Tracker pin, dashboard or live environment touched.\n\nWindows/Python3.13.15 isolated checks:181 model/shard/platform/script/screenshot assertions passed;23 opt-in/default-off/last-shot tests passed,61 deselected. The181 run stalled final Playwright fixture teardown after assertions; its native taskkill helper exited but owned synthetic Chrome6912 remained. Verified it was a descendant of owned pytest29332 on the final teardown marker and terminated only that synthetic browser; cleanup then completed and pytest reported181passed. Local intervention is explicit, not an unassisted-cleanup claim or forced assertion success. No unrelated Chrome/Multilogin/dashboard processes affected. Scanner/import smoke/whitespace pass.\n\nFresh fullsourceCI38466991847 and installer38466991917 pending; Windows3.13 already passed as observed, no historical-tree reuse. Tracker-link38466991840 pre-handoff InProgress race will be retried after durable Review. Independent exact-head/current-main review still required. Owner screenshot readability acceptance, live verification and package delivery remain unclaimed."
+          "report": "Revived after the conflict return: fast-forwarded the local branch to work/codex/acl-1529-sharp-shot (it was 172 commits behind), merged work/main. One conflict, in the build-progress rules line of report.html: kept main's api_read$ and the branch's status_shot$ (combined in one alternation). Touched tests pass: test_status_screenshot, test_build_progress_model, test_acl_test_shard, test_copy_for_group (162 passed). Full suite left to CI. Not verified live. Note: batch PR #890 ignored as instructed."
         },
         "pr": 530,
-        "queued_at": "2026-10-13T21:13:59+00:00",
+        "queued_at": "2026-10-19T20:35:33+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "return_operation": {
           "id": "dca98cd670f646d6a3a26839c4c91cff",
@@ -57606,7 +57591,8 @@
       840,
       841,
       854,
-      708
+      708,
+      529
     ],
     "review": {
       "id": "71d08f944d4646c69ba2c95edd8d2464",
@@ -94008,6 +93994,13 @@
         "issue": 708,
         "pr": 952,
         "actor": "Worker-R1019708"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T20:35:33+00:00",
+        "issue": 529,
+        "pr": 530,
+        "actor": "Worker-R1019529"
       }
     ],
     "policy": {
