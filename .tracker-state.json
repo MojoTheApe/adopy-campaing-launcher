@@ -50535,7 +50535,7 @@
             "session": "acl_1992"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-M1992A",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -50553,7 +50553,8 @@
           "report": "Implemented in PR 993 (head a62a352f). API jobs report units {done,total,last} per campaign; page percent = done/total (<=99 before result, monotonic); robot jobs keep the ACL-1347 model. creator.py untouched. Pre-handoff independent read-only review: no HIGH, all findings fixed in a62a352f. Targeted tests green locally; full suite left to CI. Live API check on 9095 still pending."
         },
         "pr": 993,
-        "queued_at": "2026-10-17T21:35:18+00:00"
+        "queued_at": "2026-10-17T21:35:18+00:00",
+        "reviewer": "Reviewer-E19992"
       },
       "994": {
         "implementers": [
@@ -52775,6 +52776,10 @@
       },
       "Reviewer-E19864": {
         "session": "r864-c0a1de70",
+        "role": "Reviewer"
+      },
+      "Reviewer-E19992": {
+        "session": "r992-c0a1de70",
         "role": "Reviewer"
       }
     },
@@ -55610,8 +55615,7 @@
     "review_queue": [
       356,
       287,
-      377,
-      992
+      377
     ],
     "review": null,
     "history": [
@@ -88007,6 +88011,13 @@
         "pr": 985,
         "lane": "4c92ce2a149d462fbc54c90a5e521770",
         "actor": "Reviewer-E19864"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-19T07:29:26+00:00",
+        "pr": 993,
+        "lane": "0f07c15381a5442ab7ca5f3be31ca310",
+        "actor": "Reviewer-E19992"
       }
     ],
     "policy": {
@@ -94196,6 +94207,18 @@
         "session": "r864-c0a1de70",
         "coordinator": "Coordinator-E1019A",
         "started_at": "2026-10-19T07:28:11+00:00",
+        "state": "reviewing"
+      },
+      "993": {
+        "id": "0f07c15381a5442ab7ca5f3be31ca310",
+        "pr": 993,
+        "issues": [
+          992
+        ],
+        "actor": "Reviewer-E19992",
+        "session": "r992-c0a1de70",
+        "coordinator": "Coordinator-E1019A",
+        "started_at": "2026-10-19T07:29:26+00:00",
         "state": "reviewing"
       }
     },
