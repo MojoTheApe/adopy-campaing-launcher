@@ -44574,9 +44574,11 @@
         "worktree": "C:\\acl-1896",
         "id": "6a7ce73b0e974e34b68a15c8da86a526",
         "issue": 896,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T21:57:19+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 949,
+        "report": "Returned-for-conflict revival (review lane release, 2026-10-19): merged current work/main into the branch. One conflict in src/fb_api/creator.py (Creator.__init__: kept both ACL-1896 _ig_cache/_ig_id and main's _form_steps/_form_warnings). Read-only Opus review of the resolution: no defects. Affected tests passed: test_acl1896_instagram_identity 26, test_acl1761_api_create 121, test_acl1775_instant_forms 86, test_acl1819_preflight 84, test_acl1761_plan_check 17, test_acl1761_parity 44, test_acl1756_page_helper_node 22. No live runs."
       }
     },
     "tasks": {
