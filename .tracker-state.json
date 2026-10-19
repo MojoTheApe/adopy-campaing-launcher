@@ -44562,9 +44562,11 @@
         "worktree": "C:\\acl-1768",
         "id": "8f54e39599e14c8d9def508a50c437ee",
         "issue": 768,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T21:55:58+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 833,
+        "report": "# ACL-1768 handoff\n\n- Merged updated codex/acl-1767-audience-cta-devices (7a78e2c6, includes current main) into the branch; 5 Python files and 11 report.html conflicts resolved (main's 13.10 Ad tab list design kept, ad-set model kept).\n- Independent read-only Opus review of the resolution: one medium finding (form-template rules not limited to Instant Form sets) and a budget/pin ordering nit; both fixed in 15e4830b.\n- Touched tests passed locally: test_acl1768_ad_sets 64, test_acl1767_audience_fields 92, test_acl1761_api_create 121, test_acl1761_parity 44, test_acl1775_instant_forms 86, test_acl1775_builder_forms 10, test_acl1776_create_forms 120, test_acl1819_preflight 110, test_acl1769_two_column_layout 12, test_builder_second_primary_text 17, test_acl1761_plan_check 17, test_acl1819_preflight_browser 5.\n- Known failures identical on pre-merge head 227f78c6: tests/test_acl1768_ad_sets_browser.py::test_ad_sets_survive_a_reload_and_a_v3_draft_opens_as_one_ad_set and ::test_audit_lists_the_ad_set_with_a_problem. Full suite left to CI. No live runs."
       },
       "401": {
         "actor": "Worker-H19401",
