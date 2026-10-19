@@ -4642,6 +4642,27 @@
         "issue_scopes": {
           "356": "2b5d76b193104aeaf5f22d3b6832244aa30d0d2644c867ec1e26ca0e8a24a87a"
         }
+      },
+      "980": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-Y19B",
+        "implementer": "Worker-E19341",
+        "head_sha": "7d89abc65956527ef43a0e99077938bdcd3e1667",
+        "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+        "tree_sha": "753dedfe91dde62ca32f5d9111a5bb344ddfa379",
+        "execution_lane": "b86d08b5d7d343408c0e647582d728a1",
+        "review_session": "rev-y19b-s1",
+        "report": "Independent source review of PR 980 (ACL-341, Issue 47), head 7d89abc6, base main 435bc154. Test-only: one new file tests/test_recipe_player_sequences.py (+307), no change to src.\nRequirements (Issue 47): representative player sequences on the recorded-page bench, step order/outcomes, safe stops on missing controls, and a broken flow must fail. All covered: whole RecipePlayer.run() in offline headless Chromium with the real meta_dom step functions and real fixtures (simple_create, audience_age_open, conversion_event_heading_group); order, skipped/optional steps, stop_after gate (pass and no-pass), real golden recipe to the campaign gate, missing name field, reverting budget, missing control logged FAIL with no click, Publish / Review and publish / Discard drafts / About this update refused and never clicked, delegated sections, hard stop on Conversion location, lost wizard. Only pauses and screenshots are stubbed, evidence/ranks go to a temp dir (nothing written into the repo). No mocks bypass selector behaviour, as the Issue demands.\nTwo strict xfail tests document real player gaps (risky click that finds nothing still ends ok=True; stale x/y click logged ok); they are strict so a future fix flips them, and the reasons name the RPA track. Acceptable and honest.\nNo secrets, no live account, English-only text. No bugs found.\nCI on head: all required jobs pass - linux shards 1/2/3, windows tests, ACL verification, Process instructions, Classify, Installer verification, tracker-link, descriptor. Did not run the 2.5-minute file locally; CI already ran it on Linux and Windows.\nVerdict: approved.\n",
+        "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          47
+        ],
+        "recorded_at": "2026-10-19T10:44:50+00:00",
+        "issue_scopes": {
+          "47": "be9479208e9a0731a6c08e48e1baa5ada1999d8e5201c15b07423025fe9b60df"
+        }
       }
     },
     "stage": {
