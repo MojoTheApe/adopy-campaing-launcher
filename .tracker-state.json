@@ -44287,6 +44287,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T20:10:40+00:00",
         "from_status": "status:todo"
+      },
+      "739": {
+        "actor": "Worker-R1019739",
+        "session": "run_r1019_739",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "codex/acl-1739-doc124-frozen",
+        "worktree": "C:\\acl-1739-doc124-frozen",
+        "id": "f15108458ff74ba3ab880d9866d3b7e9",
+        "issue": 739,
+        "state": "implementing",
+        "started_at": "2026-10-19T20:23:28+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -47343,11 +47355,15 @@
           {
             "actor": "Worker-W1739F",
             "session": "w1739f_1008"
+          },
+          {
+            "actor": "Worker-R1019739",
+            "session": "run_r1019_739"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-W1739F",
-        "coordinator": "Coordinator-T1004Q",
+        "state": "implementing",
+        "worker": "Worker-R1019739",
+        "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-W1739F",
           "session": "w1739f_1008",
@@ -47364,7 +47380,6 @@
         },
         "pr": 740,
         "queued_at": "2026-10-08T08:34:10+00:00",
-        "reviewer": "Reviewer-RV1015G",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -54707,6 +54722,10 @@
       },
       "Worker-R1019529": {
         "session": "run_r1019_529",
+        "role": "Worker"
+      },
+      "Worker-R1019739": {
+        "session": "run_r1019_739",
         "role": "Worker"
       }
     },
@@ -93907,6 +93926,13 @@
         "at": "2026-10-19T20:18:29+00:00",
         "batch_id": "a69b4124493f41c481095d71c27cc55a",
         "pr": 1018
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T20:23:28+00:00",
+        "issue": 739,
+        "claim": "f15108458ff74ba3ab880d9866d3b7e9",
+        "actor": "Worker-R1019739"
       }
     ],
     "policy": {
