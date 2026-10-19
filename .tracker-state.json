@@ -43004,20 +43004,6 @@
   },
   "execution": {
     "claims": {
-      "287": {
-        "actor": "Worker-E19287",
-        "session": "w287-c0a1de70",
-        "coordinator": "Coordinator-E1019A",
-        "branch": "work/acl-1287-english-row-text",
-        "worktree": "C:\\wk19-287",
-        "id": "f0d582cf91f746c28b2d3b14f26ba349",
-        "issue": 287,
-        "state": "handoff",
-        "started_at": "2026-10-19T07:38:15+00:00",
-        "from_status": "status:todo",
-        "pr": 964,
-        "report": "ACL-1287 round 2 (PR #964).\nNew head: 0083cd66 (pushed to work/acl-1287-english-row-text). Merged origin/main 435bc154 (merge bac1d64e, clean).\nChanged (test-only, tests/test_account_spend_reasons_are_english.py):\n1. multiline literals are no longer skipped; only `//` and `/* */` comments are stripped (as in the country_split guard)\n2. logger exemption restricted to calls on log/logger/logging/_log/_logger receivers (any other x.error(\"ru\") is flagged)\n3. guard now also covers src/analysis_agent/account_spend_api.py and src/fb_api/mlx_session.py (all three clean: no real Russian user-facing text found, no production change)\n3 new guard tests (JS block caught, JS comments allowed, non-logger .error caught).\nPR body updated (still exactly one `Tracker issues: ACL-1287` line).\nTests: test_account_spend_reasons_are_english + test_country_split_reasons_are_english: 9 passed. acl_scan_secrets: clean. acl_smoke: OK.\ntests/test_read_fallback.py: 20 passed, 1 failed - test_the_old_amount_stands_on_its_own_line_under_a_failure: ModuleNotFoundError '_design_tokens' (tests/_design_tokens.py, ACL-1797) at test_read_fallback.py:188; file is untouched by this PR (identical to main), environment/sys.path issue from main, unrelated to this change."
-      },
       "871": {
         "actor": "Worker-E19871",
         "session": "w871-c0a1de70",
@@ -49937,25 +49923,25 @@
             "session": "w287-c0a1de70"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-E19287",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
-          "actor": "Worker-ACL1287B",
-          "session": "acl-1287-pr-222939",
-          "coordinator": "Coordinator-M1011A",
+          "actor": "Worker-E19287",
+          "session": "w287-c0a1de70",
+          "coordinator": "Coordinator-E1019A",
           "branch": "work/acl-1287-english-row-text",
-          "worktree": "C:\\acl-1287-pr",
-          "id": "95328251ac024ae897588ed0c52302fb",
+          "worktree": "C:\\wk19-287",
+          "id": "f0d582cf91f746c28b2d3b14f26ba349",
           "issue": 287,
           "state": "handoff",
-          "started_at": "2026-10-17T19:29:58+00:00",
+          "started_at": "2026-10-19T07:38:15+00:00",
           "from_status": "status:todo",
           "pr": 964,
-          "report": "ACL-1287 / #287 handoff, branch work/acl-1287-english-row-text, PR #964 (base main).\n\nChecks run (worktree C:/acl-1287-pr, merged with work/main: already up to date):\n- tests/test_account_spend_reasons_are_english.py: pass (AST guard, all account_spend.py literals outside docstrings and logger calls).\n- tests/test_country_split_reasons_are_english.py: pass (tokenizer guard on country_split.py, from ACL-1462).\n- No code changed in this run; the PR diff is still only the account_spend guard test.\n\nFindings: the translations the issue lists were already applied to country_split.py under ACL-1462, and account_spend.py has no Russian in error/how/entered fields. Remaining Cyrillic in account_spend.py is in log.error messages (not shown to users, out of scope), docstrings and code comments.\n\nNot verified: full suite (runs in GitHub CI only); the end-to-end check that a failed split and spend read render English on screen (checklist items 2 and 3 of the issue are not covered by this PR).\n\nRemaining risk: low; the guard covers literals, not runtime-built strings.\nDurable reference: PR https://github.com/MojoTheApe/adopy-campaing-launcher/pull/964"
+          "report": "ACL-1287 round 2 (PR #964).\nNew head: 0083cd66 (pushed to work/acl-1287-english-row-text). Merged origin/main 435bc154 (merge bac1d64e, clean).\nChanged (test-only, tests/test_account_spend_reasons_are_english.py):\n1. multiline literals are no longer skipped; only `//` and `/* */` comments are stripped (as in the country_split guard)\n2. logger exemption restricted to calls on log/logger/logging/_log/_logger receivers (any other x.error(\"ru\") is flagged)\n3. guard now also covers src/analysis_agent/account_spend_api.py and src/fb_api/mlx_session.py (all three clean: no real Russian user-facing text found, no production change)\n3 new guard tests (JS block caught, JS comments allowed, non-logger .error caught).\nPR body updated (still exactly one `Tracker issues: ACL-1287` line).\nTests: test_account_spend_reasons_are_english + test_country_split_reasons_are_english: 9 passed. acl_scan_secrets: clean. acl_smoke: OK.\ntests/test_read_fallback.py: 20 passed, 1 failed - test_the_old_amount_stands_on_its_own_line_under_a_failure: ModuleNotFoundError '_design_tokens' (tests/_design_tokens.py, ACL-1797) at test_read_fallback.py:188; file is untouched by this PR (identical to main), environment/sys.path issue from main, unrelated to this change."
         },
         "pr": 964,
-        "queued_at": "2026-10-17T19:31:52+00:00",
+        "queued_at": "2026-10-19T07:55:51+00:00",
         "review_report": "# Review return \u2014 PR #964 (ACL-1287), Reviewer-E19287\n\nHead reviewed: a06072ebcfd0bccd9b91ac560e2a38336483c570. Current main: 435bc154.\n\n## (a) Required before approval\n\n- The head is 29 commits behind current main (435bc154). Merge current\n  `origin/main` into the original branch `work/acl-1287-english-row-text`\n  (it merges cleanly: `git merge-tree` reports no conflicts), re-run the\n  affected checks (`tests/test_account_spend_reasons_are_english.py`,\n  `tests/test_country_split_reasons_are_english.py`), let CI go green, and hand\n  off again.\n\n## (b) Blocking findings\n\nNone in content. I ran the new guard against main's `account_spend.py`\n(3646 lines): 3 passed. `test_country_split_reasons_are_english.py` on main\npassed too (3 tests). I also checked the multiline (JS) literals in\n`account_spend.py` on main by hand: the only Cyrillic outside `//` comments is a\n`/* \u2026 */` comment at :2856. Nothing Russian reaches `error`/`how` today.\nIssue criteria: country_split.py is already English (ACL-1462, guarded) and\naccount_spend.py is clean and now guarded. A failed spend renders in English\nin existing fixtures (`tests/test_read_fallback.py:171-193`), and a failed split\ndoes too (`tests/test_country_split_reasons_are_english.py:82`). There are no\nsecrets in the diff.\n\n## (c) Non-blocking notes (recommended for this round, the author decides)\n\n1. `tests/test_account_spend_reasons_are_english.py:33`: `\"\\n\" not in node.value`\n   skips every multiline literal, not just the `//` comments inside JS. A\n   Russian reason returned from a JS block (`return {error: '\u2026'}`) or a\n   multiline Python message would get past the guard. The sibling guard\n   (`test_country_split_reasons_are_english.py::_visible`) strips only `//`\n   comments. Do the same here, and strip `/* */` comments too, since :2856 uses one.\n2. `:16,27-30`: the logger exemption matches on the method name alone\n   (`.error(` / `.info(` \u2026 on any object). Any `x.error(\"\u2026\")` call is exempt,\n   not only logger calls. Narrowing it to a `log`/`logger` receiver would be safer.\n3. Scope gap: the same spend cell (`_account_map_country.html:141-146`,\n   `sr.error` / `sr.how`) is also fed by the Graph-in-profile route\n   `src/analysis_agent/account_spend_api.py` (ACL-1760, which came after the\n   Issue). That route also feeds `src/fb_api/mlx_session.py::humanize`. Both\n   are English today: I ran the guard's `_offenders` on each and it returned\n   nothing. They are not guarded, though. Adding them to the guard's file list\n   is a one-line change that keeps the promise \"keep them translated\".\n4. The PR body says \"6 passed\". That is the two files together (3 + 3), which\n   is fine; just re-state it after the main merge.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -55659,7 +55645,8 @@
       }
     },
     "review_queue": [
-      377
+      377,
+      287
     ],
     "review": null,
     "history": [
@@ -88190,6 +88177,13 @@
         "pr": 985,
         "lane": "d8c403d18d1c47a0b345a988efd49d74",
         "actor": "Reviewer-E19864"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T07:55:51+00:00",
+        "issue": 287,
+        "pr": 964,
+        "actor": "Worker-E19287"
       }
     ],
     "policy": {
