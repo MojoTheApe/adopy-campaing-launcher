@@ -49006,7 +49006,7 @@
             "session": "rf1019w-20261019"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-RF1019W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -49025,7 +49025,7 @@
         },
         "pr": 887,
         "queued_at": "2026-10-19T11:56:53+00:00",
-        "review_report": "Owner lifted the 2026-10-17 exclusive pause for ACL-1776, ACL-1899, ACL-1902 and ACL-1886 on 2026-10-19 (instruction in the review session: refresh onto current main, re-review, ship a new batch with release after the current one). Batch afaeca3e was cancelled by that pause; the old approval used main af0ade29 and is stale vs main 435bc154. Return for a main merge and fresh independent approval.",
+        "review_report": "Main moved to 1c6ab78e (batch #1016). Approval on 435bc154 is stale; return for a main merge and fresh delta approval. Owner instruction 2026-10-19: ship these four in the next batch with release.",
         "return_operation": {
           "id": "38d2cc4b555f438eb47cb6599f66672b",
           "actor": "Coordinator-M1011A",
@@ -91375,6 +91375,18 @@
           "report": "Main moved to 1c6ab78e (batch #1016). Approval on 435bc154 is stale; return for a main merge and fresh delta approval. Owner instruction 2026-10-19: ship these four in the next batch with release."
         },
         "batch_id": null
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-19T14:19:24+00:00",
+        "issue": 886,
+        "operation": {
+          "id": "38d2cc4b555f438eb47cb6599f66672b",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "report": "Main moved to 1c6ab78e (batch #1016). Approval on 435bc154 is stale; return for a main merge and fresh delta approval. Owner instruction 2026-10-19: ship these four in the next batch with release."
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -93620,50 +93632,6 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-19T12:59:03+00:00"
-      },
-      "886": {
-        "issue": 886,
-        "pr": 887,
-        "branch": "codex/acl-1886-graph-error-context",
-        "head_sha": "3f04816505d1830a8be5c2d7c495e5fa925548da",
-        "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
-        "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "scope": "291706aa97fea07f175753abc951ee231d86a7ea2d52cd679f94cf2db3f7bf9d",
-        "review": {
-          "kind": "independent-review",
-          "verdict": "approved",
-          "reviewer": "Reviewer-DV1019D",
-          "review_session": "dv1019d-887",
-          "execution_lane": "599ff1dd05cc4393b86d30e8731746bb",
-          "implementer": "Worker-RF1019W",
-          "head_sha": "3f04816505d1830a8be5c2d7c495e5fa925548da",
-          "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
-          "tree_sha": "4a8665fe82247f9756889ea697e51743d7df4b29",
-          "report": "Delta re-review after main merge. Head 3f048165 has parents a484aaa1 (previous approved) and 435bc154 (current work/main, contained in head). Remerge diff shows only the docs/system/PROJECT.md conflict, resolved keeping both the Graph read failure diagnostics and CI feedback and admission sections once each, no conflict markers, no duplicate headings, structure intact; no code resolution. All six code/test/fixture files (graph.py, catalogue, fixtures, test_acl1886_graph_error_context.py) are byte-identical to the previously approved head; the head vs main diff is exactly the PR's original 8 files. Affected tests tests/test_acl1886_graph_error_context.py: 37 passed. CI all green (linux 1-3, windows, tooling, tracker-link, installer, process instructions). Earlier full review had no blockers. No live checks claimed.",
-          "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "issues": [
-            886
-          ],
-          "recorded_at": "2026-10-19T13:12:36+00:00",
-          "issue_scopes": {
-            "886": "291706aa97fea07f175753abc951ee231d86a7ea2d52cd679f94cf2db3f7bf9d"
-          }
-        },
-        "lane": {
-          "id": "599ff1dd05cc4393b86d30e8731746bb",
-          "pr": 887,
-          "issues": [
-            886
-          ],
-          "actor": "Reviewer-DV1019D",
-          "session": "dv1019d-887",
-          "coordinator": "Coordinator-M1011A",
-          "started_at": "2026-10-19T12:29:13+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-19T13:15:31+00:00"
       }
     },
     "batches": {
