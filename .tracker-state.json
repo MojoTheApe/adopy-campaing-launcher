@@ -43221,20 +43221,6 @@
         "state": "implementing",
         "started_at": "2026-10-19T11:56:42+00:00",
         "from_status": "status:todo"
-      },
-      "72": {
-        "actor": "Worker-W142C",
-        "session": "w142c-20261016",
-        "coordinator": "Coordinator-C1016A",
-        "branch": "codex/acl-142-account-add-remove",
-        "worktree": "C:\\acl-142-c",
-        "id": "7b750aad087d483889adce3317a62811",
-        "issue": 72,
-        "state": "handoff",
-        "started_at": "2026-10-19T12:34:58+00:00",
-        "from_status": "status:todo",
-        "pr": 958,
-        "report": "Review fixes for ACL-142 (head 7f1f4c7e, merged origin/main): (1) /account-map-remove with also_unlink now unlinks placements even with no map row (404 only if neither), so a retry after a partial failure completes; tests added incl. no-row, case, no map file, retry. (2) \"leave this empty to connect now\" guidance restored. (3) dialog input disabled during the first read. (4) ACL-1872 conflict gone; PR #950 not merged yet, previously merged cleanly. Tests (py3.14, per file): acl_142 13, connect_without_act 13, review_ui_regressions 7, report_scripts_parse 3, account_map_patch 4, accounts_tab_connects 10, connect_empty_country 11, account_spend 62, all passed. Not run: test_one_connect_button, test_the_account_tree_on_screen (timed out on laptop earlier), test_connecting_an_account_is_one_place (_design_tokens env failure). Node harnesses pass."
       }
     },
     "tasks": {
@@ -49749,7 +49735,7 @@
             "session": "w142c-20261016"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W142C",
         "coordinator": "Coordinator-C1016A",
         "handoff": {
@@ -49758,16 +49744,16 @@
           "coordinator": "Coordinator-C1016A",
           "branch": "codex/acl-142-account-add-remove",
           "worktree": "C:\\acl-142-c",
-          "id": "748616d6aeaa441ebe3332ae099ea075",
+          "id": "7b750aad087d483889adce3317a62811",
           "issue": 72,
           "state": "handoff",
-          "started_at": "2026-10-16T14:42:38+00:00",
-          "from_status": "status:backlog",
+          "started_at": "2026-10-19T12:34:58+00:00",
+          "from_status": "status:todo",
           "pr": 958,
-          "report": "ACL-142: Connect uses an in-page dialog with \"Read from the open account\" (editable field, name+number shown, explicit tick required for an unedited read of the default redirected account). Country rows: x = confirmed take-out-of-country; \"Remove from ACL\" = confirmed removal of this computer's map row and all placements via /account-map-remove also_unlink. Tests: tests/test_acl_142_account_add_remove.py + Node harness; ran 112 affected tests, all green after fixing one escape. No live calls. Full suite not run (CI only)."
+          "report": "Review fixes for ACL-142 (head 7f1f4c7e, merged origin/main): (1) /account-map-remove with also_unlink now unlinks placements even with no map row (404 only if neither), so a retry after a partial failure completes; tests added incl. no-row, case, no map file, retry. (2) \"leave this empty to connect now\" guidance restored. (3) dialog input disabled during the first read. (4) ACL-1872 conflict gone; PR #950 not merged yet, previously merged cleanly. Tests (py3.14, per file): acl_142 13, connect_without_act 13, review_ui_regressions 7, report_scripts_parse 3, account_map_patch 4, accounts_tab_connects 10, connect_empty_country 11, account_spend 62, all passed. Not run: test_one_connect_button, test_the_account_tree_on_screen (timed out on laptop earlier), test_connecting_an_account_is_one_place (_design_tokens env failure). Node harnesses pass."
         },
         "pr": 958,
-        "queued_at": "2026-10-16T14:56:38+00:00",
+        "queued_at": "2026-10-19T12:44:11+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -56080,7 +56066,8 @@
       855,
       839,
       816,
-      853
+      853,
+      72
     ],
     "review": {
       "id": "b49c262d383b4011a4e6891181162ac5",
@@ -90146,6 +90133,13 @@
             "approved_at": "2026-10-19T12:38:46+00:00"
           }
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T12:44:11+00:00",
+        "issue": 72,
+        "pr": 958,
+        "actor": "Worker-W142C"
       }
     ],
     "policy": {
