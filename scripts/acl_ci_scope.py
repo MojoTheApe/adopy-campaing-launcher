@@ -174,31 +174,41 @@ def event_paths(root, event_name, event):
 
 
 def batch_context(root, event_name, event):
-    """Dispatch only explicit matching v2 policy; uncertain routes run in full."""
+    """Dispatch only explicit matching batch policy; uncertain routes run in full."""
     descriptor = Path(root) / "delivery.json"
+    config_path = Path(root) / "tracker/config.json"
     if not descriptor.exists():
+        if config_path.exists():
+            policy = json.loads(config_path.read_text(encoding="utf-8")).get("execution_policy")
+            if isinstance(policy, dict) and policy.get("schema_version") in (2, 3):
+                raise ValueError("Descriptor and Tracker batch policies differ")
         return "legacy"
     data = json.loads(descriptor.read_text(encoding="utf-8"))
     execution = data["workflow"].get("execution")
     if execution is not None and not isinstance(execution, dict):
         raise ValueError("Execution policy must be an object")
     if execution is None or execution.get("schema_version") == 1:
-        config_path = Path(root) / "tracker/config.json"
         if config_path.exists():
             policy = json.loads(config_path.read_text(encoding="utf-8")).get("execution_policy")
-            if isinstance(policy, dict) and policy.get("schema_version") == 2:
+            if isinstance(policy, dict) and policy.get("schema_version") in (2, 3):
                 raise ValueError("Descriptor and Tracker batch policies differ")
         return "legacy"
     expected = {"schema_version", "implementation_limit", "review_limit", "batch_limit"}
+    version = execution.get("schema_version")
     if (set(execution) != expected or type(execution["schema_version"]) is not int
-            or execution["schema_version"] != 2 or execution["review_limit"] != 1
+            or version not in (2, 3)
             or type(execution["review_limit"]) is not int
-            or any(type(execution[key]) is not int or not 1 <= execution[key] <= 16
-                   for key in ("implementation_limit", "batch_limit"))
-            or data["workflow"]["staging"] is not True):
+            or not 1 <= execution["review_limit"] <= (5 if version == 3 else 1)
+            or type(execution["implementation_limit"]) is not int
+            or not 1 <= execution["implementation_limit"] <= 16
+            or type(execution["batch_limit"]) is not int
+            or not 1 <= execution["batch_limit"] <= (5 if version == 3 else 16)
+            or type(data["workflow"]["staging"]) is not bool):
         raise ValueError("Invalid explicit batch policy")
-    config = json.loads((Path(root) / "tracker/config.json").read_text(encoding="utf-8"))
-    if config.get("execution_policy") != execution or "approved" not in config["workflow"]:
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    if (config.get("execution_policy") != execution or "approved" not in config["workflow"]
+            or config.get("delivery_policy", {}).get("staging", {}).get("enabled", True) != data["workflow"]["staging"]
+            or ("stage" in config["workflow"]) != data["workflow"]["staging"]):
         raise ValueError("Descriptor and Tracker batch policies differ")
     if event_name != "pull_request":
         return "full"

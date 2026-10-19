@@ -376,7 +376,7 @@ class GraphClient:
 
     # -- одна запись (ACL-1761)
     def post(self, path: str, params: dict | None = None, *, files: dict | None = None,
-             filename: str = "") -> dict:
+             filename: str = "", on_ad: bool = False) -> dict:
         """POST ровно один раз. Никаких повторов, пересъёмки токена и т.п.
 
         - отказ до отправки (политика, нет токена) — стоп, к Meta ничего не ушло;
@@ -397,7 +397,9 @@ class GraphClient:
         self.writes += 1
         self._last_call = self._clock()
         try:
-            reply = self.transport.write(path, params or {}, files=files, filename=filename)
+            # `on_ad` (ACL-1775) передаём, только когда он есть: прежние транспорты его не знают.
+            extra = {"on_ad": True} if on_ad else {}
+            reply = self.transport.write(path, params or {}, files=files, filename=filename, **extra)
         except ValueError as exc:
             # Политика Python: ничего не отправлено.
             raise self._stop(PageFailed(f"write refused before sending: {exc}")) from exc
@@ -485,13 +487,16 @@ class GraphClient:
         for page in range(max_pages):
             body = self.get(path, query)
             rows += [r for r in (body.get("data") or []) if isinstance(r, dict)]
-            after = ((body.get("paging") or {}).get("cursors") or {}).get("after")
-            if not after or not (body.get("paging") or {}).get("next") or self.stopped is not None:
-                break
-            if page == max_pages - 1:
-                # Список длиннее лимита страниц: вызывающий должен сказать «неполно» (ACL-1760).
+            paging = body.get("paging") or {}
+            after = (paging.get("cursors") or {}).get("after")
+            if not paging.get("next"):
+                break  # следующей страницы нет — список полный
+            if not after or self.stopped is not None or page == max_pages - 1:
+                # Следующая страница есть, но взять её нельзя (лимит страниц, остановка
+                # по usage или нет курсора): вызывающий должен сказать «неполно» (ACL-1760).
                 level = (params or {}).get("level")
                 self.truncated.append(path + (f"?level={level}" if level else ""))
+                break
             query = {**query, "after": after}
         return rows
 

@@ -1,7 +1,7 @@
 {# Командная таблица кампаний: Campaign > Ad set > Ad (ACL-1798, команды — ACL-1800).
 
-   Живёт ТОЛЬКО под строкой аккаунта, в её раскрывающейся области (стрелка ▸ в карте
-   аккаунтов на Home и на странице страны; `amapCampaignToggle` в report.html). Отдельной
+   Живёт ТОЛЬКО под строкой аккаунта, в её раскрывающейся области (клик по строке, стрелка ▸, Enter/Space; карта
+   аккаунтов на Home и страница страны; `amapCampaignTree` в report.html). Отдельной
    секции «Campaigns» на Home нет (решение владельца 12.10): кампании и аккаунты живут
    внутри стран. Файл — компонент: стили, шаблон разметки `#hc-scoped-tpl` и `hcMount`.
 
@@ -132,9 +132,8 @@
   .hc-table tr.hc-r-ad > td { height: var(--adopy-row-ad-min); }
   .hc-table tr.hc-sel > td { background: var(--adopy-selected-bg); }
   .hc-table td.hc-gl { border-left: 1px solid var(--adopy-border); }
-  .hc-band td, .hc-msg td, .hc-rowmsg td { overflow: visible; }
+  .hc-msg td, .hc-rowmsg td { overflow: visible; }
   .hc-table thead th.hc-pin-top { left: 0; z-index: calc(var(--adopy-z-table-header) + 6); border-right: 1px solid var(--adopy-border-strong); color: var(--adopy-text); }
-  .hc-band td { height: 36px; background: var(--adopy-surface-subtle); border-bottom: 1px solid var(--adopy-border-strong); padding: 0; }
   .hc-band-in { position: sticky; left: 0; display: flex; align-items: center; gap: 0.5rem; padding: 0 var(--adopy-cell-x);
     width: var(--hc-view-w, 900px); max-width: 100vw; overflow: hidden; }
   .hc-band-in b { font-weight: 600; }
@@ -199,7 +198,7 @@
   .hc-foot { padding: 0.5rem 0; color: var(--adopy-text-muted); font-size: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; }
   @media (max-width: 760px) { .hc { --hc-pin-w: 330px; } .hc-toolbar input[type="search"] { width: 100%; } }
   /* Таблица страны под списком аккаунтов (карта аккаунтов на Home и вкладка страны, ACL-1800). */
-  .hc.hc-scoped { margin: 0.75rem 0 0; padding: 0 var(--hc-inset) 0.5rem; white-space: normal; text-align: left; border: 1px solid var(--adopy-border);
+  .hc.hc-scoped { margin: 0.5rem 0; padding: 0 var(--hc-inset) 0.5rem; white-space: normal; text-align: left; border: 1px solid var(--adopy-border);
     border-radius: var(--adopy-radius-lg); background: var(--adopy-surface); }
   /* Один левый край у всего блока: вкладки, заголовок, панели, подсказка и сама сетка стоят на отступе --hc-inset
      (≈ отступ ячейки списка аккаунтов выше), поэтому текст шапки начинается там же, где первая колонка сетки. */
@@ -242,6 +241,26 @@
   .hc-chip.note { background: var(--adopy-neutral-bg); color: var(--adopy-text-muted); }
   .hc-hint-ok { color: var(--adopy-success); font-weight: 500; } .hc-hint-warn { color: var(--adopy-warning); font-weight: 500; } .hc-hint-neutral { color: var(--adopy-text); }
   .hc-table tr.hc-r-adset > td { background: var(--adopy-surface-subtle); }
+  .hc-pstate { flex: none; padding: 1px 8px; border: 1px solid var(--adopy-border-strong); border-radius: var(--adopy-radius-pill); font-size: 0.6875rem; color: var(--adopy-text-muted); cursor: help; }
+  .hc-pstate[data-state="warm"] { color: var(--adopy-success); border-color: currentColor; }
+  .hc-pstate[data-state="by_hand"], .hc-pstate[data-state="logged_out"] { color: var(--adopy-danger); border-color: currentColor; }
+  .hc-pstate[data-state="closing"] { color: var(--adopy-warning); border-color: currentColor; }
+  /* Дерево: строка аккаунта — родитель, под ней раскрывается таблица её кампаний (`.hc-embed` в `td` строки `.hc-acct-child`). */
+  /* Правила карты (`.amap table.amap-grid td`, их сила выше) протекают во вложенную таблицу: имя должно переноситься, и вторая строка последней ячейки не пропадает. */
+  .amap table.amap-grid .hc-embed .hc-table td.p3 { white-space: normal; }
+  .amap tbody .hc-acct-child tr:last-child td { border-bottom: 1px solid var(--adopy-border); }
+  .hc-acct-row { cursor: pointer; }
+  .hc-acct-row:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: -2px; }
+  .hc-acct-child > td { padding: 0 !important; background: var(--bg-subtle, #f7f8fa); white-space: normal; overflow: visible; }
+  .hc.hc-embed { margin: 0; padding: 0.5rem 0.75rem 0.75rem; }
+  .hc-embed .hc-frame { background: var(--adopy-surface); }
+  .hc-snap { display: block; font-size: 0.66rem; font-weight: 400; line-height: 1.3; color: var(--muted, #888); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hc-snap[data-tone="bad"] { color: var(--bad, #c0392b); }
+  .amap-pstate[hidden], .hc-ro[hidden] { display: none !important; }
+  .amap-pstate { display: inline-block; margin-left: 0.4rem; padding: 0 0.4rem; font-size: 0.66rem; font-weight: 400; white-space: nowrap; border: 1px solid var(--border-strong, #8886); border-radius: 999px; color: var(--muted, #888); cursor: help; vertical-align: middle; }
+  .amap-pstate[data-state="warm"] { color: var(--good, #2a9d4b); border-color: currentColor; }
+  .amap-pstate[data-state="by_hand"], .amap-pstate[data-state="logged_out"] { color: var(--bad, #c0392b); border-color: currentColor; }
+  .amap-pstate[data-state="closing"] { color: var(--warn, #b7791f); border-color: currentColor; }
   .hc-hist { margin-top: 0.5rem; font-size: 0.8125rem; }
   .hc-hist > summary { cursor: pointer; color: var(--adopy-primary); width: max-content; }
   .hc-hist-body { padding: 0.375rem 0; color: var(--adopy-text-muted); }
@@ -253,25 +272,23 @@
   <div class="hc-needs" data-hc="needs" hidden>Campaign inventory needs the API backend
     <small>Switch this machine to <code>ACL_FB_BACKEND=api</code> to read campaigns. Nothing was read.</small></div>
   <div data-hc="body" hidden>
-    <div class="hc-head2">
-      <div><h3 class="hc-title">Campaigns</h3><div class="hc-sub" data-hc="count" aria-live="polite"></div></div>
-      <div class="hc-actions"><button type="button" data-hc="expand-all">Expand all</button><button type="button" data-hc="collapse-all">Collapse all</button></div>
-    </div>
-    <div class="hc-toolbar" role="toolbar" aria-label="Campaign table controls">
+    <div class="hc-needs" data-hc="banner" role="alert" hidden></div>
+    <div class="hc-toolbar" role="toolbar" aria-label="Campaign tree controls">
       <input type="search" data-hc="search" placeholder="Search campaigns, ad sets or ads" aria-label="Search names">
       <select data-hc="delivery" aria-label="Delivery filter">
         <option value="all">All delivery</option><option value="active">Enabled campaigns</option><option value="paused">Paused campaigns</option></select>
       <span class="hc-divider" aria-hidden="true"></span>
       <button type="button" data-jump="controls">Controls</button><button type="button" data-jump="bi">BI metrics</button>
       <button type="button" data-jump="meta">Meta metrics</button><button type="button" data-jump="tracker">Tracking</button>
+      <span class="hc-divider" aria-hidden="true"></span>
+      <button type="button" data-hc="expand-all">Expand all</button><button type="button" data-hc="collapse-all">Collapse all</button>
       <span class="hc-spacer"></span>
+      <span class="hc-note" data-hc="count" aria-live="polite"></span>
       <span class="hc-note" data-hc="selcount" aria-live="polite"></span>
       <label class="hc-note">Columns <select data-hc="preset" aria-label="Column preset">
         <option value="optimization">Optimization</option><option value="meta">Meta delivery</option>
         <option value="bi">BI funnel</option><option value="all">All metrics</option><option value="custom" hidden>Custom</option></select></label>
       <details class="hc-cols" data-hc="cols"><summary>Manage columns</summary><div class="hc-cols-pop" data-hc="cols-pop"></div></details>
-    </div>
-    <div class="hc-batchbar">
       <span class="hc-batch" data-hc="batch" role="group" aria-label="Commands for the selected rows">
         <button type="button" data-batch="on">Switch on</button>
         <button type="button" data-batch="off">Switch off</button>
@@ -280,22 +297,21 @@
       </span>
       <span class="hc-note" data-hc="batch-note" aria-live="polite"></span>
     </div>
-    <div class="hc-hint-line"><span>Identity stays pinned</span><span>← Scroll to see all controls and metrics →</span></div>
-    <div class="hc-frame" data-hc="frame">
-      <div class="hc-top" data-hc="top" aria-hidden="true"><div data-hc="top-in"></div></div>
-      <div class="hc-scroll" data-hc="scroll" tabindex="0" role="region" aria-label="Campaign management table, scrolls horizontally">
-        <table class="hc-table" data-hc="table"></table>
-      </div>
-    </div>
-    <div class="hc-foot" data-hc="foot"></div>
-    <details class="hc-hist" data-hc="history"><summary>What was changed here</summary>
-      <div class="hc-hist-body" data-hc="history-body">Open to read the record.</div></details>
   </div>
+{% endmacro %}
+
+{% macro hc_after() %}
+  <div class="hc-foot" data-hc="foot"></div>
+  <details class="hc-hist" data-hc="history"><summary>What was changed here</summary>
+    <div class="hc-hist-body" data-hc="history-body">Open to read the record.</div></details>
 {% endmacro %}
 
 {#- Разметка таблицы страны; `amapCampaignMount` клонирует её в блок страны. Id в ней нет: таблиц на странице много. -#}
 <template id="hc-scoped-tpl">
   {{ hc_body() }}
+</template>
+<template id="hc-after-tpl">
+  {{ hc_after() }}
 </template>
 
 <script src="/static/acm_commands.js"></script>
@@ -307,20 +323,32 @@
      (`hcMount`): одна таблица на страну, внутри — её аккаунты. */
   if (window.hcMount) return;
   var instances = [], queueBusy = false;
+  /* ACL-1826: коды, после которых сервер пропускает остальные старты слота в пачке. */
+  var BATCH_STOPS = {mlx_session_lost: 1, mlx_token_expired: 1, mlx_token_workspace: 1};
 
   /* Общая очередь чтений: jobs = [{inst, account}], по одному, человек нажал — человек и спросил. */
   async function queueRun(jobs, progress) {
     if (queueBusy || !jobs.length) return;
     queueBusy = true;
     instances.forEach(function (i) { i.setReadBusy(true); });
+    /* ACL-1826: одна пачка на нажатие. Потеряна общая сессия Multilogin слота B — остальные
+       B-аккаунты пропускает сервер с той же причиной, слот A идёт дальше; над таблицей одна
+       строка и Retry, который перечитывает только пропущенных. */
+    var batch = 'rc-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8), stopped = [];
+    instances.forEach(function (i) { i.banner(null); });
     try {
       for (var i = 0; i < jobs.length; i++) {
         if (progress) progress(i + 1, jobs.length);
-        await jobs[i].inst.readOne(jobs[i].account);
+        var stop = await jobs[i].inst.readOne(jobs[i].account, batch);
+        if (stop) stopped.push({job: jobs[i], text: stop.text});
       }
     } finally {
       queueBusy = false;
       instances.forEach(function (i) { i.setReadBusy(false); });
+    }
+    if (stopped.length) {
+      stopped[0].job.inst.banner(stopped[0].text + ' (' + stopped.length + ' account' + (stopped.length === 1 ? '' : 's') + ' not read) ',
+        function () { return queueRun(stopped.map(function (x) { return x.job; }), progress); });
     }
   }
   var REASON_COPY = 'ACL-1773';
@@ -346,7 +374,14 @@
   opts = opts || {};
   var api = null;
   var pinW = loadPin(), resizing = null;
-  function el(name) { return root.querySelector('[data-hc="' + name + '"]'); }
+  /* Дерево аккаунтов: строки аккаунтов — родители, под каждой раскрывается её таблица кампаний. Узлы строк
+     (стрелка, строка снимка, кнопки, рамка прокрутки, таблица) создаёт страница и отдаёт в `opts.rows`;
+     компонент только пишет в них. Тулбар — в `root`, подвал и журнал — в `opts.after`. */
+  var handles = opts.rows || {};
+  function el(name) {
+    var sel = '[data-hc="' + name + '"]';
+    return root.querySelector(sel) || (opts.after ? opts.after.querySelector(sel) : null);
+  }
 
   var seed = opts.seed || [];     // [{country, accounts: [один аккаунт]}]
   var period = { from: root.dataset.periodFrom || '', to: root.dataset.periodTo || '', span: root.dataset.periodSpan || '' };
@@ -363,13 +398,15 @@
     treeErr: {},                     // account -> текст ошибки локального GET
     bi: {},                          // account -> сводка BI
     kids: {},                        // 'level:id' -> {state, rows, note}
-    expanded: {}, selected: {}, details: {},
+    expanded: {}, selected: {}, details: {}, acctOpen: {},
     running: {}, busy: queueBusy,
     avail: null,                     // ответ /campaign-commands/availability (null — ещё не знаем)
     notes: {},                       // key -> {text, tone}: итог последней команды по строке
     q: '', delivery: 'all',
     rulesCells: {},                  // account -> {ключ объекта: ячейка Rules} | null (недоступно); ACL-1822
-    ctx: {}                          // account -> {goal_cpa, benchmark_cpa, …} из My Goals и benchmarks
+    ctx: {},                         // account -> {goal_cpa, benchmark_cpa, …} из My Goals и benchmarks
+    warm: {available: false, actions: false, accounts: {}},   // ACL-1812: состояние профилей; нет API — чип и кнопка скрыты
+    warmBusy: {}, warmMsg: {}
   };
   var ACM = window.acmCommands && window.acmCommands.home ? window.acmCommands : null;
   seed.forEach(function (c) {
@@ -656,8 +693,13 @@
     return '<thead>' + top + heads + '</thead>';
   }
   /* Предел: не шире 60% видимой ширины таблицы и так, чтобы справа оставалось 160px прокручиваемых колонок. */
+  function viewWidth() {
+    var w = 0;
+    Object.keys(handles).forEach(function (a) { if (S.acctOpen[a] && handles[a].frame && handles[a].frame.clientWidth > w) w = handles[a].frame.clientWidth; });
+    return w;
+  }
   function pinMax() {
-    var fw = el('frame') ? el('frame').clientWidth : 0;
+    var fw = viewWidth();
     return fw ? Math.max(PIN_MIN, Math.min(Math.round(fw * 0.6), fw - PIN_KEEP)) : 900;
   }
   function clampPin(w) { return Math.max(PIN_MIN, Math.min(pinMax(), Math.round(w))); }
@@ -665,9 +707,6 @@
   function colgroup(cols) {
     return '<colgroup><col style="width:36px"><col style="width:28px"><col style="width:88px"><col style="width:' + (effPin() - PIN_FIXED) + 'px">' +
       cols.map(function (c) { return '<col style="width:' + c.w + 'px">'; }).join('') + '</colgroup>';
-  }
-  function band(cls, inner, span) {
-    return '<tr class="hc-band ' + cls + '"><td colspan="' + span + '"><div class="hc-band-in">' + inner + '</div></td></tr>';
   }
   /* Одна компактная строка на всю ширину таблицы под строкой: значок, короткое сообщение (одна строка,
      многоточие) и «Details» с полным техническим текстом (экранируется, выделяется для копирования). */
@@ -683,6 +722,18 @@
   function noteFrom(text, tone, code) {
     var A = window.acmCommands;   // помощник мог догрузиться после создания таблицы
     return A && A.explain ? A.explain(text, tone, code) : {text: String(text), raw: null, tone: tone};
+  }
+  /* Причина про профиль, уже показанная в полосе аккаунта (чип состояния или ошибка последнего чтения), строка объекта не повторяет. */
+  var WARM_CAUSE = {by_hand: 'hand', closing: 'closing', logged_out: 'logged_out'};
+  function bandCause(account) {
+    var att = (S.summaries[account] || {}).attempt, A = window.acmCommands;
+    if (att && att.state === 'failed' && A && A.profileCause) { var c = A.profileCause(att.error, att.code); if (c) return c; }
+    var w = S.warm.available && S.warm.accounts[account];
+    return (w && WARM_CAUSE[w.state]) || '';
+  }
+  function dedupNote(n, account) {
+    if (n.cause && n.cause === bandCause(account)) return {text: 'Profile problem — see account above', raw: null, tone: n.tone, cause: n.cause};
+    return n;
   }
   function msg(cls, inner, span) {
     return '<tr class="hc-msg ' + cls + '"><td colspan="' + span + '"><div class="hc-band-in">' + inner + '</div></td></tr>';
@@ -716,7 +767,7 @@
       '<td class="p3"><div class="hc-id"><span class="hc-badge">' + badge + '</span><span class="hc-name"><b title="' + esc(r.name + ' (id ' + r.id + ')') + '">' + esc(r.name || '(no name)') + ctx + '</b>' +
       '<span>' + esc(countryOf(r.account)) + ' · ' + esc(r.account) + esc(count) + '</span></span></div></td>' +
       cols.map(function (c) { return c.cell(r); }).join('') + '</tr>';
-    if (S.notes[key]) html += rowMsg('row:' + key, S.notes[key], 4 + cols.length);
+    if (S.notes[key]) html += rowMsg('row:' + key, dedupNote(S.notes[key], r.account), 4 + cols.length);
     if (open && canOpen) html += kidsHtml(r, cols);
     return html;
   }
@@ -731,20 +782,54 @@
     return out;
   }
 
-  function bandAccount(a, cols) {
-    var sum = S.summaries[a.account] || {state: 'idle'}, running = S.running[a.account];
-    var ag = age(sum, S.fetchedAt[a.account]);
-    var state = running ? 'reading…' : sum.state === 'idle' ? 'not read yet' : sum.state;
-    var counts = sum.counts ? sum.counts.campaigns + ' campaigns · ' + sum.counts.adsets + ' ad sets · ' + sum.counts.ads + ' ads' : '';
-    var bits = ['<b>' + esc(a.account) + '</b>', '<span class="hc-note">' + esc(state) + (ag ? ' · read ' + esc(ag) : '') + (counts ? ' · ' + esc(counts) : '') + '</span>'];
-    var bi = S.bi[a.account];
-    if (bi && bi.available) bits.push('<span class="hc-note" title="' + esc((bi.evidence_only || []).slice(0, 12).join(' | ')) + '">BI: ' + bi.matched + ' matched · ' + (bi.evidence_only || []).length + ' evidence only</span>');
-    else if (bi && bi.note) bits.push('<span class="hc-note" title="' + esc(bi.note) + '">BI unavailable</span>');
-    if (sum.date_from && (sum.date_from !== period.from || (sum.date_to || sum.date_from) !== (period.to || period.from))) bits.push('<span class="hc-note">Insights read for ' + esc(sum.date_from + (sum.date_to && sum.date_to !== sum.date_from ? ' → ' + sum.date_to : '')) + ', not the dates on screen</span>');
-    bits.push('<span class="hc-spacer"></span>');
-    bits.push('<button type="button" data-read="' + esc(a.account) + '"' + (S.busy || !periodOk ? ' disabled' : '') + ' title="' + esc(periodOk ? 'Read campaigns, ad sets, ads and Insights for the dates on screen (GET only)' : 'Select dates to read campaigns; Maximum is not supported') + '">Read campaigns</button>');
-    return band('', bits.join(' '), 4 + cols.length);
+  /* Строка аккаунта несёт своё: «Read campaigns», возраст снимка, одну строку статуса/ошибки и (если есть API
+     тёплых сессий) состояние профиля с «Open profile». Полоса аккаунта внутри таблицы кампаний убрана. */
+  function decorate(account, h) {
+    var sum = S.summaries[account] || {state: 'idle'}, att = sum.attempt, ag = age(sum, S.fetchedAt[account]);
+    var text, bad = false, title = '';
+    if (S.running[account]) text = 'Campaigns: reading…';
+    else if (att && att.state === 'failed') {
+      var ex = noteFrom(att.error || 'unknown reason', 'bad', att.code);
+      text = 'Campaigns: last read failed — ' + ex.text; bad = true; title = att.error || '';
+    } else if (sum.state === 'idle') text = 'Campaigns: not read yet';
+    else text = 'Campaigns: ' + (sum.counts ? sum.counts.campaigns + ' campaigns · ' + sum.counts.ads + ' ads' : sum.state) + (ag ? ' · read ' + ag : '');
+    if (h.snap) { h.snap.textContent = text; h.snap.title = title || text; h.snap.dataset.tone = bad ? 'bad' : ''; }
+    if (h.readBtn) {
+      h.readBtn.disabled = !!(S.busy || !periodOk || S.running[account]);
+      h.readBtn.textContent = S.running[account] ? 'Reading…' : 'Read campaigns';
+      h.readBtn.title = periodOk ? 'Read campaigns, ad sets, ads and Insights for the dates on screen (GET only)' : 'Select dates to read campaigns; Maximum is not supported';
+    }
+    var wi = S.warm.available ? S.warm.accounts[account] : null, shown = !!(wi && wi.state && wi.state !== 'unknown');
+    if (h.chip) {
+      h.chip.hidden = !shown;
+      if (shown) { h.chip.textContent = wi.text || wi.state; h.chip.title = wi.title || ''; h.chip.dataset.state = wi.state; }
+    }
+    if (h.openBtn) {
+      var can = shown && (wi.state === 'closed' || wi.state === 'open');
+      h.openBtn.hidden = !(shown && (can || wi.state === 'by_hand' || wi.state === 'closing'));
+      h.openBtn.disabled = !!(!can || !S.warm.actions || S.warmBusy[account] || S.busy);
+      h.openBtn.textContent = S.warmBusy[account] ? 'Opening…' : 'Open profile';
+      h.openBtn.title = !S.warm.actions ? 'Opening profiles needs the dashboard to listen on 127.0.0.1 only'
+        : shown && wi.state === 'by_hand' ? 'Close it in Multilogin first' : shown && wi.state === 'closing' ? 'Wait until it has closed'
+        : 'Open this profile with automation and keep it open (only when pressed)';
+    }
   }
+  /* Раскрытие аккаунта ничего не читает у Meta: только показывает уже сохранённое. */
+  function toggleAccount(account) {
+    if (!handles[account]) return;
+    if (S.acctOpen[account]) delete S.acctOpen[account]; else S.acctOpen[account] = true;
+    render();
+  }
+  function onRowClick(account, ev) {
+    var t = ev.target, c = t && t.closest ? t.closest('button, a, input, select, textarea, [contenteditable], .amap-acct-note, .amap-note-pop') : null;
+    if (c && !(c.classList && c.classList.contains('amap-caret'))) return;      // свои кнопки, поля и заметка строки — не раскрывают
+    toggleAccount(account);
+  }
+  function onRowKey(account, ev) {
+    if (ev.target !== handles[account].row) return;                             // Enter/Space — только на самой строке в фокусе
+    if (ev.key === 'Enter' || ev.key === ' ' || ev.key === 'Spacebar') { ev.preventDefault(); toggleAccount(account); }
+  }
+
   function accountMessage(a, cols) {
     var sum = S.summaries[a.account] || {state: 'idle'}, span = 4 + cols.length, att = sum.attempt;
     var out = '';
@@ -757,6 +842,7 @@
     if (S.treeErr[a.account]) return one('acct:' + a.account + ':tree', 'bad', 'Could not load the saved inventory', S.treeErr[a.account], '');
     if (att && att.state === 'failed') out += one('acct:' + a.account + ':read', 'bad', 'The last read failed (' + (att.at || '') + ')', att.error || 'unknown reason', att.code,
       sum.state !== 'idle' ? ' — showing the earlier snapshot below' : '');
+    if (S.warmMsg[a.account]) out += rowMsg('acct:' + a.account + ':open', S.warmMsg[a.account], span);
     if (sum.state === 'idle') return out || msg('', 'Not read yet — press Read campaigns. Nothing is shown until the account has been read.', span);
     if (sum.state === 'empty') return out + msg('', 'The account was read and has no campaigns in the shown states.', span);
     if (sum.state === 'partial') {
@@ -766,52 +852,71 @@
     return out;
   }
 
-  var rendering = false;
+  function openHandles() { return Object.keys(handles).filter(function (a) { return S.acctOpen[a]; }).map(function (a) { return handles[a]; }); }
+  var sharedLeft = 0;
   function render() {
-    var cols = visibleCols(), span = 4 + cols.length, html = colgroup(cols) + headHtml(cols) + '<tbody>';
-    var scope = scopeAccounts(), shown = 0, total = 0;
-    scope.forEach(function (a) {
-      html += bandAccount(a, cols) + accountMessage(a, cols);
-      var rows = S.rows[a.account] || [];
+    var cols = visibleCols(), shown = 0, total = 0, pin = effPin();
+    scopeAccounts().forEach(function (a) {
+      var rows = S.rows[a.account] || [], h = handles[a.account];
       total += rows.length;
-      rows.forEach(function (r) { if (visible(r)) { shown++; html += rowHtml(r, cols); } });
+      var vis = rows.filter(visible);
+      shown += vis.length;
+      if (!h) return;
+      decorate(a.account, h);
+      var open = !!S.acctOpen[a.account];
+      h.child.hidden = !open;
+      h.row.setAttribute('aria-expanded', open ? 'true' : 'false');
+      h.row.classList.toggle('amap-open', open);
+      if (!open) return;
+      var html = colgroup(cols) + (rows.length ? headHtml(cols) : '') + '<tbody>' + accountMessage(a, cols) + vis.map(function (r) { return rowHtml(r, cols); }).join('') + '</tbody>';
+      var topv = h.scroll.scrollTop;
+      /* table-layout: fixed работает только при заданной ширине: иначе закреплённые колонки расходятся с настоящими ширинами. */
+      h.table.style.width = rows.length ? (pin + cols.reduce(function (n, c) { return n + c.w; }, 0)) + 'px' : '100%';
+      h.table.innerHTML = html;
+      h.scroll.scrollTop = topv;
+      h.scroll.scrollLeft = sharedLeft; h.top.scrollLeft = sharedLeft;
     });
-    html += '</tbody>';
-    var scroller = el('scroll'), left = scroller.scrollLeft, topv = scroller.scrollTop;
-    /* table-layout: fixed работает только при заданной ширине: иначе закреплённые колонки
-       (left: 0/40/72/148) расходятся с настоящими ширинами колонок. */
-    root.style.setProperty('--hc-pin-w', effPin() + 'px');
-    el('table').style.width = (effPin() + cols.reduce(function (n, c) { return n + c.w; }, 0)) + 'px';
-    el('table').innerHTML = html;
-    scroller.scrollLeft = left; scroller.scrollTop = topv;
+    root.style.setProperty('--hc-pin-w', pin + 'px');
     var narrowed = S.q || S.delivery !== 'all';
-    el('foot').innerHTML = '<span>Showing ' + shown + (narrowed ? ' of ' + total : '') + ' campaigns. Reach and frequency are read per level from Meta and never summed up the tree.</span>' +
+    if (el('foot')) el('foot').innerHTML = '<span>Showing ' + shown + (narrowed ? ' of ' + total : '') + ' campaigns. Reach and frequency are read per level from Meta and never summed up the tree.</span>' +
       '<span>Status shows the configured on/off from Meta; Effective delivery is separate. The switch changes only after Meta confirms it.</span>';
     var n = Object.keys(S.selected).length;
     el('selcount').textContent = n ? n + ' selected' : '';
-    el('count').textContent = shown + ' campaign' + (shown === 1 ? '' : 's') + (narrowed ? ' of ' + total : '') + ' · Expand to inspect ad sets and ads · ' + n + ' selected';
+    el('count').textContent = shown + ' campaign' + (shown === 1 ? '' : 's') + (narrowed ? ' of ' + total : '');
     renderBatch();
     syncTop();
   }
 
-  /* ── верхняя прокрутка, тени краёв ── */
+  /* ── верхняя прокрутка, тени краёв: у каждой раскрытой таблицы своя рамка, а прокрутка общая — колонки стоят одинаково ── */
   var syncing = false;
   function syncTop() {
-    var sc = el('scroll'), tp = el('top');
-    el('top-in').style.width = sc.scrollWidth + 'px';
-    root.style.setProperty('--hc-view-w', Math.max(300, sc.clientWidth) + 'px');
-    var fr = el('frame');
-    fr.dataset.moreRight = sc.scrollLeft + sc.clientWidth < sc.scrollWidth - 2 ? '1' : '0';
-    fr.dataset.moreLeft = sc.scrollLeft > 2 ? '1' : '0';
-    tp.style.display = sc.scrollWidth > sc.clientWidth + 2 ? '' : 'none';
+    openHandles().forEach(function (h) {
+      var sc = h.scroll;
+      h.topIn.style.width = sc.scrollWidth + 'px';
+      if (h.embed) h.embed.style.setProperty('--hc-view-w', Math.max(300, sc.clientWidth) + 'px');
+      h.frame.dataset.moreRight = sc.scrollLeft + sc.clientWidth < sc.scrollWidth - 2 ? '1' : '0';
+      h.frame.dataset.moreLeft = sc.scrollLeft > 2 ? '1' : '0';
+      h.top.style.display = sc.scrollWidth > sc.clientWidth + 2 ? '' : 'none';
+    });
   }
-  el('scroll').addEventListener('scroll', function () {
-    if (!syncing) { syncing = true; el('top').scrollLeft = this.scrollLeft; syncing = false; }
-    syncTop();
-  });
-  el('top').addEventListener('scroll', function () {
-    if (!syncing) { syncing = true; el('scroll').scrollLeft = this.scrollLeft; syncing = false; }
-  });
+  function bindScroll(h) {
+    h.scroll.addEventListener('scroll', function () {
+      if (syncing) return;
+      syncing = true;
+      sharedLeft = this.scrollLeft;
+      openHandles().forEach(function (o) { if (o.scroll.scrollLeft !== sharedLeft) o.scroll.scrollLeft = sharedLeft; o.top.scrollLeft = sharedLeft; });
+      syncing = false;
+      syncTop();
+    });
+    h.top.addEventListener('scroll', function () {
+      if (syncing) return;
+      syncing = true;
+      sharedLeft = this.scrollLeft;
+      openHandles().forEach(function (o) { o.scroll.scrollLeft = sharedLeft; o.top.scrollLeft = sharedLeft; });
+      syncing = false;
+      syncTop();
+    });
+  }
   window.addEventListener('resize', syncTop);
 
   /* ── сеть: только локальные GET и POST «Read campaigns» ── */
@@ -826,6 +931,45 @@
     return fetch(url, {credentials: 'same-origin'}).then(function (r) {
       return r.json().then(function (j) { if (!r.ok || j.ok === false) throw new Error(j.error || ('HTTP ' + r.status)); return j; });
     });
+  }
+  /* ── профили (ACL-1812): состояние и «Open profile». Локальный GET при показе и после действий; открытие — только по кнопке ── */
+  function warmState() {
+    var accounts = Object.keys(S.accountCountries), W = window.acmWarm;
+    if (W && typeof W.state === 'function') return Promise.resolve(W.state(accounts)).catch(function () { return null; });
+    var q = accounts.map(function (a) { return 'account=' + encodeURIComponent(a); }).join('&');
+    return fetch('/warm/state?' + q, {credentials: 'same-origin'}).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+  }
+  function loadWarm() {
+    return warmState().then(function (d) {
+      S.warm = d && d.available ? {available: true, actions: !!d.actions, accounts: d.accounts || {}} : {available: false, actions: false, accounts: {}};
+      render();
+    });
+  }
+  function warmPost(account) {
+    var W = window.acmWarm;
+    if (W && typeof W.open === 'function') return Promise.resolve(W.open([account]));
+    return fetch('/warm/open', {method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({accounts: [account]})})
+      .then(function (r) { return r.json().then(function (j) { return {status: r.status, body: j}; }); });
+  }
+  function warmPoll(account, jobId) {
+    return fetch('/warm/job/' + encodeURIComponent(jobId), {credentials: 'same-origin'}).then(function (r) { return r.json(); }).then(function (job) {
+      if (job.state === 'running') return new Promise(function (res) { setTimeout(res, 2000); }).then(function () { return warmPoll(account, jobId); });
+      return (job.results || {})[account] || {state: 'failed', message: 'No result'};
+    });
+  }
+  function warmOpen(account) {
+    if (S.warmBusy[account] || !S.warm.actions) return Promise.resolve();
+    S.warmBusy[account] = true; delete S.warmMsg[account]; render();
+    return warmPost(account).then(function (res) {
+      if (res && res.job_id) return warmPoll(account, res.job_id);     // acmWarm может вернуть итог сразу
+      if (res && res.body && res.body.job_id) return warmPoll(account, res.body.job_id);
+      var b = (res && res.body) || res || {};
+      return {state: 'failed', message: b.error || 'Could not start opening the profile', code: b.code || ''};
+    }).then(function (r) {
+      if (!(r.state === 'ok' || r.ok)) S.warmMsg[account] = noteFrom(r.message || 'Could not open the profile', 'bad', r.code);
+    }, function (e) {
+      S.warmMsg[account] = noteFrom(String(e && e.message || e), 'bad');
+    }).then(function () { delete S.warmBusy[account]; return loadWarm(); });
   }
   function loadTree(account) {
     return getJson('/campaign-inventory/tree?' + qs(['account=' + encodeURIComponent(account)], account)).then(function (j) {
@@ -919,9 +1063,11 @@
     return found;
   }
 
-  function readOne(account) {
+  function readOne(account, batch) {
+    var stop = null;
     var body = new FormData();
     body.append('account', account); body.append('date_from', period.from); body.append('date_to', period.to); body.append('span', period.span || '');
+    if (batch) body.append('batch', batch);
     S.running[account] = true; render();
     return fetch('/campaign-inventory/read', {method: 'POST', body: body, credentials: 'same-origin'}).then(function (r) {
       return r.json().then(function (j) { if (!r.ok || !j.ok) { var e = new Error(j.error || ('HTTP ' + r.status)); e.code = j.code; throw e; } });
@@ -929,11 +1075,15 @@
       return refreshAccount(account).then(function () {
         /* Тот же аккаунт открыт в другой области (он стоит в двух странах) — её данные устарели. */
         instances.forEach(function (i) { if (i !== api && i.watches(account)) i.reload(account); });
+        var at = (S.summaries[account] || {}).attempt;
+        if (at && BATCH_STOPS[at.code]) stop = {account: account, text: at.error || ''};
+        loadWarm();
       });
     }).catch(function (e) {
       if (e && e.code === 'needs_api_backend') { showNeedsApi(); return; }
+      if (e && BATCH_STOPS[e.code]) stop = {account: account, text: String(e.message || '')};
       S.summaries[account] = Object.assign({}, S.summaries[account] || {state: 'idle'}, {attempt: {state: 'failed', at: '', error: String(e && e.message || e), code: e && e.code || ''}});
-    }).then(function () { delete S.running[account]; render(); });
+    }).then(function () { delete S.running[account]; render(); return stop; });
   }
   /* Ждём конец чтения у СВОЕГО сервера (локальный статус задания); Meta это не трогает. */
   function awaitDone(account) {
@@ -1051,12 +1201,15 @@
      Живая подгонка меняет `<col>` и ширину таблицы без перерисовки; запоминается по отпусканию. */
   function setPin(w, persist, quiet) {
     pinW = Math.max(PIN_MIN, Math.round(w));
-    var eff = effPin(), table = el('table'), cg = table.querySelector('colgroup');
-    if (cg && cg.children[3]) cg.children[3].style.width = (eff - PIN_FIXED) + 'px';
+    var eff = effPin();
     root.style.setProperty('--hc-pin-w', eff + 'px');
-    table.style.width = (eff + visibleCols().reduce(function (n, c) { return n + c.w; }, 0)) + 'px';
-    var h = table.querySelector('.hc-resize');
-    if (h) { h.setAttribute('aria-valuenow', String(eff)); h.setAttribute('aria-valuemax', String(pinMax())); }
+    openHandles().forEach(function (oh) {
+      var table = oh.table, cg = table.querySelector('colgroup');
+      if (cg && cg.children[3]) cg.children[3].style.width = (eff - PIN_FIXED) + 'px';
+      if ((S.rows[oh.account] || []).length) table.style.width = (eff + visibleCols().reduce(function (n, c) { return n + c.w; }, 0)) + 'px';
+      var hd = table.querySelector('.hc-resize');
+      if (hd) { hd.setAttribute('aria-valuenow', String(eff)); hd.setAttribute('aria-valuemax', String(pinMax())); }
+    });
     syncTop();
     if (persist) {
       try { localStorage.setItem(PIN_KEY, String(pinW)); } catch (e) { /* нет хранилища */ }
@@ -1079,11 +1232,10 @@
     root.classList.remove('hc-resizing');
     if (resizing) { resizing = null; setPin(pinW, true); }
   }
-  el('table').addEventListener('mousedown', onResizeDown);
-  el('table').addEventListener('dblclick', function (ev) {
+  var onDbl = function (ev) {
     if (ev.target && ev.target.closest && ev.target.closest('.hc-resize')) { setPin(PIN_DEFAULT, true); }
-  });
-  el('table').addEventListener('keydown', function (ev) {
+  };
+  var onKey = function (ev) {
     var h = ev.target && ev.target.closest ? ev.target.closest('.hc-resize') : null;
     if (!h) return;
     var step = ev.shiftKey ? 64 : 16, cur = effPin(), next = null;
@@ -1094,33 +1246,32 @@
     if (next == null) return;
     ev.preventDefault();
     setPin(clampPin(next), true);
-  });
-  el('table').addEventListener('click', function (ev) {
+  };
+  var onTableClick = function (ev) {
     var t = ev.target;
     var cb = t.closest ? t.closest('button[data-action]') : null;
     if (cb) { if (!cb.disabled) onCommand(cb); return; }
     var rb = t.closest ? t.closest('[data-rules-open]') : null;
     if (rb) { openRulesInspector(rb.dataset.account, rb.dataset.rulesOpen); return; }
-    var b = t.closest ? t.closest('[data-read],[data-exp],[data-retry],[data-details]') : null;
+    var b = t.closest ? t.closest('[data-exp],[data-retry],[data-details]') : null;
     if (!b) return;
     if (b.dataset.details) { var did = b.dataset.details; if (S.details[did]) delete S.details[did]; else S.details[did] = true; render(); return; }
-    if (b.dataset.read) { readQueue([b.dataset.read]); return; }
     var key = b.dataset.exp || b.dataset.retry, row = findRow(key);
     if (!row) return;
     if (b.dataset.retry) { loadKids(row); return; }
     if (S.expanded[key]) { delete S.expanded[key]; render(); return; }
     S.expanded[key] = true;
     if (!S.kids[key] || S.kids[key].state === 'error') loadKids(row); else render();
-  });
-  el('table').addEventListener('change', function (ev) {
+  };
+  var onTableChange = function (ev) {
     var key = ev.target && ev.target.dataset ? ev.target.dataset.sel : '';
     if (!key) return;
     if (ev.target.checked) S.selected[key] = true; else delete S.selected[key];
     render();
-  });
+  };
   el('search').addEventListener('input', function () { S.q = this.value.trim().toLowerCase(); render(); });
   el('delivery').addEventListener('change', function () { S.delivery = this.value; render(); });
-  el('collapse-all').addEventListener('click', function () { S.expanded = {}; render(); });
+  el('collapse-all').addEventListener('click', function () { S.expanded = {}; S.acctOpen = {}; render(); });
   el('expand-all').addEventListener('click', function () { expandAll(); });
   /* «Controls / BI metrics / Meta metrics / Tracking»: прокрутить к группе колонок; скрытую — сначала показать. */
   var JUMP = {controls: 'controls', bi: 'bi', meta: 'meta', tracker: 'tracker'};
@@ -1134,8 +1285,13 @@
       keys.forEach(function (k) { colState.visible.push(k); });
       colState.preset = 'custom'; saveCols(); fillCols(); render();
     }
-    var th = el('table').querySelector('th.hc-grp[data-g="' + g + '"]');
-    if (th) el('scroll').scrollLeft = Math.max(0, th.offsetLeft - effPin());
+    if (!openHandles().length) {                       // нечего прокручивать: раскрыть первый аккаунт, у которого есть кампании
+      var first = Object.keys(handles).filter(function (a) { return (S.rows[a] || []).length; })[0];
+      if (!first) return;
+      S.acctOpen[first] = true; render();
+    }
+    var oh = openHandles()[0], th = oh && oh.table.querySelector('th.hc-grp[data-g="' + g + '"]');
+    if (th) oh.scroll.scrollLeft = Math.max(0, th.offsetLeft - effPin());
   }
   /* Развернуть всё: кампании, затем их ad sets. Дети читаются из сохранённого снимка (локальные GET), по четыре разом. */
   function loadMany(rows) {
@@ -1147,7 +1303,9 @@
   function expandAll() {
     var camps = [];
     Object.keys(S.rows).forEach(function (a) { (S.rows[a] || []).forEach(function (r) { if (visible(r)) camps.push(r); }); });
+    Object.keys(handles).forEach(function (a) { S.acctOpen[a] = true; });
     camps.forEach(function (r) { S.expanded[r.key] = true; });
+    render();
     return loadMany(camps).then(function () {
       var sets = [];
       camps.forEach(function (r) {
@@ -1184,7 +1342,7 @@
 
   /* ── старт: сначала — есть ли бэкенд; без него больше ничего не делаем ── */
   function init() {
-    if (!S.countries.length) { el('body').hidden = false; el('table').innerHTML = '<tbody><tr class="hc-msg"><td><div class="hc-band-in">No accounts are placed in a country yet.</div></td></tr></tbody>'; return; }
+    if (!S.countries.length) { el('body').hidden = false; el('count').textContent = 'No accounts are placed in a country yet.'; return; }
     var accounts = Object.keys(S.accountCountries);
     var q = accounts.map(function (a) { return 'account=' + encodeURIComponent(a); }).join('&');
     return getJson('/campaign-inventory/status?' + q).then(function (j) {
@@ -1193,6 +1351,7 @@
       accounts.forEach(function (a) { S.fetchedAt[a] = Date.now(); if (j.running.indexOf(a) >= 0) S.running[a] = true; });
       el('body').hidden = false;
       fillCols(); render();
+      loadWarm();
       (ACM ? ACM.home.availability() : Promise.resolve({available: false, reason: 'the command helper did not load'}))
         .then(function (a) { S.avail = a; render(); });
       /* Страницу перезагрузили во время чтения: дальше ждём его конец у своего сервера. */
@@ -1204,7 +1363,7 @@
       return Promise.all(seen.map(loadTree)).then(render);
     }, function (e) {
       el('body').hidden = false; fillCols();
-      el('table').innerHTML = '<tbody><tr class="hc-msg hc-bad"><td><div class="hc-band-in">Could not load the campaign inventory status: ' + esc(e && e.message || e) + '</div></td></tr></tbody>';
+      el('count').textContent = 'Could not load the campaign inventory status: ' + String(e && e.message || e);
     });
   }
 
@@ -1249,10 +1408,35 @@
   }
   if (el('history')) el('history').addEventListener('toggle', function () { if (this.open) loadHistory(); });
 
+  /* Привязка к узлам дерева: строки аккаунтов и их таблицы. Раскрытие — только показ. */
+  Object.keys(handles).forEach(function (account) {
+    var h = handles[account];
+    h.account = account;
+    h.row.addEventListener('click', function (ev) { onRowClick(account, ev); });
+    h.row.addEventListener('keydown', function (ev) { onRowKey(account, ev); });
+    if (h.readBtn) h.readBtn.addEventListener('click', function () { if (!h.readBtn.disabled) readQueue([account]); });
+    if (h.openBtn) h.openBtn.addEventListener('click', function () { if (!h.openBtn.disabled) warmOpen(account); });
+    h.table.addEventListener('mousedown', onResizeDown);
+    h.table.addEventListener('dblclick', onDbl);
+    h.table.addEventListener('keydown', onKey);
+    h.table.addEventListener('click', onTableClick);
+    h.table.addEventListener('change', onTableChange);
+    bindScroll(h);
+  });
+
   api = {
+    handles: handles, toggleAccount: toggleAccount,
     state: S, render: render, init: init, syncTop: syncTop, loadHistory: loadHistory,
     watches: function (a) { return !!S.accountCountries[a]; },
     readOne: readOne,
+    banner: function (text, retry) {
+      var b = el('banner'); if (!b) return;
+      b.textContent = ''; b.hidden = !text; if (!text) return;
+      var sp = document.createElement('span'); sp.textContent = text;
+      var bt = document.createElement('button'); bt.type = 'button'; bt.textContent = 'Retry';
+      bt.addEventListener('click', function () { retry(); });
+      b.appendChild(sp); b.appendChild(bt);
+    },
     accounts: function () { return Object.keys(S.accountCountries); },
     readAll: function (progress) { return periodOk ? queueRun(Object.keys(S.accountCountries).map(function (a) { return {inst: api, account: a}; }), progress) : Promise.resolve(); },
     periodOk: periodOk,

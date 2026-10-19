@@ -590,7 +590,7 @@ class _FormReq:
     def __init__(self, fields):
         self._fields = dict(fields)
 
-    async def form(self):
+    async def form(self, **_limits):  # read_form передаёт пределы разбора
         return self._fields
 
 
@@ -698,7 +698,7 @@ def test_component_renders_the_scoped_markup_and_no_home_section():
     assert '<template id="hc-scoped-tpl">' in html
     assert "Campaign inventory needs the API backend" in html          # блок отказа есть, скрыт до ответа статуса
     assert "What was changed here" in html
-    assert html.count('data-hc="table"') == 1 and ' id="hc-table"' not in html   # id нет: таблиц на странице много
+    assert 'data-hc="table"' not in html and 'data-hc="frame"' not in html and ' id="hc-table"' not in html   # таблицы рисуются под строками аккаунтов, id нет
 
 
 def test_command_controls_are_disabled_with_the_reason_and_carry_object_data():
@@ -717,8 +717,9 @@ def test_command_controls_are_disabled_with_the_reason_and_carry_object_data():
 
 def test_template_has_no_write_paths_and_one_post():
     posts = re.findall(r"method:\s*'(\w+)'", SRC)
-    assert posts == ["POST"]
-    assert re.findall(r"fetch\('([^']+)'", SRC) == ["/campaign-inventory/read"]
+    assert posts == ["POST", "POST"]                                # чтение описи и «Open profile» (по кнопке)
+    # Meta читает только /campaign-inventory/read; остальное — локальные маршруты профилей (ACL-1812), открытие — по кнопке
+    assert re.findall(r"fetch\('([^']+)'", SRC) == ["/warm/state?", "/warm/open", "/warm/job/", "/campaign-inventory/read"]
     assert not re.search(r"\b(PUT|PATCH|DELETE)\b", SRC)
     for verb in ("setInterval",):
         assert verb not in SRC                                      # ни таймеров, ни опроса по расписанию

@@ -1,5 +1,93 @@
 # System history
 
+## ACL-1381 — Consistent Builder ad-text wording — 2026-10-18
+
+Complete the older text-label request while preserving ACL-1769's later numbered
+Primary text 1/2 interface and separate Headline display. Search/help and empty/error
+messages now refer to ad texts consistently. Library keys, copy/copy2 fields,
+selection, draft restoration and submission behavior are unchanged.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/381).
+
+## ACL-1971 — Explicit tooling fast/full plan — 2026-10-17
+
+Document the existing tooling check's exact commands, omissions and correction
+workflow while retaining full applicable ACL/installer admission. Add the missing
+parsed-workflow activity regression: PR metadata edits run linkage only, while a
+new code head retains candidate verification. Existing aggregate negatives,
+producer names, triggers, policies and runtime behavior stay intact. This records
+project verification behavior; it does not establish a cost saving or delivery.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/971).
+
+## ACL-1924 — Published-package acceptance continuation — 2026-10-15
+
+Add a durable authorized release workflow using the maintained installer publisher
+and updater. Its isolated Windows acceptance downloads the actual signed-channel
+previous/current packages, verifies the frozen release SHA/tasks, runs real
+installation/update/restart/recovery and data preservation, and emits the native
+receipt only on success. Existing same-candidate mechanism tests and employee
+update behavior are preserved; live rollout and business pilot are not asserted.
+Parent ACL-1923 retains actual activation and publication verification.
+
+## Builder: pre-flight audit card that blocks Publish - ACL-1819
+
+- Every check is defined once in `src/fb_api/preflight_rules.py` (id, label, severity, field, hint,
+  client or server side). The same table is exported to `preflight_rules.json` and rendered into the
+  page (`window.CB_PREFLIGHT_RULES`); a test fails if the file drifts from the table.
+- The editor has a "Pre-flight audit" card for the selected campaign (red cross = error, orange "!" =
+  warning, green tick = ok, grey "?" = not checked) with an "errors: N" badge, the same badge in the
+  campaign tree, and a click on a line focuses its field.
+- Client checks run instantly on edit and never touch the network: country, link (https, well formed),
+  tracking parameters (warning), media chosen, primary text, headline, headline over 40 and primary text
+  over 125 characters (warnings), CTA allowed for the objective, daily budget, age 18-65 with min <= max,
+  unique ad names, Instant Form chosen.
+- Account checks come from the read-only `/publish-plan` (the creator's own functions, no POST): account
+  ACTIVE, Page on the account, pixel (website) or ACTIVE form (Instant Form), country / language /
+  interests resolved with exact matches, media readable, file type and size, video length (over 60 s is a
+  warning), vertical 9:16 file (warning), daily budget against Meta's minimum, existing campaign with
+  other settings. They are cached per campaign draft revision and refreshed only by the "Check" button
+  and right before Publish - never on a keystroke and never on a timer. After an edit they show
+  "Edited since the last check".
+- Minimum daily budget: Meta does not publish a per-currency table. Only USD 1.00 (impressions billing)
+  is listed; any other account currency is "unknown" (it does not block). Extend `MIN_DAILY_BUDGET`
+  from Ads Manager when a currency is confirmed.
+- Gate: Publish and Publish all stay disabled while any selected campaign has an error, and the reason
+  is shown under the button. Warnings never block and are listed in the confirm dialog. Under
+  `ACL_FB_BACKEND=rpa` only client checks run (the card says "Account checks need the API backend")
+  and the RPA publish itself is unchanged; the gate looks at client errors only.
+- The gate fails closed: if the audit state or rule table is missing, Publish is blocked with
+  "Pre-flight audit unavailable — reload the page". Retry of an unanswered submission goes through the
+  same gate. Client ad names follow the server's naming (creative number from the file name plus the
+  text), and the vertical-crop check honours the video's `tkhd` rotation.
+
+## Builder: Instant Forms - use an existing form of the Page (API backend) - ACL-1775
+
+- The ad set has a real "Conversion location": Website (the default, unchanged) or Instant Form.
+  With Instant Form every ad gets a form picker filled from the Page's forms (archived, deleted and
+  draft forms are hidden) and a "Refresh forms" button. The forms are read only when a person
+  presses that button (one read per press, no polling). With `ACL_FB_BACKEND=rpa` the control is
+  disabled with the reason "API backend only"; a stored Instant Form choice is never dropped
+  silently, the server refuses it out loud. Website values stay in the draft while Instant Form is
+  chosen (and the other way round), but only the chosen destination's values are sent.
+- Reading: `GET /{page_id}/leadgen_forms` (id, name, status, locale, created_time), read-only,
+  through the same client and session. A pure capability probe (`fb_api/forms.py`) turns the answer
+  into a clear text: "This Page's forms can't be read with the current session", or "This Page has
+  not accepted the Lead Ads terms" (the robot never accepts terms and never creates forms - that is
+  ACL-1776). Whether the token captured in the profile can read the forms is NOT confirmed yet: it
+  is checked on the 9095 test accounts.
+- Creating: ad set `destination_type=ON_AD`, `optimization_goal=LEAD_GENERATION`,
+  `promoted_object={page_id}` (no pixel); the creative's `call_to_action.value` carries
+  `lead_gen_form_id`. Everything stays PAUSED. Before any write the form of every ad must be a
+  usable form of the plan's Page; another Page's form, an archived form or unreadable forms stop
+  the campaign with 0 writes.
+- Write policy, narrow change in both layers (Python `write_policy` and the page helper in
+  `token_capture`): `lead_gen_form_id` is allowed ONLY in `adcreatives` ->
+  `object_story_spec.{link_data|video_data}.call_to_action.value`, as the only key of that value,
+  a numeric id, and only when the caller says the ad set of the same plan is ON_AD (`on_ad`). It
+  stays forbidden everywhere else; creating forms (`/{page}/leadgen_forms`) and terms remain
+  outside the allowlist.
+- Readback adds the creative's form id, "the form is listed under the Page", and for the ad set
+  the destination, goal and promoted Page. "Check plan" shows the form name and id.
+
 ## Campaign commands: human-confirmed on/off, budget and bid with readback - ACL-1800
 
 Campaigns are created published and PAUSED through the API; a person switches them on or off and
@@ -28,19 +116,54 @@ a clear refusal.
   confirmed readback, and a failed or unknown outcome keeps the previous state. Duplicate and Copy
   stay disabled (ACL-1773). With the rpa backend or a non-loopback bind the controls stay disabled
   with the reason (`GET /campaign-commands/availability`).
-- The campaign table lives only inside each country block, under the list of that country's accounts
-  (Home account map and the country page). The standalone Home "Campaigns" section and the old
-  per-account list ("IN THE ACCOUNT - N CAMPAIGNS - N ADS") are gone. One table per country, with the
-  accounts of the country as bands; "Read campaigns in <Country>" in the country header reads them one
-  at a time, and each account band keeps its own "Read campaigns". Same endpoints, same confirm and
-  readback flow. Columns follow the design prototype: Delivery, Duplicate, Bid control, Budget,
-  Optimization hint, Alerts, Goal CPA, Benchmark CPA, then BI, Meta and Tracking. Goal CPA comes from My
-  Goals and Benchmark CPA from `config/benchmarks`; hints and alerts are advisory text computed from the
-  numbers on screen, and where an input is missing the cell shows a dash with the reason.
-  `GET /campaign-commands/history?account=` backs "What was changed here". Opening a block reads
-  nothing from Meta.
+- Under `ACL_FB_BACKEND=api` accounts and campaigns are one tree inside each country block. The account row of
+  the country's accounts list is the parent: clicking the row (anywhere except its own buttons, inputs and the
+  note), the chevron, or Enter/Space on the focused row expands that account's campaigns, then ad sets and ads,
+  in place (`aria-expanded`). Expanding only shows what is saved and never reads Meta. There is no separate
+  campaign table and no account bands any more: the account row carries "Read campaigns", the snapshot age, one
+  status/error line and, when the warm-sessions API is present, the profile chip with "Open profile". Search,
+  delivery filter, column-group jumps, Expand/Collapse all, columns and the batch bar sit in one compact toolbar
+  above the accounts list; "Read campaigns in <Country>" reads the accounts one at a time. Horizontal scroll and
+  the pinned name width are shared by all open accounts. Columns follow the design prototype (Delivery,
+  Duplicate, Bid control, Budget, Optimization hint, Alerts, Goal CPA, Benchmark CPA, BI, Meta, Tracking); Goal
+  CPA comes from My Goals and Benchmark CPA from `config/benchmarks`, hints and alerts are advisory text computed
+  from the numbers on screen, and a missing input is a dash with the reason. Results of commands and read
+  failures are one compact line with Details; common causes (Multilogin not running, profile opened by hand,
+  closing, cooldown, logged out, checkpoint, permission, stale preview) have short friendly messages in one
+  place, `acmCommands.friendly`, and a row failure with the same cause as its account shows only "Profile
+  problem - see account above". `GET /campaign-commands/history?account=` backs "What was changed here".
 - Backend switch: the country table and "Read campaigns in <Country>" render only with `ACL_FB_BACKEND=api`. Under `rpa` (the default) the previous per-account list from Read spend, with its Off/On chips, "Turn off?" flow, log and coverage note, is unchanged; the two are never shown for the same country.
 - The first live check runs on the 9095 test dashboard with test accounts, after the owner agrees.
+
+## Explicit official-token application inspection — ACL-1879
+
+- A narrow verifier and standalone CLI inspect an explicitly supplied subject token
+  against an expected App ID, using a separate App ID|App Secret inspector credential
+  and an explicit Graph version. Inputs use hidden prompts or explicitly named
+  environment sources; rejected arguments and fallback input do not expose values.
+- One fixed HTTPS GET disables ambient proxies, cookies, redirects and retries.
+  Bounded body reads and socket timeouts return sanitized typed outcomes, never raw
+  upstream bodies, URLs, free-text errors or credentials. DNS/header timing retains
+  the standard-library limitation documented in the runtime procedure.
+- Validity, exact application identity, known token type, expiry and scope evidence
+  remain separate from account/read/publication readiness, which is always unchecked.
+  Offline tests execute the public verifier, real urllib handler chain and real CLI
+  entry point with fake HTTPS; no live account or deployment is verified.
+
+## Account-label ID suffix keeps existing alias precedence — ACL-1824
+
+- A long numeric account-ID suffix is removed only after the existing tail lookup
+  finds no candidate. Exact names and configured name rules retain their priority;
+  ambiguous tail matches remain unmatched instead of selecting the suffix alias.
+- Explicit account links continue to select the country before workbook resolution,
+  and account rows and country totals use the same resolved alias without duplicates.
+- When that country has no rows in the selected period, the elsewhere diagnostic
+  also uses the already-resolved alias. Unresolved or ambiguous labels keep their
+  original identity; another country cannot supply a guessed suffix match.
+- Required CI exposed an inherited logging-filter leak when the added regressions
+  changed shard assignment. The pilot tests now restore each handler's pre-test
+  filters, so later tests see their own logging behavior. Production redaction and
+  the routing-log assertions remain unchanged.
 
 ## Media wizard: Crop -> Media loop no longer ends in a false "stuck" stop - ACL-1736
 
@@ -105,6 +228,17 @@ Owner review of ACL-1620 (06.10).
 - The note is drawn as an input box (field border, radius, light background, one line with an
   ellipsis). An empty note shows the same quiet box with no text, so it is always clear that it can
   be clicked. The country box stays compact beside the name.
+
+## Honest dashboard loading stages and ACM identity — ACL-1865
+
+The report-loading screen uses the existing centered ACM logo above the product
+name, followed by workbook reading, statistics processing and dashboard preparation.
+`/report/status` adds a `stage` and `waiting` flag. Progress comes from real pipeline
+boundaries and is bound to its background job, requested period and captured manager;
+another request's progress is never shown as this page's completed work. A cached
+workbook skips reading/processing, and period-only loading shows preparation.
+The existing ready/error polling and automatic dashboard transition remain in place,
+with responsive light/dark styling, reduced motion and connection retry messages.
 
 ## One metric set in every attribution table, Totals and Campaign managers on Home — ACL-1652, ACL-1654, ACL-1656
 
@@ -446,6 +580,20 @@ write their own note about an account.
   the same note in every country; notes survive a report refresh and a dashboard restart.
 - Text is escaped on render and written to the page only as text.
 - The `ready` / `to_do` fields stay in the row data; only their display is removed.
+## Builder creative replacement after a recent refresh — ACL-1651 / PR665
+
+The owner's 2026-10-13 replacement-photo report exposed a missed-search refresh
+consumed by the two-second throttle: the search latch stayed set although no
+request ran. Misses now share a pending background refresh that waits out that
+gap, then searches the current visible query. The ten-second focus limit and one
+refresh per miss streak remain; late results do not reopen a closed picker or
+change the selected creative or campaign fields. Both Image and Video searches
+use the same refreshed list; switching type merely cleared the field/picker and
+therefore caused a new focus/search path, rather than performing a separate scan.
+Offline browser regressions cover immediate replacement, typing during the wait,
+closed pickers and retained campaign settings. No live advertising action or
+installed-package delivery is established by these synthetic checks.
+
 ## Campaign Builder creative previews no longer freeze the dashboard — ACL-1615
 
 05.10 py-spy: while the Builder loaded video previews, every other request (job status, slots,

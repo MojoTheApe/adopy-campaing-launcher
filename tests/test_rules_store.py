@@ -16,6 +16,18 @@ from src.analysis_agent.rules.store import RulesStore
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(autouse=True)
+def automatic_gate_on(monkeypatch):
+    """Замок Automatic по умолчанию закрыт; тесты семантики гранта открывают его через env."""
+    monkeypatch.setenv(store_mod.AUTOMATIC_ENV, "1")
+
+
+@pytest.fixture
+def gate_off(monkeypatch):
+    monkeypatch.delenv(store_mod.AUTOMATIC_ENV, raising=False)
+    monkeypatch.setattr(store_mod, "AUTOMATIC_AVAILABLE", False)
+
+
 @pytest.fixture
 def st(tmp_path):
     return RulesStore(tmp_path)
@@ -454,3 +466,170 @@ def test_bak_is_written_atomically(st, monkeypatch):
     monkeypatch.setattr(store_mod.os, "replace", lambda a, b: (seen.append(Path(b).name), real(a, b))[1])
     st.edit_rule(r["id"], {"priority": 1})
     assert "rules.json.bak" in seen and "rules.json" in seen
+
+
+# --- замок Automatic ----------------------------------------------------------
+
+def test_gate_is_closed_by_default_in_code():
+    assert store_mod.AUTOMATIC_AVAILABLE is False
+
+
+def test_gate_refuses_grant(st, gate_off):
+    r = st.create_from_preset("stop_loss_new_tests", "Dan", by="dan", scope=_scope())
+    with pytest.raises(model.RuleValidationError, match="Automatic mode is not available yet."):
+        st.grant_automatic(r["id"], by="dan")
+    got = st.get_rule(r["id"])
+    assert got["mode"] != "automatic" and got["grant"] is None
+
+
+def test_gate_refuses_enable_flag_but_allows_disable(st, gate_off):
+    with pytest.raises(store_mod.RulesStoreError, match="Automatic mode is not available yet."):
+        st.set_automatic_enabled(True, by="dan")
+    assert st.load_settings()["automatic_enabled"] is False
+    assert st.set_automatic_enabled(False, by="dan")["automatic_enabled"] is False
+
+
+def test_gate_env_value_must_be_exactly_one(st, gate_off, monkeypatch):
+    monkeypatch.setenv(store_mod.AUTOMATIC_ENV, "true")
+    with pytest.raises(store_mod.RulesStoreError):
+        st.set_automatic_enabled(True, by="dan")
+
+
+def test_stored_automatic_loads_as_suggest_while_gate_off(st, monkeypatch):
+    r = _auto_rule(st)                                   # gate on: grant works
+    monkeypatch.delenv(store_mod.AUTOMATIC_ENV)
+    got = st.get_rule(r["id"])
+    assert got["mode"] == "suggest" and got["grant"] is None
+    assert json.loads((st.directory / "rules.json").read_text("utf-8"))["rules"][r["id"]]["mode"] == "suggest"
+
+
+def test_stored_automatic_flag_reads_off_while_gate_off(st, monkeypatch):
+    st.set_automatic_enabled(True, by="dan")
+    monkeypatch.delenv(store_mod.AUTOMATIC_ENV)
+    assert st.load_settings()["automatic_enabled"] is False
+
+
+# --- schema_version -----------------------------------------------------------
+
+def test_files_get_schema_version_on_save(st):
+    st.create_from_preset("stop_loss_new_tests", "Dan", by="dan", scope=_scope())
+    st.update_settings({"limits": {"per_rule_day": 4}}, by="dan")
+    assert json.loads((st.directory / "rules.json").read_text("utf-8"))["schema_version"] == 1
+    assert json.loads((st.directory / "rules_settings.json").read_text("utf-8"))["schema_version"] == 1
+    assert st.load_settings()["schema_version"] == 1
+
+
+def test_rules_without_schema_version_are_persisted_as_1(st):
+    r = st.create_from_preset("stop_loss_new_tests", "Dan", by="dan", scope=_scope())
+    path = st.directory / "rules.json"
+    data = json.loads(path.read_text("utf-8"))
+    del data["schema_version"]
+    path.write_text(json.dumps(data), "utf-8")
+    assert st.get_rule(r["id"])["id"] == r["id"]
+    assert json.loads(path.read_text("utf-8"))["schema_version"] == 1
+
+
+def test_unversioned_rules_do_not_lose_grants(st):
+    r = _auto_rule(st)
+    path = st.directory / "rules.json"
+    data = json.loads(path.read_text("utf-8"))
+    del data["schema_version"]
+    path.write_text(json.dumps(data), "utf-8")
+    assert st.get_rule(r["id"])["mode"] == "automatic"
+
+
+def test_settings_without_schema_version_are_persisted_as_1(tmp_path):
+    path = tmp_path / "rules_settings.json"
+    path.write_text(json.dumps({"automatic_enabled": False, "limits": {"per_rule_day": 2}}), "utf-8")
+    cur = RulesStore(tmp_path).load_settings()
+    assert cur["schema_version"] == 1 and cur["limits"]["per_rule_day"] == 2
+    assert json.loads(path.read_text("utf-8"))["schema_version"] == 1
+
+
+def test_newer_rules_schema_is_refused_and_never_overwritten(st):
+    st.create_from_preset("stop_loss_new_tests", "Dan", by="dan", scope=_scope())
+    path = st.directory / "rules.json"
+    data = json.loads(path.read_text("utf-8"))
+    data["schema_version"] = 2
+    path.write_text(json.dumps(data), "utf-8")
+    before = path.read_bytes()
+    with pytest.raises(store_mod.SchemaTooNew, match="schema_version 2"):
+        st.list_rules()
+    with pytest.raises(store_mod.SchemaTooNew):
+        st.create_from_preset("stop_loss_new_tests", "Dan", by="dan", scope=_scope())
+    assert path.read_bytes() == before
+    assert not list(st.directory.glob("rules.json.corrupt-*"))
+
+
+def test_newer_settings_schema_is_refused_and_never_overwritten(tmp_path):
+    path = tmp_path / "rules_settings.json"
+    path.write_text(json.dumps({"schema_version": 7, "automatic_enabled": False}), "utf-8")
+    before = path.read_bytes()
+    s = RulesStore(tmp_path)
+    with pytest.raises(store_mod.SchemaTooNew):
+        s.load_settings()
+    with pytest.raises(store_mod.SchemaTooNew):
+        s.update_settings({"limits": {"per_rule_day": 1}}, by="dan")
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("bad", [0, -1, "1", True, 1.5])
+def test_invalid_schema_version_is_refused(tmp_path, bad):
+    path = tmp_path / "rules.json"
+    path.write_text(json.dumps({"schema_version": bad, "rules": {}}), "utf-8")
+    with pytest.raises(store_mod.RulesStoreError, match="schema_version"):
+        RulesStore(tmp_path).list_rules()
+
+
+# --- битое правило не прячет остальные -----------------------------------------
+
+def _break(st, rule_id, **changes):
+    path = st.directory / "rules.json"
+    data = json.loads(path.read_text("utf-8"))
+    rule = data["rules"][rule_id]
+    for k, v in changes.items():
+        if v is KeyError:
+            rule.pop(k)
+        else:
+            rule[k] = v
+    path.write_text(json.dumps(data), "utf-8")
+
+
+@pytest.mark.parametrize("changes", [{"versions": KeyError}, {"current_version": 99},
+                                     {"versions": []}, {"current_version": KeyError}])
+def test_malformed_rule_is_quarantined_not_fatal(st, caplog, changes):
+    good = st.create_from_preset("stop_loss_new_tests", "Dan", by="dan", scope=_scope())
+    bad = st.create_from_preset("scale_proven", "Dan", by="dan", scope=_scope())
+    _break(st, bad["id"], **changes)
+    with caplog.at_level("WARNING"):
+        listed = st.list_rules()
+    assert [r["id"] for r in listed] == [good["id"]]
+    assert [p["rule_id"] for p in st.problems] == [bad["id"]]
+    assert bad["id"] in caplog.text
+    rules, problems = st.list_rules_checked()
+    assert len(rules) == 1 and problems[0]["rule_id"] == bad["id"] and problems[0]["error"]
+    with pytest.raises(store_mod.RulesStoreError, match=bad["id"]):
+        st.get_rule(bad["id"])
+    # битое правило остаётся на диске для разбора, новые правила создаются как обычно
+    st.create_from_preset("stop_loss_new_tests", "Dan", by="dan", scope=_scope())
+    assert bad["id"] in json.loads((st.directory / "rules.json").read_text("utf-8"))["rules"]
+
+
+def test_update_settings_refuses_automatic_true_while_gate_closed(st, gate_off, tmp_path):
+    with pytest.raises(store_mod.RulesStoreError, match="Automatic mode is not available yet."):
+        st.update_settings({"automatic_enabled": True}, by="dan")
+    # nothing True ever reaches the disk, so a later gate flip cannot switch it on
+    path = tmp_path / "rules_settings.json"
+    assert not path.exists() or json.loads(path.read_text("utf-8")).get("automatic_enabled") is not True
+
+
+def test_non_object_rule_entries_are_quarantined(tmp_path):
+    (tmp_path / "rules.json").write_text(
+        json.dumps({"schema_version": 1, "rules": {"x": "junk", "y": None}}), "utf-8")
+    s = RulesStore(tmp_path)
+    assert s.list_rules() == []
+    with pytest.raises(store_mod.RulesStoreError, match="malformed"):
+        s.get_rule("x")
+    with pytest.raises(store_mod.RuleNotFound):  # null entry reads as missing
+        s.get_rule("y")
+    assert s.create_rule("Dan", {"name": "ok"})["id"]
