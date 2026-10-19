@@ -48154,7 +48154,7 @@
         },
         "pr": 986,
         "queued_at": "2026-10-19T08:00:16+00:00",
-        "reviewer": "Reviewer-E19871"
+        "reviewer": "Reviewer-X19986"
       },
       "872": {
         "implementers": [
@@ -52851,6 +52851,10 @@
       "Worker-E19356": {
         "session": "w356-c0a1de70",
         "role": "Worker"
+      },
+      "Reviewer-X19986": {
+        "session": "rx986-1c30cbbe",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -88399,6 +88403,24 @@
         "issue": 356,
         "pr": 942,
         "actor": "Worker-E19356"
+      },
+      {
+        "event": "review-takeover",
+        "at": "2026-10-19T09:51:57+00:00",
+        "previous": {
+          "id": "65b87db1c13c479590751a135b2c8d89",
+          "pr": 986,
+          "issues": [
+            871
+          ],
+          "actor": "Reviewer-E19871",
+          "session": "r871-c0a1de70",
+          "coordinator": "Coordinator-E1019A",
+          "started_at": "2026-10-19T08:01:38+00:00",
+          "state": "reviewing"
+        },
+        "claim": "3bd526a047854eebb62bafacfdc02f0c",
+        "reason": "Previous reviewer subagent stopped; owner chose a separate reviewer session 2026-10-19"
       }
     ],
     "policy": {
@@ -94655,13 +94677,13 @@
     },
     "source_reviews": {
       "986": {
-        "id": "65b87db1c13c479590751a135b2c8d89",
+        "id": "3bd526a047854eebb62bafacfdc02f0c",
         "pr": 986,
         "issues": [
           871
         ],
-        "actor": "Reviewer-E19871",
-        "session": "r871-c0a1de70",
+        "actor": "Reviewer-X19986",
+        "session": "rx986-1c30cbbe",
         "coordinator": "Coordinator-E1019A",
         "started_at": "2026-10-19T08:01:38+00:00",
         "state": "reviewing"
