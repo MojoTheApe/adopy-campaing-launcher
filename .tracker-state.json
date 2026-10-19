@@ -43208,22 +43208,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "899": {
-        "actor": "Worker-RF1019W",
-        "session": "rf1019w-20261019",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1899-video-upload-progress",
-        "worktree": "C:\\rf19-899",
-        "id": "660c03e6127c45e99df126a409e14ea9",
-        "issue": 899,
-        "state": "handoff",
-        "started_at": "2026-10-19T11:32:27+00:00",
-        "from_status": "status:todo",
-        "pr": 900,
-        "report": "Merged 776 head 9da094c7 (includes main 435bc154) into 6743292c (new head 24e36087). Conflicts: none. No code change. Tests: test_acl1899_upload_progress + test_acl1761_api_create: 151 passed (3 reruns green; one first run had a single transient failure in test_the_page_helper_reports_progress_and_the_result, not reproducible). Needs a delta review of the merge only."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -48678,25 +48663,25 @@
             "session": "rf1019w-20261019"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RF1019W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-RF1016W",
-          "session": "rf1016w-20261016",
+          "actor": "Worker-RF1019W",
+          "session": "rf1019w-20261019",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1899-video-upload-progress",
-          "worktree": "C:\\rf-899",
-          "id": "f3ae21b7d0b44007b748537d6260fe2a",
+          "worktree": "C:\\rf19-899",
+          "id": "660c03e6127c45e99df126a409e14ea9",
           "issue": 899,
           "state": "handoff",
-          "started_at": "2026-10-16T10:22:18+00:00",
+          "started_at": "2026-10-19T11:32:27+00:00",
           "from_status": "status:todo",
           "pr": 900,
-          "report": "Merged the refreshed ACL-1776 head cd1da59b (which contains main af0ade29) into the previously approved head eb4f87d6; only CHANGELOG conflicted, resolved by keeping both sides; no code change; 151 tests passed. Needs a delta review of the merge only."
+          "report": "Merged 776 head 9da094c7 (includes main 435bc154) into 6743292c (new head 24e36087). Conflicts: none. No code change. Tests: test_acl1899_upload_progress + test_acl1761_api_create: 151 passed (3 reruns green; one first run had a single transient failure in test_the_page_helper_reports_progress_and_the_result, not reproducible). Needs a delta review of the merge only."
         },
         "pr": 900,
-        "queued_at": "2026-10-16T10:25:38+00:00",
+        "queued_at": "2026-10-19T11:39:16+00:00",
         "return_operation": {
           "id": "b138e6264e8543bdbddbfe73b48762ce",
           "actor": "Coordinator-M1011A",
@@ -55999,7 +55984,8 @@
       70,
       681,
       776,
-      138
+      138,
+      899
     ],
     "review": {
       "id": "b49c262d383b4011a4e6891181162ac5",
@@ -89748,6 +89734,13 @@
         "issue": 138,
         "pr": 947,
         "actor": "Worker-P1138B"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T11:39:16+00:00",
+        "issue": 899,
+        "pr": 900,
+        "actor": "Worker-RF1019W"
       }
     ],
     "policy": {
