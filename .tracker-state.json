@@ -44138,20 +44138,6 @@
         "started_at": "2026-10-19T19:07:51+00:00",
         "from_status": "status:todo"
       },
-      "273": {
-        "actor": "Worker-R1019273",
-        "session": "run_r1019_273",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1273-manual-report-fingerprint",
-        "worktree": "C:\\acl-1273",
-        "id": "075c1efe814f41e8a29ddcae3721ffb3",
-        "issue": 273,
-        "state": "handoff",
-        "started_at": "2026-10-19T19:47:58+00:00",
-        "from_status": "status:todo",
-        "pr": 948,
-        "report": "Revived after the conflict return: merged work/main (only docs/system/CHANGELOG.md conflicted; both entries kept), pushed. Touched test passes: test_report_delivery_review (10 passed). Full suite left to CI. Not verified live."
-      },
       "836": {
         "actor": "Worker-U1019836",
         "session": "run_u1019_836",
@@ -50473,25 +50459,25 @@
             "session": "run_r1019_273"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-R1019273",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-1273A",
-          "session": "d69b43c4-d6df-47bc-a94e-f83cd9b91368",
+          "actor": "Worker-R1019273",
+          "session": "run_r1019_273",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1273-manual-report-fingerprint",
           "worktree": "C:\\acl-1273",
-          "id": "da2092480bb24f8a94f67903334ed2a6",
+          "id": "075c1efe814f41e8a29ddcae3721ffb3",
           "issue": 273,
           "state": "handoff",
-          "started_at": "2026-10-16T13:03:15+00:00",
-          "from_status": "status:backlog",
+          "started_at": "2026-10-19T19:47:58+00:00",
+          "from_status": "status:todo",
           "pr": 948,
-          "report": "## Handoff \u2014 2026-10-16 (Worker-1273A)\n- PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/948, branch `work/acl-1273-manual-report-fingerprint`, head `15e175c3`, base main `af0ade29`.\n- Change: `report_problem()` fingerprint is now `[\"acl-report\", \"manual\", \"r\" + uuid4().hex]`, the same id is sent as tag `report_id`. Step-failure grouping unchanged. Form, route and scrubber unchanged.\n- Tests: new cases in `tests/test_report_delivery_review.py` (unique per call for different and identical text, all-digit id survives scrubbing, step failures still group, tags/context kept). Touched Sentry tests: 84 passed locally; full suite in CI.\n- Independent pre-review (read-only subagent): approve, nits only.\n- Remaining: live check after release \u2014 send two reports from the dashboard, confirm two new Sentry issues and the owner's notification, record the issue ids here; resolve old PYTHON-2. Owner-side: confirm an issue alert rule and team membership for project `python`."
+          "report": "Revived after the conflict return: merged work/main (only docs/system/CHANGELOG.md conflicted; both entries kept), pushed. Touched test passes: test_report_delivery_review (10 passed). Full suite left to CI. Not verified live."
         },
         "pr": 948,
-        "queued_at": "2026-10-16T13:10:32+00:00",
+        "queued_at": "2026-10-19T19:49:41+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -57353,7 +57339,8 @@
       805,
       945,
       807,
-      184
+      184,
+      273
     ],
     "review": {
       "id": "71d08f944d4646c69ba2c95edd8d2464",
@@ -93556,6 +93543,13 @@
         "issue": 836,
         "claim": "2441527c16924c619a6a923fce875b9c",
         "actor": "Worker-U1019836"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T19:49:41+00:00",
+        "issue": 273,
+        "pr": 948,
+        "actor": "Worker-R1019273"
       }
     ],
     "policy": {
