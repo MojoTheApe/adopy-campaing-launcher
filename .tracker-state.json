@@ -43242,9 +43242,11 @@
         "worktree": "C:\\wk-rs1827",
         "id": "ae46388e19d54bae893f588260dfcd40",
         "issue": 827,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T12:11:52+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 829,
+        "report": "# ACL-1827 resume handoff (Worker-RS1827)\nResumed on the owner instruction of 2026-10-19 after the 17.10 exclusive-workflow pause.\nHead: d69bfa32 on codex/acl-1827-design-parity-shell, merge of origin/main 435bc154 (process docs/tracker/CI accounting, ACL-1381 builder labels). Merge only, no conflicts, no 1827 code changed since the reviewed 662abff0.\nTests: test_acl1827_shell_parity, test_header, test_screens_are_in_english, test_acl1797_design_system, test_acl1799_country_workbench, test_stage_badge: 92 passed. scripts/acl_scan_secrets.py clean.\nFull suite not run locally."
       }
     },
     "tasks": {
