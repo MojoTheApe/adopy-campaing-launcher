@@ -44139,20 +44139,6 @@
         "from_status": "status:todo",
         "pr": 837,
         "report": "# ACL-1836 handoff (2026-10-19)\n\nSource PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/837 , head 1ab1af9d. PR was returned for conflicts with main; merged current main, resolved src/fb_api/graph.py and src/fb_api/token_capture.py by keeping both session-loss recovery (ACL-1836) and timeout-to-stop classification (ACL-1761). One review nit fixed: verify_url after recovery now runs inside _timeouts_as_stops.\nLocal checks: tests for 1836 recovery, 1761 hang/logout (61), 1756 (103), 1760 (79), 1761 create (121), 1812 warm (89), 1800 commands (200) all passed. Full suite left to CI.\nRead-only Opus review of the merge resolution: nothing blocking; no Graph request is replayed by the recovery path.\nNo live profile or Meta operations."
-      },
-      "309": {
-        "actor": "Worker-R1019309",
-        "session": "run_r1019_309",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1309-own-dashboard",
-        "worktree": "C:\\acl-1309-v2",
-        "id": "63b5915c5ea04513a2e3dc7ab5779695",
-        "issue": 309,
-        "state": "handoff",
-        "started_at": "2026-10-19T19:50:25+00:00",
-        "from_status": "status:todo",
-        "pr": 929,
-        "report": "Revived after the conflict return: merged work/main (only docs/system/CHANGELOG.md conflicted; both entries kept), pushed. Touched tests pass: launcher/local_dashboard/integration_fixes, test_the_dashboard_says_whose_it_is, test_release_updates (84 passed). Full suite left to CI. Not verified live."
       }
     },
     "tasks": {
@@ -50229,25 +50215,25 @@
             "session": "run_r1019_309"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-R1019309",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-W1015K",
-          "session": "S63c25b6e",
+          "actor": "Worker-R1019309",
+          "session": "run_r1019_309",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1309-own-dashboard",
           "worktree": "C:\\acl-1309-v2",
-          "id": "f3bbd1b67c9249689796356aeb2c5270",
+          "id": "63b5915c5ea04513a2e3dc7ab5779695",
           "issue": 309,
           "state": "handoff",
-          "started_at": "2026-10-15T10:08:54+00:00",
+          "started_at": "2026-10-19T19:50:25+00:00",
           "from_status": "status:todo",
           "pr": 929,
-          "report": "ACL-1309 ready for review: PR #929 (base main), branch work/acl-1309-own-dashboard, supersedes #310.\nFixed the three #310 review defects: per-person sticky port (memory + %ProgramData%\\ACL\\ports registry, no overwrite of a neighbour's mark, race-safe), dual-stack [::] occupancy check, tests run the real launcher against real stub dashboards (each restored bug turns the suite red).\nPre-handoff Opus review: nothing blocking; its MEDIUM (first-launch race) fixed in bcaec120.\nTests: packaging/windows/tests + test_the_dashboard_says_whose_it_is + test_release_updates \u2014 113 passed locally; full suite in CI.\nNot verified: two real Windows accounts on one machine."
+          "report": "Revived after the conflict return: merged work/main (only docs/system/CHANGELOG.md conflicted; both entries kept), pushed. Touched tests pass: launcher/local_dashboard/integration_fixes, test_the_dashboard_says_whose_it_is, test_release_updates (84 passed). Full suite left to CI. Not verified live."
         },
         "pr": 929,
-        "queued_at": "2026-10-15T10:33:27+00:00",
+        "queued_at": "2026-10-19T19:52:59+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -57353,7 +57339,8 @@
       807,
       184,
       273,
-      920
+      920,
+      309
     ],
     "review": {
       "id": "71d08f944d4646c69ba2c95edd8d2464",
@@ -93577,6 +93564,13 @@
         "issue": 920,
         "pr": 921,
         "actor": "Worker-R1019920"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T19:52:59+00:00",
+        "issue": 309,
+        "pr": 929,
+        "actor": "Worker-R1019309"
       }
     ],
     "policy": {
