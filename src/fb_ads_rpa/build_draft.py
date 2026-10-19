@@ -74,6 +74,8 @@ def slots_to_campaign_drafts(
                 copy_name=(s.get("copy") or "").strip(),
                 copy2_name=(s.get("copy2") or "").strip(),
                 lead_form_id=(s.get("lead_form_id") or "").strip() if destination == "instant_form" else "",
+                lead_form_template=((s.get("lead_form_template") or "").strip()
+                                    if destination == "instant_form" else ""),
             )
             for s in group
         ]
