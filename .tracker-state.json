@@ -52364,7 +52364,7 @@
             "session": "run_r1019_184"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-R1019184",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -52382,7 +52382,8 @@
           "report": "Revived after the conflict return: merged work/main (clean, no conflicts), pushed. Touched tests pass: test_acl1184_hand_open_message, test_acl1812_warm_sessions (100 passed). Full suite left to CI. Not verified live."
         },
         "pr": 937,
-        "queued_at": "2026-10-19T19:47:23+00:00"
+        "queued_at": "2026-10-19T19:47:23+00:00",
+        "reviewer": "Reviewer-R1184Y"
       },
       "175": {
         "implementers": [
@@ -54751,6 +54752,10 @@
       },
       "Reviewer-R1807Y": {
         "session": "reviewer-r1807y-20261019",
+        "role": "Reviewer"
+      },
+      "Reviewer-R1184Y": {
+        "session": "reviewer-r1184y-20261019",
         "role": "Reviewer"
       }
     },
@@ -57603,7 +57608,6 @@
     "review_queue": [
       681,
       805,
-      184,
       273,
       920,
       309,
@@ -94157,6 +94161,13 @@
             "approved_at": "2026-10-19T20:39:53+00:00"
           }
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-19T20:42:48+00:00",
+        "pr": 937,
+        "lane": "0098a6ad59774bf4bccfcd88e4973b8b",
+        "actor": "Reviewer-R1184Y"
       }
     ],
     "policy": {
@@ -101752,6 +101763,18 @@
         "session": "reviewer-r1807y-20261019",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-19T20:38:22+00:00",
+        "state": "reviewing"
+      },
+      "937": {
+        "id": "0098a6ad59774bf4bccfcd88e4973b8b",
+        "pr": 937,
+        "issues": [
+          184
+        ],
+        "actor": "Reviewer-R1184Y",
+        "session": "reviewer-r1184y-20261019",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-19T20:42:48+00:00",
         "state": "reviewing"
       }
     },
