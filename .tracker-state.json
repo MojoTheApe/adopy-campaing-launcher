@@ -43244,6 +43244,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T11:57:41+00:00",
         "from_status": "status:todo"
+      },
+      "816": {
+        "actor": "Worker-RS1816",
+        "session": "wrs1816-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1816-rules-evaluate",
+        "worktree": "C:\\wk-rs1816",
+        "id": "f5821f262c824574820b4be3a8426f65",
+        "issue": 816,
+        "state": "implementing",
+        "started_at": "2026-10-19T12:01:14+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -47328,9 +47340,13 @@
           {
             "actor": "Worker-RS1816",
             "session": "wrs1816-20261015"
+          },
+          {
+            "actor": "Worker-RS1816",
+            "session": "wrs1816-20261015"
           }
         ],
-        "state": "stopped",
+        "state": "implementing",
         "worker": "Worker-RS1816",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -47350,7 +47366,6 @@
         "pr": 820,
         "queued_at": "2026-10-16T10:17:10+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
-        "reviewer": "Reviewer-R1816U",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.577990+00:00",
@@ -89961,6 +89976,13 @@
           "report": "Returned for a one-line fix: CI guard tests/test_build_progress_model.py::test_every_step_the_robot_names_maps_to_a_stage fails on the new telemetry step proxy_gate_unchecked (needs a cb-build-model rule in src/web/templates/report.html). Review of the rest stands as reported; a fresh approval of the new head is required.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T12:01:14+00:00",
+        "issue": 816,
+        "claim": "f5821f262c824574820b4be3a8426f65",
+        "actor": "Worker-RS1816"
       }
     ],
     "policy": {
