@@ -4770,27 +4770,6 @@
           "853": "48bbd0ada92f4fbd4f162a258be49f4b8cd417a35330115cf8bcbca2bf418ab5"
         }
       },
-      "955": {
-        "kind": "independent-review",
-        "verdict": "approved",
-        "reviewer": "Reviewer-R106E",
-        "review_session": "r106e-20261019",
-        "execution_lane": "30da9f63ac2f4410aadec254c84c931a",
-        "implementer": "Worker-W106C",
-        "head_sha": "33cde2ba99964f24ce444b93945f017aa45796aa",
-        "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
-        "tree_sha": "28aadc69fdb1809941fd9a9b544b58bbf195d710",
-        "issues": [
-          19
-        ],
-        "report": "Independent source re-review of ACL-106 (Issue #19, PR 955) at head 33cde2ba against main 435bc154 (merge-base = main). Implementer Worker-W106C; reviewer did not implement. Full diff origin/main...HEAD: src/web/app.py (+_period_owner, passed as period_owner to report.html), src/web/templates/report.html (new manager-scoped notice + one sentence in the existing whole-workbook notice), tests/test_empty_period_owner.py, CHANGELOG and PROJECT.md. (1) Blocking performance issue from the first review is fixed: _period_owner(report) takes only the report dict and reads my_cm, period_from/period_to, countries[].cm_comparison[].cm/is_me; no df argument, no frame scan, no _filter_by_period, no date conversion; it is O(countries x CMs) over the already cached/deep-copied period report. The monkeypatch test is a regression guard (the function has no frame to reach) rather than a strong proof, which is acceptable. (2) Correctness against main: report_for_period sets period_from/period_to on the scoped report only when a period is chosen; load_morning_report builds countries from all managers' rows (Country Final) and build_cm_comparison sets is_me by strip().lower() equality with my_cm, matching _period_owner's comparison; NaN CMs stringify to 'nan' and are skipped; linked-only countries added by _add_linked_accounts_to_builder have empty cm_comparison and contribute nothing. Manager with rows in any country -> None; no manager or no dates -> None; no other rows -> None (the existing notice owns that case). Template: the new block requires report.countries and book_covers_period and period_owner.kind=='manager'; the existing block requires not report.countries or not book_covers_period, so the two notices (same id) are mutually exclusive. (3) Issue #19 acceptance: manager-only emptiness says 'No rows for <manager> in <dates>, while the workbook has rows for other managers... the file itself is not the problem'; whole-workbook emptiness now adds 'Nobody has rows for these dates, so the workbook itself may need updating'; both name the chosen dates; the manager case keeps the full dashboard and account map (full-page test asserts the notice precedes dashboard-shell and 'Read all'/amap remain), the whole-workbook case keeps the amap-slot include. (4) Manager name escaped: Jinja2Templates env has autoescape=True; rendering manager='<script>x</script>' produced &lt;script&gt; and no raw tag. (5) CI on head 33cde2ba green: linux tests 3.13 x3, windows tests 3.13, Process instructions, tracker-link, Installer verification, tooling, descriptor (build jobs skipped by classifier). Local Python 3.14: tests/test_empty_period_owner.py 10 passed, tests/test_sidebar_without_workbook.py 13 passed. Non-blocking nits: the returned key other_cms counts CM rows across countries, not distinct CMs (unused by the template), and the full-page test passes other_rows instead; when account_map lacks readable dates the whole-workbook text combines 'no rows with readable dates' with 'Nobody has rows', which is slightly imprecise but pre-existing in shape. No live checks claimed.",
-        "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "recorded_at": "2026-10-19T13:20:07+00:00",
-        "issue_scopes": {
-          "19": "ce291401dfa6489828ba973eb602b744efb113657552fbfff1bcb7f342232d99"
-        }
-      },
       "1016": {
         "kind": "independent-review",
         "verdict": "approved",
@@ -98138,7 +98117,9 @@
         "session": "r106e-20261019",
         "coordinator": "Coordinator-C1016A",
         "started_at": "2026-10-19T13:11:49+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "# Returned only to release the review lane: the review baseline is stale\n\nMain moved to 1c6ab78e after the review (batch #1016 merged), so the independent review no longer matches the frozen baseline and `batch approve` is refused. The code review itself found no blocking problems, and the evidence stays on record in the review notes.\n\nNext step for the author: when the coordinator says this task's batch turn is near, merge the then-current main into the original branch, run the affected tests, hand off, and get a short fresh review of the delta (content was already reviewed).",
+        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
