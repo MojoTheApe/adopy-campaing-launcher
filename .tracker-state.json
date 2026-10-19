@@ -44305,22 +44305,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "845": {
-        "actor": "Worker-R1019845",
-        "session": "run_r1019_845",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1845-publish-button-design",
-        "worktree": "C:\\acl-1845-wt",
-        "id": "cfb922d7daa24c9d855ac71aa04fdcf8",
-        "issue": 845,
-        "state": "handoff",
-        "started_at": "2026-10-19T20:55:16+00:00",
-        "from_status": "status:todo",
-        "pr": 850,
-        "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main; resolved 4 report.html hunks and CHANGELOG. Review findings addressed: (1) blocking zero-count overwrite: showQueue() and applyGate() now also disable the button when no campaign is available (count of tick.send / tick.open), so a queue update or the preflight gate cannot re-enable it; (2) main's ACL-1761 publishLabel kept (PAUSED/drafts), only the count (open campaigns) differs; main's Check plan button, account-state refresh and the sfc confirmation dialog kept (dialog keeps this PR's classes with main's font-size tokens); CHANGELOG sentences about the gate and API label updated. Tests: test_publish_button_design_browser 12, test_builder_multi_publish_browser 12, test_builder_publish_selected_browser 12, test_drawer_review_browser 13 passed. NOTE: no new dedicated regression test for the zero-count/showQueue fix; covered only by the existing browser tests (they pass)."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -49087,25 +49072,25 @@
             "session": "run_r1019_845"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-R1019845",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-Q8V274",
-          "session": "publish-buttons-20261013-Q8V274",
-          "coordinator": "Coordinator-D7K413",
+          "actor": "Worker-R1019845",
+          "session": "run_r1019_845",
+          "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1845-publish-button-design",
-          "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-Publish-Design-2026-10-13",
-          "id": "d9f5699c919e41c5957876ba9e63e27d",
+          "worktree": "C:\\acl-1845-wt",
+          "id": "cfb922d7daa24c9d855ac71aa04fdcf8",
           "issue": 845,
           "state": "handoff",
-          "started_at": "2026-10-13T07:51:51+00:00",
+          "started_at": "2026-10-19T20:55:16+00:00",
           "from_status": "status:todo",
           "pr": 850,
-          "report": "Tracker issues: ACL-1845\n\nThe builder previously stacked two filled Publish controls, and the all-campaign count included accounts already building. The footer now owns one primary action with live checkbox scope and a count that excludes already-building accounts; the open campaign's action is a secondary link. Zero eligible campaigns shows a disabled action and a wait reason, while a free account can still be enqueued. Disabled bulk publication keeps a distinct pale blue fill and border in both themes. No-checkbox/all-checkbox behavior, confirmations, retry keys, duplicate guards and draft-only payloads remain unchanged.\n\nValidation on current main 3327465fcbd46ccff9b64eb7c574ff5b84b99b80: 55 affected offline browser/per-account tests passed, including actual selected request bodies, two busy campaigns plus one free, count/scope updates while a footer select retains focus, zero count/unknown status, queued work, readable contrast, focus and reduced motion. Packaging unittest suite46, scanner, import smoke and diff check passed on Windows/Python3.14. Hosted CI and installer checks must run on the new head.\n\nActual-main synthetic populated light/dark screenshots were visually checked. A separate fixture applies only scoped publication CSS to the newer production Adopy tokens/report styles and sanitized two-column markup, using actual docked/expanded selectors. Its 480px docked and1100px expanded cases pass geometry/focus and contrast (active5.17/6.86; disabled12.24/11.43). It includes blocked Page/preflight presentation and PAUSED target labels; it executes no newer runtime JavaScript. Main still has the older one-column RPA runtime. The label adapter preserves PAUSED wording if the API runtime supplies its existing mode flag; this PR adds no API backend or expanded runtime. During integration with that newer source, its applyGate must preserve the zero-count disabled condition rather than overwrite it. CSS compatibility is not runtime adoption or installed-package delivery; no production account or advertising write was used."
+          "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main; resolved 4 report.html hunks and CHANGELOG. Review findings addressed: (1) blocking zero-count overwrite: showQueue() and applyGate() now also disable the button when no campaign is available (count of tick.send / tick.open), so a queue update or the preflight gate cannot re-enable it; (2) main's ACL-1761 publishLabel kept (PAUSED/drafts), only the count (open campaigns) differs; main's Check plan button, account-state refresh and the sfc confirmation dialog kept (dialog keeps this PR's classes with main's font-size tokens); CHANGELOG sentences about the gate and API label updated. Tests: test_publish_button_design_browser 12, test_builder_multi_publish_browser 12, test_builder_publish_selected_browser 12, test_drawer_review_browser 13 passed. NOTE: no new dedicated regression test for the zero-count/showQueue fix; covered only by the existing browser tests (they pass)."
         },
         "pr": 850,
-        "queued_at": "2026-10-13T08:15:52+00:00",
+        "queued_at": "2026-10-19T20:57:05+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -57647,7 +57632,8 @@
       841,
       854,
       708,
-      529
+      529,
+      845
     ],
     "review": {
       "id": "71d08f944d4646c69ba2c95edd8d2464",
@@ -94225,6 +94211,13 @@
         "at": "2026-10-19T20:55:16+00:00",
         "issue": 845,
         "claim": "cfb922d7daa24c9d855ac71aa04fdcf8",
+        "actor": "Worker-R1019845"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T20:57:05+00:00",
+        "issue": 845,
+        "pr": 850,
         "actor": "Worker-R1019845"
       }
     ],
