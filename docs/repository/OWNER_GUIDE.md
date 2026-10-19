@@ -25,26 +25,39 @@ that same task so earlier requirements and decisions remain visible.
 | To Do | Selected work that has not started. |
 | In Progress | An implementer has taken the task. Check the latest update to confirm what they are doing now. |
 | Paused | A stop has been explicitly recorded. The card appears with planned work and has no active elapsed timer; it can be resumed through the existing ownership procedure. |
-| Review / Ready for Review | A change is ready for an independent check. It may still be waiting for a reviewer. |
+| Needs clarification | The recorded work does not establish a ready review handoff or an active reviewer. Ask the agent to reconcile the saved work and task; it is not proof that review is running. |
+| Ready for Review | A ready handoff is recorded in the review queue, waiting for an independent reviewer. |
 | In Review | An independent reviewer holds the review assignment. |
 | Approved | The source change passed review and is waiting to be combined and delivered. This is not yet a finished application update. |
-| Integrating / Awaiting Delivery | Approved work is being combined, or the required delivery is still pending. |
+| Integrating | Approved work is being combined and checked for main. |
+| Awaiting Release | Required delivery is unfinished and no current release job is confirmed, or its result still needs the delivery confirmation. |
+| Releasing | A current release verification job is confirmed for the accepted source. The task remains unfinished until delivery is verified. |
 | Done | The task's required completion evidence has been recorded (the underlying repository status is Merged). For application work this includes the required verified package delivery; repository instructions can finish after checked publication on main. |
 | Blocked | An additional flag: a specific obstacle prevents the next step. Read its reason and required action. |
 
 Historical tasks marked **Accepted before adoption** retain their earlier
 acceptance; they do not prove a verified installer.
 
-An old task or an unavailable computer does not prove that work stopped. The agent
-must confirm the stop before releasing its assignment or recording Paused. If that
-confirmation is unavailable, the next update should say so plainly rather than
-claiming the agent is running or that the task is finished.
+An old task or an unavailable computer does not prove that work stopped. Your
+direct confirmation that an agent has stopped is enough to establish that fact;
+the agent does not need to bring the old computer online to ask again. It records
+the pause through the existing procedure and checks that the requested assignment
+was released. Without confirmation, it reports the uncertainty.
+
+Pausing preserves the original task, branch, work location and history. Files on
+an unavailable Windows computer remain uninspected, not lost or declared complete.
+A voluntary pause alone is not Blocked; a real dependency or access obstacle stays
+visible with its reason. To resume, ask the agent to continue the same task: it
+first checks the saved work, current requirements and dependencies, then records
+normal ownership. You do not need a new task or a manual Tracker status change.
 
 An explicit stop is different from a missing activity record. "Status unconfirmed"
 means the Tracker cannot establish a reliable current state from the available
 record. Ask the agent to check the original task and ownership. Do not restart,
-close or delete the task just to remove that label. Review without a recorded
-active reviewer still means Review; it does not prove a reviewer is working now.
+close or delete the task just to remove that label. Review is the group containing
+Needs clarification, Ready for Review, In Review and Approved; it does not by itself
+prove that a reviewer is working. The agent records changes through the existing
+tools; the board does not offer direct status-edit buttons.
 
 ## Read the counters and time
 
@@ -85,6 +98,21 @@ If work is blocked, the agent should give you one concrete request, such as
 restoring access to the Windows computer, and continue any independent work.
 Unavailable Windows access leaves the affected verification open; it does not
 require stopping unrelated documentation or interface work.
+
+## Try the normal workflow
+
+Use your next real ACL task to check whether the instructions make the process
+clearer. No separate demonstration task is needed. The agent should group related
+fixes, arrange independent review and reuse valid evidence where the existing
+project allows it. GitHub will still run its configured automatic checks.
+
+If a check repeats or a transition is confusing, the agent briefly records what
+happened on that task with the relevant PR/run link and the known reason or
+uncertainty. There is no extra report for every job. Tell the agent what felt
+unnecessary; the current instruction update does not itself change Actions,
+settings or software, schedule an audit or claim a measured saving. Further
+investigation follows your requested scope. Your later tasks are not prerequisites
+for completing this instruction update.
 
 ## Main project and related resources
 

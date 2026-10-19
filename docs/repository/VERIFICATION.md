@@ -3,34 +3,42 @@
 Read the exact [selected shared guide](TRACKER.md), the [ACL support/cutover plan](EARLY_ADOPTION.md) and the guarded operator mapping in [AGENTS.md](../../AGENTS.md).
 Shared contract references retain canonical bodies; `_ACL` documents preserve the original local cutover history and stronger controls.
 
-Follow the [shared verification policy](https://github.com/MojoTheApe/master-repo/blob/622557ec5be09ca45ef795035805fdab0f4a2528/docs/verification.md)
+Follow the [shared verification policy](https://github.com/MojoTheApe/master-repo/blob/6f7e9416e68c66484a3b6c0213eab24847005b8f/docs/verification.md)
 at this project's exact standard pin. `delivery.json` defines actual product
 commands/required CI names; retain matching Tracker settings, runtime checks and
-local exceptions. Separate fast source feedback, combined-candidate integration
-and actual delivery acceptance. Select by changed risk, not a desired green result.
+local exceptions. These compatible local wording clarifications require no new
+standard release, pin/helper upgrade or policy selection. Separate fast source
+feedback, combined-candidate integration and actual delivery acceptance. Select
+by changed risk, not a desired green result.
 
 Keep the project-owned fast/full plan below, with its actual commands,
 platforms and distinct truthful result names. Fast feedback is intermediate;
 ready handoff and admission need all applicable full coverage. Group related
-corrections on the owned task branch and record the real reason/candidate for
-new heavy work. Follow the exact pinned [submission rules](https://github.com/MojoTheApe/master-repo/blob/622557ec5be09ca45ef795035805fdab0f4a2528/docs/verification-submission.md).
+corrections into a meaningful ready submission on the owned task branch; retain
+useful intermediate feedback and normal review fixes. Explain manual expensive
+launches or unexpected repeats through existing task/PR/run links. Follow the exact pinned [submission rules](https://github.com/MojoTheApe/master-repo/blob/6f7e9416e68c66484a3b6c0213eab24847005b8f/docs/verification-submission.md).
 
 Preserve the adopted collector's existing bounded reuse rules. Expand context
 proof only through reviewed compatible support/adoption; the common policy alone
 cannot add an unsupported environment signature. Run missing jobs/platforms.
 Preserve independent combined review, any enabled exact stage target and package/production
 proof. Inspect passing unchanged evidence before rerunning; add checks for changed
-inputs, findings, missing scope or unresolved concerns. Cancel obsolete PR runs,
-preserve admitted integration push evidence and measure costs before pruning tests.
+inputs, findings, missing scope or unresolved concerns. A different reviewer or
+session does not reset valid tests. Exact head/base/scope review and admission
+remain required even when covered test results are reusable.
 
-Keep metadata/linkage concurrency separate from code suites; cancel only
-superseded work for the same PR. A fast success or instruction-only skip cannot
-replace missing full coverage. Partial retry requires actual original native
-job/dependent proof supported by the adopted collector; otherwise use supported
-bounded fresh behavior or stop. Shared retry/evidence export does not opt ACL in.
+Existing metadata/linkage concurrency is separate from code suites and cancels
+only superseded work for the same PR; preserve admitted integration push evidence.
+This describes current behavior, not a request to edit Actions or settings.
+A fast success or instruction-only skip cannot
+replace missing full coverage. Diagnose failures before retrying. Native failed-job
+reruns require actual original successful job/dependency proof supported by the
+adopted collector; otherwise use supported bounded complete coverage or stop.
+Preserve stricter adopted limits and inspect an uncertain dispatch before another
+request. Shared retry/evidence export does not opt ACL in.
 
 For an authorized standard upgrade, use the
-[coordinated procedure](https://github.com/MojoTheApe/master-repo/blob/622557ec5be09ca45ef795035805fdab0f4a2528/docs/workflow-upgrades.md).
+[coordinated procedure](https://github.com/MojoTheApe/master-repo/blob/6f7e9416e68c66484a3b6c0213eab24847005b8f/docs/workflow-upgrades.md).
 Only the exact compatible Tracker guide supplies commands. A newer standard/skill
 cannot activate an unimplemented maintenance or evidence collector.
 
@@ -84,11 +92,11 @@ batches, actual stage/promotion/main, manual and unknown contexts retain all
 applicable checks. The existing matrix, exact-tree collector and independent
 combined/package acceptance in [WORKFLOW.md](WORKFLOW.md) remain authoritative.
 
-Group related local corrections before pushing a meaningful new candidate. Record
-why another heavy run is needed: changed relevant inputs, a new failure, unresolved
-coverage or a new integration composition. Preserve passing unchanged evidence;
-do not create cosmetic commits or manual reruns for a demonstration. A candidate
-push still starts its normal applicable checks while tooling feedback arrives early.
+A manual expensive launch needs a concrete reason such as changed relevant inputs,
+a diagnosed failure, unresolved coverage or a new integration composition.
+Preserve valid passing evidence and required automatic runs. Do not create cosmetic
+commits or manual reruns merely to demonstrate these instructions. A candidate push
+still starts its normal applicable checks while tooling feedback arrives early.
 
 A PR title/body `edited` event starts linkage feedback only; the existing code
 workflows use GitHub's default `opened`, `synchronize` and `reopened` activities.
@@ -102,6 +110,15 @@ this plan. See [GitHub's PR activity defaults](https://docs.github.com/en/action
 The actual parsed-workflow activity regression is in
 `tests/test_acl_ci_workflows.py`; `tests/test_ci_layout.py` exercises the real
 aggregate shell and already refuses tooling success with missing required jobs.
+
+Use existing Issue/PR comments and actual run links for a brief unexpected repeat,
+confusing transition or manual expensive launch reason. Unknown causes stay unknown;
+no per-job register, new form or blocker is needed. The owner will try the normal
+flow on real requested tasks; do not create extra sample tasks, paid demos or
+scheduled audits for this instruction update. Do not claim savings from written
+guidance. Actions/settings/software changes remain outside this task and can be
+considered after owner feedback within separately explicit scope; existing
+authorization for such work does not need a routine new permission.
 
 ACL's existing `scripts/acl_ci_reuse.py` collector remains unchanged, including its
 bounded exact-tree/merged-source rules. TT-107's optional native V1 protocol does
