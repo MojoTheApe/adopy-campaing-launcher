@@ -4790,6 +4790,43 @@
         "issue_scopes": {
           "19": "ce291401dfa6489828ba973eb602b744efb113657552fbfff1bcb7f342232d99"
         }
+      },
+      "1016": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-X19BAT",
+        "implementer": "Coordinator-E1019A",
+        "head_sha": "50253d96e454b5b15f5a81502fd55b9c0b084b8d",
+        "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+        "tree_sha": "8c87de6ca6b749dd6cca2ff97348df5d0f553e67",
+        "execution_lane": "b49c262d383b4011a4e6891181162ac5",
+        "review_session": "rxbat-1c30cbbe",
+        "batch_id": "a12a28c2b40d481db2305e6bb020724d",
+        "source_heads": [
+          "c5e499312fcbcb9be063915cb2134189f588d485",
+          "5bc4aea51efb029d8e33d4bfaad06e6e04a60f3f",
+          "6c688bd3137f90bfdfa8bcef8b8e5947b3db40c5",
+          "507b1ac896e8f79ae63db0ccc220e301b593326b",
+          "0083cd665239b8baaa458d6ce2d93437cfe53e00"
+        ],
+        "report": "# Batch a12a28c2b40d481db2305e6bb020724d / PR #1016 \u2014 independent integration review (Reviewer-X19BAT)\n\nReviewer session `rxbat-1c30cbbe`, a separate Claude session from the Coordinator\n(Coordinator-E1019A, coord-c0a1de70) and from every member Worker. My earlier source\nlanes for #986 and #942 were released before I acquired this integration lane.\n\nBatch head `50253d96e454b5b15f5a81502fd55b9c0b084b8d`, tree `8c87de6c`, base main\n`435bc154`. Branch `codex/batch-a12a28c2b40d481db2305e6bb020724d`, PR body carries\n`Tracker batch: a12a28c2\u2026`. Delivery is requested (stable Windows installer channel).\n\n## Composition\n\nFirst-parent chain from main 435bc154: five two-parent merge commits in the frozen\nmanifest order, each second parent is exactly the approved source tip:\n\n| # | Issue | PR | frozen tip | merge commit |\n|---|---|---|---|---|\n| 1 | ACL-1864 | 985 | c5e49931 | aabc7fb4 |\n| 2 | ACL-1871 | 986 | 5bc4aea5 | 2fef9202 |\n| 3 | ACL-1356 | 942 | 6c688bd3 | 57adf65a |\n| 4 | ACL-1787 | 956 | 507b1ac8 | 27bd950a |\n| 5 | ACL-1287 | 964 | 0083cd66 | 50253d96 |\n\nEvery merge commit's tree equals `git merge-tree --write-tree` of its two parents\n(no manual edits, no conflict resolution). All sources are based on the same main\n435bc154; the first merge tree equals #985's reviewed tree dc6a9f72.\n\n## Final tree and interactions\n\nMember file sets are disjoint: 985 (stats workbook header reading: analysis_agent,\ncreative_agent, export_report, setup_wizard), 986 (report.html drawer + its tests),\n942 (requirements.txt pins, app.py form/static/TemplateResponse, request_limits.py),\n956 (one research doc), 964 (one English-text guard test).\n- 942 \u00d7 986: report.html is untouched by 942; the drawer is client-side only and does\n  not post forms. Builder browser tests pass under FastAPI 0.141.1 / Starlette 1.7.0 /\n  Jinja2 3.1.6.\n- 942 \u00d7 985: app.py's settings route still reaches `machine_paths.check_stats_workbook`\n  \u2192 `validate_stats_workbook` via JSON (`request.json()`, default 1 MiB limit), not forms.\n- 942 \u00d7 tests: every `form()` fake in the tree accepts `**_limits`\n  (`test_web_build_upload` uses AsyncMock); 964 is static AST scanning only.\n- 942 requirements + 985 setup_wizard both feed the installer: installer build\n  inputs, Build/install/repair/uninstall and Installer verification ran and pass.\n- 956 adds a desk-research doc only: no code, no credentials, ids or tokens.\n- `scripts/acl_scan_secrets.py` on the batch tree: clean.\n\n## Checks run by me on the batch tree 50253d96\n\n- `node tests/builder_drawer_harness.cjs`, `node tests/builder_tree_harness.cjs`: ok.\n- pytest with the batch pins (fastapi 0.141.1, starlette 1.7.0, jinja2 3.1.6,\n  python-multipart 0.0.32, httpx 0.28.1), affected sets of all five members:\n  test_request_limits, 1761, 1775, 1798, 1826, failures_reach_the_collector,\n  report_delivery_review, review_ui_regressions, web_build_upload,\n  stats_workbook_header, report_loading_stages, account_spend_reasons_are_english,\n  acl1871_side_tab_browser, acl1769_two_column_layout, builder_second_primary_text,\n  the_builder_drawer, drawer_review_browser, field_contrast: **366 passed**.\n- Required CI on 50253d96 (`gh pr checks 1016`): 16/16 pass \u2014 linux 3.11 \u00d73,\n  linux 3.13 \u00d73, windows 3.13, ACL verification, project tooling, process\n  instructions, descriptor, tracker-link, installer classify / verify build inputs /\n  build-install-repair-uninstall / installer verification.\n\n## Findings\n\nBlocking: none.\n\nNon-blocking, carried from source reviews: FastAPI `on_event` deprecation (move to\nlifespan); JSON routes stay at the 1 MiB default; owner smoke check of the live\ndashboard after delivery (large Builder publish, /static assets, video seek, builder\nside-tab resize, stats workbook with header below row 1).\n\nVerdict: approved.\n",
+        "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          864,
+          871,
+          356,
+          787,
+          287
+        ],
+        "recorded_at": "2026-10-19T13:21:37+00:00",
+        "issue_scopes": {
+          "864": "5a82d9fa0b21a5416b83b567f37b0e00f9e158450379e8e3f899ad5cd92863db",
+          "871": "6ba29b2504b4a9e908d0b80c842b06da2bb2fdb8c1402ecacb62f0628680d930",
+          "356": "2b5d76b193104aeaf5f22d3b6832244aa30d0d2644c867ec1e26ca0e8a24a87a",
+          "787": "072075680194e9c34c8c58470312d713dbf6be600ed939a280019c0b36701dcb",
+          "287": "f817108928cba547d3fd6e63b12f35cd88eb8f08363ff15c3818dedc8d9770ce"
+        }
       }
     },
     "stage": {
