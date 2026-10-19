@@ -98236,7 +98236,9 @@
         "session": "r142e-20261019",
         "coordinator": "Coordinator-C1016A",
         "started_at": "2026-10-19T13:19:20+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "# ACL-142 (PR #958) returned to the author: required CI is red on the refreshed head\n\nHead 7f1f4c7ed6cbf21e9dc493a75defd8ae5641be2d. CI run 39253888282: \"linux tests (3.13, 2)\" failed with 4 failures and \"ACL verification\" failed as a result.\n\nFailing tests, all in `tests/test_one_connect_button.py` (the file the author could not run locally because of the 300 s limit):\n- test_a_found_profile_has_one_button: Playwright wait_for_function timeout (5000 ms)\n- test_connect_opens_the_profile_before_reading_its_account: same timeout\n- test_a_failed_open_does_not_cancel_connecting: `/account-map-patch` was never called after a failed profile open (\"a failed open cancelled the connecting\")\n- test_a_second_click_while_it_works_does_not_open_twice: same timeout\n\nThe new in-page account dialog (or the locked input / confirmation tick) changes the Connect flow that these tests exercise. Required: update the code so these flows behave as before (or, only where the old behaviour is intentionally replaced, update the tests to the new dialog and say so in the handoff), then run the whole `tests/test_one_connect_button.py` file locally in the background (it is slow), plus `tests/test_the_account_tree_on_screen.py`, which was also not re-run.\n\nEverything else from the previous review is unchanged and considered fixed. The removal decision was confirmed by the owner (Issue #72 comment).",
+        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
