@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 
-_REASON_RE = re.compile(r"\breason\s+([A-Z][A-Z0-9_]+|\d+)\b")
+_REASON_RE = re.compile(r"\(Meta API:[^)]*,\s*reason\s+([A-Z][A-Z0-9_]+|\d+)\)")
 
 _WHERE = "Open this account in Business Manager > Account Quality"
 

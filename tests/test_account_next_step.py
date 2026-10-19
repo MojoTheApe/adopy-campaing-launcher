@@ -93,3 +93,29 @@ def test_get_status_and_reading_carry_the_step(monkeypatch):
     monkeypatch.setattr(sp, "_load_all", lambda: data)
     assert "payment" in sp.get_status("ACC")["next_step"]
     assert "payment" in sp.SpendReading(account="ACC", date_from="", date_to="", status="disabled", status_text=text).to_dict()["next_step"]
+
+
+def test_live_read_shows_the_next_step_escaped_and_only_for_problems():
+    from playwright.sync_api import sync_playwright
+
+    from tests.test_copy_status_text import _live
+
+    with sync_playwright() as pw:
+        b, _ctx, p, sent = _live(pw, show=False)
+        p.evaluate("s => amapApplyReading('FacebookDoc20 - Mios Darwiti', s)",
+                   {"state": "ok", "spend": 7, "currency": "USD", "status": "disabled",
+                    "status_text": _text(1), "finished_at": "2026-10-19 10:00:00",
+                    "next_step": "Open <b>Account Quality</b> & appeal."})
+        step = p.locator(".amap-status .amap-st-next")
+        assert step.count() == 1
+        assert step.inner_text() == "Open <b>Account Quality</b> & appeal."
+        p.evaluate("s => amapApplyReading('FacebookDoc20 - Mios Darwiti', s)",
+                   {"state": "ok", "spend": 7, "currency": "USD", "status": "clear",
+                    "status_text": "", "finished_at": "2026-10-19 10:05:00", "next_step": ""})
+        assert p.locator(".amap-status .amap-st-next").count() == 0
+        assert sent == []
+        b.close()
+
+
+def test_reason_is_taken_only_from_the_meta_api_suffix():
+    assert next_step("disabled", "Account disabled: reason ADS_INTEGRITY_POLICY").startswith("The reason was not reported")

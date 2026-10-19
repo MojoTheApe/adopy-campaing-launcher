@@ -1,10 +1,27 @@
 # System history
 
-## Account map: a disabled account says what to do next - ACL-123
+## Account map: a disabled account says what to do next — ACL-123 — 2026-10-19
 
 - `src/analysis_agent/account_next_step.py` maps the Meta `disable_reason` (read from the status text of the Graph read) to one plain-English next step. Page reads carry no reason, so they say the reason was not reported; an unrecognised code says the cause is unknown. Restricted and review states get a generic step. Nothing is diagnosed beyond what Meta reported and no automatic recovery is promised.
 - The step is shown under the status word on the account row (the account name stays in the same row), also after a live Read.
 
+## ACL-1381 — Consistent Builder ad-text wording — 2026-10-18
+
+Complete the older text-label request while preserving ACL-1769's later numbered
+Primary text 1/2 interface and separate Headline display. Search/help and empty/error
+messages now refer to ad texts consistently. Library keys, copy/copy2 fields,
+selection, draft restoration and submission behavior are unchanged.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/381).
+
+## ACL-1971 — Explicit tooling fast/full plan — 2026-10-17
+
+Document the existing tooling check's exact commands, omissions and correction
+workflow while retaining full applicable ACL/installer admission. Add the missing
+parsed-workflow activity regression: PR metadata edits run linkage only, while a
+new code head retains candidate verification. Existing aggregate negatives,
+producer names, triggers, policies and runtime behavior stay intact. This records
+project verification behavior; it does not establish a cost saving or delivery.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/971).
 
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
