@@ -43154,9 +43154,10 @@
         "worktree": "C:\\wk19-305",
         "id": "2c76bc2be6d345c28cd79fb37a134b58",
         "issue": 305,
-        "state": "implementing",
+        "state": "stopping",
         "started_at": "2026-10-19T10:06:40+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "report": "Parked 2026-10-19: PR #965 merged with main (head a448e2f7) but packaging/windows/tests/test_setup_wizard.py::test_manual_setup_discovers_only_this_managers_accounts line 95 expects 'No accounts' while the new CM-column check now says 'is not in the CM column'; one-line expectation change needs owner approval. Everything else passes."
       },
       "70": {
         "actor": "Worker-G19602",
