@@ -44015,9 +44015,11 @@
         "worktree": "C:\\acl-1805",
         "id": "27d37ef9b03840b6922caf58ab943d8c",
         "issue": 805,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T17:48:11+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 1019,
+        "report": "ACL-1805: Meta rules registry runs in the API creator preflight before the first POST (exact payload values, also on rerun and dry run; fails open with a log). Meta refusals on the API path render through the ACL-1786 catalog in the dashboard problem list (message + action; unknown code = raw text); API status/readback panel kept. Codes 1404078/2859015/1404163 (code or subcode) now stop the client. Tests: tests/test_acl1805_rules_before_write.py + related 1761/1775/1781/1786 files pass locally; full suite in CI. Opus review done, HIGH/MEDIUM fixed. No live calls."
       },
       "807": {
         "actor": "Worker-S1019807",
