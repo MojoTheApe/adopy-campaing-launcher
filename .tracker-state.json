@@ -44061,9 +44061,11 @@
         "worktree": "C:\\acl-1151",
         "id": "7d17c8549b0a47ab83dd5e6a21125baa",
         "issue": 151,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T18:31:06+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 950,
+        "report": "Revived after the conflict return: merged work/main into the branch (clean, no conflicts), pushed. Touched tests pass: test_acl_1151_pick_a_profile, test_accounts_tab_connects_the_same_way, test_connect_account_in_empty_country (34 passed). Full suite left to CI. Not verified live."
       },
       "896": {
         "actor": "Worker-R1019896",
