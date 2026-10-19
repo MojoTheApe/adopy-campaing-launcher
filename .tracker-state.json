@@ -43233,20 +43233,6 @@
         "state": "implementing",
         "started_at": "2026-10-19T11:57:41+00:00",
         "from_status": "status:todo"
-      },
-      "827": {
-        "actor": "Worker-RS1827",
-        "session": "wrs1827-20261015",
-        "coordinator": "Coordinator-C0930A",
-        "branch": "codex/acl-1827-design-parity-shell",
-        "worktree": "C:\\wk-rs1827",
-        "id": "ae46388e19d54bae893f588260dfcd40",
-        "issue": 827,
-        "state": "handoff",
-        "started_at": "2026-10-19T12:11:52+00:00",
-        "from_status": "status:todo",
-        "pr": 829,
-        "report": "# ACL-1827 resume handoff (Worker-RS1827)\nResumed on the owner instruction of 2026-10-19 after the 17.10 exclusive-workflow pause.\nHead: d69bfa32 on codex/acl-1827-design-parity-shell, merge of origin/main 435bc154 (process docs/tracker/CI accounting, ACL-1381 builder labels). Merge only, no conflicts, no 1827 code changed since the reviewed 662abff0.\nTests: test_acl1827_shell_parity, test_header, test_screens_are_in_english, test_acl1797_design_system, test_acl1799_country_workbench, test_stage_badge: 92 passed. scripts/acl_scan_secrets.py clean.\nFull suite not run locally."
       }
     },
     "tasks": {
@@ -47596,7 +47582,7 @@
             "session": "wrs1827-20261015"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RS1827",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -47605,16 +47591,16 @@
           "coordinator": "Coordinator-C0930A",
           "branch": "codex/acl-1827-design-parity-shell",
           "worktree": "C:\\wk-rs1827",
-          "id": "270a5ecb8ced42858c9c35ea8f09897d",
+          "id": "ae46388e19d54bae893f588260dfcd40",
           "issue": 827,
           "state": "handoff",
-          "started_at": "2026-10-16T10:08:12+00:00",
+          "started_at": "2026-10-19T12:11:52+00:00",
           "from_status": "status:todo",
           "pr": 829,
-          "report": "# ACL-1827 refresh handoff (Worker-RS1827)\nHead: 662abff0 on codex/acl-1827-design-parity-shell, merge of origin/main af0ade29 (ACL-1923/1924 no-stage delivery: process docs, workflows, delivery scripts). Merge only, no conflicts, no 1827 code changed since the reviewed de6dbfaf.\nTests: test_acl1827_shell_parity, test_header, test_screens_are_in_english (40 passed); test_acl1797_design_system, test_acl1799_country_workbench (incl. cw_harness), test_stage_badge, test_acl_test_platform (152 passed). scripts/acl_scan_secrets.py clean.\nFull suite not run locally."
+          "report": "# ACL-1827 resume handoff (Worker-RS1827)\nResumed on the owner instruction of 2026-10-19 after the 17.10 exclusive-workflow pause.\nHead: d69bfa32 on codex/acl-1827-design-parity-shell, merge of origin/main 435bc154 (process docs/tracker/CI accounting, ACL-1381 builder labels). Merge only, no conflicts, no 1827 code changed since the reviewed 662abff0.\nTests: test_acl1827_shell_parity, test_header, test_screens_are_in_english, test_acl1797_design_system, test_acl1799_country_workbench, test_stage_badge: 92 passed. scripts/acl_scan_secrets.py clean.\nFull suite not run locally."
         },
         "pr": 829,
-        "queued_at": "2026-10-16T10:17:44+00:00",
+        "queued_at": "2026-10-19T12:27:37+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -56078,7 +56064,8 @@
       855,
       886,
       839,
-      816
+      816,
+      827
     ],
     "review": {
       "id": "b49c262d383b4011a4e6891181162ac5",
@@ -90047,6 +90034,13 @@
         "issue": 816,
         "pr": 820,
         "actor": "Worker-RS1816"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T12:27:37+00:00",
+        "issue": 827,
+        "pr": 829,
+        "actor": "Worker-RS1827"
       }
     ],
     "policy": {
