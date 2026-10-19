@@ -282,10 +282,12 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
             out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("form_id")) and not a.get("template"), only_dest="instant_form"))
         elif rid == "form_template_privacy":
             out.append(_per_ad(rid, inp, lambda a, st: bool(a.get("template"))
-                               and not re.match(_LINK_RE, _s((a.get("template") or {}).get("privacy_url")), re.I)))
+                               and not re.match(_LINK_RE, _s((a.get("template") or {}).get("privacy_url")), re.I),
+                               only_dest="instant_form"))
         elif rid == "form_template_contacts":
             out.append(_per_ad(rid, inp, lambda a, st: bool(a.get("template"))
-                               and not (a.get("template") or {}).get("contact_fields")))
+                               and not (a.get("template") or {}).get("contact_fields"),
+                               only_dest="instant_form"))
         elif rid == "country_set":
             out.append(_v(rid, OK if _s(inp.get("country")) else ERROR))
         elif rid == "link_https":

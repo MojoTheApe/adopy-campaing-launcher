@@ -426,6 +426,9 @@ class ApiPublisher:
             return result_dict(Outcome(campaign_name=name),
                                error="The draft's ad account differs from the verified one. Nothing was created.")
         assert self._client is not None and self._facts is not None and self._resolver is not None
+        budget, too_big = create_call_budget(plan)
+        if too_big:
+            return result_dict(Outcome(campaign_name=name), error=too_big)
         if not self.dry_run and any(ad.form_template for s_ in plan.ad_sets for ad in s_.ads):
             # ACL-1776: Страница плана закрепляется на сессию до первой записи формы.
             try:
@@ -438,9 +441,6 @@ class ApiPublisher:
                 return result_dict(Outcome(campaign_name=name), error=(
                     "Ads Manager did not give the session back after pinning the Page "
                     f"({pinned.get('kind') or 'no token'}). Nothing was created; run again."))
-        budget, too_big = create_call_budget(plan)
-        if too_big:
-            return result_dict(Outcome(campaign_name=name), error=too_big)
         self._client.reset_budget(budget)
 
         def step(text: str) -> None:

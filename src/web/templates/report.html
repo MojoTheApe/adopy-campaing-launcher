@@ -6063,10 +6063,10 @@ window.cbPreflight = (function () {
       if (id === 'form_chosen') out.push(perAd(id, inp, function (a) { return !s(a.form_id) && !a.template; }, 'error', 'instant_form'));
       else if (id === 'form_template_privacy') out.push(perAd(id, inp, function (a) {
         return !!a.template && !new RegExp(C.link_re || '^$', 'i').test(s(a.template.privacy_url));
-      }));
+      }, 'error', 'instant_form'));
       else if (id === 'form_template_contacts') out.push(perAd(id, inp, function (a) {
         return !!a.template && !(a.template.contact_fields || []).length;
-      }));
+      }, 'error', 'instant_form'));
       else if (id === 'country_set') out.push(v(id, s(inp.country) ? 'ok' : 'error'));
       else if (id === 'link_https') out.push(!link ? v(id, 'error', 'empty') : !linkOk ? v(id, 'error', 'not_https') : v(id, 'ok'));
       else if (id === 'link_tracking') out.push(!linkOk ? v(id, 'unknown', 'no_valid_link') : v(id, trackRe.test(link) ? 'ok' : 'warning'));
@@ -6848,7 +6848,7 @@ window.cbTree = (function () {
     /* Вкладка Ad без выбора объявления: все карточки набора идут одним
        вертикальным списком (владелец, 13.10), добавление и копия видны сразу. */
     if (level === 'ad') {
-      /* ACL-1768: объявления показаны для выбранного набора; при нескольких наборах - выбор набора. */
+      /* ACL-1768: все карточки видны, подпись «Ad set N»; выбор набора задаёт, куда встанет «+ Ad». */
       if (sets.length > 1) {
         pick = '<div class="cbd-ed-pick"><label for="cbd-ed-set">Ad set</label>'
           + '<select id="cbd-ed-set" class="cbd-ed-set">'
