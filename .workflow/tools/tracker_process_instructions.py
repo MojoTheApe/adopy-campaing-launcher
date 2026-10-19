@@ -31,7 +31,9 @@ def fingerprint(config):
     return hashlib.sha256(json.dumps(policy(config), sort_keys=True).encode()).hexdigest()
 
 
-def scope(issue):
+def scope(issue, config=None):
+    if config and 'task_context_policy' in config:
+        return rules.task_scope(issue, config)
     labels = sorted(x['name'] for x in issue['labels'] if not x['name'].startswith(('status:', 'priority:', 'release:')))
     return hashlib.sha256(json.dumps({k: issue.get(k) for k in ('number', 'title', 'body')}
                                    | {'labels': labels}, sort_keys=True).encode()).hexdigest()
@@ -196,18 +198,21 @@ def classify_local(config, repository, base_sha, head_sha):
 def idle(shared, config):
     section = rules.execution_state(shared, config)
     stage = shared.get('delivery_workflow', {}).get('stage', {})
-    return not (stage and stage.get('state') != 'promoted' or section and
+    return not (rules.pending_delivery(shared, config) or stage and stage.get('state') != 'promoted' or section and
                 (section.get('integration') or section.get('intake') and section['intake'].get('state') == 'running'))
 
 
 def admit(request, config, pr, numbers, shared):
+    if config.get('execution_policy',{}).get('schema_version')==4:
+        direct=rules.direct_module()
+        return direct.admit(request,config,pr,direct.linkage(pr.get('body'),config),shared)
     proof = classify(request, config, pr)
     if not proof or len(numbers) != 1:
         raise ValueError('Process admission requires exactly one genuine instruction-only task')
     root = 'repos/' + config['project']['repository']
     section = rules.execution_state(shared, config)
     completed = section and section['completed'].get(str(pr['number'])) if pr.get('merged') else None
-    lane = completed or section and section.get('review')
+    lane = completed or rules.review_lane(section, pr=pr['number'])
     if completed and (completed.get('route') != 'process' or any(
             section['tasks'].get(str(n), {}).get('state') != 'merged'
             or section['tasks'][str(n)].get('pr') != completed.get('pr') for n in numbers)):
@@ -236,7 +241,7 @@ def admit(request, config, pr, numbers, shared):
             actual = [stages.get(x['name'][7:]) for x in issue['labels'] if x['name'].startswith('status:')]
             if actual != ['merged']:
                 raise ValueError('Old process merge cannot complete reopened legacy work')
-        if review.get('issue_scopes', {}).get(str(n)) != scope(issue):
+        if not rules.scope_matches(issue, review.get('issue_scopes', {}).get(str(n)), config):
             raise ValueError('Process task scope changed after independent review')
     current = request(root + '/git/ref/heads/' + quote(config['project']['base_branch'], safe=''))['object']['sha']
     if pr.get('merged'):
