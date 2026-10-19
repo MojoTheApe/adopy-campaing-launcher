@@ -43145,22 +43145,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "681": {
-        "actor": "Worker-G19681",
-        "session": "wg681-c0a1de70",
-        "coordinator": "Coordinator-E1019A",
-        "branch": "work/acl-1681-server-drafts",
-        "worktree": "C:\\wk19-681",
-        "id": "c7de7bb57d3940109f2fa046ed8096c0",
-        "issue": 681,
-        "state": "handoff",
-        "started_at": "2026-10-19T11:06:02+00:00",
-        "from_status": "status:todo",
-        "pr": 970,
-        "report": "ACL-1681 / PR 970 re-claimed after the administrative pause was lifted. No new features.\n\nMerged current origin/main into work/acl-1681-server-drafts (clean merge, no conflicts). New head 25c8824e25a9843211b29220f07af3bbde749012, pushed by fast-forward.\n\nChecks run in the worktree with an isolated ACL_CONFIG_DIR:\n- tests/test_acl1681_server_drafts.py, tests/test_build_progress_model.py, tests/test_acl_test_platform.py: 150 passed\n- tests/test_report_scripts_parse.py: 3 passed\n- tests/test_campaign_build_percent_browser.py: 15 passed, 1 failed on the first run (test_percent_grows_through_a_recorded_build_and_clears_when_done[classic]); it passed on rerun, the same timing flake the PR description already mentions\n- scripts/acl_scan_secrets.py: passed\n- scripts/acl_smoke.py: passed\nThe full suite was not run (CI covers it). The PR body keeps exactly one \"Tracker issues:\" line."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -50130,25 +50115,25 @@
             "session": "wg681-c0a1de70"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-G19681",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
-          "actor": "Worker-W1681A",
-          "session": "worker_acl1681_20261017",
-          "coordinator": "Coordinator-C1681",
+          "actor": "Worker-G19681",
+          "session": "wg681-c0a1de70",
+          "coordinator": "Coordinator-E1019A",
           "branch": "work/acl-1681-server-drafts",
-          "worktree": "C:\\acl-1681",
-          "id": "896b8e62f440443ba338e213c555e304",
+          "worktree": "C:\\wk19-681",
+          "id": "c7de7bb57d3940109f2fa046ed8096c0",
           "issue": 681,
           "state": "handoff",
-          "started_at": "2026-10-17T07:16:02+00:00",
+          "started_at": "2026-10-19T11:06:02+00:00",
           "from_status": "status:todo",
           "pr": 970,
-          "report": "Builder drafts used to live only in the browser's localStorage, so a Chrome crash, a different profile or `127.0.0.1` vs `localhost` lost the owner's work.\n\nWhat changes:\n- New `src/web/builder_drafts.py` and `GET/POST /api/builder-state`: three documents (`keep` = campaign cards, `jobs` = publish-jobs memory, `ui` = drawer open/expanded) saved to `builder_drafts.json` in the ACL config folder. Atomic write under a machine lock.\n- Newer `saved_at` wins. The losing copy is never dropped: on the server it goes to `builder_drafts.<name>.older.json`; in the browser a displaced local draft goes to `localStorage['acl.builder.v2.older']`. A corrupt file is moved to `builder_drafts.json.corrupt-<time>` and reads as empty.\n- `report.html`: new `cbSrv` module; `cbKeep`, `cbBuild` and `cbDrawer` register with it. localStorage stays the fast cache; the server copy is pulled on load and nothing is pushed until the first reconcile (an empty storage after a crash cannot wipe the server copy). Pushes are debounced (800 ms) and flushed on pagehide. If the server is unreachable the builder works as before.\n- Jobs are merged (union, newer `at` per job) rather than replaced; their per-step `track` percent is not synced.\n- Not synced on purpose: tree level, names-only, folded accounts, open campaign id (cosmetic or per-load ids).\n\nTests (`tests/test_acl1681_server_drafts.py`, 20): server atomicity/newer-wins/backup/corrupt/validation; real-drawer browser tests for a fresh profile, `127.0.0.1` <-> `localhost`, cleared localStorage + dashboard restart, drawer state, jobs, newer-server and newer-local conflicts, and the server-down fallback. Also ran: drawer review, duplicate buttons, name override, build percent, multi publish, copy for group, account notes (all green; one run of `test_no_extra_requests_for_the_percent` hit an unrelated `/acl/update/check` timing flake and passed on rerun). I adjusted that test to ignore `/api/builder-state`.\n\nRestart of `serve.py` is needed for the Python part (the template picks up on its own).\n\nTracker issues: ACL-1681"
+          "report": "ACL-1681 / PR 970 re-claimed after the administrative pause was lifted. No new features.\n\nMerged current origin/main into work/acl-1681-server-drafts (clean merge, no conflicts). New head 25c8824e25a9843211b29220f07af3bbde749012, pushed by fast-forward.\n\nChecks run in the worktree with an isolated ACL_CONFIG_DIR:\n- tests/test_acl1681_server_drafts.py, tests/test_build_progress_model.py, tests/test_acl_test_platform.py: 150 passed\n- tests/test_report_scripts_parse.py: 3 passed\n- tests/test_campaign_build_percent_browser.py: 15 passed, 1 failed on the first run (test_percent_grows_through_a_recorded_build_and_clears_when_done[classic]); it passed on rerun, the same timing flake the PR description already mentions\n- scripts/acl_scan_secrets.py: passed\n- scripts/acl_smoke.py: passed\nThe full suite was not run (CI covers it). The PR body keeps exactly one \"Tracker issues:\" line."
         },
         "pr": 970,
-        "queued_at": "2026-10-17T10:43:33+00:00",
+        "queued_at": "2026-10-19T11:13:29+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -55903,7 +55888,8 @@
       401,
       680,
       202,
-      70
+      70,
+      681
     ],
     "review": {
       "id": "b49c262d383b4011a4e6891181162ac5",
@@ -89417,6 +89403,13 @@
         "issue": 70,
         "pr": 982,
         "actor": "Worker-G19602"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T11:13:29+00:00",
+        "issue": 681,
+        "pr": 970,
+        "actor": "Worker-G19681"
       }
     ],
     "policy": {
