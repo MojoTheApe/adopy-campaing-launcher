@@ -102,6 +102,7 @@
       "label": "Form template: privacy policy URL (https)",
       "severity": "error",
       "side": "client",
+      "topic": "destination",
       "unit": "ad"
     },
     {
@@ -115,6 +116,7 @@
       "label": "Form template: a contact field",
       "severity": "error",
       "side": "client",
+      "topic": "destination",
       "unit": "ad"
     },
     {
@@ -128,6 +130,7 @@
       "label": "Lead Ads terms accepted on the Page",
       "severity": "error",
       "side": "server",
+      "topic": "destination",
       "unit": "campaign"
     },
     {
