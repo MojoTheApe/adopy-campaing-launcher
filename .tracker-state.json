@@ -52357,7 +52357,7 @@
             "session": "run_s1019_945"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-S1019945",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -94320,6 +94320,68 @@
           "report": "# PR #837 / ACL-1836 \u2014 review return (changes needed)\n\nReviewer: Reviewer-R1836Y (session reviewer-r1836y-20261019)\nHead: 1ab1af9d6beee6865593265dda615183b7e18265, base work/main c61501607ce11744e45add8b0d3b314368c216c5 (unchanged at review time)\n\n## Blocking\n\n1. `tests/bench/CATALOGUE.md:9`: the rendered summary line is stale after the merge of main (1ab1af9d).\n   - It reads `24 robot steps \u00d7 122 layouts, 67 fixtures`. `bench_catalogue.render()` over the current\n     `tests/bench/catalogue.json` gives `25 robot steps \u00d7 123 layouts, 68 fixtures`. Main and this branch\n     each added a catalogue entry and each updated the count on its own, and the merge kept the old total.\n   - Effect: `tests/test_bench_catalogue.py::test_the_markdown_is_current` fails on the PR head. It passes on\n     base main c6150160 (both checked locally). Required CI is red for the same reason:\n     `linux tests (3.13, 3)` gives 1 failed / 2616 passed, and the aggregate `ACL verification` fails with it\n     (run 39314307311).\n   - Fix: run `python scripts/bench_catalogue.py --write`, commit only `tests/bench/CATALOGUE.md`, and push.\n     Then wait for green required CI on the new head.\n\n## Not blocking (no change required)\n\n- The source review found no correctness or rule problems:\n  - Graph GET/POST and file-upload jobs never pass through the recovery retry. On a session loss they still\n    return `call_unknown`, with no replay.\n  - Recovery happens once per tab lifetime. It reattaches to the same targetId over the existing socket, with\n    no endpoint discovery, no new tab, no reload and no profile restart.\n  - The target URL and the main-frame URL are both checked against ACL's own navigation intent, never against\n    the URL the page currently shows.\n  - Login and checkpoint map to the existing typed stops.\n- `_ready_for_call` now turns any `CdpError`/`OSError` into a sticky `PageFailed`, including a plain PageError\n  with no session loss. Before, the raw error propagated. Warm reuse (`warm.py` `_reuse`) still catches it and\n  replaces the robot tab once, so this works, but the change in behaviour should go in the changelog note.\n- `tests/test_acl1812_warm_sessions.py::test_row_open_profile_answers_200_with_open_by_hand_over_http` fails\n  locally with HTTP 500 on both the PR head and base main. This is local and environmental, it is not caused by\n  this PR, and it passes in CI.\n\nNo live checks claimed.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-19T21:06:24+00:00",
+        "issue": 945,
+        "pr": 1022,
+        "review": {
+          "id": "2d7e227469f040bca4bdd5bc351e7b30",
+          "pr": 1022,
+          "issues": [
+            945
+          ],
+          "actor": "Reviewer-R1945Y",
+          "session": "reviewer-r1945y-20261019",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-19T19:59:58+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 945,
+            "pr": 1022,
+            "branch": "work/acl-1945-api-turn-off",
+            "head_sha": "a2ff58834ad52ba7a6f5747134bf773b94aea130",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "e9ff3ac55ccc43857b7919167fea2b5025620effa5b1a59a0baaa9a01454befc",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-R1945Y",
+              "review_session": "reviewer-r1945y-20261019",
+              "execution_lane": "2d7e227469f040bca4bdd5bc351e7b30",
+              "implementer": "Worker-S1019945",
+              "head_sha": "a2ff58834ad52ba7a6f5747134bf773b94aea130",
+              "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "tree_sha": "a0e482ceb85f406fb745e185871ecc9ff78b382c",
+              "issues": [
+                945
+              ],
+              "report": "PR #1022 (ACL-1945) adds account_spend_api.turn_off: under ACL_FB_BACKEND=api, POST /account-spend/turn-off no longer clicks the Ads Manager switch but, inside the account's own Multilogin profile tab (existing _session(account, commands=True) path from ACL-1756/1760/1800, warm-registry or opened profile, same cooldowns and call budget, writes limited by write_policy.check_object_update), reads the object by exact numeric id, refuses if it belongs to another ad account, if a 'campaign' id has no objective (ad set id rejected even with the same name), if the name Meta returns under that id differs from the dashboard name, or (ad level) if the API-read parent campaign is missing or differs from parent_id; already PAUSED sends nothing (idempotent); only ACTIVE is changed, with exactly POST /<id> status=PAUSED, then a read-back: 'off' only if status=PAUSED and effective_status is not ACTIVE/WITH_ISSUES, otherwise 'unconfirmed' or failed; a lost answer (WriteUnknown) is reconciled by a single read-back after a pause and never retried; any crash after the POST is 'unconfirmed', before it 'failed'. Nothing turns anything on. Busy-profile guard: app.py refuses with HTTP 409 and PROFILE_BUSY_ERROR when publish_jobs.profile_in_use (new, any non-final job or one finished after the request started, same profile_key_for rule as the lock) is true, and checks again under the profile lock; a failing busy check counts as busy (fail closed). Every outcome, including validation refusals and busy refusals, is written to turn_off_log.jsonl with route=api and matched_by=id (new TurnOffResult.matched_by field, default empty for the RPA path, which is unchanged when the backend is rpa). The existing tree UI already sends object_id, parent_id and name, so Off works by id once the API tree read supplies ids. Criteria: (1) API turn-off by id with read-back behind ACL_FB_BACKEND=api - met; (2) tests for request shape, read-back mismatch, lag/unconfirmed, refusal, lost answer, busy profile (lib and route), journal entry, ad parent confirmation, wrong account, bad input, RPA path kept - met in tests/test_acl1945_turn_off_via_api.py (28 tests); (3) live check on a pilot account is a separate task by design. Local runs (C:/fb_agents/.venv, Python 3.13): tests/test_acl1945_turn_off_via_api.py 25 passed, 3 route tests failed only because the local venv has Starlette 0.36.3 while requirements.txt pins 1.7.0 (Request.form() max_part_size TypeError in request_limits.py, environment-only); tests/test_account_spend.py, test_every_change_leaves_a_record.py, test_turn_off_safety_browser.py, test_the_account_tree_on_screen.py: 222 passed, 1 failed (test_the_new_table_without_row_ids_is_read_by_name, Playwright Page.set_content 30s timeout on a loaded laptop, file untouched by the diff). CI on head a2ff5883: all checks green (linux tests shards 1-3, windows tests, tracker-link, descriptor, process, tooling, installer). Non-blocking nits: the API turn-off route does not apply the loopback-bind guard that ACL-1800 campaign commands use (the RPA turn-off route never had it either); the pilot-account allowlist from the issue is an operational rule, not enforced in code (same as ACL-1800); if the serialized_browser lock itself raises, the route returns 503 without a journal line; the TurnOffResult.matched_by comment mentions a 'name' value from ACL-1379 that main does not produce yet. No live checks claimed.",
+              "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "recorded_at": "2026-10-19T21:04:42+00:00",
+              "issue_scopes": {
+                "945": "e9ff3ac55ccc43857b7919167fea2b5025620effa5b1a59a0baaa9a01454befc"
+              }
+            },
+            "lane": {
+              "id": "2d7e227469f040bca4bdd5bc351e7b30",
+              "pr": 1022,
+              "issues": [
+                945
+              ],
+              "actor": "Reviewer-R1945Y",
+              "session": "reviewer-r1945y-20261019",
+              "coordinator": "Coordinator-M1011A",
+              "started_at": "2026-10-19T19:59:58+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-19T21:05:31+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -97225,6 +97287,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-19T21:00:25+00:00"
+      },
+      "945": {
+        "issue": 945,
+        "pr": 1022,
+        "branch": "work/acl-1945-api-turn-off",
+        "head_sha": "a2ff58834ad52ba7a6f5747134bf773b94aea130",
+        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "e9ff3ac55ccc43857b7919167fea2b5025620effa5b1a59a0baaa9a01454befc",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-R1945Y",
+          "review_session": "reviewer-r1945y-20261019",
+          "execution_lane": "2d7e227469f040bca4bdd5bc351e7b30",
+          "implementer": "Worker-S1019945",
+          "head_sha": "a2ff58834ad52ba7a6f5747134bf773b94aea130",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "tree_sha": "a0e482ceb85f406fb745e185871ecc9ff78b382c",
+          "issues": [
+            945
+          ],
+          "report": "PR #1022 (ACL-1945) adds account_spend_api.turn_off: under ACL_FB_BACKEND=api, POST /account-spend/turn-off no longer clicks the Ads Manager switch but, inside the account's own Multilogin profile tab (existing _session(account, commands=True) path from ACL-1756/1760/1800, warm-registry or opened profile, same cooldowns and call budget, writes limited by write_policy.check_object_update), reads the object by exact numeric id, refuses if it belongs to another ad account, if a 'campaign' id has no objective (ad set id rejected even with the same name), if the name Meta returns under that id differs from the dashboard name, or (ad level) if the API-read parent campaign is missing or differs from parent_id; already PAUSED sends nothing (idempotent); only ACTIVE is changed, with exactly POST /<id> status=PAUSED, then a read-back: 'off' only if status=PAUSED and effective_status is not ACTIVE/WITH_ISSUES, otherwise 'unconfirmed' or failed; a lost answer (WriteUnknown) is reconciled by a single read-back after a pause and never retried; any crash after the POST is 'unconfirmed', before it 'failed'. Nothing turns anything on. Busy-profile guard: app.py refuses with HTTP 409 and PROFILE_BUSY_ERROR when publish_jobs.profile_in_use (new, any non-final job or one finished after the request started, same profile_key_for rule as the lock) is true, and checks again under the profile lock; a failing busy check counts as busy (fail closed). Every outcome, including validation refusals and busy refusals, is written to turn_off_log.jsonl with route=api and matched_by=id (new TurnOffResult.matched_by field, default empty for the RPA path, which is unchanged when the backend is rpa). The existing tree UI already sends object_id, parent_id and name, so Off works by id once the API tree read supplies ids. Criteria: (1) API turn-off by id with read-back behind ACL_FB_BACKEND=api - met; (2) tests for request shape, read-back mismatch, lag/unconfirmed, refusal, lost answer, busy profile (lib and route), journal entry, ad parent confirmation, wrong account, bad input, RPA path kept - met in tests/test_acl1945_turn_off_via_api.py (28 tests); (3) live check on a pilot account is a separate task by design. Local runs (C:/fb_agents/.venv, Python 3.13): tests/test_acl1945_turn_off_via_api.py 25 passed, 3 route tests failed only because the local venv has Starlette 0.36.3 while requirements.txt pins 1.7.0 (Request.form() max_part_size TypeError in request_limits.py, environment-only); tests/test_account_spend.py, test_every_change_leaves_a_record.py, test_turn_off_safety_browser.py, test_the_account_tree_on_screen.py: 222 passed, 1 failed (test_the_new_table_without_row_ids_is_read_by_name, Playwright Page.set_content 30s timeout on a loaded laptop, file untouched by the diff). CI on head a2ff5883: all checks green (linux tests shards 1-3, windows tests, tracker-link, descriptor, process, tooling, installer). Non-blocking nits: the API turn-off route does not apply the loopback-bind guard that ACL-1800 campaign commands use (the RPA turn-off route never had it either); the pilot-account allowlist from the issue is an operational rule, not enforced in code (same as ACL-1800); if the serialized_browser lock itself raises, the route returns 503 without a journal line; the TurnOffResult.matched_by comment mentions a 'name' value from ACL-1379 that main does not produce yet. No live checks claimed.",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "recorded_at": "2026-10-19T21:04:42+00:00",
+          "issue_scopes": {
+            "945": "e9ff3ac55ccc43857b7919167fea2b5025620effa5b1a59a0baaa9a01454befc"
+          }
+        },
+        "lane": {
+          "id": "2d7e227469f040bca4bdd5bc351e7b30",
+          "pr": 1022,
+          "issues": [
+            945
+          ],
+          "actor": "Reviewer-R1945Y",
+          "session": "reviewer-r1945y-20261019",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-19T19:59:58+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-19T21:05:31+00:00"
       }
     },
     "batches": {
@@ -101924,62 +102030,6 @@
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-19T13:01:50+00:00",
         "state": "reviewing"
-      },
-      "1022": {
-        "id": "2d7e227469f040bca4bdd5bc351e7b30",
-        "pr": 1022,
-        "issues": [
-          945
-        ],
-        "actor": "Reviewer-R1945Y",
-        "session": "reviewer-r1945y-20261019",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-19T19:59:58+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 945,
-          "pr": 1022,
-          "branch": "work/acl-1945-api-turn-off",
-          "head_sha": "a2ff58834ad52ba7a6f5747134bf773b94aea130",
-          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "e9ff3ac55ccc43857b7919167fea2b5025620effa5b1a59a0baaa9a01454befc",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-R1945Y",
-            "review_session": "reviewer-r1945y-20261019",
-            "execution_lane": "2d7e227469f040bca4bdd5bc351e7b30",
-            "implementer": "Worker-S1019945",
-            "head_sha": "a2ff58834ad52ba7a6f5747134bf773b94aea130",
-            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-            "tree_sha": "a0e482ceb85f406fb745e185871ecc9ff78b382c",
-            "issues": [
-              945
-            ],
-            "report": "PR #1022 (ACL-1945) adds account_spend_api.turn_off: under ACL_FB_BACKEND=api, POST /account-spend/turn-off no longer clicks the Ads Manager switch but, inside the account's own Multilogin profile tab (existing _session(account, commands=True) path from ACL-1756/1760/1800, warm-registry or opened profile, same cooldowns and call budget, writes limited by write_policy.check_object_update), reads the object by exact numeric id, refuses if it belongs to another ad account, if a 'campaign' id has no objective (ad set id rejected even with the same name), if the name Meta returns under that id differs from the dashboard name, or (ad level) if the API-read parent campaign is missing or differs from parent_id; already PAUSED sends nothing (idempotent); only ACTIVE is changed, with exactly POST /<id> status=PAUSED, then a read-back: 'off' only if status=PAUSED and effective_status is not ACTIVE/WITH_ISSUES, otherwise 'unconfirmed' or failed; a lost answer (WriteUnknown) is reconciled by a single read-back after a pause and never retried; any crash after the POST is 'unconfirmed', before it 'failed'. Nothing turns anything on. Busy-profile guard: app.py refuses with HTTP 409 and PROFILE_BUSY_ERROR when publish_jobs.profile_in_use (new, any non-final job or one finished after the request started, same profile_key_for rule as the lock) is true, and checks again under the profile lock; a failing busy check counts as busy (fail closed). Every outcome, including validation refusals and busy refusals, is written to turn_off_log.jsonl with route=api and matched_by=id (new TurnOffResult.matched_by field, default empty for the RPA path, which is unchanged when the backend is rpa). The existing tree UI already sends object_id, parent_id and name, so Off works by id once the API tree read supplies ids. Criteria: (1) API turn-off by id with read-back behind ACL_FB_BACKEND=api - met; (2) tests for request shape, read-back mismatch, lag/unconfirmed, refusal, lost answer, busy profile (lib and route), journal entry, ad parent confirmation, wrong account, bad input, RPA path kept - met in tests/test_acl1945_turn_off_via_api.py (28 tests); (3) live check on a pilot account is a separate task by design. Local runs (C:/fb_agents/.venv, Python 3.13): tests/test_acl1945_turn_off_via_api.py 25 passed, 3 route tests failed only because the local venv has Starlette 0.36.3 while requirements.txt pins 1.7.0 (Request.form() max_part_size TypeError in request_limits.py, environment-only); tests/test_account_spend.py, test_every_change_leaves_a_record.py, test_turn_off_safety_browser.py, test_the_account_tree_on_screen.py: 222 passed, 1 failed (test_the_new_table_without_row_ids_is_read_by_name, Playwright Page.set_content 30s timeout on a loaded laptop, file untouched by the diff). CI on head a2ff5883: all checks green (linux tests shards 1-3, windows tests, tracker-link, descriptor, process, tooling, installer). Non-blocking nits: the API turn-off route does not apply the loopback-bind guard that ACL-1800 campaign commands use (the RPA turn-off route never had it either); the pilot-account allowlist from the issue is an operational rule, not enforced in code (same as ACL-1800); if the serialized_browser lock itself raises, the route returns 503 without a journal line; the TurnOffResult.matched_by comment mentions a 'name' value from ACL-1379 that main does not produce yet. No live checks claimed.",
-            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "recorded_at": "2026-10-19T21:04:42+00:00",
-            "issue_scopes": {
-              "945": "e9ff3ac55ccc43857b7919167fea2b5025620effa5b1a59a0baaa9a01454befc"
-            }
-          },
-          "lane": {
-            "id": "2d7e227469f040bca4bdd5bc351e7b30",
-            "pr": 1022,
-            "issues": [
-              945
-            ],
-            "actor": "Reviewer-R1945Y",
-            "session": "reviewer-r1945y-20261019",
-            "coordinator": "Coordinator-M1011A",
-            "started_at": "2026-10-19T19:59:58+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-19T21:05:31+00:00"
-        }
       },
       "937": {
         "id": "0098a6ad59774bf4bccfcd88e4973b8b",
