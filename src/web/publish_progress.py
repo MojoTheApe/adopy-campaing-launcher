@@ -135,12 +135,15 @@ def _base_step(step: Any) -> str:
 def _result_view(result: dict[str, Any]) -> dict[str, Any]:
     from src.web.publish_jobs import _result_is_publishable
 
-    return {
+    view = {
         "success": result.get("success") is True,
         "publishable": _result_is_publishable(result),
         "error": str(result.get("error") or ""),
         "blocking_failures": [str(x) for x in (result.get("blocking_failures") or [])],
     }
+    if result.get("published_as"):       # ACL-1902: только у переименованной API-кампании
+        view["published_as"] = str(result["published_as"])
+    return view
 
 
 def _blocker_from_result(result: dict[str, Any]) -> str:
