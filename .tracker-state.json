@@ -44053,20 +44053,6 @@
         "started_at": "2026-10-19T17:53:46+00:00",
         "from_status": "status:todo"
       },
-      "151": {
-        "actor": "Worker-R1019151",
-        "session": "run_r1019_151",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1151-map-pick-profile",
-        "worktree": "C:\\acl-1151",
-        "id": "7d17c8549b0a47ab83dd5e6a21125baa",
-        "issue": 151,
-        "state": "handoff",
-        "started_at": "2026-10-19T18:31:06+00:00",
-        "from_status": "status:todo",
-        "pr": 950,
-        "report": "Revived after the conflict return: merged work/main into the branch (clean, no conflicts), pushed. Touched tests pass: test_acl_1151_pick_a_profile, test_accounts_tab_connects_the_same_way, test_connect_account_in_empty_country (34 passed). Full suite left to CI. Not verified live."
-      },
       "896": {
         "actor": "Worker-R1019896",
         "session": "run_r1019_896",
@@ -50427,25 +50413,25 @@
             "session": "run_r1019_151"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-R1019151",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-W1151M",
-          "session": "worker_acl1151_20261016",
+          "actor": "Worker-R1019151",
+          "session": "run_r1019_151",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1151-map-pick-profile",
           "worktree": "C:\\acl-1151",
-          "id": "39bb20b9dde844b98447a160e326acd1",
+          "id": "7d17c8549b0a47ab83dd5e6a21125baa",
           "issue": 151,
           "state": "handoff",
-          "started_at": "2026-10-16T13:03:37+00:00",
-          "from_status": "status:backlog",
+          "started_at": "2026-10-19T18:31:06+00:00",
+          "from_status": "status:todo",
           "pr": 950,
-          "report": "ACL-1151 handoff, PR #950 (work/acl-1151-map-pick-profile, head 623e3cd6, base main af0ade29). Worker-W1151M.\nDone: one server derivation src/web/profile_connection.py used by /mlx-profile-details, new GET /mlx-open-profiles and /api/accounts-overview (suggested_name); removed _account_name_from_profile and the tab's JS tailKey. _account_map_add.html: \"last letters\" field and Reload removed; one profile picker (empty + live token = open profiles with derived name/ad account; typing = Multilogin search; no token = empty list). One request aclConnectAccount() for map Connect, Connect by hand, row Save and country form. Sign-in and \"already connected\" linking unchanged.\nChecks: 94 touched tests passed locally (PYTHONPATH=tests), both node harnesses pass; full suite in CI.\nNot done / for review: no live Multilogin verification (none allowed); serve.py restart needed. Note: the issue text predates 4a04ea56 (owner chose search over open-only list) \u2014 the picker keeps search for non-running profiles, so it lists open profiles first rather than only."
+          "report": "Revived after the conflict return: merged work/main into the branch (clean, no conflicts), pushed. Touched tests pass: test_acl_1151_pick_a_profile, test_accounts_tab_connects_the_same_way, test_connect_account_in_empty_country (34 passed). Full suite left to CI. Not verified live."
         },
         "pr": 950,
-        "queued_at": "2026-10-16T13:17:26+00:00",
+        "queued_at": "2026-10-19T18:48:22+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -57163,7 +57149,8 @@
     "review_queue": [
       681,
       72,
-      805
+      805,
+      151
     ],
     "review": null,
     "history": [
@@ -93027,6 +93014,13 @@
             "approved_at": "2026-10-19T18:39:04+00:00"
           }
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T18:48:22+00:00",
+        "issue": 151,
+        "pr": 950,
+        "actor": "Worker-R1019151"
       }
     ],
     "policy": {
