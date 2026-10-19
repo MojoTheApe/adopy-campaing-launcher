@@ -43246,20 +43246,6 @@
         "started_at": "2026-10-19T12:01:14+00:00",
         "from_status": "status:todo"
       },
-      "138": {
-        "actor": "Worker-P1138B",
-        "session": "acl1138_resume_1019",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1138-proxy-gate",
-        "worktree": "C:\\acl-1138-proxy",
-        "id": "b9f0aa8ad08f43a0b461ac55d5227ed0",
-        "issue": 138,
-        "state": "handoff",
-        "started_at": "2026-10-19T12:09:33+00:00",
-        "from_status": "status:todo",
-        "pr": 947,
-        "report": "Fix for the returned review: 727e3d87 adds proxy_gate_ to the profile-stage rule in the cb-build-model table (src/web/templates/report.html), fixing CI guard tests/test_build_progress_model.py (the only real CI failure on 8bb27185; tracker-link failed only because it ran before the claim). Local: test_build_progress_model + gate tests 54 passed. Base still current main 435bc154. Needs fresh approval of the new head."
-      },
       "827": {
         "actor": "Worker-RS1827",
         "session": "wrs1827-20261015",
@@ -49462,7 +49448,7 @@
             "session": "acl1138_resume_1019"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-P1138B",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -49471,16 +49457,16 @@
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1138-proxy-gate",
           "worktree": "C:\\acl-1138-proxy",
-          "id": "7c24acecc3474f6caa0788a3f06e4f59",
+          "id": "b9f0aa8ad08f43a0b461ac55d5227ed0",
           "issue": 138,
           "state": "handoff",
-          "started_at": "2026-10-19T11:36:11+00:00",
+          "started_at": "2026-10-19T12:09:33+00:00",
           "from_status": "status:todo",
           "pr": 947,
-          "report": "Resumed 2026-10-19 on the owner's explicit instruction (owner lifted the 2026-10-17 administrative pause for ACL-1138 only).\nBranch work/acl-1138-proxy-gate, PR #947 into main, new head 8bb27185 = merge of current main 435bc154 into the reviewed source bd0f6741. Only conflict: docs/system/CHANGELOG.md (both new entries kept, ours on top). Product code identical to the reviewed bd0f6741.\nChecks on the merged tree: 78 affected test files, 2471 passed, 1 skipped. PR CI restarted (the 2026-10-16 runs were GitHub startup_failure with 0 s duration).\nPrevious independent approval was at bd0f6741 vs af0ade29 and is historical; a fresh independent review against current main is required.\nRemaining: fresh review, Approved, Coordinator batch into main, Merged. Live attach evidence on a real run still not observed."
+          "report": "Fix for the returned review: 727e3d87 adds proxy_gate_ to the profile-stage rule in the cb-build-model table (src/web/templates/report.html), fixing CI guard tests/test_build_progress_model.py (the only real CI failure on 8bb27185; tracker-link failed only because it ran before the claim). Local: test_build_progress_model + gate tests 54 passed. Base still current main 435bc154. Needs fresh approval of the new head."
         },
         "pr": 947,
-        "queued_at": "2026-10-19T11:37:51+00:00",
+        "queued_at": "2026-10-19T12:15:21+00:00",
         "review_report": "Returned for a one-line fix: CI guard tests/test_build_progress_model.py::test_every_step_the_robot_names_maps_to_a_stage fails on the new telemetry step proxy_gate_unchecked (needs a cb-build-model rule in src/web/templates/report.html). Review of the rest stands as reported; a fresh approval of the new head is required.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -56096,7 +56082,8 @@
       902,
       855,
       886,
-      839
+      839,
+      138
     ],
     "review": {
       "id": "b49c262d383b4011a4e6891181162ac5",
@@ -90037,6 +90024,13 @@
         "pr": 900,
         "lane": "b7735292fe924fbba74240daf7de2155",
         "actor": "Reviewer-DV1019B"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T12:15:21+00:00",
+        "issue": 138,
+        "pr": 947,
+        "actor": "Worker-P1138B"
       }
     ],
     "policy": {
