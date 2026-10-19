@@ -43242,20 +43242,6 @@
         "started_at": "2026-10-19T11:43:22+00:00",
         "from_status": "status:todo"
       },
-      "886": {
-        "actor": "Worker-RF1019W",
-        "session": "rf1019w-20261019",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1886-graph-error-context",
-        "worktree": "C:\\rf19-886",
-        "id": "c7bd4c38dd2b4afebe08d2766e676a0f",
-        "issue": 886,
-        "state": "handoff",
-        "started_at": "2026-10-19T11:47:02+00:00",
-        "from_status": "status:todo",
-        "pr": 887,
-        "report": "Merged main 435bc154 into a484aaa1 (new head 3f048165). Conflict only in docs/system/PROJECT.md, resolved keeping both sections (Graph read failure diagnostics + CI feedback and admission), no markers left. No code change. Tests: test_acl1886_graph_error_context: 37 passed. Needs a delta review of the merge only."
-      },
       "73": {
         "actor": "Worker-W144D",
         "session": "w144d-20261019",
@@ -48616,25 +48602,25 @@
             "session": "rf1019w-20261019"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RF1019W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-RF1016W",
-          "session": "rf1016w-20261016",
+          "actor": "Worker-RF1019W",
+          "session": "rf1019w-20261019",
           "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1886-graph-error-context",
-          "worktree": "C:\\rf-886",
-          "id": "b568bc7a62a746c09a00a8b271ae76ed",
+          "worktree": "C:\\rf19-886",
+          "id": "c7bd4c38dd2b4afebe08d2766e676a0f",
           "issue": 886,
           "state": "handoff",
-          "started_at": "2026-10-16T10:29:31+00:00",
+          "started_at": "2026-10-19T11:47:02+00:00",
           "from_status": "status:todo",
           "pr": 887,
-          "report": "Merged main af0ade29 into the previously approved head 31ee38c9; clean merge, no conflicts; no code change; 37 tests passed. Needs a delta review of the merge only."
+          "report": "Merged main 435bc154 into a484aaa1 (new head 3f048165). Conflict only in docs/system/PROJECT.md, resolved keeping both sections (Graph read failure diagnostics + CI feedback and admission), no markers left. No code change. Tests: test_acl1886_graph_error_context: 37 passed. Needs a delta review of the merge only."
         },
         "pr": 887,
-        "queued_at": "2026-10-16T10:31:48+00:00",
+        "queued_at": "2026-10-19T11:56:53+00:00",
         "review_report": "Owner lifted the 2026-10-17 exclusive pause for ACL-1776, ACL-1899, ACL-1902 and ACL-1886 on 2026-10-19 (instruction in the review session: refresh onto current main, re-review, ship a new batch with release after the current one). Batch afaeca3e was cancelled by that pause; the old approval used main af0ade29 and is stale vs main 435bc154. Return for a main merge and fresh independent approval.",
         "return_operation": {
           "id": "c370e067678440fc9b0ebd9ed307d9a6",
@@ -56070,7 +56056,8 @@
       776,
       899,
       902,
-      855
+      855,
+      886
     ],
     "review": {
       "id": "b49c262d383b4011a4e6891181162ac5",
@@ -89944,6 +89931,13 @@
         "issue": 73,
         "claim": "62443a66a01c4928ba86994ad573f701",
         "actor": "Worker-W144D"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T11:56:53+00:00",
+        "issue": 886,
+        "pr": 887,
+        "actor": "Worker-RF1019W"
       }
     ],
     "policy": {
