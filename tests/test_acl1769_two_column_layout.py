@@ -62,7 +62,9 @@ def test_the_panel_is_two_columns_with_expand_and_the_foot_kept():
     assert page.index('id="cbd-body"') < page.index('id="cbd-editor"') < page.index('id="cbd-foot"'), (
         "порядок: дерево, редактор, подвал"
     )
-    assert 'id="cbd-expand"' in page and 'aria-pressed="false"' in page
+    # ACL-1871: размер — на язычке (три кнопки), кнопки Expand в шапке больше нет.
+    assert 'id="cbd-expand"' not in page
+    assert all(f'id="cbd-preset-{n}"' in page for n in ("closed", "normal", "wide"))
     assert 'id="cbd-close"' in page, "крестик закрытия панели пропал"
     # Закрытие только прячет: у него нет обработчика, который чистит черновики.
     block = page[page.index("window.cbDrawer = (function () {"):]

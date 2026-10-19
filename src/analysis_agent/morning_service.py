@@ -33,6 +33,7 @@ from src.analysis_agent.analyze_fb_stats import (
 from src.creative_variant import apply_backfill as apply_variant_backfill
 from src.analysis_agent.gsheet_accounts import fetch_account_rows
 from src.analysis_agent.morning_report import build_morning_report
+from src.analysis_agent.stats_workbook import read_stats_workbook
 from src.analysis_agent.news_context import NewsFetcher, build_news_context
 
 
@@ -123,16 +124,9 @@ def _load_enriched_df(
     """
     if progress is not None:
         progress("reading")
-    df_raw = pd.read_excel(excel_path)
+    df_raw = read_stats_workbook(excel_path)
     if progress is not None:
         progress("processing")
-    required_cols = [
-        "Country", "Account Alias", "Adset Name", "Ad Title",
-        "# Leads", "# FTDs", "$ Spend", "CM", "Ad Asset", "$ Net",
-    ]
-    missing = [c for c in required_cols if c not in df_raw.columns]
-    if missing:
-        raise ValueError(f"Missing columns in Excel: {missing}")
     df = compute_metrics(df_raw)
     # ACL-1593: вариант для объявлений, построенных до имени с вариантом.
     df = apply_variant_backfill(enrich_structure(df))
