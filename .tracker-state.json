@@ -51609,7 +51609,7 @@
             "session": "wg602-c0a1de70"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-G19602",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
@@ -92962,6 +92962,68 @@
         "issue": 853,
         "claim": "a1d35e13fca5442b8a5c20646975dfb9",
         "actor": "Worker-U1019853"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-19T18:44:11+00:00",
+        "issue": 70,
+        "pr": 982,
+        "review": {
+          "id": "ab669508f56b407bbce1e3a6b9fec25c",
+          "pr": 982,
+          "issues": [
+            70
+          ],
+          "actor": "Reviewer-R602X",
+          "session": "reviewer-r602x-20261019",
+          "coordinator": "Coordinator-E1019A",
+          "started_at": "2026-10-19T17:50:04+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 70,
+            "pr": 982,
+            "branch": "work/acl-602-lead-goals-overview",
+            "head_sha": "0a35b7086190cf483a0117e9258ecc90122e3b99",
+            "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+            "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "e203742e52229f146fe31b5b1af11599dfae6b44fe0f9749da06c140e57f6e99",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-R602X",
+              "review_session": "reviewer-r602x-20261019",
+              "execution_lane": "ab669508f56b407bbce1e3a6b9fec25c",
+              "implementer": "Worker-G19602",
+              "head_sha": "0a35b7086190cf483a0117e9258ecc90122e3b99",
+              "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+              "tree_sha": "5af8617dc34ffc8299f521d05ce0d8fb77ec9417",
+              "issues": [
+                70
+              ],
+              "report": "PR #982 adds a read-only lead overview of stored goals: goals.overview() returns, for each manager who has saved goals (sorted case-insensitively), the cm name, the goals, the country count and the FTD total, and the new GET /goals/overview returns it only when the existing ACL_TEAM_LEAD flag is set (403 otherwise). It also closes a leak: GET /goals?cm=<other> now returns 403 unless the flag is set, so a buyer can no longer read another manager's goals, while own goals (empty cm or cm equal to MY_CM_NAME, case-insensitive) are unchanged; the other for_cm callers use MY_CM_NAME only. Criteria: (1) buyer view stays scoped to own goals - enforced by the new 403 and tested; (2) lead overview shows managers together with clear identity (cm field per entry), and derived-only guesses are deliberately excluded with the reason documented; (3) reading never writes (overview only reads, no save path touched) and grants no editing powers (POST /goals untouched). The role mechanism stays with ACL-601/#69 and the code states the flag is not a lock. User-facing error texts are in English. Tests: 4 new tests in tests/test_goals.py (overview contents, lead endpoint, non-lead 403 on overview and on other-person goals_read with no data in the body, lead reading one person); tests/test_goals.py ran 21 passed locally on head 0a35b708. CI on head 0a35b708 is fully green (linux tests 1/2/3, windows tests, ACL verification, process instructions, tracker-link, descriptor; installer build jobs skipped as not applicable). Non-blocking nits: no UI panel yet (API only, stated in the PR); with MY_CM_NAME unset a non-lead passing cm gets 403, which is the safe direction. No live checks claimed.",
+              "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "recorded_at": "2026-10-19T18:23:37+00:00",
+              "issue_scopes": {
+                "70": "e203742e52229f146fe31b5b1af11599dfae6b44fe0f9749da06c140e57f6e99"
+              }
+            },
+            "lane": {
+              "id": "ab669508f56b407bbce1e3a6b9fec25c",
+              "pr": 982,
+              "issues": [
+                70
+              ],
+              "actor": "Reviewer-R602X",
+              "session": "reviewer-r602x-20261019",
+              "coordinator": "Coordinator-E1019A",
+              "started_at": "2026-10-19T17:50:04+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-19T18:39:04+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -95559,6 +95621,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-19T17:42:20+00:00"
+      },
+      "70": {
+        "issue": 70,
+        "pr": 982,
+        "branch": "work/acl-602-lead-goals-overview",
+        "head_sha": "0a35b7086190cf483a0117e9258ecc90122e3b99",
+        "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+        "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "e203742e52229f146fe31b5b1af11599dfae6b44fe0f9749da06c140e57f6e99",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-R602X",
+          "review_session": "reviewer-r602x-20261019",
+          "execution_lane": "ab669508f56b407bbce1e3a6b9fec25c",
+          "implementer": "Worker-G19602",
+          "head_sha": "0a35b7086190cf483a0117e9258ecc90122e3b99",
+          "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+          "tree_sha": "5af8617dc34ffc8299f521d05ce0d8fb77ec9417",
+          "issues": [
+            70
+          ],
+          "report": "PR #982 adds a read-only lead overview of stored goals: goals.overview() returns, for each manager who has saved goals (sorted case-insensitively), the cm name, the goals, the country count and the FTD total, and the new GET /goals/overview returns it only when the existing ACL_TEAM_LEAD flag is set (403 otherwise). It also closes a leak: GET /goals?cm=<other> now returns 403 unless the flag is set, so a buyer can no longer read another manager's goals, while own goals (empty cm or cm equal to MY_CM_NAME, case-insensitive) are unchanged; the other for_cm callers use MY_CM_NAME only. Criteria: (1) buyer view stays scoped to own goals - enforced by the new 403 and tested; (2) lead overview shows managers together with clear identity (cm field per entry), and derived-only guesses are deliberately excluded with the reason documented; (3) reading never writes (overview only reads, no save path touched) and grants no editing powers (POST /goals untouched). The role mechanism stays with ACL-601/#69 and the code states the flag is not a lock. User-facing error texts are in English. Tests: 4 new tests in tests/test_goals.py (overview contents, lead endpoint, non-lead 403 on overview and on other-person goals_read with no data in the body, lead reading one person); tests/test_goals.py ran 21 passed locally on head 0a35b708. CI on head 0a35b708 is fully green (linux tests 1/2/3, windows tests, ACL verification, process instructions, tracker-link, descriptor; installer build jobs skipped as not applicable). Non-blocking nits: no UI panel yet (API only, stated in the PR); with MY_CM_NAME unset a non-lead passing cm gets 403, which is the safe direction. No live checks claimed.",
+          "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "recorded_at": "2026-10-19T18:23:37+00:00",
+          "issue_scopes": {
+            "70": "e203742e52229f146fe31b5b1af11599dfae6b44fe0f9749da06c140e57f6e99"
+          }
+        },
+        "lane": {
+          "id": "ab669508f56b407bbce1e3a6b9fec25c",
+          "pr": 982,
+          "issues": [
+            70
+          ],
+          "actor": "Reviewer-R602X",
+          "session": "reviewer-r602x-20261019",
+          "coordinator": "Coordinator-E1019A",
+          "started_at": "2026-10-19T17:50:04+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-19T18:39:04+00:00"
       }
     },
     "batches": {
@@ -100258,62 +100364,6 @@
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-19T13:01:50+00:00",
         "state": "reviewing"
-      },
-      "982": {
-        "id": "ab669508f56b407bbce1e3a6b9fec25c",
-        "pr": 982,
-        "issues": [
-          70
-        ],
-        "actor": "Reviewer-R602X",
-        "session": "reviewer-r602x-20261019",
-        "coordinator": "Coordinator-E1019A",
-        "started_at": "2026-10-19T17:50:04+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 70,
-          "pr": 982,
-          "branch": "work/acl-602-lead-goals-overview",
-          "head_sha": "0a35b7086190cf483a0117e9258ecc90122e3b99",
-          "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-          "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "e203742e52229f146fe31b5b1af11599dfae6b44fe0f9749da06c140e57f6e99",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-R602X",
-            "review_session": "reviewer-r602x-20261019",
-            "execution_lane": "ab669508f56b407bbce1e3a6b9fec25c",
-            "implementer": "Worker-G19602",
-            "head_sha": "0a35b7086190cf483a0117e9258ecc90122e3b99",
-            "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-            "tree_sha": "5af8617dc34ffc8299f521d05ce0d8fb77ec9417",
-            "issues": [
-              70
-            ],
-            "report": "PR #982 adds a read-only lead overview of stored goals: goals.overview() returns, for each manager who has saved goals (sorted case-insensitively), the cm name, the goals, the country count and the FTD total, and the new GET /goals/overview returns it only when the existing ACL_TEAM_LEAD flag is set (403 otherwise). It also closes a leak: GET /goals?cm=<other> now returns 403 unless the flag is set, so a buyer can no longer read another manager's goals, while own goals (empty cm or cm equal to MY_CM_NAME, case-insensitive) are unchanged; the other for_cm callers use MY_CM_NAME only. Criteria: (1) buyer view stays scoped to own goals - enforced by the new 403 and tested; (2) lead overview shows managers together with clear identity (cm field per entry), and derived-only guesses are deliberately excluded with the reason documented; (3) reading never writes (overview only reads, no save path touched) and grants no editing powers (POST /goals untouched). The role mechanism stays with ACL-601/#69 and the code states the flag is not a lock. User-facing error texts are in English. Tests: 4 new tests in tests/test_goals.py (overview contents, lead endpoint, non-lead 403 on overview and on other-person goals_read with no data in the body, lead reading one person); tests/test_goals.py ran 21 passed locally on head 0a35b708. CI on head 0a35b708 is fully green (linux tests 1/2/3, windows tests, ACL verification, process instructions, tracker-link, descriptor; installer build jobs skipped as not applicable). Non-blocking nits: no UI panel yet (API only, stated in the PR); with MY_CM_NAME unset a non-lead passing cm gets 403, which is the safe direction. No live checks claimed.",
-            "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "recorded_at": "2026-10-19T18:23:37+00:00",
-            "issue_scopes": {
-              "70": "e203742e52229f146fe31b5b1af11599dfae6b44fe0f9749da06c140e57f6e99"
-            }
-          },
-          "lane": {
-            "id": "ab669508f56b407bbce1e3a6b9fec25c",
-            "pr": 982,
-            "issues": [
-              70
-            ],
-            "actor": "Reviewer-R602X",
-            "session": "reviewer-r602x-20261019",
-            "coordinator": "Coordinator-E1019A",
-            "started_at": "2026-10-19T17:50:04+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-19T18:39:04+00:00"
-        }
       },
       "951": {
         "id": "1d64a1d747614ee6aa08f2f8522971af",
