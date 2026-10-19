@@ -44389,7 +44389,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "767": {
+        "actor": "Worker-B1019767",
+        "session": "run_b1019_767",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "codex/acl-1767-audience-cta-devices",
+        "worktree": "C:\\acl-1767",
+        "id": "5b92bb10b4954279a7c17eb5f20d5532",
+        "issue": 767,
+        "state": "implementing",
+        "started_at": "2026-10-19T21:40:00+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -48706,11 +48719,15 @@
           {
             "actor": "Worker-S1767A",
             "session": "run_s1767a_1012"
+          },
+          {
+            "actor": "Worker-B1019767",
+            "session": "run_b1019_767"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-S1767A",
-        "coordinator": "Coordinator-C0930A",
+        "state": "implementing",
+        "worker": "Worker-B1019767",
+        "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-S1767A",
           "session": "run_s1767a_1012",
@@ -54892,6 +54909,10 @@
       },
       "Worker-R1019822": {
         "session": "run_r1019_822",
+        "role": "Worker"
+      },
+      "Worker-B1019767": {
+        "session": "run_b1019_767",
         "role": "Worker"
       }
     },
@@ -94838,6 +94859,13 @@
         "issue": 822,
         "pr": 823,
         "actor": "Worker-R1019822"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T21:40:00+00:00",
+        "issue": 767,
+        "claim": "5b92bb10b4954279a7c17eb5f20d5532",
+        "actor": "Worker-B1019767"
       }
     ],
     "policy": {
