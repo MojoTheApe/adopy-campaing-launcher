@@ -21,10 +21,11 @@ def browser():
         browser.close()
 
 
-def render_section(route, populated=True):
+def render_section(route, populated=True, campaign_api=False):
     env = Environment(loader=FileSystemLoader(str(TPL)), autoescape=True)
     env.filters.update(fmt_usd=fmt_usd, fmt_currency=fmt_currency)
     env.globals["metric_values"] = metric_values
+    env.globals["campaign_table_api"] = lambda: campaign_api
     row = dict(account="Synthetic account with a long descriptive identity " * 3,
                has_data=True, spend=1044.82, leads=42, deposits=3,
                status={"status": "clear"})
@@ -52,7 +53,7 @@ def test_account_identity_and_actions_remain_reachable(browser, width, theme, ro
         assert scroll.get_attribute("tabindex") == "0"
         assert page.locator(".amap-acc").bounding_box()["width"] >= 250
         scroll.focus()
-        scroll.press("End")
+        scroll.evaluate("el => { el.scrollLeft = el.scrollWidth; }")
         page.wait_for_timeout(200)
         page.locator(".amap-read").focus()
         bounds = page.locator(".amap-read").bounding_box()
@@ -78,5 +79,36 @@ def test_account_identity_and_actions_remain_reachable(browser, width, theme, ro
         page.set_content(f'<html data-theme="{theme}"><style>{styles}</style><main class="main-content">{render_section(route, False)}</main></html>')
         assert page.locator(".amap-table-scroll").count() == 0
         assert "No accounts placed" in page.locator(".amap-empty").inner_text()
+    finally:
+        page.close()
+
+
+@pytest.mark.parametrize("width", [1280, 1024, 768, 390])
+@pytest.mark.parametrize("route", ["home", "manage"])
+def test_scroll_region_holds_only_the_table_beside_the_campaign_sections(browser, width, route):
+    """ACL-1800 markup: campaigns section above the table, footer mount below; both stay outside the scroller."""
+    report = (TPL / "report.html").read_text(encoding="utf-8")
+    styles = "\n".join(re.findall(r"<style[^>]*>(.*?)</style>", report, re.S))
+    page = browser.new_page(viewport={"width": width, "height": 900})
+    try:
+        page.set_content(f'<html data-theme="light"><style>{styles}</style><main class="main-content">{render_section(route, True, True)}</main></html>')
+        scroll = page.locator(".amap-table-scroll")
+        assert scroll.count() == 1
+        assert page.locator(".amap-campaigns").count() == 1 and page.locator("[data-hc-after]").count() == 1
+        assert scroll.evaluate("el => el.children.length === 1 && el.children[0].tagName === 'TABLE'")
+        assert scroll.locator(".amap-campaigns, [data-hc-after]").count() == 0
+        order = page.evaluate("""() => {
+            const y = s => document.querySelector(s).getBoundingClientRect().top;
+            return [y('.amap-campaigns'), y('.amap-table-scroll'), y('[data-hc-after]')];
+        }""")
+        assert order[0] <= order[1] <= order[2]
+        scroll.focus()
+        scroll.evaluate("el => { el.scrollLeft = el.scrollWidth; }")
+        page.wait_for_timeout(200)
+        page.locator(".amap-read").focus()
+        page.wait_for_timeout(300)
+        bounds, region = page.locator(".amap-read").bounding_box(), scroll.bounding_box()
+        assert region["x"] <= bounds["x"] and bounds["x"] + bounds["width"] <= region["x"] + region["width"] + 1
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
     finally:
         page.close()
