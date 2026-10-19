@@ -44825,22 +44825,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "771": {
-        "actor": "Worker-B1019771",
-        "session": "run_b1019_771",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1771-targeting-resolver",
-        "worktree": "C:\\acl-1771",
-        "id": "28eb07cec66b4d3b9ed05b20907e0bf7",
-        "issue": 771,
-        "state": "handoff",
-        "started_at": "2026-10-19T22:31:50+00:00",
-        "from_status": "status:todo",
-        "pr": 832,
-        "report": "# ACL-1771 handoff\n\n- Merged current work/main into codex/acl-1771-targeting-resolver; 2 conflicts (creator.py audit call keeps the targeting report and main's renamed/name_error args; report.html drops the old existing_differences block that main removed).\n- Independent read-only Opus review of the resolution: no defects.\n- Touched tests passed locally: test_acl1771_targeting_resolver 50, test_acl1819_preflight 84, test_acl1761_api_create 121, test_acl1761_country_resolve 5, test_acl1761_existing_check 10, test_acl1761_plan_check 17, test_acl1769_two_column_layout 12. Full suite left to CI. No live runs."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -49247,25 +49232,25 @@
             "session": "run_b1019_771"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-B1019771",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-S1771A",
-          "session": "run_s1771a_1012",
-          "coordinator": "Coordinator-C0930A",
+          "actor": "Worker-B1019771",
+          "session": "run_b1019_771",
+          "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1771-targeting-resolver",
-          "worktree": "C:\\acl-1771-resolver",
-          "id": "545e3a5ccfc44faeb92b63b377806ca2",
+          "worktree": "C:\\acl-1771",
+          "id": "28eb07cec66b4d3b9ed05b20907e0bf7",
           "issue": 771,
           "state": "handoff",
-          "started_at": "2026-10-12T13:28:49+00:00",
-          "from_status": "status:idea",
+          "started_at": "2026-10-19T22:31:50+00:00",
+          "from_status": "status:todo",
           "pr": 832,
-          "report": "PR #832 (head 81e2a23), stacked on #821. Resolver: confirmed cache, adinterestvalid exact, adinterest search paged, adTargetingCategory classes paged, split on or. No auto-pick of near matches; Confirm/Clear via /targeting-resolver endpoints and Check plan. Pre-flight rules interests_resolve and interests_confirmed. Tests: 24 new, 335 affected passed. Mutations: 4 of 4 caught."
+          "report": "# ACL-1771 handoff\n\n- Merged current work/main into codex/acl-1771-targeting-resolver; 2 conflicts (creator.py audit call keeps the targeting report and main's renamed/name_error args; report.html drops the old existing_differences block that main removed).\n- Independent read-only Opus review of the resolution: no defects.\n- Touched tests passed locally: test_acl1771_targeting_resolver 50, test_acl1819_preflight 84, test_acl1761_api_create 121, test_acl1761_country_resolve 5, test_acl1761_existing_check 10, test_acl1761_plan_check 17, test_acl1769_two_column_layout 12. Full suite left to CI. No live runs."
         },
         "pr": 832,
-        "queued_at": "2026-10-12T13:51:30+00:00",
+        "queued_at": "2026-10-19T22:35:28+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -58368,7 +58353,8 @@
       70,
       202,
       47,
-      770
+      770,
+      771
     ],
     "review": null,
     "history": [
@@ -95917,6 +95903,13 @@
         "pr": 966,
         "lane": "4d6b0c393e44486483099c2672682425",
         "actor": "Reviewer-Y19B"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T22:35:28+00:00",
+        "issue": 771,
+        "pr": 832,
+        "actor": "Worker-B1019771"
       }
     ],
     "policy": {
