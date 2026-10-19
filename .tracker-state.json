@@ -41411,6 +41411,119 @@
           }
         },
         "recorded_at": "2026-10-18T17:30:21+00:00"
+      },
+      "a12a28c2b40d481db2305e6bb020724d": {
+        "evidence": {
+          "kind": "post-main-acceptance",
+          "batch_id": "a12a28c2b40d481db2305e6bb020724d",
+          "pr": 1016,
+          "merge_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+          "head_sha": "50253d96e454b5b15f5a81502fd55b9c0b084b8d",
+          "tree_sha": "8c87de6ca6b749dd6cca2ff97348df5d0f553e67",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            864,
+            871,
+            356,
+            787,
+            287
+          ],
+          "source_heads": [
+            "c5e499312fcbcb9be063915cb2134189f588d485",
+            "5bc4aea51efb029d8e33d4bfaad06e6e04a60f3f",
+            "6c688bd3137f90bfdfa8bcef8b8e5947b3db40c5",
+            "507b1ac896e8f79ae63db0ccc220e301b593326b",
+            "0083cd665239b8baaa458d6ce2d93437cfe53e00"
+          ],
+          "issue_scopes": {
+            "864": "5a82d9fa0b21a5416b83b567f37b0e00f9e158450379e8e3f899ad5cd92863db",
+            "871": "6ba29b2504b4a9e908d0b80c842b06da2bb2fdb8c1402ecacb62f0628680d930",
+            "356": "2b5d76b193104aeaf5f22d3b6832244aa30d0d2644c867ec1e26ca0e8a24a87a",
+            "787": "072075680194e9c34c8c58470312d713dbf6be600ed939a280019c0b36701dcb",
+            "287": "f817108928cba547d3fd6e63b12f35cd88eb8f08363ff15c3818dedc8d9770ce"
+          },
+          "reviewer": "Reviewer-X19BAT",
+          "review_session": "rxbat-1c30cbbe",
+          "execution_lane": "b49c262d383b4011a4e6891181162ac5",
+          "coordinator": "Coordinator-E1019A",
+          "coordinator_session": "coord-c0a1de70",
+          "criteria": {
+            "871": [
+              {
+                "line": 12,
+                "criterion": "- [ ] Three separate accessible tab buttons close, select normal width or select wide width.",
+                "result": "passed",
+                "evidence": "main merge 1c6ab78e (tree 8c87de6c = batch head 50253d96 tree): report.html has #cbd-preset-closed/normal/wide as native buttons in role=group 'Builder size', each with English aria-label/title, aria-controls=cbd-panel and aria-pressed synced in applySize(); tests/builder_drawer_harness.cjs and test_acl1871_side_tab_browser::test_three_buttons_and_label_click pass (run by me on the batch tree, 366 passed; PR 1016 CI linux x6 + windows green)."
+              },
+              {
+                "line": 13,
+                "criterion": "- [ ] Clicking the Builder label closes/reopens at the last size; pointer dragging continuously resizes without an accidental click or loss of inputs.",
+                "result": "passed",
+                "evidence": "main merge 1c6ab78e (tree 8c87de6c = batch head 50253d96 tree): handle click toggles set(!isOpen()) keeping mode/custom width; pointer drag with a 4px dead zone and pointer capture resizes via --cbd-w only (drafts/inputs untouched), the post-drag click is swallowed. Verified by the harness (drag 900->700 gives 680px, click after pointerup does not close) and test_dragging_resizes_without_toggling_and_survives_reload (real Chromium mouse drag, still open, 630px)."
+              },
+              {
+                "line": 14,
+                "criterion": "- [ ] Saved sizing restores safely after reload, remains bounded on viewport changes and tolerates unavailable or invalid storage.",
+                "result": "passed",
+                "evidence": "main merge 1c6ab78e (tree 8c87de6c = batch head 50253d96 tree): width saved in acl.builder.width ('wide'|'normal'|3-4 digit px), all storage access in try/catch, garbage falls back to normal, clamp to [min(320,max), viewport-56], re-applied on window resize. Harness covers reload 700, '9999999', 'abc', 1200 in a 700px window, a 380px window and locked storage; the browser test covers a 420px viewport with stored 1500 and 'zzz'."
+              },
+              {
+                "line": 15,
+                "criterion": "- [ ] Keyboard operation, narrow screens and both themes remain usable; no outside-click or Escape dismissal is introduced.",
+                "result": "passed",
+                "evidence": "main merge 1c6ab78e (tree 8c87de6c = batch head 50253d96 tree): ArrowLeft/ArrowRight on the focused handle resize by 40px (harness 480->520->480); presets are focusable buttons with focus-visible outlines; narrow screens keep the tab visible (normal = min(480, vw-40); 420px browser test); colours only from existing theme tokens; no Escape/outside-click listeners added (harness asserts documentHandlers == []). test_field_contrast, test_drawer_review_browser and test_the_builder_drawer pass."
+              },
+              {
+                "line": 16,
+                "criterion": "- [ ] Affected behavior tests, scanner and smoke pass; independent review and required source CI are recorded truthfully.",
+                "result": "passed",
+                "evidence": "main merge 1c6ab78e (tree 8c87de6c = batch head 50253d96 tree): affected tests 138 passed on the source head and 366 on the batch tree (run by me); scripts/acl_scan_secrets.py clean and scripts/acl_smoke.py OK on main 1c6ab78e (run by me); independent source review recorded by Reviewer-X19986 (lane 3bd526a0, 10:38:30Z); source CI on 5bc4aea5 all pass; combined CI on PR 1016 16/16 pass."
+              }
+            ],
+            "356": [
+              {
+                "line": 13,
+                "criterion": "- [ ] Patched FastAPI/Starlette pair pinned everywhere the build reads pins; installer build green.",
+                "result": "passed",
+                "evidence": "main merge 1c6ab78e (tree 8c87de6c = batch head 50253d96 tree): requirements.txt (single pin source; requirements-dev/-extras include it via -r; the installer build reads it) pins fastapi==0.141.1 + starlette==1.7.0 (>=1.3.1) + jinja2==3.1.6. Installer jobs on PR 1016 (same tree): Verify build inputs, Build/install/repair/uninstall and Installer verification pass; Windows installer workflow on main 1c6ab78e succeeded."
+              },
+              {
+                "line": 14,
+                "criterion": "- [ ] Tests: UNC and drive-letter paths to /static are refused without touching the network; oversized bodies and too many fields are refused (413/400); a realistic creative upload still works.",
+                "result": "passed",
+                "evidence": "main merge 1c6ab78e (tree 8c87de6c = batch head 50253d96 tree): tests/test_request_limits.py sends 10 hostile /static paths (UNC host/share, UNC long-path prefix, //host, encoded //host, drive letter with slash and backslash, drive-relative, rooted backslash, parent traversal, NTFS stream) and gets 404 with StaticFiles.lookup_path monkeypatched to fail if reached; oversized declared and streamed bodies get 413 before parsing; too many fields, an oversized part and file parts get 400; a realistic 60x12 Builder form (urlencoded and multipart) gets 200. 269 passed with the new pins (run by me) and in PR 1016 CI."
+              },
+              {
+                "line": 15,
+                "criterion": "- [ ] Full test suite green on Windows CI.",
+                "result": "passed",
+                "evidence": "PR 1016 CI on head 50253d96 (tree 8c87de6c, identical to the main 1c6ab78e tree): 'windows tests (3.13)' pass (full suite), plus linux 3.11 x3 and 3.13 x3 pass; source PR 942 CI windows tests pass on 6c688bd3."
+              }
+            ],
+            "287": [
+              {
+                "line": 20,
+                "criterion": "- [ ] No Russian text can reach the account row: grep of the strings assigned to `error`, `how`, `entered` in `country_split.py` and `account_spend.py` returns only English.",
+                "result": "passed",
+                "evidence": "main merge 1c6ab78e (tree 8c87de6c = batch head 50253d96 tree): AST scan (by me) of every non-docstring string literal in src/analysis_agent/country_split.py and account_spend.py, with JS // and /* */ comments removed: country_split.py has 0 Cyrillic, account_spend.py only 2 log.error() journal messages (never rendered). Guards tests/test_country_split_reasons_are_english.py and tests/test_account_spend_reasons_are_english.py (added by PR 964; also covers account_spend_api.py and mlx_session.py) pass."
+              },
+              {
+                "line": 21,
+                "criterion": "- [ ] Tests that asserted the Russian phrases assert the English ones; full suite green.",
+                "result": "passed",
+                "evidence": "main merge 1c6ab78e (tree 8c87de6c = batch head 50253d96 tree): grep of tests/ for the Russian phrases listed in the Issue finds only code comments/docstrings and one synthetic guard sample; product-text assertions are English (e.g. test_account_spend 'not in the account map', 'no ad account number', 'without campaign ids'). The two remaining Russian strings in test_account_spend.py are synthetic exception messages raised by the test itself to check pass-through, not product text. Full suite green: PR 1016 CI linux x6 + windows pass on the same tree."
+              },
+              {
+                "line": 22,
+                "criterion": "- [ ] A failed country split and a failed spend read shown on screen (or in a test fixture) read as English sentences end to end.",
+                "result": "passed",
+                "evidence": "main merge 1c6ab78e (tree 8c87de6c = batch head 50253d96 tree): test_country_refresh_review renders a failed country split into the account row ('countries failed' marker with the English error in its title) and test_read_fallback renders a failed spend read ('profile is closed' in the cell, old amount kept); the texts the modules can produce are English per the guards above. 128 passed on main (run by me; read_fallback rerun with tests/ on the import path)."
+              }
+            ]
+          },
+          "report": "Post-main acceptance for batch a12a28c2 / PR 1016 by the retained independent integration Reviewer-X19BAT. Main merge 1c6ab78e has parents 435bc154 and batch head 50253d96; its tree 8c87de6c equals the reviewed batch tree. Issues #864 and #787 have no unchecked criteria. Every unchecked line of #871, #356 and #287 was checked against the merged code, tests run by me (366 affected on the batch tree; 128 for #287 on main; scanner and smoke on main) and CI (PR 1016 16/16, main CI and Windows installer success). No criterion needed a live dashboard or installed-package check. The owner smoke check of the live dashboard described in #356's implementation notes is not a checkbox and is not attested here."
+        },
+        "recorded_at": "2026-10-19T13:40:21+00:00"
       }
     },
     "policy_migrations": [
@@ -90656,6 +90769,12 @@
         "pr": 958,
         "lane": "e3594baab1de415b91cc01738dffef86",
         "actor": "Reviewer-R142E"
+      },
+      {
+        "event": "post-main-acceptance-recorded",
+        "at": "2026-10-19T13:40:21+00:00",
+        "batch_id": "a12a28c2b40d481db2305e6bb020724d",
+        "pr": 1016
       }
     ],
     "policy": {
