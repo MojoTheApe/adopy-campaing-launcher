@@ -44041,20 +44041,6 @@
         "started_at": "2026-10-19T17:51:45+00:00",
         "from_status": "status:todo"
       },
-      "896": {
-        "actor": "Worker-R1019896",
-        "session": "run_r1019_896",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1896-instagram-identity",
-        "worktree": "C:\\acl-1896",
-        "id": "94d780bdcb5b4ef6a86a3646cf780d24",
-        "issue": 896,
-        "state": "handoff",
-        "started_at": "2026-10-19T18:34:27+00:00",
-        "from_status": "status:todo",
-        "pr": 949,
-        "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main into the branch. The only conflict was docs/system/CHANGELOG.md (kept both entries). Re-ran tests/test_acl1896_instagram_identity.py, test_acl1761_api_create.py, test_acl1819_preflight.py, test_acl1775_instant_forms.py: 285 passed. No functional changes beyond the merge; no live runs."
-      },
       "853": {
         "actor": "Worker-U1019853",
         "session": "run_u1019_853",
@@ -50349,25 +50335,25 @@
             "session": "run_r1019_896"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-R1019896",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-1896A",
-          "session": "acl1896_20261016",
-          "coordinator": "Coordinator-1ECF",
+          "actor": "Worker-R1019896",
+          "session": "run_r1019_896",
+          "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1896-instagram-identity",
           "worktree": "C:\\acl-1896",
-          "id": "6a20b77a066f4d1f9a92746034e3503a",
+          "id": "94d780bdcb5b4ef6a86a3646cf780d24",
           "issue": 896,
           "state": "handoff",
-          "started_at": "2026-10-16T13:02:56+00:00",
-          "from_status": "status:backlog",
+          "started_at": "2026-10-19T18:34:27+00:00",
+          "from_status": "status:todo",
           "pr": 949,
-          "report": "ACL-1896 PR #949 (supersedes closed draft #898, which was stacked on the unmerged TEST9095 build). Worker-1896A ported only the ACL-1896 change onto main af0ade29 in work/acl-1896-instagram-identity (commit 33fc9219): read-only Instagram identity discovery (src/fb_api/instagram.py, <=2 reads cached per Page), server pre-flight rule instagram_identity (table + JSON), refusal before any write, object_story_spec.instagram_user_id sent and read back, one numeric field in both write-policy layers, instagram_actor_id refused. Main has no estimate_create_calls and no asset feed, so those parts of #898 were dropped. Local: test_acl1896 26 passed; mutation (skip _require_instagram) fails 5; all creator/policy/preflight/publish_api suites 990 passed, 1 skipped, one Playwright timeout under load that passes alone. 1775 golden compared without the Instagram additions. Nothing live run; live acceptance on the authorized test dashboard remains (token returns the Page fields, Meta accepts instagram_user_id, where readback returns it)."
+          "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main into the branch. The only conflict was docs/system/CHANGELOG.md (kept both entries). Re-ran tests/test_acl1896_instagram_identity.py, test_acl1761_api_create.py, test_acl1819_preflight.py, test_acl1775_instant_forms.py: 285 passed. No functional changes beyond the merge; no live runs."
         },
         "pr": 949,
-        "queued_at": "2026-10-16T13:15:07+00:00",
+        "queued_at": "2026-10-19T18:57:23+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -57181,7 +57167,8 @@
       72,
       805,
       151,
-      945
+      945,
+      896
     ],
     "review": null,
     "history": [
@@ -93072,6 +93059,13 @@
         "at": "2026-10-19T18:56:33+00:00",
         "issue": 1020,
         "reason": "Folded into ACL-1768 (PR #833): the ad set controls exist only in that PR, so the compact layout ships with it. Patch: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/833#issuecomment-6274773332"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T18:57:23+00:00",
+        "issue": 896,
+        "pr": 949,
+        "actor": "Worker-R1019896"
       }
     ],
     "policy": {
