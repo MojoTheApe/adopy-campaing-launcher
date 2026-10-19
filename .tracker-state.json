@@ -43239,9 +43239,11 @@
         "worktree": "C:\\acl-1165-c",
         "id": "70ec71ce168f4b43b4d7f6143cb96f84",
         "issue": 165,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T12:49:40+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 953,
+        "report": "# ACL-1165 refresh onto current main (PR #953)\n\nHead: 2146ec9d5e07f92951e97b1a10baef9cad70e51a (merge commit only; no code changes).\n\n- Merged origin/main. One conflict: docs/system/CHANGELOG.md; kept every entry (main's ACL-1381 and ACL-1971 entries plus the ACL-1165 entry).\n- main changed browser.py elsewhere (ACL-1727, 1604, 1702, ...) but not the attach/relaunch code touched here; the diff against main is still only the log wording.\n- Behaviour unchanged: the relaunch refusal and the FB_RPA_ALLOW_UNPROXIED_RELAUNCH gate are untouched.\n- Tests (Python 3.14): 205 passed (the new attach-log test, relaunch gate, attach short path, connect-without-act, hand-opened profile tests, campaign open test, platform guard).\n- CI was running at handoff; tracker-link fails until the task is in Review."
       },
       "29": {
         "actor": "Worker-W123C",
