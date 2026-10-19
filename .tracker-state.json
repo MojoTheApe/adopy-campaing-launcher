@@ -43067,9 +43067,11 @@
         "worktree": "C:\\wk19-787",
         "id": "efbcd7436d9a462a8a769477e492b1b5",
         "issue": 787,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T10:02:20+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 956,
+        "report": "ACL-1787 docs-only research (docs/research/ACL-1787-meta-ad-rules.md), no code change. Merged origin/main 435bc154 into the PR branch (clean, no conflicts; diff vs main is the single doc file). Checks: scripts/acl_scan_secrets.py OK (no secrets), scripts/acl_smoke.py OK (dashboard and RPA import). No unit tests affected (doc only). Owner lifted the administrative pause on 2026-10-19."
       },
       "401": {
         "actor": "Worker-E19401",
