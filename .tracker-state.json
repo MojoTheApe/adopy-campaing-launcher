@@ -102500,7 +102500,51 @@
         "session": "reviewer-r1379y-20261019",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-19T21:11:08+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 379,
+          "pr": 943,
+          "branch": "work/acl-1379-turnoff-by-name",
+          "head_sha": "139caa6d849f85ad5ea6fddfc9003c939a75011f",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "192bf5b868df45dee84613055bbdb740b50d0a0fbee228106e914f5420f7d4fa",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-R1379Y",
+            "review_session": "reviewer-r1379y-20261019",
+            "execution_lane": "6c79dca885ad4e17b2d3e51a8c648831",
+            "implementer": "Worker-R1019379",
+            "head_sha": "139caa6d849f85ad5ea6fddfc9003c939a75011f",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "tree_sha": "6afa58281d5420698efcff2bc49b5ab850d77e16",
+            "issues": [
+              379
+            ],
+            "report": "PR #943 lets the dashboard turn off a campaign by its exact name on Ads Manager accounts whose campaign table has no row ids (Doc19/20/21 since 18.09). account_spend._turn_off routes an empty object_id to the new _turn_off_by_name only when the request explicitly carries match=name and level=campaign; ads without ids stay refused with an English reason, and a missing id without match=name is still refused, so a lost id never silently becomes a name search. The by-name path attaches only through _attach_only (Multilogin, no plain-browser fallback), refuses names with control/format characters, normalises whitespace exactly as the page does (_page_name, verified against the page's own regex over every BMP character) and strips Meta's trailing labels like the ACL-1395 reader (X and X Draft count as two matches). _FIND_BY_NAME_JS requires exactly one visible table, no table_row ids, a page-confirmed campaign level, on-screen switch rows equal to the table's own 'Results from N campaigns' counter (counter parsed whole), exactly one exact (case-sensitive) match, and the embedded page data must not list the name under two ids. The click runs in the same browser task as a period re-check and requires the same row node, same switch node, same URL, same switch label (also passed through wizard_guard.forbidden_click_reason), a non-disabled, uncovered own switch; an already-off switch is never clicked. Readback requires the unique row to read off, then again after a reload with context re-checked; reverted, unconfirmed and exception-after-click outcomes are reported as failed/unconfirmed, not success. Every outcome is journaled through turn_off/_record_turn_off with matched_by='name' (including the route-level busy refusal via refuse_turn_off and exceptions), and the saved tree is marked off only for the single id-less row with that clean name (shared names are left untouched). A publish job queued/running on the same Multilogin profile (or finished while the turn-off waited for the profile lock, via since) refuses with HTTP 409 'The robot is building campaigns in this profile - wait for it to finish.', checked in the route and again under the profile lock, failing closed if the check errors; this also applies to by-id turn-off and is documented in the CHANGELOG. report.html enables the button for an id-less campaign only when its clean name is unique in the tree, sends match=name, shows the result or refusal in words under the name, keeps the button on a busy refusal, and keeps id-less ads disabled with an explanatory English tooltip. Acceptance criteria: unique name pressed and verified off (fixture test on the scrubbed Doc19 capture), duplicate/missing/near-duplicate/partial/rerendered/swapped/covered/disabled/period-changed refused with zero clicks, busy profile refused before the browser, UI button and result display covered by tests; the owner live check on Doc19/Doc21 is not done and remains with the owner. Tests run locally on this head: test_turn_off_by_name_browser.py, test_turn_off_route_by_name.py, test_turn_off_safety_browser.py, test_the_account_tree_on_screen.py, test_account_spend.py, test_account_spend_reasons_are_english.py: 248 passed, 10 failed; all 10 failures are in test_turn_off_route_by_name.py and are the known local-environment Starlette TypeError (Request.form() max_part_size), not the PR. GitHub CI on 139caa6d is fully green (linux tests 1-3, windows tests, process instructions, tooling, installer verification, descriptor, tracker-link). Non-blocking nits: (1) ACL-1945 (PR 1022) adds the same TurnOffResult.matched_by field and an identical publish_jobs.profile_in_use, which merge cleanly, but app.py and CHANGELOG conflict with this PR; whoever merges second must keep the by-name validation before the API branch so a match=name request is never sent to the Graph API path (it would fail closed there anyway, but be journaled as matched_by='id'). (2) Vocabulary drift: RPA by-id rows log matched_by='' while API rows log 'id'; consider aligning to 'id' later. (3) If Meta's embedded page data is absent the second duplicate check is skipped silently (table checks still apply), as disclosed by the author. No live checks claimed.",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "recorded_at": "2026-10-19T21:32:01+00:00",
+            "issue_scopes": {
+              "379": "192bf5b868df45dee84613055bbdb740b50d0a0fbee228106e914f5420f7d4fa"
+            }
+          },
+          "lane": {
+            "id": "6c79dca885ad4e17b2d3e51a8c648831",
+            "pr": 943,
+            "issues": [
+              379
+            ],
+            "actor": "Reviewer-R1379Y",
+            "session": "reviewer-r1379y-20261019",
+            "coordinator": "Coordinator-M1011A",
+            "started_at": "2026-10-19T21:11:08+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-19T21:32:30+00:00"
+        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
