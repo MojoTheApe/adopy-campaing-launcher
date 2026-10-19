@@ -43045,7 +43045,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "356": {
+        "actor": "Worker-E19356",
+        "session": "w356-c0a1de70",
+        "coordinator": "Coordinator-E1019A",
+        "branch": "work/acl-1356-starlette",
+        "worktree": "C:\\wk19-356",
+        "id": "9e70b39ff0c0444f9538213543ea5cb1",
+        "issue": 356,
+        "state": "implementing",
+        "started_at": "2026-10-19T08:15:42+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -49089,11 +49102,15 @@
           {
             "actor": "Worker-7k2q9",
             "session": "s-a75a7899"
+          },
+          {
+            "actor": "Worker-E19356",
+            "session": "w356-c0a1de70"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-7k2q9",
-        "coordinator": "Coordinator-M1011A",
+        "state": "implementing",
+        "worker": "Worker-E19356",
+        "coordinator": "Coordinator-E1019A",
         "handoff": {
           "actor": "Worker-7k2q9",
           "session": "s-a75a7899",
@@ -49115,8 +49132,7 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578044+00:00",
           "remote_process_stopped_verified": false
-        },
-        "reviewer": "Reviewer-E19356"
+        }
       },
       "379": {
         "implementers": [
@@ -52843,6 +52859,10 @@
       },
       "Worker-E19871": {
         "session": "w871-c0a1de70",
+        "role": "Worker"
+      },
+      "Worker-E19356": {
+        "session": "w356-c0a1de70",
         "role": "Worker"
       }
     },
@@ -88377,6 +88397,13 @@
             "approved_at": "2026-10-19T08:13:23+00:00"
           }
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T08:15:42+00:00",
+        "issue": 356,
+        "claim": "9e70b39ff0c0444f9538213543ea5cb1",
+        "actor": "Worker-E19356"
       }
     ],
     "policy": {
