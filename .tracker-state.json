@@ -43027,6 +43027,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T07:38:15+00:00",
         "from_status": "status:todo"
+      },
+      "871": {
+        "actor": "Worker-E19871",
+        "session": "w871-c0a1de70",
+        "coordinator": "Coordinator-E1019A",
+        "branch": "work/acl-1871-builder-side-tab",
+        "worktree": "C:\\wk19-871",
+        "id": "43be5f154c9e4d2c85f0a724561c7ce8",
+        "issue": 871,
+        "state": "implementing",
+        "started_at": "2026-10-19T07:39:42+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -48105,11 +48117,15 @@
           {
             "actor": "Worker-1871",
             "session": "acl1871-sonnet-20261017"
+          },
+          {
+            "actor": "Worker-E19871",
+            "session": "w871-c0a1de70"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-1871",
-        "coordinator": "Coordinator-M1011A",
+        "state": "implementing",
+        "worker": "Worker-E19871",
+        "coordinator": "Coordinator-E1019A",
         "handoff": {
           "actor": "Worker-1871",
           "session": "acl1871-sonnet-20261017",
@@ -48131,8 +48147,7 @@
           "remote_process_stopped_verified": false
         },
         "pr": 986,
-        "queued_at": "2026-10-17T19:24:43+00:00",
-        "reviewer": "Reviewer-E19871"
+        "queued_at": "2026-10-17T19:24:43+00:00"
       },
       "872": {
         "implementers": [
@@ -52816,6 +52831,10 @@
       },
       "Worker-E19287": {
         "session": "w287-c0a1de70",
+        "role": "Worker"
+      },
+      "Worker-E19871": {
+        "session": "w871-c0a1de70",
         "role": "Worker"
       }
     },
@@ -88159,6 +88178,13 @@
         "issue": 287,
         "claim": "f0d582cf91f746c28b2d3b14f26ba349",
         "actor": "Worker-E19287"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T07:39:42+00:00",
+        "issue": 871,
+        "claim": "43be5f154c9e4d2c85f0a724561c7ce8",
+        "actor": "Worker-E19871"
       }
     ],
     "policy": {
