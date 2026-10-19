@@ -94855,7 +94855,51 @@
         "session": "rev-y19b-s1",
         "coordinator": "Coordinator-E1019A",
         "started_at": "2026-10-19T10:23:37+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 787,
+          "pr": 956,
+          "branch": "codex/acl-1787-ad-rules-research",
+          "head_sha": "507b1ac896e8f79ae63db0ccc220e301b593326b",
+          "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+          "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "072075680194e9c34c8c58470312d713dbf6be600ed939a280019c0b36701dcb",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-Y19B",
+            "implementer": "Worker-E19787",
+            "head_sha": "507b1ac896e8f79ae63db0ccc220e301b593326b",
+            "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+            "tree_sha": "0cf0f98c3e30acfaa0f878cc349ceb0fe790d316",
+            "execution_lane": "2cee58424fc74b43b929c07f91df95a7",
+            "review_session": "rev-y19b-s1",
+            "report": "Independent source review of PR 956 (ACL-1787, Issue 787), head 507b1ac8, base main 435bc154. Docs-only: one new file docs/research/ACL-1787-meta-ad-rules.md (+128).\nRequirements: the Issue asks for a written finding (works / does not work, permissions, payload, recommendation). The file states honestly that this is desk research with no live call, labels every claim verified/inference/unknown, lists the live-test plan (allowlisted account, paused ad set, DISABLED rule, explicit owner go) and recommends not building yet. Acceptance for a research step is met; the live part is correctly left to a gated pilot.\nSpot-checked the repo claim: src/fb_api/write_policy.py on main forbids DELETE and the execution_options key, as the document says. No code, no secrets, no tokens/ids; English only. No bugs found.\nCI on head: ACL verification, Process instructions, Classify, Installer verification, tracker-link, descriptor all pass; code test jobs skipped as docs-only. No tests to run locally.\nVerdict: approved.\n",
+            "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              787
+            ],
+            "recorded_at": "2026-10-19T10:29:00+00:00",
+            "issue_scopes": {
+              "787": "072075680194e9c34c8c58470312d713dbf6be600ed939a280019c0b36701dcb"
+            }
+          },
+          "lane": {
+            "id": "2cee58424fc74b43b929c07f91df95a7",
+            "pr": 956,
+            "issues": [
+              787
+            ],
+            "actor": "Reviewer-Y19B",
+            "session": "rev-y19b-s1",
+            "coordinator": "Coordinator-E1019A",
+            "started_at": "2026-10-19T10:23:37+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-19T10:29:44+00:00"
+        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
