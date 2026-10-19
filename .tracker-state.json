@@ -44006,7 +44006,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "805": {
+        "actor": "Worker-S1019805",
+        "session": "run_s1019_805",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1805-rules-before-write",
+        "worktree": "C:\\acl-1805",
+        "id": "27d37ef9b03840b6922caf58ab943d8c",
+        "issue": 805,
+        "state": "implementing",
+        "started_at": "2026-10-19T17:48:11+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -51913,6 +51926,17 @@
         "pr": 1015,
         "queued_at": "2026-10-18T21:11:23+00:00",
         "reviewer": "Reviewer-PV82A"
+      },
+      "805": {
+        "implementers": [
+          {
+            "actor": "Worker-S1019805",
+            "session": "run_s1019_805"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1019805",
+        "coordinator": "Coordinator-M1011A"
       }
     },
     "actors": {
@@ -54123,6 +54147,10 @@
       "Reviewer-DV1019G": {
         "session": "dv1019g-904",
         "role": "Reviewer"
+      },
+      "Worker-S1019805": {
+        "session": "run_s1019_805",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -92702,6 +92730,13 @@
             "approved_at": "2026-10-19T17:42:20+00:00"
           }
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T17:48:11+00:00",
+        "issue": 805,
+        "claim": "27d37ef9b03840b6922caf58ab943d8c",
+        "actor": "Worker-S1019805"
       }
     ],
     "policy": {
