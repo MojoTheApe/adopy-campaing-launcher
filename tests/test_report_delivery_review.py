@@ -58,7 +58,7 @@ def test_report_route_returns_queue_state_and_selected_dates(monkeypatch):
     seen = {}
     monkeypatch.setattr(acl_sentry, 'report_problem', lambda text, context: seen.update(context) or 'synthetic-event')
     class Request:
-        async def form(self): return {'text': 'Synthetic report', 'from': '2026-09-01', 'to': '2026-09-15', 'span': ''}
+        async def form(self, **_limits): return {'text': 'Synthetic report', 'from': '2026-09-01', 'to': '2026-09-15', 'span': ''}
     response = asyncio.run(web.report_problem(Request()))
     assert response.status_code == 202
     assert json.loads(response.body)['queued'] is True
