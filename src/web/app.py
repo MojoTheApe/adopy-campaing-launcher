@@ -3996,6 +3996,12 @@ async def account_spend_turn_off(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": "account and object_id are required"}, status_code=400)
     if level not in ("campaign", "ad"):
         return JSONResponse({"ok": False, "error": "level must be campaign or ad"}, status_code=400)
+    from src.analysis_agent import account_spend_api
+
+    if account_spend_api.api_enabled():
+        # ACL-1945: под `ACL_FB_BACKEND=api` выключаем по id через Graph API из профиля,
+        # а не кликом по тумблеру; период тут ни к чему — таблицу никто не читает.
+        return await _turn_off_via_api(form, account, level, object_id)
     try:
         date_from, date_to = _spend_period(str(form.get("date_from") or ""), str(form.get("date_to") or ""), str(form.get("span") or ""))
     except ValueError as exc:
@@ -4022,6 +4028,45 @@ async def account_spend_turn_off(request: Request) -> JSONResponse:
     except Exception:
         return JSONResponse({"ok": False, "error": "Could not reach the account. Check the launcher window."}, status_code=503)
     return JSONResponse({"ok": True, "result": result.to_dict()})
+
+
+async def _turn_off_via_api(form, account: str, level: str, object_id: str) -> JSONResponse:
+    """Выключение по id через Graph API (ACL-1945). Тот же ответ, что у RPA-пути."""
+    from datetime import datetime, timezone
+    from starlette.concurrency import run_in_threadpool
+
+    from src.analysis_agent import account_spend, account_spend_api
+    from src.web import publish_jobs
+
+    requester = (os.environ.get("MY_CM_NAME") or "").strip()
+    name = str(form.get("name") or "").strip()
+    parent_id = (form.get("parent_id") or "").strip()
+    # Робот строит кампании в этом профиле — отказ сразу, а не очередь за замком профиля.
+    # Под замком `turn_off` спросит ещё раз: `since` помнит и задание, успевшее
+    # закончиться, пока мы ждали.
+    since = datetime.now(timezone.utc).isoformat()
+    try:
+        busy = publish_jobs.profile_in_use(account_spend._profile_key(account))
+    except Exception:
+        busy = True
+    if busy:
+        result = account_spend_api._api_result(account, level, object_id, name, requester)
+        result.error = account_spend_api.PROFILE_BUSY_ERROR
+        account_spend._record_turn_off(result)
+        return JSONResponse({"ok": False, "busy": True, "error": result.error,
+                             "result": result.to_dict()}, status_code=409)
+    try:
+        result = await run_in_threadpool(
+            account_spend_api.turn_off, account, level, object_id,
+            parent_id=parent_id, expected_name=name, requester=requester,
+            profile_busy=lambda key: publish_jobs.profile_in_use(key, since=since),
+        )
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Could not reach the account. Check the launcher window."}, status_code=503)
+    body = {"ok": True, "result": result.to_dict()}
+    if result.error == account_spend_api.PROFILE_BUSY_ERROR:
+        body["busy"] = True
+    return JSONResponse(body)
 
 
 @app.get("/account-spend/turn-off-history")
