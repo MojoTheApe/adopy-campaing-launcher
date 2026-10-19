@@ -44137,6 +44137,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T19:58:12+00:00",
         "from_status": "status:todo"
+      },
+      "379": {
+        "actor": "Worker-R1019379",
+        "session": "run_r1019_379",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1379-turnoff-by-name",
+        "worktree": "C:\\acl-1379-main",
+        "id": "917c7b0ab8734bd28a43d9d9b6d32e4a",
+        "issue": 379,
+        "state": "implementing",
+        "started_at": "2026-10-19T20:01:45+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -50291,10 +50303,14 @@
           {
             "actor": "Worker-W1015T",
             "session": "c2c6b65e-1379"
+          },
+          {
+            "actor": "Worker-R1019379",
+            "session": "run_r1019_379"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-W1015T",
+        "state": "implementing",
+        "worker": "Worker-R1019379",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-W1015T",
@@ -54520,6 +54536,10 @@
       "Reviewer-R1945Y": {
         "session": "reviewer-r1945y-20261019",
         "role": "Reviewer"
+      },
+      "Worker-R1019379": {
+        "session": "run_r1019_379",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -93676,6 +93696,13 @@
         "issue": 992,
         "pr": 993,
         "actor": "Worker-R1019992"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T20:01:45+00:00",
+        "issue": 379,
+        "claim": "917c7b0ab8734bd28a43d9d9b6d32e4a",
+        "actor": "Worker-R1019379"
       }
     ],
     "policy": {
