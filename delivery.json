@@ -1,9 +1,9 @@
 {
   "exceptions": [
     {
-      "scope": "Unreleased standard",
-      "reason": "The selected reviewed source VERSION 1.0.0 has no published release. Keep the descriptor draft until a reviewed published revision is adopted. Workflow activation uses genuine cutover and normal stage/main evidence; structural validation alone is not operational proof.",
-      "reference": "docs/repository/ADOPTION.md"
+      "scope": "Published workflow support source",
+      "reason": "The selected Master1.5.3 / Tracker3.7.1 pair is published. This compatible support upgrade preserves existing ACL policies and supplies the separate one-policy selection-package delivery bridge. It does not verify Task05/06 policy selections, owned activation, reader/every-writer/recovery readiness, board/behavior or comparable ordinary outcomes; adoption remains draft until those actual gates are settled. Existing package and delivery controls are preserved.",
+      "reference": "docs/repository/EARLY_ADOPTION.md"
     },
     {
       "scope": "ACL public task identities",
@@ -66,8 +66,8 @@
   },
   "standard": {
     "repository": "https://github.com/MojoTheApe/master-repo",
-    "revision": "a3f56106f52d0ae19986920519b2fa46a380798b",
-    "version": "1.0.0"
+    "revision": "6f7e9416e68c66484a3b6c0213eab24847005b8f",
+    "version": "1.5.3"
   },
   "checks": [
     "python scripts/acl_scan_secrets.py",
@@ -81,7 +81,7 @@
     "repository": "MojoTheApe/task-tracker",
     "verification": "Existing acl board verified server-side on 2026-09-21 after Task Tracker PR #64 deployment 0dadc889e18b027c8ca98b888407d492848f2f19: 160 identities, seven columns, 74 bounded historical completions, all six fresh snapshots, preserved authentication and restricted HTTP access. Browser verification excluded by owner. See docs/repository/ADOPTION.md and ACL-1248.",
     "registration": "verified",
-    "revision": "e775c624e0323e69ed891926691c3dee6587081a",
+    "revision": "be87599d1b5e625058bbddc33c35bda86687b5bf",
     "workspace_id": "acl"
   },
   "completion": "verified-stable-package",

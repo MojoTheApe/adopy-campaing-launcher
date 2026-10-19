@@ -77,6 +77,8 @@ def slots_to_campaign_drafts(
                 # ACL-1770: ключей нет у слотов без своей Страницы/ссылки - прежние черновики те же.
                 page_id=(s.get("page_id") or "").strip(),
                 link=(s.get("link") or "").strip(),
+                lead_form_template=((s.get("lead_form_template") or "").strip()
+                                    if destination == "instant_form" else ""),
             )
             for s in group
         ]

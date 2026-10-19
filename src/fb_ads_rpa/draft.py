@@ -50,6 +50,8 @@ class AdDraft:
     # Пусто - как у кампании.
     page_id: str = ""
     link: str = ""
+    # ACL-1776: id шаблона формы из библиотеки (форму создаёт робот; только API-бэкенд).
+    lead_form_template: str = ""
 
     def ad_name(self) -> str:
         """Name for the ad in Ads Manager: "<creative> [<variant>] - <text>".
@@ -98,6 +100,8 @@ class AdDraft:
             out["page_id"] = self.page_id
         if self.link:
             out["link"] = self.link
+        if self.lead_form_template:
+            out["lead_form_template"] = self.lead_form_template
         return out
 
 
