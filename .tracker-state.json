@@ -4988,6 +4988,27 @@
           "902": "5ea254204ad12b6db316af984425614260f436776360cc83218fbe5157c7b05d",
           "886": "291706aa97fea07f175753abc951ee231d86a7ea2d52cd679f94cf2db3f7bf9d"
         }
+      },
+      "950": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1151Y",
+        "review_session": "reviewer-r1151y-20261019",
+        "execution_lane": "8d00de9887014aa68193aca908a71d6f",
+        "implementer": "Worker-R1019151",
+        "head_sha": "7f2bd6358300f02662f49fb9841ff18f3147b0c9",
+        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "tree_sha": "74ea72cef2ea42af22905597eabedb4c38d04f24",
+        "issues": [
+          151
+        ],
+        "report": "Reviewed head 7f2bd635 (merge of main c6150160 into the PR branch; the merge brings only main, and git diff work/main...HEAD is the same 8-file, +552/-117 diff I reviewed on 3f3b9b9a). Issue #151 asks that the account map's connect form derive and request the profile in one shared place, like the Accounts tab, with no 'last letters' search and no Reload. The PR adds src/web/profile_connection.py (suggest_account_name, derive, known_labels, remember_labels) as the single derivation rule; /mlx-profile-details, the new GET /mlx-open-profiles and /api/accounts-overview (suggested_name per open profile) all call it, replacing the server-side _account_name_from_profile and the Accounts tab's JS tailKey copy that disagreed with it. _account_map_add.html is one picker: an empty field lists profiles open on this machine with derived name and ad account (empty list with a 'Connect Multilogin ... below' message when no live token), typed text searches the whole Multilogin workspace; the last-letters placeholder and Reload button are removed and search answers expire after 60 s. A single aclConnectAccount() posts /account-map-patch for the map Connect, the tab's Connect by hand, row Save and the country form, so the Accounts tab path was only refactored onto the shared helper (payload fields preserved, ad_account_id kept even when empty per ACL-1588) with no behavioural regression seen; the ACL-1839 panel layout in main is untouched. User-facing text is English. Tests: new tests/test_acl_1151_pick_a_profile.py plus the touched/affected suites (accounts_tab_connects_the_same_way, connecting_an_account_is_one_place, one_connect_button, connect_without_act, connect_account_in_empty_country, manage_accounts_table, acl_1588_any_account, review_ui_regressions, the_builder_tree): 93 passed, 1 failed locally: test_acl_1588_any_account.py::test_a_second_open_of_the_same_profile_does_not_start returns HTTP 500 locally, but it fails identically on a clean checkout of main c6150160 (not in this diff, environment-related), and CI passes. node harnesses account_search_harness.cjs and acl_1588_connect_harness.cjs (run with report.html as argument) exit 0. CI on head 7f2bd635: linux tests 1/2/3, windows tests, installer verification, process instructions, tooling classification, descriptor and tracker-link all pass. Non-blocking nits: /mlx-open-profiles ignores the selected Multilogin instance (lists all machine-open profiles); remembered labels are process-memory and empty until the first accounts overview (map labels still used); many code comments are Russian per repo convention. Python change needs a serve.py restart on the dashboard. No live checks claimed.",
+        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "recorded_at": "2026-10-19T20:33:34+00:00",
+        "issue_scopes": {
+          "151": "d2686c1162fe0368860ae56a0ab7cba6b83420d8c0f1fcb53d7812528126df05"
+        }
       }
     },
     "stage": {
