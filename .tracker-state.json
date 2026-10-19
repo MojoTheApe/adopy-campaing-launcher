@@ -4600,6 +4600,27 @@
         "issue_scopes": {
           "787": "072075680194e9c34c8c58470312d713dbf6be600ed939a280019c0b36701dcb"
         }
+      },
+      "986": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-X19986",
+        "implementer": "Worker-E19871",
+        "head_sha": "5bc4aea51efb029d8e33d4bfaad06e6e04a60f3f",
+        "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+        "tree_sha": "aadc73a000426347936d3e01ed51d362d1011f95",
+        "execution_lane": "3bd526a047854eebb62bafacfdc02f0c",
+        "review_session": "rx986-1c30cbbe",
+        "report": "# ACL-1871 / PR #986 \u2014 independent source review (Reviewer-X19986)\n\nReviewer session `rx986-1c30cbbe`, separate Claude session (not a subagent of the\ncoordinator or of the worker). Lane obtained by supported `execution review-takeover`\nfrom the stopped Reviewer-E19871 lane. I implemented none of this work.\n\nReviewed head `5bc4aea51efb029d8e33d4bfaad06e6e04a60f3f` (merge of main `435bc154`\ninto the original ACL-1871 work), base `435bc154`, tree `aadc73a0`. Full scope:\nIssue #871 (description, specifications, acceptance criteria) against the whole\nPR diff (`src/web/templates/report.html`, `tests/builder_drawer_harness.cjs`,\n`tests/test_acl1871_side_tab_browser.py`, `tests/test_acl1769_two_column_layout.py`,\n`tests/test_builder_second_primary_text.py`).\n\n## Requirements\n\n- Three separate accessible tab buttons (closed / normal / wide): `#cbd-preset-*`\n  in a `role=group aria-label=\"Builder size\"`, each with `aria-label`, `title`,\n  `aria-controls=\"cbd-panel\"` and `aria-pressed` kept in sync in `applySize()`.\n  Header Expand button removed; `cbDrawer.expand()/dock()` keep working via presets.\n- Label click toggles at the last size (mode/custom kept across close); pointer drag\n  resizes continuously with a 4 px dead zone, pointer capture, and the click that\n  follows a drag is swallowed (`swallowClick`, reset on `pointerdown`/`pointercancel`).\n  Inputs/drafts untouched: only `--cbd-w`, classes and `data-expanded` change.\n- Persistence: `acl.builder.width` = `wide` | `normal` | 3\u20134 digit px; garbage and\n  locked storage fall back to normal (try/catch); width clamped to\n  [min(320, max), viewport \u2212 56] and re-applied on `resize`.\n- Keyboard: ArrowLeft/ArrowRight on the focused handle resize by 40 px; buttons are\n  native `<button>`s. No outside-click or Escape dismissal added. Narrow screens:\n  normal width = min(480, viewport \u2212 40), so the tab stays visible (test at 420 px);\n  this also fixes the closed offset previously using the fixed 480 px.\n- Themes: only existing tokens (`--bg-elev`, `--border`, `--accent`, `--muted`,\n  `--focus-ring`, `--adopy-selected-bg` with fallback).\n- Obsolete ACL-1769 Expand/Dock right control reconciled: no remaining\n  `cbd-expand` / `acl.builder.expanded` references in src or tests.\n- English-only UI text: all new titles/labels are English; Russian appears only in\n  code comments (allowed). No secrets, ids, tokens or paths in the diff.\n\n## Checks run by me (only affected tests, on head 5bc4aea5)\n\n- `node tests/builder_drawer_harness.cjs` \u2014 ok; `node tests/builder_tree_harness.cjs` \u2014 ok.\n- pytest (13 drawer/builder files: test_acl1871_side_tab_browser, test_acl1769_two_column_layout,\n  test_acl1799_workbench_browser, test_acl1819_preflight_browser, test_builder_duplicate_buttons,\n  test_builder_multi_publish_browser, test_builder_publish_selected_browser,\n  test_builder_second_primary_text, test_campaign_build_dot_browser,\n  test_campaign_build_percent_browser, test_drawer_review_browser, test_field_contrast,\n  test_the_builder_drawer): **138 passed** (warnings only)\n- Required CI on 5bc4aea5 (`gh pr checks 986`): ACL verification, project tooling,\n  installer classification/verification, process instructions, descriptor,\n  linux tests 3.13 \u00d73, windows tests 3.13, tracker-link \u2014 all pass; installer\n  build jobs skipped by the classifier (no installer inputs changed).\n\n## Findings\n\nBlocking: none.\n\nNon-blocking:\n1. If a drag ends without the browser emitting a `click` on the handle, `swallowClick`\n   stays set and the next keyboard Enter/Space activation of the handle is ignored once\n   (pointer clicks reset it on `pointerdown`). Edge case only.\n2. `cbd-expanded` body class and `data-expanded` are still toggled (\u2265 800 px) for the\n   two-column layout CSS; consistent, just note it is now width-derived.\n3. Issue #871 body still carries the old \"Blocked: development is paused\" note; the\n   coordinator should make sure the Issue state reflects the authorized resumption.\n\nVerdict: approved.\n",
+        "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          871
+        ],
+        "recorded_at": "2026-10-19T10:38:30+00:00",
+        "issue_scopes": {
+          "871": "6ba29b2504b4a9e908d0b80c842b06da2bb2fdb8c1402ecacb62f0628680d930"
+        }
       }
     },
     "stage": {
