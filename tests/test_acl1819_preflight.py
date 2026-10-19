@@ -640,3 +640,12 @@ def test_the_retry_of_an_unanswered_submission_goes_through_the_gate():
     assert "window.cbPreflightGate([{ form: e.form, slots: slots }]" in body
     assert body.index("cbPreflightGate") < body.index("post(e, fd, skipped, sentNames)")
     assert "typeof window.cbPreflightGate !== 'function'" in body and "Pre-flight audit unavailable" in body
+
+
+def test_resolve_page_sets_the_account_default_source():
+    # ACL-1897: прямая проверка источника; кабинет с несколькими Страницами не стопорит запуск.
+    plan = cr.CampaignPlan.__new__(cr.CampaignPlan)
+    plan.page_id, plan.page_source = "", ""
+    facts = cr.AccountFacts(act=ACT, currency="USD", pages=["111", "222"], pixels=[])
+    cr.resolve_page(plan, facts)
+    assert (plan.page_id, plan.page_source) == ("111", "account default")
