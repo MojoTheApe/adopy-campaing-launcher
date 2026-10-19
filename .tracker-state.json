@@ -43003,21 +43003,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "902": {
-        "actor": "Worker-E19902",
-        "session": "w902-c0a1de70",
-        "coordinator": "Coordinator-E1019A",
-        "branch": "work/acl-1902-campaign-name-suffix",
-        "worktree": "C:\\wk19-902",
-        "id": "a6eec428eda64027861a7fa87f54fc34",
-        "issue": 902,
-        "state": "stopping",
-        "started_at": "2026-10-19T07:27:15+00:00",
-        "from_status": "status:todo",
-        "report": "Not refreshed on 2026-10-19: PR #904 is stacked on open ACL-1899 (#900) and ACL-1776; its diff vs main 435bc154 carries their commits. Resume after those merge, then merge main and hand off ACL-1902 alone."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -48507,22 +48493,21 @@
             "session": "w902-c0a1de70"
           }
         ],
-        "state": "implementing",
+        "state": "stopped",
         "worker": "Worker-E19902",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
-          "actor": "Worker-RF1016W",
-          "session": "rf1016w-20261016",
-          "coordinator": "Coordinator-M1011A",
+          "actor": "Worker-E19902",
+          "session": "w902-c0a1de70",
+          "coordinator": "Coordinator-E1019A",
           "branch": "work/acl-1902-campaign-name-suffix",
-          "worktree": "C:\\rf-902",
-          "id": "057f454aaede4de68b1c17e6d5db896d",
+          "worktree": "C:\\wk19-902",
+          "id": "a6eec428eda64027861a7fa87f54fc34",
           "issue": 902,
-          "state": "handoff",
-          "started_at": "2026-10-16T10:25:59+00:00",
+          "state": "stopping",
+          "started_at": "2026-10-19T07:27:15+00:00",
           "from_status": "status:todo",
-          "pr": 904,
-          "report": "Merged the refreshed ACL-1899 head 6743292c (which contains main af0ade29) into the previously approved head 3c5007af; only CHANGELOG conflicted, resolved by keeping both sides; no code change; 32 tests passed. Needs a delta review of the merge only."
+          "report": "Not refreshed on 2026-10-19: PR #904 is stacked on open ACL-1899 (#900) and ACL-1776; its diff vs main 435bc154 carries their commits. Resume after those merge, then merge main and hand off ACL-1902 alone."
         },
         "pr": 904,
         "queued_at": "2026-10-16T10:29:02+00:00",
@@ -88019,6 +88004,13 @@
         "pr": 993,
         "lane": "0f07c15381a5442ab7ca5f3be31ca310",
         "actor": "Reviewer-E19992"
+      },
+      {
+        "event": "stopped",
+        "at": "2026-10-19T07:30:27+00:00",
+        "issue": 902,
+        "actor": "Worker-E19902",
+        "report": "Not refreshed on 2026-10-19: PR #904 is stacked on open ACL-1899 (#900) and ACL-1776; its diff vs main 435bc154 carries their commits. Resume after those merge, then merge main and hand off ACL-1902 alone."
       }
     ],
     "policy": {
