@@ -43594,20 +43594,6 @@
         "state": "implementing",
         "started_at": "2026-10-19T14:21:47+00:00",
         "from_status": "status:todo"
-      },
-      "902": {
-        "actor": "Worker-RF1019X",
-        "session": "rf1019x-20261019",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1902-campaign-name-suffix",
-        "worktree": "C:\\rf19b-902",
-        "id": "ae944ec4c4294c9caf1876a88e908e3f",
-        "issue": 902,
-        "state": "handoff",
-        "started_at": "2026-10-19T14:38:06+00:00",
-        "from_status": "status:todo",
-        "pr": 904,
-        "report": "Merged new 899 head 94ab91c2 (includes 776 fix, main 1c6ab78e). Tests: acl1902_name_suffix + acl1761_existing_check 32 passed."
       }
     },
     "tasks": {
@@ -49157,25 +49143,25 @@
             "session": "rf1019x-20261019"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RF1019X",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-RF1019W",
-          "session": "rf1019w-20261019",
+          "actor": "Worker-RF1019X",
+          "session": "rf1019x-20261019",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1902-campaign-name-suffix",
-          "worktree": "C:\\rf19-902",
-          "id": "b064e06ecf0d4da89ec86da94ea52f59",
+          "worktree": "C:\\rf19b-902",
+          "id": "ae944ec4c4294c9caf1876a88e908e3f",
           "issue": 902,
           "state": "handoff",
-          "started_at": "2026-10-19T11:40:09+00:00",
+          "started_at": "2026-10-19T14:38:06+00:00",
           "from_status": "status:todo",
           "pr": 904,
-          "report": "Merged 899 head 24e36087 (includes 776 and main 435bc154) into 971bb3bf (new head bfa6fd21). Conflicts: none. No code change. Tests: test_acl1902_name_suffix + test_acl1761_existing_check: 32 passed. Needs a delta review of the merge only."
+          "report": "Merged new 899 head 94ab91c2 (includes 776 fix, main 1c6ab78e). Tests: acl1902_name_suffix + acl1761_existing_check 32 passed."
         },
         "pr": 904,
-        "queued_at": "2026-10-19T11:45:51+00:00",
+        "queued_at": "2026-10-19T14:40:30+00:00",
         "review_report": "Main moved to 1c6ab78e (batch #1016). Approval on 435bc154 is stale; return for a main merge and fresh delta approval. Owner instruction 2026-10-19: ship these four in the next batch with release.",
         "return_operation": {
           "id": "b6a50ef017d046ed874bcb22dbd3dfa4",
@@ -56552,7 +56538,8 @@
       165,
       29,
       776,
-      899
+      899,
+      902
     ],
     "review": null,
     "history": [
@@ -91460,6 +91447,13 @@
         "pr": 1017,
         "lane": "e592aa2dc3d4452793d0e584f93355ec",
         "actor": "Reviewer-R1959X"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T14:40:30+00:00",
+        "issue": 902,
+        "pr": 904,
+        "actor": "Worker-RF1019X"
       }
     ],
     "policy": {
