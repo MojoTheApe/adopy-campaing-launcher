@@ -43012,9 +43012,11 @@
         "worktree": "C:\\wk19-871",
         "id": "43be5f154c9e4d2c85f0a724561c7ce8",
         "issue": 871,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T07:39:42+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 986,
+        "report": "Refresh only (no new features). Merged origin/main 435bc154 into work/acl-1871-builder-side-tab (clean merge); new head 5bc4aea5.\nChecks on the merged tree:\n- node tests/builder_drawer_harness.cjs src/web/templates/report.html: ok\n- pytest (affected only): test_acl1871_side_tab_browser, test_the_builder_drawer, test_the_builder_tree, test_acl1769_two_column_layout, test_builder_second_primary_text, test_acl1797_design_system, test_field_contrast, test_drawer_review_browser, test_builder_duplicate_buttons, test_acl1799_workbench_browser: 110 passed (full suite not run; left to CI)\n- scripts/acl_scan_secrets.py: no secrets or real identifiers in tracked files (exit 0)\n- scripts/acl_smoke.py (run with the C:\\fb_agents .venv): ACL smoke check OK, dashboard and RPA import\nReviewer non-blocking notes 1-2 (swallowClick reset, open only on dx>0) not changed, to keep this a pure refresh. Owner authorized resuming on 2026-10-19."
       }
     },
     "tasks": {
