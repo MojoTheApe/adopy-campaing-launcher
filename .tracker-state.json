@@ -44030,6 +44030,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T17:51:45+00:00",
         "from_status": "status:todo"
+      },
+      "945": {
+        "actor": "Worker-S1019945",
+        "session": "run_s1019_945",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1945-api-turn-off",
+        "worktree": "C:\\acl-1945",
+        "id": "25a81acc4f47453eb3a4fca5adc96c14",
+        "issue": 945,
+        "state": "implementing",
+        "started_at": "2026-10-19T17:53:46+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -51961,6 +51973,17 @@
         "state": "implementing",
         "worker": "Worker-S1019807",
         "coordinator": "Coordinator-M1011A"
+      },
+      "945": {
+        "implementers": [
+          {
+            "actor": "Worker-S1019945",
+            "session": "run_s1019_945"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1019945",
+        "coordinator": "Coordinator-M1011A"
       }
     },
     "actors": {
@@ -54182,6 +54205,10 @@
       },
       "Worker-S1019807": {
         "session": "run_s1019_807",
+        "role": "Worker"
+      },
+      "Worker-S1019945": {
+        "session": "run_s1019_945",
         "role": "Worker"
       }
     },
@@ -92782,6 +92809,13 @@
         "issue": 807,
         "claim": "59bdc7cee0ef48febbfa2d1f97225cc0",
         "actor": "Worker-S1019807"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T17:53:46+00:00",
+        "issue": 945,
+        "claim": "25a81acc4f47453eb3a4fca5adc96c14",
+        "actor": "Worker-S1019945"
       }
     ],
     "policy": {
