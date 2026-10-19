@@ -44293,9 +44293,11 @@
         "worktree": "C:\\acl-1708",
         "id": "46e40808fc1947fdb05b504fa88e90de",
         "issue": 708,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T20:09:16+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 952,
+        "report": "Revived after the conflict return: merged work/main (only docs/system/CHANGELOG.md conflicted; both entries kept), pushed. The change is a one-line error string, a viewport meta and removal of an unused favicon script; no test references the old text or script (grep). Full suite left to CI. Not verified live."
       },
       "529": {
         "actor": "Worker-R1019529",
