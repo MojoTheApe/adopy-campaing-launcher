@@ -50701,7 +50701,7 @@
             "session": "run_r1019_273"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-R1019273",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -94608,6 +94608,68 @@
             "approved_at": "2026-10-19T21:24:45+00:00"
           }
         }
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-19T21:27:41+00:00",
+        "issue": 273,
+        "pr": 948,
+        "review": {
+          "id": "f5599a901a3d42219ecb177a83746024",
+          "pr": 948,
+          "issues": [
+            273
+          ],
+          "actor": "Reviewer-R1273Y",
+          "session": "reviewer-r1273y-20261019",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-19T21:07:08+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 273,
+            "pr": 948,
+            "branch": "work/acl-1273-manual-report-fingerprint",
+            "head_sha": "a57ddc5694b2e68315267e7139f3a26b3434e186",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "f4045c8ba607c5b90df464262991c98e3c67d26f99720a42c63d8a278a5403e1",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-R1273Y",
+              "review_session": "reviewer-r1273y-20261019",
+              "execution_lane": "f5599a901a3d42219ecb177a83746024",
+              "implementer": "Worker-R1019273",
+              "head_sha": "a57ddc5694b2e68315267e7139f3a26b3434e186",
+              "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "tree_sha": "7d6e866e309d0217f675bafd4b573dc242855d63",
+              "issues": [
+                273
+              ],
+              "report": "report_problem() in src/acl_sentry.py now builds its fingerprint as [acl-report, manual, report_id] where report_id is 'r' + uuid4().hex generated per call, and also sets it as the report_id tag; the previous constant fingerprint is gone, so each manual report (including repeated identical text) is a distinct Sentry issue titled by the manager's text. report_step_failure() and the other fingerprints are untouched, so automatic step failures keep grouping by step and reason; the dashboard form, /report-problem route and scrubber are unchanged. The 'r' prefix is justified: the scrubber runs over the event fingerprint and I verified over 20000 random ids that none is altered, and a test forces an all-digit hex. Tags kind/machine, the acl context with last_failures and where, and the scrubbed report context are preserved. Tests in tests/test_report_delivery_review.py: the fake scope is now per-call (no fingerprint leakage), and new tests assert four reports (two with the same text) give four distinct fingerprints that survive _before_send and match the tag, the all-digit id case, unchanged step-failure grouping, and tag/context retention; test_report_delivery_review.py 10 passed and test_failures_reach_the_collector.py 15 passed locally. CI on head a57ddc56 is fully green (windows, linux 1-3, ACL verification, tracker-link, process instructions); base main still c6150160. Non-blocking nits: the CHANGELOG entry is dated 2026-10-16 while placed above a 10-18 entry; the owner-side Sentry alert rule and team membership check from the Issue remains an open dependency, outside code scope. No live checks claimed.",
+              "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "recorded_at": "2026-10-19T21:26:19+00:00",
+              "issue_scopes": {
+                "273": "f4045c8ba607c5b90df464262991c98e3c67d26f99720a42c63d8a278a5403e1"
+              }
+            },
+            "lane": {
+              "id": "f5599a901a3d42219ecb177a83746024",
+              "pr": 948,
+              "issues": [
+                273
+              ],
+              "actor": "Reviewer-R1273Y",
+              "session": "reviewer-r1273y-20261019",
+              "coordinator": "Coordinator-M1011A",
+              "started_at": "2026-10-19T21:07:08+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-19T21:26:56+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -97601,6 +97663,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-19T21:24:45+00:00"
+      },
+      "273": {
+        "issue": 273,
+        "pr": 948,
+        "branch": "work/acl-1273-manual-report-fingerprint",
+        "head_sha": "a57ddc5694b2e68315267e7139f3a26b3434e186",
+        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "f4045c8ba607c5b90df464262991c98e3c67d26f99720a42c63d8a278a5403e1",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-R1273Y",
+          "review_session": "reviewer-r1273y-20261019",
+          "execution_lane": "f5599a901a3d42219ecb177a83746024",
+          "implementer": "Worker-R1019273",
+          "head_sha": "a57ddc5694b2e68315267e7139f3a26b3434e186",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "tree_sha": "7d6e866e309d0217f675bafd4b573dc242855d63",
+          "issues": [
+            273
+          ],
+          "report": "report_problem() in src/acl_sentry.py now builds its fingerprint as [acl-report, manual, report_id] where report_id is 'r' + uuid4().hex generated per call, and also sets it as the report_id tag; the previous constant fingerprint is gone, so each manual report (including repeated identical text) is a distinct Sentry issue titled by the manager's text. report_step_failure() and the other fingerprints are untouched, so automatic step failures keep grouping by step and reason; the dashboard form, /report-problem route and scrubber are unchanged. The 'r' prefix is justified: the scrubber runs over the event fingerprint and I verified over 20000 random ids that none is altered, and a test forces an all-digit hex. Tags kind/machine, the acl context with last_failures and where, and the scrubbed report context are preserved. Tests in tests/test_report_delivery_review.py: the fake scope is now per-call (no fingerprint leakage), and new tests assert four reports (two with the same text) give four distinct fingerprints that survive _before_send and match the tag, the all-digit id case, unchanged step-failure grouping, and tag/context retention; test_report_delivery_review.py 10 passed and test_failures_reach_the_collector.py 15 passed locally. CI on head a57ddc56 is fully green (windows, linux 1-3, ACL verification, tracker-link, process instructions); base main still c6150160. Non-blocking nits: the CHANGELOG entry is dated 2026-10-16 while placed above a 10-18 entry; the owner-side Sentry alert rule and team membership check from the Issue remains an open dependency, outside code scope. No live checks claimed.",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "recorded_at": "2026-10-19T21:26:19+00:00",
+          "issue_scopes": {
+            "273": "f4045c8ba607c5b90df464262991c98e3c67d26f99720a42c63d8a278a5403e1"
+          }
+        },
+        "lane": {
+          "id": "f5599a901a3d42219ecb177a83746024",
+          "pr": 948,
+          "issues": [
+            273
+          ],
+          "actor": "Reviewer-R1273Y",
+          "session": "reviewer-r1273y-20261019",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-19T21:07:08+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-19T21:26:56+00:00"
       }
     },
     "batches": {
@@ -102300,62 +102406,6 @@
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-19T13:01:50+00:00",
         "state": "reviewing"
-      },
-      "948": {
-        "id": "f5599a901a3d42219ecb177a83746024",
-        "pr": 948,
-        "issues": [
-          273
-        ],
-        "actor": "Reviewer-R1273Y",
-        "session": "reviewer-r1273y-20261019",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-19T21:07:08+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 273,
-          "pr": 948,
-          "branch": "work/acl-1273-manual-report-fingerprint",
-          "head_sha": "a57ddc5694b2e68315267e7139f3a26b3434e186",
-          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "f4045c8ba607c5b90df464262991c98e3c67d26f99720a42c63d8a278a5403e1",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-R1273Y",
-            "review_session": "reviewer-r1273y-20261019",
-            "execution_lane": "f5599a901a3d42219ecb177a83746024",
-            "implementer": "Worker-R1019273",
-            "head_sha": "a57ddc5694b2e68315267e7139f3a26b3434e186",
-            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-            "tree_sha": "7d6e866e309d0217f675bafd4b573dc242855d63",
-            "issues": [
-              273
-            ],
-            "report": "report_problem() in src/acl_sentry.py now builds its fingerprint as [acl-report, manual, report_id] where report_id is 'r' + uuid4().hex generated per call, and also sets it as the report_id tag; the previous constant fingerprint is gone, so each manual report (including repeated identical text) is a distinct Sentry issue titled by the manager's text. report_step_failure() and the other fingerprints are untouched, so automatic step failures keep grouping by step and reason; the dashboard form, /report-problem route and scrubber are unchanged. The 'r' prefix is justified: the scrubber runs over the event fingerprint and I verified over 20000 random ids that none is altered, and a test forces an all-digit hex. Tags kind/machine, the acl context with last_failures and where, and the scrubbed report context are preserved. Tests in tests/test_report_delivery_review.py: the fake scope is now per-call (no fingerprint leakage), and new tests assert four reports (two with the same text) give four distinct fingerprints that survive _before_send and match the tag, the all-digit id case, unchanged step-failure grouping, and tag/context retention; test_report_delivery_review.py 10 passed and test_failures_reach_the_collector.py 15 passed locally. CI on head a57ddc56 is fully green (windows, linux 1-3, ACL verification, tracker-link, process instructions); base main still c6150160. Non-blocking nits: the CHANGELOG entry is dated 2026-10-16 while placed above a 10-18 entry; the owner-side Sentry alert rule and team membership check from the Issue remains an open dependency, outside code scope. No live checks claimed.",
-            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "recorded_at": "2026-10-19T21:26:19+00:00",
-            "issue_scopes": {
-              "273": "f4045c8ba607c5b90df464262991c98e3c67d26f99720a42c63d8a278a5403e1"
-            }
-          },
-          "lane": {
-            "id": "f5599a901a3d42219ecb177a83746024",
-            "pr": 948,
-            "issues": [
-              273
-            ],
-            "actor": "Reviewer-R1273Y",
-            "session": "reviewer-r1273y-20261019",
-            "coordinator": "Coordinator-M1011A",
-            "started_at": "2026-10-19T21:07:08+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-19T21:26:56+00:00"
-        }
       },
       "943": {
         "id": "6c79dca885ad4e17b2d3e51a8c648831",
