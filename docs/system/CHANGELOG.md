@@ -60,6 +60,34 @@ Review of the first version (PR #310) found three gaps, fixed on 2026-10-15:
   They now run the real launcher against real stub dashboards on real ports. Each of the
   reviewed bugs was restored in turn, and each one turns the suite red.
 
+## ACL-1381 — Consistent Builder ad-text wording — 2026-10-18
+
+Complete the older text-label request while preserving ACL-1769's later numbered
+Primary text 1/2 interface and separate Headline display. Search/help and empty/error
+messages now refer to ad texts consistently. Library keys, copy/copy2 fields,
+selection, draft restoration and submission behavior are unchanged.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/381).
+
+## ACL-1971 — Explicit tooling fast/full plan — 2026-10-17
+
+Document the existing tooling check's exact commands, omissions and correction
+workflow while retaining full applicable ACL/installer admission. Add the missing
+parsed-workflow activity regression: PR metadata edits run linkage only, while a
+new code head retains candidate verification. Existing aggregate negatives,
+producer names, triggers, policies and runtime behavior stay intact. This records
+project verification behavior; it does not establish a cost saving or delivery.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/971).
+
+## ACL-1924 — Published-package acceptance continuation — 2026-10-15
+
+Add a durable authorized release workflow using the maintained installer publisher
+and updater. Its isolated Windows acceptance downloads the actual signed-channel
+previous/current packages, verifies the frozen release SHA/tasks, runs real
+installation/update/restart/recovery and data preservation, and emits the native
+receipt only on success. Existing same-candidate mechanism tests and employee
+update behavior are preserved; live rollout and business pilot are not asserted.
+Parent ACL-1923 retains actual activation and publication verification.
+
 ## Builder: pre-flight audit card that blocks Publish - ACL-1819
 
 - Every check is defined once in `src/fb_api/preflight_rules.py` (id, label, severity, field, hint,
