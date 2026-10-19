@@ -96064,7 +96064,51 @@
         "session": "rev-y19b-s1",
         "coordinator": "Coordinator-E1019A",
         "started_at": "2026-10-19T11:14:25+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 401,
+          "pr": 960,
+          "branch": "work/acl-1401-mlx-not-running",
+          "head_sha": "53e93b2ba353124a6b96fc2a84554f0b8d5652a2",
+          "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+          "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "3351b093cb2255ee6b77516b3761e09397e28c493d1eb8f788ec3947b8eabc8c",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-Y19B",
+            "implementer": "Worker-F19401",
+            "head_sha": "53e93b2ba353124a6b96fc2a84554f0b8d5652a2",
+            "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+            "tree_sha": "2d2b9a5804743bf3d9ffdaf05cc3e62a820dfbc0",
+            "execution_lane": "44aff1125662430981a9eb0167930b72",
+            "review_session": "rev-y19b-s1",
+            "report": "Independent source review (round 2) of PR 960 (ACL-1401, Issue 401), head 53e93b2b. Full scope re-read plus the delta since my previous return (head dc4dc59d).\nPrevious blocker: tests/test_build_progress_model.py failed because multilogin_not_running (added to retry_policy.BLOCKING_REVIEW_STEPS) had no stage rule. Fix in this head: src/web/templates/report.html cb-build-model rules, `multilogin_not_running$` added to the \"hold\" rule next to account_blocked$. One-line change, correct (a service stop step that can occur at any stage, like its neighbours).\nRest of the change unchanged and fine: launcher_unreachable walks the cause chain for a requests connection error (refused/connect timeout, not read timeout) to launcher.mlx.yt:45001; _ensure_browser raises ProfileStop(MLX_NOT_RUNNING) before DirectCDP/attach-only branches; English operator text; policy, retry, Sentry and triage entries consistent; 12 new tests. No secrets.\nCI on this exact head: all required checks pass, including linux shards 1/2/3 (shard 2 was the failing one), windows tests, ACL verification, Process instructions, Classify, Installer verification, tracker-link, descriptor.\nVerdict: approved.\n",
+            "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              401
+            ],
+            "recorded_at": "2026-10-19T11:25:08+00:00",
+            "issue_scopes": {
+              "401": "3351b093cb2255ee6b77516b3761e09397e28c493d1eb8f788ec3947b8eabc8c"
+            }
+          },
+          "lane": {
+            "id": "44aff1125662430981a9eb0167930b72",
+            "pr": 960,
+            "issues": [
+              401
+            ],
+            "actor": "Reviewer-Y19B",
+            "session": "rev-y19b-s1",
+            "coordinator": "Coordinator-E1019A",
+            "started_at": "2026-10-19T11:14:25+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-19T11:25:45+00:00"
+        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
