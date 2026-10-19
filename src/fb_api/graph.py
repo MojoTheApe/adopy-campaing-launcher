@@ -88,6 +88,28 @@ def _with_details(text: str, details: dict) -> str:
     return text + " [" + ", ".join(f"{k}={v}" for k, v in details.items()) + "]"
 
 
+def _read_context(path: str, params: dict | None) -> dict[str, str]:
+    """Only finite local categories may leave the request as diagnostics.
+
+    Do not parse URLs, decode paths or copy parameters: malformed/unknown input
+    stays unknown, rather than allowing a request value to become error text.
+    """
+    context = {"method": "GET", "operation": "unknown"}
+    if not isinstance(path, str) or len(path) > 128:
+        return context
+    if path == "/search":
+        context["operation"] = "search"
+        search_type = params.get("type") if isinstance(params, dict) else None
+        if isinstance(search_type, str) and search_type in {"adgeolocation", "adlocale", "adinterest"}:
+            context["search_type"] = search_type
+    elif path == "/me/adaccounts":
+        context["operation"] = "adaccounts"
+    elif match := re.fullmatch(r"/act_[0-9]{1,32}/(campaigns|promote_pages|adspixels|insights)", path):
+        context["operation"] = match.group(1)
+    elif re.fullmatch(r"/[0-9]{1,32}/leadgen_forms", path):
+        context["operation"] = "leadgen_forms"
+    return context
+
 
 class GraphStop(RuntimeError):
     """Остановка: дальше этот клиент не зовёт Graph вовсе."""
@@ -342,6 +364,7 @@ class GraphClient:
             sub = _int(gerr.get("error_subcode"))
             msg = str(gerr.get("message") or "Graph API error")
             details = error_details(gerr, reply)
+            details.update(_read_context(path, params))
             msg = _with_details(msg, details)
             kind = classify(code)
             if kind == "policy":
