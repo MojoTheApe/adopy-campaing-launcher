@@ -44565,6 +44565,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T21:55:58+00:00",
         "from_status": "status:todo"
+      },
+      "401": {
+        "actor": "Worker-H19401",
+        "session": "wh401-c0a1de70",
+        "coordinator": "Coordinator-E1019A",
+        "branch": "work/acl-1401-mlx-not-running",
+        "worktree": "C:\\wk20-401",
+        "id": "d53f153e8be741ef9967f34d3ddf3d46",
+        "issue": 401,
+        "state": "implementing",
+        "started_at": "2026-10-19T22:18:31+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -51346,10 +51358,14 @@
           {
             "actor": "Worker-F19401",
             "session": "wf401-c0a1de70"
+          },
+          {
+            "actor": "Worker-H19401",
+            "session": "wh401-c0a1de70"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-F19401",
+        "state": "implementing",
+        "worker": "Worker-H19401",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
           "actor": "Worker-F19401",
@@ -51373,14 +51389,7 @@
           "at": "2026-10-17T16:30:39.578084+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-Y19B",
         "return_operation": {
-          "id": "ca308098776c4d4a85fe812ce3f4f580",
-          "actor": "Coordinator-E1019A",
-          "session": "coord-c0a1de70",
-          "report": "# Return for a main refresh\n\nMain moved to c6150160 (batch #1018 merged after #1016). The existing source approval is bound to the previous main baseline and cannot enter the next intake. No scope change and no defect is requested: merge current origin/main into the original branch, re-run the affected checks, hand off again and get a fresh independent review."
-        },
-        "return": {
           "id": "ca308098776c4d4a85fe812ce3f4f580",
           "actor": "Coordinator-E1019A",
           "session": "coord-c0a1de70",
@@ -55176,6 +55185,10 @@
       },
       "Worker-R1020896": {
         "session": "run_r1020_896",
+        "role": "Worker"
+      },
+      "Worker-H19401": {
+        "session": "wh401-c0a1de70",
         "role": "Worker"
       }
     },
@@ -95486,6 +95499,13 @@
           "report": "Base moved to c6150160 (main advanced after batch PRs 1016 and 1018); author merges main and re-hands off. No defects found so far in the quick pass over PR 970 (ACL-1681) at head 25c8824e; full re-review on the refreshed head.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T22:18:31+00:00",
+        "issue": 401,
+        "claim": "d53f153e8be741ef9967f34d3ddf3d46",
+        "actor": "Worker-H19401"
       }
     ],
     "policy": {
