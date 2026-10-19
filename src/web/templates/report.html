@@ -3450,6 +3450,17 @@
     .cb-form-refresh { background: none; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
       color: var(--text); font: inherit; font-size: var(--adopy-text-sm); padding: 0.2rem 0.5rem; cursor: pointer; }
     .cb-form-refresh:disabled { opacity: 0.6; cursor: progress; }
+    .cb-form-source { margin-bottom: 0.3rem; }
+    .cb-form-create { border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: var(--space-sm); margin-top: 0.3rem; }
+    .cb-form-create[hidden], .cb-form-templatebox[hidden], .cb-form-existing[hidden] { display: none; }
+    .cb-fc-title { font-weight: 600; margin-bottom: 0.3rem; }
+    .cb-fc-label { display: block; margin-top: 0.4rem; font-size: var(--adopy-text-sm); }
+    .cb-fc-label .cb-input { display: block; width: 100%; margin-top: 0.15rem; box-sizing: border-box; }
+    .cb-fc-opt { opacity: 0.6; }
+    .cb-fc-checks { display: flex; gap: var(--space-md); margin-top: 0.15rem; }
+    .cb-fc-q { display: grid; gap: 0.2rem; margin: 0.25rem 0; }
+    .cb-fc-actions { display: flex; gap: var(--space-sm); margin-top: 0.5rem; }
+    .cb-fc-msg { color: var(--danger, #b3261e); }
     .cb-form-note { color: var(--muted); font-size: var(--adopy-text-sm); margin-top: 0.15rem; overflow-wrap: anywhere; }
 
     /* Подвал: выбор «страна / аккаунт» и «новая страна» в две колонки, чтобы
@@ -5749,6 +5760,8 @@ window.cbLayout = (function () {
     [/detailed targeting|interest|target/i, '.cb-targeting-search', 'adset'],
     [/language/i, '[name$="_language"]', 'adset'],
     [/instant form|page's forms|lead ads terms/i, '.cb-form-select', 'ad'],
+    [/form template|template was not found|existing form or a template|form named|created the form|create forms|create a form|to create the form|creating the form|the form .* was read back/i,
+      '.cb-form-template-select, .cb-form-select', 'ad'],
     [/tracking link/i, 'input[name="tracking_link"]', 'form']
   ];
 
@@ -5801,6 +5814,72 @@ window.cbLayout = (function () {
     return String(entry.message || 'The forms could not be read');
   }
 
+  /* ACL-1776: шаблон Instant Form. Зеркало src/fb_api/form_templates.validate:
+     те же тексты и потолки; окончательно проверяет сервер при сохранении и при публикации. */
+  var FORM_LIMITS = { questions: 5, options: 10, name: 60, headline: 60, intro: 500,
+                      label: 80, option: 60, thanks: 300, linkText: 70 };
+  var CONTACTS = ['name', 'email', 'phone'];
+
+  function httpsUrl(u) {
+    return /^https:\/\/[^\s\/?#:]+\.[^\s\/?#:]+(:\d+)?([\/?#]\S*)?$/i.test(String(u == null ? '' : u).trim());
+  }
+
+  function squeeze(v) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); }
+
+  function validateTemplate(t) {
+    var e = [], L = FORM_LIMITS;
+    t = t || {};
+    var name = squeeze(t.name), headline = squeeze(t.headline);
+    if (!name) e.push('Template name is required');
+    else if (name.length > L.name) e.push('Template name is longer than ' + L.name + ' characters');
+    if (!headline) e.push('Headline is required');
+    else if (headline.length > L.headline) e.push('Headline is longer than ' + L.headline + ' characters');
+    if (String(t.intro || '').trim().length > L.intro) e.push('Intro is longer than ' + L.intro + ' characters');
+    var chosen = (t.contact_fields || []).filter(function (k) { return CONTACTS.indexOf(String(k)) !== -1; });
+    if (!chosen.length) e.push('Choose at least one contact field (name, email or phone)');
+    var qs = t.questions || [];
+    qs.forEach(function (q, i) {
+      var n = i + 1, label = squeeze(q && q.label), kind = (q && q.type) || 'short_answer';
+      if (!label) e.push('Question ' + n + ': text is required (remove the question if it is not needed)');
+      else if (label.length > L.label) e.push('Question ' + n + ': text is longer than ' + L.label + ' characters');
+      if (kind === 'multiple_choice') {
+        var opts = ((q && q.options) || []).map(squeeze).filter(Boolean);
+        if (opts.length < 2) e.push('Question ' + n + ': a multiple choice question needs at least 2 options');
+        if (opts.length > L.options) e.push('Question ' + n + ': more than ' + L.options + ' options');
+        var low = opts.map(function (o) { return o.toLowerCase(); });
+        if (low.some(function (o, k) { return low.indexOf(o) !== k; })) e.push('Question ' + n + ': options must differ');
+        if (opts.some(function (o) { return o.length > L.option; })) e.push('Question ' + n + ': an option is longer than ' + L.option + ' characters');
+      }
+    });
+    if (qs.length > L.questions) e.push('At most ' + L.questions + ' custom questions');
+    var url = String(t.privacy_url || '').trim();
+    if (!url) e.push('Privacy policy URL is required');
+    else if (!httpsUrl(url)) e.push('Privacy policy URL must start with https://');
+    var thanks = String(t.thank_you_text || '').trim();
+    if (!thanks) e.push('Thank-you screen text is required');
+    else if (thanks.length > L.thanks) e.push('Thank-you screen text is longer than ' + L.thanks + ' characters');
+    var site = String(t.website_url || '').trim();
+    if (site && !httpsUrl(site)) e.push('Website link on the thank-you screen must start with https://');
+    var locale = squeeze(t.locale).toUpperCase().replace(/-/g, '_') || 'EN_US';
+    if (!/^[A-Z]{2}_[A-Z]{2}$/.test(locale)) e.push('Locale must look like EN_US');
+    return e;
+  }
+
+  /* 'template' | 'existing' - откуда форма у объявления. */
+  function formSource(v) { return v === 'template' ? 'template' : 'existing'; }
+
+  function templateOptions(templates, current) {
+    var out = [], seen = {};
+    (templates || []).forEach(function (t) {
+      if (!t || !t.id || seen[t.id]) return;
+      seen[t.id] = true;
+      out.push({ id: String(t.id), label: String(t.name || t.id) });
+    });
+    var cur = String(current == null ? '' : current);
+    if (cur && !seen[cur]) out.push({ id: cur, label: cur + ' (not in the library)', missing: true });
+    return out;
+  }
+
   function parseList(raw) {
     try {
       var v = JSON.parse(raw || '[]');
@@ -5811,6 +5890,8 @@ window.cbLayout = (function () {
   return {
     LEVELS: LEVELS, LEVEL_LABEL: LEVEL_LABEL, FUTURE: FUTURE, DESTINATIONS: DESTINATIONS,
     destination: destination, formOptions: formOptions, formsStatus: formsStatus,
+    validateTemplate: validateTemplate, formSource: formSource, templateOptions: templateOptions,
+    httpsUrl: httpsUrl, FORM_LIMITS: FORM_LIMITS,
     level: level, futureTip: futureTip, futureHtml: futureHtml, effectiveName: effectiveName,
     accountState: accountState, clampAd: clampAd, routes: routes, campMeta: campMeta, parseList: parseList
   };
@@ -5853,7 +5934,13 @@ window.cbPreflight = (function () {
     rules.forEach(function (rule) {
       if (rule.side !== 'client' || !applies(rule, dest)) return;
       var id = rule.id, ads = inp.ads || [];
-      if (id === 'form_chosen') out.push(perAd(id, inp, function (a) { return !s(a.form_id); }));
+      if (id === 'form_chosen') out.push(perAd(id, inp, function (a) { return !s(a.form_id) && !a.template; }));
+      else if (id === 'form_template_privacy') out.push(perAd(id, inp, function (a) {
+        return !!a.template && !new RegExp(C.link_re || '^$', 'i').test(s(a.template.privacy_url));
+      }));
+      else if (id === 'form_template_contacts') out.push(perAd(id, inp, function (a) {
+        return !!a.template && !(a.template.contact_fields || []).length;
+      }));
       else if (id === 'country_set') out.push(v(id, s(inp.country) ? 'ok' : 'error'));
       else if (id === 'link_https') out.push(!link ? v(id, 'error', 'empty') : !linkOk ? v(id, 'error', 'not_https') : v(id, 'ok'));
       else if (id === 'link_tracking') out.push(!linkOk ? v(id, 'unknown', 'no_valid_link') : v(id, trackRe.test(link) ? 'ok' : 'warning'));
@@ -6637,6 +6724,21 @@ window.cbTree = (function () {
   }
   window.cbPfRev = pfRev;
 
+  function formMode(row) {
+    var sel = row.querySelector('.cb-form-source');
+    return L.formSource(sel ? sel.value : '');
+  }
+
+  /* ACL-1776: шаблон объявления для аудита: только то, что проверяют правила (https и контакты). */
+  function templateAudit(row) {
+    if (formMode(row) !== 'template') return null;
+    var hid = row.querySelector('input[type="hidden"][name$="_form_template"]');
+    var id = hid ? String(hid.value || '').trim() : '';
+    if (!id) return null;
+    var hit = (window.cbFormTemplates || []).filter(function (t) { return t.id === id; })[0];
+    return { privacy_url: hit ? String(hit.privacy_url || '') : '', contact_fields: hit ? (hit.contact_fields || []) : [] };
+  }
+
   /* Вход аудита с карточки (то, что понимает evaluate_client / cbPreflight.evaluate). */
   function auditInput(slot) {
     var form = slot.closest ? slot.closest('form') : null;
@@ -6654,7 +6756,8 @@ window.cbTree = (function () {
         name: window.cbPreflight.adName(file, copy),
         file: file, body: entry ? String(entry.body || '') : '',
         headline: entry ? String(entry.headline || entry.ad_title || '') : '',
-        form_id: val(row, 'input[type="hidden"][name$="_form_id"]').trim(), cta: 'LEARN_MORE'
+        form_id: formMode(row) === 'template' ? '' : val(row, 'input[type="hidden"][name$="_form_id"]').trim(),
+        template: templateAudit(row), cta: 'LEARN_MORE'
       });
     });
     return {
@@ -13154,10 +13257,31 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       row.querySelectorAll('.cb-form-only').forEach(function (el) {
         if (el.hidden === instant) el.hidden = !instant;
       });
+      /* ACL-1776: источник формы. Активен один из двух; второй не уходит на сервер. */
+      var srcSel = row.querySelector('.cb-form-source');
+      var tmpl = L.formSource(srcSel ? srcSel.value : '') === 'template';
+      if (srcSel) {
+        var tOpt = srcSel.querySelector('option[value="template"]');
+        if (tOpt && tOpt.disabled !== !api) tOpt.disabled = !api;
+        var tTip = !api ? 'API backend only: the robot creates forms through the Graph API' : '';
+        if (srcSel.title !== tTip) srcSel.title = tTip;
+      }
+      row.querySelectorAll('.cb-form-existing').forEach(function (el) { if (el.hidden === tmpl) el.hidden = !tmpl; });
+      var panelOpen = row.querySelector('.cb-form-create') && !row.querySelector('.cb-form-create').hidden;
+      row.querySelectorAll('.cb-form-templatebox').forEach(function (el) {
+        var want = !(tmpl && !panelOpen);
+        if (el.hidden !== want) el.hidden = want;
+      });
       var hid = row.querySelector('input[name$="_form_id"]');
-      if (hid && hid.disabled === instant) hid.disabled = !instant;
+      var wantId = !(instant && !tmpl);
+      if (hid && hid.disabled !== wantId) hid.disabled = wantId;
+      var hidT = row.querySelector('input[name$="_form_template"]');
+      var wantT = !(instant && tmpl);
+      if (hidT && hidT.disabled !== wantT) hidT.disabled = wantT;
     });
+    if (instant) window.cbLoadFormTemplates();
     window.cbFillFormSelects(slot);
+    window.cbFillTemplateSelects(slot);
   };
 
   window.cbDestinationChanged = function (sel) {
@@ -13200,6 +13324,180 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
         done({ state: 'failed', ok: false, forms: [], message: 'The dashboard did not answer; try again' });
       });
   };
+
+  /* ACL-1776: шаблоны форм. Библиотека лежит на этом компьютере (в Meta не ходит);
+     форму из шаблона создаёт РОБОТ при публикации, в билдере её нет. */
+  window.cbFormTemplates = window.cbFormTemplates || [];
+  window.cbFormTemplatesLoaded = window.cbFormTemplatesLoaded || false;
+
+  window.cbLoadFormTemplates = function () {
+    if (window.cbFormTemplatesLoaded || typeof fetch !== 'function') return;
+    window.cbFormTemplatesLoaded = true;
+    fetch('/api/form-templates').then(function (r) { return r.json(); }).then(function (d) {
+      window.cbFormTemplates = (d && d.templates) || [];
+      document.querySelectorAll('.cb-slot').forEach(function (sl) { window.cbFillTemplateSelects(sl); });
+    }).catch(function () { window.cbFormTemplatesLoaded = false; });
+  };
+
+  window.cbFillTemplateSelects = function (root) {
+    var L = window.cbLayout;
+    if (!L || !root) return;
+    root.querySelectorAll('.cb-ad-row').forEach(function (row) {
+      var sel = row.querySelector('.cb-form-template-select');
+      var hid = row.querySelector('input[name$="_form_template"]');
+      if (!sel || !hid) return;
+      var opts = L.templateOptions(window.cbFormTemplates, hid.value);
+      var sig = JSON.stringify([opts, hid.value]);
+      if (sel.dataset.sig !== sig) {
+        var html = '<option value="">— select a template —</option>';
+        opts.forEach(function (o) { html += '<option value="' + aclEscHtml(o.id) + '">' + aclEscHtml(o.label) + '</option>'; });
+        sel.innerHTML = html;
+        sel.value = hid.value;
+        sel.dataset.sig = sig;
+      }
+      var note = row.querySelector('[data-template-note]');
+      var text = hid.value ? 'The robot creates this form on the Page when you publish (found by name, never twice).'
+        : (window.cbFormTemplates.length ? 'Choose a saved template or create one.' : 'No templates yet: create one.');
+      if (note && note.textContent !== text) note.textContent = text;
+    });
+  };
+
+  window.cbFormTemplateChosen = function (sel) {
+    var row = sel.closest('.cb-ad-row');
+    var hid = row ? row.querySelector('input[name$="_form_template"]') : null;
+    if (!hid) return;
+    hid.value = sel.value;
+    hid.dispatchEvent(new Event('input', { bubbles: true }));
+    window.cbFillTemplateSelects(row.closest('.cb-slot'));
+  };
+
+  /* Откуда форма: существующая (1775) или шаблон. Неактивный вариант не уходит на сервер. */
+  window.cbFormSourceChanged = function (sel) {
+    var slot = sel.closest('.cb-slot');
+    if (slot) window.cbSyncDestination(slot);
+    var row = sel.closest('.cb-ad-row');
+    if (row) {
+      var hid = row.querySelector('input[name$="_form_template"]');
+      if (hid) hid.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  };
+
+  function formPanel(el) { return el.closest('.cb-ad-row').querySelector('.cb-form-create'); }
+
+  function questionHTML() {
+    return '<div class="cb-fc-q">' +
+      '<input type="text" class="cb-input cb-fc-q-label" maxlength="80" placeholder="Question text" aria-label="Custom question">' +
+      '<select class="cb-input cb-select cb-fc-q-type" onchange="cbFormQuestionType(this)" aria-label="Question type">' +
+      '<option value="short_answer">Short answer</option><option value="multiple_choice">Multiple choice</option></select>' +
+      '<textarea class="cb-input cb-fc-q-options" rows="3" hidden placeholder="One option per line (at least 2)" aria-label="Options"></textarea>' +
+      '<button type="button" class="cb-form-refresh" onclick="cbFormQuestionRemove(this)">Remove</button></div>';
+  }
+
+  window.cbFormQuestionType = function (sel) {
+    var q = sel.closest('.cb-fc-q'), box = q.querySelector('.cb-fc-q-options');
+    box.hidden = sel.value !== 'multiple_choice';
+  };
+  window.cbFormQuestionRemove = function (btn) { btn.closest('.cb-fc-q').remove(); };
+  window.cbFormQuestionAdd = function (btn) {
+    var panel = formPanel(btn), list = panel.querySelector('.cb-fc-questions');
+    var max = (window.cbLayout && window.cbLayout.FORM_LIMITS.questions) || 5;
+    if (list.querySelectorAll('.cb-fc-q').length >= max) {
+      panel.querySelector('[data-fc-msg]').textContent = 'At most ' + max + ' custom questions';
+      return;
+    }
+    list.insertAdjacentHTML('beforeend', questionHTML());
+  };
+
+  function panelValue(panel, sel) { var el = panel.querySelector(sel); return el ? String(el.value || '') : ''; }
+
+  /* Содержимое панели -> шаблон (то, что понимает сервер и cbLayout.validateTemplate). */
+  window.cbFormPanelTemplate = function (panel) {
+    var contacts = [];
+    panel.querySelectorAll('.cb-fc-contact').forEach(function (c) { if (c.checked) contacts.push(c.value); });
+    var qs = [];
+    panel.querySelectorAll('.cb-fc-q').forEach(function (q) {
+      var kind = panelValue(q, '.cb-fc-q-type') || 'short_answer';
+      var item = { label: panelValue(q, '.cb-fc-q-label'), type: kind };
+      if (kind === 'multiple_choice') item.options = panelValue(q, '.cb-fc-q-options').split('\n');
+      qs.push(item);
+    });
+    return {
+      name: panelValue(panel, '.cb-fc-name'), headline: panelValue(panel, '.cb-fc-headline'),
+      intro: panelValue(panel, '.cb-fc-intro'), contact_fields: contacts, questions: qs,
+      privacy_url: panelValue(panel, '.cb-fc-privacy'), thank_you_text: panelValue(panel, '.cb-fc-thanks'),
+      website_url: panelValue(panel, '.cb-fc-site'), locale: panelValue(panel, '.cb-fc-locale') || 'EN_US'
+    };
+  };
+
+  window.cbFormCreateOpen = function (btn) {
+    var panel = formPanel(btn);
+    if (!panel) return;
+    panel.hidden = false;
+    var row = btn.closest('.cb-ad-row');
+    var msg = panel.querySelector('[data-fc-msg]');
+    if (msg) msg.textContent = '';
+    var main = row.querySelector('.cb-form-templatebox');
+    if (main) main.hidden = true;
+  };
+
+  window.cbFormCreateClose = function (btn) {
+    var panel = formPanel(btn);
+    if (!panel) return;
+    panel.hidden = true;
+    var main = btn.closest('.cb-ad-row').querySelector('.cb-form-templatebox');
+    if (main) main.hidden = false;
+  };
+
+  window.cbFormCreateSave = function (btn) {
+    var panel = formPanel(btn), msg = panel.querySelector('[data-fc-msg]');
+    var tpl = window.cbFormPanelTemplate(panel);
+    var errors = window.cbLayout.validateTemplate(tpl);
+    if (errors.length) { msg.textContent = errors.join('. ') + '.'; return; }
+    if (btn.disabled) return;
+    btn.disabled = true;
+    msg.textContent = 'Saving the template on this computer…';
+    var row = btn.closest('.cb-ad-row');
+    function fail(text) { btn.disabled = false; msg.textContent = text; }
+    fetch('/api/form-templates', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                   body: JSON.stringify(tpl) })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d || {} }; }); })
+      .then(function (x) {
+        if (!x.ok || !x.d.template) return fail(((x.d.errors || ['The template was not saved']).join('. ')) + '.');
+        var saved = x.d.template;
+        window.cbFormTemplates = window.cbFormTemplates.filter(function (t) { return t.id !== saved.id; }).concat([saved]);
+        var hid = row.querySelector('input[name$="_form_template"]');
+        if (hid) { hid.value = saved.id; hid.dispatchEvent(new Event('input', { bubbles: true })); }
+        btn.disabled = false;
+        window.cbFormCreateClose(btn);
+        window.cbFillTemplateSelects(row.closest('.cb-slot'));
+      })
+      .catch(function () { fail('The dashboard did not answer; try again'); });
+  };
+
+  function formCreatePanelHTML() {
+    return '<div class="cb-form-create" hidden>' +
+      '<div class="cb-fc-title">Create and save form</div>' +
+      '<label class="cb-fc-label">Template name<input type="text" class="cb-input cb-fc-name" maxlength="60" placeholder="Demo form template"></label>' +
+      '<label class="cb-fc-label">Headline<input type="text" class="cb-input cb-fc-headline" maxlength="60" placeholder="Get more information"></label>' +
+      '<label class="cb-fc-label">Intro <span class="cb-fc-opt">(optional)</span><textarea class="cb-input cb-fc-intro" rows="2" maxlength="500"></textarea></label>' +
+      '<div class="cb-fc-label">Contact fields<div class="cb-fc-checks">' +
+      '<label><input type="checkbox" class="cb-fc-contact" value="name" checked> Name</label>' +
+      '<label><input type="checkbox" class="cb-fc-contact" value="email" checked> Email</label>' +
+      '<label><input type="checkbox" class="cb-fc-contact" value="phone"> Phone</label></div></div>' +
+      '<div class="cb-fc-label">Custom questions <span class="cb-fc-opt">(up to 5)</span>' +
+      '<div class="cb-fc-questions"></div>' +
+      '<button type="button" class="cb-form-refresh" onclick="cbFormQuestionAdd(this)">+ Add question</button></div>' +
+      '<label class="cb-fc-label">Privacy policy URL<input type="text" class="cb-input cb-fc-privacy" placeholder="https://example.com/privacy"></label>' +
+      '<label class="cb-fc-label">Completion screen<textarea class="cb-input cb-fc-thanks" rows="2" maxlength="300" placeholder="Thank you. We will contact you."></textarea></label>' +
+      '<label class="cb-fc-label">Website link on the completion screen <span class="cb-fc-opt">(optional, https)</span><input type="text" class="cb-input cb-fc-site"></label>' +
+      '<label class="cb-fc-label">Locale<input type="text" class="cb-input cb-fc-locale" value="EN_US" maxlength="5"></label>' +
+      '<div class="cb-fc-actions">' +
+      '<button type="button" class="cb-form-refresh cb-fc-save" onclick="cbFormCreateSave(this)">Save and select</button>' +
+      '<button type="button" class="cb-form-refresh" onclick="cbFormCreateClose(this)">&larr; Back to ad</button></div>' +
+      '<div class="cb-form-note cb-fc-msg" data-fc-msg role="alert"></div>' +
+      '<div class="cb-form-note">Saving only stores the template on this computer. The robot creates the form on the Page when you publish; it never accepts the Lead Ads terms.</div>' +
+      '</div>';
+  }
 
   // ── Ad row HTML builder ───────────────────────────────────────────────
   function buildAdRowHTML(cIdx, aIdx) {
@@ -13253,12 +13551,26 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
          оно выключено, но значение живёт дальше. */
       '<span class="cb-label cb-form-only" hidden>Instant Form</span>' +
       '<div class="cb-form-wrap cb-form-only" hidden>' +
+      /* ACL-1776: два пути - существующая форма Страницы или шаблон (форму создаёт робот). */
+      '<select class="cb-input cb-select cb-form-source" onchange="cbFormSourceChanged(this)" aria-label="Where the Instant Form comes from">' +
+      '<option value="existing">Use existing form</option><option value="template">Create from template</option></select>' +
+      '<div class="cb-form-templatebox" hidden>' +
+      '<div class="cb-form-line">' +
+      '<select class="cb-input cb-select cb-form-template-select" onchange="cbFormTemplateChosen(this)" aria-label="Form template"></select>' +
+      '<button type="button" class="cb-form-refresh" onclick="cbFormCreateOpen(this)" title="Write a new form template and save it on this computer">Create and save form</button>' +
+      '</div>' +
+      '<input type="hidden" name="' + pfx + 'form_template" value="" disabled>' +
+      '<div class="cb-form-note" data-template-note></div>' +
+      '</div>' +
+      formCreatePanelHTML() +
+      '<div class="cb-form-existing">' +
       '<div class="cb-form-line">' +
       '<select class="cb-input cb-select cb-form-select" onchange="cbFormChosen(this)" aria-label="Instant Form of the Page"></select>' +
       '<button type="button" class="cb-form-refresh" onclick="cbRefreshForms(this)" title="Read the forms of the Page from Meta now">Refresh forms</button>' +
       '</div>' +
       '<input type="hidden" name="' + pfx + 'form_id" value="" disabled>' +
       '<div class="cb-form-note" data-form-note></div>' +
+      '</div>' +
       '</div>' +
       '<span class="cb-label">More primary texts</span>' + future('texts', 'button', '+ Primary text 3–5') +
       '<span class="cb-label">CTA</span>' + future('cta', 'select', 'Learn more', 'Every ad uses Learn more today') +
@@ -13331,6 +13643,13 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     var srcForm = srcRow.querySelector('input[name$="_form_id"]');
     var newForm = newRow.querySelector('input[name$="_form_id"]');
     if (srcForm && newForm) newForm.value = srcForm.value;
+    // ACL-1776: шаблон формы и источник тоже едут в копию.
+    var srcTpl = srcRow.querySelector('input[name$="_form_template"]');
+    var newTpl = newRow.querySelector('input[name$="_form_template"]');
+    if (srcTpl && newTpl) newTpl.value = srcTpl.value;
+    var srcMode = srcRow.querySelector('.cb-form-source');
+    var newMode = newRow.querySelector('.cb-form-source');
+    if (srcMode && newMode) newMode.value = srcMode.value;
     // ACL-1344: второй вариант основного текста едет в копию вместе с первым.
     var srcText2 = srcRow.querySelector('.cb-text2-sel-wrap');
     var newText2 = newRow.querySelector('.cb-text2-sel-wrap');
@@ -14693,6 +15012,7 @@ function cbPlanHtml(data) {
     h += '<div class="cbd-plan-camp" style="margin:0.4rem 0;padding-left:0.4rem;border-left:2px solid '
       + (r.error ? 'var(--bad)' : 'var(--good)') + '">';
     h += '<div><strong>' + aclEscHtml(r.campaign_name || '?') + '</strong>'
+      + (r.published_as ? ' → published as <strong>' + aclEscHtml(r.published_as) + '</strong>' : '')
       + (s ? ' · PAUSED · ' + aclEscHtml(cbPlanMoney(s))
            + (s.existing ? ' · <em>already exists; a publish would reuse it</em>' : '') : '')
       + '</div>';
@@ -14701,13 +15021,6 @@ function cbPlanHtml(data) {
       if (w === 'Dry run: nothing was created') return;
       h += '<div class="cbd-plan-warn" style="color:#b45309">⚠ ' + aclEscHtml(w) + '</div>';
     });
-    if (s && (s.existing_differences || []).length) {
-      h += '<div class="cbd-plan-diff" style="color:#b45309;margin:0.2rem 0">⚠ Already exists in Ads Manager — differs from the builder:<ul style="margin:0.1rem 0 0 1.1rem">';
-      s.existing_differences.forEach(function (d) {
-        h += '<li><strong>' + aclEscHtml(d.object) + '</strong>: ' + aclEscHtml((d.differences || []).join('; ')) + '</li>';
-      });
-      h += '</ul>A publish would stop before writing anything. Delete or rename the old campaign in Ads Manager, or rename the campaign in the builder.</div>';
-    }
     if (s) {
       var allForms = (s.ad_sets || []).length && (s.ad_sets || []).every(function (x) { return x.destination === 'Instant Form'; });
       h += '<div class="cbd-plan-meta" style="font-size:var(--adopy-text-sm);color:var(--muted)">page '
@@ -14727,7 +15040,9 @@ function cbPlanHtml(data) {
             + aclEscHtml(ad.file) + '<br>headline: ' + aclEscHtml(ad.headline) + ' · text: '
             + aclEscHtml(ad.primary_text) + (ad.description ? ' · description: '
             + aclEscHtml(ad.description) : '')
-            + (ad.form_id ? '<br>Instant Form ' + aclEscHtml(ad.form_name || '?') + ' (' + aclEscHtml(ad.form_id) + ')'
+            + (ad.form_note ? '<br>Instant Form: ' + aclEscHtml(ad.form_note)
+                              + (ad.form_id ? ' (' + aclEscHtml(ad.form_id) + ')' : '')
+              : ad.form_id ? '<br>Instant Form ' + aclEscHtml(ad.form_name || '?') + ' (' + aclEscHtml(ad.form_id) + ')'
                           : '<br>link ' + aclEscHtml(ad.link))
             + ' · CTA ' + aclEscHtml(ad.cta) + '</li>';
         });
@@ -16075,7 +16390,8 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
       var icon = !r.success ? '❌' : (blocked ? '❌' : (warningOnly ? '⚠️' : '✅'));
       html += '<div class="cb-status-row">';
       html += '<span class="cb-status-icon">' + icon + '</span>';
-      html += '<span class="cb-status-name">' + aclEscHtml(r.campaign_name || '?') + '</span>';
+      html += '<span class="cb-status-name">' + aclEscHtml(r.campaign_name || '?')
+        + (r.published_as ? ' → published as ' + aclEscHtml(r.published_as) : '') + '</span>';
       if (r.success && r.campaign_id) {
         html += '<span class="cb-status-id">campaign_id: ' + aclEscHtml(r.campaign_id) + '</span>';
       }
