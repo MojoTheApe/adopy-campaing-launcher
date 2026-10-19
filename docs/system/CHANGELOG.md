@@ -28,6 +28,26 @@ receipt only on success. Existing same-candidate mechanism tests and employee
 update behavior are preserved; live rollout and business pilot are not asserted.
 Parent ACL-1923 retains actual activation and publication verification.
 
+## API backend: campaign name gets _2, _3 ... when a different campaign has that name - ACL-1902
+
+- Owner request: instead of blocking when a campaign with the same name already exists (for example a
+  PAUSED leftover of a failed run with other settings), pick a free name automatically.
+- The creator resolves the name before any write, in the publish run and in Check plan, with one function:
+  `NAME`, `NAME_2` ... `NAME_20`. Free -> use; ours and identical -> reuse (resume, no duplicate); ours
+  but different or same name without our tag -> next. Suffix goes on the full name (`X_2` -> `X_2_2`).
+  Ad set and ad names are unchanged; the tag is derived from the chosen name. All 20 taken -> stop
+  before any write with a clear message.
+- Check plan: the preflight rule `existing_diffs` is now a WARNING ("Will be published as 'NAME_2': ...")
+  when a suffix is chosen, an ERROR only when all 20 names are taken.
+- `campaign_name` in results, job progress and draft status stays the builder name (so dots and verdicts
+  keep matching); the chosen name is the new field `published_as`, shown next to the name in the plan and
+  job panels. Statistics and reports in Meta show `NAME_2`; each NAME_k has its own tag (creatives are
+  recreated, a video may be uploaded again); an older partial campaign stays PAUSED, untouched.
+- Safety: a full (200 rows) search is not trusted (exact lookup, else stop); `X_2` reuse requires matching ads; at most 6 own
+  candidates are diffed; names over 400 characters stop (conservative guard). Removed the dead "A publish would stop" block.
+- Reads: one campaigns search on the base name for all candidates, plus the previous diff reads per own
+  candidate. No extra writes.
+
 ## API backend: no time limit on file uploads, upload progress on the dashboard - ACL-1899
 
 - Bug (live 2026-10-14): a video upload hit the generic 120 s write timeout, Python stopped waiting
