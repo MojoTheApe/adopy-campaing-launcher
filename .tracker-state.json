@@ -44125,7 +44125,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "990": {
+        "actor": "Worker-R1019990",
+        "session": "run_r1019_990",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1990-preflight-topics",
+        "worktree": "C:\\acl-1990-preflight-topics",
+        "id": "502d6b12f7014fea8fef14fe7251d600",
+        "issue": 990,
+        "state": "implementing",
+        "started_at": "2026-10-19T19:55:13+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -51812,11 +51825,15 @@
           {
             "actor": "Worker-W1381A",
             "session": "implementation_audit_20261018_acl1381"
+          },
+          {
+            "actor": "Worker-R1019990",
+            "session": "run_r1019_990"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-W1381A",
-        "coordinator": "Coordinator-C1818A",
+        "state": "implementing",
+        "worker": "Worker-R1019990",
+        "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-W1381A",
           "session": "implementation_audit_20261018_acl1381",
@@ -54468,6 +54485,10 @@
       },
       "Worker-R1019309": {
         "session": "run_r1019_309",
+        "role": "Worker"
+      },
+      "Worker-R1019990": {
+        "session": "run_r1019_990",
         "role": "Worker"
       }
     },
@@ -93582,6 +93603,13 @@
         "issue": 836,
         "pr": 837,
         "actor": "Worker-U1019836"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T19:55:13+00:00",
+        "issue": 990,
+        "claim": "502d6b12f7014fea8fef14fe7251d600",
+        "actor": "Worker-R1019990"
       }
     ],
     "policy": {
