@@ -44296,9 +44296,11 @@
         "worktree": "C:\\acl-1854-wt",
         "id": "8ed5474077a24ef0af7a92f863e035c5",
         "issue": 854,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T20:30:34+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 869,
+        "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main. Conflicts: CHANGELOG, PROJECT.md (kept both notes), src/web/publish_jobs.py (imports: hashlib, json from this branch + logging from main), report.html (kept the previous-ready line and main's text-size token). Tests: test_acl1854_current_draft_status 31 passed (one cross-process lock test timed out once under heavy laptop load and passed on rerun), test_a_job_exception_reaches_sentry_tagged 4 passed, test_a_finished_clean_profile_closes_itself 46 passed. No live runs."
       }
     },
     "tasks": {
