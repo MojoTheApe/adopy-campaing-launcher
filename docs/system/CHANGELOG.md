@@ -50,6 +50,87 @@ receipt only on success. Existing same-candidate mechanism tests and employee
 update behavior are preserved; live rollout and business pilot are not asserted.
 Parent ACL-1923 retains actual activation and publication verification.
 
+## API backend: campaign name gets _2, _3 ... when a different campaign has that name - ACL-1902
+
+- Owner request: instead of blocking when a campaign with the same name already exists (for example a
+  PAUSED leftover of a failed run with other settings), pick a free name automatically.
+- The creator resolves the name before any write, in the publish run and in Check plan, with one function:
+  `NAME`, `NAME_2` ... `NAME_20`. Free -> use; ours and identical -> reuse (resume, no duplicate); ours
+  but different or same name without our tag -> next. Suffix goes on the full name (`X_2` -> `X_2_2`).
+  Ad set and ad names are unchanged; the tag is derived from the chosen name. All 20 taken -> stop
+  before any write with a clear message.
+- Check plan: the preflight rule `existing_diffs` is now a WARNING ("Will be published as 'NAME_2': ...")
+  when a suffix is chosen, an ERROR only when all 20 names are taken.
+- `campaign_name` in results, job progress and draft status stays the builder name (so dots and verdicts
+  keep matching); the chosen name is the new field `published_as`, shown next to the name in the plan and
+  job panels. Statistics and reports in Meta show `NAME_2`; each NAME_k has its own tag (creatives are
+  recreated, a video may be uploaded again); an older partial campaign stays PAUSED, untouched.
+- Safety: a full (200 rows) search is not trusted (exact lookup, else stop); `X_2` reuse requires matching ads; at most 6 own
+  candidates are diffed; names over 400 characters stop (conservative guard). Removed the dead "A publish would stop" block.
+- Reads: one campaigns search on the base name for all candidates, plus the previous diff reads per own
+  candidate. No extra writes.
+
+## API backend: no time limit on file uploads, upload progress on the dashboard - ACL-1899
+
+- Bug (live 2026-10-14): a video upload hit the generic 120 s write timeout, Python stopped waiting
+  (`call_unknown`), one readback 5 s later found nothing and the run stopped, while the page's request
+  could still reach Meta. Owner decision: no time limit for file uploads.
+- File writes (`advideos`, `adimages`) now run as a job in the page helper (`XMLHttpRequest`); Python polls it ~once per second with a short per-poll CDP timeout and no overall
+  deadline. Network, HTTP and Meta errors, a lost page, or Stop end the wait. Writes without a file are
+  unchanged (short timeout). The write policy and the size + SHA-256 check before sending are unchanged.
+- Dashboard: the job panel shows `ad 1: uploading video (180 MB), 1m 20s` (images too), at most once per
+  second. There is no byte progress: a listener on `xhr.upload` makes the browser send a CORS preflight,
+  Graph answers it with `Access-Control-Allow-Origin: *` and no `Allow-Credentials`, and the credentialed
+  request is blocked (live failure on TEST9095: `network`, body never sent). So the helper registers no
+  upload listener; a real percentage comes with chunked upload (ACL-891).
+- Stop during an upload aborts the request in the page, reads back once and stops; a re-run reuses an
+  already uploaded video and never uploads twice.
+- After an unknown upload result the readback is repeated (6 reads with waits of 5, 10, 20, 30, 30, 30 s,
+  about 2 minutes), counted in the per-campaign call budget; other writes keep one readback.
+- Redirects: the old `fetch` used `redirect: 'error'`; XHR follows redirects. The helper aborts the
+  request as soon as the response URL differs from the requested one and reports `redirected`, which
+  counts as an unknown result (reconcile), never as not sent. Residual risk: the browser may already have
+  re-sent the body to the redirect target before the check. Graph hosts do not redirect.
+- Review fixes: up to 3 consecutive poll timeouts are tolerated (never a re-send); Stop during the
+  readback ends the run as cancelled and keeps the write marked unreconciled; Stop during an upload reads
+  back twice (5 s, 20 s) and tells the buyer to wait a few minutes before publishing again; repeated
+  readbacks read at most 3 pages.
+- Stacked on ACL-1776 (depends on the ACL-1761...1776 stack). Chunked upload for files over 200 MB
+  (ACL-891) can reuse the job / progress plumbing.
+
+## Builder: Instant Forms - the robot creates a form from a template (API backend) - ACL-1776
+
+- Owner decision 2026-10-12: the robot MAY create an Instant Form on a Page from a saved template. It
+  never accepts the Lead Ads terms (`tos_accepted` is not allowed anywhere, in either policy layer). A
+  Page that has not accepted the terms stops the campaign before any write with a text that tells the
+  human to accept them in Meta.
+- Forms library: templates live in `form_templates.json` in the machine config folder
+  (`get_local_config_dir()`), not in git. A template has a name, headline, optional intro, contact fields
+  (name / email / phone), up to 5 custom questions (short answer or multiple choice), an https privacy
+  policy URL, thank-you text with an optional https website link, and a locale. The same checks run on
+  the page and on the server.
+- Builder: with Instant Form every ad has "Use existing form" (ACL-1775) or "Create from template" with
+  a "Create and save form" panel (Save and select / Back to ad). Saving only stores the template on the
+  computer. With `ACL_FB_BACKEND=rpa` the template path is disabled with "API backend only"; a stored
+  choice is refused out loud.
+- Creation: `POST /{page_id}/leadgen_forms` runs in its own narrow write-policy chain
+  (`write_policy.check_form_create`, mirrored in the page helper): only that edge on the plan's Page; only
+  the keys name, questions, privacy_policy, thank_you_page, context_card, question_page_custom_headline,
+  locale, follow_up_action_url; nested keys and values are checked; no terms, no DELETE, no other Page
+  edge, no files.
+- Idempotent: the form name is `<template> · ACL <6-hex content hash>`. The Page's forms are searched by
+  the exact name first; an ACTIVE match is reused (also by another campaign), an archived one stops with
+  a clear text. The write happens once, right before the creative that needs the form. A timeout is
+  reconciled by reading the forms list; nothing found means a stop and no blind retry. The created form
+  is read back: ACTIVE, on this Page, questions match.
+- Check plan makes zero writes and says "form will be created: <name>" (or "form found on the Page,
+  reused"). Pre-flight audit: privacy URL present and https, at least one contact field, Lead Ads terms
+  accepted (when readable).
+- Open: whether the captured Ads Manager token may create forms on a Page is only known from a live
+  attempt (`pages_manage_ads`). `/me/permissions` is read as a hint (warning, not a block); a Meta refusal
+  becomes a clear English stop that points to "Use existing form". The robot never asks for or stores
+  another token.
+
 ## Builder: pre-flight audit card that blocks Publish - ACL-1819
 
 - Every check is defined once in `src/fb_api/preflight_rules.py` (id, label, severity, field, hint,
@@ -201,6 +282,19 @@ Crop where Next hung and closed the wizard with Close, leaving the ad without me
   ends in the honest `crop_wizard_stuck`, with the exit reason `looped_back`.
 - The wizard telemetry row gets `looped_back_to` (first earlier step the wizard went back to, e.g.
   `Media`), also inside `exit`. No new clicks: only the existing Next on a Crop that is on screen.
+
+## Safe operation context for Graph read failures — ACL-1886
+
+- Two Plan check permission errors showed the same Graph10/OAuthException/HTTP400
+  diagnostics without identifying the failed read. An offline replay reproduced
+  that loss across search, campaign, promoted-page, pixel and form requests.
+- GraphClient now adds only the fixed GET method, a closed operation category and
+  an optional allowlisted search subtype to its existing error details/text.
+  Unknown paths/types cannot echo URLs, queries, names, IDs or request parameters.
+- Existing caller error handling, token/rate/policy stops and request counts stay
+  unchanged. The anonymized error fixture and public-client tests cover safe
+  context and pagination. This diagnostic fix does not explain or resolve the
+  live permission denial, grant access or establish deployment to a dashboard.
 
 ## Window recovery enlarges a window restored below the editor minimum — ACL-1727
 

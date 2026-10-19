@@ -2290,6 +2290,10 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                 slot["destination"] = destination
             if destination == "instant_form":
                 slot["lead_form_id"] = (form.get(f"camp_{idx}_ad_{a_idx}_form_id") or "").strip()
+                # ACL-1776: шаблон формы (создаёт робот при публикации); ключ есть только при выборе шаблона.
+                template = (form.get(f"camp_{idx}_ad_{a_idx}_form_template") or "").strip()
+                if template:
+                    slot["lead_form_template"] = template
             slots.append(slot)
     # Return the ISO code, not the raw form value ("Costa Rica"). Confirmed
     # live 2026-07-30: the full name leaked into draft.country, where both
@@ -5236,6 +5240,47 @@ async def api_page_forms(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": "Instant Forms need the Graph API backend (ACL_FB_BACKEND=api)."},
                             status_code=409)
     return JSONResponse(await asyncio.to_thread(page_forms.read_forms, account))
+
+
+@app.get("/api/form-templates")
+def api_form_templates_list() -> JSONResponse:
+    """ACL-1776: шаблоны Instant Form из локальной библиотеки (в Meta не ходит)."""
+    from src.fb_api import form_templates
+
+    return JSONResponse({"ok": True, "templates": form_templates.load(),
+                         "limits": {"questions": form_templates.MAX_QUESTIONS}})
+
+
+@app.post("/api/form-templates")
+async def api_form_templates_save(request: Request) -> JSONResponse:
+    """ACL-1776: сохранить шаблон (ошибки проверки - 400, по-английски). Ничего в Meta."""
+    from src.fb_api import form_templates
+
+    try:
+        raw = await request.json()
+    except ValueError:
+        return JSONResponse({"ok": False, "errors": ["The template could not be read"]}, status_code=400)
+    try:
+        saved = await asyncio.to_thread(form_templates.save, raw)
+    except form_templates.TemplateError as exc:
+        return JSONResponse({"ok": False, "errors": exc.errors}, status_code=400)
+    except OSError:
+        return JSONResponse({"ok": False, "errors": ["The template could not be saved on this computer"]},
+                            status_code=500)
+    return JSONResponse({"ok": True, "template": saved})
+
+
+@app.post("/api/form-templates/delete")
+async def api_form_templates_delete(request: Request) -> JSONResponse:
+    """ACL-1776: убрать шаблон из библиотеки. Формы на Страницах не трогаются никогда."""
+    from src.fb_api import form_templates
+
+    try:
+        raw = await request.json()
+    except ValueError:
+        raw = {}
+    removed = await asyncio.to_thread(form_templates.delete, str((raw or {}).get("id") or ""))
+    return JSONResponse({"ok": removed})
 
 
 @app.post("/preview-publish")
