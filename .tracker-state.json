@@ -43059,20 +43059,6 @@
         "started_at": "2026-10-19T10:01:02+00:00",
         "from_status": "status:todo"
       },
-      "787": {
-        "actor": "Worker-E19787",
-        "session": "w787-c0a1de70",
-        "coordinator": "Coordinator-E1019A",
-        "branch": "codex/acl-1787-ad-rules-research",
-        "worktree": "C:\\wk19-787",
-        "id": "efbcd7436d9a462a8a769477e492b1b5",
-        "issue": 787,
-        "state": "handoff",
-        "started_at": "2026-10-19T10:02:20+00:00",
-        "from_status": "status:todo",
-        "pr": 956,
-        "report": "ACL-1787 docs-only research (docs/research/ACL-1787-meta-ad-rules.md), no code change. Merged origin/main 435bc154 into the PR branch (clean, no conflicts; diff vs main is the single doc file). Checks: scripts/acl_scan_secrets.py OK (no secrets), scripts/acl_smoke.py OK (dashboard and RPA import). No unit tests affected (doc only). Owner lifted the administrative pause on 2026-10-19."
-      },
       "401": {
         "actor": "Worker-E19401",
         "session": "w401-c0a1de70",
@@ -49599,25 +49585,25 @@
             "session": "w787-c0a1de70"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-E19787",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
-          "actor": "Worker-W1787C",
-          "session": "w1787c-20261016",
-          "coordinator": "Coordinator-C1016A",
+          "actor": "Worker-E19787",
+          "session": "w787-c0a1de70",
+          "coordinator": "Coordinator-E1019A",
           "branch": "codex/acl-1787-ad-rules-research",
-          "worktree": "C:\\acl-1787-c",
-          "id": "cab384b4c05f4c11aae5b3a15a8368e9",
+          "worktree": "C:\\wk19-787",
+          "id": "efbcd7436d9a462a8a769477e492b1b5",
           "issue": 787,
           "state": "handoff",
-          "started_at": "2026-10-16T14:45:24+00:00",
-          "from_status": "status:backlog",
+          "started_at": "2026-10-19T10:02:20+00:00",
+          "from_status": "status:todo",
           "pr": 956,
-          "report": "ACL-1787 desk research delivered in PR 956 (docs/research/ACL-1787-meta-ad-rules.md). Official Meta docs only; no API calls, credentials or accounts touched. Verified facts separated from inferences and unknowns. Key unknowns for a gated pilot: error 2703 versus pause-with-spend rules, and whether the in-profile token can create rules. Recommendation: do not build yet; run the section 8 pilot with an explicit owner go. Verification: documentation-only change, no code or tests."
+          "report": "ACL-1787 docs-only research (docs/research/ACL-1787-meta-ad-rules.md), no code change. Merged origin/main 435bc154 into the PR branch (clean, no conflicts; diff vs main is the single doc file). Checks: scripts/acl_scan_secrets.py OK (no secrets), scripts/acl_smoke.py OK (dashboard and RPA import). No unit tests affected (doc only). Owner lifted the administrative pause on 2026-10-19."
         },
         "pr": 956,
-        "queued_at": "2026-10-16T14:53:45+00:00",
+        "queued_at": "2026-10-19T10:08:25+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -55771,7 +55757,8 @@
     },
     "review_queue": [
       377,
-      356
+      356,
+      787
     ],
     "review": null,
     "history": [
@@ -88532,6 +88519,13 @@
         "issue": 305,
         "claim": "2c76bc2be6d345c28cd79fb37a134b58",
         "actor": "Worker-E19305"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T10:08:25+00:00",
+        "issue": 787,
+        "pr": 956,
+        "actor": "Worker-E19787"
       }
     ],
     "policy": {
