@@ -44401,6 +44401,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T21:40:00+00:00",
         "from_status": "status:todo"
+      },
+      "897": {
+        "actor": "Worker-S1019897",
+        "session": "run_s1019_897",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1897-first-page",
+        "worktree": "C:\\acl-1897",
+        "id": "0b951ded8d624b41b82c93473fb4d482",
+        "issue": 897,
+        "state": "implementing",
+        "started_at": "2026-10-19T21:40:33+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -52528,6 +52540,17 @@
         "queued_at": "2026-10-19T20:04:44+00:00",
         "reviewer": "Reviewer-R1175Y",
         "review_report": "# Return: PR #930 (ACL-1175), head 28a2ffab, reviewer Reviewer-R1175Y\n\n## Blocking\n\n1. Acceptance criterion 1 is not met: the page is reachable only AFTER the installer has run.\n   - docs/SETUP-NEW-PC.md:15-17 (Step 0) says the installer comes \"from Evgeni\"; the guide exists only inside the bundle (_internal/setup-guide.html, installer.iss Icons/Run). Before the .exe is installed, the manager has no page at all.\n   - Issue #175 asks for \"a link, not a file on hand\" available before repo access. The PR body claim \"can be read without repo access\" is true only post-install.\n   - The first thing that can go wrong (SmartScreen \"Windows protected your PC\", docs Step 1 and table row \"Installer\") happens before the guide is on disk, so the person reads that advice in a file they do not yet have.\n   - Fix: publish the rendered setup-guide.html as an asset of the same GitHub Release as the installer (release.yml, next to .sha256 and release.json), or at another stable URL; make Step 0 / the top of the page say \"open this link first\" and name that link in the text the manager is given with the installer. Add a test or release.yml check that the asset is published. Keep the in-installer copy.\n\n## Non-blocking nits\n- Criterion 3: the issue asks that \"no advanced release\" and the terminal window loop be named. The .exe flow made the loop obsolete, but the table has no row for the dashboard Update button refusals. Either add a row or note in the PR why they no longer apply.\n- Criterion 4 (live pass with Yotam) is correctly stated as not done; the issue must stay open after merge (PR says \"Tracker issues\", not \"Closes\" - good).\n- Install ACL.bat is still in main; RELEASE_TRUST.md note is fine.\n\n## Verified OK\nSteps match wizard (6 STEPS, title \"Adopy Campaign Manager Setup\", 4 system checks, 500 MB, port wording, Multilogin moved to dashboard, Accounts messages match report.html). No secrets/ids/internal URLs in the diff. tests/test_setup_guide.py: 11 passed locally.\nCI at review time: Process instructions, Classify, Verify build inputs, descriptor, tracker-link, windows tests (3.13) pass; linux tests and \"Build, install, repair, and uninstall\" were still pending."
+      },
+      "897": {
+        "implementers": [
+          {
+            "actor": "Worker-S1019897",
+            "session": "run_s1019_897"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-S1019897",
+        "coordinator": "Coordinator-M1011A"
       }
     },
     "actors": {
@@ -54913,6 +54936,10 @@
       },
       "Worker-B1019767": {
         "session": "run_b1019_767",
+        "role": "Worker"
+      },
+      "Worker-S1019897": {
+        "session": "run_s1019_897",
         "role": "Worker"
       }
     },
@@ -94866,6 +94893,13 @@
         "issue": 767,
         "claim": "5b92bb10b4954279a7c17eb5f20d5532",
         "actor": "Worker-B1019767"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T21:40:33+00:00",
+        "issue": 897,
+        "claim": "0b951ded8d624b41b82c93473fb4d482",
+        "actor": "Worker-S1019897"
       }
     ],
     "policy": {
