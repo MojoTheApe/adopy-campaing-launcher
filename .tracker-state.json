@@ -43154,9 +43154,11 @@
         "worktree": "C:\\wk19-681",
         "id": "c7de7bb57d3940109f2fa046ed8096c0",
         "issue": 681,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T11:06:02+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 970,
+        "report": "ACL-1681 / PR 970 re-claimed after the administrative pause was lifted. No new features.\n\nMerged current origin/main into work/acl-1681-server-drafts (clean merge, no conflicts). New head 25c8824e25a9843211b29220f07af3bbde749012, pushed by fast-forward.\n\nChecks run in the worktree with an isolated ACL_CONFIG_DIR:\n- tests/test_acl1681_server_drafts.py, tests/test_build_progress_model.py, tests/test_acl_test_platform.py: 150 passed\n- tests/test_report_scripts_parse.py: 3 passed\n- tests/test_campaign_build_percent_browser.py: 15 passed, 1 failed on the first run (test_percent_grows_through_a_recorded_build_and_clears_when_done[classic]); it passed on rerun, the same timing flake the PR description already mentions\n- scripts/acl_scan_secrets.py: passed\n- scripts/acl_smoke.py: passed\nThe full suite was not run (CI covers it). The PR body keeps exactly one \"Tracker issues:\" line."
       }
     },
     "tasks": {
