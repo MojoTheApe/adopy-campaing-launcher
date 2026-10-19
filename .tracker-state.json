@@ -44028,22 +44028,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "807": {
-        "actor": "Worker-S1019807",
-        "session": "run_s1019_807",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1807-valid-combos",
-        "worktree": "C:\\acl-1807",
-        "id": "59bdc7cee0ef48febbfa2d1f97225cc0",
-        "issue": 807,
-        "state": "handoff",
-        "started_at": "2026-10-19T17:51:45+00:00",
-        "from_status": "status:todo",
-        "pr": 1021,
-        "report": "Builder reads the Meta rules registry (ga only): capabilities endpoint, Conversion location filtering, blocking Meta-rules audit line with the server's reason text. Tests: test_acl1807_valid_combos (13) + 1781/1819/1769 suites pass. Opus review: no HIGH; fixed intersect-with-enums and 503 handling. Note: builder has no goal/billing/CTA selectors yet (ACL-1767), so those lists are ready but not yet wired to controls."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -52003,9 +51988,25 @@
             "session": "run_s1019_807"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1019807",
-        "coordinator": "Coordinator-M1011A"
+        "coordinator": "Coordinator-M1011A",
+        "handoff": {
+          "actor": "Worker-S1019807",
+          "session": "run_s1019_807",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "work/acl-1807-valid-combos",
+          "worktree": "C:\\acl-1807",
+          "id": "59bdc7cee0ef48febbfa2d1f97225cc0",
+          "issue": 807,
+          "state": "handoff",
+          "started_at": "2026-10-19T17:51:45+00:00",
+          "from_status": "status:todo",
+          "pr": 1021,
+          "report": "Builder reads the Meta rules registry (ga only): capabilities endpoint, Conversion location filtering, blocking Meta-rules audit line with the server's reason text. Tests: test_acl1807_valid_combos (13) + 1781/1819/1769 suites pass. Opus review: no HIGH; fixed intersect-with-enums and 503 handling. Note: builder has no goal/billing/CTA selectors yet (ACL-1767), so those lists are ready but not yet wired to controls."
+        },
+        "pr": 1021,
+        "queued_at": "2026-10-19T19:05:03+00:00"
       },
       "945": {
         "implementers": [
@@ -57146,7 +57147,8 @@
       151,
       945,
       896,
-      853
+      853,
+      807
     ],
     "review": null,
     "history": [
@@ -93058,6 +93060,13 @@
         "issue": 903,
         "actor": "Worker-R1019903",
         "report": "Revival blocked: branch is stacked on open, blocked ACL-1774 (PR 834) and ACL-1767 commits; merging current main conflicts in src/fb_api/creator.py, src/fb_api/write_policy.py, src/web/templates/report.html and CHANGELOG with the 1774 content. Merge aborted, nothing pushed. Revive ACL-1774 first, then rebase this one."
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T19:05:03+00:00",
+        "issue": 807,
+        "pr": 1021,
+        "actor": "Worker-S1019807"
       }
     ],
     "policy": {
