@@ -43239,9 +43239,11 @@
         "worktree": "C:\\acl-123-c",
         "id": "d448aadd8f7d441c8acc29b1209c5e2b",
         "issue": 29,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T12:50:20+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 954,
+        "report": "ACL-123 refreshed: merged origin/main (only CHANGELOG conflicted, both kept; heading now dated). _REASON_RE anchored to the \"(Meta API: ..., reason X)\" suffix; added a Playwright live-Read (amapStatusTail) test. blocked status left out (out of scope). Tests (py 3.14, one file at a time): next_step 11, copy_status_text 20, disabled_account_status 17, account_spend 62 - all pass."
       }
     },
     "tasks": {
