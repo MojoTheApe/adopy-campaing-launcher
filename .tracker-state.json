@@ -44398,9 +44398,11 @@
         "worktree": "C:\\acl-1767",
         "id": "5b92bb10b4954279a7c17eb5f20d5532",
         "issue": 767,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T21:40:00+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 830,
+        "report": "# ACL-1767 handoff\n\n- Merged current work/main into codex/acl-1767-audience-cta-devices (merge commit 7a78e2c6); 7 conflicts resolved keeping both sides (ACL-1767 CTA/targeting/devices/multi-ads with ACL-1776 form templates, ACL-1899 live_progress, _PATH_RE).\n- Read-only independent review of the resolution (Opus): no defects.\n- Tests run (touched/related only): test_acl1767_audience_fields 92, test_acl1761_api_create 121, test_acl1761_parity 44, test_acl1775_instant_forms 86, test_acl1776_create_forms 120, test_acl1819_preflight 97, test_builder_second_primary_text 17, test_acl1769_two_column_layout 12, test_acl1761_plan_check + test_acl1819_preflight_browser 22: all passed. Full suite is left to CI.\n- No live runs; Meta CTA list and user_os version format remain unverified live (see PR body)."
       }
     },
     "tasks": {
