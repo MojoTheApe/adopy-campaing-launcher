@@ -43606,20 +43606,6 @@
         "state": "implementing",
         "started_at": "2026-10-19T14:21:47+00:00",
         "from_status": "status:todo"
-      },
-      "776": {
-        "actor": "Worker-RF1019X",
-        "session": "rf1019x-20261019",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1776-create-forms",
-        "worktree": "C:\\rf19b-776",
-        "id": "1260ebd5a7234fc4a2e0a173c30c209b",
-        "issue": 776,
-        "state": "handoff",
-        "started_at": "2026-10-19T14:23:46+00:00",
-        "from_status": "status:todo",
-        "pr": 831,
-        "report": "Refreshed onto main 1c6ab78e (batch #1016): merge 4b59c50f clean, plus extra test-only commit (fake _Req.form accepts read_form limits). Tests: acl1776_create_forms, acl1775_builder_forms, acl1819_preflight 214 passed."
       }
     },
     "tasks": {
@@ -47843,25 +47829,25 @@
             "session": "rf1019x-20261019"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RF1019X",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-RF1019W",
-          "session": "rf1019w-20261019",
+          "actor": "Worker-RF1019X",
+          "session": "rf1019x-20261019",
           "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1776-create-forms",
-          "worktree": "C:\\rf19-776",
-          "id": "2a0a9c7b6c9f432ea8583c166ad35384",
+          "worktree": "C:\\rf19b-776",
+          "id": "1260ebd5a7234fc4a2e0a173c30c209b",
           "issue": 776,
           "state": "handoff",
-          "started_at": "2026-10-19T11:24:12+00:00",
+          "started_at": "2026-10-19T14:23:46+00:00",
           "from_status": "status:todo",
           "pr": 831,
-          "report": "Merged main 435bc154 into cd1da59b (new head 9da094c7). Conflicts: none. No code change. Tests: test_acl1776_create_forms, test_acl1775_builder_forms, test_acl1819_preflight: 214 passed. Needs a delta review of the merge only."
+          "report": "Refreshed onto main 1c6ab78e (batch #1016): merge 4b59c50f clean, plus extra test-only commit (fake _Req.form accepts read_form limits). Tests: acl1776_create_forms, acl1775_builder_forms, acl1819_preflight 214 passed."
         },
         "pr": 831,
-        "queued_at": "2026-10-19T11:31:33+00:00",
+        "queued_at": "2026-10-19T14:30:26+00:00",
         "review_report": "Main moved to 1c6ab78e (batch #1016). Approval on 435bc154 is stale; return for a main merge and fresh delta approval. Owner instruction 2026-10-19: ship these four in the next batch with release.",
         "return_operation": {
           "id": "5f4dd2e912fc41e6a57d1253f8677c84",
@@ -56559,7 +56545,8 @@
       839,
       73,
       165,
-      29
+      29,
+      776
     ],
     "review": null,
     "history": [
@@ -91424,6 +91411,13 @@
         "at": "2026-10-19T14:23:46+00:00",
         "issue": 776,
         "claim": "1260ebd5a7234fc4a2e0a173c30c209b",
+        "actor": "Worker-RF1019X"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T14:30:26+00:00",
+        "issue": 776,
+        "pr": 831,
         "actor": "Worker-RF1019X"
       }
     ],
