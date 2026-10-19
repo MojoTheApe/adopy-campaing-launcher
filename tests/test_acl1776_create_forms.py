@@ -873,7 +873,7 @@ class _Req:
     def __init__(self, fields=None, body=None):
         self._f, self._b = dict(fields or {}), body
 
-    async def form(self):
+    async def form(self, **_limits):  # read_form passes parse limits
         return self._f
 
     async def json(self):
