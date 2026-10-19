@@ -51199,7 +51199,7 @@
             "session": "acl-1377"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-K7Q2M",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -51217,7 +51217,8 @@
           "report": "PR #935: compact workbook-alias match (Facebook_6540_<id> -> Facebook6540) with collision/ambiguity guards, \"not in workbook\" hint on Meta-only campaign rows. Tests: tests/test_dashboard_review.py, tests/test_the_account_tree_on_screen.py (144 passed). Independent Sonnet review done; findings on rule keys and empty-workbook hint fixed. Owner check on the live dashboard still required."
         },
         "pr": 935,
-        "queued_at": "2026-10-17T19:36:55+00:00"
+        "queued_at": "2026-10-17T19:36:55+00:00",
+        "reviewer": "Reviewer-R1377X"
       },
       "987": {
         "implementers": [
@@ -53693,6 +53694,10 @@
       },
       "Reviewer-R1855X": {
         "session": "reviewer-r1855x-20261019",
+        "role": "Reviewer"
+      },
+      "Reviewer-R1377X": {
+        "session": "reviewer-r1377x-20261019",
         "role": "Reviewer"
       }
     },
@@ -56543,7 +56548,6 @@
       }
     },
     "review_queue": [
-      377,
       70,
       681,
       839,
@@ -91481,6 +91485,13 @@
         "pr": 927,
         "lane": "8919de673fad444cbf5716783f18b91f",
         "actor": "Reviewer-R1855X"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-19T14:43:28+00:00",
+        "pr": 935,
+        "lane": "f9c07d4263c64bc8a0710687acb1e97b",
+        "actor": "Reviewer-R1377X"
       }
     ],
     "policy": {
@@ -98232,6 +98243,18 @@
         "session": "reviewer-r1855x-20261019",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-19T14:42:50+00:00",
+        "state": "reviewing"
+      },
+      "935": {
+        "id": "f9c07d4263c64bc8a0710687acb1e97b",
+        "pr": 935,
+        "issues": [
+          377
+        ],
+        "actor": "Reviewer-R1377X",
+        "session": "reviewer-r1377x-20261019",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-19T14:43:28+00:00",
         "state": "reviewing"
       }
     },
