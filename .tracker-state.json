@@ -102429,7 +102429,51 @@
         "session": "reviewer-r1529y-20261019",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-19T21:16:34+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 529,
+          "pr": 530,
+          "branch": "codex/acl-1529-sharp-shot",
+          "head_sha": "975e4f0609b9dc255f6bffb27194316ef3bbf335",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "d2a578fc8422a76cdb13d415f870c385f45e611e31569057e69edab3a2b33eac",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-R1529Y",
+            "review_session": "reviewer-r1529y-20261019",
+            "execution_lane": "b30f33cdb8634786ad22668116bbe726",
+            "implementer": "Worker-R1019529",
+            "head_sha": "975e4f0609b9dc255f6bffb27194316ef3bbf335",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "tree_sha": "8b36fc6c2a97f0783ad4f03826fcb2fff41d054e",
+            "issues": [
+              529
+            ],
+            "report": "PR #530 removes the red header band from Copy for group: amapCopyGroup in report.html now fetches the stored status shot and copies it as is, after amapTrimShot cuts empty white margins on the right and bottom (covers old shots), with the disabled state and the new-tab/view fallback unchanged and data-head kept only as the fallback tab title. New status shots (account_spend._status_shot -> _full_view_shot) are taken with a plain CDP Page.captureScreenshot (no clip, no scale; the owner-approved fingerprint-safe decision replacing the issue's scale-2 idea, documented in code and CHANGELOG), then cropped in Python with Pillow: the top (account selector, banner, table header) is never cut, the bottom is cut 24 CSS px under the last table text, white margins are trimmed, width is capped at 2600 px; hidden pages are not captured, the frame/capture work has a 10 s deadline, a CDP failure leaves no shot (no page.screenshot reset of profile metrics), non-CDP pages keep the old fallback. Capture stays inside the page via CDP (nothing outside the Multilogin profile), failures go to Sentry scrubbed and rate-limited, the status_shot diagnostic maps to the hold stage, Pillow becomes a runtime requirement (optional at run time), and the Linux sharder gets a browser-count rebalance without loosening coverage. Merge with current main c6150160 is clean; no ids/tokens/secrets found in the diff or tests; user-facing text is English. Acceptance criteria: no band, copied PNG is the cropped shot, crop keeps selector/header/rows/banner and removes white margins (fixture tests in tests/test_copy_for_group.py, test_status_screenshot.py); the scale-2 wording is met by the owner-approved no-clip/no-scale decision (output is the native-resolution shot, capped at 2600 px); owner readability check of fresh 9943/Doc20/6540 pictures remains outstanding. Tests run locally (Windows, venv Python): test_copy_for_group, test_status_screenshot, test_acl_test_shard, test_build_progress_model - 162 passed. CI on this exact head is all green (linux 3.11/3.13 x3 shards, windows 3.13, installer build/verify, tracker-link, process instructions). Non-blocking nits: comments are in Russian per repo convention; the Pillow try/except ImportError silently keeps an uncropped shot, so a missing Pillow would go unnoticed; the sharder rebalance is somewhat intricate for a feature PR. No live checks claimed.",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "recorded_at": "2026-10-19T21:28:46+00:00",
+            "issue_scopes": {
+              "529": "d2a578fc8422a76cdb13d415f870c385f45e611e31569057e69edab3a2b33eac"
+            }
+          },
+          "lane": {
+            "id": "b30f33cdb8634786ad22668116bbe726",
+            "pr": 530,
+            "issues": [
+              529
+            ],
+            "actor": "Reviewer-R1529Y",
+            "session": "reviewer-r1529y-20261019",
+            "coordinator": "Coordinator-M1011A",
+            "started_at": "2026-10-19T21:16:34+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-19T21:29:14+00:00"
+        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
