@@ -43256,6 +43256,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T12:09:33+00:00",
         "from_status": "status:todo"
+      },
+      "827": {
+        "actor": "Worker-RS1827",
+        "session": "wrs1827-20261015",
+        "coordinator": "Coordinator-C0930A",
+        "branch": "codex/acl-1827-design-parity-shell",
+        "worktree": "C:\\wk-rs1827",
+        "id": "ae46388e19d54bae893f588260dfcd40",
+        "issue": 827,
+        "state": "implementing",
+        "started_at": "2026-10-19T12:11:52+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -47598,9 +47610,13 @@
           {
             "actor": "Worker-RS1827",
             "session": "wrs1827-20261015"
+          },
+          {
+            "actor": "Worker-RS1827",
+            "session": "wrs1827-20261015"
           }
         ],
-        "state": "stopped",
+        "state": "implementing",
         "worker": "Worker-RS1827",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -47620,7 +47636,6 @@
         "pr": 829,
         "queued_at": "2026-10-16T10:17:44+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
-        "reviewer": "Reviewer-R1827U",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.577996+00:00",
@@ -90001,6 +90016,13 @@
         "issue": 138,
         "claim": "b9f0aa8ad08f43a0b461ac55d5227ed0",
         "actor": "Worker-P1138B"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T12:11:52+00:00",
+        "issue": 827,
+        "claim": "ae46388e19d54bae893f588260dfcd40",
+        "actor": "Worker-RS1827"
       }
     ],
     "policy": {
