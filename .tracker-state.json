@@ -43594,20 +43594,6 @@
         "state": "implementing",
         "started_at": "2026-10-19T14:21:47+00:00",
         "from_status": "status:todo"
-      },
-      "899": {
-        "actor": "Worker-RF1019X",
-        "session": "rf1019x-20261019",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1899-video-upload-progress",
-        "worktree": "C:\\rf19b-899",
-        "id": "51955f6df4174ec591bfea82e87623e9",
-        "issue": 899,
-        "state": "handoff",
-        "started_at": "2026-10-19T14:33:27+00:00",
-        "from_status": "status:todo",
-        "pr": 900,
-        "report": "Merged new 776 head 39afcefd (includes main 1c6ab78e). Tests: acl1899_upload_progress + acl1761_api_create 181 passed; page-helper test failed once under load (known flaky), file rerun 30 passed."
       }
     },
     "tasks": {
@@ -49094,25 +49080,25 @@
             "session": "rf1019x-20261019"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RF1019X",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-RF1019W",
-          "session": "rf1019w-20261019",
+          "actor": "Worker-RF1019X",
+          "session": "rf1019x-20261019",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1899-video-upload-progress",
-          "worktree": "C:\\rf19-899",
-          "id": "660c03e6127c45e99df126a409e14ea9",
+          "worktree": "C:\\rf19b-899",
+          "id": "51955f6df4174ec591bfea82e87623e9",
           "issue": 899,
           "state": "handoff",
-          "started_at": "2026-10-19T11:32:27+00:00",
+          "started_at": "2026-10-19T14:33:27+00:00",
           "from_status": "status:todo",
           "pr": 900,
-          "report": "Merged 776 head 9da094c7 (includes main 435bc154) into 6743292c (new head 24e36087). Conflicts: none. No code change. Tests: test_acl1899_upload_progress + test_acl1761_api_create: 151 passed (3 reruns green; one first run had a single transient failure in test_the_page_helper_reports_progress_and_the_result, not reproducible). Needs a delta review of the merge only."
+          "report": "Merged new 776 head 39afcefd (includes main 1c6ab78e). Tests: acl1899_upload_progress + acl1761_api_create 181 passed; page-helper test failed once under load (known flaky), file rerun 30 passed."
         },
         "pr": 900,
-        "queued_at": "2026-10-19T11:39:16+00:00",
+        "queued_at": "2026-10-19T14:37:13+00:00",
         "return_operation": {
           "id": "1699e940bdac4ac4b989c5c2d3883206",
           "actor": "Coordinator-M1011A",
@@ -56550,7 +56536,8 @@
       165,
       29,
       776,
-      959
+      959,
+      899
     ],
     "review": null,
     "history": [
@@ -91436,6 +91423,13 @@
         "at": "2026-10-19T14:33:27+00:00",
         "issue": 899,
         "claim": "51955f6df4174ec591bfea82e87623e9",
+        "actor": "Worker-RF1019X"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T14:37:13+00:00",
+        "issue": 899,
+        "pr": 900,
         "actor": "Worker-RF1019X"
       }
     ],
