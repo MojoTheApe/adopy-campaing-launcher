@@ -44049,9 +44049,11 @@
         "worktree": "C:\\acl-1896",
         "id": "94d780bdcb5b4ef6a86a3646cf780d24",
         "issue": 896,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T18:34:27+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 949,
+        "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main into the branch. The only conflict was docs/system/CHANGELOG.md (kept both entries). Re-ran tests/test_acl1896_instagram_identity.py, test_acl1761_api_create.py, test_acl1819_preflight.py, test_acl1775_instant_forms.py: 285 passed. No functional changes beyond the merge; no live runs."
       },
       "853": {
         "actor": "Worker-U1019853",
