@@ -43181,6 +43181,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T11:01:08+00:00",
         "from_status": "status:todo"
+      },
+      "680": {
+        "actor": "Worker-F19680",
+        "session": "wf680-c0a1de70",
+        "coordinator": "Coordinator-E1019A",
+        "branch": "work/acl-1680-one-config-dir",
+        "worktree": "C:\\wk19-680b",
+        "id": "839dc76f0e3645d5a5dda5ef74cd27de",
+        "issue": 680,
+        "state": "implementing",
+        "started_at": "2026-10-19T11:01:40+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -50067,10 +50079,14 @@
           {
             "actor": "Worker-E19680",
             "session": "w680-c0a1de70"
+          },
+          {
+            "actor": "Worker-F19680",
+            "session": "wf680-c0a1de70"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-E19680",
+        "state": "implementing",
+        "worker": "Worker-F19680",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
           "actor": "Worker-E19680",
@@ -50093,8 +50109,7 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578092+00:00",
           "remote_process_stopped_verified": false
-        },
-        "reviewer": "Reviewer-Y19B"
+        }
       },
       "287": {
         "implementers": [
@@ -53066,6 +53081,10 @@
       },
       "Worker-G19602": {
         "session": "wg602-c0a1de70",
+        "role": "Worker"
+      },
+      "Worker-F19680": {
+        "session": "wf680-c0a1de70",
         "role": "Worker"
       }
     },
@@ -89357,6 +89376,13 @@
         "issue": 70,
         "claim": "23c87fcf133a4a47b873076fefdbe79d",
         "actor": "Worker-G19602"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T11:01:40+00:00",
+        "issue": 680,
+        "claim": "839dc76f0e3645d5a5dda5ef74cd27de",
+        "actor": "Worker-F19680"
       }
     ],
     "policy": {
