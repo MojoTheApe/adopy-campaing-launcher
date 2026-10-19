@@ -329,6 +329,10 @@ def _uniq(items: Any) -> list[str]:
     return list(seen)
 
 
+def has_norm(items: list[str], value: str) -> bool:
+    return _norm(value) in {_norm(i) for i in items}
+
+
 def capabilities(ruleset: RuleSet | None = None) -> dict[str, Any]:
     """Что реестр разрешает выбрать в билдере: только значения со статусом `ga`.
 
@@ -361,9 +365,14 @@ def capabilities(ruleset: RuleSet | None = None) -> dict[str, Any]:
                     bucket.extend(allowed)
         entry["restricted_goals"] = bool(goals)
         entry["restricted_ctas"] = bool(ctas)
-        goals = _uniq(goals) or goal_enum
+        # Как в check_job: значение должно пройти и правило объекта, и общий enum.
+        goals = [g for g in _uniq(goals) if not goal_enum or has_norm(goal_enum, g)] if goals else goal_enum
         # Цели без своего правила billing_event_by_goal не режутся: общий enum.
-        entry["goals"] = {g: _uniq(billing_by_goal.get(_norm(g), [])) or billing_enum for g in goals}
+        entry["goals"] = {
+            g: ([b for b in _uniq(billing_by_goal[_norm(g)]) if not billing_enum or has_norm(billing_enum, b)]
+                if _norm(g) in billing_by_goal else billing_enum)
+            for g in goals
+        }
         entry["ctas"] = _uniq(ctas) or cta_enum
     return {
         "api_version": rs.meta["api_version_current"],

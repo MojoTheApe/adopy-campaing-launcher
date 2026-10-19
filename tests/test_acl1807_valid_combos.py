@@ -89,10 +89,10 @@ def test_every_offered_combination_passes_check_job():
     caps = meta_rules.capabilities(rs)
     for obj, entry in caps["objectives"].items():
         for goal, events in entry["goals"].items():
-            for ev in events[:3]:
+            for ev in events:
                 job = {"objective": obj, "optimization_goal": goal, "billing_event": ev}
                 assert meta_rules.check_job(job, rs, skip_kinds=SKIP) == [], (obj, goal, ev)
-        for cta in entry["ctas"][:5]:
+        for cta in entry["ctas"]:
             assert meta_rules.check_job({"objective": obj, "call_to_action": cta}, rs, skip_kinds=SKIP) == []
 
 

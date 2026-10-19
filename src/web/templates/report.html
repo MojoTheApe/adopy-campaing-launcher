@@ -13246,7 +13246,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       var bad = !!(caps && !caps.destinationAllowed(v));
       var off2 = bad || (v === 'instant_form' && !api);
       if (o && o.disabled !== off2) o.disabled = off2;
-      if (o && bad) o.title = caps.destinationReason(v);
+      if (o && bad) o.title = caps.destinationReason(v); else if (o && o.title && !(v === 'instant_form' && !api)) o.removeAttribute('title');
     });
     var off = !api && !instant;
     if (sel.disabled !== off) sel.disabled = off;

@@ -5523,7 +5523,7 @@ async def api_meta_rules_capabilities() -> JSONResponse:
 
     try:
         return JSONResponse(await asyncio.to_thread(meta_rules.capabilities))
-    except meta_rules.MetaRulesError as e:
+    except Exception as e:  # реестр не прочитался/не соответствует схеме — билдер ничего не режет
         return JSONResponse({"error": str(e)}, status_code=503)
 
 
