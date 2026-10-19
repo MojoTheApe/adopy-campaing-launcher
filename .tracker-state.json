@@ -44296,9 +44296,11 @@
         "worktree": "C:\\acl-1739-doc124-frozen",
         "id": "f15108458ff74ba3ab880d9866d3b7e9",
         "issue": 739,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T20:23:28+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 740,
+        "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main (only conflict: docs/system/CHANGELOG.md, kept both entries). tests/test_a_busy_tab_is_not_a_frozen_episode.py and test_a_frozen_tab_is_never_waited_on.py: 14 passed. No code change beyond the merge; no live runs."
       }
     },
     "tasks": {
