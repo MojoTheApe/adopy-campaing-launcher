@@ -13,7 +13,7 @@ Tracker batch line, and link the source PRs/approvals; see docs/repository/BATCH
 
 ## Verification
 
-Self-checks and results. Implementation claim, handoff, independent Reviewer/report
+Self-checks and results. Use the guarded ACL operator adapter described in AGENTS.md. Implementation claim, handoff, independent Reviewer/report
 and exact reviewed version. For instruction-only sources: complete fixed-path/blob
 proof, current main/scope, matching base opt-in and idle stage/integration ownership.
 For batch stage/promotion: frozen members/source heads,

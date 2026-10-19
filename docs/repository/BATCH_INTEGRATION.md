@@ -1,229 +1,399 @@
-# Approved tasks and batches of at most five
+# Approved tasks and frozen integration batches (execution schemas 2/3)
 
-The prepared [ACL-1875 source-review pool](SOURCE_REVIEWS.md) selects execution
-schema 3 with five independent source reviews and the same single integration
-Coordinator/Reviewer. Its own source finishes the current v2 route before actual
-live migration retained in parent ACL-1874. The dated v1-to-v2 adoption evidence
-and commands below remain historical; they are not the v2-to-v3 migration procedure.
+With explicitly adopted [task context](TASK_CONTEXT.md), unchanged Approved sources
+can use an existing bounded independent compatibility lane after forward main
+changes. Original source review/checks remain unchanged; separate exact-bound
+compatibility proof permits current intake without an invented author edit.
+Changed scope/content or actual conflicts retain normal author return. Frozen
+batch recovery and all combined checks stay mandatory. Other projects preserve
+the original conservative main-bound approvals described below.
 
-Parent [ACL-1566](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/566)
-records actual migration, fresh shared-board verification and remaining deferred scope.
-Source child [ACL-1747](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/747)
-prepares the reviewed source and completes its existing execution-v1 stage/main route.
-**Source preparation is not live activation.** Preserve the dated v1 activation
-record in [PARALLEL_EXECUTION.md](PARALLEL_EXECUTION.md).
+## Optional Stage and authorized delivery — TT-127
 
-The later [ACL-1750](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/750)
-source prepares the separate instruction-only route. It changes policy and CI and
-therefore uses the ordinary old-policy stage route after ACL-1747; keep its genuine
-claim/review/handoff distinct. Both adopted-source handoffs have completed normally.
-The required [ACL-1753](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/753)
-compatible-pin refresh follows its own old-policy source route before the coordinated
-live v2 cutover. The original nine queued source tasks remain preserved.
+Stage is optional at a compatible explicit engine pin. Keep the same execution
+schema/capacities and set `delivery_policy.staging.enabled` to false, mirrored by
+`delivery.json.workflow.staging: false`; remove only the semantic Stage column.
+The sequence becomes Review → Approved → reviewed frozen batch → main → verified
+delivery. Individual source PRs still target main for approval and cannot merge.
+Only the official reserved `codex/batch-<32hex>` branch with the identical
+`Tracker batch: <ID>` line can select the `batch` route. Admission resolves its
+actual Coordinator reservation, exact members, source approvals/scope/main,
+bounded composition, independent combined review and required CI. A matching
+branch name or PR marker alone cannot admit or authorize anything.
 
-## Selected contract and reading map
+For this route, open the combined PR into main and use the existing
+`batch review-acquire`, `record-review`, `check-merge`, real GitHub merge and
+`merged ... --pr N --apply --reviewed-complete` commands. No Stage entry,
+verification or fabricated promotion receipt is used. Actual merge parents and
+source inclusion remain mandatory; interrupted Merged label writes retain the
+lane for the same retry. Post-main acceptance can still be attested only by the
+retained actual independent integration Reviewer. After main, finish this batch;
+new product fixes require their own task/batch. Existing staged/legacy/v1 flows
+retain their behavior.
 
-ACL-1747 originally selected reviewed Master
-`cd79a7699cb108c517e5729590a57cab85ab1083` (MR-14 / PR15) and Tracker
-`e6013f8ad641bd99061f7db82bceeb705f8c150a` (TT-77 / PR78). ACL-1750 advances
-the source to reviewed, merged Master `d24db185ebdff2cadcecf89f5b28061d6cd19564`
-(MR-16 / PR17) and Tracker `d6ce39bede04851c37bb4d13cc3bed0f2dcd2f76`
-(TT-79 / PR80), including the instruction-only admission contract. ACL-1753 selects
-reviewed merged Master `fe9241152cb466dfbafa3bcd3070f877c1b1b9c4` (MR-18 / PR19)
-and Tracker `086aaa98f2e807d640105be2929714d0b7331f21` (TT-85 / PR86), adding the
-explicit preserved-closed-handoff cutover option without changing live approval guards.
-At the ACL-1753 source cutover both ACL
-execution objects explicitly selected schema 2, implementation_limit 5,
-review_limit 1 and batch_limit 5. The shared skill was installed locally from
-Master `d24db185ebdff2cadcecf89f5b28061d6cd19564` with a backup; each other agent environment needs
-its own installation. Installing the skill does not migrate project state.
+When the owner authorizes integration **and delivery**, freeze that permission
+explicitly while beginning the batch:
 
-Read the pinned Tracker's `docs/BATCH_INTEGRATION.md` and `guide` for exact commands.
-`python scripts/task_tracker.py` is the guarded project client. Exported portable
-admission helpers remain in `.workflow/tools/` with `scripts/` compatibility paths.
-The required batch helper travels with the reviewed pin; v2/v3 validation
-refuses a missing implementation or compatibility entry point.
+```sh
+python scripts/task_tracker.py batch begin --intake INTAKE_ID \
+  --actor Coordinator-XXXX --session ACTUAL_RUN --deliver \
+  --delivery-workflow .github/workflows/complete-delivery.yml \
+  --delivery-job 'Verify published Windows package'
+```
 
-Each task keeps one source PR, its actual Worker/branch and independent Reviewer.
-Ordinary batch source PRs target main and remain open. Their direct merging is refused.
-The separately opted-in [instruction-only route](PROCESS_INSTRUCTIONS.md) instead
-holds independent source review through direct main admission; no batch is created.
-For ordinary batch work, individual review checks the complete current scope,
-main/base, content and required source CI. `batch approve` verifies the report and
-moves Review -> Approved, releasing
-the source-review lane. Approved is waiting for integration, not completion.
+Workflow/job above are examples of an actual project producer. The durable
+`delivery_request` binds the batch/member set, target, policy, actual requester
+and exact native verification workflow/job. Fixes may refresh approvals within
+the same frozen member set and still need independent combined review. A batch
+without this request keeps its ordinary integration behavior. Permission cannot
+be added by resuming an existing batch or inferred from an arbitrary main push.
 
-On an authorized "ship all Approved" request, freeze the currently eligible intake.
-New approvals wait for another intake. Select sequential batches of at most five;
-one urgent task is valid and the Approved backlog has no size cap. Capacity for
-implementation and batch size are separate settings. Only one held integration
-batch may occupy permanent stage. A separate actual Coordinator run owns it;
-do not rename one Worker run to manufacture a Coordinator or Reviewer.
+The Coordinator completes the genuine Merged handoff; the project-owned trusted
+workflow performs its release/deploy and acceptance. The exported
+`scripts/tracker_delivery_receipt.py` can then resolve and record the request
+using a same-repository token, without cloning the private engine. See
+[native delivery evidence](DELIVERY_POLICY.md#authorized-native-delivery-continuation).
+Merge never means Delivered. Pending/failed receipts remain unfinished, and a
+new batch cannot advance main while an earlier authorized delivery to the same
+target is incomplete. Source implementation/review can continue.
+Instruction-only main admission also waits so it cannot invalidate an in-flight
+exact-main publication. Those tasks may retain their ordinary queued handoff.
 
-## Assemble and ship
+Retry the exact authorized publication after an operational failure. If the
+owner explicitly cancels a failed/abandoned delivery request, its actual retained
+Coordinator can run `batch delivery-cancel --batch-id ID --claim ID --actor
+Coordinator-XXXX --session ACTUAL_RUN --report-file decision.md`. A replacement
+actual Coordinator must inspect the stopped owner and additionally supply
+`--previous-claim ID --stopped --reason ...`. This records the cancellation and
+ownership history, preserving all task receipts and their pending/failed state;
+it permits a new reviewed fix batch without claiming completion. It is a new
+decision on abandoned work, not another routine release approval.
 
-Use real opaque actor/session IDs and the actual claim IDs returned by the engine;
-the examples below are placeholders, not evidence of executing agents.
+Changing an existing staging policy needs the explicit fenced, queue-preserving
+[policy migration](DELIVERY_POLICY.md#staging-only-policy-migration). Publish
+compatible writers/service, drain real owners, inspect preview, and apply only
+after the exact reviewed candidate config is on main. No consumer is activated
+by this source change. Re-enabling Stage uses the same guarded procedure and an
+explicit owner decision; a first release does not flip configuration implicitly.
+
+Master companion: [MR-28](https://github.com/MojoTheApe/master-repo/issues/28).
+
+## Parallel source reviews (explicit execution schema 3)
+
+```json
+"execution_policy": {"schema_version": 3, "implementation_limit": 5,
+                     "review_limit": 5, "batch_limit": 5}
+```
+
+Mirror the exact object in `delivery.json.workflow.execution`. Schema 3 accepts
+implementation_limit 1–16, source review_limit 1–5 and batch_limit 1–5. Every
+source lane belongs to a distinct actual Reviewer run; the shared CAS reservation
+rejects a sixth source when five are occupied. The existing single Coordinator,
+frozen intake/batch and one independent integration review stay bounded separately.
+Source reviews and approvals continue while the integration reviewer holds a
+batch. Schemas 1/2 still require review_limit 1 and keep their prior lifecycle.
+
+Commands and exact-content checks below are unchanged. `execution review-acquire`
+selects a source by `--pr`; resume, `review-return`, takeover and `batch approve`
+select only its claim. `record-review` identifies the matching PR, lane and actual
+session. Uncertain approval/return writes hold only that source lane. A takeover
+invalidates only that source's prior review, preserving other lanes. Reusing a
+Reviewer run for concurrent source/integration lanes is refused. Source reviews
+are stored privately in `source_reviews` keyed by PR; `review` holds only the one
+integration lane. Public snapshots expose neutral owners and occupancy without
+private claims, sessions, paths, evidence or reports. Instruction-only reviews
+count toward source capacity and every held process lane blocks intake/batch
+creation; genuine process admission still requires idle stage/intake/integration.
+
+For explicit schema-2 to schema-3 adoption, keep implementation/batch capacities
+unchanged, commit matching consumer config/descriptor/pins and publish compatible
+writers plus the snapshot service. Preview `execution migrate
+--preserve-review-queue`, then apply the same command with `--apply` while all
+workers, source/integration reviewers, intake/batch and stage owners are idle.
+The migration validates every queued Review's original ready handoff and each
+current Approved's complete source scope/review/checks against current main. It
+preserves exact queue order, approvals, Issues/PRs, actor/task/completion history,
+delivery receipts and historical acceptance. The adoption history lists preserved
+task IDs. A stale Approved source must be returned/reviewed under its prior rules
+before migration. Unrecorded Reviews, busy owners or changed capacities fail
+closed. Existing explicitly requested closed-handoff preservation remains opt-in
+and never makes those sources ready. No hand editing or automatic state clearing
+is permitted. Upgrading an engine, merging this implementation or changing a
+registry fallback alone does not activate consumers or publish a service.
+
+The independently integrated [TT-93](https://github.com/MojoTheApe/task-tracker/issues/93)
+introduced the source pool. [TT-97](https://github.com/MojoTheApe/task-tracker/issues/97)
+extends its ceiling to five with companion
+[MR-22](https://github.com/MojoTheApe/master-repo/issues/22).
+
+Each task keeps its genuine Worker, isolated branch/claim and independent source
+review. Approval releases the review slot. A separate Coordinator owns a frozen
+integration batch through configured Stage and main; one Reviewer reviews its combined
+content. Approved is waiting for integration, not completion. The web UI remains
+read-only. Commands reserve work and record evidence; they never merge or deploy.
+
+## Explicit adoption
+
+```json
+"execution_policy": {"schema_version": 2, "implementation_limit": 5,
+                     "review_limit": 1, "batch_limit": 5}
+```
+
+Mirror this object in `delivery.json` at `workflow.execution`. It requires the
+existing delivery policy and exactly one Approved column between Review and Stage,
+or Review and Merged when Stage is disabled. Implementation and batch capacity are independent;
+both accept 1–16, review capacity is exactly one. ACL initially uses five per
+batch. Approved backlog has no size limit; one urgent task is a valid batch.
+Legacy and execution-schema-1 projects keep their existing behavior.
+
+Except for the explicitly audited queued transition below, finish existing
+PRs/claims/review/stage work under their original rules. Publish
+the reviewed compatible snapshot service, commit matching consumer pins/config
+and registry fallback, then preview/apply `execution migrate` while idle. It
+preserves delivery receipts, historical completion and actor/task history. It
+refuses live Approved work, active intake/batches and any old claim/review/stage.
+No engine upgrade or skill installation activates this mode. Keep all writers on
+the new pin; an old configuration cannot mutate the new policy's state.
+
+For an explicitly selected execution-schema-1 to schema-2 upgrade, the supported
+`execution migrate --preserve-review-queue` option can retain already handed-off
+Review tasks while all implementation/review owners and stage are idle. Capacity
+must stay unchanged, and every Review Issue must exactly match one durable ready
+queued source PR on its original Worker branch. Preview lists preserved tasks;
+apply changes only policy/approval-batch sections and migration history, without
+editing Issues, PRs, authors or handoffs. Existing stage-targeted source PRs become
+approval-only; direct merging is refused. They still need fresh current-main
+review/checks before Approved. A source base may be the reconciled stage revision
+only when its tree equals current main. New source PRs should target main, so
+individual approval can proceed while a batch occupies stage. Busy owners,
+unrecorded Reviews, drafts, wrong source branches or active stage block migration.
+
+Only when explicitly requested, add `--preserve-closed-review-handoffs` together
+with `--preserve-review-queue` to retain an original nondraft, closed, unmerged
+source. All the same capacity, idle ownership, exact queue, branch, source route
+and singleton checks still apply. Both base/head repositories must be official,
+and the handoff must match its recorded Worker, session and implementer history.
+Preview writes nothing. Apply preserves task/actor/completion records, queue order,
+Issues and PRs, adding only normal policy adoption and one history event. The
+event and result list actual sorted `{issue, pr}` pairs in
+`preserved_closed_review_handoffs`; no source becomes ready or Approved. Default
+migration still rejects closed sources. Closed entries cannot acquire source
+review, record review evidence, approve, enter intake or pass batch admission;
+author resolution remains separate. New eligible work can proceed without
+consuming those historical entries. This does not reopen or close PRs, clear
+authority or authorize service publication.
+
+## Individual review and approval
+
+Use `python scripts/task_tracker.py` in a consumer, or `python -m tracker` in this
+repository. The [claim, identity and handoff rules](PARALLEL_EXECUTION.md#roles-and-claims)
+still apply: one actual run has one Worker/Reviewer identity; use separate real
+agent runs and never relabel a Worker as its own Reviewer.
+
+1. `work`/`start` claims one task in its dedicated branch/worktree. One source PR
+   links one task, targets **main**, and remains unmerged. Include current main in
+   the source and retain all configured source checks. Direct source admission to
+   main is refused; only the reserved combined candidate enters the configured integration branch.
+2. `execution handoff ID --pr N ...` releases implementation capacity after the
+   durable Review handoff. `execution review-acquire --pr N ...` reserves the
+   actual source review slot: the shared single lane in schema 2, or one of the
+   explicitly configured independent source slots in schema 3.
+3. Review exact head/base/tree and complete task scope. `record-review` uses the
+   existing evidence fields, plus `execution_lane` and `review_session`. Scope,
+   policy and current main are also bound by the command.
+4. `batch approve --actor Reviewer-XXXX --session ACTUAL_RUN --claim REVIEW_ID`
+   checks current review, source CI and scope, journals the transition, verifies
+   Approved and releases the review slot. Retry the same claim after uncertainty;
+   ownership stays reserved until labels and state agree. The source PR stays open.
+
+Before approval, `execution review-return` returns the task to its author. After
+approval, its Coordinator uses `batch return --issue ID --actor Coordinator-XXXX
+--session RUN --report-file fixes.md`. The author takes a fresh claim on the
+original branch, checks, hands off, and gets a new independent approval. Scope,
+head, baseline, membership or policy changes require fresh relevant evidence.
+Changing a label alone cannot approve, reserve or admit a task.
+If the task belongs to a running frozen intake, its current Coordinator supplies
+`--claim INTAKE_ID`; a member of the active batch requires `--claim BATCH_ID`.
+
+## Ship a fixed intake
+
+On an authorized request, the Coordinator freezes currently eligible Approved
+tasks. Source CI and dependencies remain mandatory. Ineligible tasks are reported
+with reasons and remain unfinished. New approvals wait for the next intake.
 
 ```sh
 python scripts/task_tracker.py batch intake --all-approved \
-  --actor Coordinator-XXXX --session ACTUAL_COORDINATOR_RUN
+  --actor Coordinator-XXXX --session COORDINATOR_RUN
+# Or select the explicit fixed set using --issues ID ID instead of --all-approved.
 python scripts/task_tracker.py batch begin --intake INTAKE_ID \
-  --actor Coordinator-XXXX --session ACTUAL_COORDINATOR_RUN
-python scripts/acl_batch.py --actor Coordinator-XXXX \
-  --session ACTUAL_COORDINATOR_RUN --claim BATCH_ID --worktree /absolute/new/worktree
-# Inspect the plan; the same arguments with --apply assemble the frozen tips.
+  --actor Coordinator-XXXX --session COORDINATOR_RUN
 ```
 
-`acl_batch.py` reads the live private claim through the exact pinned client, verifies
-ownership, matching policy, frozen membership, current main and unchanged open source
-PR heads. It requires the official ACL origin and a clean checkout, fetches exact tips,
-rechecks ownership and creates a dedicated linked worktree on `codex/batch-BATCH_ID`.
-Merge commits preserve every source tip. It prints the combined PR title/body and
-candidate head/tree; it never pushes, merges into stage/main, publishes or deploys.
-An existing unrelated directory/branch is preserved. A conflict aborts only its own
-unfinished merge, retaining prior assembled work and the claim. Return the affected
-task to its author; no unreviewed conflict resolution belongs in the batch branch.
-The helper accepts matching v2/v3 batch policy. In v3 unrelated source-review
-owners may continue during assembly; an existing integration review still blocks
-reassembly. Exact composition, frozen membership and guarded rebuild proof remain
-required.
+The returned batch ID is its private Coordinator claim. Default selection takes
+up to `batch_limit` remaining intake members; `--issues` can select a smaller
+subset, never new members. Only one integration batch exists repository-wide.
+When enabled, Stage must already contain current main's tree. Members, exact source tips,
+approvals, scope, main baseline, policy and real review identities are frozen.
 
-Push the reviewed candidate branch and create its PR into stage with all member IDs
-in the title, one `Tracker issues: ID, ID` line and one `Tracker batch: BATCH_ID` line.
-Acquire `batch review-acquire`; the actual independent Reviewer must have implemented
-none of the members and must be a different run from the Coordinator. Review combined
-scope, composition, merge commits and final tree in addition to each source's review.
-Record the exact report using `record-review`, with execution_lane, review_session,
-batch_id and ordered source_heads from the frozen manifest. Preserve actual member
-Workers and source Reviewers; the combined report names the actual Coordinator as
-the integration implementer.
+Assemble those tips with merge commits in the reserved `codex/batch-<ID>` branch
+from current main. Preserve the source branches. Ordinary extra implementation
+commits are rejected by admission. Conflict resolution changes code: return
+affected tasks to their authors and review them again. Review also inspects the
+merge commits and resulting tree; these attestations do not authenticate GitHub
+users or replace branch protection.
 
-Complete applicable combined CI is mandatory: Linux Python 3.11/3.13 shards, Windows
-3.13 tests, descriptor, linkage and installer/build/install/repair/uninstall plus the
-real isolated packaged update/restart/recovery report. Even a docs-only combined
-batch requires this context. The scope classifier permits per-job reuse only of the
-same tested Git tree. A green source's different tree proves no combined candidate.
-Manual/release rules remain unchanged; report reused jobs and skipped source jobs
-accurately. See [WORKFLOW.md](WORKFLOW.md) and [STAGING.md](../runtime/STAGING.md).
+Create the integration PR into stage (or main when Stage is disabled) with all member IDs in the title, exactly one
+`Tracker issues: ID, ID` line, and one `Tracker batch: BATCH_ID` line. Then:
 
-Run `check-pr` and `check-merge` immediately before the actual stage merge. Record
-`stage --pr N --apply`, verify the actual configured stage target/tree, then promote
-permanent stage to main with identical members/batch lines and unchanged content.
-Run promotion admission again; no extra fix or member joins it. After the real main
-merge and full task-scope review, use `merged ID ID --pr MAIN_PR` dry run then
-`--apply --reviewed-complete`. The engine journals each member and releases the
-integration claim only after completion. `batch close-sources --batch-id BATCH_ID`
-closes superseded source PRs only with actual inclusion evidence, preserving branches.
-Reconcile stage/main and revalidate the next intake members against current main.
-After admitted instruction-only main merges, the engine's read-only
-`stage_base_compatible` verifies actual process receipts and a bounded current
-first-parent/scope/policy/tree chain before permitting the next batch. This proof
-changes no branch refs; unexplained or mixed divergence remains blocked. See
-[PROCESS_INSTRUCTIONS.md](PROCESS_INSTRUCTIONS.md).
+```sh
+python scripts/task_tracker.py batch review-acquire --pr N \
+  --actor Reviewer-YYYY --session REVIEW_RUN --coordinator Coordinator-XXXX
+```
 
-## Fixes and recovery
+The Reviewer must be independent of every member's historical implementers and
+the Coordinator run. Record review of the exact combined candidate. Evidence
+uses the actual Coordinator as `implementer`, and adds `batch_id` and ordered
+`source_heads` from the frozen manifest to the existing fields. Preserve each
+member's own Worker/Reviewer; integration review is additional evidence.
 
-Before approval, Reviewer returns review and the author takes a fresh implementation
-claim before any edit. After approval, Coordinator uses `batch return` with the held
-batch/intake claim where applicable. The original author claims, fixes, checks and
-hands off for fresh independent approval. Changed main/base/scope/head or policy
-requires fresh relevant evidence. Labels and timeouts cannot reserve or transfer work.
+For staging-enabled delivery, run the complete applicable combined CI, `check-merge N`, merge into stage, then
+`stage --pr N --apply`. Every frozen member becomes Stage. Verify the actual
+configured target/tree with `verify-stage`. Promote permanent stage to main with
+the same member and batch lines. `check-merge` requires the passed exact combined
+tree and unchanged main baseline. Preserve permanent branches and local release,
+installation, backup and rollback controls.
 
-Before actual stage entry, `batch cancel` preserves real author claims/status/history;
-begin a smaller subset of the same intake to leave a failed member for later. After
-stage entry retain the Coordinator lock and same members. Return only affected authors,
-refresh after fresh approval, rebuild, independently review and reverify exact stage.
-After `batch refresh`, use a **new** isolated path with
-`acl_batch.py --rebuild --previous-head EXACT_OLD_HEAD --apply` and the same owning
-actor/session/claim arguments. The helper validates the retained previous manifest
-and exact generated head, saves a local evidence ref, and assembles a fresh detached
-candidate from frozen main and current approved tips. The previous local branch,
-worktree and index stay intact. Appending new tips to the old graph retains superseded
-tips and fails the pinned composition gate; it is not a recovery method.
-If a detached rebuild failed without publication, the remote still holds an earlier
-candidate: the helper must find a retained same-member manifest whose exact composition
-matches that head. The latest refreshed manifest alone does not establish its history.
-An unknown old implementation commit is rejected; keep the failed worktree as evidence.
+After the real main merge, use `merged ID ID --pr MAIN_PR` dry run, then
+`--apply --reviewed-complete` after verifying every member's complete scope.
+The intake records completion of that batch; the Coordinator claim is released
+only after durable merge/label writes. `batch close-sources --batch-id BATCH_ID`
+can close superseded source PRs only after verifying their exact inclusion in an
+admitted merge still in main. Branches/reviews/history remain intact.
 
-Inspect the printed `replacement.push_argv`, recheck the actual held claim/current
-sources, then run that exact atomic push. It creates a remote evidence branch at the
-old head and replaces **only the owned generated integration ref**, with explicit
-expected-old-head and expected-absent-evidence leases. If either lease fails, neither
-remote update happens: inspect the changed ownership/ref, preserve evidence and stop.
-For an unpublished partial assembly, the old head must match the owned local branch;
-the generated remote ref must still be absent. The printed atomic push uses an
-expected-absent lease for its first publication and archives the partial head too.
-Further rebuilds archive each previous remote candidate while keeping the original
-local branch/worktree and all earlier evidence intact.
-Never use an unqualified force push. The old evidence refs are retained; source
-branches, main, permanent stage and release tags are never rewritten by this operation.
-The rebuilt candidate needs fresh combined review, CI and exact stage verification.
-If the baseline changed, use the documented claimed reconciliation first. Never force-reset/delete stage or
-invent new members in a rebuilding batch. Selective post-stage exclusion needs a
-separately reviewed supported recovery implementation.
+GitHub can automatically mark the main-targeted source PRs MERGED when the
+promotion includes their head commits. This is expected: completion accepts them
+only after a real promotion merge, with unchanged frozen source heads, scope,
+policy and independent review, and verifies each tip is an ancestor of that exact
+main merge. Approval, intake and pre-main admission still require open unmerged
+sources. Cleanup treats already merged or closed included sources as satisfied;
+it closes only sources that remain open and unmerged. Retry normal `merged` after
+an interrupted label write; ownership stays held until every member finishes.
 
-Inspect private `execution show` before retry/takeover. Only supported explicit
-stopped-session transfers change ownership. `batch review-return` keeps the
-Coordinator lock; source fixes do not silently release integrated content. Keep
-private manifests/claim/session IDs and raw reports out of public board snapshots.
+For a blocked batch on an older engine, invoke a clean reviewed fixed-engine
+checkout explicitly with `python -m tracker --config /absolute/consumer/tracker/config.json`
+from that engine checkout, then the same `merged` and `batch close-sources`
+arguments. The consumer client enforces `tracker/engine.json` even with
+`TASK_TRACKER_HOME`; pointing it at a different revision will fail. Never patch
+the old `.tracker-runtime` or edit durable state/claims to bypass completion.
+An explicit engine invocation preserves the project's configuration and existing
+policy; it does not migrate state or adopt a new consumer pin. Coordinate future
+writer pins through the project's normal adoption procedure.
 
-## Guarded source and state cutover
+Reconcile stage with main, then `batch begin --intake SAME_ID ...` for the next
+bounded set. Revalidate its source approvals against the new main; stale tasks
+return for author updates and fresh review. Ten eligible tasks ship as two batches
+of five; new arrivals do not extend them. Package/production delivery still needs
+its separate verified receipt. Main merge alone never publishes or installs.
 
-2026-10-08 intake: main `48bb8ee4898bc5845bd7a4cb33a052ce2f4cb496`; nine durable
-queued Reviews (Issues406,433,526,529,642,651,710,728,739), no Worker/Reviewer before
-ACL-1747's claim, and last stage candidate PR744 promoted. Preserve all their PRs,
-authors, task scope and handoffs; none is automatically approved or completed.
+## Recovery
 
-1. ACL-1747 uses an access-controlled copy of the genuine old main config (execution
-   schema 1, capacity5/review1) for its old-rule claim/review/admission/stage/verification/
-   promotion/Merged commands. The old a4ea engine cannot read ACL's >1MiB state.
-   The reviewed TT-73 operator at `c89dd82289d2c6b3e27a85736729bbeaf7461a77` supplies
-   that already-reviewed read fix while retaining the unchanged old policy; this is
-   bounded transition support, not a fabricated configuration or a v2 admission bypass.
-2. Independently review source/base/full child scope, run required CI, admit its source
-   into stage under that old config, verify the actual exact-stage Windows package
-   mechanism. Verify the shared-service publication in step 3 before main promotion;
-   then promote unchanged into main and complete its normal old-policy
-   Merged handoff. ACL-1750 completed its separate old-policy source handoff; the
-   required ACL-1753 compatibility refresh also completes its own ordinary
-   old-policy stage/main/Merged route before coordinated live migration. Original queued work stays
-   idle and preserved through the cutover.
-   The new head config is prepared but cannot mutate old v1 state as v2.
-3. Publish the reviewed compatible shared Tracker service through its maintained
-   guarded deployment. It preserves authentication, last-good snapshots and the single
-   event writer. If this operation is not authorized or verified, do not claim rollout
-   or activate consumer state. Keep the maintained ACL registry fallback aligned via
-   a reviewed Tracker companion; config merge alone is not live-board proof.
-4. Verify no active Worker/Reviewer, unpromoted stage, active batch/intake or unrecorded
-   Review. Save a private before-state snapshot. From the reviewed merged ACL checkout
-   and exact new engine, preview both explicit preservation flags:
-   `execution migrate --preserve-review-queue --preserve-closed-review-handoffs`.
-   Inspect its exact retained queue and `preserved_closed_review_handoffs` pairs,
-   then apply the same options. The second flag requires the first. It supports only
-   unchanged-capacity v1->v2 with verified durable one-task handoffs, including the
-   original closed unmerged PR 407 for Task 406 and PR 439 for Task 433. These stay
-   unfinished; no Issue/PR is reopened or automatically approved. Review acquisition,
-   approval and batch admission still require a current open ready source. Never
-   clear, edit or overwrite state to pass.
-5. Compare private before/after state: only execution policy/new approval-batch sections
-   and migration history may change. Preserve Issues/labels/source PRs/authors/handoffs,
-   delivery/history, six modules, 71 aliases, +1000 IDs and the 74-task manifest.
-   Existing stage-targeted queued sources become approval-only; they still require
-   current-main author reconciliation, CI and independent review before Approved.
-6. Verify a fresh digest-covered shared ACL board with Approved, limit5, distinct
-   ownership, retained queue and correct package/delivery projection. Browser verification
-   is excluded by the existing owner decision; report server-side snapshot evidence
-   and preserved access controls accurately. The owner selected the shortest cutover
-   and cancelled extra tools and demonstration work. Do not create such tasks or
-   manufacture a real-batch receipt; retain unresolved scope in the parent and resume
-   useful application work only under its separate authorization.
+`execution show` is private: inspect held claims, intake, member versions and
+reports before retrying. Every reservation uses shared-file SHA compare-and-swap;
+uncertain GitHub writes retain ownership. Never infer abandonment from time.
 
-The genuine pristine upstream template baseline stays legacy at its recorded inputs;
-v2 is an explicit local opt-in. Draft standard validation remains because VERSION1.0.0
-is unpublished. The delivery fingerprint stays
-`302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21`.
-Main merge does not publish a stable installer, update employee machines, verify the
-release/download channel or perform the deferred live Multilogin pilot. Frozen
-compatibility master, backups/recovery, machine data and draft-only advertising remain
-under their maintained procedures and actual authorization.
+- Before stage, `batch cancel ... --claim BATCH_ID --report-file reason.md` can
+  release the batch while unchanged members remain Approved in the intake.
+  It refuses an actual stage merge even when its Stage receipt was interrupted.
+- After stage, keep the Coordinator claim. `batch return --issue ID ... --claim
+  BATCH_ID --report-file fixes.md` returns only the affected author and invalidates
+  candidate review/verification. Other members and integrated content stay held.
+  The author gets a fresh claim/approval. `batch refresh ... --claim BATCH_ID`
+  binds fresh member proofs/current main to the same set, preserving old history.
+  Build a new candidate, independently review, verify stage and promote unchanged.
+- `batch review-return ... --claim REVIEW_ID --report-file reason.md` releases
+  candidate review for rebuilding while retaining Coordinator ownership. It does
+  not implement or silently return all member tasks.
+- If main changes, refresh all affected source approvals and the held candidate.
+  No new task joins a batch, including during fixes. Do not reset stage, discard
+  already integrated work, drop a member or add unreviewed promotion changes.
+  This version deliberately supports same-member rebuilds; selective exclusion
+  after stage requires a separately reviewed recovery implementation.
+- A stopped Coordinator transfers with `batch takeover --previous-claim BATCH_ID
+  --stopped --reason ... --actor Coordinator-NEWID --session NEW_RUN`. The old
+  session cannot mutate the held batch. A stopped Reviewer uses the existing
+  `execution review-takeover`; old approval is invalidated, exact-content stage
+  proof stays subject to the new independent candidate review.
+- If the Coordinator stops before/between batches, the same takeover command
+  accepts the running intake ID and preserves its remaining selection. Pending
+  member author-return journals transfer with a held batch. A standalone pending
+  author return uses `batch takeover --issue ID --previous-claim RETURN_ID
+  --stopped --reason ...` before resuming the same report under the new claim.
+- A stopped Reviewer during a partial Review/Approved label transition retains
+  its narrowly scoped approval-recovery journal on takeover. Its replacement
+  records a fresh independent review; only that owned recovery permits the two
+  transitional labels, and approval reconciles them before releasing the slot.
+- With no held batch, `batch intake-cancel --claim INTAKE_ID ... --report-file ...`
+  cancels only remaining intake selection; actual task statuses/history stay.
+
+Public snapshots show Approved count, configured batch limit, held member IDs,
+Coordinator and batch state, with separate implementation/review capacity. They
+exclude session/claim IDs, source manifests, filesystem paths and reports.
+
+Tracked by [TT-77](https://github.com/MojoTheApe/task-tracker/issues/77) and
+[MR-14](https://github.com/MojoTheApe/master-repo/issues/14). Consumer adoption and
+shared-service publication require their own verified operational handoff.
+
+## Optional instruction-only process route
+
+The separate top-level `process_instructions` setting is mirrored exactly as
+`delivery.json.workflow.process_instructions`. It requires the independent-review
+delivery policy and never changes its fingerprint or inherits on export. Read
+[PROCESS_INSTRUCTIONS.md](PROCESS_INSTRUCTIONS.md) for the fixed eligible paths,
+complete Git proof, actual process check names, independent ownership and exact
+merged evidence. Eligible one-task sources target main and complete from their
+verified process merge receipt; ordinary changes keep this document’s delivery
+flow. Legacy uses its actual task slot and review attestation; execution-v1/v2
+uses the real source review lane. V2 process sources cannot become Approved or
+enter intake/batches. A process lane blocks new intake/batch claims, and held
+stage/intake/integration blocks process acquisition. Idle stage gaps can bridge
+only current retained verified process merges under the pinned proof, with full
+normal checks/review/stage verification and unchanged frozen main afterward.
+
+
+## Explicit post-main application acceptance recovery
+
+An admitted application batch can retain its integration lane after main while
+its original acceptance checkboxes remain unchecked. Editing those checkboxes
+changes frozen scope. Instead, the actual retained independent integration
+Reviewer may use `record-acceptance --pr MAIN_PR --actor Reviewer-ID --session
+ACTUAL_SESSION --claim RETAINED_LANE --evidence-file acceptance.json` (preview;
+add `--apply` to journal). This does not edit an Issue, finish a task, change a
+policy or publish a package. The Coordinator and member implementers cannot
+attest their own acceptance. Do not use it for partially implemented outcomes.
+
+The document has `kind: post-main-acceptance`, a concrete `report`, exact
+`batch_id`, promotion `pr`, actual `merge_sha`, `head_sha`, combined `tree_sha`,
+`policy`, frozen ordered `issues` and `source_heads`, original `issue_scopes`
+keyed by decimal Issue number, retained `reviewer`, `review_session`,
+`execution_lane`, `coordinator` and `coordinator_session`. `criteria` is keyed
+by exactly the members with unchecked work. Each value lists every unchecked
+line in original order, including its one-based `line`, literal `criterion`,
+`result: passed` and concrete nonempty `evidence`. Fenced examples are excluded.
+The receipt validates the admitted promotion, source inclusion, original review,
+passed stage/tree and required checks. It cannot waive any of them.
+
+After recording, use ordinary `merged ... --pr MAIN_PR` preview and then
+`--apply --reviewed-complete`. Completion rechecks the current receipt and task
+scope before all writes and each task write; uncertain writes retain normal
+ownership and resume behavior. The same evidence is retained for idempotent
+completion and exact-source cleanup. Missing/partial/stale evidence fails closed.
+Original task bodies, approvals and reviews remain unchanged. Parent/sibling
+outcomes outside the frozen batch remain unfinished. Public snapshots exclude
+acceptance reports, sessions and private ownership.
+
+For an already admitted batch blocked on an older consumer pin, use a clean,
+independently reviewed fixed-engine checkout with the exact original consumer
+config: `python -m tracker --config /absolute/original/tracker/config.json
+record-acceptance ...`, then normal `merged` commands. Do not patch cached
+runtime code, change config or adopt a new policy. This explicit engine invocation
+is recovery only; permanent consumer-pin adoption is separately tracked/reviewed.
