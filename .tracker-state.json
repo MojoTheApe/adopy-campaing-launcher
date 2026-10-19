@@ -43255,6 +43255,18 @@
         "from_status": "status:todo",
         "pr": 887,
         "report": "Merged main 435bc154 into a484aaa1 (new head 3f048165). Conflict only in docs/system/PROJECT.md, resolved keeping both sections (Graph read failure diagnostics + CI feedback and admission), no markers left. No code change. Tests: test_acl1886_graph_error_context: 37 passed. Needs a delta review of the merge only."
+      },
+      "73": {
+        "actor": "Worker-W144D",
+        "session": "w144d-20261019",
+        "coordinator": "Coordinator-C1016A",
+        "branch": "codex/acl-144-direct-profile-dir",
+        "worktree": "C:\\acl-144-c",
+        "id": "62443a66a01c4928ba86994ad573f701",
+        "issue": 73,
+        "state": "implementing",
+        "started_at": "2026-10-19T11:56:42+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -49605,10 +49617,14 @@
           {
             "actor": "Worker-W144C",
             "session": "w144c-20261016"
+          },
+          {
+            "actor": "Worker-W144D",
+            "session": "w144d-20261019"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-W144C",
+        "state": "implementing",
+        "worker": "Worker-W144D",
         "coordinator": "Coordinator-C1016A",
         "handoff": {
           "actor": "Worker-W144C",
@@ -49626,7 +49642,6 @@
         },
         "pr": 951,
         "queued_at": "2026-10-16T14:32:38+00:00",
-        "reviewer": "Reviewer-R144D",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -53212,6 +53227,10 @@
       },
       "Worker-W1855B": {
         "session": "claude-w1855b-20261019",
+        "role": "Worker"
+      },
+      "Worker-W144D": {
+        "session": "w144d-20261019",
         "role": "Worker"
       }
     },
@@ -89918,6 +89937,13 @@
         "issue": 855,
         "pr": 927,
         "actor": "Worker-W1855B"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T11:56:42+00:00",
+        "issue": 73,
+        "claim": "62443a66a01c4928ba86994ad573f701",
+        "actor": "Worker-W144D"
       }
     ],
     "policy": {
