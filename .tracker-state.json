@@ -44401,20 +44401,6 @@
         "state": "implementing",
         "started_at": "2026-10-19T21:40:00+00:00",
         "from_status": "status:todo"
-      },
-      "897": {
-        "actor": "Worker-S1019897",
-        "session": "run_s1019_897",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1897-first-page",
-        "worktree": "C:\\acl-1897",
-        "id": "0b951ded8d624b41b82c93473fb4d482",
-        "issue": 897,
-        "state": "handoff",
-        "started_at": "2026-10-19T21:40:33+00:00",
-        "from_status": "status:todo",
-        "pr": 1025,
-        "report": "ACL-1897: Automatic Page now takes the first Page of promote_pages (one or several); zero Pages still refuses; chosen/map Page must be among promote_pages. page_for (Instant Forms) follows. Tests: 5 touched files in full, 349 passed. Opus review: no HIGH/MEDIUM; two LOWs noted in PR. No live Meta/Multilogin calls."
       }
     },
     "tasks": {
@@ -52550,9 +52536,25 @@
             "session": "run_s1019_897"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1019897",
-        "coordinator": "Coordinator-M1011A"
+        "coordinator": "Coordinator-M1011A",
+        "handoff": {
+          "actor": "Worker-S1019897",
+          "session": "run_s1019_897",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "work/acl-1897-first-page",
+          "worktree": "C:\\acl-1897",
+          "id": "0b951ded8d624b41b82c93473fb4d482",
+          "issue": 897,
+          "state": "handoff",
+          "started_at": "2026-10-19T21:40:33+00:00",
+          "from_status": "status:todo",
+          "pr": 1025,
+          "report": "ACL-1897: Automatic Page now takes the first Page of promote_pages (one or several); zero Pages still refuses; chosen/map Page must be among promote_pages. page_for (Instant Forms) follows. Tests: 5 touched files in full, 349 passed. Opus review: no HIGH/MEDIUM; two LOWs noted in PR. No live Meta/Multilogin calls."
+        },
+        "pr": 1025,
+        "queued_at": "2026-10-19T21:42:41+00:00"
       }
     },
     "actors": {
@@ -57802,7 +57804,8 @@
       841,
       854,
       845,
-      822
+      822,
+      897
     ],
     "review": {
       "id": "71d08f944d4646c69ba2c95edd8d2464",
@@ -94901,6 +94904,13 @@
         "at": "2026-10-19T21:40:33+00:00",
         "issue": 897,
         "claim": "0b951ded8d624b41b82c93473fb4d482",
+        "actor": "Worker-S1019897"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T21:42:41+00:00",
+        "issue": 897,
+        "pr": 1025,
         "actor": "Worker-S1019897"
       }
     ],
