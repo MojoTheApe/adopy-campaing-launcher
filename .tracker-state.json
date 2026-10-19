@@ -44134,9 +44134,11 @@
         "worktree": "C:\\acl-1990-preflight-topics",
         "id": "502d6b12f7014fea8fef14fe7251d600",
         "issue": 990,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T19:55:13+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 991,
+        "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main into the branch; conflicts only in docs/system/CHANGELOG.md (kept both entries). Re-ran the touched tests: test_acl1819_preflight 86 passed, test_acl1819_preflight_browser 5 passed (branch first fast-forwarded to work/ branch tip 0257ddb0). No functional change beyond the merge; no live runs."
       }
     },
     "tasks": {
