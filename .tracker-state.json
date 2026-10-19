@@ -43166,9 +43166,11 @@
         "worktree": "C:\\wk19-401b",
         "id": "8766c63875be48bb88ed9631f6a86e99",
         "issue": 401,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T11:00:26+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 960,
+        "report": "Returned for red CI: test_every_step_the_robot_names_maps_to_a_stage failed because the new step multilogin_not_running had no cb-build-model rule. Fix: added it to the \"hold\" rule (next to account_blocked$) in src/web/templates/report.html, one line. ACL verification failed only because the Linux tests job failed. Tests: build_progress_model + PR test (42 passed), scan_secrets, smoke OK. Head 53e93b2b."
       },
       "70": {
         "actor": "Worker-G19602",
