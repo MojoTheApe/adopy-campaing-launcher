@@ -43079,9 +43079,11 @@
         "worktree": "C:\\wk19-680",
         "id": "b8db1f1af0a54445942e663c2486c5a5",
         "issue": 680,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T10:09:59+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 966,
+        "report": "ACL-1680 refresh. PR 966 brought up to current main: merged origin/main 435bc15467e3bedef515534e9fb407642431f435 into work/acl-1680-one-config-dir with no conflicts, new head 7684023ffdd9553b3697416a4592f8338f81d29d. No new code beyond the PR's own diff.\nTests: tests/test_acl1680_one_config_dir.py + tests/test_machine_paths.py + tests/test_windows_launcher_contract.py + packaging/windows/tests: 80 passed, 4 subtests. scripts/acl_scan_secrets.py clean; scripts/acl_smoke.py OK. Full suite left to CI. No real MSIX run."
       }
     },
     "tasks": {
