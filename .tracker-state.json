@@ -3787,20 +3787,20 @@
       "831": {
         "kind": "independent-review",
         "verdict": "approved",
-        "reviewer": "Reviewer-DV1019A",
-        "review_session": "dv1019a-831",
-        "execution_lane": "6730539b1fe2423dafdf45e928f165be",
-        "implementer": "Worker-RF1019W",
-        "head_sha": "9da094c7e6be136bc7e7671bc46dfdc67c10ce40",
-        "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
-        "tree_sha": "582bdc1442fa24c52309c9cd1ff64e7d22834b19",
-        "report": "Delta re-review of ACL-1776 after merging work/main 435bc154 (parents cd1da59b previous approved + 435bc154). Head contains current main; git show --remerge-diff is empty (no conflict resolution, no code edits). Non-doc diff cd1da59b..9da094c7 (76 files) has the same file set and identical +/- line content as af0ade29..435bc154; only CHANGELOG/PROJECT docs additionally touched, both sides kept. Ran tests/test_acl1776_create_forms.py, test_acl1775_builder_forms.py, test_acl1819_preflight.py: 214 passed. gh pr checks 831 all green (linux 1-3, windows, tracker-link, verification). Earlier full review had no blockers; no live checks claimed.",
-        "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+        "reviewer": "Reviewer-DV1019E",
+        "review_session": "dv1019e-831",
+        "execution_lane": "552beb4f9fae48c696e35272031751a0",
+        "implementer": "Worker-RF1019X",
+        "head_sha": "39afcefd38d2fddf771820e3e58eaa2f072c1b5b",
+        "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+        "tree_sha": "4801739d863fb301aff9889fb22d37265428f72a",
+        "report": "Delta re-review after main merge. Head 39afcefd = merge 4b59c50f (parents 9da094c7 previously approved + 1c6ab78e main) + one test-only commit. git show --remerge-diff of the merge is empty (no conflict resolution). Diff 9da094c7..4b59c50f has the same patch-id as 435bc154..1c6ab78e, so the merge brings exactly main's changes and no extra code. The extra commit changes one line in tests/test_acl1776_create_forms.py (fake _Req.form accepts **_limits); it is test-only, minimal and justified: main's read_form() in src/web/request_limits.py calls request.form(max_fields=..., max_files=..., max_part_size=...), and the 1776 endpoints (preview-publish and the builder form routes) go through read_form(request, BUILDER_FORM); no raw request.form() remains in src/web, so the product respects main's request limits (the template-save endpoint reads JSON). Head contains current work/main 1c6ab78e. Tests run: test_acl1776_create_forms, test_acl1775_builder_forms, test_acl1775_instant_forms, test_acl1819_preflight: 300 passed. gh pr checks 831 all green (linux 1/2/3, windows, tracker-link, verification). No live checks claimed.",
+        "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
         "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
         "issues": [
           776
         ],
-        "recorded_at": "2026-10-19T12:37:12+00:00",
+        "recorded_at": "2026-10-19T15:05:30+00:00",
         "issue_scopes": {
           "776": "3d95a7528bc437c6b9f8409335a38ea74c548d2fc21e480d381655f55e7bc220"
         }
