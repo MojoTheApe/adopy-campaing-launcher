@@ -42210,6 +42210,144 @@
           "report": "Post-main acceptance for batch a12a28c2 / PR 1016 by the retained independent integration Reviewer-X19BAT. Main merge 1c6ab78e has parents 435bc154 and batch head 50253d96; its tree 8c87de6c equals the reviewed batch tree. Issues #864 and #787 have no unchecked criteria. Every unchecked line of #871, #356 and #287 was checked against the merged code, tests run by me (366 affected on the batch tree; 128 for #287 on main; scanner and smoke on main) and CI (PR 1016 16/16, main CI and Windows installer success). No criterion needed a live dashboard or installed-package check. The owner smoke check of the live dashboard described in #356's implementation notes is not a checkbox and is not attested here."
         },
         "recorded_at": "2026-10-19T13:40:21+00:00"
+      },
+      "a69b4124493f41c481095d71c27cc55a": {
+        "evidence": {
+          "kind": "post-main-acceptance",
+          "batch_id": "a69b4124493f41c481095d71c27cc55a",
+          "pr": 1018,
+          "merge_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "head_sha": "fc451d26cce066718e22d390b166edc652ca3b42",
+          "tree_sha": "49a2d11bf737c0322ba5f45346067641f339d327",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            776,
+            899,
+            902,
+            886
+          ],
+          "source_heads": [
+            "39afcefd38d2fddf771820e3e58eaa2f072c1b5b",
+            "94ab91c2559c34a984924f8e1fc818639c19e779",
+            "ef09410a24ec8b618a5867eb899e266ac7b4bdc3",
+            "e64308889035cb5682c607cd64474121822840c5"
+          ],
+          "issue_scopes": {
+            "776": "3d95a7528bc437c6b9f8409335a38ea74c548d2fc21e480d381655f55e7bc220",
+            "899": "52d852154dfd159e49185f701d1c699a64ca2b269802ff49b0340c10537527de",
+            "902": "5ea254204ad12b6db316af984425614260f436776360cc83218fbe5157c7b05d",
+            "886": "291706aa97fea07f175753abc951ee231d86a7ea2d52cd679f94cf2db3f7bf9d"
+          },
+          "reviewer": "Reviewer-BV1019K",
+          "review_session": "bv1019k-1018",
+          "execution_lane": "71d08f944d4646c69ba2c95edd8d2464",
+          "coordinator": "Coordinator-M1011A",
+          "coordinator_session": "coord-m1011a-20261015",
+          "report": "Post-main acceptance by the retained independent integration Reviewer. On current main c6150160 (merge of PR 1018) every unchecked criterion of ACL-1902 and ACL-1886 was checked against named passing tests, fixtures and docs; 776 and 899 have no unchecked criteria. For 886 criterion 1 the new test file was run against the pre-change base 1c6ab78e and fails there. No live Meta check is claimed; the live permission cause for 886 stays unknown by design.",
+          "criteria": {
+            "902": [
+              {
+                "line": 21,
+                "criterion": "- [ ] free name -> base name",
+                "result": "passed",
+                "evidence": "tests/test_acl1902_name_suffix.py::test_free_name_stays_as_is passed on main c6150160 (22/22 tests in file passed)."
+              },
+              {
+                "line": 22,
+                "criterion": "- [ ] ours + identical -> reuse, no new write",
+                "result": "passed",
+                "evidence": "tests/test_acl1902_name_suffix.py::test_ours_and_identical_is_reused_with_no_new_write passed on main c6150160."
+              },
+              {
+                "line": 23,
+                "criterion": "- [ ] ours + different -> _2, then _3 when _2 also differs",
+                "result": "passed",
+                "evidence": "tests/test_acl1902_name_suffix.py::test_ours_but_different_goes_to_suffix_2_then_3 passed on main c6150160."
+              },
+              {
+                "line": 24,
+                "criterion": "- [ ] name taken without our tag -> _2",
+                "result": "passed",
+                "evidence": "tests/test_acl1902_name_suffix.py::test_same_name_without_our_tag_goes_to_suffix_2 passed on main c6150160."
+              },
+              {
+                "line": 25,
+                "criterion": "- [ ] identical _2 from an earlier run -> reuse _2",
+                "result": "passed",
+                "evidence": "tests/test_acl1902_name_suffix.py::test_identical_suffixed_campaign_from_an_earlier_run_is_reused and ::test_resume_of_a_partial_run_reuses_the_suffixed_campaign passed on main c6150160."
+              },
+              {
+                "line": 26,
+                "criterion": "- [ ] all 20 taken -> stop with zero writes",
+                "result": "passed",
+                "evidence": "tests/test_acl1902_name_suffix.py::test_all_twenty_names_taken_stops_before_any_write (and ::test_check_plan_of_a_free_name_is_ok_and_all_taken_is_an_error) passed on main c6150160."
+              },
+              {
+                "line": 27,
+                "criterion": "- [ ] unknown-write readback uses the resolved name",
+                "result": "passed",
+                "evidence": "tests/test_acl1902_name_suffix.py::test_unknown_write_readback_uses_the_resolved_name passed on main c6150160."
+              },
+              {
+                "line": 28,
+                "criterion": "- [ ] Check plan shows WARNING with the resolved name, no error",
+                "result": "passed",
+                "evidence": "tests/test_acl1902_name_suffix.py::test_check_plan_warns_with_the_resolved_name_and_has_no_error passed on main c6150160."
+              },
+              {
+                "line": 29,
+                "criterion": "- [ ] deleted/archived campaign does not count",
+                "result": "passed",
+                "evidence": "tests/test_acl1902_name_suffix.py::test_deleted_and_archived_campaigns_do_not_count passed on main c6150160."
+              },
+              {
+                "line": 30,
+                "criterion": "- [ ] docs/system/PROJECT.md and CHANGELOG.md updated",
+                "result": "passed",
+                "evidence": "docs/system/PROJECT.md line 52 (Campaign name ACL-1902 paragraph) and docs/system/CHANGELOG.md line 31 (section 'API backend: campaign name gets _2, _3 ... - ACL-1902') exist on main c6150160."
+              }
+            ],
+            "886": [
+              {
+                "line": 18,
+                "criterion": "- [ ] A deterministic test against the actual current-main GraphClient fails before the fix because error10 responses for the supported operations lose their identity.",
+                "result": "passed",
+                "evidence": "Ran tests/test_acl1886_graph_error_context.py against the base tree 1c6ab78e (graph.py without the change) with the test file and fixture taken from main: 37 tests failed there; on main c6150160 all 59 tests in the file pass (e.g. test_denied_read_names_only_its_safe_operation[...], test_reacquired_read_keeps_diagnostic_context_without_extra_retry)."
+              },
+              {
+                "line": 19,
+                "criterion": "- [ ] Public get/get_all calls expose distinct, bounded safe operation context for search, campaign, promoted-page, pixel and form reads. No extra request or advertising write occurs.",
+                "result": "passed",
+                "evidence": "tests/test_acl1886_graph_error_context.py::test_denied_read_names_only_its_safe_operation covers /search, campaigns, promote_pages, adspixels, leadgen_forms, adaccounts, insights with distinct operation values; ReadTransport asserts method == GET, so no write; test_search_context_distinguishes_only_allowlisted_lookup_types covers adgeolocation/adlocale/adinterest; all passed on main c6150160. Related src/fb_api read/create tests also passed: tests/test_acl1761_api_create.py, test_acl1761_existing_check.py, test_acl1761_plan_check.py, test_acl1776_create_forms.py (268 passed)."
+              },
+              {
+                "line": 20,
+                "criterion": "- [ ] Unknown/raw/encoded paths, query strings, fragments, parameters and synthetic secrets cannot leak into added context; diagnostics fail closed. Response-provided operation fields cannot spoof trusted context.",
+                "result": "passed",
+                "evidence": "tests/test_acl1886_graph_error_context.py::test_unknown_path_never_becomes_diagnostic_text (17 parametrized cases: full URL with token, query, fragment, encoded, newline, fullwidth digits, wrong shapes, over-long, empty/None/non-str), ::test_unknown_search_type_cannot_echo_or_break_error_handling and ::test_response_cannot_spoof_local_operation_context passed on main c6150160."
+              },
+              {
+                "line": 21,
+                "criterion": "- [ ] Existing rate-limit, policy-block, checkpoint, token reacquisition, pagination and safe error details behavior remain covered, with unchanged call counts and stop semantics.",
+                "result": "passed",
+                "evidence": "tests/test_acl1886_graph_error_context.py::test_stop_classes_and_no_retry_survive_context[4-RateLimited] and [368-PolicyBlocked], ::test_reacquired_read_keeps_diagnostic_context_without_extra_retry and ::test_later_page_error_keeps_operation_without_cursor_or_next_url passed on main c6150160; neighbouring tests/test_acl1761_*.py and test_acl1776_create_forms.py (268) passed, so unchanged stop/pagination semantics."
+              },
+              {
+                "line": 22,
+                "criterion": "- [ ] An anonymized failure fixture and offline bench entry preserve the motivating evidence. A separate synthetic snapshot of the actual preview Plan check proves the error reaches the public result while success stays false and writes/network calls remain zero.",
+                "result": "passed",
+                "evidence": "Fixture tests/fixtures/ads_manager/fb_api_permission_denied_2026_10_13.json (anonymized error 10) and bench entry tests/bench/catalogue.json 'Graph read permission diagnostics (ACL-1886)' / tests/bench/CATALOGUE.md line 322-328 exist on main. For the Plan check snapshot I ran an ad hoc scratch test (not committed; scratchpad/bv1018/test_scratch_plan.py) on main c6150160 through the real publish_api.check_plan with FakeMeta returning that fixture for /search and for /campaigns: result error text contains 'operation=search, search_type=adgeolocation' and 'operation=campaigns' respectively, success false, publishable false, meta.posts empty (zero writes), no real network."
+              },
+              {
+                "line": 23,
+                "criterion": "- [ ] Affected tests, scanner, import smoke, applicable hosted source checks and independent full source review are recorded with exact source/base identity. Documentation says diagnostic trace is ready while the live permission cause remains unknown.",
+                "result": "passed",
+                "evidence": "Source PR #887 head e64308889035cb5682c607cd64474121822840c5 has its tracker independent source review (approved, recorded in tracker for batch member 886); combined PR #1018 head fc451d26 CI fully green incl. linux 3.11/3.13 shards, windows 3.13, ACL verification, installer verification (this covers scanner/import-smoke steps of the hosted checks); docs/system/PROJECT.md section 'Graph read failure diagnostics' states it identifies the failed read and does not establish the cause of a live Meta permission denial; CHANGELOG.md section 'Safe operation context for Graph read failures - ACL-1886' says the same."
+              }
+            ]
+          }
+        },
+        "recorded_at": "2026-10-19T20:18:29+00:00"
       }
     },
     "policy_migrations": [
@@ -93763,6 +93901,12 @@
         "issue": 529,
         "claim": "81a6ec5e2293417cafc7ed10d771571d",
         "actor": "Worker-R1019529"
+      },
+      {
+        "event": "post-main-acceptance-recorded",
+        "at": "2026-10-19T20:18:29+00:00",
+        "batch_id": "a69b4124493f41c481095d71c27cc55a",
+        "pr": 1018
       }
     ],
     "policy": {
