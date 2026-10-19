@@ -44389,22 +44389,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "822": {
-        "actor": "Worker-R1019822",
-        "session": "run_r1019_822",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1822-rules-ui",
-        "worktree": "C:\\acl-1822-wt",
-        "id": "250c530e89d948bea7865b14c1dcc079",
-        "issue": 822,
-        "state": "handoff",
-        "started_at": "2026-10-19T21:36:02+00:00",
-        "from_status": "status:todo",
-        "pr": 823,
-        "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main (stack carries ACL-1816 and the rules UI). Conflicts resolved keeping both intents: src/web/app.py (the /rules/* endpoints and main's /warm/* endpoints), _campaign_table.html (rulesCells state + main's warm state; Rules-cell click handler kept, main's narrower selector), tests/test_acl1800_account_scoped_table.py (took main's version: main removed that harness), test_acl1800_account_tree.py (Rules column added to the expected header order). The browser test test_acl1822_rules_browser.py was adapted to main's account tree (open the account row first, per-account .hc-scroll). Tests: test_acl1822_rules_api 28, test_acl1816_rules_evaluate 67, test_rules_store 86, test_acl1800_account_tree 53, test_acl1800_home_wiring 22, test_acl1822_rules_page 15, test_acl1800_account_scoped_table 11, test_acl1822_rules_browser 17 - all passed. Read-only opus review of the merge resolution: no defects. Not run: test_acl1800_home_commands_browser and other main-owned browser files. No live runs."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -48538,25 +48523,25 @@
             "session": "run_r1019_822"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-R1019822",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-S1822A",
-          "session": "run_s1822a_1012",
-          "coordinator": "Coordinator-C0930A",
+          "actor": "Worker-R1019822",
+          "session": "run_r1019_822",
+          "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1822-rules-ui",
-          "worktree": "C:\\acl-1822-rules-ui",
-          "id": "a49cfbd74b8749f19c8d4ac374c47865",
+          "worktree": "C:\\acl-1822-wt",
+          "id": "250c530e89d948bea7865b14c1dcc079",
           "issue": 822,
           "state": "handoff",
-          "started_at": "2026-10-12T10:19:35+00:00",
-          "from_status": "status:idea",
+          "started_at": "2026-10-19T21:36:02+00:00",
+          "from_status": "status:todo",
           "pr": 823,
-          "report": "ACL-1822: PR #823, head ee95794, stacked on #820 + #802 (merged origin/codex/acl-1800-campaign-commands, clean).\nDone: Rules nav + page (Decision flow in Split), list, templates S1/S3, duplicate, enable/disable, editor, scope dialog from snapshot, 4 cards + counters + objects table, Evaluate now (queue only), Observe/Suggest only (Automatic disabled with T5 reason), Apply via acmCommands only, Dismiss in rules journal, Rules column + inspector in the country table, states (empty/loading/error/stale BI/ambiguous/no target/rpa), light+dark, no page scroll at 1280/1024/390.\nDeferred: Cohort/Lifetime, Activity tab, Undo, Release hold, Automatic (T5), builder hook.\nTests: api 16 + page/node 15 passed; browser 16 passed (run with a RAM override for screenshots, free RAM was about 5 GB; skipped by default under 6 GB); affected suites 493 passed.\nScreenshots: C:\\acl-design\\outbox\\2026-10-12_complete-dashboard-designs\\screens\\rules-flow__<state>__<theme>__built.png (built stand shows the page panel only, not the whole dashboard shell)."
+          "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main (stack carries ACL-1816 and the rules UI). Conflicts resolved keeping both intents: src/web/app.py (the /rules/* endpoints and main's /warm/* endpoints), _campaign_table.html (rulesCells state + main's warm state; Rules-cell click handler kept, main's narrower selector), tests/test_acl1800_account_scoped_table.py (took main's version: main removed that harness), test_acl1800_account_tree.py (Rules column added to the expected header order). The browser test test_acl1822_rules_browser.py was adapted to main's account tree (open the account row first, per-account .hc-scroll). Tests: test_acl1822_rules_api 28, test_acl1816_rules_evaluate 67, test_rules_store 86, test_acl1800_account_tree 53, test_acl1800_home_wiring 22, test_acl1822_rules_page 15, test_acl1800_account_scoped_table 11, test_acl1822_rules_browser 17 - all passed. Read-only opus review of the merge resolution: no defects. Not run: test_acl1800_home_commands_browser and other main-owned browser files. No live runs."
         },
         "pr": 823,
-        "queued_at": "2026-10-12T11:43:04+00:00",
+        "queued_at": "2026-10-19T21:36:48+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -57766,7 +57751,8 @@
       840,
       841,
       854,
-      845
+      845,
+      822
     ],
     "review": {
       "id": "71d08f944d4646c69ba2c95edd8d2464",
@@ -94844,6 +94830,13 @@
         "at": "2026-10-19T21:36:02+00:00",
         "issue": 822,
         "claim": "250c530e89d948bea7865b14c1dcc079",
+        "actor": "Worker-R1019822"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T21:36:48+00:00",
+        "issue": 822,
+        "pr": 823,
         "actor": "Worker-R1019822"
       }
     ],
