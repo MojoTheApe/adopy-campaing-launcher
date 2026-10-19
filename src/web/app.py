@@ -28,9 +28,8 @@ from pathlib import Path
 from typing import Any, Dict
 from urllib.parse import urlencode, urlsplit
 
-from fastapi import FastAPI, Request, UploadFile, File
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from src.web import account_notes as _account_notes
@@ -57,6 +56,14 @@ from src.web.cache import (
     get_cached_report,
     peek_cached_report,
     start_background_build,
+)
+from src.web.request_limits import (
+    BUILDER_FORM,
+    DEFAULT_MAX_BODY,
+    ROUTE_MAX_BODY,
+    RequestBodyLimit,
+    SafeStaticFiles,
+    read_form,
 )
 from concurrent.futures import ThreadPoolExecutor
 from src.analysis_agent.money_format import fmt_usd, fmt_currency, fmt_summary_amount
@@ -1407,7 +1414,13 @@ _NCOLS_BY_SECTION = {
 }
 
 app = FastAPI(title="Adopy Campaign Manager")
-app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+# Предел тела проверяется до чтения (ACL-1356, аудит S04). Прослойка
+# добавлена раньше local_dashboard_boundary, значит, стоит внутри неё:
+# отказ 413 тоже получает защитные заголовки.
+app.add_middleware(RequestBodyLimit, default_max_body=DEFAULT_MAX_BODY, route_max_body=ROUTE_MAX_BODY)
+# SafeStaticFiles не пускает UNC, буквы дисков и абсолютные пути к файловой
+# системе (CVE-2026-48818: исходящий SMB/NTLM на Windows).
+app.mount("/static", SafeStaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 
 # ── Отчёт — не в цикле событий (ACL-1399) ───────────────────────────────
@@ -1862,12 +1875,14 @@ def _render_report(
         report, _df, warnings = get_cached_report()
     except FileNotFoundError as e:
         return templates.TemplateResponse(
+            request,
             "error.html",
             {"request": request, "title": "No data file", "message": str(e)},
             status_code=200,
         )
     except ValueError as e:
         return templates.TemplateResponse(
+            request,
             "error.html",
             {"request": request, "title": "Excel format problem", "message": str(e)},
             status_code=200,
@@ -1885,6 +1900,7 @@ def _render_report(
         report = report_for_period(report, _df, date_from, date_to)
     except PeriodReportError as exc:
         return templates.TemplateResponse(
+            request,
             "error.html",
             {"request": request, "title": "Period calculation failed", "message": str(exc)},
             status_code=503,
@@ -1928,6 +1944,7 @@ def _render_report(
 
     goals_view = _build_goals_view(report, goal_seed)
     return templates.TemplateResponse(
+        request,
         "report.html",
         {
             "request": request,
@@ -2353,7 +2370,7 @@ async def index(
     if not _page_ready(date_from, date_to, span):
         if forget_background_error() is None:
             _start_warm(date_from, date_to, span)
-            return templates.TemplateResponse("loading.html", {"request": request})
+            return templates.TemplateResponse(request, "loading.html", {"request": request})
         # Фоновая сборка упала — рисуем страницу обычным путём: он покажет
         # ту же ошибку по-человечески (нет файла, не тот формат).
     return await _in_report_pool(
@@ -2416,6 +2433,7 @@ def details(request: Request) -> HTMLResponse:
     if section not in _DRILL_ENABLED:
         ncols = 6
         return templates.TemplateResponse(
+            request,
             "_details_fragment.html",
             {
                 "request": request,
@@ -2440,6 +2458,7 @@ def details(request: Request) -> HTMLResponse:
         # Cache build failed — return a no-op fragment so the table layout
         # stays intact and the user is invited to fix the / page first.
         return templates.TemplateResponse(
+            request,
             "_details_fragment.html",
             {
                 "request": request,
@@ -2453,6 +2472,7 @@ def details(request: Request) -> HTMLResponse:
 
     rows = get_underlying_rows(df, section=section, country=country, **params)
     return templates.TemplateResponse(
+        request,
         "_details_fragment.html",
         {
             "request": request,
@@ -2629,6 +2649,7 @@ def creative_brief(request: Request, creative: str = "") -> HTMLResponse:
     creative_name = creative.strip()
     if not creative_name:
         return templates.TemplateResponse(
+            request,
             "error.html",
             {"request": request, "title": "No creative name", "message": "Pass ?creative=<name>"},
         )
@@ -2638,6 +2659,7 @@ def creative_brief(request: Request, creative: str = "") -> HTMLResponse:
     if found_path is None:
         # File not found — render upload form
         return templates.TemplateResponse(
+            request,
             "brief.html",
             {
                 "request": request,
@@ -2661,6 +2683,7 @@ def creative_brief(request: Request, creative: str = "") -> HTMLResponse:
         vision = vision_analyze(found_path)
         result = generate_brief(scan, vision, stats, audience)
         return templates.TemplateResponse(
+            request,
             "brief.html",
             {
                 "request": request,
@@ -2675,6 +2698,7 @@ def creative_brief(request: Request, creative: str = "") -> HTMLResponse:
         )
     except Exception as e:
         return templates.TemplateResponse(
+            request,
             "brief.html",
             {
                 "request": request,
@@ -3367,8 +3391,9 @@ def _creative_not_modified(request: Request | None, resolved: Path) -> Response 
 
 
 def _creative_range_response(request: Request | None, resolved: Path, media_type: str) -> Response | None:
-    """Range для видео. Starlette 0.36 (fastapi 0.110) сам Range не умеет и
-    отдавал файл целиком, а без 206 браузер не перематывает ролик. Поддержан
+    """Range для видео. Исторически (Starlette 0.36) FileResponse Range не умел и
+    отдавал файл целиком, а без 206 браузер не перематывает ролик; Starlette 1.x
+    умеет, но свой обработчик оставлен. Поддержан
     один диапазон (`bytes=a-b`, `a-`, `-n`); остальное — обычный 200."""
     if request is None:
         return None
@@ -3755,7 +3780,7 @@ async def account_spend_read(request: Request) -> JSONResponse:
     """
     from src.analysis_agent import account_spend
 
-    form = await request.form()
+    form = await read_form(request)
     account = (form.get("account") or "").strip()
     if not account:
         return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
@@ -3826,7 +3851,7 @@ async def account_spend_read_countries(request: Request) -> JSONResponse:
     """
     from src.analysis_agent import country_split
 
-    form = await request.form()
+    form = await read_form(request)
     account = (form.get("account") or "").strip()
     if not account:
         return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
@@ -3919,7 +3944,7 @@ async def report_problem(request: Request) -> JSONResponse:
     """
     from src import acl_sentry
 
-    form = await request.form()
+    form = await read_form(request)
     text = (form.get("text") or "").strip()
     if not text:
         return JSONResponse(
@@ -3979,7 +4004,7 @@ async def account_spend_turn_off(request: Request) -> JSONResponse:
     """
     from src.analysis_agent import account_spend
 
-    form = await request.form()
+    form = await read_form(request)
     account = (form.get("account") or "").strip()
     level = (form.get("level") or "").strip()
     object_id = (form.get("object_id") or "").strip()
@@ -4063,7 +4088,7 @@ async def account_spend_open_profile(request: Request) -> JSONResponse:
     """
     from src.analysis_agent import account_spend
 
-    form = await request.form()
+    form = await read_form(request)
     account = (form.get("account") or "").strip()
     if not account:
         return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
@@ -4099,7 +4124,7 @@ async def mlx_profile_open(request: Request) -> JSONResponse:
     """
     from src.analysis_agent import account_spend
 
-    form = await request.form()
+    form = await read_form(request)
     profile_id = (form.get("profile_id") or "").strip()
     if not profile_id:
         return JSONResponse({"ok": False, "error": "profile_id is required"}, status_code=400)
@@ -4146,7 +4171,7 @@ async def account_probe_ad_account(request: Request) -> JSONResponse:
     """
     from src.analysis_agent import account_spend
 
-    form = await request.form()
+    form = await read_form(request)
     profile_id = (form.get("profile_id") or "").strip()
     if not profile_id:
         return JSONResponse({"ok": False, "error": "profile_id is required"}, status_code=400)
@@ -4308,7 +4333,7 @@ async def campaign_inventory_read(request: Request) -> JSONResponse:
     """
     from src.analysis_agent import campaign_inventory as ci
 
-    form = await request.form()
+    form = await read_form(request)
     account = (form.get("account") or "").strip()
     if not account:
         return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
@@ -4466,6 +4491,7 @@ def account_map_fragment(
 
     _enrich_country_overview(report)
     return templates.TemplateResponse(
+        request,
         "_account_map.html",
         {
             "request": request,
@@ -4505,6 +4531,7 @@ def account_map_available_fragment(
             status_code=503,
         )
     return templates.TemplateResponse(
+        request,
         "_account_map_available.html", {"request": request, "amap": view}
     )
 
@@ -5224,7 +5251,7 @@ async def api_page_forms(request: Request) -> JSONResponse:
     """
     from src.web import page_forms, publish_api
 
-    form = await request.form()
+    form = await read_form(request, BUILDER_FORM)
     account = (form.get("account_label") or form.get("account") or "").strip()
     if not account:
         return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
@@ -5237,7 +5264,7 @@ async def api_page_forms(request: Request) -> JSONResponse:
 @app.post("/preview-publish")
 async def preview_publish(request: Request) -> JSONResponse:
     """Dry-run: convert form slots → PublishJob plan, return JSON (no Meta API calls)."""
-    form = await request.form()
+    form = await read_form(request, BUILDER_FORM)
     country, account_label, slots = _parse_build_upload_form(form)
     refused = _instant_form_refusal(slots)
     if refused is not None:
@@ -5275,7 +5302,7 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
     `request_id` (ACL-1399): ключ отправки со страницы. Повтор с тем же
     ключом — после «сервер не ответил» — возвращает то же задание.
     """
-    form = await request.form()
+    form = await read_form(request, BUILDER_FORM)
     country, account_label, slots = _parse_build_upload_form(form)
     refused = _instant_form_refusal(slots)
     if refused is not None:
@@ -5342,7 +5369,7 @@ async def publish_plan(request: Request) -> JSONResponse:
     """
     from src.web import publish_api
 
-    form = await request.form()
+    form = await read_form(request, BUILDER_FORM)
     if (form.get("dry_run") or "").strip() != "1":
         return JSONResponse({"error": "Check plan only runs as a dry run (dry_run=1)."}, status_code=400)
     if not publish_api.api_enabled():
@@ -5514,7 +5541,7 @@ async def publish_jobs_release_kept(request: Request) -> JSONResponse:
     Не зависит от панели задания. Окно не закрывается — только перестаёт
     считаться в потолке профилей. Объявлен до `/publish-jobs/{job_id}/…`.
     """
-    form = await request.form()
+    form = await read_form(request)
     from src.web.publish_jobs import release_kept
 
     got = release_kept(str(form.get("account") or ""))
@@ -5577,7 +5604,7 @@ async def publish_jobs_progress(job_id: str) -> JSONResponse:
 @app.post("/build-upload")
 async def build_upload(request: Request) -> Response:
     """Build Upload FB xlsx from campaign builder slots for one account."""
-    form = await request.form()
+    form = await read_form(request, BUILDER_FORM)
     country, account_label, slots = _parse_build_upload_form(form)
     if any(s.get("destination") == "instant_form" for s in slots):
         # ACL-1775: таблица Upload FB формы не умеет - не собирать сайтовую молча.

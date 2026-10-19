@@ -82,7 +82,7 @@ def test_maximum_does_not_read_yesterday_or_show_cached_spend(monkeypatch):
     def unexpected(*a, **k):
         pytest.fail("Maximum must not start a browser read")
     monkeypatch.setattr(account_spend, "start_read", unexpected)
-    async def form():
+    async def form(**_limits):
         return {"account": "Acc", "span": "all", "date_from": "", "date_to": ""}
     response=asyncio.run(app.account_spend_read(NS(form=form)))
     assert response.status_code == 400
