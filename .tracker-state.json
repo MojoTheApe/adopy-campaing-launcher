@@ -43082,6 +43082,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T10:04:35+00:00",
         "from_status": "status:todo"
+      },
+      "305": {
+        "actor": "Worker-E19305",
+        "session": "w305-c0a1de70",
+        "coordinator": "Coordinator-E1019A",
+        "branch": "work/acl-1305-setup-name-check",
+        "worktree": "C:\\wk19-305",
+        "id": "2c76bc2be6d345c28cd79fb37a134b58",
+        "issue": 305,
+        "state": "implementing",
+        "started_at": "2026-10-19T10:06:40+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -50066,11 +50078,15 @@
           {
             "actor": "Worker-W1305A",
             "session": "w1305a-20261017"
+          },
+          {
+            "actor": "Worker-E19305",
+            "session": "w305-c0a1de70"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-W1305A",
-        "coordinator": "Coordinator-T1004Q",
+        "state": "implementing",
+        "worker": "Worker-E19305",
+        "coordinator": "Coordinator-E1019A",
         "handoff": {
           "actor": "Worker-W1305A",
           "session": "w1305a-20261017",
@@ -52915,6 +52931,10 @@
       },
       "Worker-E19401": {
         "session": "w401-c0a1de70",
+        "role": "Worker"
+      },
+      "Worker-E19305": {
+        "session": "w305-c0a1de70",
         "role": "Worker"
       }
     },
@@ -88503,6 +88523,13 @@
         "issue": 401,
         "claim": "8a5abe1c7fd84311890a424a8e7c02d7",
         "actor": "Worker-E19401"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T10:06:40+00:00",
+        "issue": 305,
+        "claim": "2c76bc2be6d345c28cd79fb37a134b58",
+        "actor": "Worker-E19305"
       }
     ],
     "policy": {
