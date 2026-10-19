@@ -44075,6 +44075,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T18:34:27+00:00",
         "from_status": "status:todo"
+      },
+      "853": {
+        "actor": "Worker-U1019853",
+        "session": "run_u1019_853",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "codex/acl-1853-profile-process-lease",
+        "worktree": "C:\\acl-1853",
+        "id": "a1d35e13fca5442b8a5c20646975dfb9",
+        "issue": 853,
+        "state": "implementing",
+        "started_at": "2026-10-19T18:36:54+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -48963,11 +48975,15 @@
           {
             "actor": "Worker-W853D",
             "session": "w853d-20261019"
+          },
+          {
+            "actor": "Worker-U1019853",
+            "session": "run_u1019_853"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-W853D",
-        "coordinator": "Coordinator-C1016A",
+        "state": "implementing",
+        "worker": "Worker-U1019853",
+        "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-W853D",
           "session": "w853d-20261019",
@@ -48995,8 +49011,7 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578013+00:00",
           "remote_process_stopped_verified": false
-        },
-        "reviewer": "Reviewer-R853E"
+        }
       },
       "864": {
         "implementers": [
@@ -54289,6 +54304,10 @@
       },
       "Worker-R1019896": {
         "session": "run_r1019_896",
+        "role": "Worker"
+      },
+      "Worker-U1019853": {
+        "session": "run_u1019_853",
         "role": "Worker"
       }
     },
@@ -92936,6 +92955,13 @@
         "issue": 896,
         "claim": "94d780bdcb5b4ef6a86a3646cf780d24",
         "actor": "Worker-R1019896"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T18:36:54+00:00",
+        "issue": 853,
+        "claim": "a1d35e13fca5442b8a5c20646975dfb9",
+        "actor": "Worker-U1019853"
       }
     ],
     "policy": {
