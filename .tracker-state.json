@@ -44287,20 +44287,6 @@
         "state": "implementing",
         "started_at": "2026-10-19T20:10:40+00:00",
         "from_status": "status:todo"
-      },
-      "841": {
-        "actor": "Worker-R1019841",
-        "session": "run_r1019_841",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1841-account-table-responsive",
-        "worktree": "C:\\acl-1841-wt",
-        "id": "13c1ca850b834ef5b33e616519c551df",
-        "issue": 841,
-        "state": "handoff",
-        "started_at": "2026-10-19T20:28:15+00:00",
-        "from_status": "status:todo",
-        "pr": 848,
-        "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main. Conflicts resolved: _account_map_country.html (kept main's ACL-1800 campaigns section above the table and hc-after footer mount below it, outside the scroll region; our scroll wrapper kept around the table only) and CHANGELOG. Added the review's minor request: a test with campaign_table_api true that checks the order (campaigns section, scroller with only the table, footer mount), no page overflow and reachable actions at 1280/1024/768/390 on Home and Manage. Tests are now explicit about scrolling to the end (End key scrolls vertically, which made the 1024 case flaky on the new main layout). tests/test_account_table_responsive.py: 24 collected, 1024 cases re-run green (6 passed); 1280/768/390 passed earlier in the run.\nNOT DONE: review finding 2 (issue #841 criteria for search/filter, expansion, column settings and batch-command grouping, and footer/builder handle not covering actions, in the integrated toolbar). This remains a partial slice (as the CHANGELOG says). Needs the coordinator to accept it as a partial slice with a follow-up Issue, or a separate task for the toolbar grouping; it should not close #841."
       }
     },
     "tasks": {
@@ -49023,25 +49009,25 @@
             "session": "run_r1019_841"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-R1019841",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-T8L621",
-          "session": "table-fix-01a133d7-1841",
-          "coordinator": "Coordinator-D7K413",
+          "actor": "Worker-R1019841",
+          "session": "run_r1019_841",
+          "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1841-account-table-responsive",
-          "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-1841-2026-10-13",
-          "id": "4b1b4a13060d408793ec620b03eb80f7",
+          "worktree": "C:\\acl-1841-wt",
+          "id": "13c1ca850b834ef5b33e616519c551df",
           "issue": 841,
           "state": "handoff",
-          "started_at": "2026-10-13T08:14:11+00:00",
+          "started_at": "2026-10-19T20:28:15+00:00",
           "from_status": "status:todo",
           "pr": 848,
-          "report": "Partial source implementation: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/848\n\nCurrent-main refresh: genuine author merged official main 3327465fcbd46ccff9b64eb7c574ff5b84b99b80 into the retained source branch. New source head b5f85d02fa3cfc69ea8d8966d1bedce8b679e0b0, tree 000992a0edbe5a73199535d8ac7e893ea550fd42. The sole changelog insertion conflict preserves both ACL-1841 and ACL-1824 sections. No design behavior changed during reconciliation.\n\nThe shared Home / country Manage account table keeps a readable minimum width in a keyboard-focusable horizontal scroll region. Names and headers wrap, and read/profile/unlink actions remain reachable. Existing data, table order and handlers are preserved.\n\nValidation on the refreshed tree: 186 affected tests passed, including the strengthened 16-case responsive regression (214.62 seconds). Production CSS, synthetic populated/empty sections, light/dark themes, and 1280/1024/768/390 px were checked. Future Read campaigns and Open profile actions were also checked without live advertising operations. Secret scan, import smoke and diff check passed. Previous source checks apply only to the prior baseline; new complete source CI remains required.\n\nAll original acceptance criteria remain in force. This source does not complete ACL-1841: coherent campaign-toolbar grouping and complete integrated dashboard geometry / builder clearance remain outstanding until the ACL-1797/1798 campaign implementation is integrated. Two table-boundary integration conflicts require reconciliation; keep toolbar and footer outside the account-table scroller. No installer or live delivery is claimed."
+          "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main. Conflicts resolved: _account_map_country.html (kept main's ACL-1800 campaigns section above the table and hc-after footer mount below it, outside the scroll region; our scroll wrapper kept around the table only) and CHANGELOG. Added the review's minor request: a test with campaign_table_api true that checks the order (campaigns section, scroller with only the table, footer mount), no page overflow and reachable actions at 1280/1024/768/390 on Home and Manage. Tests are now explicit about scrolling to the end (End key scrolls vertically, which made the 1024 case flaky on the new main layout). tests/test_account_table_responsive.py: 24 collected, 1024 cases re-run green (6 passed); 1280/768/390 passed earlier in the run.\nNOT DONE: review finding 2 (issue #841 criteria for search/filter, expansion, column settings and batch-command grouping, and footer/builder handle not covering actions, in the integrated toolbar). This remains a partial slice (as the CHANGELOG says). Needs the coordinator to accept it as a partial slice with a follow-up Issue, or a separate task for the toolbar grouping; it should not close #841."
         },
         "pr": 848,
-        "queued_at": "2026-10-13T08:20:59+00:00",
+        "queued_at": "2026-10-19T20:29:54+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -57605,7 +57591,8 @@
       175,
       379,
       739,
-      840
+      840,
+      841
     ],
     "review": {
       "id": "71d08f944d4646c69ba2c95edd8d2464",
@@ -93978,6 +93965,13 @@
         "at": "2026-10-19T20:28:15+00:00",
         "issue": 841,
         "claim": "13c1ca850b834ef5b33e616519c551df",
+        "actor": "Worker-R1019841"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T20:29:54+00:00",
+        "issue": 841,
+        "pr": 848,
         "actor": "Worker-R1019841"
       }
     ],
