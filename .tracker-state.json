@@ -48556,7 +48556,7 @@
             "session": "w864-c0a1de70"
           }
         ],
-        "state": "approved",
+        "state": "merged",
         "worker": "Worker-E19864",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
@@ -48581,7 +48581,8 @@
         },
         "pr": 985,
         "queued_at": "2026-10-19T07:47:31+00:00",
-        "reviewer": "Reviewer-E19864"
+        "reviewer": "Reviewer-E19864",
+        "batch_id": "a12a28c2b40d481db2305e6bb020724d"
       },
       "865": {
         "implementers": [
@@ -48728,7 +48729,7 @@
             "session": "w871-c0a1de70"
           }
         ],
-        "state": "approved",
+        "state": "merged",
         "worker": "Worker-E19871",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
@@ -48753,7 +48754,8 @@
         },
         "pr": 986,
         "queued_at": "2026-10-19T08:00:16+00:00",
-        "reviewer": "Reviewer-X19986"
+        "reviewer": "Reviewer-X19986",
+        "batch_id": "a12a28c2b40d481db2305e6bb020724d"
       },
       "872": {
         "implementers": [
@@ -49712,7 +49714,7 @@
             "session": "w356-c0a1de70"
           }
         ],
-        "state": "approved",
+        "state": "merged",
         "worker": "Worker-E19356",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
@@ -49737,7 +49739,8 @@
           "at": "2026-10-17T16:30:39.578044+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-X19356"
+        "reviewer": "Reviewer-X19356",
+        "batch_id": "a12a28c2b40d481db2305e6bb020724d"
       },
       "379": {
         "implementers": [
@@ -50194,7 +50197,7 @@
             "session": "w787-c0a1de70"
           }
         ],
-        "state": "approved",
+        "state": "merged",
         "worker": "Worker-E19787",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
@@ -50219,7 +50222,8 @@
           "at": "2026-10-17T16:30:39.578068+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-Y19B"
+        "reviewer": "Reviewer-Y19B",
+        "batch_id": "a12a28c2b40d481db2305e6bb020724d"
       },
       "788": {
         "implementers": [
@@ -50625,7 +50629,7 @@
             "session": "w287-c0a1de70"
           }
         ],
-        "state": "approved",
+        "state": "merged",
         "worker": "Worker-E19287",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
@@ -50650,7 +50654,8 @@
           "at": "2026-10-17T16:30:39.578093+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-E19287"
+        "reviewer": "Reviewer-E19287",
+        "batch_id": "a12a28c2b40d481db2305e6bb020724d"
       },
       "681": {
         "implementers": [
@@ -56494,6 +56499,23 @@
         "started_at": "2026-10-18T21:12:52+00:00",
         "state": "reviewing",
         "route": "process"
+      },
+      "1016": {
+        "id": "b49c262d383b4011a4e6891181162ac5",
+        "batch_id": "a12a28c2b40d481db2305e6bb020724d",
+        "pr": 1016,
+        "issues": [
+          864,
+          871,
+          356,
+          787,
+          287
+        ],
+        "actor": "Reviewer-X19BAT",
+        "session": "rxbat-1c30cbbe",
+        "coordinator": "Coordinator-E1019A",
+        "state": "reviewing",
+        "started_at": "2026-10-19T10:54:52+00:00"
       }
     },
     "review_queue": [
@@ -56506,23 +56528,7 @@
       165,
       29
     ],
-    "review": {
-      "id": "b49c262d383b4011a4e6891181162ac5",
-      "batch_id": "a12a28c2b40d481db2305e6bb020724d",
-      "pr": 1016,
-      "issues": [
-        864,
-        871,
-        356,
-        787,
-        287
-      ],
-      "actor": "Reviewer-X19BAT",
-      "session": "rxbat-1c30cbbe",
-      "coordinator": "Coordinator-E1019A",
-      "state": "reviewing",
-      "started_at": "2026-10-19T10:54:52+00:00"
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -90977,6 +90983,292 @@
         "at": "2026-10-19T13:40:21+00:00",
         "batch_id": "a12a28c2b40d481db2305e6bb020724d",
         "pr": 1016
+      },
+      {
+        "event": "batch-integrated",
+        "at": "2026-10-19T14:12:36+00:00",
+        "batch": {
+          "id": "a12a28c2b40d481db2305e6bb020724d",
+          "actor": "Coordinator-E1019A",
+          "session": "coord-c0a1de70",
+          "state": "merged",
+          "issues": [
+            864,
+            871,
+            356,
+            787,
+            287
+          ],
+          "members": [
+            {
+              "issue": 864,
+              "pr": 985,
+              "branch": "work/acl-1864-stats-header-rows",
+              "head_sha": "c5e499312fcbcb9be063915cb2134189f588d485",
+              "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+              "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "5a82d9fa0b21a5416b83b567f37b0e00f9e158450379e8e3f899ad5cd92863db",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-E19864",
+                "implementer": "Worker-E19864",
+                "head_sha": "c5e499312fcbcb9be063915cb2134189f588d485",
+                "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+                "tree_sha": "dc6a9f72911300fdb5d4d2b6f3fc25cbf6c011d6",
+                "execution_lane": "d8c403d18d1c47a0b345a988efd49d74",
+                "review_session": "r864-c0a1de70",
+                "report": "ACL-1864 / PR #985 source review (Reviewer-E19864, session r864-c0a1de70).\n\nPhase 1 (head 216df94b vs main 435bc154): full-scope review against Issue #864. Shared header selection lives in src/analysis_agent/stats_workbook.py (first_content_row / find_stats_header_row / read_stats_workbook). The header is the first non-empty row of the first sheet; only None/empty/whitespace/NaN cells count as blank, so 0 and False are content. All ten Stats columns are required; duplicated names (case-insensitive, edge spaces stripped) and missing names are rejected; there is no search past an invalid first content row. Used by morning_service, morning_report, analyze_fb_stats, stats_correlator, export_report, the setup wizard and settings validation. Row-1 compatibility, extra Date/Variant columns and column order are preserved. Tests (tests/test_stats_workbook_header.py) use synthetic workbooks: 515 formatted empty rows load identically to a row-1 workbook through both _load_enriched_df and build_morning_report; partial, wrong and duplicate headers, 0/False before a later header, whitespace-only and empty sheets are covered; the SHA-256 of the workbook bytes is unchanged after load and validation. No secrets; user-facing text is English. Trial merge into main was clean; 55 affected tests passed locally. The review returned only for the main refresh. Blocking findings: none.\n\nPhase 2 (head c5e49931): the delta since 216df94b is a single merge commit with parents 216df94b and 435bc154. Its tree is identical to git merge-tree of those parents (no extra edits), and the PR diff against main is unchanged (same 9 files, +247/-36; range-diff shows the 3 commits identical). The merged tree is the same one I tested in phase 1. The author reports 34 + 21 affected tests passed, scanner clean, smoke OK. Source CI on c5e49931 is all green, including tracker-link after the coordinator re-ran the stale job.\n\nNon-blocking notes: scripts/_ecuador_targets_report.py:17 still uses raw pd.read_excel for Stats (ad-hoc script); STATS_COLUMNS duplicates STATS_REQUIRED_COLUMNS; the settings error shows a Python list repr; .xls is no longer readable by direct entry points (settings already restrict to .xlsx/.xlsm).",
+                "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  864
+                ],
+                "recorded_at": "2026-10-19T08:12:36+00:00",
+                "issue_scopes": {
+                  "864": "5a82d9fa0b21a5416b83b567f37b0e00f9e158450379e8e3f899ad5cd92863db"
+                }
+              },
+              "lane": {
+                "id": "d8c403d18d1c47a0b345a988efd49d74",
+                "pr": 985,
+                "issues": [
+                  864
+                ],
+                "actor": "Reviewer-E19864",
+                "session": "r864-c0a1de70",
+                "coordinator": "Coordinator-E1019A",
+                "started_at": "2026-10-19T07:48:45+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-19T08:13:23+00:00"
+            },
+            {
+              "issue": 871,
+              "pr": 986,
+              "branch": "work/acl-1871-builder-side-tab",
+              "head_sha": "5bc4aea51efb029d8e33d4bfaad06e6e04a60f3f",
+              "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+              "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "6ba29b2504b4a9e908d0b80c842b06da2bb2fdb8c1402ecacb62f0628680d930",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-X19986",
+                "implementer": "Worker-E19871",
+                "head_sha": "5bc4aea51efb029d8e33d4bfaad06e6e04a60f3f",
+                "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+                "tree_sha": "aadc73a000426347936d3e01ed51d362d1011f95",
+                "execution_lane": "3bd526a047854eebb62bafacfdc02f0c",
+                "review_session": "rx986-1c30cbbe",
+                "report": "# ACL-1871 / PR #986 \u2014 independent source review (Reviewer-X19986)\n\nReviewer session `rx986-1c30cbbe`, separate Claude session (not a subagent of the\ncoordinator or of the worker). Lane obtained by supported `execution review-takeover`\nfrom the stopped Reviewer-E19871 lane. I implemented none of this work.\n\nReviewed head `5bc4aea51efb029d8e33d4bfaad06e6e04a60f3f` (merge of main `435bc154`\ninto the original ACL-1871 work), base `435bc154`, tree `aadc73a0`. Full scope:\nIssue #871 (description, specifications, acceptance criteria) against the whole\nPR diff (`src/web/templates/report.html`, `tests/builder_drawer_harness.cjs`,\n`tests/test_acl1871_side_tab_browser.py`, `tests/test_acl1769_two_column_layout.py`,\n`tests/test_builder_second_primary_text.py`).\n\n## Requirements\n\n- Three separate accessible tab buttons (closed / normal / wide): `#cbd-preset-*`\n  in a `role=group aria-label=\"Builder size\"`, each with `aria-label`, `title`,\n  `aria-controls=\"cbd-panel\"` and `aria-pressed` kept in sync in `applySize()`.\n  Header Expand button removed; `cbDrawer.expand()/dock()` keep working via presets.\n- Label click toggles at the last size (mode/custom kept across close); pointer drag\n  resizes continuously with a 4 px dead zone, pointer capture, and the click that\n  follows a drag is swallowed (`swallowClick`, reset on `pointerdown`/`pointercancel`).\n  Inputs/drafts untouched: only `--cbd-w`, classes and `data-expanded` change.\n- Persistence: `acl.builder.width` = `wide` | `normal` | 3\u20134 digit px; garbage and\n  locked storage fall back to normal (try/catch); width clamped to\n  [min(320, max), viewport \u2212 56] and re-applied on `resize`.\n- Keyboard: ArrowLeft/ArrowRight on the focused handle resize by 40 px; buttons are\n  native `<button>`s. No outside-click or Escape dismissal added. Narrow screens:\n  normal width = min(480, viewport \u2212 40), so the tab stays visible (test at 420 px);\n  this also fixes the closed offset previously using the fixed 480 px.\n- Themes: only existing tokens (`--bg-elev`, `--border`, `--accent`, `--muted`,\n  `--focus-ring`, `--adopy-selected-bg` with fallback).\n- Obsolete ACL-1769 Expand/Dock right control reconciled: no remaining\n  `cbd-expand` / `acl.builder.expanded` references in src or tests.\n- English-only UI text: all new titles/labels are English; Russian appears only in\n  code comments (allowed). No secrets, ids, tokens or paths in the diff.\n\n## Checks run by me (only affected tests, on head 5bc4aea5)\n\n- `node tests/builder_drawer_harness.cjs` \u2014 ok; `node tests/builder_tree_harness.cjs` \u2014 ok.\n- pytest (13 drawer/builder files: test_acl1871_side_tab_browser, test_acl1769_two_column_layout,\n  test_acl1799_workbench_browser, test_acl1819_preflight_browser, test_builder_duplicate_buttons,\n  test_builder_multi_publish_browser, test_builder_publish_selected_browser,\n  test_builder_second_primary_text, test_campaign_build_dot_browser,\n  test_campaign_build_percent_browser, test_drawer_review_browser, test_field_contrast,\n  test_the_builder_drawer): **138 passed** (warnings only)\n- Required CI on 5bc4aea5 (`gh pr checks 986`): ACL verification, project tooling,\n  installer classification/verification, process instructions, descriptor,\n  linux tests 3.13 \u00d73, windows tests 3.13, tracker-link \u2014 all pass; installer\n  build jobs skipped by the classifier (no installer inputs changed).\n\n## Findings\n\nBlocking: none.\n\nNon-blocking:\n1. If a drag ends without the browser emitting a `click` on the handle, `swallowClick`\n   stays set and the next keyboard Enter/Space activation of the handle is ignored once\n   (pointer clicks reset it on `pointerdown`). Edge case only.\n2. `cbd-expanded` body class and `data-expanded` are still toggled (\u2265 800 px) for the\n   two-column layout CSS; consistent, just note it is now width-derived.\n3. Issue #871 body still carries the old \"Blocked: development is paused\" note; the\n   coordinator should make sure the Issue state reflects the authorized resumption.\n\nVerdict: approved.\n",
+                "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  871
+                ],
+                "recorded_at": "2026-10-19T10:38:30+00:00",
+                "issue_scopes": {
+                  "871": "6ba29b2504b4a9e908d0b80c842b06da2bb2fdb8c1402ecacb62f0628680d930"
+                }
+              },
+              "lane": {
+                "id": "3bd526a047854eebb62bafacfdc02f0c",
+                "pr": 986,
+                "issues": [
+                  871
+                ],
+                "actor": "Reviewer-X19986",
+                "session": "rx986-1c30cbbe",
+                "coordinator": "Coordinator-E1019A",
+                "started_at": "2026-10-19T08:01:38+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-19T10:39:04+00:00"
+            },
+            {
+              "issue": 356,
+              "pr": 942,
+              "branch": "work/acl-1356-starlette",
+              "head_sha": "6c688bd3137f90bfdfa8bcef8b8e5947b3db40c5",
+              "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+              "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "2b5d76b193104aeaf5f22d3b6832244aa30d0d2644c867ec1e26ca0e8a24a87a",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-X19356",
+                "implementer": "Worker-E19356",
+                "head_sha": "6c688bd3137f90bfdfa8bcef8b8e5947b3db40c5",
+                "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+                "tree_sha": "65c786d1bfb078142f5fcd9cad642c23651cf481",
+                "execution_lane": "e4d41508f0864c4fade26d5a68c6a2e7",
+                "review_session": "rx356-1c30cbbe",
+                "report": "# ACL-1356 / PR #942 \u2014 independent source review (Reviewer-X19356)\n\nReviewer session `rx356-1c30cbbe`, separate Claude session (not a subagent of the\ncoordinator or of the worker). I implemented none of this work.\n\nReviewed head `6c688bd3137f90bfdfa8bcef8b8e5947b3db40c5` (merge of main `435bc154`\n`cb1cd958` + docstring commit), base `435bc154`. Full scope: Issue #356 (description,\nspecifications, acceptance criteria) against the whole PR diff (requirements.txt,\nsrc/web/app.py, new src/web/request_limits.py, new tests/test_request_limits.py,\nseven test fakes updated to the new `form(max_fields=\u2026)` signature). The earlier\nreturn (stale branch) is resolved: head contains current main.\n\n## Requirements\n\n- Pins: `requirements.txt` is the single pin source (requirements-dev/-extras use\n  `-r requirements.txt`; installer build reads it). fastapi 0.110.0 \u2192 0.141.1 with\n  explicit starlette==1.7.0 (>= 1.3.1, fixes CVE-2026-48818, CVE-2024-47874,\n  CVE-2025-54121, CVE-2026-54283); jinja2 3.1.4 \u2192 3.1.6; python-multipart unchanged.\n  Installer workflow ran on this head: Verify build inputs + Build, install, repair,\n  and uninstall + Installer verification all pass.\n- Global body limit before buffering: `RequestBodyLimit` ASGI middleware \u2014 declared\n  Content-Length over the route limit \u2192 413 without calling the app; invalid/negative\n  Content-Length \u2192 400; chunked/understated bodies counted per message and cut at the\n  first byte over the limit; an app that swallows the overflow still answers 413;\n  `Connection: close` on refusals. Default 1 MiB, Builder routes 16 MiB, root_path aware.\n- Form limits: every `request.form()` in src goes through `read_form` (only call left is\n  inside it). SMALL_FORM 50 fields / 0 files / 64 KiB part; BUILDER_FORM 20 000 fields /\n  0 files / 1 MiB part. `max_files=0` is safe: the dashboard has no file upload route\n  (the removed `UploadFile, File` import was unused on main; no `type=file` inputs).\n- BUILDER_ROUTES = /build-upload, /preview-publish, /publish-jobs, /publish-plan,\n  /api/page-forms \u2014 exactly the routes calling `read_form(request, BUILDER_FORM)`.\n- /static: `SafeStaticFiles` refuses backslashes, colons (drive letters, NTFS streams),\n  NUL, empty segments (`//host` UNC), `.`/`..`/dot-files, Windows device names and\n  trailing dots, both on the raw route path and again in `lookup_path`;\n  `follow_symlink=True` raises. Tests monkeypatch the resolver to fail if reached.\n- TemplateResponse: all 14 calls are request-first (Starlette 1.x signature).\n- No secrets, tokens or machine paths added. User-facing strings English.\n\n## Checks run by me (only affected tests)\n\nIsolated pins (fastapi 0.141.1, starlette 1.7.0, jinja2 3.1.6, python-multipart 0.0.32,\nhttpx 0.28.1) in a scratch target dir, worktree at 6c688bd3:\ntests/test_request_limits.py + test_acl1761_plan_check, test_acl1775_instant_forms,\ntest_acl1798_campaign_inventory, test_acl1826_mlx_session_lost,\ntest_failures_reach_the_collector, test_report_delivery_review,\ntest_review_ui_regressions: **269 passed** (2 warnings: FastAPI on_event deprecation).\n\nRequired CI on 6c688bd3 (`gh pr checks 942`): linux tests 3.11 \u00d73 and 3.13 \u00d73,\nwindows tests 3.13, ACL verification, project tooling, process instructions,\ndescriptor, installer classify/verify-inputs/build-install-repair-uninstall/\nverification \u2014 all pass. `tracker-link` initially failed only because CI started\n(08:23:28) before the handoff moved #356 to Review (08:24:05); I re-ran that job\nafter the handoff and it passes.\n\n## Findings\n\nBlocking: none.\n\nNon-blocking (follow-ups, not needed for this source):\n1. `@app.on_event(\"startup\")` is deprecated in FastAPI 0.141 \u2014 migrate to lifespan\n   before a release removes it.\n2. JSON routes stay at the 1 MiB default; any future bulk JSON route needs an entry\n   in ROUTE_MAX_BODY.\n3. `_SAFE_STATIC_SEGMENT` rejects names with spaces/`+`/`@`; current static assets\n   comply \u2014 worth a comment for future assets.\n4. Owner smoke check of the live dashboard after integration (large Builder publish,\n   /static assets, creative video seek) remains as the Issue states.\n\nVerdict: approved.\n",
+                "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  356
+                ],
+                "recorded_at": "2026-10-19T10:42:49+00:00",
+                "issue_scopes": {
+                  "356": "2b5d76b193104aeaf5f22d3b6832244aa30d0d2644c867ec1e26ca0e8a24a87a"
+                }
+              },
+              "lane": {
+                "id": "e4d41508f0864c4fade26d5a68c6a2e7",
+                "pr": 942,
+                "issues": [
+                  356
+                ],
+                "actor": "Reviewer-X19356",
+                "session": "rx356-1c30cbbe",
+                "coordinator": "Coordinator-E1019A",
+                "started_at": "2026-10-19T10:40:22+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-19T10:43:23+00:00"
+            },
+            {
+              "issue": 787,
+              "pr": 956,
+              "branch": "codex/acl-1787-ad-rules-research",
+              "head_sha": "507b1ac896e8f79ae63db0ccc220e301b593326b",
+              "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+              "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "072075680194e9c34c8c58470312d713dbf6be600ed939a280019c0b36701dcb",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-Y19B",
+                "implementer": "Worker-E19787",
+                "head_sha": "507b1ac896e8f79ae63db0ccc220e301b593326b",
+                "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+                "tree_sha": "0cf0f98c3e30acfaa0f878cc349ceb0fe790d316",
+                "execution_lane": "2cee58424fc74b43b929c07f91df95a7",
+                "review_session": "rev-y19b-s1",
+                "report": "Independent source review of PR 956 (ACL-1787, Issue 787), head 507b1ac8, base main 435bc154. Docs-only: one new file docs/research/ACL-1787-meta-ad-rules.md (+128).\nRequirements: the Issue asks for a written finding (works / does not work, permissions, payload, recommendation). The file states honestly that this is desk research with no live call, labels every claim verified/inference/unknown, lists the live-test plan (allowlisted account, paused ad set, DISABLED rule, explicit owner go) and recommends not building yet. Acceptance for a research step is met; the live part is correctly left to a gated pilot.\nSpot-checked the repo claim: src/fb_api/write_policy.py on main forbids DELETE and the execution_options key, as the document says. No code, no secrets, no tokens/ids; English only. No bugs found.\nCI on head: ACL verification, Process instructions, Classify, Installer verification, tracker-link, descriptor all pass; code test jobs skipped as docs-only. No tests to run locally.\nVerdict: approved.\n",
+                "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  787
+                ],
+                "recorded_at": "2026-10-19T10:29:00+00:00",
+                "issue_scopes": {
+                  "787": "072075680194e9c34c8c58470312d713dbf6be600ed939a280019c0b36701dcb"
+                }
+              },
+              "lane": {
+                "id": "2cee58424fc74b43b929c07f91df95a7",
+                "pr": 956,
+                "issues": [
+                  787
+                ],
+                "actor": "Reviewer-Y19B",
+                "session": "rev-y19b-s1",
+                "coordinator": "Coordinator-E1019A",
+                "started_at": "2026-10-19T10:23:37+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-19T10:29:44+00:00"
+            },
+            {
+              "issue": 287,
+              "pr": 964,
+              "branch": "work/acl-1287-english-row-text",
+              "head_sha": "0083cd665239b8baaa458d6ce2d93437cfe53e00",
+              "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+              "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "f817108928cba547d3fd6e63b12f35cd88eb8f08363ff15c3818dedc8d9770ce",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-E19287",
+                "implementer": "Worker-E19287",
+                "head_sha": "0083cd665239b8baaa458d6ce2d93437cfe53e00",
+                "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+                "tree_sha": "fba7a3a7f1699b7aa7e291c383c50f088460a1a4",
+                "execution_lane": "b7e3fd8d1f2d448188a88f1f1062a6c0",
+                "review_session": "r287-c0a1de70",
+                "report": "Independent source review of PR #964 (ACL-1287) at head 0083cd66, base main 435bc154 (head contains main via merge bac1d64e, clean). Delta a06072eb..0083cd66 is test-only: tests/test_account_spend_reasons_are_english.py now strips only // and /* */ comments in multiline (JS) literals, limits the logger exemption to log/logger receivers, and guards account_spend.py, account_spend_api.py and mlx_session.py (all clean), with 3 extra self-tests. Issue criteria met: country_split.py English and guarded (ACL-1462), account_spend.py plus the API route and humanize English and guarded; failed spend/split render in English in existing fixtures. No production code changed; no secrets. Local: 9 guard tests passed on the merged tree. tests/test_read_fallback.py::test_the_old_amount_stands_on_its_own_line_under_a_failure fails identically on clean main 435bc154 when run alone locally (ModuleNotFoundError _design_tokens, tests/ not on sys.path); CI passes it. Required CI on 0083cd66 green: descriptor, tracker-link (rerun after status:review), ACL verification, Installer verification; linux 1-3 and windows tests pass.",
+                "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  287
+                ],
+                "recorded_at": "2026-10-19T08:10:45+00:00",
+                "issue_scopes": {
+                  "287": "f817108928cba547d3fd6e63b12f35cd88eb8f08363ff15c3818dedc8d9770ce"
+                }
+              },
+              "lane": {
+                "id": "b7e3fd8d1f2d448188a88f1f1062a6c0",
+                "pr": 964,
+                "issues": [
+                  287
+                ],
+                "actor": "Reviewer-E19287",
+                "session": "r287-c0a1de70",
+                "coordinator": "Coordinator-E1019A",
+                "started_at": "2026-10-19T07:57:13+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-19T08:11:19+00:00"
+            }
+          ],
+          "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+          "branch": "codex/batch-a12a28c2b40d481db2305e6bb020724d",
+          "intake": "a696245e23ac46aeb3a4e14c995dc330",
+          "started_at": "2026-10-19T10:52:02+00:00",
+          "pr": 1016,
+          "entered_stage": false,
+          "history": [],
+          "delivery_request": {
+            "schema_version": 1,
+            "state": "requested",
+            "batch_id": "a12a28c2b40d481db2305e6bb020724d",
+            "issues": [
+              864,
+              871,
+              356,
+              787,
+              287
+            ],
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "target": "ACL stable Windows installer and update channel",
+            "workflow": ".github/workflows/complete-delivery.yml",
+            "job": "Verify published Windows package",
+            "actor": "Coordinator-E1019A",
+            "session": "coord-c0a1de70",
+            "requested_at": "2026-10-19T10:52:02+00:00"
+          },
+          "review": {
+            "id": "b49c262d383b4011a4e6891181162ac5",
+            "batch_id": "a12a28c2b40d481db2305e6bb020724d",
+            "pr": 1016,
+            "issues": [
+              864,
+              871,
+              356,
+              787,
+              287
+            ],
+            "actor": "Reviewer-X19BAT",
+            "session": "rxbat-1c30cbbe",
+            "coordinator": "Coordinator-E1019A",
+            "state": "reviewing",
+            "started_at": "2026-10-19T10:54:52+00:00"
+          },
+          "main_prs": [
+            1016
+          ],
+          "finished_at": "2026-10-19T14:12:36+00:00"
+        }
       }
     ],
     "policy": {
@@ -97565,253 +97857,12 @@
         "finished_at": "2026-10-18T20:42:37+00:00",
         "closing_sources": false,
         "sources_closed": true
-      }
-    },
-    "integration": {
-      "id": "a12a28c2b40d481db2305e6bb020724d",
-      "actor": "Coordinator-E1019A",
-      "session": "coord-c0a1de70",
-      "state": "reviewing",
-      "issues": [
-        864,
-        871,
-        356,
-        787,
-        287
-      ],
-      "members": [
-        {
-          "issue": 864,
-          "pr": 985,
-          "branch": "work/acl-1864-stats-header-rows",
-          "head_sha": "c5e499312fcbcb9be063915cb2134189f588d485",
-          "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
-          "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "5a82d9fa0b21a5416b83b567f37b0e00f9e158450379e8e3f899ad5cd92863db",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-E19864",
-            "implementer": "Worker-E19864",
-            "head_sha": "c5e499312fcbcb9be063915cb2134189f588d485",
-            "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
-            "tree_sha": "dc6a9f72911300fdb5d4d2b6f3fc25cbf6c011d6",
-            "execution_lane": "d8c403d18d1c47a0b345a988efd49d74",
-            "review_session": "r864-c0a1de70",
-            "report": "ACL-1864 / PR #985 source review (Reviewer-E19864, session r864-c0a1de70).\n\nPhase 1 (head 216df94b vs main 435bc154): full-scope review against Issue #864. Shared header selection lives in src/analysis_agent/stats_workbook.py (first_content_row / find_stats_header_row / read_stats_workbook). The header is the first non-empty row of the first sheet; only None/empty/whitespace/NaN cells count as blank, so 0 and False are content. All ten Stats columns are required; duplicated names (case-insensitive, edge spaces stripped) and missing names are rejected; there is no search past an invalid first content row. Used by morning_service, morning_report, analyze_fb_stats, stats_correlator, export_report, the setup wizard and settings validation. Row-1 compatibility, extra Date/Variant columns and column order are preserved. Tests (tests/test_stats_workbook_header.py) use synthetic workbooks: 515 formatted empty rows load identically to a row-1 workbook through both _load_enriched_df and build_morning_report; partial, wrong and duplicate headers, 0/False before a later header, whitespace-only and empty sheets are covered; the SHA-256 of the workbook bytes is unchanged after load and validation. No secrets; user-facing text is English. Trial merge into main was clean; 55 affected tests passed locally. The review returned only for the main refresh. Blocking findings: none.\n\nPhase 2 (head c5e49931): the delta since 216df94b is a single merge commit with parents 216df94b and 435bc154. Its tree is identical to git merge-tree of those parents (no extra edits), and the PR diff against main is unchanged (same 9 files, +247/-36; range-diff shows the 3 commits identical). The merged tree is the same one I tested in phase 1. The author reports 34 + 21 affected tests passed, scanner clean, smoke OK. Source CI on c5e49931 is all green, including tracker-link after the coordinator re-ran the stale job.\n\nNon-blocking notes: scripts/_ecuador_targets_report.py:17 still uses raw pd.read_excel for Stats (ad-hoc script); STATS_COLUMNS duplicates STATS_REQUIRED_COLUMNS; the settings error shows a Python list repr; .xls is no longer readable by direct entry points (settings already restrict to .xlsx/.xlsm).",
-            "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              864
-            ],
-            "recorded_at": "2026-10-19T08:12:36+00:00",
-            "issue_scopes": {
-              "864": "5a82d9fa0b21a5416b83b567f37b0e00f9e158450379e8e3f899ad5cd92863db"
-            }
-          },
-          "lane": {
-            "id": "d8c403d18d1c47a0b345a988efd49d74",
-            "pr": 985,
-            "issues": [
-              864
-            ],
-            "actor": "Reviewer-E19864",
-            "session": "r864-c0a1de70",
-            "coordinator": "Coordinator-E1019A",
-            "started_at": "2026-10-19T07:48:45+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-19T08:13:23+00:00"
-        },
-        {
-          "issue": 871,
-          "pr": 986,
-          "branch": "work/acl-1871-builder-side-tab",
-          "head_sha": "5bc4aea51efb029d8e33d4bfaad06e6e04a60f3f",
-          "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
-          "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "6ba29b2504b4a9e908d0b80c842b06da2bb2fdb8c1402ecacb62f0628680d930",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-X19986",
-            "implementer": "Worker-E19871",
-            "head_sha": "5bc4aea51efb029d8e33d4bfaad06e6e04a60f3f",
-            "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
-            "tree_sha": "aadc73a000426347936d3e01ed51d362d1011f95",
-            "execution_lane": "3bd526a047854eebb62bafacfdc02f0c",
-            "review_session": "rx986-1c30cbbe",
-            "report": "# ACL-1871 / PR #986 \u2014 independent source review (Reviewer-X19986)\n\nReviewer session `rx986-1c30cbbe`, separate Claude session (not a subagent of the\ncoordinator or of the worker). Lane obtained by supported `execution review-takeover`\nfrom the stopped Reviewer-E19871 lane. I implemented none of this work.\n\nReviewed head `5bc4aea51efb029d8e33d4bfaad06e6e04a60f3f` (merge of main `435bc154`\ninto the original ACL-1871 work), base `435bc154`, tree `aadc73a0`. Full scope:\nIssue #871 (description, specifications, acceptance criteria) against the whole\nPR diff (`src/web/templates/report.html`, `tests/builder_drawer_harness.cjs`,\n`tests/test_acl1871_side_tab_browser.py`, `tests/test_acl1769_two_column_layout.py`,\n`tests/test_builder_second_primary_text.py`).\n\n## Requirements\n\n- Three separate accessible tab buttons (closed / normal / wide): `#cbd-preset-*`\n  in a `role=group aria-label=\"Builder size\"`, each with `aria-label`, `title`,\n  `aria-controls=\"cbd-panel\"` and `aria-pressed` kept in sync in `applySize()`.\n  Header Expand button removed; `cbDrawer.expand()/dock()` keep working via presets.\n- Label click toggles at the last size (mode/custom kept across close); pointer drag\n  resizes continuously with a 4 px dead zone, pointer capture, and the click that\n  follows a drag is swallowed (`swallowClick`, reset on `pointerdown`/`pointercancel`).\n  Inputs/drafts untouched: only `--cbd-w`, classes and `data-expanded` change.\n- Persistence: `acl.builder.width` = `wide` | `normal` | 3\u20134 digit px; garbage and\n  locked storage fall back to normal (try/catch); width clamped to\n  [min(320, max), viewport \u2212 56] and re-applied on `resize`.\n- Keyboard: ArrowLeft/ArrowRight on the focused handle resize by 40 px; buttons are\n  native `<button>`s. No outside-click or Escape dismissal added. Narrow screens:\n  normal width = min(480, viewport \u2212 40), so the tab stays visible (test at 420 px);\n  this also fixes the closed offset previously using the fixed 480 px.\n- Themes: only existing tokens (`--bg-elev`, `--border`, `--accent`, `--muted`,\n  `--focus-ring`, `--adopy-selected-bg` with fallback).\n- Obsolete ACL-1769 Expand/Dock right control reconciled: no remaining\n  `cbd-expand` / `acl.builder.expanded` references in src or tests.\n- English-only UI text: all new titles/labels are English; Russian appears only in\n  code comments (allowed). No secrets, ids, tokens or paths in the diff.\n\n## Checks run by me (only affected tests, on head 5bc4aea5)\n\n- `node tests/builder_drawer_harness.cjs` \u2014 ok; `node tests/builder_tree_harness.cjs` \u2014 ok.\n- pytest (13 drawer/builder files: test_acl1871_side_tab_browser, test_acl1769_two_column_layout,\n  test_acl1799_workbench_browser, test_acl1819_preflight_browser, test_builder_duplicate_buttons,\n  test_builder_multi_publish_browser, test_builder_publish_selected_browser,\n  test_builder_second_primary_text, test_campaign_build_dot_browser,\n  test_campaign_build_percent_browser, test_drawer_review_browser, test_field_contrast,\n  test_the_builder_drawer): **138 passed** (warnings only)\n- Required CI on 5bc4aea5 (`gh pr checks 986`): ACL verification, project tooling,\n  installer classification/verification, process instructions, descriptor,\n  linux tests 3.13 \u00d73, windows tests 3.13, tracker-link \u2014 all pass; installer\n  build jobs skipped by the classifier (no installer inputs changed).\n\n## Findings\n\nBlocking: none.\n\nNon-blocking:\n1. If a drag ends without the browser emitting a `click` on the handle, `swallowClick`\n   stays set and the next keyboard Enter/Space activation of the handle is ignored once\n   (pointer clicks reset it on `pointerdown`). Edge case only.\n2. `cbd-expanded` body class and `data-expanded` are still toggled (\u2265 800 px) for the\n   two-column layout CSS; consistent, just note it is now width-derived.\n3. Issue #871 body still carries the old \"Blocked: development is paused\" note; the\n   coordinator should make sure the Issue state reflects the authorized resumption.\n\nVerdict: approved.\n",
-            "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              871
-            ],
-            "recorded_at": "2026-10-19T10:38:30+00:00",
-            "issue_scopes": {
-              "871": "6ba29b2504b4a9e908d0b80c842b06da2bb2fdb8c1402ecacb62f0628680d930"
-            }
-          },
-          "lane": {
-            "id": "3bd526a047854eebb62bafacfdc02f0c",
-            "pr": 986,
-            "issues": [
-              871
-            ],
-            "actor": "Reviewer-X19986",
-            "session": "rx986-1c30cbbe",
-            "coordinator": "Coordinator-E1019A",
-            "started_at": "2026-10-19T08:01:38+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-19T10:39:04+00:00"
-        },
-        {
-          "issue": 356,
-          "pr": 942,
-          "branch": "work/acl-1356-starlette",
-          "head_sha": "6c688bd3137f90bfdfa8bcef8b8e5947b3db40c5",
-          "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
-          "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "2b5d76b193104aeaf5f22d3b6832244aa30d0d2644c867ec1e26ca0e8a24a87a",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-X19356",
-            "implementer": "Worker-E19356",
-            "head_sha": "6c688bd3137f90bfdfa8bcef8b8e5947b3db40c5",
-            "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
-            "tree_sha": "65c786d1bfb078142f5fcd9cad642c23651cf481",
-            "execution_lane": "e4d41508f0864c4fade26d5a68c6a2e7",
-            "review_session": "rx356-1c30cbbe",
-            "report": "# ACL-1356 / PR #942 \u2014 independent source review (Reviewer-X19356)\n\nReviewer session `rx356-1c30cbbe`, separate Claude session (not a subagent of the\ncoordinator or of the worker). I implemented none of this work.\n\nReviewed head `6c688bd3137f90bfdfa8bcef8b8e5947b3db40c5` (merge of main `435bc154`\n`cb1cd958` + docstring commit), base `435bc154`. Full scope: Issue #356 (description,\nspecifications, acceptance criteria) against the whole PR diff (requirements.txt,\nsrc/web/app.py, new src/web/request_limits.py, new tests/test_request_limits.py,\nseven test fakes updated to the new `form(max_fields=\u2026)` signature). The earlier\nreturn (stale branch) is resolved: head contains current main.\n\n## Requirements\n\n- Pins: `requirements.txt` is the single pin source (requirements-dev/-extras use\n  `-r requirements.txt`; installer build reads it). fastapi 0.110.0 \u2192 0.141.1 with\n  explicit starlette==1.7.0 (>= 1.3.1, fixes CVE-2026-48818, CVE-2024-47874,\n  CVE-2025-54121, CVE-2026-54283); jinja2 3.1.4 \u2192 3.1.6; python-multipart unchanged.\n  Installer workflow ran on this head: Verify build inputs + Build, install, repair,\n  and uninstall + Installer verification all pass.\n- Global body limit before buffering: `RequestBodyLimit` ASGI middleware \u2014 declared\n  Content-Length over the route limit \u2192 413 without calling the app; invalid/negative\n  Content-Length \u2192 400; chunked/understated bodies counted per message and cut at the\n  first byte over the limit; an app that swallows the overflow still answers 413;\n  `Connection: close` on refusals. Default 1 MiB, Builder routes 16 MiB, root_path aware.\n- Form limits: every `request.form()` in src goes through `read_form` (only call left is\n  inside it). SMALL_FORM 50 fields / 0 files / 64 KiB part; BUILDER_FORM 20 000 fields /\n  0 files / 1 MiB part. `max_files=0` is safe: the dashboard has no file upload route\n  (the removed `UploadFile, File` import was unused on main; no `type=file` inputs).\n- BUILDER_ROUTES = /build-upload, /preview-publish, /publish-jobs, /publish-plan,\n  /api/page-forms \u2014 exactly the routes calling `read_form(request, BUILDER_FORM)`.\n- /static: `SafeStaticFiles` refuses backslashes, colons (drive letters, NTFS streams),\n  NUL, empty segments (`//host` UNC), `.`/`..`/dot-files, Windows device names and\n  trailing dots, both on the raw route path and again in `lookup_path`;\n  `follow_symlink=True` raises. Tests monkeypatch the resolver to fail if reached.\n- TemplateResponse: all 14 calls are request-first (Starlette 1.x signature).\n- No secrets, tokens or machine paths added. User-facing strings English.\n\n## Checks run by me (only affected tests)\n\nIsolated pins (fastapi 0.141.1, starlette 1.7.0, jinja2 3.1.6, python-multipart 0.0.32,\nhttpx 0.28.1) in a scratch target dir, worktree at 6c688bd3:\ntests/test_request_limits.py + test_acl1761_plan_check, test_acl1775_instant_forms,\ntest_acl1798_campaign_inventory, test_acl1826_mlx_session_lost,\ntest_failures_reach_the_collector, test_report_delivery_review,\ntest_review_ui_regressions: **269 passed** (2 warnings: FastAPI on_event deprecation).\n\nRequired CI on 6c688bd3 (`gh pr checks 942`): linux tests 3.11 \u00d73 and 3.13 \u00d73,\nwindows tests 3.13, ACL verification, project tooling, process instructions,\ndescriptor, installer classify/verify-inputs/build-install-repair-uninstall/\nverification \u2014 all pass. `tracker-link` initially failed only because CI started\n(08:23:28) before the handoff moved #356 to Review (08:24:05); I re-ran that job\nafter the handoff and it passes.\n\n## Findings\n\nBlocking: none.\n\nNon-blocking (follow-ups, not needed for this source):\n1. `@app.on_event(\"startup\")` is deprecated in FastAPI 0.141 \u2014 migrate to lifespan\n   before a release removes it.\n2. JSON routes stay at the 1 MiB default; any future bulk JSON route needs an entry\n   in ROUTE_MAX_BODY.\n3. `_SAFE_STATIC_SEGMENT` rejects names with spaces/`+`/`@`; current static assets\n   comply \u2014 worth a comment for future assets.\n4. Owner smoke check of the live dashboard after integration (large Builder publish,\n   /static assets, creative video seek) remains as the Issue states.\n\nVerdict: approved.\n",
-            "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              356
-            ],
-            "recorded_at": "2026-10-19T10:42:49+00:00",
-            "issue_scopes": {
-              "356": "2b5d76b193104aeaf5f22d3b6832244aa30d0d2644c867ec1e26ca0e8a24a87a"
-            }
-          },
-          "lane": {
-            "id": "e4d41508f0864c4fade26d5a68c6a2e7",
-            "pr": 942,
-            "issues": [
-              356
-            ],
-            "actor": "Reviewer-X19356",
-            "session": "rx356-1c30cbbe",
-            "coordinator": "Coordinator-E1019A",
-            "started_at": "2026-10-19T10:40:22+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-19T10:43:23+00:00"
-        },
-        {
-          "issue": 787,
-          "pr": 956,
-          "branch": "codex/acl-1787-ad-rules-research",
-          "head_sha": "507b1ac896e8f79ae63db0ccc220e301b593326b",
-          "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
-          "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "072075680194e9c34c8c58470312d713dbf6be600ed939a280019c0b36701dcb",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-Y19B",
-            "implementer": "Worker-E19787",
-            "head_sha": "507b1ac896e8f79ae63db0ccc220e301b593326b",
-            "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
-            "tree_sha": "0cf0f98c3e30acfaa0f878cc349ceb0fe790d316",
-            "execution_lane": "2cee58424fc74b43b929c07f91df95a7",
-            "review_session": "rev-y19b-s1",
-            "report": "Independent source review of PR 956 (ACL-1787, Issue 787), head 507b1ac8, base main 435bc154. Docs-only: one new file docs/research/ACL-1787-meta-ad-rules.md (+128).\nRequirements: the Issue asks for a written finding (works / does not work, permissions, payload, recommendation). The file states honestly that this is desk research with no live call, labels every claim verified/inference/unknown, lists the live-test plan (allowlisted account, paused ad set, DISABLED rule, explicit owner go) and recommends not building yet. Acceptance for a research step is met; the live part is correctly left to a gated pilot.\nSpot-checked the repo claim: src/fb_api/write_policy.py on main forbids DELETE and the execution_options key, as the document says. No code, no secrets, no tokens/ids; English only. No bugs found.\nCI on head: ACL verification, Process instructions, Classify, Installer verification, tracker-link, descriptor all pass; code test jobs skipped as docs-only. No tests to run locally.\nVerdict: approved.\n",
-            "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              787
-            ],
-            "recorded_at": "2026-10-19T10:29:00+00:00",
-            "issue_scopes": {
-              "787": "072075680194e9c34c8c58470312d713dbf6be600ed939a280019c0b36701dcb"
-            }
-          },
-          "lane": {
-            "id": "2cee58424fc74b43b929c07f91df95a7",
-            "pr": 956,
-            "issues": [
-              787
-            ],
-            "actor": "Reviewer-Y19B",
-            "session": "rev-y19b-s1",
-            "coordinator": "Coordinator-E1019A",
-            "started_at": "2026-10-19T10:23:37+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-19T10:29:44+00:00"
-        },
-        {
-          "issue": 287,
-          "pr": 964,
-          "branch": "work/acl-1287-english-row-text",
-          "head_sha": "0083cd665239b8baaa458d6ce2d93437cfe53e00",
-          "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
-          "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "f817108928cba547d3fd6e63b12f35cd88eb8f08363ff15c3818dedc8d9770ce",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-E19287",
-            "implementer": "Worker-E19287",
-            "head_sha": "0083cd665239b8baaa458d6ce2d93437cfe53e00",
-            "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
-            "tree_sha": "fba7a3a7f1699b7aa7e291c383c50f088460a1a4",
-            "execution_lane": "b7e3fd8d1f2d448188a88f1f1062a6c0",
-            "review_session": "r287-c0a1de70",
-            "report": "Independent source review of PR #964 (ACL-1287) at head 0083cd66, base main 435bc154 (head contains main via merge bac1d64e, clean). Delta a06072eb..0083cd66 is test-only: tests/test_account_spend_reasons_are_english.py now strips only // and /* */ comments in multiline (JS) literals, limits the logger exemption to log/logger receivers, and guards account_spend.py, account_spend_api.py and mlx_session.py (all clean), with 3 extra self-tests. Issue criteria met: country_split.py English and guarded (ACL-1462), account_spend.py plus the API route and humanize English and guarded; failed spend/split render in English in existing fixtures. No production code changed; no secrets. Local: 9 guard tests passed on the merged tree. tests/test_read_fallback.py::test_the_old_amount_stands_on_its_own_line_under_a_failure fails identically on clean main 435bc154 when run alone locally (ModuleNotFoundError _design_tokens, tests/ not on sys.path); CI passes it. Required CI on 0083cd66 green: descriptor, tracker-link (rerun after status:review), ACL verification, Installer verification; linux 1-3 and windows tests pass.",
-            "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              287
-            ],
-            "recorded_at": "2026-10-19T08:10:45+00:00",
-            "issue_scopes": {
-              "287": "f817108928cba547d3fd6e63b12f35cd88eb8f08363ff15c3818dedc8d9770ce"
-            }
-          },
-          "lane": {
-            "id": "b7e3fd8d1f2d448188a88f1f1062a6c0",
-            "pr": 964,
-            "issues": [
-              287
-            ],
-            "actor": "Reviewer-E19287",
-            "session": "r287-c0a1de70",
-            "coordinator": "Coordinator-E1019A",
-            "started_at": "2026-10-19T07:57:13+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-19T08:11:19+00:00"
-        }
-      ],
-      "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
-      "branch": "codex/batch-a12a28c2b40d481db2305e6bb020724d",
-      "intake": "a696245e23ac46aeb3a4e14c995dc330",
-      "started_at": "2026-10-19T10:52:02+00:00",
-      "pr": 1016,
-      "entered_stage": false,
-      "history": [],
-      "delivery_request": {
-        "schema_version": 1,
-        "state": "requested",
-        "batch_id": "a12a28c2b40d481db2305e6bb020724d",
+      },
+      "a12a28c2b40d481db2305e6bb020724d": {
+        "id": "a12a28c2b40d481db2305e6bb020724d",
+        "actor": "Coordinator-E1019A",
+        "session": "coord-c0a1de70",
+        "state": "merged",
         "issues": [
           864,
           871,
@@ -97819,20 +97870,283 @@
           787,
           287
         ],
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "target": "ACL stable Windows installer and update channel",
-        "workflow": ".github/workflows/complete-delivery.yml",
-        "job": "Verify published Windows package",
-        "actor": "Coordinator-E1019A",
-        "session": "coord-c0a1de70",
-        "requested_at": "2026-10-19T10:52:02+00:00"
+        "members": [
+          {
+            "issue": 864,
+            "pr": 985,
+            "branch": "work/acl-1864-stats-header-rows",
+            "head_sha": "c5e499312fcbcb9be063915cb2134189f588d485",
+            "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+            "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "5a82d9fa0b21a5416b83b567f37b0e00f9e158450379e8e3f899ad5cd92863db",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-E19864",
+              "implementer": "Worker-E19864",
+              "head_sha": "c5e499312fcbcb9be063915cb2134189f588d485",
+              "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+              "tree_sha": "dc6a9f72911300fdb5d4d2b6f3fc25cbf6c011d6",
+              "execution_lane": "d8c403d18d1c47a0b345a988efd49d74",
+              "review_session": "r864-c0a1de70",
+              "report": "ACL-1864 / PR #985 source review (Reviewer-E19864, session r864-c0a1de70).\n\nPhase 1 (head 216df94b vs main 435bc154): full-scope review against Issue #864. Shared header selection lives in src/analysis_agent/stats_workbook.py (first_content_row / find_stats_header_row / read_stats_workbook). The header is the first non-empty row of the first sheet; only None/empty/whitespace/NaN cells count as blank, so 0 and False are content. All ten Stats columns are required; duplicated names (case-insensitive, edge spaces stripped) and missing names are rejected; there is no search past an invalid first content row. Used by morning_service, morning_report, analyze_fb_stats, stats_correlator, export_report, the setup wizard and settings validation. Row-1 compatibility, extra Date/Variant columns and column order are preserved. Tests (tests/test_stats_workbook_header.py) use synthetic workbooks: 515 formatted empty rows load identically to a row-1 workbook through both _load_enriched_df and build_morning_report; partial, wrong and duplicate headers, 0/False before a later header, whitespace-only and empty sheets are covered; the SHA-256 of the workbook bytes is unchanged after load and validation. No secrets; user-facing text is English. Trial merge into main was clean; 55 affected tests passed locally. The review returned only for the main refresh. Blocking findings: none.\n\nPhase 2 (head c5e49931): the delta since 216df94b is a single merge commit with parents 216df94b and 435bc154. Its tree is identical to git merge-tree of those parents (no extra edits), and the PR diff against main is unchanged (same 9 files, +247/-36; range-diff shows the 3 commits identical). The merged tree is the same one I tested in phase 1. The author reports 34 + 21 affected tests passed, scanner clean, smoke OK. Source CI on c5e49931 is all green, including tracker-link after the coordinator re-ran the stale job.\n\nNon-blocking notes: scripts/_ecuador_targets_report.py:17 still uses raw pd.read_excel for Stats (ad-hoc script); STATS_COLUMNS duplicates STATS_REQUIRED_COLUMNS; the settings error shows a Python list repr; .xls is no longer readable by direct entry points (settings already restrict to .xlsx/.xlsm).",
+              "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                864
+              ],
+              "recorded_at": "2026-10-19T08:12:36+00:00",
+              "issue_scopes": {
+                "864": "5a82d9fa0b21a5416b83b567f37b0e00f9e158450379e8e3f899ad5cd92863db"
+              }
+            },
+            "lane": {
+              "id": "d8c403d18d1c47a0b345a988efd49d74",
+              "pr": 985,
+              "issues": [
+                864
+              ],
+              "actor": "Reviewer-E19864",
+              "session": "r864-c0a1de70",
+              "coordinator": "Coordinator-E1019A",
+              "started_at": "2026-10-19T07:48:45+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-19T08:13:23+00:00"
+          },
+          {
+            "issue": 871,
+            "pr": 986,
+            "branch": "work/acl-1871-builder-side-tab",
+            "head_sha": "5bc4aea51efb029d8e33d4bfaad06e6e04a60f3f",
+            "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+            "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "6ba29b2504b4a9e908d0b80c842b06da2bb2fdb8c1402ecacb62f0628680d930",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-X19986",
+              "implementer": "Worker-E19871",
+              "head_sha": "5bc4aea51efb029d8e33d4bfaad06e6e04a60f3f",
+              "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+              "tree_sha": "aadc73a000426347936d3e01ed51d362d1011f95",
+              "execution_lane": "3bd526a047854eebb62bafacfdc02f0c",
+              "review_session": "rx986-1c30cbbe",
+              "report": "# ACL-1871 / PR #986 \u2014 independent source review (Reviewer-X19986)\n\nReviewer session `rx986-1c30cbbe`, separate Claude session (not a subagent of the\ncoordinator or of the worker). Lane obtained by supported `execution review-takeover`\nfrom the stopped Reviewer-E19871 lane. I implemented none of this work.\n\nReviewed head `5bc4aea51efb029d8e33d4bfaad06e6e04a60f3f` (merge of main `435bc154`\ninto the original ACL-1871 work), base `435bc154`, tree `aadc73a0`. Full scope:\nIssue #871 (description, specifications, acceptance criteria) against the whole\nPR diff (`src/web/templates/report.html`, `tests/builder_drawer_harness.cjs`,\n`tests/test_acl1871_side_tab_browser.py`, `tests/test_acl1769_two_column_layout.py`,\n`tests/test_builder_second_primary_text.py`).\n\n## Requirements\n\n- Three separate accessible tab buttons (closed / normal / wide): `#cbd-preset-*`\n  in a `role=group aria-label=\"Builder size\"`, each with `aria-label`, `title`,\n  `aria-controls=\"cbd-panel\"` and `aria-pressed` kept in sync in `applySize()`.\n  Header Expand button removed; `cbDrawer.expand()/dock()` keep working via presets.\n- Label click toggles at the last size (mode/custom kept across close); pointer drag\n  resizes continuously with a 4 px dead zone, pointer capture, and the click that\n  follows a drag is swallowed (`swallowClick`, reset on `pointerdown`/`pointercancel`).\n  Inputs/drafts untouched: only `--cbd-w`, classes and `data-expanded` change.\n- Persistence: `acl.builder.width` = `wide` | `normal` | 3\u20134 digit px; garbage and\n  locked storage fall back to normal (try/catch); width clamped to\n  [min(320, max), viewport \u2212 56] and re-applied on `resize`.\n- Keyboard: ArrowLeft/ArrowRight on the focused handle resize by 40 px; buttons are\n  native `<button>`s. No outside-click or Escape dismissal added. Narrow screens:\n  normal width = min(480, viewport \u2212 40), so the tab stays visible (test at 420 px);\n  this also fixes the closed offset previously using the fixed 480 px.\n- Themes: only existing tokens (`--bg-elev`, `--border`, `--accent`, `--muted`,\n  `--focus-ring`, `--adopy-selected-bg` with fallback).\n- Obsolete ACL-1769 Expand/Dock right control reconciled: no remaining\n  `cbd-expand` / `acl.builder.expanded` references in src or tests.\n- English-only UI text: all new titles/labels are English; Russian appears only in\n  code comments (allowed). No secrets, ids, tokens or paths in the diff.\n\n## Checks run by me (only affected tests, on head 5bc4aea5)\n\n- `node tests/builder_drawer_harness.cjs` \u2014 ok; `node tests/builder_tree_harness.cjs` \u2014 ok.\n- pytest (13 drawer/builder files: test_acl1871_side_tab_browser, test_acl1769_two_column_layout,\n  test_acl1799_workbench_browser, test_acl1819_preflight_browser, test_builder_duplicate_buttons,\n  test_builder_multi_publish_browser, test_builder_publish_selected_browser,\n  test_builder_second_primary_text, test_campaign_build_dot_browser,\n  test_campaign_build_percent_browser, test_drawer_review_browser, test_field_contrast,\n  test_the_builder_drawer): **138 passed** (warnings only)\n- Required CI on 5bc4aea5 (`gh pr checks 986`): ACL verification, project tooling,\n  installer classification/verification, process instructions, descriptor,\n  linux tests 3.13 \u00d73, windows tests 3.13, tracker-link \u2014 all pass; installer\n  build jobs skipped by the classifier (no installer inputs changed).\n\n## Findings\n\nBlocking: none.\n\nNon-blocking:\n1. If a drag ends without the browser emitting a `click` on the handle, `swallowClick`\n   stays set and the next keyboard Enter/Space activation of the handle is ignored once\n   (pointer clicks reset it on `pointerdown`). Edge case only.\n2. `cbd-expanded` body class and `data-expanded` are still toggled (\u2265 800 px) for the\n   two-column layout CSS; consistent, just note it is now width-derived.\n3. Issue #871 body still carries the old \"Blocked: development is paused\" note; the\n   coordinator should make sure the Issue state reflects the authorized resumption.\n\nVerdict: approved.\n",
+              "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                871
+              ],
+              "recorded_at": "2026-10-19T10:38:30+00:00",
+              "issue_scopes": {
+                "871": "6ba29b2504b4a9e908d0b80c842b06da2bb2fdb8c1402ecacb62f0628680d930"
+              }
+            },
+            "lane": {
+              "id": "3bd526a047854eebb62bafacfdc02f0c",
+              "pr": 986,
+              "issues": [
+                871
+              ],
+              "actor": "Reviewer-X19986",
+              "session": "rx986-1c30cbbe",
+              "coordinator": "Coordinator-E1019A",
+              "started_at": "2026-10-19T08:01:38+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-19T10:39:04+00:00"
+          },
+          {
+            "issue": 356,
+            "pr": 942,
+            "branch": "work/acl-1356-starlette",
+            "head_sha": "6c688bd3137f90bfdfa8bcef8b8e5947b3db40c5",
+            "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+            "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "2b5d76b193104aeaf5f22d3b6832244aa30d0d2644c867ec1e26ca0e8a24a87a",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-X19356",
+              "implementer": "Worker-E19356",
+              "head_sha": "6c688bd3137f90bfdfa8bcef8b8e5947b3db40c5",
+              "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+              "tree_sha": "65c786d1bfb078142f5fcd9cad642c23651cf481",
+              "execution_lane": "e4d41508f0864c4fade26d5a68c6a2e7",
+              "review_session": "rx356-1c30cbbe",
+              "report": "# ACL-1356 / PR #942 \u2014 independent source review (Reviewer-X19356)\n\nReviewer session `rx356-1c30cbbe`, separate Claude session (not a subagent of the\ncoordinator or of the worker). I implemented none of this work.\n\nReviewed head `6c688bd3137f90bfdfa8bcef8b8e5947b3db40c5` (merge of main `435bc154`\n`cb1cd958` + docstring commit), base `435bc154`. Full scope: Issue #356 (description,\nspecifications, acceptance criteria) against the whole PR diff (requirements.txt,\nsrc/web/app.py, new src/web/request_limits.py, new tests/test_request_limits.py,\nseven test fakes updated to the new `form(max_fields=\u2026)` signature). The earlier\nreturn (stale branch) is resolved: head contains current main.\n\n## Requirements\n\n- Pins: `requirements.txt` is the single pin source (requirements-dev/-extras use\n  `-r requirements.txt`; installer build reads it). fastapi 0.110.0 \u2192 0.141.1 with\n  explicit starlette==1.7.0 (>= 1.3.1, fixes CVE-2026-48818, CVE-2024-47874,\n  CVE-2025-54121, CVE-2026-54283); jinja2 3.1.4 \u2192 3.1.6; python-multipart unchanged.\n  Installer workflow ran on this head: Verify build inputs + Build, install, repair,\n  and uninstall + Installer verification all pass.\n- Global body limit before buffering: `RequestBodyLimit` ASGI middleware \u2014 declared\n  Content-Length over the route limit \u2192 413 without calling the app; invalid/negative\n  Content-Length \u2192 400; chunked/understated bodies counted per message and cut at the\n  first byte over the limit; an app that swallows the overflow still answers 413;\n  `Connection: close` on refusals. Default 1 MiB, Builder routes 16 MiB, root_path aware.\n- Form limits: every `request.form()` in src goes through `read_form` (only call left is\n  inside it). SMALL_FORM 50 fields / 0 files / 64 KiB part; BUILDER_FORM 20 000 fields /\n  0 files / 1 MiB part. `max_files=0` is safe: the dashboard has no file upload route\n  (the removed `UploadFile, File` import was unused on main; no `type=file` inputs).\n- BUILDER_ROUTES = /build-upload, /preview-publish, /publish-jobs, /publish-plan,\n  /api/page-forms \u2014 exactly the routes calling `read_form(request, BUILDER_FORM)`.\n- /static: `SafeStaticFiles` refuses backslashes, colons (drive letters, NTFS streams),\n  NUL, empty segments (`//host` UNC), `.`/`..`/dot-files, Windows device names and\n  trailing dots, both on the raw route path and again in `lookup_path`;\n  `follow_symlink=True` raises. Tests monkeypatch the resolver to fail if reached.\n- TemplateResponse: all 14 calls are request-first (Starlette 1.x signature).\n- No secrets, tokens or machine paths added. User-facing strings English.\n\n## Checks run by me (only affected tests)\n\nIsolated pins (fastapi 0.141.1, starlette 1.7.0, jinja2 3.1.6, python-multipart 0.0.32,\nhttpx 0.28.1) in a scratch target dir, worktree at 6c688bd3:\ntests/test_request_limits.py + test_acl1761_plan_check, test_acl1775_instant_forms,\ntest_acl1798_campaign_inventory, test_acl1826_mlx_session_lost,\ntest_failures_reach_the_collector, test_report_delivery_review,\ntest_review_ui_regressions: **269 passed** (2 warnings: FastAPI on_event deprecation).\n\nRequired CI on 6c688bd3 (`gh pr checks 942`): linux tests 3.11 \u00d73 and 3.13 \u00d73,\nwindows tests 3.13, ACL verification, project tooling, process instructions,\ndescriptor, installer classify/verify-inputs/build-install-repair-uninstall/\nverification \u2014 all pass. `tracker-link` initially failed only because CI started\n(08:23:28) before the handoff moved #356 to Review (08:24:05); I re-ran that job\nafter the handoff and it passes.\n\n## Findings\n\nBlocking: none.\n\nNon-blocking (follow-ups, not needed for this source):\n1. `@app.on_event(\"startup\")` is deprecated in FastAPI 0.141 \u2014 migrate to lifespan\n   before a release removes it.\n2. JSON routes stay at the 1 MiB default; any future bulk JSON route needs an entry\n   in ROUTE_MAX_BODY.\n3. `_SAFE_STATIC_SEGMENT` rejects names with spaces/`+`/`@`; current static assets\n   comply \u2014 worth a comment for future assets.\n4. Owner smoke check of the live dashboard after integration (large Builder publish,\n   /static assets, creative video seek) remains as the Issue states.\n\nVerdict: approved.\n",
+              "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                356
+              ],
+              "recorded_at": "2026-10-19T10:42:49+00:00",
+              "issue_scopes": {
+                "356": "2b5d76b193104aeaf5f22d3b6832244aa30d0d2644c867ec1e26ca0e8a24a87a"
+              }
+            },
+            "lane": {
+              "id": "e4d41508f0864c4fade26d5a68c6a2e7",
+              "pr": 942,
+              "issues": [
+                356
+              ],
+              "actor": "Reviewer-X19356",
+              "session": "rx356-1c30cbbe",
+              "coordinator": "Coordinator-E1019A",
+              "started_at": "2026-10-19T10:40:22+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-19T10:43:23+00:00"
+          },
+          {
+            "issue": 787,
+            "pr": 956,
+            "branch": "codex/acl-1787-ad-rules-research",
+            "head_sha": "507b1ac896e8f79ae63db0ccc220e301b593326b",
+            "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+            "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "072075680194e9c34c8c58470312d713dbf6be600ed939a280019c0b36701dcb",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-Y19B",
+              "implementer": "Worker-E19787",
+              "head_sha": "507b1ac896e8f79ae63db0ccc220e301b593326b",
+              "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+              "tree_sha": "0cf0f98c3e30acfaa0f878cc349ceb0fe790d316",
+              "execution_lane": "2cee58424fc74b43b929c07f91df95a7",
+              "review_session": "rev-y19b-s1",
+              "report": "Independent source review of PR 956 (ACL-1787, Issue 787), head 507b1ac8, base main 435bc154. Docs-only: one new file docs/research/ACL-1787-meta-ad-rules.md (+128).\nRequirements: the Issue asks for a written finding (works / does not work, permissions, payload, recommendation). The file states honestly that this is desk research with no live call, labels every claim verified/inference/unknown, lists the live-test plan (allowlisted account, paused ad set, DISABLED rule, explicit owner go) and recommends not building yet. Acceptance for a research step is met; the live part is correctly left to a gated pilot.\nSpot-checked the repo claim: src/fb_api/write_policy.py on main forbids DELETE and the execution_options key, as the document says. No code, no secrets, no tokens/ids; English only. No bugs found.\nCI on head: ACL verification, Process instructions, Classify, Installer verification, tracker-link, descriptor all pass; code test jobs skipped as docs-only. No tests to run locally.\nVerdict: approved.\n",
+              "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                787
+              ],
+              "recorded_at": "2026-10-19T10:29:00+00:00",
+              "issue_scopes": {
+                "787": "072075680194e9c34c8c58470312d713dbf6be600ed939a280019c0b36701dcb"
+              }
+            },
+            "lane": {
+              "id": "2cee58424fc74b43b929c07f91df95a7",
+              "pr": 956,
+              "issues": [
+                787
+              ],
+              "actor": "Reviewer-Y19B",
+              "session": "rev-y19b-s1",
+              "coordinator": "Coordinator-E1019A",
+              "started_at": "2026-10-19T10:23:37+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-19T10:29:44+00:00"
+          },
+          {
+            "issue": 287,
+            "pr": 964,
+            "branch": "work/acl-1287-english-row-text",
+            "head_sha": "0083cd665239b8baaa458d6ce2d93437cfe53e00",
+            "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+            "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "f817108928cba547d3fd6e63b12f35cd88eb8f08363ff15c3818dedc8d9770ce",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-E19287",
+              "implementer": "Worker-E19287",
+              "head_sha": "0083cd665239b8baaa458d6ce2d93437cfe53e00",
+              "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+              "tree_sha": "fba7a3a7f1699b7aa7e291c383c50f088460a1a4",
+              "execution_lane": "b7e3fd8d1f2d448188a88f1f1062a6c0",
+              "review_session": "r287-c0a1de70",
+              "report": "Independent source review of PR #964 (ACL-1287) at head 0083cd66, base main 435bc154 (head contains main via merge bac1d64e, clean). Delta a06072eb..0083cd66 is test-only: tests/test_account_spend_reasons_are_english.py now strips only // and /* */ comments in multiline (JS) literals, limits the logger exemption to log/logger receivers, and guards account_spend.py, account_spend_api.py and mlx_session.py (all clean), with 3 extra self-tests. Issue criteria met: country_split.py English and guarded (ACL-1462), account_spend.py plus the API route and humanize English and guarded; failed spend/split render in English in existing fixtures. No production code changed; no secrets. Local: 9 guard tests passed on the merged tree. tests/test_read_fallback.py::test_the_old_amount_stands_on_its_own_line_under_a_failure fails identically on clean main 435bc154 when run alone locally (ModuleNotFoundError _design_tokens, tests/ not on sys.path); CI passes it. Required CI on 0083cd66 green: descriptor, tracker-link (rerun after status:review), ACL verification, Installer verification; linux 1-3 and windows tests pass.",
+              "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                287
+              ],
+              "recorded_at": "2026-10-19T08:10:45+00:00",
+              "issue_scopes": {
+                "287": "f817108928cba547d3fd6e63b12f35cd88eb8f08363ff15c3818dedc8d9770ce"
+              }
+            },
+            "lane": {
+              "id": "b7e3fd8d1f2d448188a88f1f1062a6c0",
+              "pr": 964,
+              "issues": [
+                287
+              ],
+              "actor": "Reviewer-E19287",
+              "session": "r287-c0a1de70",
+              "coordinator": "Coordinator-E1019A",
+              "started_at": "2026-10-19T07:57:13+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-19T08:11:19+00:00"
+          }
+        ],
+        "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+        "branch": "codex/batch-a12a28c2b40d481db2305e6bb020724d",
+        "intake": "a696245e23ac46aeb3a4e14c995dc330",
+        "started_at": "2026-10-19T10:52:02+00:00",
+        "pr": 1016,
+        "entered_stage": false,
+        "history": [],
+        "delivery_request": {
+          "schema_version": 1,
+          "state": "requested",
+          "batch_id": "a12a28c2b40d481db2305e6bb020724d",
+          "issues": [
+            864,
+            871,
+            356,
+            787,
+            287
+          ],
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "target": "ACL stable Windows installer and update channel",
+          "workflow": ".github/workflows/complete-delivery.yml",
+          "job": "Verify published Windows package",
+          "actor": "Coordinator-E1019A",
+          "session": "coord-c0a1de70",
+          "requested_at": "2026-10-19T10:52:02+00:00"
+        },
+        "review": {
+          "id": "b49c262d383b4011a4e6891181162ac5",
+          "batch_id": "a12a28c2b40d481db2305e6bb020724d",
+          "pr": 1016,
+          "issues": [
+            864,
+            871,
+            356,
+            787,
+            287
+          ],
+          "actor": "Reviewer-X19BAT",
+          "session": "rxbat-1c30cbbe",
+          "coordinator": "Coordinator-E1019A",
+          "state": "reviewing",
+          "started_at": "2026-10-19T10:54:52+00:00"
+        },
+        "main_prs": [
+          1016
+        ],
+        "finished_at": "2026-10-19T14:12:36+00:00"
       }
     },
+    "integration": null,
     "intake": {
       "id": "a696245e23ac46aeb3a4e14c995dc330",
       "actor": "Coordinator-E1019A",
       "session": "coord-c0a1de70",
-      "state": "running",
+      "state": "finished",
       "issues": [
         864,
         871,
@@ -97840,14 +98154,10 @@
         787,
         287
       ],
-      "remaining": [
-        864,
-        871,
-        356,
-        787,
-        287
+      "remaining": [],
+      "batches": [
+        "a12a28c2b40d481db2305e6bb020724d"
       ],
-      "batches": [],
       "started_at": "2026-10-19T10:50:45+00:00",
       "ineligible": {}
     },
