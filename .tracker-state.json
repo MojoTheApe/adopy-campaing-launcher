@@ -43196,9 +43196,11 @@
         "worktree": "C:\\rf19-776",
         "id": "2a0a9c7b6c9f432ea8583c166ad35384",
         "issue": 776,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T11:24:12+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 831,
+        "report": "Merged main 435bc154 into cd1da59b (new head 9da094c7). Conflicts: none. No code change. Tests: test_acl1776_create_forms, test_acl1775_builder_forms, test_acl1819_preflight: 214 passed. Needs a delta review of the merge only."
       }
     },
     "tasks": {
