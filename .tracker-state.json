@@ -4726,6 +4726,27 @@
         "issue_scopes": {
           "202": "874916528a5e419af368f88079d8af38988995625b9d8492c34a8c8ce7d6c3f7"
         }
+      },
+      "947": {
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1138",
+        "implementer": "Worker-P1138B",
+        "head_sha": "8bb27185e6d2e1cedde94cd93dae34068b2cc41c",
+        "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+        "tree_sha": "260a966c22f651a677469b250fda9dd85890b951",
+        "execution_lane": "82cec9d7a4ae4c9eabb30424216b8700",
+        "review_session": "acl1138_review_1019",
+        "kind": "independent-review",
+        "report": "Independent read-only review of the whole change against current main: every route that opens or attaches to a Multilogin profile goes through the proxy gate before connect/launch/navigation; merge of main adds no behaviour; English actionable message; 98 targeted tests passed. LOW only: legacy unused MultiloginSession.__enter__ path ungated (follow-up).",
+        "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          138
+        ],
+        "recorded_at": "2026-10-19T11:51:45+00:00",
+        "issue_scopes": {
+          "138": "dda7a0c1e14a09401c053051c5b626d8f01198c7b16ec8fff13e387c006d31b6"
+        }
       }
     },
     "stage": {
