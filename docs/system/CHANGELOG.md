@@ -9,6 +9,28 @@
 - Country rows: `x` asks before taking the account out of that country; a separate "Remove from ACL"
   deletes this computer's map row and all placements (`/account-map-remove`, `also_unlink`).
   Shared sheet, history, Meta campaigns and Multilogin profiles are untouched.
+- Review fixes: "Remove from ACL" also works for an account that is placed in a country but has no
+  map row (the route answers 404 only when there is neither a row nor a placement), so a retry after a
+  partly failed removal completes. The dialog keeps the "leave this empty to connect now" guidance and
+  disables its field during the automatic first read.
+
+## ACL-1381 — Consistent Builder ad-text wording — 2026-10-18
+
+Complete the older text-label request while preserving ACL-1769's later numbered
+Primary text 1/2 interface and separate Headline display. Search/help and empty/error
+messages now refer to ad texts consistently. Library keys, copy/copy2 fields,
+selection, draft restoration and submission behavior are unchanged.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/381).
+
+## ACL-1971 — Explicit tooling fast/full plan — 2026-10-17
+
+Document the existing tooling check's exact commands, omissions and correction
+workflow while retaining full applicable ACL/installer admission. Add the missing
+parsed-workflow activity regression: PR metadata edits run linkage only, while a
+new code head retains candidate verification. Existing aggregate negatives,
+producer names, triggers, policies and runtime behavior stay intact. This records
+project verification behavior; it does not establish a cost saving or delivery.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/971).
 
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 

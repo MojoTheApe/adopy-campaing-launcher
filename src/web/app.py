@@ -4823,40 +4823,50 @@ async def account_map_remove(request: Request) -> JSONResponse:
             status_code=400,
         )
 
+    also_unlink = data.get("also_unlink") is True
     map_path = Path(get_ad_account_map_path())
-    if not map_path.is_file():
+    if not map_path.is_file() and not also_unlink:
         return JSONResponse({"ok": False, "error": "Account map not found"}, status_code=404)
 
+    removed: list[str] = []
+    kept: list = []
+    unlinked: list[dict] = []
     try:
-        with open(map_path, encoding="utf-8-sig", newline="") as f:
-            reader = _csv.DictReader(f)
-            fieldnames = reader.fieldnames or []
-            rows = list(reader)
+        if map_path.is_file():
+            with open(map_path, encoding="utf-8-sig", newline="") as f:
+                reader = _csv.DictReader(f)
+                fieldnames = reader.fieldnames or []
+                rows = list(reader)
 
-        target = set(wanted)
-        kept = [r for r in rows if (r.get("account_name") or "").strip() not in target]
-        removed = [
-            (r.get("account_name") or "").strip() for r in rows
-            if (r.get("account_name") or "").strip() in target
-        ]
-        if not removed:
+            target = set(wanted)
+            kept = [r for r in rows if (r.get("account_name") or "").strip() not in target]
+            removed = [
+                (r.get("account_name") or "").strip() for r in rows
+                if (r.get("account_name") or "").strip() in target
+            ]
+            if removed:
+                write_csv_atomic(map_path, fieldnames, kept)
+
+        # "Remove from ACL" must not depend on a map row: country rows come
+        # from the placements, and an account can be placed with no row (a
+        # workbook-only account, one already removed in the Accounts tab, or a
+        # different letter case). Doing this independently also lets a retry
+        # finish a removal whose placement write failed after the row was gone.
+        if also_unlink:
+            from src.web import account_links
+
+            for name in dict.fromkeys(wanted):
+                for kind in account_links.KINDS:
+                    for place in account_links.values_for(name, kind):
+                        if account_links.unlink(name, kind, place):
+                            unlinked.append({"account": name, "kind": kind, "value": place})
+
+        if not removed and not unlinked:
             shown = "«" + "», «".join(wanted[:3]) + "»"
             return JSONResponse(
                 {"ok": False, "error": f"{shown} is not in the map of this machine"},
                 status_code=404,
             )
-
-        write_csv_atomic(map_path, fieldnames, kept)
-
-        unlinked: list[dict] = []
-        if data.get("also_unlink") is True:
-            from src.web import account_links
-
-            for name in removed:
-                for kind in account_links.KINDS:
-                    for place in account_links.values_for(name, kind):
-                        if account_links.unlink(name, kind, place):
-                            unlinked.append({"account": name, "kind": kind, "value": place})
     except Exception as exc:  # noqa: BLE001
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
 

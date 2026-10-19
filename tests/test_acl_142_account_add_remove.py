@@ -130,3 +130,56 @@ def test_the_country_row_offers_both_actions_in_plain_words():
     removal = page[page.index("function amapRemoveFromAcl("): page.index("function amapAccountModel(")]
     assert "confirm(" in removal and "also_unlink: true" in removal
     assert "shared sheet" in removal and "Multilogin profile" in removal
+
+
+def test_remove_from_acl_works_for_a_placed_account_with_no_map_row(machine):
+    account_links.link("Sheet Only", "country", "Chile")
+    out = _remove({"account_name": "Sheet Only", "also_unlink": True})
+    assert out["ok"] and out["removed"] == [] and out["missing"] == ["Sheet Only"]
+    assert [(u["kind"], u["value"]) for u in out["unlinked"]] == [("country", "Chile")]
+    assert account_links.values_for("Sheet Only", "country") == []
+    assert _names(machine) == ["Acc A", "Acc B"], "unrelated rows are untouched"
+
+
+def test_remove_from_acl_matches_placements_by_case(machine):
+    out = _remove({"account_name": "acc b", "also_unlink": True})
+    assert out["ok"] and len(out["unlinked"]) == 1
+    assert account_links.values_for("Acc B", "country") == []
+
+
+def test_remove_from_acl_works_when_this_machine_has_no_map_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(account_links, "links_path", lambda: tmp_path / "account_links.csv")
+    account_links.link("Orphan", "country", "Peru")
+    with patch("src.web.app.get_ad_account_map_path", return_value=str(tmp_path / "missing.csv")):
+        out = _remove({"account_name": "Orphan", "also_unlink": True})
+    assert out["ok"] and len(out["unlinked"]) == 1
+
+
+def test_nothing_to_remove_is_still_a_404(machine):
+    out = _remove({"account_name": "Nobody", "also_unlink": True})
+    assert out["ok"] is False and "not in the map" in out["error"]
+    out = _remove({"account_name": "Nobody"})
+    assert out["ok"] is False
+
+
+def test_a_retry_after_a_failed_placement_write_finishes_the_removal(machine, monkeypatch):
+    real = account_links.unlink
+
+    def broken(*a, **k):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(account_links, "unlink", broken)
+    first = _remove({"account_name": "Acc A", "also_unlink": True})
+    assert first["ok"] is False, "the failure is reported"
+    assert _names(machine) == ["Acc B"], "the row is already gone"
+    monkeypatch.setattr(account_links, "unlink", real)
+    second = _remove({"account_name": "Acc A", "also_unlink": True})
+    assert second["ok"] and len(second["unlinked"]) == 2
+    assert account_links.values_for("Acc A", "country") == []
+
+
+def test_the_dialog_keeps_the_connect_now_guidance_and_locks_the_field_while_reading():
+    page = (TPL / "report.html").read_text(encoding="utf-8")
+    dialog = page[page.index("function amapAskAccount("): page.index("/* } ACL-142 account dialog */")]
+    assert "leave this empty to connect now" in dialog
+    assert "input.disabled = m.reading" in dialog
