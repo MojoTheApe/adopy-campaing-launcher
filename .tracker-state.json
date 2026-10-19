@@ -44834,9 +44834,11 @@
         "worktree": "C:\\acl-1771",
         "id": "28eb07cec66b4d3b9ed05b20907e0bf7",
         "issue": 771,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T22:31:50+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 832,
+        "report": "# ACL-1771 handoff\n\n- Merged current work/main into codex/acl-1771-targeting-resolver; 2 conflicts (creator.py audit call keeps the targeting report and main's renamed/name_error args; report.html drops the old existing_differences block that main removed).\n- Independent read-only Opus review of the resolution: no defects.\n- Touched tests passed locally: test_acl1771_targeting_resolver 50, test_acl1819_preflight 84, test_acl1761_api_create 121, test_acl1761_country_resolve 5, test_acl1761_existing_check 10, test_acl1761_plan_check 17, test_acl1769_two_column_layout 12. Full suite left to CI. No live runs."
       }
     },
     "tasks": {
