@@ -44125,7 +44125,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "708": {
+        "actor": "Worker-R1019708",
+        "session": "run_r1019_708",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "codex/acl-1708-rebrand-leftovers",
+        "worktree": "C:\\acl-1708",
+        "id": "46e40808fc1947fdb05b504fa88e90de",
+        "issue": 708,
+        "state": "implementing",
+        "started_at": "2026-10-19T20:09:16+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -50511,11 +50524,15 @@
           {
             "actor": "Worker-W1708C",
             "session": "w1708c-20261016"
+          },
+          {
+            "actor": "Worker-R1019708",
+            "session": "run_r1019_708"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-W1708C",
-        "coordinator": "Coordinator-C1016A",
+        "state": "implementing",
+        "worker": "Worker-R1019708",
+        "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-W1708C",
           "session": "w1708c-20261016",
@@ -50532,7 +50549,6 @@
         },
         "pr": 952,
         "queued_at": "2026-10-16T14:50:17+00:00",
-        "reviewer": "Reviewer-R1708D",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -54530,6 +54546,10 @@
       },
       "Worker-R1019379": {
         "session": "run_r1019_379",
+        "role": "Worker"
+      },
+      "Worker-R1019708": {
+        "session": "run_r1019_708",
         "role": "Worker"
       }
     },
@@ -93710,6 +93730,13 @@
         "issue": 379,
         "pr": 943,
         "actor": "Worker-R1019379"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T20:09:16+00:00",
+        "issue": 708,
+        "claim": "46e40808fc1947fdb05b504fa88e90de",
+        "actor": "Worker-R1019708"
       }
     ],
     "policy": {
