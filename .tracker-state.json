@@ -43254,9 +43254,11 @@
         "worktree": "C:\\acl-1138-proxy",
         "id": "b9f0aa8ad08f43a0b461ac55d5227ed0",
         "issue": 138,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T12:09:33+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 947,
+        "report": "Fix for the returned review: 727e3d87 adds proxy_gate_ to the profile-stage rule in the cb-build-model table (src/web/templates/report.html), fixing CI guard tests/test_build_progress_model.py (the only real CI failure on 8bb27185; tracker-link failed only because it ran before the claim). Local: test_build_progress_model + gate tests 54 passed. Base still current main 435bc154. Needs fresh approval of the new head."
       },
       "827": {
         "actor": "Worker-RS1827",
