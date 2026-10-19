@@ -33,6 +33,7 @@ from typing import Any, Callable
 from src.fb_api import form_create as _fc
 from src.fb_api import form_templates as _ft
 from src.fb_api import forms as _forms
+from src.fb_api import write_policy as _wpol
 from src.fb_api.graph import GraphClient, GraphError, GraphStop, WritesBlocked, WriteUnknown, normalize_act
 
 PAUSED = "PAUSED"

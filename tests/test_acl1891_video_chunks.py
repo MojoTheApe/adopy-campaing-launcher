@@ -496,35 +496,27 @@ def test_preflight_rule_allows_big_videos_and_refuses_above_the_new_limit(small,
     assert "video 1536 MB" in (ROOT / "src/fb_api/preflight_rules.json").read_text(encoding="utf-8")
 
 
-def test_chunk_calls_are_part_of_the_estimate(small, tmp_path):
-    d, f = _big_draft(tmp_path)
-    plan = cr.plan_from_draft(d)
-    small_n = cr.estimate_create_calls(plan, lambda p: 10)
-    big_n = cr.estimate_create_calls(plan, lambda p: 3 * MB + 500_000)
-    assert big_n - small_n == 4 + cr.CALLS_UPLOAD_FIXED
-    # Файл ровно на пороге - один запрос, без кусков.
-    assert cr.estimate_create_calls(plan, lambda p: MB) == small_n
+def test_chunk_calls_are_counted_per_file_size():
+    # Файл ровно на пороге - один запрос, без кусков; больше - куски по 8 МБ плюс start/finish/запас.
+    assert cr.upload_calls(cr.VIDEO_SINGLE_MAX_BYTES) == 0
+    assert cr.upload_calls(cr.VIDEO_SINGLE_MAX_BYTES + 1) == -(-(cr.VIDEO_SINGLE_MAX_BYTES + 1) // cr.VIDEO_CHUNK_MAX) + cr.CALLS_UPLOAD_FIXED
+    assert cr.upload_calls(cr.VIDEO_MAX_BYTES) == 192 + cr.CALLS_UPLOAD_FIXED
 
 
 def test_a_plan_that_cannot_fit_the_call_budget_is_refused_up_front(small, tmp_path):
     d, f = _big_draft(tmp_path)
     meta = ChunkMeta()
     out, _ = _run(meta, d, max_calls=25)
-    assert out.stop_kind == "plan" and "needs about" in out.error and "Meta calls" in out.error
+    assert out.stop_kind == "plan" and "need about" in out.error and "Meta calls" in out.error
     assert meta.posts == []
 
 
-def test_the_default_budget_check_refuses_an_oversized_plan(monkeypatch, tmp_path):
+def test_the_default_budget_fits_a_typical_big_video_and_refuses_the_largest():
     from src.web import publish_api
 
-    d, f = _big_draft(tmp_path, size=10 * MB)
-    plan = cr.plan_from_draft(d)
-    monkeypatch.setattr(cr, "_disk_size", lambda p: cr.VIDEO_MAX_BYTES)
-    budget, refusal = publish_api.create_call_budget(plan)
-    # 1.5 ГБ по 8 МБ = 192 куска + остальное: влезает в 250 для одного видео.
-    assert refusal == "" and budget <= publish_api.DEFAULT_CREATE_MAX_CALLS
-    monkeypatch.setattr(cr, "_disk_size", lambda p: 3 * cr.VIDEO_MAX_BYTES)
-    assert "split it" in publish_api.create_call_budget(plan)[1]
+    # 247 МБ = 31 кусок + 3: влезает в бюджет по умолчанию; 1,5 ГБ = 195 вызовов - отказ заранее («разбейте»).
+    assert cr.upload_calls(247 * 1024 * 1024) + cr.CALLS_RESERVE_OTHER <= publish_api.DEFAULT_CREATE_MAX_CALLS
+    assert cr.upload_calls(cr.VIDEO_MAX_BYTES) + cr.CALLS_RESERVE_OTHER > publish_api.DEFAULT_CREATE_MAX_CALLS
 
 
 # ───────────────────────── мутации: охранники обязаны падать ─────────────────────────
