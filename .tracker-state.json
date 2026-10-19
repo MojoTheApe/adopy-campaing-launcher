@@ -43146,20 +43146,6 @@
   },
   "execution": {
     "claims": {
-      "70": {
-        "actor": "Worker-G19602",
-        "session": "wg602-c0a1de70",
-        "coordinator": "Coordinator-E1019A",
-        "branch": "work/acl-602-lead-goals-overview",
-        "worktree": "C:\\wk19-602",
-        "id": "23c87fcf133a4a47b873076fefdbe79d",
-        "issue": 70,
-        "state": "handoff",
-        "started_at": "2026-10-19T11:01:08+00:00",
-        "from_status": "status:todo",
-        "pr": 982,
-        "report": "ACL-602 fresh claim after pause lift. Merged current origin/main into work/acl-602-lead-goals-overview (clean, no conflicts); no new code. Checks: tests/test_goals.py + test_build_progress_model + test_acl_test_platform (151 passed); test_every_change_leaves_a_record, test_web_form_endpoints, test_one_button_reads_what_is_needed, test_acl_ci_scope, test_acl_batch_ci_scope (305 passed); acl_scan_secrets OK; acl_smoke OK. Scope: goals.overview(), GET /goals/overview (ACL_TEAM_LEAD only, 403 else), GET /goals?cm=other needs flag. API only, no UI."
-      },
       "681": {
         "actor": "Worker-G19681",
         "session": "wg681-c0a1de70",
@@ -50574,25 +50560,25 @@
             "session": "wg602-c0a1de70"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-G19602",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
-          "actor": "Worker-W0602A",
-          "session": "acl602-run1",
-          "coordinator": "Coordinator-T1004Q",
+          "actor": "Worker-G19602",
+          "session": "wg602-c0a1de70",
+          "coordinator": "Coordinator-E1019A",
           "branch": "work/acl-602-lead-goals-overview",
-          "worktree": "C:\\acl-602",
-          "id": "2ab7ba9e05eb425e88e804f162cf7b94",
+          "worktree": "C:\\wk19-602",
+          "id": "23c87fcf133a4a47b873076fefdbe79d",
           "issue": 70,
           "state": "handoff",
-          "started_at": "2026-10-17T13:35:50+00:00",
+          "started_at": "2026-10-19T11:01:08+00:00",
           "from_status": "status:todo",
           "pr": 982,
-          "report": "ACL-602: added goals.overview() and GET /goals/overview (lead only via ACL_TEAM_LEAD, 403 otherwise); GET /goals for another person's name also needs the flag. Tests: py -m pytest tests/test_goals.py, 21 passed. No UI panel (API only). PR #982."
+          "report": "ACL-602 fresh claim after pause lift. Merged current origin/main into work/acl-602-lead-goals-overview (clean, no conflicts); no new code. Checks: tests/test_goals.py + test_build_progress_model + test_acl_test_platform (151 passed); test_every_change_leaves_a_record, test_web_form_endpoints, test_one_button_reads_what_is_needed, test_acl_ci_scope, test_acl_batch_ci_scope (305 passed); acl_scan_secrets OK; acl_smoke OK. Scope: goals.overview(), GET /goals/overview (ACL_TEAM_LEAD only, 403 else), GET /goals?cm=other needs flag. API only, no UI."
         },
         "pr": 982,
-        "queued_at": "2026-10-17T13:39:34+00:00",
+        "queued_at": "2026-10-19T11:11:58+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -55914,7 +55900,8 @@
       377,
       401,
       680,
-      202
+      202,
+      70
     ],
     "review": {
       "id": "b49c262d383b4011a4e6891181162ac5",
@@ -89421,6 +89408,13 @@
         "issue": 202,
         "pr": 976,
         "actor": "Worker-G19202"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T11:11:58+00:00",
+        "issue": 70,
+        "pr": 982,
+        "actor": "Worker-G19602"
       }
     ],
     "policy": {
