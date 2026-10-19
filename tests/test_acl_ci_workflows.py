@@ -144,6 +144,22 @@ def test_tracker_link_runs_only_on_pull_requests():
     assert set(workflow("tracker-link.yml")[True]) == {"pull_request"}
 
 
+@pytest.mark.parametrize("activity,expected", [
+    ("edited", {"tracker-link.yml"}),
+    ("synchronize", set(ALL)),
+])
+def test_pr_metadata_feedback_does_not_restart_candidate_verification(activity, expected):
+    # GitHub defaults an absent types filter to opened/synchronize/reopened:
+    # https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request
+    defaults = {"opened", "synchronize", "reopened"}
+    triggered = set()
+    for name in ALL:
+        event = workflow(name)[True]["pull_request"] or {}
+        if activity in event.get("types", defaults):
+            triggered.add(name)
+    assert triggered == expected
+
+
 # --- the Python matrix ------------------------------------------------------------------------------
 
 def test_scope_publishes_the_python_list_and_the_matrix_uses_it():
