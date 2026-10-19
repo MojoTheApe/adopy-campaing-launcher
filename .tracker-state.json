@@ -50461,7 +50461,7 @@
             "session": "run_r1019_151"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-R1019151",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -50485,7 +50485,8 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578059+00:00",
           "remote_process_stopped_verified": false
-        }
+        },
+        "reviewer": "Reviewer-R1151Y"
       },
       "708": {
         "implementers": [
@@ -54422,6 +54423,10 @@
       "Reviewer-R1896Y": {
         "session": "reviewer-r1896y-20261019",
         "role": "Reviewer"
+      },
+      "Reviewer-R1151Y": {
+        "session": "reviewer-r1151y-20261019",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -57273,7 +57278,6 @@
     "review_queue": [
       681,
       805,
-      151,
       945,
       807
     ],
@@ -93450,6 +93454,13 @@
         "pr": 949,
         "lane": "526e9be5620545b5aea024d662f72574",
         "actor": "Reviewer-R1896Y"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-19T19:38:08+00:00",
+        "pr": 950,
+        "lane": "8d00de9887014aa68193aca908a71d6f",
+        "actor": "Reviewer-R1151Y"
       }
     ],
     "policy": {
@@ -100957,6 +100968,18 @@
         "session": "reviewer-r1896y-20261019",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-19T19:36:34+00:00",
+        "state": "reviewing"
+      },
+      "950": {
+        "id": "8d00de9887014aa68193aca908a71d6f",
+        "pr": 950,
+        "issues": [
+          151
+        ],
+        "actor": "Reviewer-R1151Y",
+        "session": "reviewer-r1151y-20261019",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-19T19:38:08+00:00",
         "state": "reviewing"
       }
     },
