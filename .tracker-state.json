@@ -44287,20 +44287,6 @@
         "state": "implementing",
         "started_at": "2026-10-19T20:10:40+00:00",
         "from_status": "status:todo"
-      },
-      "854": {
-        "actor": "Worker-R1019854",
-        "session": "run_r1019_854",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1854-current-draft-status",
-        "worktree": "C:\\acl-1854-wt",
-        "id": "8ed5474077a24ef0af7a92f863e035c5",
-        "issue": 854,
-        "state": "handoff",
-        "started_at": "2026-10-19T20:30:34+00:00",
-        "from_status": "status:todo",
-        "pr": 869,
-        "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main. Conflicts: CHANGELOG, PROJECT.md (kept both notes), src/web/publish_jobs.py (imports: hashlib, json from this branch + logging from main), report.html (kept the previous-ready line and main's text-size token). Tests: test_acl1854_current_draft_status 31 passed (one cross-process lock test timed out once under heavy laptop load and passed on rerun), test_a_job_exception_reaches_sentry_tagged 4 passed, test_a_finished_clean_profile_closes_itself 46 passed. No live runs."
       }
     },
     "tasks": {
@@ -49339,25 +49325,25 @@
             "session": "run_r1019_854"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-R1019854",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-SR1012",
-          "session": "connection_sr1012_worker",
-          "coordinator": "Coordinator-CR1012",
+          "actor": "Worker-R1019854",
+          "session": "run_r1019_854",
+          "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1854-current-draft-status",
-          "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Audit-2026-10-12\\worktrees\\acl-1854",
-          "id": "60ea414304684db29e26ac07125aba41",
+          "worktree": "C:\\acl-1854-wt",
+          "id": "8ed5474077a24ef0af7a92f863e035c5",
           "issue": 854,
           "state": "handoff",
-          "started_at": "2026-10-13T09:46:44+00:00",
+          "started_at": "2026-10-19T20:30:34+00:00",
           "from_status": "status:todo",
           "pr": 869,
-          "report": "# ACL-1854 / PR869 review-return repair\n\nActual author Worker-SR1012 / connection_sr1012_worker; Coordinator-CR1012.\nIndependent Reviewer-RS1012's ordinary return completed for issue854 before edits.\nFresh normal author claim: 60ea414304684db29e26ac07125aba41.\nWorktree/branch remain Audit/worktrees/acl-1854 / codex/acl-1854-current-draft-status.\nCurrent main remains 3327465fcbd46ccff9b64eb7c574ff5b84b99b80.\nNew head: edcdb67024bbe24043d7751eab96da3dec9c1920.\nTree: 22becf6d3b80b5c6ed6fd74f033d3c915a81754e. Worktree clean after commit.\n\n## Finding and failed-before proof\n\nOn handed-off source6b264f39, a new admission reads the predecessor at revision2\nthen fails its atomic write. If failure bookkeeping is delayed while the accepted\npredecessor saves revision3 ready, the failed attempted job's error incorrectly\nmasks that later successful result. The disk still contains the accepted ready\nresult; the fault is the failure overlay's missing observed revision.\n\nRead-only standalone replay under Audit: 1 failed/1 passed in7.31s, then minimized\nconfirmation1 failed/1 passed in4.23s. Source was unchanged until the durable\nreview-return and fresh author claim. The permanent regression was then added\nbefore the fix:1 failed/1 passed/29 deselected in3.77s. It drives actual save,\npublic job-status loader and rendered report with synthetic temporary JSON.\n\n## Narrow correction\n\nFailed admission bookkeeping now retains both predecessor identity and observed\nrevision. A later successful revision of that predecessor suppresses the stale\noverlay, as does a later accepted job. An unchanged predecessor still exposes the\nreal admission error. Existing non-admission failure fencing uses the attempted\njob/revision as before. There is no on-disk schema, profile/slot, lifecycle,\ndeadline, runtime, workbook or external action change in this repair.\n\n## Fresh validation\n\nWindows / Python3.14, existing test venv, isolated ACL_CONFIG_DIR/basetemp,\nACL_LIBRARY_REPO/TOKEN/BRANCH empty and Sentry disabled.\n\n`python -m pytest tests/test_acl1854_current_draft_status.py tests/test_publish_safety_contract.py tests/test_acl1614_cancel_hung_job.py tests/test_config_locations.py -q`\n\n**91 passed,92 deprecation warnings in26.18s**. Includes all31 status regressions,\nboth new admission-error orderings, stale-write/error fences, missing/malformed\nstorage, actual process locking, rendered badges and existing cancellation rules.\nSecret scanner, import smoke and staged diff check passed.\n\nThe earlier broader496+2 affected checks and46 packaging tests remain prior-head\nevidence, not relabelled as fresh runs. Hosted CI and independent review must bind\nthe new exact head. No merge, deployment or live Meta/Multilogin check is claimed."
+          "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main. Conflicts: CHANGELOG, PROJECT.md (kept both notes), src/web/publish_jobs.py (imports: hashlib, json from this branch + logging from main), report.html (kept the previous-ready line and main's text-size token). Tests: test_acl1854_current_draft_status 31 passed (one cross-process lock test timed out once under heavy laptop load and passed on rerun), test_a_job_exception_reaches_sentry_tagged 4 passed, test_a_finished_clean_profile_closes_itself 46 passed. No live runs."
         },
         "pr": 869,
-        "queued_at": "2026-10-13T09:52:42+00:00",
+        "queued_at": "2026-10-19T20:32:17+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "return_operation": {
           "id": "91201340047f423fa6a6747b1c5dc404",
@@ -57607,7 +57593,8 @@
       379,
       739,
       840,
-      841
+      841,
+      854
     ],
     "review": {
       "id": "71d08f944d4646c69ba2c95edd8d2464",
@@ -93994,6 +93981,13 @@
         "at": "2026-10-19T20:30:34+00:00",
         "issue": 854,
         "claim": "8ed5474077a24ef0af7a92f863e035c5",
+        "actor": "Worker-R1019854"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T20:32:17+00:00",
+        "issue": 854,
+        "pr": 869,
         "actor": "Worker-R1019854"
       }
     ],
