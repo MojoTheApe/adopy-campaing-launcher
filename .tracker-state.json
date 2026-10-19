@@ -50415,7 +50415,7 @@
             "session": "run_r1019_896"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-R1019896",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -50434,7 +50434,7 @@
         },
         "pr": 949,
         "queued_at": "2026-10-19T18:57:23+00:00",
-        "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
+        "review_report": "# Returned only to release the review lane: merge conflict with current main\n\nIndependent review (Reviewer-R1896Y, 2026-10-19) of head 6a908f16 on base 1c6ab78e found no blocking problems: 394 affected tests passed and CI was green (tracker-link re-run passed). Full notes are in the review summary.\n\nMain then moved to c6150160 (batch PR 1018 merged) and `gh pr update-branch` reports a merge conflict, so the review cannot be recorded against the current baseline.\n\nNext step for the author: merge current main into the original branch, resolve the conflict, run the affected tests (test_acl1896_instagram_identity, test_acl1761_api_create, test_acl1775_instant_forms, test_acl1819_preflight, test_acl1761_plan_check, test_acl1761_parity, test_acl1756_page_helper_node), hand off, and get a short fresh review of the conflict resolution.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578052+00:00",
@@ -93571,6 +93571,24 @@
         "issue": 309,
         "pr": 929,
         "actor": "Worker-R1019309"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-19T19:53:28+00:00",
+        "review": {
+          "id": "526e9be5620545b5aea024d662f72574",
+          "pr": 949,
+          "issues": [
+            896
+          ],
+          "actor": "Reviewer-R1896Y",
+          "session": "reviewer-r1896y-20261019",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-19T19:36:34+00:00",
+          "state": "returning",
+          "report": "# Returned only to release the review lane: merge conflict with current main\n\nIndependent review (Reviewer-R1896Y, 2026-10-19) of head 6a908f16 on base 1c6ab78e found no blocking problems: 394 affected tests passed and CI was green (tracker-link re-run passed). Full notes are in the review summary.\n\nMain then moved to c6150160 (batch PR 1018 merged) and `gh pr update-branch` reports a merge conflict, so the review cannot be recorded against the current baseline.\n\nNext step for the author: merge current main into the original branch, resolve the conflict, run the affected tests (test_acl1896_instagram_identity, test_acl1761_api_create, test_acl1775_instant_forms, test_acl1819_preflight, test_acl1761_plan_check, test_acl1761_parity, test_acl1756_page_helper_node), hand off, and get a short fresh review of the conflict resolution.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -101067,20 +101085,6 @@
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-19T19:35:26+00:00",
         "state": "reviewing"
-      },
-      "949": {
-        "id": "526e9be5620545b5aea024d662f72574",
-        "pr": 949,
-        "issues": [
-          896
-        ],
-        "actor": "Reviewer-R1896Y",
-        "session": "reviewer-r1896y-20261019",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-19T19:36:34+00:00",
-        "state": "returning",
-        "report": "# Returned only to release the review lane: merge conflict with current main\n\nIndependent review (Reviewer-R1896Y, 2026-10-19) of head 6a908f16 on base 1c6ab78e found no blocking problems: 394 affected tests passed and CI was green (tracker-link re-run passed). Full notes are in the review summary.\n\nMain then moved to c6150160 (batch PR 1018 merged) and `gh pr update-branch` reports a merge conflict, so the review cannot be recorded against the current baseline.\n\nNext step for the author: merge current main into the original branch, resolve the conflict, run the affected tests (test_acl1896_instagram_identity, test_acl1761_api_create, test_acl1775_instant_forms, test_acl1819_preflight, test_acl1761_plan_check, test_acl1761_parity, test_acl1756_page_helper_node), hand off, and get a short fresh review of the conflict resolution.",
-        "keep_lane": false
       },
       "950": {
         "id": "8d00de9887014aa68193aca908a71d6f",
