@@ -43583,20 +43583,6 @@
   },
   "execution": {
     "claims": {
-      "959": {
-        "actor": "Worker-W1019959",
-        "session": "run_w1019_959",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1959-mlx-stop-error",
-        "worktree": "C:\\acl-1959",
-        "id": "9f5cce427c2948118578576b8826f406",
-        "issue": 959,
-        "state": "handoff",
-        "started_at": "2026-10-19T14:13:30+00:00",
-        "from_status": "status:todo",
-        "pr": 1017,
-        "report": "Tracker issues: ACL-1959\n\n## What\nClosing a profile after an account read sometimes logged `MLX stop failed (Stop profile failed HTTP 404: 404 page not found)` and left the window open (TEST9095, 16.10). The real stop address (`v1/profile/stop/p/{id}`) failed at the transport level, the code fell through to the legacy addresses, and their 404 hid the real error.\n\n`MultiloginLauncher.stop_profile` now:\n- asks the real stop address once more after a short pause when it does not answer (connection dropped or read timeout);\n- treats \"already stopped\" on that retry as stopped;\n- if the retry fails too, raises an error naming the address and the exception, without walking the legacy tail.\n\nAn HTTP 404 from the real address still walks the legacy tail as before. Callers are unchanged (`allow_kill=False` still closes nothing beyond the API).\n\n## Checks\n- `tests/test_acl1959_stop_transport_error.py`: 5 passed (dropped connection, read timeout, already-stopped on retry, two drops, 404 tail)\n- Neighbouring stop tests (`test_the_api_stop_is_asked_first.py`, `test_a_hand_opened_profile_is_never_stopped.py`): passed\n- Pre-handoff Opus review: no HIGH/MEDIUM; LOW items fixed (timeout case, changelog spacing)\n\n\ud83e\udd16 Generated with [Claude Code](https://claude.com/claude-code)"
-      },
       "72": {
         "actor": "Worker-W142C",
         "session": "w142c-20261016",
@@ -50278,27 +50264,31 @@
             "session": "run_w1019_959"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1019959",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-S1016C",
-          "session": "stop404",
+          "actor": "Worker-W1019959",
+          "session": "run_w1019_959",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1959-mlx-stop-error",
           "worktree": "C:\\acl-1959",
-          "id": "d184991e30bf45f995d5798b2c866d7c",
+          "id": "9f5cce427c2948118578576b8826f406",
           "issue": 959,
-          "state": "implementing",
-          "started_at": "2026-10-16T16:08:01+00:00",
-          "from_status": "status:todo"
+          "state": "handoff",
+          "started_at": "2026-10-19T14:13:30+00:00",
+          "from_status": "status:todo",
+          "pr": 1017,
+          "report": "Tracker issues: ACL-1959\n\n## What\nClosing a profile after an account read sometimes logged `MLX stop failed (Stop profile failed HTTP 404: 404 page not found)` and left the window open (TEST9095, 16.10). The real stop address (`v1/profile/stop/p/{id}`) failed at the transport level, the code fell through to the legacy addresses, and their 404 hid the real error.\n\n`MultiloginLauncher.stop_profile` now:\n- asks the real stop address once more after a short pause when it does not answer (connection dropped or read timeout);\n- treats \"already stopped\" on that retry as stopped;\n- if the retry fails too, raises an error naming the address and the exception, without walking the legacy tail.\n\nAn HTTP 404 from the real address still walks the legacy tail as before. Callers are unchanged (`allow_kill=False` still closes nothing beyond the API).\n\n## Checks\n- `tests/test_acl1959_stop_transport_error.py`: 5 passed (dropped connection, read timeout, already-stopped on retry, two drops, 404 tail)\n- Neighbouring stop tests (`test_the_api_stop_is_asked_first.py`, `test_a_hand_opened_profile_is_never_stopped.py`): passed\n- Pre-handoff Opus review: no HIGH/MEDIUM; LOW items fixed (timeout case, changelog spacing)\n\n\ud83e\udd16 Generated with [Claude Code](https://claude.com/claude-code)"
         },
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578082+00:00",
           "remote_process_stopped_verified": false
-        }
+        },
+        "pr": 1017,
+        "queued_at": "2026-10-19T14:31:57+00:00"
       },
       "401": {
         "implementers": [
@@ -56548,7 +56538,8 @@
       73,
       165,
       29,
-      776
+      776,
+      959
     ],
     "review": null,
     "history": [
@@ -91421,6 +91412,13 @@
         "issue": 776,
         "pr": 831,
         "actor": "Worker-RF1019X"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T14:31:57+00:00",
+        "issue": 959,
+        "pr": 1017,
+        "actor": "Worker-W1019959"
       }
     ],
     "policy": {
