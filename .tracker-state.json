@@ -5030,6 +5030,27 @@
         "issue_scopes": {
           "72": "29908408faf8c76a8e21d2c74771b90cf9be87a7460620c328116b81f9a1e8fd"
         }
+      },
+      "1021": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1807Y",
+        "review_session": "reviewer-r1807y-20261019",
+        "execution_lane": "5688d26ff9a54a5a98c6bcff00b0db57",
+        "implementer": "Worker-S1019807",
+        "head_sha": "e16195b2c01e1159276bb202371eee382fa3fc5b",
+        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "tree_sha": "e935ad186311db15b8ebf4958ffef0ab5062956b",
+        "issues": [
+          807
+        ],
+        "report": "The PR adds meta_rules.capabilities() which derives, from the sourced registry config/meta_rules (ACL-1781, rules carry source_url and checked_date), the per-objective allowed optimization goals, billing events per goal, CTAs and destination types, using only status 'ga' rules and intersecting per-objective lists with the global enums exactly as check_job does; a new GET /api/meta-rules/capabilities endpoint (503 if the registry is unreadable) and window.CB_META_CAPS embedded in the report page expose it. The page gets a cbMetaCaps module: options() limits goal/CTA/billing lists by objective, violations() reuse the same English wording as the server check_job message, and cbPreflight.lines now adds a blocking error 'Meta rules' audit line for a forbidden objective/goal/billing event/per-ad CTA/destination, while the Website/Instant Form destination options are disabled with a reason when the registry does not allow them (with the real registry both are allowed, so no behaviour change today). Saved drafts are never rewritten: a now-disallowed value is only flagged by the audit and blocks submission, so there is no silent data loss; with empty/unreadable capabilities nothing is restricted, and server-side check_job stays the final gate. Criteria: limited lists (options + endpoint, tested), blocking with the same English reason as preflight (test_page_reason_equals_server_reason), endpoint tests (200 and 503), every offered combination passes check_job. Tests: tests/test_acl1807_valid_combos.py 13 passed (including Node harness on live template code); affected suites test_acl1781_meta_rules, test_acl1819_preflight(+browser), test_acl1604_preflight_browser 111 passed total. CI on head e16195b2: all checks pass (linux 1/2/3, windows, ACL verification, tracker-link, etc.). Non-blocking nits: the current builder hard-codes objective 'leads', CTA LEARN_MORE and has no goal/CTA dropdowns, so the limiting of lists is realised via the audit and the capability API rather than visible select filtering (a CTA select is still a 'future' placeholder); option title reset logic for destination is slightly convoluted; comments are Russian per repo convention. No live checks claimed.",
+        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "recorded_at": "2026-10-19T20:59:32+00:00",
+        "issue_scopes": {
+          "807": "035e2510451cf6de8846fddfb7bd12a3bb0560cfd9e889adb4206f300cd3d10d"
+        }
       }
     },
     "stage": {
