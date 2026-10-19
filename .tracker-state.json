@@ -101622,7 +101622,51 @@
         "session": "reviewer-r142x-20261019",
         "coordinator": "Coordinator-C1016A",
         "started_at": "2026-10-19T19:21:36+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 72,
+          "pr": 958,
+          "branch": "codex/acl-142-account-add-remove",
+          "head_sha": "96399f2db771f012ebef96177ccb631f35da497f",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "29908408faf8c76a8e21d2c74771b90cf9be87a7460620c328116b81f9a1e8fd",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-R142X",
+            "review_session": "reviewer-r142x-20261019",
+            "execution_lane": "c0479d080afc4152a98b78933f00ef05",
+            "implementer": "Worker-W142C",
+            "head_sha": "96399f2db771f012ebef96177ccb631f35da497f",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "tree_sha": "47b2f9d1e86bbf6b491a4c01f0c729ff9ea25005",
+            "issues": [
+              72
+            ],
+            "report": "PR #958 (ACL-142, Issue #72) replaces the browser prompt() in the account-map Connect step with an in-page dialog (amapAskAccount in src/web/templates/report.html) that reads the open Multilogin profile's ad account automatically on opening and again on 'Read from the open account', shows the detected name and act_ number in an editable field, and requires an explicit 'This is the ad account I want to connect' tick before Connect is enabled when the value is an unedited read (read_ad_account now returns needs_confirmation=True because Ads Manager redirects to the profile's default ad account); a typed number needs no tick, an empty field still connects without a number, and Cancel/Escape still cancels. The probe reuses the existing /account-probe/ad-account route (attach-only to the Multilogin-opened profile, one read per open or button press, no polling, nothing secret added), and the Connect flow, profile open order and Multilogin naming are unchanged (test_one_connect_button, test_connect_without_act, test_accounts_tab_connects_the_same_way pass). Removal is now two distinct, confirmed actions: the country-row 'x' asks before taking the account out of that one country (it stays in ACL and moves to Available accounts), and a separate 'Remove from ACL' button posts /account-map-remove with also_unlink=true, which deletes this computer's map row and unlinks every country/asset placement while leaving the shared sheet, history, Meta campaigns and Multilogin profile untouched, matching the owner decision of 2026-10-16 in Issue #72. Prior findings are fixed: Remove from ACL now unlinks placements even with no map row or no map file and answers 404 only when there is neither a row nor a placement (tests for sheet-only account, missing map file, case-insensitive placements and retry after a failed placement write); the 'leave this empty to connect now' guidance pinned by test_connect_without_act is back in the dialog's failure text; the input and the read button are disabled while reading. All user-facing text is English. I confirmed the latest coordinator merge only brings main: git diff work/main...HEAD at 96399f2d is identical to the diff reviewed at 5270268a apart from hunk line offsets, merge-base equals work/main c6150160. Locally on 96399f2d I ran only the affected tests (test_acl_142_account_add_remove incl. the Node dialog harness, test_one_connect_button, test_connect_without_act, test_account_spend, test_accounts_tab_connects_the_same_way, test_browser_boundary_contract, test_browser_roles_review, test_buttons_do_not_look_like_fields, test_hidden_accounts_browser, test_hiding_accounts_this_machine_ignores, test_review_spend_regressions, test_review_ui_regressions, test_september_review, test_the_account_tree_on_screen): 297 passed, 1 failed; the failure, test_account_spend::test_the_new_table_without_row_ids_is_read_by_name, is a Playwright Page.set_content 30 s timeout on this heavily loaded laptop in a test whose code and fixture the PR does not touch, and it passes in CI. Required CI on head 96399f2d is green (linux tests 1/2/3, windows tests, ACL verification, Process instructions, tooling, installer classification, descriptor, tracker-link; build/install jobs skipped by classification). Non-blocking nits: the map-row match in /account-map-remove stays case-sensitive while placements match case-insensitively, so 'acc b' clears placements but leaves an 'Acc B' row; the new dialog and the 'Remove from ACL' button rely on native <dialog> and the existing .amap-x styling with no dedicated CSS; a failed re-read keeps a previous detected value in the field. No live checks claimed.",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "recorded_at": "2026-10-19T20:39:10+00:00",
+            "issue_scopes": {
+              "72": "29908408faf8c76a8e21d2c74771b90cf9be87a7460620c328116b81f9a1e8fd"
+            }
+          },
+          "lane": {
+            "id": "c0479d080afc4152a98b78933f00ef05",
+            "pr": 958,
+            "issues": [
+              72
+            ],
+            "actor": "Reviewer-R142X",
+            "session": "reviewer-r142x-20261019",
+            "coordinator": "Coordinator-C1016A",
+            "started_at": "2026-10-19T19:21:36+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-19T20:39:53+00:00"
+        }
       },
       "863": {
         "id": "978c1289e4c947128b94e8208924b7cb",
