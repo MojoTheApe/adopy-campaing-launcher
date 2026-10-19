@@ -44043,20 +44043,6 @@
         "pr": 1021,
         "report": "Builder reads the Meta rules registry (ga only): capabilities endpoint, Conversion location filtering, blocking Meta-rules audit line with the server's reason text. Tests: test_acl1807_valid_combos (13) + 1781/1819/1769 suites pass. Opus review: no HIGH; fixed intersect-with-enums and 503 handling. Note: builder has no goal/billing/CTA selectors yet (ACL-1767), so those lists are ready but not yet wired to controls."
       },
-      "853": {
-        "actor": "Worker-U1019853",
-        "session": "run_u1019_853",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1853-profile-process-lease",
-        "worktree": "C:\\acl-1853",
-        "id": "a1d35e13fca5442b8a5c20646975dfb9",
-        "issue": 853,
-        "state": "handoff",
-        "started_at": "2026-10-19T18:36:54+00:00",
-        "from_status": "status:todo",
-        "pr": 863,
-        "report": "# ACL-1853 handoff (2026-10-19)\n\nSource PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/863 , head 8c9470d6 (clean merge of current main into 3ad52a3f; no conflicts, no lease source change).\n\nLocal checks: tests/test_acl1853_read_wait.py (2 passed), tests/test_profile_process_lease.py (43 passed). Full suite left to CI.\nRead-only Opus review of the merge: nothing blocking; main's new files touch no Multilogin profile open/close/read paths, so the lease is not bypassed. Non-blocking notes: (1) operations.py try also wraps the body, so a ProfileLeaseError raised inside it is reported as \"no browser action started\"; (2) writes without cancelled= give up after 120 s; (3) warm sessions hold the lease only during adopt; (4) no fairness between waiters.\nNo live profile or Meta operations."
-      },
       "903": {
         "actor": "Worker-R1019903",
         "session": "run_r1019_903",
@@ -48962,25 +48948,25 @@
             "session": "run_u1019_853"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-U1019853",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-W853D",
-          "session": "w853d-20261019",
-          "coordinator": "Coordinator-C1016A",
+          "actor": "Worker-U1019853",
+          "session": "run_u1019_853",
+          "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1853-profile-process-lease",
-          "worktree": "C:\\acl-1853-r2",
-          "id": "bb23000d64bf4b93be5b5492b0a40edb",
+          "worktree": "C:\\acl-1853",
+          "id": "a1d35e13fca5442b8a5c20646975dfb9",
           "issue": 853,
           "state": "handoff",
-          "started_at": "2026-10-19T11:57:41+00:00",
+          "started_at": "2026-10-19T18:36:54+00:00",
           "from_status": "status:todo",
           "pr": 863,
-          "report": "ACL-1853 refreshed onto origin/main 435bc154 (merge commit 3ad52a3f, no conflicts). Includes 366d6580 (reads wait up to 600 s for a busy profile instead of failing at 120 s; matches the Issue intent, kept).\nTests (py 3.14, affected files, 1291 tests): all pass; test_profile_process_lease.py::test_process_termination_releases_without_removing_lock_file failed once in a 900-test run, passed 43/43 in isolation (flaky under load). CI: all test jobs and checks pass except tracker-link, which needed the handoff.\nNon-blocking, not fixed: publish_jobs.close_profile writes stop_log under canonical UUID while readers use raw profile_id (touches several modules); close_account_profile checks lease only with the Multilogin key."
+          "report": "# ACL-1853 handoff (2026-10-19)\n\nSource PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/863 , head 8c9470d6 (clean merge of current main into 3ad52a3f; no conflicts, no lease source change).\n\nLocal checks: tests/test_acl1853_read_wait.py (2 passed), tests/test_profile_process_lease.py (43 passed). Full suite left to CI.\nRead-only Opus review of the merge: nothing blocking; main's new files touch no Multilogin profile open/close/read paths, so the lease is not bypassed. Non-blocking notes: (1) operations.py try also wraps the body, so a ProfileLeaseError raised inside it is reported as \"no browser action started\"; (2) writes without cancelled= give up after 120 s; (3) warm sessions hold the lease only during adopt; (4) no fairness between waiters.\nNo live profile or Meta operations."
         },
         "pr": 863,
-        "queued_at": "2026-10-19T12:31:55+00:00",
+        "queued_at": "2026-10-19T19:02:35+00:00",
         "review_report": "# Returned only to release the review lane: the review baseline is stale\n\nMain moved to 1c6ab78e after the review (batch #1016 merged), so the independent review no longer matches the frozen baseline and `batch approve` is refused. The code review itself found no blocking problems, and the evidence stays on record in the review notes.\n\nNext step for the author: when the coordinator says this task's batch turn is near, merge the then-current main into the original branch, run the affected tests, hand off, and get a short fresh review of the delta (content was already reviewed).",
         "return_operation": {
           "id": "e26bf4c9096b4a088993fde43345eaa5",
@@ -57172,7 +57158,8 @@
       805,
       151,
       945,
-      896
+      896,
+      853
     ],
     "review": null,
     "history": [
@@ -93070,6 +93057,13 @@
         "issue": 896,
         "pr": 949,
         "actor": "Worker-R1019896"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T19:02:35+00:00",
+        "issue": 853,
+        "pr": 863,
+        "actor": "Worker-U1019853"
       }
     ],
     "policy": {
