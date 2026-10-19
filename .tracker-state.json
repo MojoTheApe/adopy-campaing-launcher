@@ -43218,9 +43218,11 @@
         "worktree": "C:\\acl-144-c",
         "id": "62443a66a01c4928ba86994ad573f701",
         "issue": 73,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T11:56:42+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 951,
+        "report": "# ACL-144 refresh onto current main (PR #951)\n\nHead: 88f95d21c06d5d42d9cf347e944b7ba093749f91 (merge commit 4f6952b9 + fix).\n\n- Merged origin/main (merge commit). One conflict: docs/system/CHANGELOG.md; kept every entry (main's ACL-1381 and ACL-1971 entries, then the ACL-144 entry).\n- main did not change `_find_mlx_profile_dir`; the change is still right. Callers on main still use the one-argument form.\n- Review note fixed: parametrized `\"a\\b\"` (a backspace) is now `\"a\\b\"`, so the backslash rejection is tested. Marked `# linux-ok` because the repo's platform guard flags backslash paths.\n- CI found a real order dependence in my lookup: a known folder_id could lose to another workspace's profile with the same name, depending on directory listing order on Linux. Now a known folder_id is tried across all workspaces first. No recursive scan was added.\n- Tests (Python 3.14): 242 passed across profile-dir, account_spend and the browser reopen tests; later test_acl_test_platform + the profile-folder test, 113 passed.\n- CI: Process instructions, tooling, windows, linux shard 2, installer pass; tracker-link fails until the task is in Review (this handoff); linux shards 1 and 3 were still running at handoff."
       },
       "19": {
         "actor": "Worker-W106C",
