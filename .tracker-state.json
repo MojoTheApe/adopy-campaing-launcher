@@ -52456,7 +52456,7 @@
             "session": "wh602-c0a1de70"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-H19602",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
@@ -95972,6 +95972,68 @@
         "issue": 1026,
         "pr": 1027,
         "actor": "Worker-ACT174A"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-19T23:22:48+00:00",
+        "issue": 70,
+        "pr": 982,
+        "review": {
+          "id": "a930a10c05b34ae59dcca59c7dde6308",
+          "pr": 982,
+          "issues": [
+            70
+          ],
+          "actor": "Reviewer-X20982",
+          "session": "rx982-1c30cbbe",
+          "coordinator": "Coordinator-E1019A",
+          "started_at": "2026-10-19T23:19:51+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 70,
+            "pr": 982,
+            "branch": "work/acl-602-lead-goals-overview",
+            "head_sha": "5fcb857ccfe6c2b7407837d39c661eee6c9ed273",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "e203742e52229f146fe31b5b1af11599dfae6b44fe0f9749da06c140e57f6e99",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-X20982",
+              "implementer": "Worker-H19602",
+              "head_sha": "5fcb857ccfe6c2b7407837d39c661eee6c9ed273",
+              "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "tree_sha": "8f019c46ce6553bd22f559ca69418723f25f8624",
+              "execution_lane": "a930a10c05b34ae59dcca59c7dde6308",
+              "review_session": "rx982-1c30cbbe",
+              "report": "# ACL-602 / PR #982 \u2014 refresh-round source review (Reviewer-X20982)\n\nSeparate reviewer session `rx982-1c30cbbe`; I implemented none of this work.\nHead `5fcb857ccfe6c2b7407837d39c661eee6c9ed273`, base main `c61501607ce1`.\nPreviously approved head `0a35b7086190cf483a0117e9258ecc90122e3b99` (source-approved\n2026-10-19T18:44:11Z, base main 1c6ab78e).\n\n## Delta check\n\n- New head is one merge commit with parents 0a35b708 (previous approved head) and\n  c6150160 (current main). Its tree `8f019c46` equals `git merge-tree --write-tree`\n  of those parents: clean merge, no extra edits.\n- PR diff vs main is unchanged: same 3 files (src/web/app.py, src/web/goals.py,\n  tests/test_goals.py, +83/-0); `git diff 1c6ab78e 0a35b708` and\n  `git diff c6150160 5fcb857c` differ only in blob index hashes and hunk offsets\n  (+4 lines from main in app.py). range-diff: the single feature commit 85d18fba is identical.\n- Interaction with main (batch 1016/1018 incl. ACL-1356): the added `/goals/overview`\n  is a GET returning JSON, no request body/form parsing; no `request.form()` outside\n  `read_form` in src. Error texts are English.\n\n## Checks\n\n- Local with the current pins (fastapi 0.141.1 / starlette 1.7.0): tests/test_goals.py,\n  tests/test_web_form_endpoints.py, tests/test_one_button_reads_what_is_needed.py \u2014\n  60 passed. The author's 5 HTTP 500 failures in the last two files come from a stale\n  local venv (old FastAPI); with the pinned versions they pass.\n- Required CI on 5fcb857c (`gh pr checks 982`): ACL verification, project tooling,\n  installer classify/verification, process instructions, descriptor, linux 3.13 x3,\n  windows 3.13, tracker-link \u2014 all pass; installer build jobs skipped (no installer inputs).\n\nBlocking findings: none. Verdict: approved.\n",
+              "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                70
+              ],
+              "recorded_at": "2026-10-19T23:21:59+00:00",
+              "issue_scopes": {
+                "70": "e203742e52229f146fe31b5b1af11599dfae6b44fe0f9749da06c140e57f6e99"
+              }
+            },
+            "lane": {
+              "id": "a930a10c05b34ae59dcca59c7dde6308",
+              "pr": 982,
+              "issues": [
+                70
+              ],
+              "actor": "Reviewer-X20982",
+              "session": "rx982-1c30cbbe",
+              "coordinator": "Coordinator-E1019A",
+              "started_at": "2026-10-19T23:19:51+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-19T23:22:19+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -98833,6 +98895,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-19T21:32:30+00:00"
+      },
+      "70": {
+        "issue": 70,
+        "pr": 982,
+        "branch": "work/acl-602-lead-goals-overview",
+        "head_sha": "5fcb857ccfe6c2b7407837d39c661eee6c9ed273",
+        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "e203742e52229f146fe31b5b1af11599dfae6b44fe0f9749da06c140e57f6e99",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-X20982",
+          "implementer": "Worker-H19602",
+          "head_sha": "5fcb857ccfe6c2b7407837d39c661eee6c9ed273",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "tree_sha": "8f019c46ce6553bd22f559ca69418723f25f8624",
+          "execution_lane": "a930a10c05b34ae59dcca59c7dde6308",
+          "review_session": "rx982-1c30cbbe",
+          "report": "# ACL-602 / PR #982 \u2014 refresh-round source review (Reviewer-X20982)\n\nSeparate reviewer session `rx982-1c30cbbe`; I implemented none of this work.\nHead `5fcb857ccfe6c2b7407837d39c661eee6c9ed273`, base main `c61501607ce1`.\nPreviously approved head `0a35b7086190cf483a0117e9258ecc90122e3b99` (source-approved\n2026-10-19T18:44:11Z, base main 1c6ab78e).\n\n## Delta check\n\n- New head is one merge commit with parents 0a35b708 (previous approved head) and\n  c6150160 (current main). Its tree `8f019c46` equals `git merge-tree --write-tree`\n  of those parents: clean merge, no extra edits.\n- PR diff vs main is unchanged: same 3 files (src/web/app.py, src/web/goals.py,\n  tests/test_goals.py, +83/-0); `git diff 1c6ab78e 0a35b708` and\n  `git diff c6150160 5fcb857c` differ only in blob index hashes and hunk offsets\n  (+4 lines from main in app.py). range-diff: the single feature commit 85d18fba is identical.\n- Interaction with main (batch 1016/1018 incl. ACL-1356): the added `/goals/overview`\n  is a GET returning JSON, no request body/form parsing; no `request.form()` outside\n  `read_form` in src. Error texts are English.\n\n## Checks\n\n- Local with the current pins (fastapi 0.141.1 / starlette 1.7.0): tests/test_goals.py,\n  tests/test_web_form_endpoints.py, tests/test_one_button_reads_what_is_needed.py \u2014\n  60 passed. The author's 5 HTTP 500 failures in the last two files come from a stale\n  local venv (old FastAPI); with the pinned versions they pass.\n- Required CI on 5fcb857c (`gh pr checks 982`): ACL verification, project tooling,\n  installer classify/verification, process instructions, descriptor, linux 3.13 x3,\n  windows 3.13, tracker-link \u2014 all pass; installer build jobs skipped (no installer inputs).\n\nBlocking findings: none. Verdict: approved.\n",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            70
+          ],
+          "recorded_at": "2026-10-19T23:21:59+00:00",
+          "issue_scopes": {
+            "70": "e203742e52229f146fe31b5b1af11599dfae6b44fe0f9749da06c140e57f6e99"
+          }
+        },
+        "lane": {
+          "id": "a930a10c05b34ae59dcca59c7dde6308",
+          "pr": 982,
+          "issues": [
+            70
+          ],
+          "actor": "Reviewer-X20982",
+          "session": "rx982-1c30cbbe",
+          "coordinator": "Coordinator-E1019A",
+          "started_at": "2026-10-19T23:19:51+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-19T23:22:19+00:00"
       }
     },
     "batches": {
@@ -103564,62 +103670,6 @@
         "coordinator": "Coordinator-E1019A",
         "started_at": "2026-10-19T22:32:46+00:00",
         "state": "reviewing"
-      },
-      "982": {
-        "id": "a930a10c05b34ae59dcca59c7dde6308",
-        "pr": 982,
-        "issues": [
-          70
-        ],
-        "actor": "Reviewer-X20982",
-        "session": "rx982-1c30cbbe",
-        "coordinator": "Coordinator-E1019A",
-        "started_at": "2026-10-19T23:19:51+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 70,
-          "pr": 982,
-          "branch": "work/acl-602-lead-goals-overview",
-          "head_sha": "5fcb857ccfe6c2b7407837d39c661eee6c9ed273",
-          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "e203742e52229f146fe31b5b1af11599dfae6b44fe0f9749da06c140e57f6e99",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-X20982",
-            "implementer": "Worker-H19602",
-            "head_sha": "5fcb857ccfe6c2b7407837d39c661eee6c9ed273",
-            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-            "tree_sha": "8f019c46ce6553bd22f559ca69418723f25f8624",
-            "execution_lane": "a930a10c05b34ae59dcca59c7dde6308",
-            "review_session": "rx982-1c30cbbe",
-            "report": "# ACL-602 / PR #982 \u2014 refresh-round source review (Reviewer-X20982)\n\nSeparate reviewer session `rx982-1c30cbbe`; I implemented none of this work.\nHead `5fcb857ccfe6c2b7407837d39c661eee6c9ed273`, base main `c61501607ce1`.\nPreviously approved head `0a35b7086190cf483a0117e9258ecc90122e3b99` (source-approved\n2026-10-19T18:44:11Z, base main 1c6ab78e).\n\n## Delta check\n\n- New head is one merge commit with parents 0a35b708 (previous approved head) and\n  c6150160 (current main). Its tree `8f019c46` equals `git merge-tree --write-tree`\n  of those parents: clean merge, no extra edits.\n- PR diff vs main is unchanged: same 3 files (src/web/app.py, src/web/goals.py,\n  tests/test_goals.py, +83/-0); `git diff 1c6ab78e 0a35b708` and\n  `git diff c6150160 5fcb857c` differ only in blob index hashes and hunk offsets\n  (+4 lines from main in app.py). range-diff: the single feature commit 85d18fba is identical.\n- Interaction with main (batch 1016/1018 incl. ACL-1356): the added `/goals/overview`\n  is a GET returning JSON, no request body/form parsing; no `request.form()` outside\n  `read_form` in src. Error texts are English.\n\n## Checks\n\n- Local with the current pins (fastapi 0.141.1 / starlette 1.7.0): tests/test_goals.py,\n  tests/test_web_form_endpoints.py, tests/test_one_button_reads_what_is_needed.py \u2014\n  60 passed. The author's 5 HTTP 500 failures in the last two files come from a stale\n  local venv (old FastAPI); with the pinned versions they pass.\n- Required CI on 5fcb857c (`gh pr checks 982`): ACL verification, project tooling,\n  installer classify/verification, process instructions, descriptor, linux 3.13 x3,\n  windows 3.13, tracker-link \u2014 all pass; installer build jobs skipped (no installer inputs).\n\nBlocking findings: none. Verdict: approved.\n",
-            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              70
-            ],
-            "recorded_at": "2026-10-19T23:21:59+00:00",
-            "issue_scopes": {
-              "70": "e203742e52229f146fe31b5b1af11599dfae6b44fe0f9749da06c140e57f6e99"
-            }
-          },
-          "lane": {
-            "id": "a930a10c05b34ae59dcca59c7dde6308",
-            "pr": 982,
-            "issues": [
-              70
-            ],
-            "actor": "Reviewer-X20982",
-            "session": "rx982-1c30cbbe",
-            "coordinator": "Coordinator-E1019A",
-            "started_at": "2026-10-19T23:19:51+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-19T23:22:19+00:00"
-        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
