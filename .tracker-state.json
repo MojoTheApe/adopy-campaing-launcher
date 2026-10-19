@@ -44146,9 +44146,11 @@
         "worktree": "C:\\acl-1992-wt",
         "id": "65d64514edec4788b290eb0040dc975a",
         "issue": 992,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T19:59:07+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 993,
+        "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main into the branch; conflicts only in docs/system/CHANGELOG.md (kept both entries). Re-ran the touched tests: test_acl1992_api_build_percent 15 passed, test_acl1992_api_build_percent_browser 2 passed. No functional change beyond the merge; no live runs."
       }
     },
     "tasks": {
