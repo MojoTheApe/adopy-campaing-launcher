@@ -44562,9 +44562,11 @@
         "worktree": "C:\\wk20-202",
         "id": "f287256e603742e8a6992a44a7185c0a",
         "issue": 202,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T22:20:27+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 976,
+        "report": "Pure refresh, no defect/scope change: merged origin/main (c6150160) into work/acl-1202-overview-profile-search (merge commit 294f4120, clean, no conflicts in report.html/app.py). Tests: PR tests + 8 related suites + build_progress_model, acl_test_platform, report_scripts_parse: 214 passed, 2 failed. test_acl_1588 test_a_second_open_of_the_same_profile_does_not_start fails identically on origin/main (pre-existing). test_country_totals_for_the_dashboard::test_currencies_are_never_added_together fails only in the big combined run (order-dependent), passes alone and in subset on both main and branch. acl_scan_secrets OK, acl_smoke OK."
       },
       "70": {
         "actor": "Worker-H19602",
