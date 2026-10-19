@@ -47355,7 +47355,7 @@
             "session": "rf1016w-20261016"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-RF1016W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -47374,7 +47374,7 @@
         },
         "pr": 831,
         "queued_at": "2026-10-16T10:21:33+00:00",
-        "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
+        "review_report": "Owner lifted the 2026-10-17 exclusive pause for ACL-1776, ACL-1899, ACL-1902 and ACL-1886 on 2026-10-19 (instruction in the review session: refresh onto current main, re-review, ship a new batch with release after the current one). Batch afaeca3e was cancelled by that pause; the old approval used main af0ade29 and is stale vs main 435bc154. Return for a main merge and fresh independent approval.",
         "return_operation": {
           "id": "4eee273524d746a39a39ad6874cf9c40",
           "actor": "Coordinator-M1011A",
@@ -89423,6 +89423,18 @@
         "pr": 960,
         "lane": "44aff1125662430981a9eb0167930b72",
         "actor": "Reviewer-Y19B"
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-19T11:20:30+00:00",
+        "issue": 776,
+        "operation": {
+          "id": "4eee273524d746a39a39ad6874cf9c40",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "report": "Owner lifted the 2026-10-17 exclusive pause for ACL-1776, ACL-1899, ACL-1902 and ACL-1886 on 2026-10-19 (instruction in the review session: refresh onto current main, re-review, ship a new batch with release after the current one). Batch afaeca3e was cancelled by that pause; the old approval used main af0ade29 and is stale vs main 435bc154. Return for a main merge and fresh independent approval."
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -90830,50 +90842,6 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-16T10:41:58+00:00"
-      },
-      "776": {
-        "issue": 776,
-        "pr": 831,
-        "branch": "codex/acl-1776-create-forms",
-        "head_sha": "cd1da59b660a8978f2a956e06da5dee0827bdb72",
-        "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
-        "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "scope": "3d95a7528bc437c6b9f8409335a38ea74c548d2fc21e480d381655f55e7bc220",
-        "review": {
-          "kind": "independent-review",
-          "verdict": "approved",
-          "reviewer": "Reviewer-DV1016A",
-          "review_session": "dv1016a-831",
-          "execution_lane": "f1a9eca1144647bba3e809299727e3a5",
-          "implementer": "Worker-RF1016W",
-          "head_sha": "cd1da59b660a8978f2a956e06da5dee0827bdb72",
-          "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
-          "tree_sha": "eb4389151bcbcbc53b4649f82c1040c7537b70ba",
-          "report": "Delta re-review after main merge. Head cd1da59b has parents 271113df (previous approved head) and af0ade29 (work/main) and contains main. remerge-diff shows only docs/system/CHANGELOG.md resolution with both sides' entries (ACL-1924 and ACL-1776) kept, nothing lost or duplicated. Diff 271113df..cd1da59b excluding CHANGELOG is identical to 3ee7c6d9..af0ade29 excluding CHANGELOG (same files, identical diff), so no extra code. Ran tests/test_acl1776_create_forms.py, test_acl1775_builder_forms.py, test_acl1819_preflight.py: 214 passed. CI all green (linux 1/2/3, windows, tracker-link, process, installer verification). No live checks claimed.",
-          "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "issues": [
-            776
-          ],
-          "recorded_at": "2026-10-16T10:48:52+00:00",
-          "issue_scopes": {
-            "776": "3d95a7528bc437c6b9f8409335a38ea74c548d2fc21e480d381655f55e7bc220"
-          }
-        },
-        "lane": {
-          "id": "f1a9eca1144647bba3e809299727e3a5",
-          "pr": 831,
-          "issues": [
-            776
-          ],
-          "actor": "Reviewer-DV1016A",
-          "session": "dv1016a-831",
-          "coordinator": "Coordinator-M1011A",
-          "started_at": "2026-10-16T10:38:14+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-16T10:51:41+00:00"
       },
       "827": {
         "issue": 827,
