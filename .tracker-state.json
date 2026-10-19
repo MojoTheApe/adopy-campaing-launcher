@@ -44589,6 +44589,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T22:19:46+00:00",
         "from_status": "status:todo"
+      },
+      "202": {
+        "actor": "Worker-H19202",
+        "session": "wh202-c0a1de70",
+        "coordinator": "Coordinator-E1019A",
+        "branch": "work/acl-1202-overview-profile-search",
+        "worktree": "C:\\wk20-202",
+        "id": "f287256e603742e8a6992a44a7185c0a",
+        "issue": 202,
+        "state": "implementing",
+        "started_at": "2026-10-19T22:20:27+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -52031,10 +52043,14 @@
           {
             "actor": "Worker-G19202",
             "session": "wg202-c0a1de70"
+          },
+          {
+            "actor": "Worker-H19202",
+            "session": "wh202-c0a1de70"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-G19202",
+        "state": "implementing",
+        "worker": "Worker-H19202",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
           "actor": "Worker-G19202",
@@ -52058,14 +52074,7 @@
           "at": "2026-10-17T16:30:39.578102+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-Y19B",
         "return_operation": {
-          "id": "cd9f18beb7ed4c44b9c2cebd674ac71b",
-          "actor": "Coordinator-E1019A",
-          "session": "coord-c0a1de70",
-          "report": "# Return for a main refresh\n\nMain moved to c6150160 (batch #1018 merged after #1016). The existing source approval is bound to the previous main baseline and cannot enter the next intake. No scope change and no defect is requested: merge current origin/main into the original branch, re-run the affected checks, hand off again and get a fresh independent review."
-        },
-        "return": {
           "id": "cd9f18beb7ed4c44b9c2cebd674ac71b",
           "actor": "Coordinator-E1019A",
           "session": "coord-c0a1de70",
@@ -55214,6 +55223,10 @@
       },
       "Worker-H19680": {
         "session": "wh680-c0a1de70",
+        "role": "Worker"
+      },
+      "Worker-H19202": {
+        "session": "wh202-c0a1de70",
         "role": "Worker"
       }
     },
@@ -95550,6 +95563,13 @@
         "issue": 680,
         "claim": "e07c836f3f274acf994524be87a3358b",
         "actor": "Worker-H19680"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T22:20:27+00:00",
+        "issue": 202,
+        "claim": "f287256e603742e8a6992a44a7185c0a",
+        "actor": "Worker-H19202"
       }
     ],
     "policy": {
