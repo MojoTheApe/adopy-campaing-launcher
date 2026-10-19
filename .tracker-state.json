@@ -47355,7 +47355,7 @@
             "session": "rf1016w-20261016"
           }
         ],
-        "state": "stopped",
+        "state": "returning_approval",
         "worker": "Worker-RF1016W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -47376,16 +47376,22 @@
         "queued_at": "2026-10-16T10:21:33+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "return_operation": {
-          "id": "ee510c2d39a74da199c607bbaf5e5d0d",
+          "id": "4eee273524d746a39a39ad6874cf9c40",
           "actor": "Coordinator-M1011A",
           "session": "coord-m1011a-20261015",
-          "report": "Main moved to af0ade29 (ACL-1924 batch + ACL-1923 no-stage activation). The earlier approval used main 3ee7c6d9 and is no longer current under the new policy. Return to author for a main merge (CHANGELOG-only conflict), then fresh independent delta approval. Content unchanged."
+          "report": "Owner lifted the 2026-10-17 exclusive pause for ACL-1776, ACL-1899, ACL-1902 and ACL-1886 on 2026-10-19 (instruction in the review session: refresh onto current main, re-review, ship a new batch with release after the current one). Batch afaeca3e was cancelled by that pause; the old approval used main af0ade29 and is stale vs main 435bc154. Return for a main merge and fresh independent approval."
         },
         "reviewer": "Reviewer-DV1016A",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.577993+00:00",
           "remote_process_stopped_verified": false
+        },
+        "return": {
+          "id": "4eee273524d746a39a39ad6874cf9c40",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "report": "Owner lifted the 2026-10-17 exclusive pause for ACL-1776, ACL-1899, ACL-1902 and ACL-1886 on 2026-10-19 (instruction in the review session: refresh onto current main, re-review, ship a new batch with release after the current one). Batch afaeca3e was cancelled by that pause; the old approval used main af0ade29 and is stale vs main 435bc154. Return for a main merge and fresh independent approval."
         }
       },
       "826": {
