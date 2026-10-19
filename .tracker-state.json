@@ -44554,20 +44554,6 @@
   },
   "execution": {
     "claims": {
-      "680": {
-        "actor": "Worker-H19680",
-        "session": "wh680-c0a1de70",
-        "coordinator": "Coordinator-E1019A",
-        "branch": "work/acl-1680-one-config-dir",
-        "worktree": "C:\\wk20-680",
-        "id": "e07c836f3f274acf994524be87a3358b",
-        "issue": 680,
-        "state": "handoff",
-        "started_at": "2026-10-19T22:19:46+00:00",
-        "from_status": "status:todo",
-        "pr": 966,
-        "report": "Pure refresh: merged origin/main (c6150160) into work/acl-1680-one-config-dir, clean merge, no conflicts, no scope change. New head 04c17927.\nTests: test_acl_test_platform, test_acl1680_one_config_dir, test_machine_paths, test_windows_launcher_contract, packaging/windows/tests: 180 passed. acl_scan_secrets OK, acl_smoke OK."
-      },
       "202": {
         "actor": "Worker-H19202",
         "session": "wh202-c0a1de70",
@@ -51684,25 +51670,25 @@
             "session": "wh680-c0a1de70"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-H19680",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
-          "actor": "Worker-F19680",
-          "session": "wf680-c0a1de70",
+          "actor": "Worker-H19680",
+          "session": "wh680-c0a1de70",
           "coordinator": "Coordinator-E1019A",
           "branch": "work/acl-1680-one-config-dir",
-          "worktree": "C:\\wk19-680b",
-          "id": "839dc76f0e3645d5a5dda5ef74cd27de",
+          "worktree": "C:\\wk20-680",
+          "id": "e07c836f3f274acf994524be87a3358b",
           "issue": 680,
           "state": "handoff",
-          "started_at": "2026-10-19T11:01:40+00:00",
+          "started_at": "2026-10-19T22:19:46+00:00",
           "from_status": "status:todo",
           "pr": 966,
-          "report": "Fix: test file marked windows_only; 180 affected tests pass; head b9684b1a."
+          "report": "Pure refresh: merged origin/main (c6150160) into work/acl-1680-one-config-dir, clean merge, no conflicts, no scope change. New head 04c17927.\nTests: test_acl_test_platform, test_acl1680_one_config_dir, test_machine_paths, test_windows_launcher_contract, packaging/windows/tests: 180 passed. acl_scan_secrets OK, acl_smoke OK."
         },
         "pr": 966,
-        "queued_at": "2026-10-19T11:07:15+00:00",
+        "queued_at": "2026-10-19T22:24:35+00:00",
         "review_report": "# Return for a main refresh\n\nMain moved to c6150160 (batch #1018 merged after #1016). The existing source approval is bound to the previous main baseline and cannot enter the next intake. No scope change and no defect is requested: merge current origin/main into the original branch, re-run the affected checks, hand off again and get a fresh independent review.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -58118,7 +58104,8 @@
       767,
       896,
       768,
-      401
+      401,
+      680
     ],
     "review": null,
     "history": [
@@ -95611,6 +95598,13 @@
         "issue": 401,
         "pr": 960,
         "actor": "Worker-H19401"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T22:24:35+00:00",
+        "issue": 680,
+        "pr": 966,
+        "actor": "Worker-H19680"
       }
     ],
     "policy": {
