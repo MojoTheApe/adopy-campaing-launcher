@@ -44285,20 +44285,6 @@
   },
   "execution": {
     "claims": {
-      "708": {
-        "actor": "Worker-R1019708",
-        "session": "run_r1019_708",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1708-rebrand-leftovers",
-        "worktree": "C:\\acl-1708",
-        "id": "46e40808fc1947fdb05b504fa88e90de",
-        "issue": 708,
-        "state": "handoff",
-        "started_at": "2026-10-19T20:09:16+00:00",
-        "from_status": "status:todo",
-        "pr": 952,
-        "report": "Revived after the conflict return: merged work/main (only docs/system/CHANGELOG.md conflicted; both entries kept), pushed. The change is a one-line error string, a viewport meta and removal of an unused favicon script; no test references the old text or script (grep). Full suite left to CI. Not verified live."
-      },
       "529": {
         "actor": "Worker-R1019529",
         "session": "run_r1019_529",
@@ -50712,25 +50698,25 @@
             "session": "run_r1019_708"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-R1019708",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-W1708C",
-          "session": "w1708c-20261016",
-          "coordinator": "Coordinator-C1016A",
+          "actor": "Worker-R1019708",
+          "session": "run_r1019_708",
+          "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1708-rebrand-leftovers",
-          "worktree": "C:\\acl-1708-c",
-          "id": "df8787aed5bb42feb7e5a561cabb94cd",
+          "worktree": "C:\\acl-1708",
+          "id": "46e40808fc1947fdb05b504fa88e90de",
           "issue": 708,
           "state": "handoff",
-          "started_at": "2026-10-16T14:29:01+00:00",
+          "started_at": "2026-10-19T20:09:16+00:00",
           "from_status": "status:todo",
           "pr": 952,
-          "report": "# ACL-1708 report\nChanges: \"Check the launcher window.\" -> \"Check the Adopy Campaign Manager window.\" in src/web/app.py (no tests/JS compare the string; no other user-visible launcher wording in src/web, remaining hits are comments/docstrings/identifiers/URLs). scripts/convert_favicon_to_ico.py deleted (it drew the old mark; repo has no SVG renderer, kit SVGs are src/web/static/logo.svg and favicon.svg, assets/dashboard.ico and favicon.ico are committed kit files); install_dashboard_shortcut.ps1 message no longer points at it; requirements-dev.txt comment fixed. Added viewport meta to report.html. CHANGELOG entry added.\nTests: tests/test_distribution_boundary.py + test_account_blocked_stops_the_campaign.py: 20 passed. 40 report.html-related test files: 713 passed, 1 failed (test_available_accounts_browser::test_select_remove_restore_and_counts, 500 on page render), and test_dashboard_review.py 3 failed; both identical on clean origin/main (pre-existing, unrelated). Remaining ~50 report.html test files only partially run. CI not run (startup_failure)."
+          "report": "Revived after the conflict return: merged work/main (only docs/system/CHANGELOG.md conflicted; both entries kept), pushed. The change is a one-line error string, a viewport meta and removal of an unused favicon script; no test references the old text or script (grep). Full suite left to CI. Not verified live."
         },
         "pr": 952,
-        "queued_at": "2026-10-16T14:50:17+00:00",
+        "queued_at": "2026-10-19T20:34:37+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -57617,7 +57603,8 @@
       739,
       840,
       841,
-      854
+      854,
+      708
     ],
     "review": {
       "id": "71d08f944d4646c69ba2c95edd8d2464",
@@ -94012,6 +93999,13 @@
         "issue": 854,
         "pr": 869,
         "actor": "Worker-R1019854"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T20:34:37+00:00",
+        "issue": 708,
+        "pr": 952,
+        "actor": "Worker-R1019708"
       }
     ],
     "policy": {
