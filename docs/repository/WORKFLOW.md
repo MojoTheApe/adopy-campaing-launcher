@@ -1,5 +1,7 @@
 # ACL repository workflow
 
+For a plain-language owner overview, read [the owner guide](OWNER_GUIDE.md).
+
 Read the exact [selected shared guide](TRACKER.md), the [ACL support/cutover plan](EARLY_ADOPTION.md) and the guarded operator mapping in [AGENTS.md](../../AGENTS.md).
 Shared contract references retain canonical bodies; `_ACL` documents preserve the original local cutover history and stronger controls.
 
@@ -79,8 +81,11 @@ For changes before approval, the Reviewer returns review and the author takes a
 fresh implementation claim before editing the original branch. After approval,
 use the owning Coordinator's `batch return`, followed by an author claim, checks,
 handoff and fresh independent approval. Changed code, main/base, task scope or
-policy invalidates earlier evidence. A Reviewer who edits becomes an implementer;
-a different agent must approve. Do not fabricate a second identity for one run.
+policy requires the current exact review/admission evidence enforced by the pinned
+engine. It does not automatically invalidate test results for unchanged inputs
+within the adopted collector's actual coverage. A new agent/session alone needs no
+blanket test rerun. A Reviewer who edits becomes an implementer; a different agent
+must approve. Do not fabricate a second identity for one run.
 
 On an authorized ship request, the Coordinator freezes the current eligible
 Approved intake, then selects sequential batches of up to five. New approvals wait
@@ -92,11 +97,38 @@ assembly, independent combined review and recovery. Execution-v1 source-adoption
 commands remain in force only until the documented old-policy handoff completes.
 
 Use `check-pr N` for early linkage feedback; run `check-merge N` once immediately before merging.
+It includes linkage, so do not repeat a separate immediate `check-pr` call. Keep
+the distinct required review, merge-recording and delivery actions.
 Final admission checks current review, CI and any configured stage evidence. These agent commands are
 not GitHub branch protection. Verify actual GitHub controls; the private repository
 currently reports a plan restriction for branch protection/rulesets. Never present
 an unenforced agent rule as a server-enforced guarantee. Do not purchase a plan or
 make the repository public as an implicit part of adoption.
+
+## Pause and resume
+
+Accept the owner's direct confirmation that an agent has stopped; do not demand
+Windows access solely to reconfirm it. Read the actual claim and use the exact
+pinned `execution stop` under the current real owner. If that owner has stopped,
+use supported `execution takeover --previous-claim ... --stopped --reason ...`
+with the acting Worker's real identity before stopping its new claim. Preserve
+the recorded branch and original owner/worktree in the handoff and transfer
+history. An isolated administrative location must be described honestly; it is
+not a copy of inaccessible Windows work. Keep uninspected contents unknown.
+
+Verify the requested claim is gone and the task is recorded stopped/Paused.
+The current stop command also adds `flag:blocked`. For a purely voluntary pause,
+after checking actual dependencies and obstacles, use the existing
+`python scripts/acl_task_tracker.py set ACL-ID --no-blocked --reason "Owner-requested pause; no remaining blocker"`.
+Do not remove a real blocker, change requirements or bypass a failed ownership
+guard merely to free a slot. Review queue length and reserved capacity do not
+prove that agents are running.
+
+Before resuming implementation, inspect retained work, current scope/main and
+dependencies; use normal supported ownership and preserve the original branch
+where appropriate. Continue individual independent review, Approved integration
+and required package delivery. A pause neither accepts partial work nor removes
+the existing checks or delivery condition.
 
 ## Stage, main and completion
 
@@ -145,8 +177,13 @@ Use the requirements and isolation rules in [engineering context](../system/AGEN
 Run focused behavior tests first, then scanner, smoke, the complete required tests
 and packaging checks on the final candidate. CI (Linux and Windows test jobs)
 remains required for code, dependencies, packaging and CI changes. Record success, skip, infrastructure failure
-and unrun manual checks separately. Do not rerun a successful unchanged candidate
-without a new failure, change or unresolved concern.
+and unrun manual checks separately. Group related fixes into a meaningful ready
+submission while preserving useful early feedback. Do not request another run for
+a successful unchanged candidate without a new failure, change or unresolved concern.
+Existing GitHub events still start their configured checks; these instructions
+do not authorize workflow/settings changes. Inspect actual outcomes before retrying
+an uncertain command. Follow [VERIFICATION.md](VERIFICATION.md) for supported reuse
+and short observations on ordinary work.
 
 ### Fast feedback before full applicable checks
 

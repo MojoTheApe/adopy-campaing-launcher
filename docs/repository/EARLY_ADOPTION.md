@@ -1,165 +1,161 @@
-# ACL early adoption: support first, then two owned cutovers
+# ACL early adoption: released support, then separate owned selections
 
-[ACL-1977](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/977)
-prepares repository support for [Master Task06](https://github.com/MojoTheApe/master-repo/issues/39).
-This source child does not complete the pilot. Its target is published Master
-`864ca7a5814e703dd6e61207362d24cbc26dc9ad` (1.2.0) and Tracker
-`866baf6dec2bd82d8ca052002cc3dc6f4805e247` (3.4.0). Later unpublished retry
-support is excluded. Follow the exact [selected guide](TRACKER.md) and local
-[TASK_CONTEXT.md](TASK_CONTEXT.md), [COMPLETION_POLICY.md](COMPLETION_POLICY.md),
-[maintenance contract](MAINTENANCE_AND_CI_EVIDENCE.md) and
-[portable contract](PORTABLE_CONTRACT.md); their reference text is upstream-owned.
+## Current instruction pin
 
-## What this source selects
+[ACL-2011](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1011)
+selects published Master 1.5.3
+`6f7e9416e68c66484a3b6c0213eab24847005b8f` for common instructions. Tracker 3.7.1
+`be87599d1b5e625058bbddc33c35bda86687b5bf`, the support introduced by ACL-1987,
+activated choices, local checks and package completion remain unchanged.
+This source update still requires its ordinary independent source review, batch,
+main checks and verified package receipt. A source branch is not delivered.
+Use the actual current-main pinned ACL adapter for current ownership and delivery;
+the old operative866 instructions below describe ACL-1987's original source path.
 
-| Capability | Available in released support | ACL selection / actual adoption |
+## Retained ACL-1987 support scope
+
+[ACL-1987](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/987)
+updates compatible support to published Master1.5.1
+`622557ec5be09ca45ef795035805fdab0f4a2528` and Tracker3.7.1
+`be87599d1b5e625058bbddc33c35bda86687b5bf`. It preserves ACL's existing
+configuration and adopted execution policy. It selects or activates no optional
+policy and does not finish [Task05](https://github.com/MojoTheApe/master-repo/issues/38)
+or [Task06](https://github.com/MojoTheApe/master-repo/issues/39).
+
+The original [ACL-1977](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/977)
+scope, reader observations, F1 STOP finding/correction and recovery plan are
+preserved byte-for-byte in [the dated1977 record](EARLY_ADOPTION_1977_HISTORY.md).
+Its Master1.2.0/Tracker3.4.0 target lacked the selection-package bridge; that
+finding remains true of that old pin. The new support is not available on official
+main or delivered merely because this source branch exists. Complete its normal
+Source/combined/main/package route before preparing a new selection.
+
+Read the exact [selected guide](TRACKER.md), [task context](TASK_CONTEXT.md),
+[completion](COMPLETION_POLICY.md), [retry](CI_RETRY.md),
+[portable contract](PORTABLE_CONTRACT.md) and
+[selection-package contract](DELIVERY_POLICY.md#one-policy-selection-package-before-activation).
+These shared references retain their exact upstream bodies. For operator commands
+use the guarded ACL adapter as mapped in [AGENTS.md](../../AGENTS.md).
+
+## Current choices and available support
+
+| Capability | Released support | ACL selection / actual adoption |
 | --- | --- | --- |
 | Execution v3, five Workers/five source reviews/batch five | Yes | Existing activated choice, preserved; no repeat migration |
 | No Stage, permanent stage retained | Yes | Existing activated choice, preserved |
 | Process instructions schema1 | Yes | Existing activated choice and exact checks, preserved |
-| Readiness, terminal journal, Approved compatibility | Task context1 | Absent; no scope/hash transition performed here |
-| Accepted-scope completion | Completion1 | Absent; no completion-state transition performed here |
+| Readiness, terminal journal, Approved compatibility | Context1, plus separately selected modern Context2 | Absent; the initial pilot retains Context1 rather than importing modern defaults |
+| Accepted-scope completion | Completion1 | Absent; no completion-state transition here |
+| Bounded full retry and accounting | Retry1 and independent read-only report | Retry absent; retained accounting works without state/engine activation |
+| One-policy selection package before activation | Stage-off execution-v2/v3 package bridge | Support only; every real selection/package/activation remains separate |
 | Native shared CI evidence | Policy1/2 | Absent; ACL's bounded exact-tree collector remains authoritative |
-| CI retry | Not part of this published pair | Absent; no rerun automation or budget selection |
 
-The descriptor remains draft until its stated adoption verification is settled.
-A published standard replaces the old unreleased-source caveat; it does not prove
-this consumer's pilot. The package profile, verified-stable-package completion,
-actual required checks, Windows matrices, installer/update/recovery, data protection
-and standing authorized delivery continuation all survive. An ordinary source
-stays approval-only until independently approved and included in a genuinely owned
-frozen batch. Main inclusion alone does not prove package delivery or full Task06.
+Keep descriptor2, execution3/5-5-5, no Stage, process1, package target, all exact
+required checks, full Linux/Windows and installer gates and verified-stable-package
+completion. Adoption remains draft until the separate pilot is verified. Source
+support does not establish reader, every-writer, recovery or live-board readiness.
+Modern execution4/context2/capture are not selected by this upgrade.
 
-## Reader/writer inventory before selection
+## Actual authority, readers, writers and recovery
 
-The source upgrade is prepared under the actual old e775 project policy. Its
-old-policy handoff uses the unchanged old checkout and exact pinned client; a
-new source pin does not retroactively change another owner's client or claim.
-Before either cutover the Coordinator must record a fresh private inventory:
+For ACL-1987's original support source, use the then-operative866 actual-main checkout for its
+author handoff, Source approval, batch ownership, combined review and main
+admission. The be875 candidate cannot authorize itself. After the genuine merge,
+verify the actual official new pin before its maintained completion/delivery.
 
-- The actual deployed snapshot reader and its immutable revision, not merely the
-  target source. The coordinated service evidence recorded compatible reader
-  `95079e71d454c8a6e2216b76ae86c0f87d522897`; refresh actual publication/health
-  before activation and verify it supports every selected state/projection.
-- Every real interactive CLI/operator, existing Windows/Mac Worker, source
-  Reviewer, intake/integration Coordinator and repair run. Publish compatible
-  writers before reserving a gate. Existing old checkouts are not updated by
-  changing this branch. Unknown writer support means the cutover is not ready.
-- Native GitHub Actions paths: `ci.yml`, `windows-installer.yml`,
-  `tracker-link.yml`, `delivery-check.yml`, `release.yml` and
-  `complete-delivery.yml`, including the `Process instructions` job in `ci.yml`, portable receipt producers and retained
-  pre-cutover sources. Inspect their actual adopted main/config/helper inputs.
-  Old queued PRs keep their owners/history; finish or explicitly revalidate them
-  through supported routes. Old unsupported writers must refuse newer state,
-  never silently overwrite or reconstruct its accepted scope.
-- The single actual snapshot/service writer and any maintained scheduled/operator
-  writer. An installed skill, source merge, green descriptor or successful
-  read-only check is not evidence that all of these writers were published.
+Before any optional selection, record a fresh private inventory of:
 
-Private before-state captures retain current state Git SHA, raw durable state,
-config/pins, claims/reviews/intake/integration, queues/approvals, pending journals,
-stage/main ancestry, delivery receipts and history. Keep paths, session/claim IDs,
-reports and raw captures private. Record only safe outcome references on the board.
+- The actual published snapshot/service reader, immutable revision and health,
+  every interactive CLI/operator/Worker/Reviewer/Coordinator and repair writer.
+  An installed skill or source pin does not update old checkouts or prove support.
+- All native CI and package paths: `ci.yml`, `windows-installer.yml`,
+  `tracker-link.yml`, `delivery-check.yml`, `release.yml`, `complete-delivery.yml`,
+  portable receipt producers and retained pre-cutover sources. Preserve genuine
+  owners and reconcile old sources through supported return/revalidation routes.
+- Exact current config/state/pins, queues, approval tips, pending journals,
+  intake/integration/Stage, delivery requests/receipts and history. Keep raw state,
+  paths, sessions, claims and full reports private; publish only safe outcomes.
+- A complete verified compatible last-good reader/state recovery point for the
+  intended fence. Context4, completion5 and retry6 have different requirements.
+  A copied-state parse alone is not installation, health or full rollback proof.
 
-## Sequential reviewed selection and activation
+Unknown reader/writer support or recovery stops dependent selection/activation.
+No service deployment, maintenance reservation or state migration occurs in this
+support leaf. Context1/completion1 do not require selecting retry or completing
+the later direct-mode Task07; their actual reader/writer/recovery checks still apply.
 
-**STOP optional selections at this source's pinned Tracker3.4.0 / `866baf6`.**
-That revision lacks the selection-package delivery bridge: a newly selected
-task-context or completion contract can prevent its own authorized package
-continuation before activation. Its maintenance/adoption idle checks also omit
-pending target delivery. Before either optional selection, a separate reviewed
-support upgrade must actually be published, integrated and pinned with compatible
-selection-delivery support. Verify the real reader, every writer and recovery
-paths against that published revision. This source supplies no engine fix,
-selection or activation; a candidate or a newer source pin alone is insufficient.
+## Separate selection package, then owned idle activation
 
-Do not execute adoption commands as part of this support source. Actual starts
-wait for all compatible writers and a genuine coordinated window. A maintenance
-reservation prevents new admissions; it does not release existing owners or make
-state idle. Fresh CAS readiness must show all owners/pending operations reconciled.
-Queued/Approved sources are retained unfinished; the count of open PRs is not
-occupied capacity. Never clear another owner by elapsed time, hand-edit shared
-state, reset stage or mass-close retained sources.
+The exact bridge supports one previously absent context1, completion1 or retry1
+selection in a genuine one-member execution-v2/v3 Stage-off package batch. It
+derives operative authority from the actual frozen baseline and admitted merge;
+caller-supplied old config or a matching fingerprint is insufficient. Ordinary
+admission retains selected/adopted consistency.
 
-1. Integrate this independently reviewed support source through ACL's existing
-   normal source/batch/main route. Preserve the ordinary before measurement.
-   Complete the separate compatible-support prerequisite above before selecting
-   an optional policy. Verify all writers above and actual published reader;
-   record exact revisions and recovery proof.
-2. Make a separate reviewed configuration change selecting only task context1 in
-   descriptor and config. Keep completion absent. Master1.2.0's upgrade command
-   has no task-context flag: explicitly review the matching objects against the
-   canonical contract and preserve a truthful pristine template ancestry.
-   Source selection is not activation. Integrate this selection through its genuine
-   frozen batch and full applicable native checks; publish the real official main
-   config. Complete its authorized exact-target package publication, installation,
-   update and recovery verification and durable delivery receipt **before** step3.
-   Explicitly reconcile pending delivery for that exact selection target; pending,
-   failed or unknown delivery stops here without reserving maintenance or adopting.
-3. Only after that verified selection delivery and exact-target drain, with a
-   genuine Maintainer identity, preview/reserve the maintained interval;
-   retain the returned claim and private report. Inspect `maintenance show`, drain
-   existing owners through their own supported operations, then preview/apply
-   `task-context adopt` with that exact actor/session/claim/report. Require the
-   actual current-main config and idle state; stop on changed ownership or CAS.
-   A legacy `maintenance show` idle result cannot replace the explicit pending
-   delivery check or the completed exact-target package receipt.
-   Verify retained queue/approvals/history/delivery, protocol4 and fresh board,
-   then resume that same interval. Do not run `execution migrate` again just to
-   change a compatible pin on an already activated execution-v3 project.
-4. Only after the first activation is genuinely complete, make the next separate
-   reviewed selection of completion1, preserving already active task context.
-   `standard.py upgrade --completion-policy` can preview this source change.
-   Again integrate this separate selection through its genuine frozen batch and
-   full applicable native checks to official main. Complete its own authorized
-   exact-target package publication, installation, update and recovery verification
-   and durable delivery receipt, and explicitly drain pending target delivery
-   **before** reserving a new owned maintenance interval. Pending, failed or unknown
-   delivery stops this second cutover too; old idle output is insufficient.
-   Only then use inspected `completion adopt` preview/apply and verified resume. Protocol5
-   retains its underlying task-context/execution state. Never leave both new
-   policies selected but unactivated: each adoption requires the other selected
-   contract already to match durable state and refuses an incompatible mixture.
-5. Verify exact current config/state/client, published reader/writers and a fresh
-   authenticated board. Old accepted/historical proof stays bounded; unknown old
-   scope remains unverified. No current-body backfill creates accepted history.
+1. Complete and verify this compatible support package first. Verify actual
+   reader/writers and full recovery for the intended first state. Preserve the
+   ordinary before measurement; source publication is not consumer activation.
+2. Prepare a separately claimed and independently reviewed Context1 selection,
+   keeping completion/retry absent. Follow the exact five-file boundary in
+   DELIVERY_POLICY: descriptor, config, selected Tracker guide, corresponding
+   WORKFLOW.md and truthful template baseline. Preserve every engine/helper,
+   workflow, target, capacity and existing choice. The ordinary upgrade has no
+   legacy task-context flag; explicitly review matching objects and genuine
+   pristine consequences rather than inventing a template ancestry.
+3. Freeze that actual one-member batch with the genuine existing `--deliver`
+   request and configured workflow/job. Retain full Source/combined/main review,
+   checks and the ordinary Merged handoff. Complete actual stable publication,
+   published-channel install/update/restart/recovery/data checks and the exact
+   native receipt. Pending, failed or unknown delivery stops before maintenance.
+4. Only after that verified receipt, inspect and drain every real owner, intake,
+   Stage, unresolved effect and other pending operation/target delivery. A free
+   lane or old idle result is insufficient. Reserve a genuine maintained interval,
+   retain its actor/session/claim and private report, preview/apply `task-context
+   adopt`, verify retained history/queues/receipts and fresh protocol4 projection,
+   then resume that same owner. Stop on changed ownership, CAS or unknown effect.
+5. After the first activation is genuinely complete, prepare completion1 as its
+   own separate reviewed five-file selection, preserving active context. The
+   corresponding document is DELIVERY.md. `standard.py upgrade --completion-policy`
+   can preview the change; check the exact final boundary. Again deliver and
+   reconcile its own one-member selection package before a new maintenance window,
+   then perform owned `completion adopt`, verify protocol5 and resume. Never
+   co-select policies or deliver through held maintenance.
+6. Retry, if selected for Task05, uses its own reviewed VERIFICATION.md selection,
+   actual compatible protocol6 recovery and owned `ci-retry adopt`. Initial
+   support is full-only with the explicit bounded limit; export or a failure
+   grants no dispatch. ACL's dynamic YAML/matrix contexts remain unsupported
+   without actual qualified original native proof. Do not create paid failures,
+   infer no effect from403, reset budgets or release unknown reservations.
 
-Read the exact pinned guides for arguments. Examples/placeholders are not claims
-or evidence. On an uncertain write retain ownership, read the durable matching
-operation and resume with the original identity; do not blindly retry or create
-another claim. A stale CAS requires a fresh inspected read.
+Do not run `execution migrate` merely to advance compatible pins. Never clear
+foreign owners by age, edit shared state, reset Stage or mass-close old sources.
+On uncertain writes retain the original identity/intents, inspect fresh durable
+effects and use the exact supported recovery. Restoring an old state over newer
+history or restarting an incompatible reader is not rollback.
 
-## Recovery checkpoints and actual pilot acceptance
+## Pilot acceptance and retained reporting
 
-Checkpoint before each reservation, after reservation while draining, after the
-confirmed adoption commit and after resume. Compare exact retained task IDs,
-modules, aliases, +1000 numbering, 74 historical completions, queue/approval/source
-heads and author/reviewer history, delivery receipts and unrelated state. A failed
-preview writes nothing. An uncertain applied commit is recovered from retained
-operation identity and compatible readers. A stopped Maintainer requires explicit
-verified transfer, not timeout. Never roll an activated protocol back to a reader
-that cannot preserve its newer history or restore an old file over new owners.
+Checkpoint before reservation, while draining, after confirmed adoption and after
+resume. Compare all IDs/modules/aliases/+1000 numbering, historical completions,
+source tips/owners/reviews, queue/approval/delivery history and unrelated state.
+Verify actual current config/client/reader, unsupported-writer refusal and a fresh
+authenticated board; do not synthesize accepted scope from today's Issue body.
 
-Task06 remains unfinished until genuine useful pilot work demonstrates:
+Task06 still requires useful ordinary work showing current-task assessment before
+start/resume; permitted terminal-journal updates versus genuine requirement changes;
+independent compatibility review of unchanged Approved source after main advances;
+author return for actual fixes; independent new-composition review/full checks;
+and exact package acceptance with pending/failed delivery unfinished. Keep all
+original pilot and recovery criteria rather than treating this runbook as proof.
 
-- An old task is assessed against actual current requirements/main and relevant
-  code/decisions/dependencies before a real start or resume.
-- A permitted exact terminal journal update preserves new-protocol scope; a real
-  requirement change invalidates it without erasing original history.
-- A distinct independent Reviewer assesses unchanged Approved source after main
-  advances, preserving its approval and recording genuine compatibility; required
-  conflict/code fixes instead return to a claimed author.
-- A real new combined candidate receives independent combined review and complete
-  applicable checks. Separate green source trees are insufficient.
-- Pending/failed required package delivery remains unfinished until real immutable
-  publication and installation/update/recovery acceptance for its exact tasks.
-- Fresh board/config/state/client and unsupported-writer refusal agree, retained
-  history is unchanged and the planned recovery checkpoints are actually verified.
-
-Use ordinary work, not paid demonstration CI. Compare the later snapshot using the
-same corrected accounting method and bounded creation/execution cohort as the
-retained baseline; distinguish carried-forward native rows, actual intervals,
-rounded estimates, incomplete execution lookback, unavailable billing and separate
-storage observations. Record benefit or no measured benefit; infer no fleet-wide
-percentage, invoice or savings from a pin change. Pass exact adopted capabilities
-and remaining scope to Task13 without deferring these Task06 acceptance checks.
+The accounting helper retains its historical df0154 source/C9 hash and immutable
+ACL-1968 evidence. Its unchanged bytes now also belong to the actual complete new
+export manifest; historical introduction is not a permanent engine-pin constraint.
+Preserve the guarded ACL adapter, portable no-engine report and snapshot replay.
+Compare comparable ordinary cohorts with the corrected accounting method; retain
+carried rows, interval/rounded-estimate distinctions, incomplete lookback, unknown
+billing and separate storage. Claim measured benefit only from actual outcomes.
+[ACL-1649](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/649) keeps its
+original2x/3x target unchanged. Pass actual adopted capabilities and remaining
+scope to Task13 without deferring Task06 acceptance or claiming employee/live-ad
+rollout from these support sources.

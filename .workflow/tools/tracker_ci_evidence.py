@@ -122,7 +122,8 @@ def adopted(request, config, key):
     _, raw = contents(request, root, 'tracker/config.json', main)
     current = json.loads(raw)
     if (current.get('project') != config.get('project') or policy(current) != policy(config)
-            or any(current.get(k) != config.get(k) for k in ('delivery_policy', 'execution_policy', 'process_instructions', 'task_context_policy'))):
+            or any(current.get(k) != config.get(k) for k in ('delivery_policy', 'execution_policy', 'process_instructions',
+                                                           'task_context_policy', 'completion_policy', 'ci_retry_policy'))):
         raise ValueError('CI policy must match the actual immutable current-main adoption')
     return profile(current, key)
 
@@ -339,6 +340,11 @@ def save(api, config, store, args):
 
 
 def coverage(request, read_log, config, state, key, number, expected_head, context='source'):
+    try:
+        from . import delivery_policy as rules
+    except ImportError:
+        import tracker_delivery_policy as rules
+    rules.execution_state(state, config)
     p = adopted(request, config, key)
     root = 'repos/' + config['project']['repository']
     pr = request(root + f'/pulls/{int(number)}')

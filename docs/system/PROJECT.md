@@ -29,6 +29,9 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   gap waits in the background for its refresh; typing remains available and the
   visible latest query is searched again without switching Image/Video. Selected
   creatives and campaign fields remain unchanged until the user chooses a file.
+  ACL-1381 keeps ACL-1769's numbered primary-text fields and separately displayed
+  headline. Builder search/help and empty/error messages call the shared library
+  entries ad texts; internal copy/copy2 fields and submission behavior are unchanged.
 - `src/analysis_agent`: statistics workbook reading, reports and reconciliation.
 - `src/campaign_bridge`, `src/upload_agent`: campaign input/output preparation.
 - `src/fb_ads_rpa`, `src/meta_campaign_agent`: Ads Manager interactions, verified
