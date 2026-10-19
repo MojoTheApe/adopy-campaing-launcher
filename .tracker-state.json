@@ -44554,20 +44554,6 @@
   },
   "execution": {
     "claims": {
-      "401": {
-        "actor": "Worker-H19401",
-        "session": "wh401-c0a1de70",
-        "coordinator": "Coordinator-E1019A",
-        "branch": "work/acl-1401-mlx-not-running",
-        "worktree": "C:\\wk20-401",
-        "id": "d53f153e8be741ef9967f34d3ddf3d46",
-        "issue": 401,
-        "state": "handoff",
-        "started_at": "2026-10-19T22:18:31+00:00",
-        "from_status": "status:todo",
-        "pr": 960,
-        "report": "Pure refresh: merged origin/main (c6150160) into work/acl-1401-mlx-not-running, no conflicts, no scope change. Head 60382abb.\nChecks: 348 passed (multilogin-not-running stop, build_progress_model, acl_test_platform, failure_policy, sentry tests); acl_scan_secrets clean; acl_smoke OK. cb-build-model rule multilogin_not_running$ present in report.html."
-      },
       "680": {
         "actor": "Worker-H19680",
         "session": "wh680-c0a1de70",
@@ -51402,25 +51388,25 @@
             "session": "wh401-c0a1de70"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-H19401",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
-          "actor": "Worker-F19401",
-          "session": "wf401-c0a1de70",
+          "actor": "Worker-H19401",
+          "session": "wh401-c0a1de70",
           "coordinator": "Coordinator-E1019A",
           "branch": "work/acl-1401-mlx-not-running",
-          "worktree": "C:\\wk19-401b",
-          "id": "8766c63875be48bb88ed9631f6a86e99",
+          "worktree": "C:\\wk20-401",
+          "id": "d53f153e8be741ef9967f34d3ddf3d46",
           "issue": 401,
           "state": "handoff",
-          "started_at": "2026-10-19T11:00:26+00:00",
+          "started_at": "2026-10-19T22:18:31+00:00",
           "from_status": "status:todo",
           "pr": 960,
-          "report": "Returned for red CI: test_every_step_the_robot_names_maps_to_a_stage failed because the new step multilogin_not_running had no cb-build-model rule. Fix: added it to the \"hold\" rule (next to account_blocked$) in src/web/templates/report.html, one line. ACL verification failed only because the Linux tests job failed. Tests: build_progress_model + PR test (42 passed), scan_secrets, smoke OK. Head 53e93b2b."
+          "report": "Pure refresh: merged origin/main (c6150160) into work/acl-1401-mlx-not-running, no conflicts, no scope change. Head 60382abb.\nChecks: 348 passed (multilogin-not-running stop, build_progress_model, acl_test_platform, failure_policy, sentry tests); acl_scan_secrets clean; acl_smoke OK. cb-build-model rule multilogin_not_running$ present in report.html."
         },
         "pr": 960,
-        "queued_at": "2026-10-19T11:04:21+00:00",
+        "queued_at": "2026-10-19T22:23:49+00:00",
         "review_report": "# Return for a main refresh\n\nMain moved to c6150160 (batch #1018 merged after #1016). The existing source approval is bound to the previous main baseline and cannot enter the next intake. No scope change and no defect is requested: merge current origin/main into the original branch, re-run the affected checks, hand off again and get a fresh independent review.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -58129,7 +58115,8 @@
       897,
       767,
       896,
-      768
+      768,
+      401
     ],
     "review": null,
     "history": [
@@ -95615,6 +95602,13 @@
         "issue": 770,
         "claim": "94db45b07f7e46ad9f60bdf4a0c559e8",
         "actor": "Worker-B1019770"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T22:23:49+00:00",
+        "issue": 401,
+        "pr": 960,
+        "actor": "Worker-H19401"
       }
     ],
     "policy": {
