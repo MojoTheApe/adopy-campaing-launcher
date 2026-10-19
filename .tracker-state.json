@@ -43012,9 +43012,11 @@
         "worktree": "C:\\wk19-287",
         "id": "f0d582cf91f746c28b2d3b14f26ba349",
         "issue": 287,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T07:38:15+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 964,
+        "report": "ACL-1287 round 2 (PR #964).\nNew head: 0083cd66 (pushed to work/acl-1287-english-row-text). Merged origin/main 435bc154 (merge bac1d64e, clean).\nChanged (test-only, tests/test_account_spend_reasons_are_english.py):\n1. multiline literals are no longer skipped; only `//` and `/* */` comments are stripped (as in the country_split guard)\n2. logger exemption restricted to calls on log/logger/logging/_log/_logger receivers (any other x.error(\"ru\") is flagged)\n3. guard now also covers src/analysis_agent/account_spend_api.py and src/fb_api/mlx_session.py (all three clean: no real Russian user-facing text found, no production change)\n3 new guard tests (JS block caught, JS comments allowed, non-logger .error caught).\nPR body updated (still exactly one `Tracker issues: ACL-1287` line).\nTests: test_account_spend_reasons_are_english + test_country_split_reasons_are_english: 9 passed. acl_scan_secrets: clean. acl_smoke: OK.\ntests/test_read_fallback.py: 20 passed, 1 failed - test_the_old_amount_stands_on_its_own_line_under_a_failure: ModuleNotFoundError '_design_tokens' (tests/_design_tokens.py, ACL-1797) at test_read_fallback.py:188; file is untouched by this PR (identical to main), environment/sys.path issue from main, unrelated to this change."
       },
       "871": {
         "actor": "Worker-E19871",
