@@ -44149,6 +44149,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T19:47:58+00:00",
         "from_status": "status:todo"
+      },
+      "836": {
+        "actor": "Worker-U1019836",
+        "session": "run_u1019_836",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "codex/acl-1836-session-recovery",
+        "worktree": "C:\\acl-1836",
+        "id": "2441527c16924c619a6a923fce875b9c",
+        "issue": 836,
+        "state": "implementing",
+        "started_at": "2026-10-19T19:48:27+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -48671,11 +48683,15 @@
           {
             "actor": "Worker-SR1012",
             "session": "connection_sr1012_worker"
+          },
+          {
+            "actor": "Worker-U1019836",
+            "session": "run_u1019_836"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-SR1012",
-        "coordinator": "Coordinator-CR1012",
+        "state": "implementing",
+        "worker": "Worker-U1019836",
+        "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-SR1012",
           "session": "connection_sr1012_worker",
@@ -48694,13 +48710,6 @@
         "queued_at": "2026-10-13T19:30:53+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "return_operation": {
-          "id": "2ab69234dbc645ffab72d57e22133086",
-          "actor": "Coordinator-CR1012",
-          "session": "acm_connection_coordinator_20261013",
-          "report": "Coordinator approval return for ACL-1836 / Issue836 / source PR837.\n\nActual Coordinator: Coordinator-CR1012.\nActual root session: acm_connection_coordinator_20261013.\nThe user resumed development, integration and installation with \"\u0432\u0441\u0435 \u0432\u043c\u0435\u0441\u0442\u0435\" and selected ACM TEST9095. Cross-chat coordination is explicitly authorized.\n\nFresh official readback confirms main7cee2857d4b374bc564c5ca84b9f6ede69f96430, while the existing Approved review for exact source d0d4b87305a4e1d25c045c67103da1637fe8c3d7 was bound to main777663bf539308c0898cc177f872a8e0f63b597e. PR837 is still OPEN, ready, targeting main, with that unchanged head. The latest private state confirms Approved, no implementation claim, no pending return, and recorded approval Coordinator-CR1012. The task is not a member of the foreign frozen integration or intake.\n\nReturn reason is only advancement of the authoritative baseline; no new product defect is asserted. Preserve full Issue scope/history, original Worker-SR1012 / connection_sr1012_worker, original source branch and review evidence. After this supported return, the actual original author must claim normally, reconcile current main, perform applicable checks, push the same source PR and hand off for fresh independent current-source review. The author currently owns ACL-1886 and must finish its normal handoff first; do not steal or fabricate a second Worker run.\n\nThis return does not edit source/runtime, change the foreign batch24551548a5084a13a4d81bb957a084f1 or its Coordinator-DLV13 ownership, start a competing intake, claim a new approval, publish a package or execute advertising."
-        },
-        "reviewer": "Reviewer-RS1012",
-        "return": {
           "id": "2ab69234dbc645ffab72d57e22133086",
           "actor": "Coordinator-CR1012",
           "session": "acm_connection_coordinator_20261013",
@@ -54484,6 +54493,10 @@
       },
       "Worker-R1019273": {
         "session": "run_r1019_273",
+        "role": "Worker"
+      },
+      "Worker-U1019836": {
+        "session": "run_u1019_836",
         "role": "Worker"
       }
     },
@@ -93534,6 +93547,13 @@
         "issue": 273,
         "claim": "075c1efe814f41e8a29ddcae3721ffb3",
         "actor": "Worker-R1019273"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T19:48:27+00:00",
+        "issue": 836,
+        "claim": "2441527c16924c619a6a923fce875b9c",
+        "actor": "Worker-U1019836"
       }
     ],
     "policy": {
