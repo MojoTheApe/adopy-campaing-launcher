@@ -44137,6 +44137,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T20:09:16+00:00",
         "from_status": "status:todo"
+      },
+      "529": {
+        "actor": "Worker-R1019529",
+        "session": "run_r1019_529",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "codex/acl-1529-sharp-shot",
+        "worktree": "C:\\acl-1529-sharpshot",
+        "id": "81a6ec5e2293417cafc7ed10d771571d",
+        "issue": 529,
+        "state": "implementing",
+        "started_at": "2026-10-19T20:10:40+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -45574,11 +45586,15 @@
           {
             "actor": "Worker-W530R",
             "session": "worker530refresh20261013"
+          },
+          {
+            "actor": "Worker-R1019529",
+            "session": "run_r1019_529"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-W530R",
-        "coordinator": "Coordinator-DLV13",
+        "state": "implementing",
+        "worker": "Worker-R1019529",
+        "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-W530R",
           "session": "worker530refresh20261013",
@@ -45602,7 +45618,6 @@
           "session": "Root-DLV13-01a13445",
           "report": "PR530 approved source c459673e names former main777663bf. Actualmain now7cee2857 after admitted verified batchPR884/885. Original taskscope, Worker, sourcebranch and originalsourcePR remain unchanged; return for originalauthor current-main reconciliation, required relevant checks and fresh independent exact-head/base/tree approval. No new product outcome or completion is asserted; retained3member integration is untouched."
         },
-        "reviewer": "Reviewer-C530",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.577978+00:00",
@@ -54550,6 +54565,10 @@
       },
       "Worker-R1019708": {
         "session": "run_r1019_708",
+        "role": "Worker"
+      },
+      "Worker-R1019529": {
+        "session": "run_r1019_529",
         "role": "Worker"
       }
     },
@@ -93737,6 +93756,13 @@
         "issue": 708,
         "claim": "46e40808fc1947fdb05b504fa88e90de",
         "actor": "Worker-R1019708"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T20:10:40+00:00",
+        "issue": 529,
+        "claim": "81a6ec5e2293417cafc7ed10d771571d",
+        "actor": "Worker-R1019529"
       }
     ],
     "policy": {
