@@ -11,6 +11,23 @@
   wrong slot or URL (TEST9095, 16.10: 9403A, Doc124, B90; windows left open after a read).
 - A 404 on the real address still walks the legacy tail. Callers are unchanged:
   `allow_kill=False` still closes nothing beyond the API.
+## ACL-1381 — Consistent Builder ad-text wording — 2026-10-18
+
+Complete the older text-label request while preserving ACL-1769's later numbered
+Primary text 1/2 interface and separate Headline display. Search/help and empty/error
+messages now refer to ad texts consistently. Library keys, copy/copy2 fields,
+selection, draft restoration and submission behavior are unchanged.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/381).
+
+## ACL-1971 — Explicit tooling fast/full plan — 2026-10-17
+
+Document the existing tooling check's exact commands, omissions and correction
+workflow while retaining full applicable ACL/installer admission. Add the missing
+parsed-workflow activity regression: PR metadata edits run linkage only, while a
+new code head retains candidate verification. Existing aggregate negatives,
+producer names, triggers, policies and runtime behavior stay intact. This records
+project verification behavior; it does not establish a cost saving or delivery.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/971).
 
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
