@@ -50042,7 +50042,7 @@
             "session": "w680-c0a1de70"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-E19680",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
@@ -50061,7 +50061,7 @@
         },
         "pr": 966,
         "queued_at": "2026-10-19T10:15:33+00:00",
-        "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
+        "review_report": "Returned (ACL-1680, PR 966, head 7684023f). The read-through of the design is fine, but the head fails required CI for real reasons, none of them infra flakes.\n1. tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis fails (Classify and check project tooling, Process instructions, ACL verification, windows tests, linux shard 1): the new tests/test_acl1680_one_config_dir.py uses backslash Windows paths (lines 13, 14, 19-22, ...) and is not marked. Fix: add `pytestmark = pytest.mark.windows_only(reason=\"...\")` or `# linux-ok: <why>` on pure-data lines.\n2. On Linux shard 2 (3.11 and 3.13) two tests fail in that file: test_pin_sets_the_env_for_child_processes (got 'C:\\Users\\B...\\Local/ACL' vs '...\\Local\\ACL', mixed separators from unvirtualize_path/pin_config_dir_env) and test_launcher_and_dashboard_agree_on_the_folder (line 143). Either make the helpers/test separator-neutral or mark the file windows_only; ideally decide which and keep one behaviour.\n3. Installer workflow: \"Build, install, repair, and uninstall\" hit the 20-minute job limit (cancelled), so \"Installer verification\" fails. This PR touches launcher.py and calls config_unify.prepare_config_dir() from scripts/acl_migrate_config.py (the installer path). After fixing 1-2, rerun and check the installer log: if it hangs again, prepare_config_dir (merge/backup, input or locking) in the installer is the suspect and needs a non-interactive/timeout-safe path; if it passes on a rerun it was a runner stall.\nAfter the fixes: re-run tests/test_acl1680_one_config_dir.py, tests/test_acl_test_platform.py, tests/test_machine_paths.py, tests/test_windows_launcher_contract.py and push so that all required checks (Linux shards, Windows, installer) pass; then re-queue for review.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578092+00:00",
@@ -88949,6 +88949,24 @@
         "pr": 966,
         "lane": "b9f7f854041848268bea5e66a51dbdbe",
         "actor": "Reviewer-Y19B"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-19T10:49:08+00:00",
+        "review": {
+          "id": "b9f7f854041848268bea5e66a51dbdbe",
+          "pr": 966,
+          "issues": [
+            680
+          ],
+          "actor": "Reviewer-Y19B",
+          "session": "rev-y19b-s1",
+          "coordinator": "Coordinator-E1019A",
+          "started_at": "2026-10-19T10:47:39+00:00",
+          "state": "returning",
+          "report": "Returned (ACL-1680, PR 966, head 7684023f). The read-through of the design is fine, but the head fails required CI for real reasons, none of them infra flakes.\n1. tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis fails (Classify and check project tooling, Process instructions, ACL verification, windows tests, linux shard 1): the new tests/test_acl1680_one_config_dir.py uses backslash Windows paths (lines 13, 14, 19-22, ...) and is not marked. Fix: add `pytestmark = pytest.mark.windows_only(reason=\"...\")` or `# linux-ok: <why>` on pure-data lines.\n2. On Linux shard 2 (3.11 and 3.13) two tests fail in that file: test_pin_sets_the_env_for_child_processes (got 'C:\\Users\\B...\\Local/ACL' vs '...\\Local\\ACL', mixed separators from unvirtualize_path/pin_config_dir_env) and test_launcher_and_dashboard_agree_on_the_folder (line 143). Either make the helpers/test separator-neutral or mark the file windows_only; ideally decide which and keep one behaviour.\n3. Installer workflow: \"Build, install, repair, and uninstall\" hit the 20-minute job limit (cancelled), so \"Installer verification\" fails. This PR touches launcher.py and calls config_unify.prepare_config_dir() from scripts/acl_migrate_config.py (the installer path). After fixing 1-2, rerun and check the installer log: if it hangs again, prepare_config_dir (merge/backup, input or locking) in the installer is the suspect and needs a non-interactive/timeout-safe path; if it passes on a rerun it was a runner stall.\nAfter the fixes: re-run tests/test_acl1680_one_config_dir.py, tests/test_acl_test_platform.py, tests/test_machine_paths.py, tests/test_windows_launcher_contract.py and push so that all required checks (Linux shards, Windows, installer) pass; then re-queue for review.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -95379,22 +95397,7 @@
       "started_at": "2026-10-18T20:09:23+00:00",
       "ineligible": {}
     },
-    "source_reviews": {
-      "966": {
-        "id": "b9f7f854041848268bea5e66a51dbdbe",
-        "pr": 966,
-        "issues": [
-          680
-        ],
-        "actor": "Reviewer-Y19B",
-        "session": "rev-y19b-s1",
-        "coordinator": "Coordinator-E1019A",
-        "started_at": "2026-10-19T10:47:39+00:00",
-        "state": "returning",
-        "report": "Returned (ACL-1680, PR 966, head 7684023f). The read-through of the design is fine, but the head fails required CI for real reasons, none of them infra flakes.\n1. tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis fails (Classify and check project tooling, Process instructions, ACL verification, windows tests, linux shard 1): the new tests/test_acl1680_one_config_dir.py uses backslash Windows paths (lines 13, 14, 19-22, ...) and is not marked. Fix: add `pytestmark = pytest.mark.windows_only(reason=\"...\")` or `# linux-ok: <why>` on pure-data lines.\n2. On Linux shard 2 (3.11 and 3.13) two tests fail in that file: test_pin_sets_the_env_for_child_processes (got 'C:\\Users\\B...\\Local/ACL' vs '...\\Local\\ACL', mixed separators from unvirtualize_path/pin_config_dir_env) and test_launcher_and_dashboard_agree_on_the_folder (line 143). Either make the helpers/test separator-neutral or mark the file windows_only; ideally decide which and keep one behaviour.\n3. Installer workflow: \"Build, install, repair, and uninstall\" hit the 20-minute job limit (cancelled), so \"Installer verification\" fails. This PR touches launcher.py and calls config_unify.prepare_config_dir() from scripts/acl_migrate_config.py (the installer path). After fixing 1-2, rerun and check the installer log: if it hangs again, prepare_config_dir (merge/backup, input or locking) in the installer is the suspect and needs a non-interactive/timeout-safe path; if it passes on a rerun it was a runner stall.\nAfter the fixes: re-run tests/test_acl1680_one_config_dir.py, tests/test_acl_test_platform.py, tests/test_machine_paths.py, tests/test_windows_launcher_contract.py and push so that all required checks (Linux shards, Windows, installer) pass; then re-queue for review.",
-        "keep_lane": false
-      }
-    },
+    "source_reviews": {},
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
   },
   "maintenance_history": [
