@@ -51645,7 +51645,7 @@
             "session": "wf680-c0a1de70"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-F19680",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
@@ -51664,7 +51664,7 @@
         },
         "pr": 966,
         "queued_at": "2026-10-19T11:07:15+00:00",
-        "review_report": "Returned (ACL-1680, PR 966, head 7684023f). The read-through of the design is fine, but the head fails required CI for real reasons, none of them infra flakes.\n1. tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis fails (Classify and check project tooling, Process instructions, ACL verification, windows tests, linux shard 1): the new tests/test_acl1680_one_config_dir.py uses backslash Windows paths (lines 13, 14, 19-22, ...) and is not marked. Fix: add `pytestmark = pytest.mark.windows_only(reason=\"...\")` or `# linux-ok: <why>` on pure-data lines.\n2. On Linux shard 2 (3.11 and 3.13) two tests fail in that file: test_pin_sets_the_env_for_child_processes (got 'C:\\Users\\B...\\Local/ACL' vs '...\\Local\\ACL', mixed separators from unvirtualize_path/pin_config_dir_env) and test_launcher_and_dashboard_agree_on_the_folder (line 143). Either make the helpers/test separator-neutral or mark the file windows_only; ideally decide which and keep one behaviour.\n3. Installer workflow: \"Build, install, repair, and uninstall\" hit the 20-minute job limit (cancelled), so \"Installer verification\" fails. This PR touches launcher.py and calls config_unify.prepare_config_dir() from scripts/acl_migrate_config.py (the installer path). After fixing 1-2, rerun and check the installer log: if it hangs again, prepare_config_dir (merge/backup, input or locking) in the installer is the suspect and needs a non-interactive/timeout-safe path; if it passes on a rerun it was a runner stall.\nAfter the fixes: re-run tests/test_acl1680_one_config_dir.py, tests/test_acl_test_platform.py, tests/test_machine_paths.py, tests/test_windows_launcher_contract.py and push so that all required checks (Linux shards, Windows, installer) pass; then re-queue for review.",
+        "review_report": "# Return for a main refresh\n\nMain moved to c6150160 (batch #1018 merged after #1016). The existing source approval is bound to the previous main baseline and cannot enter the next intake. No scope change and no defect is requested: merge current origin/main into the original branch, re-run the affected checks, hand off again and get a fresh independent review.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578092+00:00",
@@ -95425,6 +95425,18 @@
           "report": "# Return for a main refresh\n\nMain moved to c6150160 (batch #1018 merged after #1016). The existing source approval is bound to the previous main baseline and cannot enter the next intake. No scope change and no defect is requested: merge current origin/main into the original branch, re-run the affected checks, hand off again and get a fresh independent review."
         },
         "batch_id": null
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-19T22:16:12+00:00",
+        "issue": 680,
+        "operation": {
+          "id": "55483130812c4a71b3579ce89ee528d2",
+          "actor": "Coordinator-E1019A",
+          "session": "coord-c0a1de70",
+          "report": "# Return for a main refresh\n\nMain moved to c6150160 (batch #1018 merged after #1016). The existing source approval is bound to the previous main baseline and cannot enter the next intake. No scope change and no defect is requested: merge current origin/main into the original branch, re-run the affected checks, hand off again and get a fresh independent review."
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -97450,50 +97462,6 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-19T10:43:23+00:00"
-      },
-      "680": {
-        "issue": 680,
-        "pr": 966,
-        "branch": "work/acl-1680-one-config-dir",
-        "head_sha": "b9684b1a336245e2c8b8af02410dd98b017334c5",
-        "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
-        "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "scope": "503e07e2c8a0717c8914ace1daad97c1516a28140c4528063b28e8ab786dbafb",
-        "review": {
-          "kind": "independent-review",
-          "verdict": "approved",
-          "reviewer": "Reviewer-Y19B",
-          "implementer": "Worker-F19680",
-          "head_sha": "b9684b1a336245e2c8b8af02410dd98b017334c5",
-          "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
-          "tree_sha": "ec727c1dd32d934d92fc3e1b9ad2e3e9d9cc4fb5",
-          "execution_lane": "302b3729d4104ae9938688636f24009e",
-          "review_session": "rev-y19b-s1",
-          "report": "Independent source review (round 2) of PR 966 (ACL-1680, Issue 680), head b9684b1a. Full scope re-read plus delta since my return (head 7684023f).\nDelta: tests/test_acl1680_one_config_dir.py +2 lines, the windows_only pytestmark (fixes blocker 1: unmarked Windows-path test file); with it the file no longer runs on Linux, which also removes the two Linux-only failures (mixed separators). No source change.\nFull read of config/config_unify.py, config/paths.py changes, launcher/serve/migrate hooks: unvirtualize_path maps only the Packages\\<pkg>\\LocalCache\\Local root to the real AppData and leaves any other explicit ACL_CONFIG_DIR untouched; prepare_config_dir never raises, pins the env first, merge is non-destructive (copy missing, newer wins with backup under ACL\\backups\\config-unify-*, source never deleted, .env merged by key with empty values never winning); skip lists exclude runtimes/logs/locks. English log text; no secrets. Known limit stated by the author: real-path writes from inside a package may still be redirected by Windows (the warning covers it). Non-blocking note only.\nCI on this exact head: all required checks pass, including the installer job that timed out last time (Build, install, repair, and uninstall 12m31s, Installer verification), linux shards 1-3 on 3.11 and 3.13, windows tests, ACL verification, Process instructions, Classify, tracker-link, descriptor. So the earlier installer timeout was a runner stall, not a hang in prepare_config_dir.\nVerdict: approved.\n",
-          "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "issues": [
-            680
-          ],
-          "recorded_at": "2026-10-19T11:28:20+00:00",
-          "issue_scopes": {
-            "680": "503e07e2c8a0717c8914ace1daad97c1516a28140c4528063b28e8ab786dbafb"
-          }
-        },
-        "lane": {
-          "id": "302b3729d4104ae9938688636f24009e",
-          "pr": 966,
-          "issues": [
-            680
-          ],
-          "actor": "Reviewer-Y19B",
-          "session": "rev-y19b-s1",
-          "coordinator": "Coordinator-E1019A",
-          "started_at": "2026-10-19T11:27:12+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-19T11:28:54+00:00"
       },
       "202": {
         "issue": 202,
