@@ -44126,20 +44126,6 @@
   },
   "execution": {
     "claims": {
-      "920": {
-        "actor": "Worker-R1019920",
-        "session": "run_r1019_920",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1920-search-refused",
-        "worktree": "C:\\wk-1920",
-        "id": "4fe32f5f0d724b0793cededdf67e4e3e",
-        "issue": 920,
-        "state": "handoff",
-        "started_at": "2026-10-19T19:07:51+00:00",
-        "from_status": "status:todo",
-        "pr": 921,
-        "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main into the branch; conflicts only in docs/system/CHANGELOG.md (kept both entries). Re-ran the touched tests: test_acl1920_search_refused 23, test_acl1771_targeting_resolver 50, test_acl1819_preflight 78 passed. No functional change beyond the merge; no live runs."
-      },
       "836": {
         "actor": "Worker-U1019836",
         "session": "run_u1019_836",
@@ -49868,25 +49854,25 @@
             "session": "run_r1019_920"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-R1019920",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-S1920A",
-          "session": "s1920a-20261015",
+          "actor": "Worker-R1019920",
+          "session": "run_r1019_920",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1920-search-refused",
           "worktree": "C:\\wk-1920",
-          "id": "cbf30124fe7a45f0b1c36b1072014078",
+          "id": "4fe32f5f0d724b0793cededdf67e4e3e",
           "issue": 920,
           "state": "handoff",
-          "started_at": "2026-10-15T05:51:11+00:00",
-          "from_status": "status:idea",
+          "started_at": "2026-10-19T19:07:51+00:00",
+          "from_status": "status:todo",
           "pr": 921,
-          "report": "ACL-1920 handoff, PR #921 (work/acl-1920-search-refused, head 2142a9c4, base main 3ee7c6d9).\nImplementation: 58a4e554 (refused optional resolver searches are skipped with an English warning naming the lookup; adinterest/adgeolocation/adlocale refusals still fail with the search type), review fixes 93ea6b49.\nStacked on ACL-1771 (#832, codex/acl-1771-targeting-resolver ffd8b307); 2026-10-15 both brought up to date with main (merge commits only, conflicts in app.py/creator.py/report.html resolved keeping both sides, main's pixel check). No change to ACL-1920 logic after review.\nLocal checks: tests/test_acl1920_search_refused.py + test_acl1771_targeting_resolver.py 73 passed; resolver/preflight/plan-check/platform set 245 passed. Hosted CI running on the PR.\nRemaining: independent review of the current head, merge after #832, live Check plan of MX_AMZ_All_Video_Day_35_15.10 on KLD_BFL_B90 (TEST9095)."
+          "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main into the branch; conflicts only in docs/system/CHANGELOG.md (kept both entries). Re-ran the touched tests: test_acl1920_search_refused 23, test_acl1771_targeting_resolver 50, test_acl1819_preflight 78 passed. No functional change beyond the merge; no live runs."
         },
         "pr": 921,
-        "queued_at": "2026-10-15T10:17:35+00:00",
+        "queued_at": "2026-10-19T19:52:41+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -57366,7 +57352,8 @@
       945,
       807,
       184,
-      273
+      273,
+      920
     ],
     "review": {
       "id": "71d08f944d4646c69ba2c95edd8d2464",
@@ -93583,6 +93570,13 @@
         "issue": 309,
         "claim": "63b5915c5ea04513a2e3dc7ab5779695",
         "actor": "Worker-R1019309"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T19:52:41+00:00",
+        "issue": 920,
+        "pr": 921,
+        "actor": "Worker-R1019920"
       }
     ],
     "policy": {
