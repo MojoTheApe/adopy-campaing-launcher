@@ -5051,6 +5051,27 @@
         "issue_scopes": {
           "945": "e9ff3ac55ccc43857b7919167fea2b5025620effa5b1a59a0baaa9a01454befc"
         }
+      },
+      "952": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1708Y",
+        "review_session": "reviewer-r1708y-20261019",
+        "execution_lane": "5880200939394a92b6a135fcdcb532a7",
+        "implementer": "Worker-R1019708",
+        "head_sha": "f2a8c950ddefb39b533114396454ea9cb04334ea",
+        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "tree_sha": "73291e5ec46be0708a9749d21f4d06d3ca035932",
+        "issues": [
+          708
+        ],
+        "report": "PR #952 (head f2a8c950 merged with current main c6150160, base unchanged) makes four small changes. (1) src/web/app.py account_spend_turn_off now returns 'Could not reach the account. Check the Adopy Campaign Manager window.' instead of 'Check the launcher window.'; I grepped src and tests and nothing compares the old or new string, as the Issue required checking. (2) scripts/convert_favicon_to_ico.py, which still drew the old ACL mark, is deleted (the Issue's allowed 'delete' option); the only code reference, the error text in scripts/install_dashboard_shortcut.ps1, now tells the user to restore assets/dashboard.ico from the repository; assets/dashboard.ico and src/web/static/favicon.ico are untouched brand-kit files, so no script can regenerate the old mark, and existing install paths, file names and the updater are unaffected. requirements-dev.txt only drops the stale Pillow comment line (Pillow stays pinned because tests still import PIL). (3) report.html gets the optional meta viewport tag. (4) docs/system/CHANGELOG.md records the change in English. Acceptance: no visible 'launcher' wording remains in the dashboard error the Issue named, and no regenerating script remains. Tests: ran tests/test_account_blocked_stops_the_campaign.py and tests/test_distribution_boundary.py, 20 passed. CI on this head: all checks green, including windows and linux tests, installer build/install/repair/uninstall, and tracker-link. Non-blocking nits: app.py:1788 still has a user-visible 'ACM was not started by its launcher' message in the update endpoint, outside the Issue's named scope but arguably against the 'no visible launcher wording' acceptance line, worth a follow-up; docs/superpowers/specs/2026-06-13-dashboard-desktop-launcher-design.md:21 still lists the deleted script (historical spec). No live checks claimed.",
+        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "recorded_at": "2026-10-19T21:24:17+00:00",
+        "issue_scopes": {
+          "708": "6b7726dd5b2fd3e4f37b1f1ed4921ba836cab3de1eff62531d7029faa5dce02e"
+        }
       }
     },
     "stage": {
