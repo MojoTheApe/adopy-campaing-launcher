@@ -43047,20 +43047,6 @@
   },
   "execution": {
     "claims": {
-      "47": {
-        "actor": "Worker-E19341",
-        "session": "w341-c0a1de70",
-        "coordinator": "Coordinator-E1019A",
-        "branch": "work/acl-341-recipe-player-tests",
-        "worktree": "C:\\wk19-341",
-        "id": "c4ff1b5ae0bf42b2b5074e3897516845",
-        "issue": 47,
-        "state": "handoff",
-        "started_at": "2026-10-19T10:01:02+00:00",
-        "from_status": "status:todo",
-        "pr": 980,
-        "report": "ACL-341 (PR 980) brought up to date: merged origin/main 435bc154 into the branch (no conflicts), new head 7d89abc65956527ef43a0e99077938bdcd3e1667. Test-only PR, one file tests/test_recipe_player_sequences.py.\nChecks on merged head: pytest tests/test_recipe_player_sequences.py -> 20 passed, 2 xfailed (606 s on this loaded machine); acl_scan_secrets OK; acl_smoke OK. Full suite left to CI."
-      },
       "305": {
         "actor": "Worker-E19305",
         "session": "w305-c0a1de70",
@@ -50383,25 +50369,25 @@
             "session": "w341-c0a1de70"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-E19341",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
-          "actor": "Worker-W0341A",
-          "session": "acl341-w0341a-20261017",
-          "coordinator": "Coordinator-T1004Q",
+          "actor": "Worker-E19341",
+          "session": "w341-c0a1de70",
+          "coordinator": "Coordinator-E1019A",
           "branch": "work/acl-341-recipe-player-tests",
-          "worktree": "C:\\acl-341",
-          "id": "3efe9b149f3041fc817b98d04a7c64df",
+          "worktree": "C:\\wk19-341",
+          "id": "c4ff1b5ae0bf42b2b5074e3897516845",
           "issue": 47,
           "state": "handoff",
-          "started_at": "2026-10-17T13:08:21+00:00",
+          "started_at": "2026-10-19T10:01:02+00:00",
           "from_status": "status:todo",
           "pr": 980,
-          "report": "Added tests/test_recipe_player_sequences.py (PR #980): 20 passing + 2 strict xfail, RecipePlayer.run() on bench fixtures, no live account, no src change.\nChecks: py -m pytest tests/test_recipe_player_sequences.py -> 20 passed, 2 xfailed. recipe_player coverage 8% -> 39% (new file alone, sysmon core).\nFindings for RPA track (xfail): risky click that found nothing ends run ok=True; stale-coordinate click logged ok. Also, a failed recover_from_bad_url / wizard_guard FAIL still ends ok=True (seen in probe, not pinned by a test).\nLeft: full suite only in CI; two tests take 15-30 s (real waits in meta_dom)."
+          "report": "ACL-341 (PR 980) brought up to date: merged origin/main 435bc154 into the branch (no conflicts), new head 7d89abc65956527ef43a0e99077938bdcd3e1667. Test-only PR, one file tests/test_recipe_player_sequences.py.\nChecks on merged head: pytest tests/test_recipe_player_sequences.py -> 20 passed, 2 xfailed (606 s on this loaded machine); acl_scan_secrets OK; acl_smoke OK. Full suite left to CI."
         },
         "pr": 980,
-        "queued_at": "2026-10-17T13:31:34+00:00",
+        "queued_at": "2026-10-19T10:16:40+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -55758,7 +55744,8 @@
       356,
       787,
       401,
-      680
+      680,
+      47
     ],
     "review": null,
     "history": [
@@ -88547,6 +88534,13 @@
         "issue": 680,
         "pr": 966,
         "actor": "Worker-E19680"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T10:16:40+00:00",
+        "issue": 47,
+        "pr": 980,
+        "actor": "Worker-E19341"
       }
     ],
     "policy": {
