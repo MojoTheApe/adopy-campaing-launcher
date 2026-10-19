@@ -43070,20 +43070,6 @@
         "state": "implementing",
         "started_at": "2026-10-19T10:06:40+00:00",
         "from_status": "status:todo"
-      },
-      "680": {
-        "actor": "Worker-E19680",
-        "session": "w680-c0a1de70",
-        "coordinator": "Coordinator-E1019A",
-        "branch": "work/acl-1680-one-config-dir",
-        "worktree": "C:\\wk19-680",
-        "id": "b8db1f1af0a54445942e663c2486c5a5",
-        "issue": 680,
-        "state": "handoff",
-        "started_at": "2026-10-19T10:09:59+00:00",
-        "from_status": "status:todo",
-        "pr": 966,
-        "report": "ACL-1680 refresh. PR 966 brought up to current main: merged origin/main 435bc15467e3bedef515534e9fb407642431f435 into work/acl-1680-one-config-dir with no conflicts, new head 7684023ffdd9553b3697416a4592f8338f81d29d. No new code beyond the PR's own diff.\nTests: tests/test_acl1680_one_config_dir.py + tests/test_machine_paths.py + tests/test_windows_launcher_contract.py + packaging/windows/tests: 80 passed, 4 subtests. scripts/acl_scan_secrets.py clean; scripts/acl_smoke.py OK. Full suite left to CI. No real MSIX run."
       }
     },
     "tasks": {
@@ -49966,25 +49952,25 @@
             "session": "w680-c0a1de70"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-E19680",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
-          "actor": "Worker-W1680A",
-          "session": "w1680a-s1",
-          "coordinator": "Coordinator-T1004Q",
+          "actor": "Worker-E19680",
+          "session": "w680-c0a1de70",
+          "coordinator": "Coordinator-E1019A",
           "branch": "work/acl-1680-one-config-dir",
-          "worktree": "C:\\acl-1680",
-          "id": "122c1999e90a48909b54605472476158",
+          "worktree": "C:\\wk19-680",
+          "id": "b8db1f1af0a54445942e663c2486c5a5",
           "issue": 680,
           "state": "handoff",
-          "started_at": "2026-10-17T07:14:42+00:00",
+          "started_at": "2026-10-19T10:09:59+00:00",
           "from_status": "status:todo",
           "pr": 966,
-          "report": "ACL-1680 handoff. PR 966.\nChanges: config/paths.py resolves the real AppData\\Local\\ACL (own commit); config/config_unify.py pins ACL_CONFIG_DIR, merges the MSIX package copy (newer wins, .env by key, backups, source kept), logs folder and warns on a second differing .env; wired into launcher.py, serve.py, acl_migrate_config.py; README note.\nTests: tests/test_acl1680_one_config_dir.py + packaging/windows/tests + test_machine_paths + test_windows_launcher_contract: 80 passed. Full suite left to CI. No real MSIX run."
+          "report": "ACL-1680 refresh. PR 966 brought up to current main: merged origin/main 435bc15467e3bedef515534e9fb407642431f435 into work/acl-1680-one-config-dir with no conflicts, new head 7684023ffdd9553b3697416a4592f8338f81d29d. No new code beyond the PR's own diff.\nTests: tests/test_acl1680_one_config_dir.py + tests/test_machine_paths.py + tests/test_windows_launcher_contract.py + packaging/windows/tests: 80 passed, 4 subtests. scripts/acl_scan_secrets.py clean; scripts/acl_smoke.py OK. Full suite left to CI. No real MSIX run."
         },
         "pr": 966,
-        "queued_at": "2026-10-17T07:24:19+00:00",
+        "queued_at": "2026-10-19T10:15:33+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -55769,7 +55755,8 @@
       377,
       356,
       787,
-      401
+      401,
+      680
     ],
     "review": null,
     "history": [
@@ -88551,6 +88538,13 @@
         "issue": 401,
         "pr": 960,
         "actor": "Worker-E19401"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T10:15:33+00:00",
+        "issue": 680,
+        "pr": 966,
+        "actor": "Worker-E19680"
       }
     ],
     "policy": {
