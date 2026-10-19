@@ -44049,9 +44049,11 @@
         "worktree": "C:\\acl-1853",
         "id": "a1d35e13fca5442b8a5c20646975dfb9",
         "issue": 853,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T18:36:54+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 863,
+        "report": "# ACL-1853 handoff (2026-10-19)\n\nSource PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/863 , head 8c9470d6 (clean merge of current main into 3ad52a3f; no conflicts, no lease source change).\n\nLocal checks: tests/test_acl1853_read_wait.py (2 passed), tests/test_profile_process_lease.py (43 passed). Full suite left to CI.\nRead-only Opus review of the merge: nothing blocking; main's new files touch no Multilogin profile open/close/read paths, so the lease is not bypassed. Non-blocking notes: (1) operations.py try also wraps the body, so a ProfileLeaseError raised inside it is reported as \"no browser action started\"; (2) writes without cancelled= give up after 120 s; (3) warm sessions hold the lease only during adopt; (4) no fairness between waiters.\nNo live profile or Meta operations."
       },
       "903": {
         "actor": "Worker-R1019903",
