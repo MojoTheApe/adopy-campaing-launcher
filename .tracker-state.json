@@ -44825,7 +44825,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "1026": {
+        "actor": "Worker-ACT174A",
+        "session": "act174a-78a5f7133f0f4cfbad8ecebf63811c02",
+        "coordinator": "Coordinator-ACT174",
+        "branch": "codex/acl-2026-shared-executor-activity",
+        "worktree": "/Users/dmitry.o/Documents/ChatGPT/Task Tracker/acl-activity-adoption",
+        "id": "c75dfe62ba9c4c118a40471dc46a618e",
+        "issue": 1026,
+        "state": "implementing",
+        "started_at": "2026-10-19T23:14:33+00:00",
+        "from_status": "status:backlog"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -53044,6 +53057,17 @@
         },
         "pr": 1025,
         "queued_at": "2026-10-19T21:42:41+00:00"
+      },
+      "1026": {
+        "implementers": [
+          {
+            "actor": "Worker-ACT174A",
+            "session": "act174a-78a5f7133f0f4cfbad8ecebf63811c02"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-ACT174A",
+        "coordinator": "Coordinator-ACT174"
       }
     },
     "actors": {
@@ -55469,6 +55493,10 @@
       },
       "Worker-B1019771": {
         "session": "run_b1019_771",
+        "role": "Worker"
+      },
+      "Worker-ACT174A": {
+        "session": "act174a-78a5f7133f0f4cfbad8ecebf63811c02",
         "role": "Worker"
       }
     },
@@ -95915,6 +95943,13 @@
         "event": "included-sources-closed",
         "at": "2026-10-19T22:40:25+00:00",
         "batch_id": "a69b4124493f41c481095d71c27cc55a"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T23:14:33+00:00",
+        "issue": 1026,
+        "claim": "c75dfe62ba9c4c118a40471dc46a618e",
+        "actor": "Worker-ACT174A"
       }
     ],
     "policy": {
