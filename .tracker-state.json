@@ -44287,20 +44287,6 @@
         "state": "implementing",
         "started_at": "2026-10-19T20:10:40+00:00",
         "from_status": "status:todo"
-      },
-      "739": {
-        "actor": "Worker-R1019739",
-        "session": "run_r1019_739",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1739-doc124-frozen",
-        "worktree": "C:\\acl-1739-doc124-frozen",
-        "id": "f15108458ff74ba3ab880d9866d3b7e9",
-        "issue": 739,
-        "state": "handoff",
-        "started_at": "2026-10-19T20:23:28+00:00",
-        "from_status": "status:todo",
-        "pr": 740,
-        "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main (only conflict: docs/system/CHANGELOG.md, kept both entries). tests/test_a_busy_tab_is_not_a_frozen_episode.py and test_a_frozen_tab_is_never_waited_on.py: 14 passed. No code change beyond the merge; no live runs."
       }
     },
     "tasks": {
@@ -47363,25 +47349,25 @@
             "session": "run_r1019_739"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-R1019739",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-W1739F",
-          "session": "w1739f_1008",
-          "coordinator": "Coordinator-T1004Q",
+          "actor": "Worker-R1019739",
+          "session": "run_r1019_739",
+          "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1739-doc124-frozen",
           "worktree": "C:\\acl-1739-doc124-frozen",
-          "id": "d9262967653e4d319d1e55a5250d5c11",
+          "id": "f15108458ff74ba3ab880d9866d3b7e9",
           "issue": 739,
           "state": "handoff",
-          "started_at": "2026-10-08T08:22:30+00:00",
-          "from_status": "status:idea",
+          "started_at": "2026-10-19T20:23:28+00:00",
+          "from_status": "status:todo",
           "pr": 740,
-          "report": "# ACL-1739 handoff\nPR #740, head 681100a3. Cause: profile window covered by 4-7 windows; 5 s probe missed on alive-but-slow tab (stall_evidence responsive=true, heap ~500MB, 6.3k nodes), each miss counted toward the 1702 budget. Not video-specific. Fix: _tab_frozen confirms with the 10 s probe before counting. Tests: new unit file + 11 affected files pass (fakes only)."
+          "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main (only conflict: docs/system/CHANGELOG.md, kept both entries). tests/test_a_busy_tab_is_not_a_frozen_episode.py and test_a_frozen_tab_is_never_waited_on.py: 14 passed. No code change beyond the merge; no live runs."
         },
         "pr": 740,
-        "queued_at": "2026-10-08T08:34:10+00:00",
+        "queued_at": "2026-10-19T20:25:03+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -57589,7 +57575,8 @@
       990,
       992,
       175,
-      379
+      379,
+      739
     ],
     "review": {
       "id": "71d08f944d4646c69ba2c95edd8d2464",
@@ -93934,6 +93921,13 @@
         "at": "2026-10-19T20:23:28+00:00",
         "issue": 739,
         "claim": "f15108458ff74ba3ab880d9866d3b7e9",
+        "actor": "Worker-R1019739"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T20:25:03+00:00",
+        "issue": 739,
+        "pr": 740,
         "actor": "Worker-R1019739"
       }
     ],
