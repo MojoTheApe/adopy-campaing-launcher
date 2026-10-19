@@ -49041,7 +49041,7 @@
             "session": "s-a75a7899"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-7k2q9",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -49065,7 +49065,8 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578044+00:00",
           "remote_process_stopped_verified": false
-        }
+        },
+        "reviewer": "Reviewer-E19356"
       },
       "379": {
         "implementers": [
@@ -52768,6 +52769,10 @@
       "Reviewer-E19992": {
         "session": "r992-c0a1de70",
         "role": "Reviewer"
+      },
+      "Reviewer-E19356": {
+        "session": "r356-c0a1de70",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -55600,7 +55605,6 @@
       }
     },
     "review_queue": [
-      356,
       287,
       377
     ],
@@ -88030,6 +88034,13 @@
           "report": "PR #993 (ACL-1992) conflicts with current main 435bc154 in docs/system/CHANGELOG.md (content conflict; src/web/templates/report.html auto-merges cleanly). Head a62a352f. Author must merge current origin/main into the original branch, resolve, re-run affected checks and hand off again.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-19T07:32:18+00:00",
+        "pr": 942,
+        "lane": "0ac65e36272245109a1f4fc50839c1e8",
+        "actor": "Reviewer-E19356"
       }
     ],
     "policy": {
@@ -94219,6 +94230,18 @@
         "session": "r864-c0a1de70",
         "coordinator": "Coordinator-E1019A",
         "started_at": "2026-10-19T07:28:11+00:00",
+        "state": "reviewing"
+      },
+      "942": {
+        "id": "0ac65e36272245109a1f4fc50839c1e8",
+        "pr": 942,
+        "issues": [
+          356
+        ],
+        "actor": "Reviewer-E19356",
+        "session": "r356-c0a1de70",
+        "coordinator": "Coordinator-E1019A",
+        "started_at": "2026-10-19T07:32:18+00:00",
         "state": "reviewing"
       }
     },
