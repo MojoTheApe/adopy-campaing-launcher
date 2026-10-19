@@ -43221,6 +43221,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T11:56:42+00:00",
         "from_status": "status:todo"
+      },
+      "19": {
+        "actor": "Worker-W106C",
+        "session": "w106c-20261016",
+        "coordinator": "Coordinator-C1016A",
+        "branch": "codex/acl-106-empty-period-owner",
+        "worktree": "C:\\acl-106-c",
+        "id": "c82eb1bf1f904f4495b142b71ae6251e",
+        "issue": 19,
+        "state": "implementing",
+        "started_at": "2026-10-19T12:46:15+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -49630,9 +49642,13 @@
           {
             "actor": "Worker-W106C",
             "session": "w106c-20261016"
+          },
+          {
+            "actor": "Worker-W106C",
+            "session": "w106c-20261016"
           }
         ],
-        "state": "stopped",
+        "state": "implementing",
         "worker": "Worker-W106C",
         "coordinator": "Coordinator-C1016A",
         "handoff": {
@@ -90151,6 +90167,13 @@
         "pr": 863,
         "lane": "ebdd6b2b6eb340749fbf6e85cf6cb913",
         "actor": "Reviewer-R853E"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T12:46:15+00:00",
+        "issue": 19,
+        "claim": "c82eb1bf1f904f4495b142b71ae6251e",
+        "actor": "Worker-W106C"
       }
     ],
     "policy": {
