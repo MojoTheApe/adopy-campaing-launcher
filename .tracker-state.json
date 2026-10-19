@@ -51615,7 +51615,7 @@
             "session": "wh401-c0a1de70"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-H19401",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
@@ -96187,6 +96187,68 @@
         "pr": 960,
         "lane": "e8313764ab1445f4872e398763ccda14",
         "actor": "Reviewer-Y19B"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-19T23:39:53+00:00",
+        "issue": 401,
+        "pr": 960,
+        "review": {
+          "id": "e8313764ab1445f4872e398763ccda14",
+          "pr": 960,
+          "issues": [
+            401
+          ],
+          "actor": "Reviewer-Y19B",
+          "session": "rev-y19b-s1",
+          "coordinator": "Coordinator-E1019A",
+          "started_at": "2026-10-19T23:38:23+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 401,
+            "pr": 960,
+            "branch": "work/acl-1401-mlx-not-running",
+            "head_sha": "60382abba4f6ca04f14b6f038335f12f28312852",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "3351b093cb2255ee6b77516b3761e09397e28c493d1eb8f788ec3947b8eabc8c",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-Y19B",
+              "implementer": "Worker-H19401",
+              "head_sha": "60382abba4f6ca04f14b6f038335f12f28312852",
+              "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "tree_sha": "fe797a9868770b02809864327aac95e34f4cbe2a",
+              "execution_lane": "e8313764ab1445f4872e398763ccda14",
+              "review_session": "rev-y19b-s1",
+              "report": "Independent source review (refresh) of PR 960 (ACL-1401, Issue 401), head 60382aba, base main c6150160. I approved 53e93b2b earlier; this head is a clean merge of main into it.\nDelta check: the only file touched both by main (435bc154..c6150160) and by this PR is src/web/templates/report.html. The PR's diff there is still exactly one line: `multilogin_not_running$` added to the \"hold\" rule in the cb-build-model rules, next to account_blocked$ (re-read the PR diff against the new base). All other differences between 53e93b2b and 60382aba are files changed only on main. The PR's file list and sizes are unchanged (7 source/config files + the 182-line test file).\nCI on this exact head: all 11 required checks pass (linux shards 1-3 on 3.11 and 3.13, windows tests, ACL verification, Process instructions, Classify, Installer verification, tracker-link, descriptor); installer build skipped as not applicable.\nVerdict: approved.\n",
+              "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                401
+              ],
+              "recorded_at": "2026-10-19T23:39:01+00:00",
+              "issue_scopes": {
+                "401": "3351b093cb2255ee6b77516b3761e09397e28c493d1eb8f788ec3947b8eabc8c"
+              }
+            },
+            "lane": {
+              "id": "e8313764ab1445f4872e398763ccda14",
+              "pr": 960,
+              "issues": [
+                401
+              ],
+              "actor": "Reviewer-Y19B",
+              "session": "rev-y19b-s1",
+              "coordinator": "Coordinator-E1019A",
+              "started_at": "2026-10-19T23:38:23+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-19T23:39:24+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -99180,6 +99242,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-19T23:37:23+00:00"
+      },
+      "401": {
+        "issue": 401,
+        "pr": 960,
+        "branch": "work/acl-1401-mlx-not-running",
+        "head_sha": "60382abba4f6ca04f14b6f038335f12f28312852",
+        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "3351b093cb2255ee6b77516b3761e09397e28c493d1eb8f788ec3947b8eabc8c",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-Y19B",
+          "implementer": "Worker-H19401",
+          "head_sha": "60382abba4f6ca04f14b6f038335f12f28312852",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "tree_sha": "fe797a9868770b02809864327aac95e34f4cbe2a",
+          "execution_lane": "e8313764ab1445f4872e398763ccda14",
+          "review_session": "rev-y19b-s1",
+          "report": "Independent source review (refresh) of PR 960 (ACL-1401, Issue 401), head 60382aba, base main c6150160. I approved 53e93b2b earlier; this head is a clean merge of main into it.\nDelta check: the only file touched both by main (435bc154..c6150160) and by this PR is src/web/templates/report.html. The PR's diff there is still exactly one line: `multilogin_not_running$` added to the \"hold\" rule in the cb-build-model rules, next to account_blocked$ (re-read the PR diff against the new base). All other differences between 53e93b2b and 60382aba are files changed only on main. The PR's file list and sizes are unchanged (7 source/config files + the 182-line test file).\nCI on this exact head: all 11 required checks pass (linux shards 1-3 on 3.11 and 3.13, windows tests, ACL verification, Process instructions, Classify, Installer verification, tracker-link, descriptor); installer build skipped as not applicable.\nVerdict: approved.\n",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            401
+          ],
+          "recorded_at": "2026-10-19T23:39:01+00:00",
+          "issue_scopes": {
+            "401": "3351b093cb2255ee6b77516b3761e09397e28c493d1eb8f788ec3947b8eabc8c"
+          }
+        },
+        "lane": {
+          "id": "e8313764ab1445f4872e398763ccda14",
+          "pr": 960,
+          "issues": [
+            401
+          ],
+          "actor": "Reviewer-Y19B",
+          "session": "rev-y19b-s1",
+          "coordinator": "Coordinator-E1019A",
+          "started_at": "2026-10-19T23:38:23+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-19T23:39:24+00:00"
       }
     },
     "batches": {
@@ -103911,62 +104017,6 @@
         "coordinator": "Coordinator-ACT174",
         "started_at": "2026-10-19T23:23:53+00:00",
         "state": "reviewing"
-      },
-      "960": {
-        "id": "e8313764ab1445f4872e398763ccda14",
-        "pr": 960,
-        "issues": [
-          401
-        ],
-        "actor": "Reviewer-Y19B",
-        "session": "rev-y19b-s1",
-        "coordinator": "Coordinator-E1019A",
-        "started_at": "2026-10-19T23:38:23+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 401,
-          "pr": 960,
-          "branch": "work/acl-1401-mlx-not-running",
-          "head_sha": "60382abba4f6ca04f14b6f038335f12f28312852",
-          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "3351b093cb2255ee6b77516b3761e09397e28c493d1eb8f788ec3947b8eabc8c",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-Y19B",
-            "implementer": "Worker-H19401",
-            "head_sha": "60382abba4f6ca04f14b6f038335f12f28312852",
-            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-            "tree_sha": "fe797a9868770b02809864327aac95e34f4cbe2a",
-            "execution_lane": "e8313764ab1445f4872e398763ccda14",
-            "review_session": "rev-y19b-s1",
-            "report": "Independent source review (refresh) of PR 960 (ACL-1401, Issue 401), head 60382aba, base main c6150160. I approved 53e93b2b earlier; this head is a clean merge of main into it.\nDelta check: the only file touched both by main (435bc154..c6150160) and by this PR is src/web/templates/report.html. The PR's diff there is still exactly one line: `multilogin_not_running$` added to the \"hold\" rule in the cb-build-model rules, next to account_blocked$ (re-read the PR diff against the new base). All other differences between 53e93b2b and 60382aba are files changed only on main. The PR's file list and sizes are unchanged (7 source/config files + the 182-line test file).\nCI on this exact head: all 11 required checks pass (linux shards 1-3 on 3.11 and 3.13, windows tests, ACL verification, Process instructions, Classify, Installer verification, tracker-link, descriptor); installer build skipped as not applicable.\nVerdict: approved.\n",
-            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              401
-            ],
-            "recorded_at": "2026-10-19T23:39:01+00:00",
-            "issue_scopes": {
-              "401": "3351b093cb2255ee6b77516b3761e09397e28c493d1eb8f788ec3947b8eabc8c"
-            }
-          },
-          "lane": {
-            "id": "e8313764ab1445f4872e398763ccda14",
-            "pr": 960,
-            "issues": [
-              401
-            ],
-            "actor": "Reviewer-Y19B",
-            "session": "rev-y19b-s1",
-            "coordinator": "Coordinator-E1019A",
-            "started_at": "2026-10-19T23:38:23+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-19T23:39:24+00:00"
-        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
