@@ -2,11 +2,13 @@
 
 ## Current instruction pin
 
-[ACL-2011](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1011)
-selects published Master 1.5.3
-`6f7e9416e68c66484a3b6c0213eab24847005b8f` for common instructions. Tracker 3.7.1
-`be87599d1b5e625058bbddc33c35bda86687b5bf`, the support introduced by ACL-1987,
+[ACL-2026](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1026)
+selects published Master 1.5.4
+`10da6de5b496a21e10188f2df63bef1f0254afbf` for common instructions. Tracker 3.7.3
+`5d0a915c9fdb8dea4e3aded38beaa8dd1a024ecc` retains the support introduced by ACL-1987
+and adds the shared [executor activity contract](EXECUTOR_ACTIVITY.md). Existing
 activated choices, local checks and package completion remain unchanged.
+The prior ACL-2011 instruction-pin adoption remains in the dated process history.
 This source update still requires its ordinary independent source review, batch,
 main checks and verified package receipt. A source branch is not delivered.
 Use the actual current-main pinned ACL adapter for current ownership and delivery;

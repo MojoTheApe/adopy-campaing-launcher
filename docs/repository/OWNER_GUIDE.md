@@ -69,9 +69,22 @@ tools; the board does not offer direct status-edit buttons.
 - **Integration 0/1** means the single slot for combining approved changes is free.
 
 The counters stay visible. A separate "free" suffix is unnecessary because the
-ratio already shows capacity. **Elapsed** adds up recorded intervals in that
-workflow activity, including the current assignment. It does not measure
-continuous agent runtime. Paused work has no active elapsed timer.
+ratio already shows capacity. Work time now uses confirmations from the actual
+executor. Waiting and gaps without confirmation do not add work time. After five
+minutes without confirmation the timer freezes and shows **Activity unconfirmed**;
+the assignment stays reserved until the normal stop or handoff procedure releases
+it. **Waiting for checks or input** and **Executor stopped** explain a confirmed
+wait or stop. Historical time without activity evidence remains incomplete.
+
+The task's category stays separate: a task can remain in Review while its reviewer
+waits, stops or has unconfirmed activity. Updating the shared client does not
+restart existing agents or prove that they are running.
+
+Open **Task history** to see which task moved, its previous and next status,
+when and the GitHub actor that changed it. Review includes Approved, so a move
+from Review to Approved stays inside that category. The history window is bounded;
+an incomplete or unavailable history is marked and earlier records remain linked
+from each GitHub task. A shared GitHub account does not identify an individual agent.
 
 **Details** contains supporting operational records. A reservation is recorded
 ownership. "Admission not assessed" means eligibility for the next step has not

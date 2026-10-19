@@ -19,13 +19,20 @@ and do not run ACL's historical prepared-bootstrap preflight. Read
 The completed cutovers and their original recovery procedures remain historical
 evidence; current work follows the active policies below.
 
-- [Selected Master 1.5.3 standard](https://github.com/MojoTheApe/master-repo/blob/6f7e9416e68c66484a3b6c0213eab24847005b8f/standard.md).
+- [Selected Master 1.5.4 standard](https://github.com/MojoTheApe/master-repo/blob/10da6de5b496a21e10188f2df63bef1f0254afbf/standard.md).
 - [Repository workflow](docs/repository/WORKFLOW.md), [delivery](docs/repository/DELIVERY.md),
   [selected Tracker guide](docs/repository/TRACKER.md), [verification](docs/repository/VERIFICATION.md)
   and [file ownership](docs/repository/LAYOUT.md).
 - [Current system](docs/system/PROJECT.md) and [engineering context](docs/system/AGENT_CONTEXT.md).
 - [Installation/release/recovery](docs/runtime/DELIVERY.md) and [isolated staging](docs/runtime/STAGING.md).
 - Machine-readable settings: `delivery.json`, `tracker/config.json`, `.workflow/adoption.json`.
+
+Confirm your own actual running, waiting and stopped state through the shared
+[executor activity commands](docs/repository/EXECUTOR_ACTIVITY.md), using the
+guarded ACL adapter above. Report at real tool boundaries and once a minute while
+running. Missing confirmation becomes unknown after five minutes; it never frees
+ownership. Existing agents without a producer stay unknown until their actual
+owners report. Do not run a detached reporter or confirm another agent's activity.
 
 Preserve employee data, existing installers and draft-only advertising controls.
 Implementation requires a real Issue and a durable Worker claim. After the

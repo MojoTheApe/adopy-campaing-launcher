@@ -1,5 +1,32 @@
 # Repository process history
 
+## ACL-2026 — Adopt shared executor activity — 2026-10-20
+
+Select published Master1.5.4 `10da6de5b496a21e10188f2df63bef1f0254afbf`
+and Tracker3.7.3 `5d0a915c9fdb8dea4e3aded38beaa8dd1a024ecc` through
+the maintained three-way upgrade. Preserve the genuine rendered target baseline
+and exact portable export; existing common client/helper bytes and ACL's guarded
+adapter need no change. The adapter passes the shared activity commands through
+its original adoption checks. Owners report their own running, waiting and stopped
+state; unknown activity and waiting gaps do not grow confirmed work time. Existing
+owners without activity reports remain unknown, retaining all reservations.
+
+Resolve three template overlaps explicitly: the delivery-check Action and shared
+verification links change only their exact Master pin; append the canonical
+Executor activity section to the complete retained ACL workflow. Preserve the
+local triggers, draft validation, all checks, execution3/5-5-5, process1, Stage-off
+package route, absent optional policies, IDs/aliases and historical receipts.
+Update the owner guide for confirmed activity and bounded native status history.
+Shared upstream sources are [TT-174](https://github.com/MojoTheApe/task-tracker/issues/174)
+and [MR-65](https://github.com/MojoTheApe/master-repo/issues/65).
+
+The shared reader is already published; this source is consumer preparation and
+still requires genuine independent source/combined review, CI, main admission and
+verified package delivery. No state migration, detached heartbeat, campaign code,
+product skill, employee data, installer/updater or system/runtime behavior changes.
+Other adoption/pilot acceptance retains its original scope. Task:
+https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1026.
+
 ## ACL-2014 — Clarify verification repeats without changing CI — 2026-10-18
 
 Distinguish agent-requested repetitions from current automatic GitHub checks.

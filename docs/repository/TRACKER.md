@@ -180,3 +180,14 @@ require fresh inspection and supported same-owner recovery; never overwrite
 other owners, discard history, mutate private state or claim release by timeout.
 Read [delivery and exact evidence](DELIVERY_POLICY.md) and
 [maintenance/recovery](MAINTENANCE_AND_CI_EVIDENCE.md).
+
+## Confirm actual executor activity
+
+Held ownership is not a heartbeat. Read [executor activity](EXECUTOR_ACTIVITY.md)
+for the shared `activity report` and foreground `activity run --exec` commands.
+Only the actual owner/session/claim reports its running, waiting or stopped state.
+Report once a minute while running and explicitly before waiting. Five minutes
+without confirmation freezes the work clock and shows activity unconfirmed;
+it never frees a claim. Do not run a detached heartbeat or impersonate another
+executor. Missing producers and historical gaps remain unknown. Installing a
+pin does not restart existing agents or select a new execution policy.

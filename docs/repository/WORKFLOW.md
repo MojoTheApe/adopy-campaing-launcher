@@ -300,3 +300,13 @@ Update docs/system for implemented behavior, docs/repository for process changes
 and docs/runtime for operational procedures. Preserve original specifications.
 Assess Master Repo and Task Tracker impact for process changes; link the owning
 companion change rather than silently modifying another repository.
+
+## Executor activity
+
+Follow the selected pinned Tracker guide for `activity report` and the foreground
+`activity run --exec` wrapper when supported. Only the current owner/session/claim
+reports running, waiting and stopped. Confirm once a minute while running; five
+minutes without a running/waiting report freezes work time and means activity
+unconfirmed. A recorded stop remains while that owner is assigned. Neither
+condition releases ownership. No detached endless reporter or coordinator heartbeat
+for another executor. Existing runs without a producer remain unknown.
