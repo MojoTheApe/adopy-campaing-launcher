@@ -84,7 +84,7 @@ def test_missing_root_and_missing_profile_fail_safely(tmp_path, monkeypatch, wal
     assert br._find_mlx_profile_dir("p-1", "folder-1") is None
 
 
-@pytest.mark.parametrize("bad", ["", "  ", ".", "..", "../x", "a/b", "a\\b"])
+@pytest.mark.parametrize("bad", ["", "  ", ".", "..", "../x", "a/b", "a\\b"])  # linux-ok: a backslash profile id given as data
 def test_an_unsafe_profile_id_resolves_to_nothing(mlx, bad):
     (mlx / "ws-1" / "folder-1").mkdir(parents=True)
     assert br._find_mlx_profile_dir(bad) is None

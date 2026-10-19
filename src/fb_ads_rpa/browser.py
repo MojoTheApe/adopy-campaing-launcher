@@ -58,13 +58,15 @@ def _find_mlx_profile_dir(profile_id: str, folder_id: str = "") -> Path | None:
     try:
         if not root.is_dir():
             return None
-        for ws in root.iterdir():
-            if not ws.is_dir():
-                continue
-            if folder_id:
+        workspaces = [ws for ws in root.iterdir() if ws.is_dir()]
+        # Известный folder_id важнее любого другого совпадения: ищем его по
+        # всем рабочим пространствам раньше, чем смотрим остальные папки.
+        if folder_id:
+            for ws in workspaces:
                 p = ws / folder_id / profile_id
                 if p.is_dir():
                     return p
+        for ws in workspaces:
             p = ws / profile_id
             if p.is_dir():
                 return p
