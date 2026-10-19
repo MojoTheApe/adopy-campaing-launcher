@@ -47855,7 +47855,7 @@
             "session": "rf1019w-20261019"
           }
         ],
-        "state": "approved",
+        "state": "returning_approval",
         "worker": "Worker-RF1019W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -47876,17 +47876,23 @@
         "queued_at": "2026-10-19T11:31:33+00:00",
         "review_report": "Owner lifted the 2026-10-17 exclusive pause for ACL-1776, ACL-1899, ACL-1902 and ACL-1886 on 2026-10-19 (instruction in the review session: refresh onto current main, re-review, ship a new batch with release after the current one). Batch afaeca3e was cancelled by that pause; the old approval used main af0ade29 and is stale vs main 435bc154. Return for a main merge and fresh independent approval.",
         "return_operation": {
-          "id": "4eee273524d746a39a39ad6874cf9c40",
+          "id": "5f4dd2e912fc41e6a57d1253f8677c84",
           "actor": "Coordinator-M1011A",
           "session": "coord-m1011a-20261015",
-          "report": "Owner lifted the 2026-10-17 exclusive pause for ACL-1776, ACL-1899, ACL-1902 and ACL-1886 on 2026-10-19 (instruction in the review session: refresh onto current main, re-review, ship a new batch with release after the current one). Batch afaeca3e was cancelled by that pause; the old approval used main af0ade29 and is stale vs main 435bc154. Return for a main merge and fresh independent approval."
+          "report": "Main moved to 1c6ab78e (batch #1016). Approval on 435bc154 is stale; return for a main merge and fresh delta approval. Owner instruction 2026-10-19: ship these four in the next batch with release."
         },
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.577993+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-DV1019A"
+        "reviewer": "Reviewer-DV1019A",
+        "return": {
+          "id": "5f4dd2e912fc41e6a57d1253f8677c84",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "report": "Main moved to 1c6ab78e (batch #1016). Approval on 435bc154 is stale; return for a main merge and fresh delta approval. Owner instruction 2026-10-19: ship these four in the next batch with release."
+        }
       },
       "826": {
         "implementers": [
