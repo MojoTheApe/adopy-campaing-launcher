@@ -1038,3 +1038,73 @@ def test_old_api_reading_with_iso_code_is_shown_with_a_sign(tmp_path, monkeypatc
     assert got["Acc_3"].currency == "USD"   # RPA-записи не трогаем
     assert sp.latest_readings()["Acc_1"].currency == "$"
     assert sp._API_SIGNS == api._SIGNS      # одна таблица знаков на оба модуля
+
+
+# ───────────────────────── ревью ACL-1760: владение профилем и неполные страницы ─────────────────────────
+
+class _Resp:
+    def __init__(self, status, body):
+        self.status_code, self._body, self.text = status, body, json.dumps(body)
+
+    def json(self):
+        return self._body
+
+
+def _launcher_with_409(monkeypatch):
+    from src.meta_campaign_agent import multilogin_launcher as ml
+    from src.meta_campaign_agent.multilogin_config import MultiloginInstanceConfig
+
+    stopped = []
+    launcher = ml.MultiloginLauncher(MultiloginInstanceConfig("A", "tok", "http://127.0.0.1:1/api/v2"))
+    launcher.stop_profile = lambda *a, **k: stopped.append(a)
+    launcher._resolve_folder_id = lambda pid: "F"
+    body = {"status": {"error_code": "PROFILE_ALREADY_RUNNING", "message": "already running"},
+            "data": {"port": "61234"}}
+    monkeypatch.setattr(ml.requests, "get", lambda *a, **k: _Resp(409, body))
+    return launcher, stopped
+
+
+def test_launcher_409_is_not_a_fresh_start_and_is_never_stopped(world, monkeypatch):
+    """Профиль уже работал, а обзор его пропустил: MLX ответил 409 с портом — он чужой."""
+    launcher, mlx_stops = _launcher_with_409(monkeypatch)
+    monkeypatch.setattr(prof, "running_state", lambda l, p: ("not_running", None))
+    monkeypatch.setattr(api, "_open_profile", lambda pid, folder, instance: prof.open_profile(
+        pid, folder, instance, launcher_factory=lambda i: launcher,
+        local_probe=lambda p: ("none", None)))
+    world.local = ("none", None)
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.state == "ok"
+    assert world.soft_stops == [] and mlx_stops == [], "a reused profile is never closed by us"
+    assert [c[0] for c in world.queue.calls] == ["acquire", "release"], "slot given back, not kept"
+
+
+def test_launcher_marks_only_a_real_start_as_new(monkeypatch):
+    from src.meta_campaign_agent import multilogin_launcher as ml
+    from src.meta_campaign_agent.multilogin_config import MultiloginInstanceConfig
+
+    launcher, _ = _launcher_with_409(monkeypatch)
+    assert launcher.start_profile("F", "P").newly_started is False
+    fresh = ml.MultiloginLauncher(MultiloginInstanceConfig("A", "tok", "http://127.0.0.1:1/api/v2"))
+    monkeypatch.setattr(ml.requests, "get", lambda *a, **k: _Resp(200, {"data": {"port": "5555"}}))
+    assert fresh.start_profile("F", "P").newly_started is True
+
+
+def test_page_with_next_cursor_at_stop_usage_is_marked_truncated(world):
+    """Страница пришла, usage >= STOP_PCT: следующую не берём, список неполный."""
+    more = {"cursors": {"after": "c"}, "next": "https://graph.facebook.com/x?after=c"}
+    hot = {"x-app-usage": json.dumps({"call_count": 85, "total_cputime": 1, "total_time": 1})}
+    page = {"status": 200, "headers": hot, "body": {
+        "data": [{"country": "US", "spend": "1", "account_currency": "USD"}], "paging": more}}
+    world.page.routes["/ACT/insights|account|country"] = lambda spec: page
+    split = api.read_country_split_via_api(ACCOUNT, D, D)
+    assert split.state != "ok" and split.rows == [], "half the countries must not look whole"
+    assert split.state == "failed" and "partial" in split.error
+
+
+def test_graph_get_all_marks_truncation_when_the_next_page_is_not_taken(world):
+    more = {"cursors": {"after": "c"}, "next": "https://graph.facebook.com/x?after=c"}
+    hot = {"x-app-usage": json.dumps({"call_count": 85})}
+    world.page.routes["/ACT/campaigns||"] = {"status": 200, "headers": hot, "body": {
+        "data": [{"id": "1", "name": "A"}], "paging": more}}
+    r = api.read_via_api(ACCOUNT, D, D)
+    assert r.objects_error and "partial" in r.objects_error

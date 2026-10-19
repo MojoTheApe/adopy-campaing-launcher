@@ -10,6 +10,21 @@ name: Publish release
 # ACL_RELEASES_TOKEN to a token that can write releases there.
 
 on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+      continuation:
+        type: boolean
+        default: false
+    secrets:
+      ACL_RELEASES_TOKEN:
+        required: false
+      ACL_RELEASE_SIGNING_KEY:
+        required: false
+      ACL_UPDATE_TOKEN:
+        required: false
   push:
     tags:
       - "acl-release-*"
@@ -26,11 +41,33 @@ permissions:
   actions: read
 
 concurrency:
-  group: acl-release-${{ github.event.inputs.tag || github.ref_name }}
+  group: acl-stable-publisher
   cancel-in-progress: false
 
 jobs:
+  existing:
+    name: Inspect immutable published release on continuation retry
+    if: ${{ inputs.continuation }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      published: ${{ steps.inspect.outputs.published }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+      - id: inspect
+        env:
+          GH_TOKEN: ${{ secrets.ACL_RELEASES_TOKEN || github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASES_REPO: ${{ vars.ACL_RELEASES_REPO || github.repository }}
+        run: |
+          result=$(python3 scripts/acl_complete_delivery.py published --tag "$RELEASE_TAG" --repo "$RELEASES_REPO")
+          echo "published=$result" >> "$GITHUB_OUTPUT"
   publish:
+    needs: existing
+    if: ${{ always() && !cancelled() && (needs.existing.result == 'skipped' || (needs.existing.result == 'success' && needs.existing.outputs.published != 'true')) }}
     name: Build, test and publish the installer
     runs-on: windows-latest
     timeout-minutes: 60
@@ -42,14 +79,14 @@ jobs:
       ACL_NO_TELEMETRY: "1"
       PYTHONUTF8: "1"
       PYTHONIOENCODING: utf-8
-      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      RELEASE_TAG: ${{ inputs.tag || github.event.inputs.tag || github.ref_name }}
       RELEASES_REPO: ${{ vars.ACL_RELEASES_REPO || github.repository }}
 
     steps:
       - name: Check out the tagged commit with history and tags
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.event.inputs.tag || github.ref }}
           fetch-depth: 0
 
       - name: Verify promoted tag and its successful main CI
@@ -106,6 +143,7 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          ACL_RELEASES_READ_TOKEN: ${{ secrets.ACL_UPDATE_TOKEN || secrets.ACL_RELEASES_TOKEN || github.token }}
         run: |
           $installer = Get-ChildItem packaging/windows/.artifacts/installer/Adopy-Campaign-Launcher-Setup-*.exe | Select-Object -First 1
           if (-not $installer) { throw "The installer was not built." }

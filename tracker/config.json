@@ -88,7 +88,6 @@
     "in_progress",
     "review",
     "approved",
-    "stage",
     "merged"
   ],
   "priorities": [
@@ -160,9 +159,9 @@
   "delivery_policy": {
     "schema_version": 1,
     "staging": {
-      "enabled": true,
+      "enabled": false,
       "branch": "stage",
-      "target": "ACL isolated Windows stage installation"
+      "target": "disabled"
     },
     "completion": "verified-stable-package",
     "delivery_target": "ACL stable Windows installer and update channel",
@@ -176,7 +175,7 @@
   "historical_completion": {
     "schema_version": 1,
     "repository": "MojoTheApe/adopy-campaing-launcher",
-    "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+    "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
     "audited_at": "2026-09-21T10:55:31.841147+00:00",
     "approved_by": "Owner explicitly approved preserving the 74 audited completed tasks on 2026-09-21; recorded in ACL-1248 adoption PR.",
     "report": "docs/repository/HISTORICAL_COMPLETION.md at the reviewed ACL-1248 adoption revision",
@@ -482,9 +481,9 @@
     }
   },
   "execution_policy": {
-    "schema_version": 2,
+    "schema_version": 3,
     "implementation_limit": 5,
-    "review_limit": 1,
+    "review_limit": 5,
     "batch_limit": 5
   },
   "process_instructions": {
