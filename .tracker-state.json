@@ -44028,7 +44028,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "184": {
+        "actor": "Worker-R1019184",
+        "session": "run_r1019_184",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1184-hand-open-message",
+        "worktree": "C:\\acl-1184",
+        "id": "c4d6b287bb7b4f8bb6e34c7260b032f9",
+        "issue": 184,
+        "state": "implementing",
+        "started_at": "2026-10-19T19:06:13+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -52038,6 +52051,17 @@
       "1020": {
         "implementers": [],
         "state": "archived"
+      },
+      "184": {
+        "implementers": [
+          {
+            "actor": "Worker-R1019184",
+            "session": "run_r1019_184"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-R1019184",
+        "coordinator": "Coordinator-M1011A"
       }
     },
     "actors": {
@@ -54291,6 +54315,10 @@
       },
       "Worker-R1019903": {
         "session": "run_r1019_903",
+        "role": "Worker"
+      },
+      "Worker-R1019184": {
+        "session": "run_r1019_184",
         "role": "Worker"
       }
     },
@@ -93067,6 +93095,13 @@
         "issue": 807,
         "pr": 1021,
         "actor": "Worker-S1019807"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T19:06:13+00:00",
+        "issue": 184,
+        "claim": "c4d6b287bb7b4f8bb6e34c7260b032f9",
+        "actor": "Worker-R1019184"
       }
     ],
     "policy": {
