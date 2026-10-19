@@ -44051,9 +44051,10 @@
         "worktree": "C:\\acl-1903-file-clear",
         "id": "61874486549148ae87e52928e32a4509",
         "issue": 903,
-        "state": "implementing",
+        "state": "stopping",
         "started_at": "2026-10-19T18:52:03+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "report": "Revival blocked: branch is stacked on open, blocked ACL-1774 (PR 834) and ACL-1767 commits; merging current main conflicts in src/fb_api/creator.py, src/fb_api/write_policy.py, src/web/templates/report.html and CHANGELOG with the 1774 content. Merge aborted, nothing pushed. Revive ACL-1774 first, then rebase this one."
       }
     },
     "tasks": {
