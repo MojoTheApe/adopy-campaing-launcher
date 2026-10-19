@@ -43582,22 +43582,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "886": {
-        "actor": "Worker-RF1019X",
-        "session": "rf1019x-20261019",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1886-graph-error-context",
-        "worktree": "C:\\rf19b-886",
-        "id": "1895824d32464d6781901563e7fbbadd",
-        "issue": 886,
-        "state": "handoff",
-        "started_at": "2026-10-19T14:41:27+00:00",
-        "from_status": "status:todo",
-        "pr": 887,
-        "report": "Merged main 1c6ab78e cleanly. Tests: acl1886_graph_error_context 37 passed."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -48968,25 +48953,25 @@
             "session": "rf1019x-20261019"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RF1019X",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-RF1019W",
-          "session": "rf1019w-20261019",
+          "actor": "Worker-RF1019X",
+          "session": "rf1019x-20261019",
           "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1886-graph-error-context",
-          "worktree": "C:\\rf19-886",
-          "id": "c7bd4c38dd2b4afebe08d2766e676a0f",
+          "worktree": "C:\\rf19b-886",
+          "id": "1895824d32464d6781901563e7fbbadd",
           "issue": 886,
           "state": "handoff",
-          "started_at": "2026-10-19T11:47:02+00:00",
+          "started_at": "2026-10-19T14:41:27+00:00",
           "from_status": "status:todo",
           "pr": 887,
-          "report": "Merged main 435bc154 into a484aaa1 (new head 3f048165). Conflict only in docs/system/PROJECT.md, resolved keeping both sections (Graph read failure diagnostics + CI feedback and admission), no markers left. No code change. Tests: test_acl1886_graph_error_context: 37 passed. Needs a delta review of the merge only."
+          "report": "Merged main 1c6ab78e cleanly. Tests: acl1886_graph_error_context 37 passed."
         },
         "pr": 887,
-        "queued_at": "2026-10-19T11:56:53+00:00",
+        "queued_at": "2026-10-19T14:46:37+00:00",
         "review_report": "Main moved to 1c6ab78e (batch #1016). Approval on 435bc154 is stale; return for a main merge and fresh delta approval. Owner instruction 2026-10-19: ship these four in the next batch with release.",
         "return_operation": {
           "id": "38d2cc4b555f438eb47cb6599f66672b",
@@ -56551,7 +56536,8 @@
       776,
       899,
       902,
-      72
+      72,
+      886
     ],
     "review": null,
     "history": [
@@ -91501,6 +91487,13 @@
         "issue": 72,
         "pr": 958,
         "actor": "Worker-W142C"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T14:46:37+00:00",
+        "issue": 886,
+        "pr": 887,
+        "actor": "Worker-RF1019X"
       }
     ],
     "policy": {
