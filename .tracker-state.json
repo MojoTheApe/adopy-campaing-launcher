@@ -44134,9 +44134,11 @@
         "worktree": "C:\\acl-1184",
         "id": "c4d6b287bb7b4f8bb6e34c7260b032f9",
         "issue": 184,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T19:06:13+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 937,
+        "report": "Revived after the conflict return: merged work/main (clean, no conflicts), pushed. Touched tests pass: test_acl1184_hand_open_message, test_acl1812_warm_sessions (100 passed). Full suite left to CI. Not verified live."
       },
       "920": {
         "actor": "Worker-R1019920",
