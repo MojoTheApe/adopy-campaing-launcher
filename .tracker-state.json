@@ -44562,9 +44562,11 @@
         "worktree": "C:\\wk20-401",
         "id": "d53f153e8be741ef9967f34d3ddf3d46",
         "issue": 401,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T22:18:31+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 960,
+        "report": "Pure refresh: merged origin/main (c6150160) into work/acl-1401-mlx-not-running, no conflicts, no scope change. Head 60382abb.\nChecks: 348 passed (multilogin-not-running stop, build_progress_model, acl_test_platform, failure_policy, sentry tests); acl_scan_secrets clean; acl_smoke OK. cb-build-model rule multilogin_not_running$ present in report.html."
       },
       "680": {
         "actor": "Worker-H19680",
