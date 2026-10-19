@@ -103101,7 +103101,9 @@
         "session": "rev-y19b-s1",
         "coordinator": "Coordinator-E1019A",
         "started_at": "2026-10-19T22:17:33+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "Base moved to c6150160 (main advanced after batch PRs 1016 and 1018); author merges main and re-hands off. No defects found so far in the quick pass over PR 970 (ACL-1681) at head 25c8824e; full re-review on the refreshed head.",
+        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
