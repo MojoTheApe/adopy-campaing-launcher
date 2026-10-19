@@ -44293,9 +44293,11 @@
         "worktree": "C:\\acl-1529-sharpshot",
         "id": "81a6ec5e2293417cafc7ed10d771571d",
         "issue": 529,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T20:10:40+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 530,
+        "report": "Revived after the conflict return: fast-forwarded the local branch to work/codex/acl-1529-sharp-shot (it was 172 commits behind), merged work/main. One conflict, in the build-progress rules line of report.html: kept main's api_read$ and the branch's status_shot$ (combined in one alternation). Touched tests pass: test_status_screenshot, test_build_progress_model, test_acl_test_shard, test_copy_for_group (162 passed). Full suite left to CI. Not verified live. Note: batch PR #890 ignored as instructed."
       }
     },
     "tasks": {
