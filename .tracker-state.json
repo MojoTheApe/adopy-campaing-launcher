@@ -44137,20 +44137,6 @@
         "state": "implementing",
         "started_at": "2026-10-19T19:58:12+00:00",
         "from_status": "status:todo"
-      },
-      "992": {
-        "actor": "Worker-R1019992",
-        "session": "run_r1019_992",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1992-api-build-percent",
-        "worktree": "C:\\acl-1992-wt",
-        "id": "65d64514edec4788b290eb0040dc975a",
-        "issue": 992,
-        "state": "handoff",
-        "started_at": "2026-10-19T19:59:07+00:00",
-        "from_status": "status:todo",
-        "pr": 993,
-        "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main into the branch; conflicts only in docs/system/CHANGELOG.md (kept both entries). Re-ran the touched tests: test_acl1992_api_build_percent 15 passed, test_acl1992_api_build_percent_browser 2 passed. No functional change beyond the merge; no live runs."
       }
     },
     "tasks": {
@@ -51876,25 +51862,25 @@
             "session": "run_r1019_992"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-R1019992",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-M1992A",
-          "session": "acl_1992",
+          "actor": "Worker-R1019992",
+          "session": "run_r1019_992",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1992-api-build-percent",
-          "worktree": "C:\\acl-1992",
-          "id": "cda2954f62c848d2ac499e8fa6d225fe",
+          "worktree": "C:\\acl-1992-wt",
+          "id": "65d64514edec4788b290eb0040dc975a",
           "issue": 992,
           "state": "handoff",
-          "started_at": "2026-10-17T21:22:23+00:00",
-          "from_status": "status:idea",
+          "started_at": "2026-10-19T19:59:07+00:00",
+          "from_status": "status:todo",
           "pr": 993,
-          "report": "Implemented in PR 993 (head a62a352f). API jobs report units {done,total,last} per campaign; page percent = done/total (<=99 before result, monotonic); robot jobs keep the ACL-1347 model. creator.py untouched. Pre-handoff independent read-only review: no HIGH, all findings fixed in a62a352f. Targeted tests green locally; full suite left to CI. Live API check on 9095 still pending."
+          "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main into the branch; conflicts only in docs/system/CHANGELOG.md (kept both entries). Re-ran the touched tests: test_acl1992_api_build_percent 15 passed, test_acl1992_api_build_percent_browser 2 passed. No functional change beyond the merge; no live runs."
         },
         "pr": 993,
-        "queued_at": "2026-10-17T21:35:18+00:00",
+        "queued_at": "2026-10-19T20:01:13+00:00",
         "review_report": "PR #993 (ACL-1992) conflicts with current main 435bc154 in docs/system/CHANGELOG.md (content conflict; src/web/templates/report.html auto-merges cleanly). Head a62a352f. Author must merge current origin/main into the original branch, resolve, re-run affected checks and hand off again."
       },
       "994": {
@@ -57391,7 +57377,8 @@
       920,
       309,
       836,
-      990
+      990,
+      992
     ],
     "review": {
       "id": "71d08f944d4646c69ba2c95edd8d2464",
@@ -93682,6 +93669,13 @@
         "pr": 1022,
         "lane": "2d7e227469f040bca4bdd5bc351e7b30",
         "actor": "Reviewer-R1945Y"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T20:01:13+00:00",
+        "issue": 992,
+        "pr": 993,
+        "actor": "Worker-R1019992"
       }
     ],
     "policy": {
