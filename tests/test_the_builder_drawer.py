@@ -120,7 +120,9 @@ def test_the_width_is_one_number():
     Язычку ширина задана явно и входит в отступ: он торчит слева от панели,
     и без этого открытый ящик кладёт его поверх таблицы."""
     css = TPL.read_text(encoding="utf-8")
-    assert "--cbd-w: 360px;" in css and "--cbd-handle-w: 40px;" in css
+    # ACL-1769: две колонки — 480, а не 360; растянутая панель ширину не
+    # переопределяет (у неё своё правило на `.cbd-panel`), так что число одно.
+    assert "--cbd-w: 480px;" in css and "--cbd-handle-w: 40px;" in css
     assert css.count("--cbd-w: ") == 1, "ширина задана в двух местах"
     assert css.count("--cbd-handle-w: ") == 1
     assert "width: var(--cbd-handle-w); box-sizing: border-box;" in css, (

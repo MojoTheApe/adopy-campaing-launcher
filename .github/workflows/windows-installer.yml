@@ -1,3 +1,5 @@
+# ACL-1747: explicit v2 batch/stage/promotion requires the installer; one-task
+# approval sources retain affected-input selection. Reuse requires the same tested tree.
 name: Windows installer
 
 on:
@@ -37,11 +39,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      # ACL-1649: PRs into stage and pushes to stage run the installer only when installer,
-      # packaging, delivery or dependency files change (scripts/acl_ci_scope.py,
-      # classify_installer). PRs into main/master, pushes to main/master, release tags and
-      # manual runs always run it. windows=false also when this exact tree already passed the
-      # installer in an earlier run (PR -> stage -> main), see scripts/acl_ci_reuse.py.
+      # ACL-1747 v2: individual approval sources retain affected-input selection;
+      # combined batch/actual stage/promotion requires the full installer workflow.
+      # Reuse accepts only applicable successful jobs of the exact tested Git tree;
+      # manual/release paths always run and uncertainty falls back to full checks.
+      # ACL-1750: proven instruction-only sources into already-opted-in main skip
+      # installer jobs; policy adoption itself and mixed/unknown files do not.
       - id: scope
         run: python3 scripts/acl_ci_scope.py --workflow windows-installer.yml
         env:

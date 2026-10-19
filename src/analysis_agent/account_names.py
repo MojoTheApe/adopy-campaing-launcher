@@ -13,11 +13,16 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from pathlib import Path
 
 _LOG = logging.getLogger(__name__)
 _RULES_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "account_name_rules.json"
-_CACHE: dict = {"stamp": None, "rules": []}
+_CACHE: dict = {"stamp": None, "rules": [], "checked": 0.0}
+#: ACL-1729: stat файла стоил ~0.6 мс на вызов, а вызовов были сотни тысяч за
+#: одну отрисовку Home. Правка файла нужна в человеческом масштабе времени —
+#: перепроверяем не чаще раза в это число секунд (горячая перезагрузка ACL-1653).
+_RESTAT_EVERY_S = 1.0
 
 
 def _parse(data) -> list[list[str]]:
@@ -42,6 +47,12 @@ def _parse(data) -> list[list[str]]:
 
 def _snapshot() -> list[list[str]]:
     """Единственный снимок правил: файл читается один раз на изменение."""
+    now = time.monotonic()
+    stamp0 = _CACHE["stamp"]
+    if (stamp0 is not None and stamp0[0] == str(_RULES_PATH)
+            and 0.0 <= now - _CACHE["checked"] < _RESTAT_EVERY_S):
+        return _CACHE["rules"]
+    _CACHE["checked"] = now
     try:
         st = _RULES_PATH.stat()
         stamp = (str(_RULES_PATH), st.st_mtime_ns, st.st_size)

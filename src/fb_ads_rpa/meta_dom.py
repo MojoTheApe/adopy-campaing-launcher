@@ -12267,7 +12267,8 @@ def _leave_wizard(page: Page, *, allow_complete: bool = True, skip: str = "") ->
     return out
 
 
-def _leave_stuck_wizard(page: Page, trail, why: str, presses: int, pressed: str = "") -> bool:
+def _leave_stuck_wizard(page: Page, trail, why: str, presses: int, pressed: str = "",
+                        looped_back_to: str = "") -> bool:
     """Next на Crop не довёл мастер дальше: выйти своей кнопкой мастера.
 
     Save/Done мастера — мастер завершён, как обычным обходом. Только Close
@@ -12277,6 +12278,8 @@ def _leave_stuck_wizard(page: Page, trail, why: str, presses: int, pressed: str 
     """
     out = _leave_wizard(page, skip=pressed if pressed in _WIZARD_COMPLETE_LABELS else "")
     out.update({"why": why, "step": "Crop", "next_presses": presses})
+    if looped_back_to:
+        out["looped_back_to"] = looped_back_to   # ACL-1736: Crop -> Media -> ... -> Crop
     completed = bool(out["closed"]) and out["closed_by"] in _WIZARD_COMPLETE_LABELS
     if not completed:
         _crop.mark_wizard_stuck()
@@ -12285,6 +12288,10 @@ def _leave_stuck_wizard(page: Page, trail, why: str, presses: int, pressed: str 
     except Exception:
         pass
     return bool(out["closed"])
+
+
+#: ACL-1736: шаги мастера, которые идут ДО Crop (возврат на них = петля).
+_WIZARD_STEPS_BEFORE_CROP = ("Media", "Creative setup", "Trim")
 
 
 def _walk_creative_wizard(page: Page, *, rounds: int = 16) -> bool:
@@ -12321,11 +12328,41 @@ def _walk_creative_wizard_rounds(page: Page, rounds: int, trail) -> bool:
     # ACL-1551: ожидание «занятого» мастера — не промах, но в пределах срока.
     busy_left = _WIZARD_BUSY_WAIT_S
     crop_next = 0   # нажатий «вперёд» на Crop в этом обходе
+    left_crop = False   # ACL-1736: Next с Crop увёл мастер с Crop (виден другой шаг)
+    crop_returns = 0    # сколько раз мастер вернулся на Crop после ухода
+    went_back = False   # ACL-1736 F1: после Crop реально виден шаг ДО него
+    crop_pressed = ""   # подпись, нажатая на Crop (для выхода)
     for _ in range(rounds):
         if not _creative_wizard_open(page):
             return True
         trail.see(page)
         on_crop = _on_crop_step_now(page, trail.current)
+        if left_crop and not on_crop and trail.current:
+            if trail.current in _WIZARD_STEPS_BEFORE_CROP:
+                trail.loop_back(trail.current)   # Meta вернула назад, а не вперёд
+                went_back = True
+            else:
+                left_crop = False   # обычный ход вперёд (Text и дальше)
+        if on_crop and left_crop and not went_back:
+            # Шаг до Crop не виден (один пустой read): это тот же Crop - охрана ACL-1551.
+            left_crop = False
+        if on_crop and left_crop:
+            # ACL-1736 (445fa5460ce6, 5265 ad 2): Next на Crop привёл на Media,
+            # дальше мастер дошёл до Crop снова. Это НЕ тот же Crop, на котором
+            # Next завис (ACL-1551): выбор в библиотеке цел (плитка selected,
+            # «1 selected»), Next не нажимали. Один повторный проход разрешён
+            # для одиночного плана; пара (Replace) и второй возврат — честный
+            # `crop_wizard_stuck` с `looped_back_to`.
+            left_crop = False
+            went_back = False
+            crop_returns += 1
+            plan_now = _crop.current_plan()
+            pair = plan_now is not None and getattr(plan_now, "replace_vertical", False)
+            if crop_returns > 1 or pair or _crop.forward_stuck():
+                return _leave_stuck_wizard(page, trail, "looped_back", crop_next, crop_pressed,
+                                           looped_back_to=trail.looped_back_to)
+            crop_next = 0
+            _crop.reopen()   # Meta могла сбросить рамки по дороге — Original снова
         if on_crop and (crop_next or _crop.forward_stuck()):
             # ACL-1551: Next на Crop уже нажимали, а мастер с Crop не ушёл —
             # второй раз Next не жмём (живьём 04.10 он завис больше минуты).
@@ -12358,11 +12395,13 @@ def _walk_creative_wizard_rounds(page: Page, rounds: int, trail) -> bool:
         misses = 0
         if on_crop:
             crop_next += 1
+            crop_pressed = pressed
             got = _await_crop_advance(page)
             if got == "closed":
                 trail.closed_by = pressed
                 return True
             if got == "advanced":
+                left_crop = True
                 continue
             _crop.note_forward_stuck()
             return _leave_stuck_wizard(page, trail, "busy" if got == "busy" else "next_did_not_advance",

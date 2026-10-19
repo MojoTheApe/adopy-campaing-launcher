@@ -82,7 +82,7 @@ def test_maximum_does_not_read_yesterday_or_show_cached_spend(monkeypatch):
     def unexpected(*a, **k):
         pytest.fail("Maximum must not start a browser read")
     monkeypatch.setattr(account_spend, "start_read", unexpected)
-    async def form():
+    async def form(**_limits):
         return {"account": "Acc", "span": "all", "date_from": "", "date_to": ""}
     response=asyncio.run(app.account_spend_read(NS(form=form)))
     assert response.status_code == 400
@@ -114,7 +114,7 @@ function cell() {
   return {dataset:{account:'Acc',running:'1'},closest:()=>row,btn,status,set innerHTML(v){this.firstChild={};}};
 }
 const cells=[cell(),cell()];
-const ctx={document:{readyState:'loading',addEventListener:(e,fn)=>callbacks[e]=fn,querySelectorAll:s=>s.startsWith('.amap-live')?cells:[]},
+const ctx={window:{addEventListener(){}},document:{readyState:'loading',addEventListener:(e,fn)=>callbacks[e]=fn,querySelectorAll:s=>s.startsWith('.amap-live')?cells:[]},
   amapPeriod:()=>({from:'2026-09-06',to:'2026-09-06'}),
   setTimeout:fn=>queue.push(fn),
   fetch:async url=>{requests.push(url);return {json:async()=>({ok:true,reading:{state:'ok',spend:1234.56,currency:'EUR',status:'disabled',status_text:'Account disabled',finished_at:'now'}})};},

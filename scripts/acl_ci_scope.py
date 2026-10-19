@@ -173,12 +173,131 @@ def event_paths(root, event_name, event):
     return None
 
 
+def batch_context(root, event_name, event):
+    """Dispatch only explicit matching batch policy; uncertain routes run in full."""
+    descriptor = Path(root) / "delivery.json"
+    config_path = Path(root) / "tracker/config.json"
+    if not descriptor.exists():
+        if config_path.exists():
+            policy = json.loads(config_path.read_text(encoding="utf-8")).get("execution_policy")
+            if isinstance(policy, dict) and policy.get("schema_version") in (2, 3):
+                raise ValueError("Descriptor and Tracker batch policies differ")
+        return "legacy"
+    data = json.loads(descriptor.read_text(encoding="utf-8"))
+    execution = data["workflow"].get("execution")
+    if execution is not None and not isinstance(execution, dict):
+        raise ValueError("Execution policy must be an object")
+    if execution is None or execution.get("schema_version") == 1:
+        if config_path.exists():
+            policy = json.loads(config_path.read_text(encoding="utf-8")).get("execution_policy")
+            if isinstance(policy, dict) and policy.get("schema_version") in (2, 3):
+                raise ValueError("Descriptor and Tracker batch policies differ")
+        return "legacy"
+    expected = {"schema_version", "implementation_limit", "review_limit", "batch_limit"}
+    version = execution.get("schema_version")
+    if (set(execution) != expected or type(execution["schema_version"]) is not int
+            or version not in (2, 3)
+            or type(execution["review_limit"]) is not int
+            or not 1 <= execution["review_limit"] <= (5 if version == 3 else 1)
+            or type(execution["implementation_limit"]) is not int
+            or not 1 <= execution["implementation_limit"] <= 16
+            or type(execution["batch_limit"]) is not int
+            or not 1 <= execution["batch_limit"] <= (5 if version == 3 else 16)
+            or type(data["workflow"]["staging"]) is not bool):
+        raise ValueError("Invalid explicit batch policy")
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    if (config.get("execution_policy") != execution or "approved" not in config["workflow"]
+            or config.get("delivery_policy", {}).get("staging", {}).get("enabled", True) != data["workflow"]["staging"]
+            or ("stage" in config["workflow"]) != data["workflow"]["staging"]):
+        raise ValueError("Descriptor and Tracker batch policies differ")
+    if event_name != "pull_request":
+        return "full"
+    pr = event["pull_request"]
+    base, head = pr["base"]["ref"], pr["head"]["ref"]
+    prefix = re.escape(config["project"]["id_prefix"].lower())
+    # Retained v1 stage-targeted source PRs are approval-only after migration.
+    if base in ("main", "stage") and re.fullmatch(r"(?:work|codex)/" + prefix + r"-[1-9]\d*(?:-[a-z0-9-]+)?", head):
+        return "source"
+    return "full"  # combined batch, promotion, unknown branch or release route
+
+
+
+def process_context(root, event_name, event, *, ref=""):
+    """Prove only adopted process sources/main pushes with complete immutable Git data.
+
+    Initial policy adoption, stage, batches, manual/release and unknown contexts
+    retain their existing checks. Classification is not review/admission proof.
+    """
+    if event_name not in ("pull_request", "push"):
+        return None
+    root = Path(root)
+    if not (root / "delivery.json").exists():
+        return None
+    descriptor = json.loads((root / "delivery.json").read_text(encoding="utf-8"))
+    config = json.loads((root / "tracker/config.json").read_text(encoding="utf-8"))
+    selected = descriptor["workflow"].get("process_instructions")
+    if selected is None and config.get("process_instructions") is None:
+        return None
+    if selected != config.get("process_instructions"):
+        raise ValueError("Descriptor and Tracker process-instruction policies differ")
+    main = descriptor["workflow"].get("main_branch", "main")
+    if config["project"].get("base_branch", "main") != main:
+        raise ValueError("Descriptor and Tracker main branches differ")
+    if event_name == "pull_request":
+        pr = event["pull_request"]
+        prefix = re.escape(config["project"]["id_prefix"].lower())
+        if (pr["base"]["ref"] != main
+                or not re.fullmatch(r"(?:work|codex)/" + prefix + r"-[1-9]\d*(?:-[a-z0-9-]+)?", pr["head"]["ref"])):
+            return None
+        official = config["project"]["repository"].lower()
+        if any(pr[side]["repo"]["full_name"].lower() != official for side in ("base", "head")):
+            raise ValueError("Process source must belong to the configured repository")
+        base, head = pr["base"]["sha"], pr["head"]["sha"]
+        expected_main = base
+    else:
+        if branch_of(ref) != main:
+            return None
+        if event["repository"]["full_name"].lower() != config["project"]["repository"].lower():
+            raise ValueError("Push belongs to another repository")
+        base, head = event["before"], event["after"]
+        expected_main = head
+        # Full checkout must be the event's actual main content, not a candidate
+        # or a later unrelated checkout. The helper verifies complete ancestry.
+        checked_out = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+        if checked_out != head:
+            raise ValueError("Main checkout differs from the push head")
+    if not all(re.fullmatch(r"[0-9a-f]{40}", sha or "") and sha != "0" * 40 for sha in (base, head)):
+        raise ValueError("Expected existing exact process base/head commits")
+    current = subprocess.check_output(["git", "rev-parse", "refs/remotes/origin/" + main], cwd=root, text=True).strip()
+    if current != expected_main:
+        raise ValueError("Current main differs from the process event")
+    baseline = json.loads(subprocess.check_output(["git", "show", base + ":delivery.json"], cwd=root, text=True))
+    if baseline["workflow"].get("process_instructions") != selected:
+        return None  # initial adoption cannot activate its own shortcut
+    try:
+        from scripts import tracker_process_instructions as process_rules
+    except ImportError:
+        import tracker_process_instructions as process_rules
+    proof = process_rules.classify_local(config, root, base, head)
+    if proof and reuse.tree_of(root, "HEAD") != proof["tree_sha"]:
+        raise ValueError("Checked out tree differs from the proven process source")
+    return proof
+
+
 def select(root, event_name, event, *, ref="", workflow="ci.yml"):
     classifier = classify_installer if workflow == "windows-installer.yml" else classify
     base_ref = branch = None
     try:
+        process = process_context(root, event_name, event, ref=ref)
+        if process:
+            return {"windows": False, "linux": False, "reason": "process-instructions-only",
+                    "python": list(reuse.FULL_PYTHON_VERSIONS), "process": process}
+        context = batch_context(root, event_name, event)
+        if context == "full":
+            return {"windows": True, "linux": workflow != "windows-installer.yml",
+                    "reason": "batch-integration-promotion-or-unknown-route", "python": list(reuse.FULL_PYTHON_VERSIONS)}
         if event_name == "pull_request":
-            base_ref = event["pull_request"]["base"]["ref"]
+            base_ref = "stage" if context == "source" else event["pull_request"]["base"]["ref"]
         branch = branch_of(ref)
         light = light_context(event_name, base_ref, branch)
         paths = event_paths(root, event_name, event) if light else []
@@ -186,7 +305,7 @@ def select(root, event_name, event, *, ref="", workflow="ci.yml"):
             structural = event_structural(root, event_name, event) if light else []
             return classifier(paths, event_name, base_ref, branch, structural)
         return classifier(paths, event_name, base_ref, branch)
-    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, ImportError, subprocess.SubprocessError):
         return {"windows": True, "linux": workflow != "windows-installer.yml",
                 "reason": "classification-unavailable-run-full", "python": list(reuse.FULL_PYTHON_VERSIONS)}
 
