@@ -43012,9 +43012,10 @@
         "worktree": "C:\\wk19-902",
         "id": "a6eec428eda64027861a7fa87f54fc34",
         "issue": 902,
-        "state": "implementing",
+        "state": "stopping",
         "started_at": "2026-10-19T07:27:15+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "report": "Not refreshed on 2026-10-19: PR #904 is stacked on open ACL-1899 (#900) and ACL-1776; its diff vs main 435bc154 carries their commits. Resume after those merge, then merge main and hand off ACL-1902 alone."
       }
     },
     "tasks": {
