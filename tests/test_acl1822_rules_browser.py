@@ -424,7 +424,7 @@ def test_rules_cell_in_the_campaign_table_opens_the_inspector_and_apply_goes_thr
     assert cell.inner_text().startswith("1 · Suggest")
     assert "Pause suggested" in page.inner_text('tr[data-key="adset:2000002"]')
     cell.scroll_into_view_if_needed()
-    page.evaluate("document.querySelector('[data-hc=scroll]').scrollLeft += 220")
+    page.evaluate("document.querySelector('.hc-acct-child .hc-scroll').scrollLeft += 220")
     shot(page, "table-rules-cell", "light")
     cell.click()
     page.wait_for_selector("dialog.hc-rinsp[open]")
@@ -454,7 +454,7 @@ def test_rules_cell_in_the_campaign_table_opens_the_inspector_and_apply_goes_thr
 
 @pytest.fixture
 def open_cell_page(env, monkeypatch, tmp_path):
-    from tests.test_acl1800_home_commands_browser import CmdSite, inventory_snapshot
+    from tests.test_acl1800_home_commands_browser import CmdSite, inventory_snapshot, open_acc
     from src.fb_api import commands as cmd
     from tests.test_acl1800_campaign_commands import World
     from src.web import app as web
@@ -511,7 +511,8 @@ def open_cell_page(env, monkeypatch, tmp_path):
     pg.on("pageerror", lambda e: errors.append(str(e)))
     pg.errors = errors
     goto(pg, "http://acl.test/")
-    pg.wait_for_selector("[data-hc=table] tbody tr", timeout=10000)
+    open_acc(pg, "Acc")
+    pg.wait_for_selector(".hc-table tbody tr", timeout=10000)
     pg.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.avail !== null")
     pg.click(f'[data-exp="campaign:1000001"]')
     pg.wait_for_selector('tr[data-key="adset:2000002"]')
