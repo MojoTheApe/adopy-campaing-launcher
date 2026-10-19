@@ -94415,7 +94415,51 @@
         "session": "r287-c0a1de70",
         "coordinator": "Coordinator-E1019A",
         "started_at": "2026-10-19T07:57:13+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 287,
+          "pr": 964,
+          "branch": "work/acl-1287-english-row-text",
+          "head_sha": "0083cd665239b8baaa458d6ce2d93437cfe53e00",
+          "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+          "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "f817108928cba547d3fd6e63b12f35cd88eb8f08363ff15c3818dedc8d9770ce",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-E19287",
+            "implementer": "Worker-E19287",
+            "head_sha": "0083cd665239b8baaa458d6ce2d93437cfe53e00",
+            "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+            "tree_sha": "fba7a3a7f1699b7aa7e291c383c50f088460a1a4",
+            "execution_lane": "b7e3fd8d1f2d448188a88f1f1062a6c0",
+            "review_session": "r287-c0a1de70",
+            "report": "Independent source review of PR #964 (ACL-1287) at head 0083cd66, base main 435bc154 (head contains main via merge bac1d64e, clean). Delta a06072eb..0083cd66 is test-only: tests/test_account_spend_reasons_are_english.py now strips only // and /* */ comments in multiline (JS) literals, limits the logger exemption to log/logger receivers, and guards account_spend.py, account_spend_api.py and mlx_session.py (all clean), with 3 extra self-tests. Issue criteria met: country_split.py English and guarded (ACL-1462), account_spend.py plus the API route and humanize English and guarded; failed spend/split render in English in existing fixtures. No production code changed; no secrets. Local: 9 guard tests passed on the merged tree. tests/test_read_fallback.py::test_the_old_amount_stands_on_its_own_line_under_a_failure fails identically on clean main 435bc154 when run alone locally (ModuleNotFoundError _design_tokens, tests/ not on sys.path); CI passes it. Required CI on 0083cd66 green: descriptor, tracker-link (rerun after status:review), ACL verification, Installer verification; linux 1-3 and windows tests pass.",
+            "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              287
+            ],
+            "recorded_at": "2026-10-19T08:10:45+00:00",
+            "issue_scopes": {
+              "287": "f817108928cba547d3fd6e63b12f35cd88eb8f08363ff15c3818dedc8d9770ce"
+            }
+          },
+          "lane": {
+            "id": "b7e3fd8d1f2d448188a88f1f1062a6c0",
+            "pr": 964,
+            "issues": [
+              287
+            ],
+            "actor": "Reviewer-E19287",
+            "session": "r287-c0a1de70",
+            "coordinator": "Coordinator-E1019A",
+            "started_at": "2026-10-19T07:57:13+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-19T08:11:19+00:00"
+        }
       },
       "986": {
         "id": "65b87db1c13c479590751a135b2c8d89",
