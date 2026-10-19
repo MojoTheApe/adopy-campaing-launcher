@@ -149,9 +149,35 @@ def upload_calls(size: int) -> int:
     return -(-size // VIDEO_CHUNK_MAX) + CALLS_UPLOAD_FIXED
 
 
-def estimate_create_calls(plan: "CampaignPlan", size_of: Callable[[str], int] | None = None) -> int:
-    """Сколько вызовов Graph нужно на кампанию целиком (первый запуск, с запасом)."""
-    size_of = size_of or _disk_size
+def _compress_available() -> bool:
+    """Есть чем сжимать видео (ffmpeg из зависимостей или системный)."""
+    try:
+        return bool(_video_compress._ffmpeg())
+    except Exception:  # noqa: BLE001 — нет кодировщика = не сжимаем
+        return False
+
+
+def expected_upload_size(size: int) -> int:
+    """Вес видео на загрузке (Issue #1000): тяжелее порога уйдёт сжатым до ~45 МБ, если есть ffmpeg.
+
+    Живой Check 19.10 (Doc120): исходники по 1,29 ГБ считались кусками — 367 вызовов и отказ
+    «split it», хотя после сжатия план укладывается в ~50.
+    """
+    if size > _video_compress.threshold_mb() * _video_compress.MB and _compress_available():
+        return min(size, int(_video_compress.DEFAULT_TARGET_MB * _video_compress.MB))
+    return size
+
+
+def estimate_create_calls(plan: "CampaignPlan", size_of: Callable[[str], int] | None = None, *,
+                          compressed: bool = False) -> int:
+    """Сколько вызовов Graph нужно на кампанию целиком (первый запуск, с запасом).
+
+    `compressed=True` — размеры ещё исходные (до сборки, пробный запуск): тяжёлое видео считается
+    сжатым. В настоящей сборке файлы уже сжаты, считаем по точным размерам — если сжатие не
+    удалось, отказ будет честным и до записи.
+    """
+    disk = size_of or _disk_size
+    size_of = (lambda p: expected_upload_size(disk(p))) if compressed else disk
     total = CALLS_BASE + CALLS_PER_AD_SET * len(plan.ad_sets)
     for ad_set in plan.ad_sets:
         total += CALLS_PER_AD * len(ad_set.ads)
@@ -1944,11 +1970,11 @@ class CampaignCreator:
                     data = self.load_media(ad.path, ad.kind)
                 except OSError as exc:
                     raise PlanError(f"ad {ad.index}: creative file cannot be read ({exc})") from exc
+                def warn(text: str) -> None:
+                    out.warnings.append(text)
+                    self._step(out, text)
                 if ad.kind == "video" and compress:
                     # Тяжёлый ролик сжимается до проверки лимита: 247 МБ в лимит 200 не влезал бы.
-                    def warn(text: str) -> None:
-                        out.warnings.append(text)
-                        self._step(out, text)
                     data = self.compress_video(ad.path, data, ad.index,
                                                lambda text: self._step(out, text), warn=warn)
                 limit = VIDEO_MAX_BYTES if ad.kind == "video" else IMAGE_MAX_BYTES
@@ -1961,6 +1987,10 @@ class CampaignCreator:
                         vdata = self.load_media(ad.vertical_path, ad.vertical_kind)
                     except OSError as exc:
                         raise PlanError(f"ad {ad.index}: Stories / Reels file cannot be read ({exc})") from exc
+                    if ad.vertical_kind == "video" and compress:
+                        # Вертикальный ролик тяжёлый так же, как основной (19.10: 1,29 ГБ ушли бы кусками).
+                        vdata = self.compress_video(ad.vertical_path, vdata, ad.index,
+                                                    lambda text: self._step(out, text), warn=warn)
                     vlimit = VIDEO_MAX_BYTES if ad.vertical_kind == "video" else IMAGE_MAX_BYTES
                     if not vdata or len(vdata) > vlimit:
                         raise PlanError(f"ad {ad.index}: Stories / Reels file is empty or larger than "
@@ -1973,7 +2003,8 @@ class CampaignCreator:
         # ACL-1891: план с большими видео должен влезть в бюджет вызовов - иначе отказ до записи.
         budget = getattr(self.client, "max_calls", None)
         if isinstance(budget, int) and any(isinstance(v, LargeFile) for v in files.values()):
-            need = estimate_create_calls(plan, lambda p: len(files[p]) if p in files else 0)
+            need = estimate_create_calls(plan, lambda p: len(files[p]) if p in files else 0,
+                                         compressed=not compress)
             if need > budget:
                 raise PlanError(f"This campaign needs about {need} Meta calls (large videos are uploaded in "
                                 f"chunks), more than one run allows ({budget}). Use a smaller video or "

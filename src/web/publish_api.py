@@ -88,7 +88,7 @@ def create_call_budget(plan: Any) -> tuple[int, str]:
 
     ceiling = int(_env_number(CREATE_MAX_CALLS_ENV, DEFAULT_CREATE_MAX_CALLS, CREATE_CALLS_FLOOR,
                               DEFAULT_CREATE_MAX_CALLS))
-    need = estimate_create_calls(plan)
+    need = estimate_create_calls(plan, compressed=True)   # тяжёлое видео уйдёт сжатым (Issue #1000)
     if need > DEFAULT_CREATE_MAX_CALLS:
         return ceiling, (f"This campaign needs about {need} Meta calls, more than one run allows "
                          "— split it. Nothing was created.")

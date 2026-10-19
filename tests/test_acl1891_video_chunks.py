@@ -519,6 +519,7 @@ def test_the_default_budget_check_refuses_an_oversized_plan(monkeypatch, tmp_pat
 
     d, f = _big_draft(tmp_path, size=10 * MB)
     plan = cr.plan_from_draft(d)
+    monkeypatch.setattr(cr, "_compress_available", lambda: False)   # без сжатия: считаются куски
     monkeypatch.setattr(cr, "_disk_size", lambda p: cr.VIDEO_MAX_BYTES)
     budget, refusal = publish_api.create_call_budget(plan)
     # 1.5 ГБ по 8 МБ = 192 куска + остальное: влезает в 250 для одного видео.
