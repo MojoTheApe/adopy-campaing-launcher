@@ -44037,9 +44037,11 @@
         "worktree": "C:\\acl-1807",
         "id": "59bdc7cee0ef48febbfa2d1f97225cc0",
         "issue": 807,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T17:51:45+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 1021,
+        "report": "Builder reads the Meta rules registry (ga only): capabilities endpoint, Conversion location filtering, blocking Meta-rules audit line with the server's reason text. Tests: test_acl1807_valid_combos (13) + 1781/1819/1769 suites pass. Opus review: no HIGH; fixed intersect-with-enums and 503 handling. Note: builder has no goal/billing/CTA selectors yet (ACL-1767), so those lists are ready but not yet wired to controls."
       },
       "853": {
         "actor": "Worker-U1019853",
