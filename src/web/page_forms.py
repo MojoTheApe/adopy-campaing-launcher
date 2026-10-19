@@ -19,13 +19,13 @@ READ_MAX_CALLS = 8
 
 
 def page_for(entry_page_id: str, client: Any, act: str) -> str:
-    """Страница аккаунта: из карты; пусто - единственная из `promote_pages` кабинета."""
+    """Страница аккаунта: из карты; пусто - первая из `promote_pages` кабинета (ACL-1897)."""
     page_id = (entry_page_id or "").strip()
     if page_id:
         return page_id
     pages = client.get_all(f"/{act}/promote_pages", {"fields": "id,name", "limit": 100}, max_pages=1)
     ids = [str(p.get("id")) for p in pages if p.get("id")]
-    return ids[0] if len(ids) == 1 else ""
+    return ids[0] if ids else ""
 
 
 def _read_in_session(account_label: str) -> dict[str, Any]:

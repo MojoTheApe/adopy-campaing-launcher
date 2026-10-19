@@ -314,11 +314,25 @@ def test_page_not_on_the_account(tmp_path):
     assert _by(out)["pixel_ok"]["status"] == "ok", "остальные проверки независимы"
 
 
-def test_page_not_chosen_and_ambiguous(tmp_path):
+def test_page_not_chosen_takes_the_first_page(tmp_path):
+    # ACL-1897: пустой выбор берёт первую Страницу кабинета, одна она или несколько.
     d = _draft(tmp_path, ads=1)
     d.page_id = ""
+    out = _audit(AuditMeta(pages=("111", "222")), d)
+    assert _by(out)["page_ok"]["status"] == "ok"
+    assert any("the first of 2 pages" in w and "(111)" in w for w in out.warnings)
+    d.page_id = ""
+    assert _by(_audit(AuditMeta(pages=("111",)), d))["page_ok"]["status"] == "ok"
+    d.page_id = ""
+    assert _by(_audit(AuditMeta(pages=()), d))["page_ok"]["status"] == "error"   # нет Страниц
+
+
+def test_page_chosen_must_be_among_pages_even_with_several(tmp_path):
+    d = _draft(tmp_path, ads=1)
+    d.page_id = "222"
+    assert _by(_audit(AuditMeta(pages=("111", "222")), d))["page_ok"]["status"] == "ok"
+    d.page_id = "333"
     assert _by(_audit(AuditMeta(pages=("111", "222")), d))["page_ok"]["status"] == "error"
-    assert _by(_audit(AuditMeta(pages=("111",)), d))["page_ok"]["status"] == "ok"   # единственная страница
 
 
 def test_pixel_missing_for_website_conversions(tmp_path):

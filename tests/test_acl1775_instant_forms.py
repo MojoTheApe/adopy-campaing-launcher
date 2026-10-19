@@ -804,3 +804,20 @@ def test_the_forms_read_failure_comes_back_as_text(monkeypatch):
     monkeypatch.setattr(_as, "serialized_browser", lambda **kw: (lambda fn: fn))
     out = page_forms.read_forms("Nope")
     assert out["ok"] is False and out["state"] == "failed" and "not in the account map" in out["message"]
+
+
+def test_page_for_takes_the_first_page_when_the_map_is_empty():
+    # ACL-1897: пустой page_id в карте — первая Страница кабинета, одна или несколько.
+    from src.web import page_forms as pf
+
+    class _C:
+        def __init__(self, ids):
+            self.ids = ids
+
+        def get_all(self, *a, **k):
+            return [{"id": i} for i in self.ids]
+
+    assert pf.page_for("", _C(["111", "222"]), "act_1") == "111"
+    assert pf.page_for("", _C(["111"]), "act_1") == "111"
+    assert pf.page_for("", _C([]), "act_1") == ""
+    assert pf.page_for("999", _C(["111"]), "act_1") == "999"

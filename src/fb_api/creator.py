@@ -336,13 +336,18 @@ def resolve_page(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
             src = plan.page_source or "draft"
             raise PlanError(f"The page from the {src} ({plan.page_id}) is not among the pages "
                             f"this ad account can advertise from ({len(facts.pages)} found).")
-    elif len(facts.pages) == 1:
+    elif facts.pages:
+        # Решение владельца 14.10 (ACL-1897): «Автоматически» берёт первую Страницу списка,
+        # одна она или несколько; выбор в билдере остаётся ветвью выше.
         plan.page_id = facts.pages[0]
         plan.page_source = "account default"
-        notes.append("page_id was empty in the account map; the only page of the ad account is used")
+        if len(facts.pages) == 1:
+            notes.append("page_id was empty in the account map; the only page of the ad account is used")
+        else:
+            notes.append(f"page_id was empty in the account map; the first of {len(facts.pages)} pages "
+                         f"of the ad account is used ({plan.page_id})")
     else:
-        raise PlanError(f"page_id is empty in the account map and the ad account has "
-                        f"{len(facts.pages)} pages; set page_id")
+        raise PlanError("page_id is empty in the account map and the ad account has no pages; set page_id")
     return notes
 
 
