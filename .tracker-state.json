@@ -47825,7 +47825,7 @@
             "session": "rf1019x-20261019"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-RF1019X",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -91661,6 +91661,68 @@
         "pr": 831,
         "lane": "552beb4f9fae48c696e35272031751a0",
         "actor": "Reviewer-DV1019E"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-19T15:06:31+00:00",
+        "issue": 776,
+        "pr": 831,
+        "review": {
+          "id": "552beb4f9fae48c696e35272031751a0",
+          "pr": 831,
+          "issues": [
+            776
+          ],
+          "actor": "Reviewer-DV1019E",
+          "session": "dv1019e-831",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-19T15:03:44+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 776,
+            "pr": 831,
+            "branch": "codex/acl-1776-create-forms",
+            "head_sha": "39afcefd38d2fddf771820e3e58eaa2f072c1b5b",
+            "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+            "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "3d95a7528bc437c6b9f8409335a38ea74c548d2fc21e480d381655f55e7bc220",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-DV1019E",
+              "review_session": "dv1019e-831",
+              "execution_lane": "552beb4f9fae48c696e35272031751a0",
+              "implementer": "Worker-RF1019X",
+              "head_sha": "39afcefd38d2fddf771820e3e58eaa2f072c1b5b",
+              "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+              "tree_sha": "4801739d863fb301aff9889fb22d37265428f72a",
+              "report": "Delta re-review after main merge. Head 39afcefd = merge 4b59c50f (parents 9da094c7 previously approved + 1c6ab78e main) + one test-only commit. git show --remerge-diff of the merge is empty (no conflict resolution). Diff 9da094c7..4b59c50f has the same patch-id as 435bc154..1c6ab78e, so the merge brings exactly main's changes and no extra code. The extra commit changes one line in tests/test_acl1776_create_forms.py (fake _Req.form accepts **_limits); it is test-only, minimal and justified: main's read_form() in src/web/request_limits.py calls request.form(max_fields=..., max_files=..., max_part_size=...), and the 1776 endpoints (preview-publish and the builder form routes) go through read_form(request, BUILDER_FORM); no raw request.form() remains in src/web, so the product respects main's request limits (the template-save endpoint reads JSON). Head contains current work/main 1c6ab78e. Tests run: test_acl1776_create_forms, test_acl1775_builder_forms, test_acl1775_instant_forms, test_acl1819_preflight: 300 passed. gh pr checks 831 all green (linux 1/2/3, windows, tracker-link, verification). No live checks claimed.",
+              "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                776
+              ],
+              "recorded_at": "2026-10-19T15:05:30+00:00",
+              "issue_scopes": {
+                "776": "3d95a7528bc437c6b9f8409335a38ea74c548d2fc21e480d381655f55e7bc220"
+              }
+            },
+            "lane": {
+              "id": "552beb4f9fae48c696e35272031751a0",
+              "pr": 831,
+              "issues": [
+                776
+              ],
+              "actor": "Reviewer-DV1019E",
+              "session": "dv1019e-831",
+              "coordinator": "Coordinator-M1011A",
+              "started_at": "2026-10-19T15:03:44+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-19T15:05:59+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -93994,6 +94056,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-19T15:02:08+00:00"
+      },
+      "776": {
+        "issue": 776,
+        "pr": 831,
+        "branch": "codex/acl-1776-create-forms",
+        "head_sha": "39afcefd38d2fddf771820e3e58eaa2f072c1b5b",
+        "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+        "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "3d95a7528bc437c6b9f8409335a38ea74c548d2fc21e480d381655f55e7bc220",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-DV1019E",
+          "review_session": "dv1019e-831",
+          "execution_lane": "552beb4f9fae48c696e35272031751a0",
+          "implementer": "Worker-RF1019X",
+          "head_sha": "39afcefd38d2fddf771820e3e58eaa2f072c1b5b",
+          "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+          "tree_sha": "4801739d863fb301aff9889fb22d37265428f72a",
+          "report": "Delta re-review after main merge. Head 39afcefd = merge 4b59c50f (parents 9da094c7 previously approved + 1c6ab78e main) + one test-only commit. git show --remerge-diff of the merge is empty (no conflict resolution). Diff 9da094c7..4b59c50f has the same patch-id as 435bc154..1c6ab78e, so the merge brings exactly main's changes and no extra code. The extra commit changes one line in tests/test_acl1776_create_forms.py (fake _Req.form accepts **_limits); it is test-only, minimal and justified: main's read_form() in src/web/request_limits.py calls request.form(max_fields=..., max_files=..., max_part_size=...), and the 1776 endpoints (preview-publish and the builder form routes) go through read_form(request, BUILDER_FORM); no raw request.form() remains in src/web, so the product respects main's request limits (the template-save endpoint reads JSON). Head contains current work/main 1c6ab78e. Tests run: test_acl1776_create_forms, test_acl1775_builder_forms, test_acl1775_instant_forms, test_acl1819_preflight: 300 passed. gh pr checks 831 all green (linux 1/2/3, windows, tracker-link, verification). No live checks claimed.",
+          "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            776
+          ],
+          "recorded_at": "2026-10-19T15:05:30+00:00",
+          "issue_scopes": {
+            "776": "3d95a7528bc437c6b9f8409335a38ea74c548d2fc21e480d381655f55e7bc220"
+          }
+        },
+        "lane": {
+          "id": "552beb4f9fae48c696e35272031751a0",
+          "pr": 831,
+          "issues": [
+            776
+          ],
+          "actor": "Reviewer-DV1019E",
+          "session": "dv1019e-831",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-19T15:03:44+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-19T15:05:59+00:00"
       }
     },
     "batches": {
@@ -98513,62 +98619,6 @@
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-19T14:44:03+00:00",
         "state": "reviewing"
-      },
-      "831": {
-        "id": "552beb4f9fae48c696e35272031751a0",
-        "pr": 831,
-        "issues": [
-          776
-        ],
-        "actor": "Reviewer-DV1019E",
-        "session": "dv1019e-831",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-19T15:03:44+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 776,
-          "pr": 831,
-          "branch": "codex/acl-1776-create-forms",
-          "head_sha": "39afcefd38d2fddf771820e3e58eaa2f072c1b5b",
-          "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-          "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "3d95a7528bc437c6b9f8409335a38ea74c548d2fc21e480d381655f55e7bc220",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-DV1019E",
-            "review_session": "dv1019e-831",
-            "execution_lane": "552beb4f9fae48c696e35272031751a0",
-            "implementer": "Worker-RF1019X",
-            "head_sha": "39afcefd38d2fddf771820e3e58eaa2f072c1b5b",
-            "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-            "tree_sha": "4801739d863fb301aff9889fb22d37265428f72a",
-            "report": "Delta re-review after main merge. Head 39afcefd = merge 4b59c50f (parents 9da094c7 previously approved + 1c6ab78e main) + one test-only commit. git show --remerge-diff of the merge is empty (no conflict resolution). Diff 9da094c7..4b59c50f has the same patch-id as 435bc154..1c6ab78e, so the merge brings exactly main's changes and no extra code. The extra commit changes one line in tests/test_acl1776_create_forms.py (fake _Req.form accepts **_limits); it is test-only, minimal and justified: main's read_form() in src/web/request_limits.py calls request.form(max_fields=..., max_files=..., max_part_size=...), and the 1776 endpoints (preview-publish and the builder form routes) go through read_form(request, BUILDER_FORM); no raw request.form() remains in src/web, so the product respects main's request limits (the template-save endpoint reads JSON). Head contains current work/main 1c6ab78e. Tests run: test_acl1776_create_forms, test_acl1775_builder_forms, test_acl1775_instant_forms, test_acl1819_preflight: 300 passed. gh pr checks 831 all green (linux 1/2/3, windows, tracker-link, verification). No live checks claimed.",
-            "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              776
-            ],
-            "recorded_at": "2026-10-19T15:05:30+00:00",
-            "issue_scopes": {
-              "776": "3d95a7528bc437c6b9f8409335a38ea74c548d2fc21e480d381655f55e7bc220"
-            }
-          },
-          "lane": {
-            "id": "552beb4f9fae48c696e35272031751a0",
-            "pr": 831,
-            "issues": [
-              776
-            ],
-            "actor": "Reviewer-DV1019E",
-            "session": "dv1019e-831",
-            "coordinator": "Coordinator-M1011A",
-            "started_at": "2026-10-19T15:03:44+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-19T15:05:59+00:00"
-        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
