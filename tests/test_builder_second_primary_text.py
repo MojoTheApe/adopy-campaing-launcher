@@ -216,13 +216,38 @@ def test_primary_text_1_names_the_library_pick_and_shows_its_headline(ui):
     assert "Primary text 2" in text and "+ Primary text 3–5" in text
     expect(row.locator("[data-headline]")).to_be_hidden()
     box = row.locator(".cb-adtitle-search")
+    expect(box).to_have_attribute("placeholder", "— type to search ad text —")
+    expect(box).to_have_attribute(
+        "title", "The chosen ad text gives the primary text, the headline and the description")
     box.click()
     box.fill("text7")
     opt = p.locator(".cb-slot:not([hidden]) .cb-ad-row[data-ad-idx='0'] .cb-adtitle-sel-wrap .cb-sel-opt[data-val='Text7']")
     expect(opt).to_be_visible()
     opt.evaluate("e => e.dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true}))")
-    expect(row.locator("[data-headline]")).to_have_text("Headline: Otro, from the ad-title library")
+    expect(row.locator("[data-headline]")).to_have_text("Headline: Otro, from the ad-text library")
     assert p.input_value("[name='camp_0_ad_0_copy']") == "Text7", "имя поля или значение изменились"
+
+
+@pytest.mark.parametrize("wrapper", [".cb-adtitle-sel-wrap", ".cb-text2-sel-wrap"])
+@pytest.mark.parametrize("status, message", [
+    (200, "No ad texts found"),
+    (503, "Could not load ad texts"),
+])
+def test_primary_text_search_names_ad_texts_when_empty_or_unavailable(ui, wrapper, status, message):
+    """ACL-1381: both real dropdowns distinguish no matching text from a load failure."""
+    p, _ = ui
+    add(p)
+    _show(p)
+    p.route("**/api/ad-copy", lambda route: route.fulfill(status=status, json={"rows": []}))
+    with p.expect_response("**/api/ad-copy"):
+        p.evaluate("document.dispatchEvent(new CustomEvent('acl:adtextschange'))")
+    field = p.locator(".cb-slot:not([hidden]) .cb-ad-row[data-ad-idx='0'] " + wrapper)
+    box = field.locator("input[type=text]")
+    box.click()
+    box.fill("missing text")
+    expect(field.locator(".cb-sel-dropdown")).to_be_visible()
+    expect(field.locator(".cb-sel-dropdown")).to_have_text(message)
+    assert field.locator("input[type=hidden]").input_value() == ""
 
 
 # ── ACL-1769, правка владельца 13.10: объявления набора — стопкой карточек ──
@@ -234,7 +259,7 @@ def _mode(p, mode):
     if mode == "narrow":
         p.set_viewport_size({"width": 420, "height": 900})
     elif mode == "expanded":
-        p.locator("#cbd-expand").click()
+        p.locator("#cbd-preset-wide").click()
 
 
 def _cards(p):

@@ -23,7 +23,8 @@ from machine_config import (
 
 
 from src.analysis_agent.stats_workbook import (
-    STATS_COLUMNS, StatsWorkbookError, validate_stats_workbook as _validate_stats_workbook,
+    STATS_COLUMNS, StatsWorkbookError, first_content_row,
+    validate_stats_workbook as _validate_stats_workbook,
 )
 
 
@@ -108,7 +109,9 @@ def build_manual_setup(*, campaign_manager_name: str, stats_workbook: str) -> Ma
     try:
         sheet = workbook[workbook.sheetnames[0]]
         rows = sheet.iter_rows(values_only=True)
-        headers = [str(value or "").strip() for value in next(rows)]
+        # ACL-1864: заголовок — первая непустая строка, а не обязательно первая.
+        first = first_content_row(rows)
+        headers = [str(value or "").strip() for value in (first[1] if first else [])]
         by_name = {header.casefold(): index for index, header in enumerate(headers)}
         if "cm" not in by_name or "account alias" not in by_name:
             raise WizardValidationError("Stats workbook is missing CM or Account Alias columns.")
