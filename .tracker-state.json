@@ -43012,9 +43012,11 @@
         "worktree": "C:\\wk19-864",
         "id": "d8137835052048f986bb128167fcda2c",
         "issue": 864,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T07:36:07+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 985,
+        "report": "Refreshed with main: merged origin/main (435bc154) into work/acl-1864-stats-header-rows; clean merge, no conflicts. New head c5e49931.\nTests (venv C:\\fb_agents\\.venv): pytest test_stats_workbook_header, test_report_loading_stages, test_machine_paths, test_dashboard_stays_responsive_while_report_builds: 34 passed. packaging/windows/tests setup_wizard+machine_config+integration_fixes: 21 passed. acl_scan_secrets: clean. acl_smoke: OK.\nPR #985 head = c5e49931, body has one \"Tracker issues: ACL-1864\" line."
       },
       "287": {
         "actor": "Worker-E19287",
