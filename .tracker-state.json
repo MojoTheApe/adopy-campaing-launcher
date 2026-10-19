@@ -43615,9 +43615,11 @@
         "worktree": "C:\\rf19b-776",
         "id": "1260ebd5a7234fc4a2e0a173c30c209b",
         "issue": 776,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T14:23:46+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 831,
+        "report": "Refreshed onto main 1c6ab78e (batch #1016): merge 4b59c50f clean, plus extra test-only commit (fake _Req.form accepts read_form limits). Tests: acl1776_create_forms, acl1775_builder_forms, acl1819_preflight 214 passed."
       }
     },
     "tasks": {
