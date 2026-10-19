@@ -4705,6 +4705,27 @@
         "issue_scopes": {
           "680": "503e07e2c8a0717c8914ace1daad97c1516a28140c4528063b28e8ab786dbafb"
         }
+      },
+      "976": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-Y19B",
+        "implementer": "Worker-G19202",
+        "head_sha": "728489279502a6738da2b2d17d431f317290c29f",
+        "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+        "tree_sha": "603d46c0965137f08083cd45424946d5717c8055",
+        "execution_lane": "3efb6c7788344ff7b35bf4c3d4eee2d2",
+        "review_session": "rev-y19b-s1",
+        "report": "Independent source review of PR 976 (ACL-1202, Issue 202), head 72848927 (author merged main 435bc154). Files: src/web/app.py +10, report.html +130/-5, a node harness and a python test file.\nRequirements checked against the Issue: (1) per-row name search reusing /multilogin-search through the shared cached amapProfiles (no fetch in the new block - asserted by a test); (2) open profiles first and marked open, found-only profiles marked \"closed (starts on Publish)\"; (3) suggestion keys on search results via server-side profile_name_key (label_key on /api/accounts-overview rows, key on /multilogin-search profiles; the key is imported/used in scope, no copy of the rule in the page; two same-key hits give no guess); (4) empty search says \"DQ438 is not in Multilogin\"; (5) failure is non-fatal, message \"The Multilogin catalogue did not answer (...) - showing open profiles only.\" and open profiles stay; (6) debounce 350 ms, minimum 2 chars, stale-answer guard via a generation counter, cache by (instance,text). Save path carries folder_id and multilogin_instance of a found profile; multilogin_instance is an accepted field of the save endpoint. Options are HTML-escaped (tested). All user text English. No secrets. Minor non-blocking note: the search slot comes from the country-card instance selector with default A when absent.\nTests: tests/test_acl_1202_overview_profile_search.py (4) and the node harness cover the above; CI ran them.\nCI on this exact head: all 11 required checks pass (linux shards 1-3 on 3.11 and 3.13, windows tests, ACL verification, Process instructions, Classify, Installer verification, tracker-link, descriptor), installer build skipped as not applicable.\nNote for the batch: python change in app.py needs a serve.py restart (stated by the author).\nVerdict: approved.\n",
+        "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          202
+        ],
+        "recorded_at": "2026-10-19T11:33:22+00:00",
+        "issue_scopes": {
+          "202": "874916528a5e419af368f88079d8af38988995625b9d8492c34a8c8ce7d6c3f7"
+        }
       }
     },
     "stage": {
