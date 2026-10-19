@@ -44589,6 +44589,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T22:22:57+00:00",
         "from_status": "status:todo"
+      },
+      "47": {
+        "actor": "Worker-H19341",
+        "session": "wh341-c0a1de70",
+        "coordinator": "Coordinator-E1019A",
+        "branch": "work/acl-341-recipe-player-tests",
+        "worktree": "C:\\wk20-341",
+        "id": "4c582a02a1c94920809d0a2596a593d1",
+        "issue": 47,
+        "state": "implementing",
+        "started_at": "2026-10-19T22:25:46+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -52122,10 +52134,14 @@
           {
             "actor": "Worker-E19341",
             "session": "w341-c0a1de70"
+          },
+          {
+            "actor": "Worker-H19341",
+            "session": "wh341-c0a1de70"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-E19341",
+        "state": "implementing",
+        "worker": "Worker-H19341",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
           "actor": "Worker-E19341",
@@ -52149,14 +52165,7 @@
           "at": "2026-10-17T16:30:39.578103+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-Y19B",
         "return_operation": {
-          "id": "f8897a738a77412986ff1c09cbd05f68",
-          "actor": "Coordinator-E1019A",
-          "session": "coord-c0a1de70",
-          "report": "# Return for a main refresh\n\nMain moved to c6150160 (batch #1018 merged after #1016). The existing source approval is bound to the previous main baseline and cannot enter the next intake. No scope change and no defect is requested: merge current origin/main into the original branch, re-run the affected checks, hand off again and get a fresh independent review."
-        },
-        "return": {
           "id": "f8897a738a77412986ff1c09cbd05f68",
           "actor": "Coordinator-E1019A",
           "session": "coord-c0a1de70",
@@ -55224,6 +55233,10 @@
       },
       "Worker-B1019770": {
         "session": "run_b1019_770",
+        "role": "Worker"
+      },
+      "Worker-H19341": {
+        "session": "wh341-c0a1de70",
         "role": "Worker"
       }
     },
@@ -95605,6 +95618,13 @@
         "issue": 680,
         "pr": 966,
         "actor": "Worker-H19680"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T22:25:46+00:00",
+        "issue": 47,
+        "claim": "4c582a02a1c94920809d0a2596a593d1",
+        "actor": "Worker-H19341"
       }
     ],
     "policy": {
