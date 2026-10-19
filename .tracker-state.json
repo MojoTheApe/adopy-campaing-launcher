@@ -49915,7 +49915,7 @@
             "session": "acl-1287-pr-222939"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-ACL1287B",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -49934,7 +49934,7 @@
         },
         "pr": 964,
         "queued_at": "2026-10-17T19:31:52+00:00",
-        "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
+        "review_report": "# Review return \u2014 PR #964 (ACL-1287), Reviewer-E19287\n\nHead reviewed: a06072ebcfd0bccd9b91ac560e2a38336483c570. Current main: 435bc154.\n\n## (a) Required before approval\n\n- The head is 29 commits behind current main (435bc154). Merge current\n  `origin/main` into the original branch `work/acl-1287-english-row-text`\n  (it merges cleanly: `git merge-tree` reports no conflicts), re-run the\n  affected checks (`tests/test_account_spend_reasons_are_english.py`,\n  `tests/test_country_split_reasons_are_english.py`), let CI go green, and hand\n  off again.\n\n## (b) Blocking findings\n\nNone in content. I ran the new guard against main's `account_spend.py`\n(3646 lines): 3 passed. `test_country_split_reasons_are_english.py` on main\npassed too (3 tests). I also checked the multiline (JS) literals in\n`account_spend.py` on main by hand: the only Cyrillic outside `//` comments is a\n`/* \u2026 */` comment at :2856. Nothing Russian reaches `error`/`how` today.\nIssue criteria: country_split.py is already English (ACL-1462, guarded) and\naccount_spend.py is clean and now guarded. A failed spend renders in English\nin existing fixtures (`tests/test_read_fallback.py:171-193`), and a failed split\ndoes too (`tests/test_country_split_reasons_are_english.py:82`). There are no\nsecrets in the diff.\n\n## (c) Non-blocking notes (recommended for this round, the author decides)\n\n1. `tests/test_account_spend_reasons_are_english.py:33`: `\"\\n\" not in node.value`\n   skips every multiline literal, not just the `//` comments inside JS. A\n   Russian reason returned from a JS block (`return {error: '\u2026'}`) or a\n   multiline Python message would get past the guard. The sibling guard\n   (`test_country_split_reasons_are_english.py::_visible`) strips only `//`\n   comments. Do the same here, and strip `/* */` comments too, since :2856 uses one.\n2. `:16,27-30`: the logger exemption matches on the method name alone\n   (`.error(` / `.info(` \u2026 on any object). Any `x.error(\"\u2026\")` call is exempt,\n   not only logger calls. Narrowing it to a `log`/`logger` receiver would be safer.\n3. Scope gap: the same spend cell (`_account_map_country.html:141-146`,\n   `sr.error` / `sr.how`) is also fed by the Graph-in-profile route\n   `src/analysis_agent/account_spend_api.py` (ACL-1760, which came after the\n   Issue). That route also feeds `src/fb_api/mlx_session.py::humanize`. Both\n   are English today: I ran the guard's `_offenders` on each and it returned\n   nothing. They are not guarded, though. Adding them to the guard's file list\n   is a one-line change that keeps the promise \"keep them translated\".\n4. The PR body says \"6 passed\". That is the two files together (3 + 3), which\n   is fine; just re-state it after the main merge.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578093+00:00",
@@ -88097,6 +88097,24 @@
         "issue": 864,
         "claim": "d8137835052048f986bb128167fcda2c",
         "actor": "Worker-E19864"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-19T07:36:44+00:00",
+        "review": {
+          "id": "50c312a6547147febea08cdc81a9cba3",
+          "pr": 964,
+          "issues": [
+            287
+          ],
+          "actor": "Reviewer-E19287",
+          "session": "r287-c0a1de70",
+          "coordinator": "Coordinator-E1019A",
+          "started_at": "2026-10-19T07:33:47+00:00",
+          "state": "returning",
+          "report": "# Review return \u2014 PR #964 (ACL-1287), Reviewer-E19287\n\nHead reviewed: a06072ebcfd0bccd9b91ac560e2a38336483c570. Current main: 435bc154.\n\n## (a) Required before approval\n\n- The head is 29 commits behind current main (435bc154). Merge current\n  `origin/main` into the original branch `work/acl-1287-english-row-text`\n  (it merges cleanly: `git merge-tree` reports no conflicts), re-run the\n  affected checks (`tests/test_account_spend_reasons_are_english.py`,\n  `tests/test_country_split_reasons_are_english.py`), let CI go green, and hand\n  off again.\n\n## (b) Blocking findings\n\nNone in content. I ran the new guard against main's `account_spend.py`\n(3646 lines): 3 passed. `test_country_split_reasons_are_english.py` on main\npassed too (3 tests). I also checked the multiline (JS) literals in\n`account_spend.py` on main by hand: the only Cyrillic outside `//` comments is a\n`/* \u2026 */` comment at :2856. Nothing Russian reaches `error`/`how` today.\nIssue criteria: country_split.py is already English (ACL-1462, guarded) and\naccount_spend.py is clean and now guarded. A failed spend renders in English\nin existing fixtures (`tests/test_read_fallback.py:171-193`), and a failed split\ndoes too (`tests/test_country_split_reasons_are_english.py:82`). There are no\nsecrets in the diff.\n\n## (c) Non-blocking notes (recommended for this round, the author decides)\n\n1. `tests/test_account_spend_reasons_are_english.py:33`: `\"\\n\" not in node.value`\n   skips every multiline literal, not just the `//` comments inside JS. A\n   Russian reason returned from a JS block (`return {error: '\u2026'}`) or a\n   multiline Python message would get past the guard. The sibling guard\n   (`test_country_split_reasons_are_english.py::_visible`) strips only `//`\n   comments. Do the same here, and strip `/* */` comments too, since :2856 uses one.\n2. `:16,27-30`: the logger exemption matches on the method name alone\n   (`.error(` / `.info(` \u2026 on any object). Any `x.error(\"\u2026\")` call is exempt,\n   not only logger calls. Narrowing it to a `log`/`logger` receiver would be safer.\n3. Scope gap: the same spend cell (`_account_map_country.html:141-146`,\n   `sr.error` / `sr.how`) is also fed by the Graph-in-profile route\n   `src/analysis_agent/account_spend_api.py` (ACL-1760, which came after the\n   Issue). That route also feeds `src/fb_api/mlx_session.py::humanize`. Both\n   are English today: I ran the guard's `_offenders` on each and it returned\n   nothing. They are not guarded, though. Adding them to the guard's file list\n   is a one-line change that keeps the promise \"keep them translated\".\n4. The PR body says \"6 passed\". That is the two files together (3 + 3), which\n   is fine; just re-state it after the main merge.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -94289,20 +94307,6 @@
         "coordinator": "Coordinator-E1019A",
         "started_at": "2026-10-19T07:32:18+00:00",
         "state": "reviewing"
-      },
-      "964": {
-        "id": "50c312a6547147febea08cdc81a9cba3",
-        "pr": 964,
-        "issues": [
-          287
-        ],
-        "actor": "Reviewer-E19287",
-        "session": "r287-c0a1de70",
-        "coordinator": "Coordinator-E1019A",
-        "started_at": "2026-10-19T07:33:47+00:00",
-        "state": "returning",
-        "report": "# Review return \u2014 PR #964 (ACL-1287), Reviewer-E19287\n\nHead reviewed: a06072ebcfd0bccd9b91ac560e2a38336483c570. Current main: 435bc154.\n\n## (a) Required before approval\n\n- The head is 29 commits behind current main (435bc154). Merge current\n  `origin/main` into the original branch `work/acl-1287-english-row-text`\n  (it merges cleanly: `git merge-tree` reports no conflicts), re-run the\n  affected checks (`tests/test_account_spend_reasons_are_english.py`,\n  `tests/test_country_split_reasons_are_english.py`), let CI go green, and hand\n  off again.\n\n## (b) Blocking findings\n\nNone in content. I ran the new guard against main's `account_spend.py`\n(3646 lines): 3 passed. `test_country_split_reasons_are_english.py` on main\npassed too (3 tests). I also checked the multiline (JS) literals in\n`account_spend.py` on main by hand: the only Cyrillic outside `//` comments is a\n`/* \u2026 */` comment at :2856. Nothing Russian reaches `error`/`how` today.\nIssue criteria: country_split.py is already English (ACL-1462, guarded) and\naccount_spend.py is clean and now guarded. A failed spend renders in English\nin existing fixtures (`tests/test_read_fallback.py:171-193`), and a failed split\ndoes too (`tests/test_country_split_reasons_are_english.py:82`). There are no\nsecrets in the diff.\n\n## (c) Non-blocking notes (recommended for this round, the author decides)\n\n1. `tests/test_account_spend_reasons_are_english.py:33`: `\"\\n\" not in node.value`\n   skips every multiline literal, not just the `//` comments inside JS. A\n   Russian reason returned from a JS block (`return {error: '\u2026'}`) or a\n   multiline Python message would get past the guard. The sibling guard\n   (`test_country_split_reasons_are_english.py::_visible`) strips only `//`\n   comments. Do the same here, and strip `/* */` comments too, since :2856 uses one.\n2. `:16,27-30`: the logger exemption matches on the method name alone\n   (`.error(` / `.info(` \u2026 on any object). Any `x.error(\"\u2026\")` call is exempt,\n   not only logger calls. Narrowing it to a `log`/`logger` receiver would be safer.\n3. Scope gap: the same spend cell (`_account_map_country.html:141-146`,\n   `sr.error` / `sr.how`) is also fed by the Graph-in-profile route\n   `src/analysis_agent/account_spend_api.py` (ACL-1760, which came after the\n   Issue). That route also feeds `src/fb_api/mlx_session.py::humanize`. Both\n   are English today: I ran the guard's `_offenders` on each and it returned\n   nothing. They are not guarded, though. Adding them to the guard's file list\n   is a one-line change that keeps the promise \"keep them translated\".\n4. The PR body says \"6 passed\". That is the two files together (3 + 3), which\n   is fine; just re-state it after the main merge.",
-        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
