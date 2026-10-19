@@ -48838,7 +48838,7 @@
             "session": "run_u1019_836"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-U1019836",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -48868,7 +48868,8 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578002+00:00",
           "remote_process_stopped_verified": false
-        }
+        },
+        "reviewer": "Reviewer-R1836Y"
       },
       "838": {
         "implementers": [
@@ -54757,6 +54758,10 @@
       "Reviewer-R1184Y": {
         "session": "reviewer-r1184y-20261019",
         "role": "Reviewer"
+      },
+      "Reviewer-R1836Y": {
+        "session": "reviewer-r1836y-20261019",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -57611,7 +57616,6 @@
       273,
       920,
       309,
-      836,
       990,
       992,
       175,
@@ -94186,6 +94190,13 @@
           "report": "# ACL-1853 / PR #863 \u2014 review return (Reviewer-R1853Y, session reviewer-r1853y-20261019)\n\nReviewed head: 8c9470d6bcd1c56560b8e3f10694631721ec2c20 (PR base 1c6ab78e6427895ffaf9ebae43233efaa1481629).\nCurrent main: c61501607ce11744e45add8b0d3b314368c216c5 (moved; batch PR 1018 merged).\n\n## Verdict: returned \u2014 merge conflict with current main (not a content problem)\n\nThe content review found no blocking problems.\n\n## Required action for the author\n\nMerge current `work/main` (c6150160) into the branch. `git merge-tree --write-tree --name-only work/main HEAD` reports exactly one conflicting file:\n\n- `docs/system/CHANGELOG.md` \u2014 content conflict (keep both entries).\n\nAuto-merged without conflict: `docs/system/PROJECT.md`, `src/web/publish_jobs.py`, `tests/test_acl1761_api_create.py`. After the merge, re-check that `src/web/publish_jobs.py` still passes `cancelled=` to `_publish_serial(...)` in `_run_job_inner`, still catches `ProfileLeaseError` in `_run_job` and `close_profile`, and that the CI on the new head is green.\n\n## Content review summary (head 8c9470d6)\n\n- `src/fb_ads_rpa/profile_lease.py`: a thread RLock plus `config.paths.machine_file_lock(timeout=0)` (msvcrt `LK_NBLCK` on byte 0 on Windows, `flock` on POSIX). The outer acquisition only, then nested reentry by depth. If the OS lock fails, the thread lock is released (no poisoning). A cancel check runs before and after the OS lock. Lock files under `~/.acl-profile-leases/<sha256>` do not depend on `ACL_CONFIG_DIR`, port or endpoint, and are never unlinked. Process death releases the OS lock, and there is no PID/expiry guessing. The key is the canonical UUID (spelling and braces normalized; nil, malformed and empty values are refused). Dolphin uses a separate `dolphin:<n>` namespace, and the Multilogin provider aliases collapse to one key. Waits are bounded: 120 s by default, 600 s for reads (`READ_WAIT_SECONDS`), 1800 s for a publish waiting with `cancelled=`. `check_nested_profile` refuses a nested switch to another profile, so there is no cross-profile lock ordering and no deadlock.\n- Callers: `operations.serialized_browser` / `publish_lease`; `rpa_publisher.profile_key_for` refuses unresolved labels; `require_profile_lease` runs before `_ensure_browser` and `close_account_profile`; `account_spend._attach_only` checks before attach. The read, country, turn-off and API country-split paths turn refusals into failed results through `on_lease_error`. The publish job turns a lease refusal into `_fatal`, and the slot is released in the existing `finally`. A non-blocking `close_profile` returns `busy`. The deferred-close timer survives a refusal.\n- RPA safety: no new browser launch path, no polling of accounts, no killing of other processes' browsers, no secrets. No path opens an account outside Multilogin.\n- Tests: `tests/test_profile_process_lease.py` (spawned multiprocess exclusion across config/port, distinct UUIDs proceed, reentry, termination release, cancelled and timed-out waiters, lock I/O failure recovery, aliases, invalid IDs, map change, public result shapes, publish slot release) and `tests/test_acl1853_read_wait.py`. The Graph/warm full-session integration is explicitly deferred to follow-up #862 and documented in `docs/system/PROFILE_OWNERSHIP.md`, which is in line with the issue scope.\n\n## Non-blocking notes\n\n1. `rpa_publisher.close_account_profile` checks `physical_profile_key(entry.profile_id)` with the default (Multilogin) provider, while `close_profile` acquires `profile_key_for(label)` with the configured provider. Under the Dolphin provider the close would refuse with a \"does not match\" error. This is acceptable because close is Multilogin-only, but passing the provider would be cleaner.\n2. A local focused run of the 40 touched test files (1332 tests, no xdist) could not finish on this machine. Other sessions' pytest runs were loading it, and collection alone took 132 s. The coordinator stopped the run before tracebacks were printed. The progress output showed failures in `test_account_spend.py` (1), `test_acl1603_stable_slots.py` (3), `test_acl1812_warm_sessions.py` (1), `test_one_button_reads_what_is_needed.py` (2) and `test_publish_safety_contract.py` (1). They were not triaged. An earlier aborted run showed only 3 failures, which points to timing sensitivity under load. CI on this head is green on Linux (3.11/3.13 x3 shards) and Windows 3.13. After merging main, the author should rerun these five files in isolation and confirm that they pass.\n\nNo live checks claimed.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-19T20:48:00+00:00",
+        "pr": 837,
+        "lane": "ddafec3acb0849b09819164b28080a4a",
+        "actor": "Reviewer-R1836Y"
       }
     ],
     "policy": {
@@ -101781,6 +101792,18 @@
         "session": "reviewer-r1184y-20261019",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-19T20:42:48+00:00",
+        "state": "reviewing"
+      },
+      "837": {
+        "id": "ddafec3acb0849b09819164b28080a4a",
+        "pr": 837,
+        "issues": [
+          836
+        ],
+        "actor": "Reviewer-R1836Y",
+        "session": "reviewer-r1836y-20261019",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-19T20:48:00+00:00",
         "state": "reviewing"
       }
     },
