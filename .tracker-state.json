@@ -50521,7 +50521,7 @@
             "session": "acl_1992"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-M1992A",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -50540,7 +50540,8 @@
         },
         "pr": 993,
         "queued_at": "2026-10-17T21:35:18+00:00",
-        "reviewer": "Reviewer-E19992"
+        "reviewer": "Reviewer-E19992",
+        "review_report": "PR #993 (ACL-1992) conflicts with current main 435bc154 in docs/system/CHANGELOG.md (content conflict; src/web/templates/report.html auto-merges cleanly). Head a62a352f. Author must merge current origin/main into the original branch, resolve, re-run affected checks and hand off again."
       },
       "994": {
         "implementers": [
@@ -88011,6 +88012,24 @@
         "issue": 902,
         "actor": "Worker-E19902",
         "report": "Not refreshed on 2026-10-19: PR #904 is stacked on open ACL-1899 (#900) and ACL-1776; its diff vs main 435bc154 carries their commits. Resume after those merge, then merge main and hand off ACL-1902 alone."
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-19T07:31:37+00:00",
+        "review": {
+          "id": "0f07c15381a5442ab7ca5f3be31ca310",
+          "pr": 993,
+          "issues": [
+            992
+          ],
+          "actor": "Reviewer-E19992",
+          "session": "r992-c0a1de70",
+          "coordinator": "Coordinator-E1019A",
+          "started_at": "2026-10-19T07:29:26+00:00",
+          "state": "returning",
+          "report": "PR #993 (ACL-1992) conflicts with current main 435bc154 in docs/system/CHANGELOG.md (content conflict; src/web/templates/report.html auto-merges cleanly). Head a62a352f. Author must merge current origin/main into the original branch, resolve, re-run affected checks and hand off again.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -94201,20 +94220,6 @@
         "coordinator": "Coordinator-E1019A",
         "started_at": "2026-10-19T07:28:11+00:00",
         "state": "reviewing"
-      },
-      "993": {
-        "id": "0f07c15381a5442ab7ca5f3be31ca310",
-        "pr": 993,
-        "issues": [
-          992
-        ],
-        "actor": "Reviewer-E19992",
-        "session": "r992-c0a1de70",
-        "coordinator": "Coordinator-E1019A",
-        "started_at": "2026-10-19T07:29:26+00:00",
-        "state": "returning",
-        "report": "PR #993 (ACL-1992) conflicts with current main 435bc154 in docs/system/CHANGELOG.md (content conflict; src/web/templates/report.html auto-merges cleanly). Head a62a352f. Author must merge current origin/main into the original branch, resolve, re-run affected checks and hand off again.",
-        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
