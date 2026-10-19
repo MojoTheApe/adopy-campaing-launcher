@@ -1,5 +1,7 @@
 # ACL project instructions
 
+Owner overview: [requesting work and reading the Tracker](docs/repository/OWNER_GUIDE.md).
+
 **Use the selected shared workflow on `main`; permanent `stage` is retained.**
 The temporary [direct-main and post-main delivery selection](docs/repository/POST_MAIN_DELIVERY.md)
 is active through its recorded idle cutover. Its initial source used the old
@@ -17,6 +19,7 @@ and do not run ACL's historical prepared-bootstrap preflight. Read
 The completed cutovers and their original recovery procedures remain historical
 evidence; current work follows the active policies below.
 
+- [Selected Master 1.5.3 standard](https://github.com/MojoTheApe/master-repo/blob/6f7e9416e68c66484a3b6c0213eab24847005b8f/standard.md).
 - [Repository workflow](docs/repository/WORKFLOW.md), [delivery](docs/repository/DELIVERY.md),
   [selected Tracker guide](docs/repository/TRACKER.md), [verification](docs/repository/VERIFICATION.md)
   and [file ownership](docs/repository/LAYOUT.md).

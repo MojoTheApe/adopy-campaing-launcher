@@ -2,7 +2,7 @@
   "exceptions": [
     {
       "scope": "Published workflow support source",
-      "reason": "The selected Master1.5.1 / Tracker3.7.1 pair is published. This compatible support upgrade preserves existing ACL policies and supplies the separate one-policy selection-package delivery bridge. It does not verify Task05/06 policy selections, owned activation, reader/every-writer/recovery readiness, board/behavior or comparable ordinary outcomes; adoption remains draft until those actual gates are settled. Existing package and delivery controls are preserved.",
+      "reason": "The selected Master1.5.3 / Tracker3.7.1 pair is published. This compatible support upgrade preserves existing ACL policies and supplies the separate one-policy selection-package delivery bridge. It does not verify Task05/06 policy selections, owned activation, reader/every-writer/recovery readiness, board/behavior or comparable ordinary outcomes; adoption remains draft until those actual gates are settled. Existing package and delivery controls are preserved.",
       "reference": "docs/repository/EARLY_ADOPTION.md"
     },
     {
@@ -66,8 +66,8 @@
   },
   "standard": {
     "repository": "https://github.com/MojoTheApe/master-repo",
-    "revision": "622557ec5be09ca45ef795035805fdab0f4a2528",
-    "version": "1.5.1"
+    "revision": "6f7e9416e68c66484a3b6c0213eab24847005b8f",
+    "version": "1.5.3"
   },
   "checks": [
     "python scripts/acl_scan_secrets.py",
