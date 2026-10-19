@@ -97026,7 +97026,51 @@
         "session": "acl1138_review_1019",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-19T12:18:23+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 138,
+          "pr": 947,
+          "branch": "work/acl-1138-proxy-gate",
+          "head_sha": "727e3d87897029858258969bcd491c3095877036",
+          "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+          "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "dda7a0c1e14a09401c053051c5b626d8f01198c7b16ec8fff13e387c006d31b6",
+          "review": {
+            "verdict": "approved",
+            "reviewer": "Reviewer-R1138",
+            "implementer": "Worker-P1138B",
+            "head_sha": "727e3d87897029858258969bcd491c3095877036",
+            "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+            "tree_sha": "09376e311a24c6072e98ef2a46354bbe093905cb",
+            "execution_lane": "0ba906ea1b9d49e78736c18614d980d8",
+            "review_session": "acl1138_review_1019",
+            "kind": "independent-review",
+            "report": "Independent read-only review of the whole change against current main: every route that opens or attaches to a Multilogin profile goes through the proxy gate before connect/launch/navigation; merge of main adds no behaviour; English actionable message; 98 targeted tests passed. LOW only: legacy unused MultiloginSession.__enter__ path ungated (follow-up). Re-review after CI fix 727e3d87 (proxy_gate_ mapped to the profile stage in cb-build-model): one-line change, no new findings; test_build_progress_model + gate tests 54 passed.",
+            "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              138
+            ],
+            "recorded_at": "2026-10-19T12:54:11+00:00",
+            "issue_scopes": {
+              "138": "dda7a0c1e14a09401c053051c5b626d8f01198c7b16ec8fff13e387c006d31b6"
+            }
+          },
+          "lane": {
+            "id": "0ba906ea1b9d49e78736c18614d980d8",
+            "pr": 947,
+            "issues": [
+              138
+            ],
+            "actor": "Reviewer-R1138",
+            "session": "acl1138_review_1019",
+            "coordinator": "Coordinator-M1011A",
+            "started_at": "2026-10-19T12:18:23+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-19T12:59:03+00:00"
+        }
       },
       "887": {
         "id": "599ff1dd05cc4393b86d30e8731746bb",
