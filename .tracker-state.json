@@ -95150,7 +95150,51 @@
         "session": "rx356-1c30cbbe",
         "coordinator": "Coordinator-E1019A",
         "started_at": "2026-10-19T10:40:22+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 356,
+          "pr": 942,
+          "branch": "work/acl-1356-starlette",
+          "head_sha": "6c688bd3137f90bfdfa8bcef8b8e5947b3db40c5",
+          "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+          "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "2b5d76b193104aeaf5f22d3b6832244aa30d0d2644c867ec1e26ca0e8a24a87a",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-X19356",
+            "implementer": "Worker-E19356",
+            "head_sha": "6c688bd3137f90bfdfa8bcef8b8e5947b3db40c5",
+            "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
+            "tree_sha": "65c786d1bfb078142f5fcd9cad642c23651cf481",
+            "execution_lane": "e4d41508f0864c4fade26d5a68c6a2e7",
+            "review_session": "rx356-1c30cbbe",
+            "report": "# ACL-1356 / PR #942 \u2014 independent source review (Reviewer-X19356)\n\nReviewer session `rx356-1c30cbbe`, separate Claude session (not a subagent of the\ncoordinator or of the worker). I implemented none of this work.\n\nReviewed head `6c688bd3137f90bfdfa8bcef8b8e5947b3db40c5` (merge of main `435bc154`\n`cb1cd958` + docstring commit), base `435bc154`. Full scope: Issue #356 (description,\nspecifications, acceptance criteria) against the whole PR diff (requirements.txt,\nsrc/web/app.py, new src/web/request_limits.py, new tests/test_request_limits.py,\nseven test fakes updated to the new `form(max_fields=\u2026)` signature). The earlier\nreturn (stale branch) is resolved: head contains current main.\n\n## Requirements\n\n- Pins: `requirements.txt` is the single pin source (requirements-dev/-extras use\n  `-r requirements.txt`; installer build reads it). fastapi 0.110.0 \u2192 0.141.1 with\n  explicit starlette==1.7.0 (>= 1.3.1, fixes CVE-2026-48818, CVE-2024-47874,\n  CVE-2025-54121, CVE-2026-54283); jinja2 3.1.4 \u2192 3.1.6; python-multipart unchanged.\n  Installer workflow ran on this head: Verify build inputs + Build, install, repair,\n  and uninstall + Installer verification all pass.\n- Global body limit before buffering: `RequestBodyLimit` ASGI middleware \u2014 declared\n  Content-Length over the route limit \u2192 413 without calling the app; invalid/negative\n  Content-Length \u2192 400; chunked/understated bodies counted per message and cut at the\n  first byte over the limit; an app that swallows the overflow still answers 413;\n  `Connection: close` on refusals. Default 1 MiB, Builder routes 16 MiB, root_path aware.\n- Form limits: every `request.form()` in src goes through `read_form` (only call left is\n  inside it). SMALL_FORM 50 fields / 0 files / 64 KiB part; BUILDER_FORM 20 000 fields /\n  0 files / 1 MiB part. `max_files=0` is safe: the dashboard has no file upload route\n  (the removed `UploadFile, File` import was unused on main; no `type=file` inputs).\n- BUILDER_ROUTES = /build-upload, /preview-publish, /publish-jobs, /publish-plan,\n  /api/page-forms \u2014 exactly the routes calling `read_form(request, BUILDER_FORM)`.\n- /static: `SafeStaticFiles` refuses backslashes, colons (drive letters, NTFS streams),\n  NUL, empty segments (`//host` UNC), `.`/`..`/dot-files, Windows device names and\n  trailing dots, both on the raw route path and again in `lookup_path`;\n  `follow_symlink=True` raises. Tests monkeypatch the resolver to fail if reached.\n- TemplateResponse: all 14 calls are request-first (Starlette 1.x signature).\n- No secrets, tokens or machine paths added. User-facing strings English.\n\n## Checks run by me (only affected tests)\n\nIsolated pins (fastapi 0.141.1, starlette 1.7.0, jinja2 3.1.6, python-multipart 0.0.32,\nhttpx 0.28.1) in a scratch target dir, worktree at 6c688bd3:\ntests/test_request_limits.py + test_acl1761_plan_check, test_acl1775_instant_forms,\ntest_acl1798_campaign_inventory, test_acl1826_mlx_session_lost,\ntest_failures_reach_the_collector, test_report_delivery_review,\ntest_review_ui_regressions: **269 passed** (2 warnings: FastAPI on_event deprecation).\n\nRequired CI on 6c688bd3 (`gh pr checks 942`): linux tests 3.11 \u00d73 and 3.13 \u00d73,\nwindows tests 3.13, ACL verification, project tooling, process instructions,\ndescriptor, installer classify/verify-inputs/build-install-repair-uninstall/\nverification \u2014 all pass. `tracker-link` initially failed only because CI started\n(08:23:28) before the handoff moved #356 to Review (08:24:05); I re-ran that job\nafter the handoff and it passes.\n\n## Findings\n\nBlocking: none.\n\nNon-blocking (follow-ups, not needed for this source):\n1. `@app.on_event(\"startup\")` is deprecated in FastAPI 0.141 \u2014 migrate to lifespan\n   before a release removes it.\n2. JSON routes stay at the 1 MiB default; any future bulk JSON route needs an entry\n   in ROUTE_MAX_BODY.\n3. `_SAFE_STATIC_SEGMENT` rejects names with spaces/`+`/`@`; current static assets\n   comply \u2014 worth a comment for future assets.\n4. Owner smoke check of the live dashboard after integration (large Builder publish,\n   /static assets, creative video seek) remains as the Issue states.\n\nVerdict: approved.\n",
+            "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              356
+            ],
+            "recorded_at": "2026-10-19T10:42:49+00:00",
+            "issue_scopes": {
+              "356": "2b5d76b193104aeaf5f22d3b6832244aa30d0d2644c867ec1e26ca0e8a24a87a"
+            }
+          },
+          "lane": {
+            "id": "e4d41508f0864c4fade26d5a68c6a2e7",
+            "pr": 942,
+            "issues": [
+              356
+            ],
+            "actor": "Reviewer-X19356",
+            "session": "rx356-1c30cbbe",
+            "coordinator": "Coordinator-E1019A",
+            "started_at": "2026-10-19T10:40:22+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-19T10:43:23+00:00"
+        }
       },
       "980": {
         "id": "b86d08b5d7d343408c0e647582d728a1",
