@@ -44125,7 +44125,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "175": {
+        "actor": "Worker-R1019175",
+        "session": "run_r1019_175",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1175-install-guide",
+        "worktree": "C:\\acl-1175-guide",
+        "id": "47cec4a2eaaa4b879080690b940741c4",
+        "issue": 175,
+        "state": "implementing",
+        "started_at": "2026-10-19T19:58:12+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -52182,6 +52195,17 @@
         },
         "pr": 937,
         "queued_at": "2026-10-19T19:47:23+00:00"
+      },
+      "175": {
+        "implementers": [
+          {
+            "actor": "Worker-R1019175",
+            "session": "run_r1019_175"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-R1019175",
+        "coordinator": "Coordinator-M1011A"
       }
     },
     "actors": {
@@ -54479,6 +54503,10 @@
       },
       "Worker-R1019990": {
         "session": "run_r1019_990",
+        "role": "Worker"
+      },
+      "Worker-R1019175": {
+        "session": "run_r1019_175",
         "role": "Worker"
       }
     },
@@ -93608,6 +93636,13 @@
         "issue": 990,
         "pr": 991,
         "actor": "Worker-R1019990"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T19:58:12+00:00",
+        "issue": 175,
+        "claim": "47cec4a2eaaa4b879080690b940741c4",
+        "actor": "Worker-R1019175"
       }
     ],
     "policy": {
