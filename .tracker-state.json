@@ -43218,9 +43218,11 @@
         "worktree": "C:\\acl-106-c",
         "id": "c82eb1bf1f904f4495b142b71ae6251e",
         "issue": 19,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T12:46:15+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 955,
+        "report": "ACL-106 refresh: merged origin/main 435bc154 (only conflict: docs/system/CHANGELOG.md, kept both entries). Notice block and _period_owner re-verified against current template and cm_comparison/is_me; tests test_empty_period_owner, test_sidebar_without_workbook, test_web_build_upload pass on py3.14. Head 33cde2ba99964f24ce444b93945f017aa45796aa."
       },
       "165": {
         "actor": "Worker-W144D",
