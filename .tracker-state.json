@@ -44554,20 +44554,6 @@
   },
   "execution": {
     "claims": {
-      "202": {
-        "actor": "Worker-H19202",
-        "session": "wh202-c0a1de70",
-        "coordinator": "Coordinator-E1019A",
-        "branch": "work/acl-1202-overview-profile-search",
-        "worktree": "C:\\wk20-202",
-        "id": "f287256e603742e8a6992a44a7185c0a",
-        "issue": 202,
-        "state": "handoff",
-        "started_at": "2026-10-19T22:20:27+00:00",
-        "from_status": "status:todo",
-        "pr": 976,
-        "report": "Pure refresh, no defect/scope change: merged origin/main (c6150160) into work/acl-1202-overview-profile-search (merge commit 294f4120, clean, no conflicts in report.html/app.py). Tests: PR tests + 8 related suites + build_progress_model, acl_test_platform, report_scripts_parse: 214 passed, 2 failed. test_acl_1588 test_a_second_open_of_the_same_profile_does_not_start fails identically on origin/main (pre-existing). test_country_totals_for_the_dashboard::test_currencies_are_never_added_together fails only in the big combined run (order-dependent), passes alone and in subset on both main and branch. acl_scan_secrets OK, acl_smoke OK."
-      },
       "770": {
         "actor": "Worker-B1019770",
         "session": "run_b1019_770",
@@ -52039,25 +52025,25 @@
             "session": "wh202-c0a1de70"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-H19202",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
-          "actor": "Worker-G19202",
-          "session": "wg202-c0a1de70",
+          "actor": "Worker-H19202",
+          "session": "wh202-c0a1de70",
           "coordinator": "Coordinator-E1019A",
           "branch": "work/acl-1202-overview-profile-search",
-          "worktree": "C:\\wk19-202",
-          "id": "ad52aab87c9f4ee8bd17f18081b006a0",
+          "worktree": "C:\\wk20-202",
+          "id": "f287256e603742e8a6992a44a7185c0a",
           "issue": 202,
           "state": "handoff",
-          "started_at": "2026-10-19T11:02:10+00:00",
+          "started_at": "2026-10-19T22:20:27+00:00",
           "from_status": "status:todo",
           "pr": 976,
-          "report": "# ACL-1202 handoff - Worker-G19202 (wg202-c0a1de70)\nPR #976, head 728489279502a6738da2b2d17d431f317290c29f: fresh claim after the pause lifted, current origin/main merged (clean, no conflicts). No code changes beyond the merge.\nChecks (headless): 1202 new tests + touched suites (1588, review_ui_regressions, accounts tab/connect/manage/one-connect/country/hidden) + guards test_build_progress_model, test_acl_test_platform, test_report_scripts_parse + report.html-related guards: 203 + 19 passed. acl_scan_secrets OK, acl_smoke OK. Full suite left to CI.\nNot verified live (no real Multilogin). serve.py restart needed after merge."
+          "report": "Pure refresh, no defect/scope change: merged origin/main (c6150160) into work/acl-1202-overview-profile-search (merge commit 294f4120, clean, no conflicts in report.html/app.py). Tests: PR tests + 8 related suites + build_progress_model, acl_test_platform, report_scripts_parse: 214 passed, 2 failed. test_acl_1588 test_a_second_open_of_the_same_profile_does_not_start fails identically on origin/main (pre-existing). test_country_totals_for_the_dashboard::test_currencies_are_never_added_together fails only in the big combined run (order-dependent), passes alone and in subset on both main and branch. acl_scan_secrets OK, acl_smoke OK."
         },
         "pr": 976,
-        "queued_at": "2026-10-19T11:10:08+00:00",
+        "queued_at": "2026-10-19T22:29:01+00:00",
         "review_report": "# Return for a main refresh\n\nMain moved to c6150160 (batch #1018 merged after #1016). The existing source approval is bound to the previous main baseline and cannot enter the next intake. No scope change and no defect is requested: merge current origin/main into the original branch, re-run the affected checks, hand off again and get a fresh independent review.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -58109,7 +58095,8 @@
       768,
       401,
       680,
-      70
+      70,
+      202
     ],
     "review": null,
     "history": [
@@ -95623,6 +95610,13 @@
         "issue": 70,
         "pr": 982,
         "actor": "Worker-H19602"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T22:29:01+00:00",
+        "issue": 202,
+        "pr": 976,
+        "actor": "Worker-H19202"
       }
     ],
     "policy": {
