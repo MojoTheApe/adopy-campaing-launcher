@@ -14,7 +14,7 @@ import pytest
 from src.fb_ads_rpa import browser as br
 from src.fb_ads_rpa.browser import MultiloginDirectCDPProvider
 
-PID = "989b5920-aaaa-bbbb-cccc-000000000000"
+PID = "p-attach-log-test"
 NAME = "src.fb_ads_rpa.browser"
 
 
