@@ -44389,7 +44389,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "822": {
+        "actor": "Worker-R1019822",
+        "session": "run_r1019_822",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "codex/acl-1822-rules-ui",
+        "worktree": "C:\\acl-1822-wt",
+        "id": "250c530e89d948bea7865b14c1dcc079",
+        "issue": 822,
+        "state": "implementing",
+        "started_at": "2026-10-19T21:36:02+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -48517,11 +48530,15 @@
           {
             "actor": "Worker-S1822A",
             "session": "run_s1822a_1012"
+          },
+          {
+            "actor": "Worker-R1019822",
+            "session": "run_r1019_822"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-S1822A",
-        "coordinator": "Coordinator-C0930A",
+        "state": "implementing",
+        "worker": "Worker-R1019822",
+        "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-S1822A",
           "session": "run_s1822a_1012",
@@ -54885,6 +54902,10 @@
       "Reviewer-R1708Y": {
         "session": "reviewer-r1708y-20261019",
         "role": "Reviewer"
+      },
+      "Worker-R1019822": {
+        "session": "run_r1019_822",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -94815,6 +94836,13 @@
             "approved_at": "2026-10-19T21:32:30+00:00"
           }
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T21:36:02+00:00",
+        "issue": 822,
+        "claim": "250c530e89d948bea7865b14c1dcc079",
+        "actor": "Worker-R1019822"
       }
     ],
     "policy": {
