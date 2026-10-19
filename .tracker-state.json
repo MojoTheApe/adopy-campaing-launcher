@@ -5030,6 +5030,27 @@
         "issue_scopes": {
           "807": "035e2510451cf6de8846fddfb7bd12a3bb0560cfd9e889adb4206f300cd3d10d"
         }
+      },
+      "1022": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1945Y",
+        "review_session": "reviewer-r1945y-20261019",
+        "execution_lane": "2d7e227469f040bca4bdd5bc351e7b30",
+        "implementer": "Worker-S1019945",
+        "head_sha": "a2ff58834ad52ba7a6f5747134bf773b94aea130",
+        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "tree_sha": "a0e482ceb85f406fb745e185871ecc9ff78b382c",
+        "issues": [
+          945
+        ],
+        "report": "PR #1022 (ACL-1945) adds account_spend_api.turn_off: under ACL_FB_BACKEND=api, POST /account-spend/turn-off no longer clicks the Ads Manager switch but, inside the account's own Multilogin profile tab (existing _session(account, commands=True) path from ACL-1756/1760/1800, warm-registry or opened profile, same cooldowns and call budget, writes limited by write_policy.check_object_update), reads the object by exact numeric id, refuses if it belongs to another ad account, if a 'campaign' id has no objective (ad set id rejected even with the same name), if the name Meta returns under that id differs from the dashboard name, or (ad level) if the API-read parent campaign is missing or differs from parent_id; already PAUSED sends nothing (idempotent); only ACTIVE is changed, with exactly POST /<id> status=PAUSED, then a read-back: 'off' only if status=PAUSED and effective_status is not ACTIVE/WITH_ISSUES, otherwise 'unconfirmed' or failed; a lost answer (WriteUnknown) is reconciled by a single read-back after a pause and never retried; any crash after the POST is 'unconfirmed', before it 'failed'. Nothing turns anything on. Busy-profile guard: app.py refuses with HTTP 409 and PROFILE_BUSY_ERROR when publish_jobs.profile_in_use (new, any non-final job or one finished after the request started, same profile_key_for rule as the lock) is true, and checks again under the profile lock; a failing busy check counts as busy (fail closed). Every outcome, including validation refusals and busy refusals, is written to turn_off_log.jsonl with route=api and matched_by=id (new TurnOffResult.matched_by field, default empty for the RPA path, which is unchanged when the backend is rpa). The existing tree UI already sends object_id, parent_id and name, so Off works by id once the API tree read supplies ids. Criteria: (1) API turn-off by id with read-back behind ACL_FB_BACKEND=api - met; (2) tests for request shape, read-back mismatch, lag/unconfirmed, refusal, lost answer, busy profile (lib and route), journal entry, ad parent confirmation, wrong account, bad input, RPA path kept - met in tests/test_acl1945_turn_off_via_api.py (28 tests); (3) live check on a pilot account is a separate task by design. Local runs (C:/fb_agents/.venv, Python 3.13): tests/test_acl1945_turn_off_via_api.py 25 passed, 3 route tests failed only because the local venv has Starlette 0.36.3 while requirements.txt pins 1.7.0 (Request.form() max_part_size TypeError in request_limits.py, environment-only); tests/test_account_spend.py, test_every_change_leaves_a_record.py, test_turn_off_safety_browser.py, test_the_account_tree_on_screen.py: 222 passed, 1 failed (test_the_new_table_without_row_ids_is_read_by_name, Playwright Page.set_content 30s timeout on a loaded laptop, file untouched by the diff). CI on head a2ff5883: all checks green (linux tests shards 1-3, windows tests, tracker-link, descriptor, process, tooling, installer). Non-blocking nits: the API turn-off route does not apply the loopback-bind guard that ACL-1800 campaign commands use (the RPA turn-off route never had it either); the pilot-account allowlist from the issue is an operational rule, not enforced in code (same as ACL-1800); if the serialized_browser lock itself raises, the route returns 503 without a journal line; the TurnOffResult.matched_by comment mentions a 'name' value from ACL-1379 that main does not produce yet. No live checks claimed.",
+        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "recorded_at": "2026-10-19T21:04:42+00:00",
+        "issue_scopes": {
+          "945": "e9ff3ac55ccc43857b7919167fea2b5025620effa5b1a59a0baaa9a01454befc"
+        }
       }
     },
     "stage": {
