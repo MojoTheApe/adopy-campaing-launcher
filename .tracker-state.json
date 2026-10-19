@@ -52205,7 +52205,7 @@
             "session": "wg602-c0a1de70"
           }
         ],
-        "state": "approved",
+        "state": "returning_approval",
         "worker": "Worker-G19602",
         "coordinator": "Coordinator-E1019A",
         "handoff": {
@@ -52230,7 +52230,19 @@
           "at": "2026-10-17T16:30:39.578105+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-R602X"
+        "reviewer": "Reviewer-R602X",
+        "return_operation": {
+          "id": "1c0113678ecf4d5580886fe6a2c47147",
+          "actor": "Coordinator-E1019A",
+          "session": "coord-c0a1de70",
+          "report": "# Return for a main refresh\n\nMain moved to c6150160 (batch #1018 merged after #1016). The existing source approval is bound to the previous main baseline and cannot enter the next intake. No scope change and no defect is requested: merge current origin/main into the original branch, re-run the affected checks, hand off again and get a fresh independent review."
+        },
+        "return": {
+          "id": "1c0113678ecf4d5580886fe6a2c47147",
+          "actor": "Coordinator-E1019A",
+          "session": "coord-c0a1de70",
+          "report": "# Return for a main refresh\n\nMain moved to c6150160 (batch #1018 merged after #1016). The existing source approval is bound to the previous main baseline and cannot enter the next intake. No scope change and no defect is requested: merge current origin/main into the original branch, re-run the affected checks, hand off again and get a fresh independent review."
+        }
       },
       "142": {
         "implementers": [
