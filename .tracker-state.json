@@ -44125,22 +44125,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "836": {
-        "actor": "Worker-U1019836",
-        "session": "run_u1019_836",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1836-session-recovery",
-        "worktree": "C:\\acl-1836",
-        "id": "2441527c16924c619a6a923fce875b9c",
-        "issue": 836,
-        "state": "handoff",
-        "started_at": "2026-10-19T19:48:27+00:00",
-        "from_status": "status:todo",
-        "pr": 837,
-        "report": "# ACL-1836 handoff (2026-10-19)\n\nSource PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/837 , head 1ab1af9d. PR was returned for conflicts with main; merged current main, resolved src/fb_api/graph.py and src/fb_api/token_capture.py by keeping both session-loss recovery (ACL-1836) and timeout-to-stop classification (ACL-1761). One review nit fixed: verify_url after recovery now runs inside _timeouts_as_stops.\nLocal checks: tests for 1836 recovery, 1761 hang/logout (61), 1756 (103), 1760 (79), 1761 create (121), 1812 warm (89), 1800 commands (200) all passed. Full suite left to CI.\nRead-only Opus review of the merge resolution: nothing blocking; no Graph request is replayed by the recovery path.\nNo live profile or Meta operations."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -48667,25 +48652,25 @@
             "session": "run_u1019_836"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-U1019836",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-SR1012",
-          "session": "connection_sr1012_worker",
-          "coordinator": "Coordinator-CR1012",
+          "actor": "Worker-U1019836",
+          "session": "run_u1019_836",
+          "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1836-session-recovery",
-          "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\Adopy Campaign Manager\\ACM-Worker-1836-2026-10-12",
-          "id": "94f701d1fd4e4237ab9f8f00c04afa51",
+          "worktree": "C:\\acl-1836",
+          "id": "2441527c16924c619a6a923fce875b9c",
           "issue": 836,
           "state": "handoff",
-          "started_at": "2026-10-13T19:04:02+00:00",
+          "started_at": "2026-10-19T19:48:27+00:00",
           "from_status": "status:todo",
           "pr": 837,
-          "report": "# ACL-1836 current schema-3 source handoff \u2014 2026-10-13\n\nActual Worker-SR1012 / connection_sr1012_worker hands PR837 to a separate independent Reviewer under Coordinator-CR1012. Normal claim:94f701d1fd4e4237ab9f8f00c04afa51. Worktree:C:/Users/EvgeniSedin/Desktop/Adopy Campaign Manager/ACM-Worker-1836-2026-10-12. Branch:codex/acl-1836-session-recovery.\n\n## Exact published candidate\n\n- PR:https://github.com/MojoTheApe/adopy-campaing-launcher/pull/837 (open, ready, approval-only into main).\n- Head:d0d4b87305a4e1d25c045c67103da1637fe8c3d7.\n- Tree:5424d9b512651693f1aac5b536b0857408f66f05.\n- Base/main:777663bf539308c0898cc177f872a8e0f63b597e, still actual remote main immediately after publication.\n- Genuine schema-3 client pin:46283b8a6fe444065838e136c89ef4ed64bd1528; TASK_TRACKER_HOME unset.\n\nThe original actual author resumed after the owner's Flow pause ended. Full issue836 and private state were preserved before the supported no-blocked transition and fresh normal claim. The issue's former pause reason is retained as historical; all Description, Specifications and acceptance criteria remain. No foreign ownership was changed.\n\nMain reconciliation completed normally without conflicts. Recovery source/tests and fixture are byte-identical to02bb4f77. Only ACL-1836's own system documentation moved to avoid sibling insertion sites, preserving its complete text. Final ACL-1872 repair1b5459a0 merge-tree check is clean (computed treeb7463062b0f64203f1384f79f66ddb33c3a473ee). Earlier checks with1844 efebcc75 and1879 5d0e7259 are also clean. No sibling source implementation was imported; these checks are not combined runtime/CI evidence.\n\n## Behavior and acceptance\n\nThe real PageTab/InPageGraph boundary recognizes exact session loss and permits at most one reattachment of the same owned target on the existing browser socket. Trusted successful navigation intent survives helper replacement during warm read/write mode switches. Target and main-frame account identity must match; arbitrary current URLs are not adopted as trusted identity. Login/checkpoint/cancellation, missing targets, unavailable transport, identity races and repeat detachment remain typed stops. Recovery is sticky when unsafe and does not open tabs, restart profiles or reload for missing tokens. Tokens remain in-page.\n\nA sent Graph call is never replayed. Recovered transport is for later reconciliation; an unrecoverable call becomes GraphStop so existing creator callers can preserve partial object results. The main PR intentionally excludes the separately pending ACL-1761 creator source. An anonymized failure fixture and bench entry retain the exact lost-session incident without real IDs or raw private evidence.\n\n## Fresh local evidence at this exact source\n\nWindows/Python3.14.3 via C:/fb_agents/.venv/Scripts/python.exe. Config and temp paths are isolated under Audit/verification, ACL_LIBRARY_* empty, Sentry disabled. No live Meta/Multilogin/profile calls.\n\n- 276 affected pytest tests passed in52.35s: test_acl1836_session_recovery.py, test_acl1756_fb_api.py, test_acl1756_page_helper_node.py, test_bench_catalogue.py, test_acl_test_platform.py, test_the_api_stop_is_asked_first.py. Log:acl1836-schema3-focused.log.\n- Packaging behavior unit suite:46 passed in38.692s. Log:acl1836-schema3-package.log.\n- scripts/acl_scan_secrets.py and scripts/acl_smoke.py:passed.\n- git diff --check:passed; local worktree clean.\n\nTests were not needlessly repeated during the publication-only wait: published head/tree are exactly the previously tested local candidate. This is distinct from the older276-test evidence on02bb4f77.\n\n## Earlier compatibility evidence and limits\n\nThe original exact-session and warm-helper regression failures preceded their fixes. Root's separate isolated integrated Creator -> GraphClient -> InPageGraph -> PageTab replay passed4 incident cases (surviving/gone target, normal/warm replacement helper), with exactly one uncertain video POST and retained partial campaign/ad-set IDs. The prior larger integrated run was502 passed /1 WinError5 tempfile replacement failure; the exact failed test then passed. This is not clean503 first-pass evidence, a stop-log repair or fresh testing of this whole main tree. Its unchanged source scope and detailed limitations remain in acl1836-compatibility-report.md.\n\nThe earlier isolated real-Chromium detach/reattach probe validated the same target/new session and untouched second fixture tab with local routed content. It is not a live Meta or Multilogin receipt. The original external detachment cause and actual upload outcome remain unknown.\n\n## Current hosted verification and remaining review\n\nFresh runs for the exact published head, all pending at handoff preparation:\n- CI:https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38455155317\n- Windows installer:https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38455155193\n- Delivery descriptor:https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38455155171\n- Tracker linkage:https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/38455155162\n\nThe first linkage run38455154901 was automatically cancelled by the PR-body update. If the current linkage check observed In Progress before this normal handoff, inspect its exact failure and retry only that metadata check after durable queued state. Do not blindly rerun application CI.\n\nFresh full independent review and all applicable exact-head hosted checks remain mandatory before approval/integration. Old approval/CI are historical, not current proof. If main changes while CI runs, notify Coordinator before any superseding push; revalidate the changed base normally, without modifying another owner's batch.\n\nThis handoff releases implementation ownership through the supported operation; success must be verified from durable state. It does not merge source, integrate foreign batch884, install TEST9095, modify runtime configuration, publish a package or activate campaigns. No live fix or completed employee rollout is claimed."
+          "report": "# ACL-1836 handoff (2026-10-19)\n\nSource PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/837 , head 1ab1af9d. PR was returned for conflicts with main; merged current main, resolved src/fb_api/graph.py and src/fb_api/token_capture.py by keeping both session-loss recovery (ACL-1836) and timeout-to-stop classification (ACL-1761). One review nit fixed: verify_url after recovery now runs inside _timeouts_as_stops.\nLocal checks: tests for 1836 recovery, 1761 hang/logout (61), 1756 (103), 1760 (79), 1761 create (121), 1812 warm (89), 1800 commands (200) all passed. Full suite left to CI.\nRead-only Opus review of the merge resolution: nothing blocking; no Graph request is replayed by the recovery path.\nNo live profile or Meta operations."
         },
         "pr": 837,
-        "queued_at": "2026-10-13T19:30:53+00:00",
+        "queued_at": "2026-10-19T19:53:50+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "return_operation": {
           "id": "2ab69234dbc645ffab72d57e22133086",
@@ -57340,7 +57325,8 @@
       184,
       273,
       920,
-      309
+      309,
+      836
     ],
     "review": {
       "id": "71d08f944d4646c69ba2c95edd8d2464",
@@ -93589,6 +93575,13 @@
           "report": "# Returned only to release the review lane: merge conflict with current main\n\nIndependent review (Reviewer-R1896Y, 2026-10-19) of head 6a908f16 on base 1c6ab78e found no blocking problems: 394 affected tests passed and CI was green (tracker-link re-run passed). Full notes are in the review summary.\n\nMain then moved to c6150160 (batch PR 1018 merged) and `gh pr update-branch` reports a merge conflict, so the review cannot be recorded against the current baseline.\n\nNext step for the author: merge current main into the original branch, resolve the conflict, run the affected tests (test_acl1896_instagram_identity, test_acl1761_api_create, test_acl1775_instant_forms, test_acl1819_preflight, test_acl1761_plan_check, test_acl1761_parity, test_acl1756_page_helper_node), hand off, and get a short fresh review of the conflict resolution.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T19:53:50+00:00",
+        "issue": 836,
+        "pr": 837,
+        "actor": "Worker-U1019836"
       }
     ],
     "policy": {
