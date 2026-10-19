@@ -43221,6 +43221,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T11:56:42+00:00",
         "from_status": "status:todo"
+      },
+      "72": {
+        "actor": "Worker-W142C",
+        "session": "w142c-20261016",
+        "coordinator": "Coordinator-C1016A",
+        "branch": "codex/acl-142-account-add-remove",
+        "worktree": "C:\\acl-142-c",
+        "id": "7b750aad087d483889adce3317a62811",
+        "issue": 72,
+        "state": "implementing",
+        "started_at": "2026-10-19T12:34:58+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -49729,9 +49741,13 @@
           {
             "actor": "Worker-W142C",
             "session": "w142c-20261016"
+          },
+          {
+            "actor": "Worker-W142C",
+            "session": "w142c-20261016"
           }
         ],
-        "state": "stopped",
+        "state": "implementing",
         "worker": "Worker-W142C",
         "coordinator": "Coordinator-C1016A",
         "handoff": {
@@ -90059,6 +90075,13 @@
         "pr": 829,
         "lane": "55a77729e4d846cbb45cfba7ac1df2cc",
         "actor": "Reviewer-R1827V"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T12:34:58+00:00",
+        "issue": 72,
+        "claim": "7b750aad087d483889adce3317a62811",
+        "actor": "Worker-W142C"
       }
     ],
     "policy": {
