@@ -43054,9 +43054,11 @@
         "worktree": "C:\\wk19-356",
         "id": "9e70b39ff0c0444f9538213543ea5cb1",
         "issue": 356,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T08:15:42+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 942,
+        "report": "ACL-1356 / PR #942 handoff after reviewer return (stale branch).\nNew head 6c688bd3 = merge of origin/main 435bc154 (clean, no conflicts; cb1cd958) + one docstring commit.\nGreps on merged tree: request.form( only inside read_form (src/web/request_limits.py:84); no old-style TemplateResponse(name,...) - all 14 calls request-first; BUILDER_ROUTES (/build-upload, /preview-publish, /publish-jobs, /publish-plan, /api/page-forms) match every read_form(request, BUILDER_FORM) route in app.py. Main did not touch src/web/app.py or requirements.txt, so no migration was needed.\nOptional fix done: stale Starlette 0.36 Range docstring in _creative_range_response.\nTests in a fresh venv with the PR pins (fastapi 0.141.1, starlette 1.7.0, jinja2 3.1.6): test_request_limits + the 7 changed-fake test files (1761, 1775, 1798, 1826, failures_reach_collector, report_delivery_review, review_ui_regressions): 269 passed. acl_scan_secrets OK, acl_smoke OK. Full suite not run locally (CI)."
       }
     },
     "tasks": {
