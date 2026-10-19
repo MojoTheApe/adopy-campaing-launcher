@@ -10,6 +10,8 @@ import pytest
 
 from config import config_unify, paths
 
+pytestmark = pytest.mark.windows_only(reason="MSIX virtual AppData paths and LOCALAPPDATA are Windows-only")
+
 VIRTUAL = r"C:\Users\Buyer\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Local"
 REAL = r"C:\Users\Buyer\AppData\Local"
 
