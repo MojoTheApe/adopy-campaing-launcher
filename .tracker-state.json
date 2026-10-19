@@ -43253,20 +43253,6 @@
         "state": "implementing",
         "started_at": "2026-10-19T11:47:02+00:00",
         "from_status": "status:todo"
-      },
-      "855": {
-        "actor": "Worker-W1855B",
-        "session": "claude-w1855b-20261019",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1855-durable-intent",
-        "worktree": "C:\\acl-1855-durable-intent",
-        "id": "3596961efe2345d3b5b557bad32cd7ae",
-        "issue": 855,
-        "state": "handoff",
-        "started_at": "2026-10-19T11:53:01+00:00",
-        "from_status": "status:todo",
-        "pr": 927,
-        "report": "ACL-1855 returned to review on the owner's instruction of 2026-10-19 (\"put it into review\"); the 2026-10-17 administrative pause on this task is lifted by that instruction. Fresh claim on the retained branch work/acl-1855-durable-intent, PR #927, head f493fd9a (merge of current main 435bc154; the code itself is unchanged since the earlier handoff at 363be1c8).\n- Mandatory durable \"sending\" record (append+flush+fsync) before every POST; storage refusal 503/code storage before the first write; a later object is not sent when its record cannot be saved (partial success stays visible); post-POST failures keep the durable intent and report Outcome unknown.\n- Restart after readback keeps confirmed results; torn lines (incl. mid-UTF-8) are skipped; the page says \"Not sent\" only when nothing reached Meta.\n- Checks: PR #927 all required checks green on f493fd9a (linux 1/2/3, windows, descriptor, tracker-link, verification, installer); targeted tests 330 passed, 1 skipped. Pre-handoff read-only Opus review: APPROVE at 363be1c8, no open findings.\n- No live Meta write. Remaining: official independent review, batch approval, delivery."
       }
     },
     "tasks": {
@@ -49262,25 +49248,25 @@
             "session": "claude-w1855b-20261019"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1855B",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-W1855A",
-          "session": "821e4a97-45d7-466a-b9ea-56309769a6f1",
+          "actor": "Worker-W1855B",
+          "session": "claude-w1855b-20261019",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1855-durable-intent",
           "worktree": "C:\\acl-1855-durable-intent",
-          "id": "0a9330cdff9e414aa31394dd4bc3440e",
+          "id": "3596961efe2345d3b5b557bad32cd7ae",
           "issue": 855,
           "state": "handoff",
-          "started_at": "2026-10-15T09:31:15+00:00",
-          "from_status": "status:backlog",
+          "started_at": "2026-10-19T11:53:01+00:00",
+          "from_status": "status:todo",
           "pr": 927,
-          "report": "ACL-1855 implementation complete on work/acl-1855-durable-intent at 363be1c8 (base main 080df2d8), PR #927.\n- Mandatory durable \"sending\" record (append+flush+fsync) before every POST; storage refusal 503/code storage before first write; later object not sent on failure, partial success visible; post-POST failures keep the durable intent and report Outcome unknown.\n- Restart after readback restores confirmed results; torn lines (incl. mid-UTF-8) skipped; page shows a clear storage reason and never \"Not sent\" after a write may have landed.\n- Checks: targeted tests 330 passed, 1 skipped (test_acl1855_*, test_acl1800_*); seam-free reproduction fails on base with the original bug. Full suite left to CI.\n- Pre-handoff read-only Opus review: 3 rounds, final APPROVE at 363be1c8 (no open findings; LOW 3/5/6 accepted by design).\n- No live Meta write; 9090 untouched. Remaining: official independent review, batch approval, delivery."
+          "report": "ACL-1855 returned to review on the owner's instruction of 2026-10-19 (\"put it into review\"); the 2026-10-17 administrative pause on this task is lifted by that instruction. Fresh claim on the retained branch work/acl-1855-durable-intent, PR #927, head f493fd9a (merge of current main 435bc154; the code itself is unchanged since the earlier handoff at 363be1c8).\n- Mandatory durable \"sending\" record (append+flush+fsync) before every POST; storage refusal 503/code storage before the first write; a later object is not sent when its record cannot be saved (partial success stays visible); post-POST failures keep the durable intent and report Outcome unknown.\n- Restart after readback keeps confirmed results; torn lines (incl. mid-UTF-8) are skipped; the page says \"Not sent\" only when nothing reached Meta.\n- Checks: PR #927 all required checks green on f493fd9a (linux 1/2/3, windows, descriptor, tracker-link, verification, installer); targeted tests 330 passed, 1 skipped. Pre-handoff read-only Opus review: APPROVE at 363be1c8, no open findings.\n- No live Meta write. Remaining: official independent review, batch approval, delivery."
         },
         "pr": 927,
-        "queued_at": "2026-10-15T09:53:41+00:00",
+        "queued_at": "2026-10-19T11:55:16+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -56062,7 +56048,8 @@
       681,
       776,
       899,
-      902
+      902,
+      855
     ],
     "review": {
       "id": "b49c262d383b4011a4e6891181162ac5",
@@ -89922,6 +89909,13 @@
             "approved_at": "2026-10-19T11:34:46+00:00"
           }
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T11:55:16+00:00",
+        "issue": 855,
+        "pr": 927,
+        "actor": "Worker-W1855B"
       }
     ],
     "policy": {
