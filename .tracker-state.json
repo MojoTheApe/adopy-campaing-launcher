@@ -43591,9 +43591,11 @@
         "worktree": "C:\\acl-1959",
         "id": "9f5cce427c2948118578576b8826f406",
         "issue": 959,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-19T14:13:30+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 1017,
+        "report": "Tracker issues: ACL-1959\n\n## What\nClosing a profile after an account read sometimes logged `MLX stop failed (Stop profile failed HTTP 404: 404 page not found)` and left the window open (TEST9095, 16.10). The real stop address (`v1/profile/stop/p/{id}`) failed at the transport level, the code fell through to the legacy addresses, and their 404 hid the real error.\n\n`MultiloginLauncher.stop_profile` now:\n- asks the real stop address once more after a short pause when it does not answer (connection dropped or read timeout);\n- treats \"already stopped\" on that retry as stopped;\n- if the retry fails too, raises an error naming the address and the exception, without walking the legacy tail.\n\nAn HTTP 404 from the real address still walks the legacy tail as before. Callers are unchanged (`allow_kill=False` still closes nothing beyond the API).\n\n## Checks\n- `tests/test_acl1959_stop_transport_error.py`: 5 passed (dropped connection, read timeout, already-stopped on retry, two drops, 404 tail)\n- Neighbouring stop tests (`test_the_api_stop_is_asked_first.py`, `test_a_hand_opened_profile_is_never_stopped.py`): passed\n- Pre-handoff Opus review: no HIGH/MEDIUM; LOW items fixed (timeout case, changelog spacing)\n\n\ud83e\udd16 Generated with [Claude Code](https://claude.com/claude-code)"
       },
       "72": {
         "actor": "Worker-W142C",
