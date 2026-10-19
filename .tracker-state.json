@@ -48485,7 +48485,7 @@
             "session": "w853d-20261019"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-W853D",
         "coordinator": "Coordinator-C1016A",
         "handoff": {
@@ -48504,7 +48504,7 @@
         },
         "pr": 863,
         "queued_at": "2026-10-19T12:31:55+00:00",
-        "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
+        "review_report": "# Returned only to release the review lane: the review baseline is stale\n\nMain moved to 1c6ab78e after the review (batch #1016 merged), so the independent review no longer matches the frozen baseline and `batch approve` is refused. The code review itself found no blocking problems, and the evidence stays on record in the review notes.\n\nNext step for the author: when the coordinator says this task's batch turn is near, merge the then-current main into the original branch, run the affected tests, hand off, and get a short fresh review of the delta (content was already reviewed).",
         "return_operation": {
           "id": "e26bf4c9096b4a088993fde43345eaa5",
           "actor": "Coordinator-M1011A",
@@ -91363,6 +91363,24 @@
           "report": "# Returned only to release the review lane: the review baseline is stale\n\nMain moved to 1c6ab78e after the review (batch #1016 merged), so the independent review no longer matches the frozen baseline and `batch approve` is refused. The code review itself found no blocking problems, and the evidence stays on record in the review notes.\n\nNext step for the author: when the coordinator says this task's batch turn is near, merge the then-current main into the original branch, run the affected tests, hand off, and get a short fresh review of the delta (content was already reviewed).",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-19T14:20:39+00:00",
+        "review": {
+          "id": "ebdd6b2b6eb340749fbf6e85cf6cb913",
+          "pr": 863,
+          "issues": [
+            853
+          ],
+          "actor": "Reviewer-R853E",
+          "session": "r853e-20261019",
+          "coordinator": "Coordinator-C1016A",
+          "started_at": "2026-10-19T12:45:25+00:00",
+          "state": "returning",
+          "report": "# Returned only to release the review lane: the review baseline is stale\n\nMain moved to 1c6ab78e after the review (batch #1016 merged), so the independent review no longer matches the frozen baseline and `batch approve` is refused. The code review itself found no blocking problems, and the evidence stays on record in the review notes.\n\nNext step for the author: when the coordinator says this task's batch turn is near, merge the then-current main into the original branch, run the affected tests, hand off, and get a short fresh review of the delta (content was already reviewed).",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -98080,20 +98098,6 @@
       "ineligible": {}
     },
     "source_reviews": {
-      "863": {
-        "id": "ebdd6b2b6eb340749fbf6e85cf6cb913",
-        "pr": 863,
-        "issues": [
-          853
-        ],
-        "actor": "Reviewer-R853E",
-        "session": "r853e-20261019",
-        "coordinator": "Coordinator-C1016A",
-        "started_at": "2026-10-19T12:45:25+00:00",
-        "state": "returning",
-        "report": "# Returned only to release the review lane: the review baseline is stale\n\nMain moved to 1c6ab78e after the review (batch #1016 merged), so the independent review no longer matches the frozen baseline and `batch approve` is refused. The code review itself found no blocking problems, and the evidence stays on record in the review notes.\n\nNext step for the author: when the coordinator says this task's batch turn is near, merge the then-current main into the original branch, run the affected tests, hand off, and get a short fresh review of the delta (content was already reviewed).",
-        "keep_lane": false
-      },
       "820": {
         "id": "c2ff818609fd44c99998f17deee0ad08",
         "pr": 820,
