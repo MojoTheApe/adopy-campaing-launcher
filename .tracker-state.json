@@ -43220,20 +43220,6 @@
         "state": "implementing",
         "started_at": "2026-10-19T11:32:27+00:00",
         "from_status": "status:todo"
-      },
-      "138": {
-        "actor": "Worker-P1138B",
-        "session": "acl1138_resume_1019",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1138-proxy-gate",
-        "worktree": "C:\\acl-1138-proxy",
-        "id": "7c24acecc3474f6caa0788a3f06e4f59",
-        "issue": 138,
-        "state": "handoff",
-        "started_at": "2026-10-19T11:36:11+00:00",
-        "from_status": "status:todo",
-        "pr": 947,
-        "report": "Resumed 2026-10-19 on the owner's explicit instruction (owner lifted the 2026-10-17 administrative pause for ACL-1138 only).\nBranch work/acl-1138-proxy-gate, PR #947 into main, new head 8bb27185 = merge of current main 435bc154 into the reviewed source bd0f6741. Only conflict: docs/system/CHANGELOG.md (both new entries kept, ours on top). Product code identical to the reviewed bd0f6741.\nChecks on the merged tree: 78 affected test files, 2471 passed, 1 skipped. PR CI restarted (the 2026-10-16 runs were GitHub startup_failure with 0 s duration).\nPrevious independent approval was at bd0f6741 vs af0ade29 and is historical; a fresh independent review against current main is required.\nRemaining: fresh review, Approved, Coordinator batch into main, Merged. Live attach evidence on a real run still not observed."
       }
     },
     "tasks": {
@@ -49407,25 +49393,25 @@
             "session": "acl1138_resume_1019"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-P1138B",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-P1138",
-          "session": "acl1138_proxy_gate",
+          "actor": "Worker-P1138B",
+          "session": "acl1138_resume_1019",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1138-proxy-gate",
           "worktree": "C:\\acl-1138-proxy",
-          "id": "91370c8bfef44f8ab814427488fb4344",
+          "id": "7c24acecc3474f6caa0788a3f06e4f59",
           "issue": 138,
           "state": "handoff",
-          "started_at": "2026-10-16T11:02:43+00:00",
-          "from_status": "status:backlog",
+          "started_at": "2026-10-19T11:36:11+00:00",
+          "from_status": "status:todo",
           "pr": 947,
-          "report": "Implementation complete on work/acl-1138-proxy-gate, PR #947 into main, head bd0f6741.\nGate: profile proxy read from MLX API (/profile/search by profile_ids) before every attach/start (all Multilogin providers, attach_existing_only, fb_api.profile.open_profile, warm pool open/adopt/checkout); no proxy -> profile_no_proxy account stop; API trouble -> fail-open with proxy_gate_unchecked telemetry; FB_RPA_PROXY_GATE=0 switch.\nChecks: 24 new tests; affected test files locally 2387 + 822 passed; secret scan clean; full suite left to CI.\nVerified read-only against real profiles in workspaces A and B: http and socks5 pass, no-proxy refused. Survey: 34/1848 (A) and 3/520 (B) profiles have no proxy.\nIndependent review (separate Opus subagent, read-only): changes requested twice, fixed, APPROVE at bd0f6741 vs base af0ade29.\nRemaining: acceptance item \"tried against real profiles before it gates\" is met on the configuration side; a live attach on a real run (command-line evidence log line) is not yet observed. Watch proxy_gate_unchecked telemetry after release."
+          "report": "Resumed 2026-10-19 on the owner's explicit instruction (owner lifted the 2026-10-17 administrative pause for ACL-1138 only).\nBranch work/acl-1138-proxy-gate, PR #947 into main, new head 8bb27185 = merge of current main 435bc154 into the reviewed source bd0f6741. Only conflict: docs/system/CHANGELOG.md (both new entries kept, ours on top). Product code identical to the reviewed bd0f6741.\nChecks on the merged tree: 78 affected test files, 2471 passed, 1 skipped. PR CI restarted (the 2026-10-16 runs were GitHub startup_failure with 0 s duration).\nPrevious independent approval was at bd0f6741 vs af0ade29 and is historical; a fresh independent review against current main is required.\nRemaining: fresh review, Approved, Coordinator batch into main, Merged. Live attach evidence on a real run still not observed."
         },
         "pr": 947,
-        "queued_at": "2026-10-16T11:39:09+00:00",
+        "queued_at": "2026-10-19T11:37:51+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -56010,7 +55996,8 @@
       377,
       70,
       681,
-      776
+      776,
+      138
     ],
     "review": {
       "id": "b49c262d383b4011a4e6891181162ac5",
@@ -89751,6 +89738,13 @@
         "at": "2026-10-19T11:36:11+00:00",
         "issue": 138,
         "claim": "7c24acecc3474f6caa0788a3f06e4f59",
+        "actor": "Worker-P1138B"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-19T11:37:51+00:00",
+        "issue": 138,
+        "pr": 947,
         "actor": "Worker-P1138B"
       }
     ],
