@@ -45,16 +45,54 @@ def test_active_flag_without_cutover_evidence_is_not_enough(prepared):
         acl_adoption.guard_tracker(['work', 'ACL-1248'], prepared)
 
 
-@pytest.mark.parametrize('client', ['scripts/task_tracker.py', '.workflow/tools/task_tracker.py'])
-def test_both_client_entrypoints_stop_before_loading_engine(client, prepared):
-    for name in ('scripts/task_tracker.py', 'scripts/acl_adoption.py', '.workflow/tools/task_tracker.py'):
+def test_guarded_acl_adapter_stops_before_loading_shared_engine(prepared):
+    for name in ('scripts/acl_task_tracker.py', 'scripts/task_tracker.py', 'scripts/acl_adoption.py',
+                 '.workflow/tools/task_tracker.py'):
         target = prepared / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / name, target)
-    result = subprocess.run([sys.executable, str(prepared / client), 'set', 'ACL-1248', '--status', 'merged'],
+    result = subprocess.run([sys.executable, str(prepared / 'scripts/acl_task_tracker.py'),
+                             'set', 'ACL-1248', '--status', 'merged'],
                             cwd=ROOT, capture_output=True, text=True)
     assert result.returncode != 0
     assert 'not active' in result.stderr
+
+
+@pytest.mark.parametrize('marker', [None, '{', '{"schema_version":1,"state":"unknown"}',
+                                   '{"schema_version":1,"state":"active","evidence":{}}'])
+def test_guarded_adapter_rejects_missing_or_corrupt_marker_before_delegation(prepared, monkeypatch, marker):
+    from scripts import acl_task_tracker
+    path = prepared / '.workflow/adoption.json'
+    if marker is None:
+        path.unlink()
+    else:
+        path.write_text(marker)
+    actual_guard = acl_adoption.guard_tracker
+    monkeypatch.setattr(acl_adoption, 'guard_tracker', lambda args: actual_guard(args, prepared))
+    monkeypatch.setitem(sys.modules, 'acl_adoption', acl_adoption)
+    monkeypatch.setattr(sys, 'argv', ['acl_task_tracker.py', 'work', 'ACL-1248'])
+    monkeypatch.setattr(acl_task_tracker.runpy, 'run_path',
+                        lambda *a, **k: pytest.fail('invalid marker reached shared engine/transport'))
+    before = sorted(p.relative_to(prepared).as_posix() for p in prepared.rglob('*'))
+    assert acl_task_tracker.main() == 1
+    assert sorted(p.relative_to(prepared).as_posix() for p in prepared.rglob('*')) == before
+
+
+def test_active_guarded_adapter_delegates_same_arguments_to_canonical_client(prepared, monkeypatch):
+    from scripts import acl_task_tracker
+    path = prepared / '.workflow/adoption.json'
+    state = json.loads(path.read_text())
+    state.update(state='active', evidence={k: 'retained actual cutover proof' for k in acl_adoption.ACTIVATION_EVIDENCE})
+    path.write_text(json.dumps(state))
+    actual_guard = acl_adoption.guard_tracker
+    monkeypatch.setattr(acl_adoption, 'guard_tracker', lambda args: actual_guard(args, prepared))
+    monkeypatch.setitem(sys.modules, 'acl_adoption', acl_adoption)
+    argv = ['acl_task_tracker.py', 'guide']
+    monkeypatch.setattr(sys, 'argv', argv)
+    calls = []
+    monkeypatch.setattr(acl_task_tracker.runpy, 'run_path', lambda path, **kwargs: calls.append((path, kwargs, sys.argv[:])))
+    assert acl_task_tracker.main() == 0
+    assert calls == [(str(ROOT / 'scripts/task_tracker.py'), {'run_name': '__main__'}, argv)]
 
 
 @pytest.mark.parametrize('arguments', [
