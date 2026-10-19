@@ -50059,7 +50059,7 @@
             "session": "w106c-20261016"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-W106C",
         "coordinator": "Coordinator-C1016A",
         "handoff": {
@@ -50078,7 +50078,7 @@
         },
         "pr": 955,
         "queued_at": "2026-10-19T12:52:39+00:00",
-        "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
+        "review_report": "# Returned only to release the review lane: the review baseline is stale\n\nMain moved to 1c6ab78e after the review (batch #1016 merged), so the independent review no longer matches the frozen baseline and `batch approve` is refused. The code review itself found no blocking problems, and the evidence stays on record in the review notes.\n\nNext step for the author: when the coordinator says this task's batch turn is near, merge the then-current main into the original branch, run the affected tests, hand off, and get a short fresh review of the delta (content was already reviewed).",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578063+00:00",
@@ -91366,6 +91366,24 @@
           "report": "Main moved to 1c6ab78e (batch #1016). Approval on 435bc154 is stale; return for a main merge and fresh delta approval. Owner instruction 2026-10-19: ship these four in the next batch with release."
         },
         "batch_id": null
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-19T14:19:59+00:00",
+        "review": {
+          "id": "30da9f63ac2f4410aadec254c84c931a",
+          "pr": 955,
+          "issues": [
+            19
+          ],
+          "actor": "Reviewer-R106E",
+          "session": "r106e-20261019",
+          "coordinator": "Coordinator-C1016A",
+          "started_at": "2026-10-19T13:11:49+00:00",
+          "state": "returning",
+          "report": "# Returned only to release the review lane: the review baseline is stale\n\nMain moved to 1c6ab78e after the review (batch #1016 merged), so the independent review no longer matches the frozen baseline and `batch approve` is refused. The code review itself found no blocking problems, and the evidence stays on record in the review notes.\n\nNext step for the author: when the coordinator says this task's batch turn is near, merge the then-current main into the original branch, run the affected tests, hand off, and get a short fresh review of the delta (content was already reviewed).",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -98106,20 +98124,6 @@
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-19T13:01:50+00:00",
         "state": "reviewing"
-      },
-      "955": {
-        "id": "30da9f63ac2f4410aadec254c84c931a",
-        "pr": 955,
-        "issues": [
-          19
-        ],
-        "actor": "Reviewer-R106E",
-        "session": "r106e-20261019",
-        "coordinator": "Coordinator-C1016A",
-        "started_at": "2026-10-19T13:11:49+00:00",
-        "state": "returning",
-        "report": "# Returned only to release the review lane: the review baseline is stale\n\nMain moved to 1c6ab78e after the review (batch #1016 merged), so the independent review no longer matches the frozen baseline and `batch approve` is refused. The code review itself found no blocking problems, and the evidence stays on record in the review notes.\n\nNext step for the author: when the coordinator says this task's batch turn is near, merge the then-current main into the original branch, run the affected tests, hand off, and get a short fresh review of the delta (content was already reviewed).",
-        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
