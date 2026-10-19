@@ -43624,7 +43624,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "959": {
+        "actor": "Worker-W1019959",
+        "session": "run_w1019_959",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1959-mlx-stop-error",
+        "worktree": "C:\\acl-1959",
+        "id": "9f5cce427c2948118578576b8826f406",
+        "issue": 959,
+        "state": "implementing",
+        "started_at": "2026-10-19T14:13:30+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -50263,10 +50276,14 @@
           {
             "actor": "Worker-S1016C",
             "session": "stop404"
+          },
+          {
+            "actor": "Worker-W1019959",
+            "session": "run_w1019_959"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-S1016C",
+        "state": "implementing",
+        "worker": "Worker-W1019959",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-S1016C",
@@ -53670,6 +53687,10 @@
       "Reviewer-R142E": {
         "session": "r142e-20261019",
         "role": "Reviewer"
+      },
+      "Worker-W1019959": {
+        "session": "run_w1019_959",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -91269,6 +91290,13 @@
           ],
           "finished_at": "2026-10-19T14:12:36+00:00"
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T14:13:30+00:00",
+        "issue": 959,
+        "claim": "9f5cce427c2948118578576b8826f406",
+        "actor": "Worker-W1019959"
       }
     ],
     "policy": {
