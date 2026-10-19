@@ -52160,7 +52160,7 @@
             "session": "run_s1019_945"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1019945",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -52178,7 +52178,8 @@
           "report": "ACL-1945 handoff: PR https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1022\n\nUnder ACL_FB_BACKEND=api the dashboard turn-off sends POST /<id> status=PAUSED through the in-profile Graph transport, then reads the object back and confirms status=PAUSED (delivery not still active). Campaign level; an ad only after the API confirms its parent campaign; an id that is not a campaign (no objective) is refused. Busy profile (publish job running or queued) is refused with HTTP 409; every outcome is journaled in turn_off_log.jsonl with route api and matched_by id. A lost write answer is reconciled by a read-back, never a second POST; possibly-applied outcomes are unconfirmed, not failed. RPA path unchanged. Turning back on is out of scope.\n\nTests: tests/test_acl1945_turn_off_via_api.py, 28 tests with a fake Graph transport using the real write policy (request shape, read-back mismatch, lagging delivery, refused/lost/applied writes, busy profile, ad parent confirmation, ad-set-as-campaign refusal, journal, route under api/rpa). Also green: test_acl1760_api_read, test_every_change_leaves_a_record, test_turn_off_safety_browser, test_acl1800_campaign_commands. Full suite left to CI.\n\nReview: Opus read-only review of work/main...HEAD; no HIGH. MEDIUM fixed: ad set id could pass as campaign (now requires objective); write now holds the browser gate so a release update sees it. LOW fixed: reconciled only after confirmation. Not fixed (follow-ups): journal line is written after the write, not before; busy check does not count an abandoned-but-still-running publish thread; the route does a little blocking work on the event loop.\n\nOpen points: PR #943 (ACL-1379) touches the same places (matched_by, profile_in_use, PROFILE_BUSY_ERROR copied verbatim; #943 uses matched_by \"\" for by-id, this uses \"id\"; by-name requests must stay on the RPA path after both merge). No pilot-account allowlist exists in code; live check on an allowed pilot account is a separate task and was not run."
         },
         "pr": 1022,
-        "queued_at": "2026-10-19T18:51:15+00:00"
+        "queued_at": "2026-10-19T18:51:15+00:00",
+        "reviewer": "Reviewer-R1945Y"
       },
       "1020": {
         "implementers": [],
@@ -54527,6 +54528,10 @@
       "Worker-R1019992": {
         "session": "run_r1019_992",
         "role": "Worker"
+      },
+      "Reviewer-R1945Y": {
+        "session": "reviewer-r1945y-20261019",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -57378,7 +57383,6 @@
     "review_queue": [
       681,
       805,
-      945,
       807,
       184,
       273,
@@ -93669,6 +93673,13 @@
         "issue": 992,
         "claim": "65d64514edec4788b290eb0040dc975a",
         "actor": "Worker-R1019992"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-19T19:59:58+00:00",
+        "pr": 1022,
+        "lane": "2d7e227469f040bca4bdd5bc351e7b30",
+        "actor": "Reviewer-R1945Y"
       }
     ],
     "policy": {
@@ -101176,6 +101187,18 @@
         "session": "reviewer-r1151y-20261019",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-19T19:38:08+00:00",
+        "state": "reviewing"
+      },
+      "1022": {
+        "id": "2d7e227469f040bca4bdd5bc351e7b30",
+        "pr": 1022,
+        "issues": [
+          945
+        ],
+        "actor": "Reviewer-R1945Y",
+        "session": "reviewer-r1945y-20261019",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-19T19:59:58+00:00",
         "state": "reviewing"
       }
     },
