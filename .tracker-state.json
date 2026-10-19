@@ -43181,6 +43181,18 @@
         "state": "implementing",
         "started_at": "2026-10-19T11:02:10+00:00",
         "from_status": "status:todo"
+      },
+      "681": {
+        "actor": "Worker-G19681",
+        "session": "wg681-c0a1de70",
+        "coordinator": "Coordinator-E1019A",
+        "branch": "work/acl-1681-server-drafts",
+        "worktree": "C:\\wk19-681",
+        "id": "c7de7bb57d3940109f2fa046ed8096c0",
+        "issue": 681,
+        "state": "implementing",
+        "started_at": "2026-10-19T11:06:02+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -50146,11 +50158,15 @@
           {
             "actor": "Worker-W1681A",
             "session": "worker_acl1681_20261017"
+          },
+          {
+            "actor": "Worker-G19681",
+            "session": "wg681-c0a1de70"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-W1681A",
-        "coordinator": "Coordinator-C1681",
+        "state": "implementing",
+        "worker": "Worker-G19681",
+        "coordinator": "Coordinator-E1019A",
         "handoff": {
           "actor": "Worker-W1681A",
           "session": "worker_acl1681_20261017",
@@ -53080,6 +53096,10 @@
       },
       "Worker-G19202": {
         "session": "wg202-c0a1de70",
+        "role": "Worker"
+      },
+      "Worker-G19681": {
+        "session": "wg681-c0a1de70",
         "role": "Worker"
       }
     },
@@ -89400,6 +89420,13 @@
         "issue": 305,
         "actor": "Worker-E19305",
         "report": "Parked 2026-10-19: PR #965 merged with main (head a448e2f7) but packaging/windows/tests/test_setup_wizard.py::test_manual_setup_discovers_only_this_managers_accounts line 95 expects 'No accounts' while the new CM-column check now says 'is not in the CM column'; one-line expectation change needs owner approval. Everything else passes."
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-19T11:06:02+00:00",
+        "issue": 681,
+        "claim": "c7de7bb57d3940109f2fa046ed8096c0",
+        "actor": "Worker-G19681"
       }
     ],
     "policy": {
