@@ -99661,7 +99661,51 @@
         "session": "reviewer-r1377x-20261019",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-19T14:43:28+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 377,
+          "pr": 935,
+          "branch": "work/acl-1377-workbook-key",
+          "head_sha": "e548e74f96f1642e2e18aaa98b2c549801f208e6",
+          "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+          "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "ba1d91de10f6ab2391b19b6d8e3faeff12e10c23d3500ddb0530bf15a1ad84d1",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-R1377X",
+            "review_session": "reviewer-r1377x-20261019",
+            "execution_lane": "f9c07d4263c64bc8a0710687acb1e97b",
+            "implementer": "Worker-K7Q2M",
+            "head_sha": "e548e74f96f1642e2e18aaa98b2c549801f208e6",
+            "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+            "tree_sha": "8478aa654af2ad36b63c9aa54ec0215746f3f9d1",
+            "issues": [
+              377
+            ],
+            "report": "Reviewed PR #935 (ACL-1377), head 613739de, merged cleanly against current main 1c6ab78e (git merge-tree: no conflicts; main did not touch _alias_without_id_suffix, workbook_alias_for or amapFillAttribution since merge-base af0ade29; PR #825/ACL-1824 id-suffix matching is already in the base). The diff adds a second, compact step to _alias_without_id_suffix in src/web/app.py: after the exact account_key match on the label with the trailing id (>=8 digits) removed fails, it compares a compact key (account_key stripped to [0-9a-z], rule-based keys 'ruleN:' excluded) among the country-scoped workbook aliases and returns a match only if exactly one distinct alias hits, so Facebook_6540_61579599532457 resolves to Facebook6540 and feeds both the account row and the campaign tree, which share workbook_alias_for. Criteria: (1) match plus lead in account row - covered by test_label_matches_the_workbook_alias_written_without_underscores and test_account_map_row_shows_numbers_for_the_compact_workbook_alias (leads 6, spend 30); (2) no collisions - 6540 vs 6545, 6540 vs 65400, two compact candidates -> no match, country scoping, exact underscore alias wins over compact; (3) existing matches (FacebookDoc19 - Eros Andersson, Facebook_5265_id) unchanged - tested; (4) 'not in workbook' hint added in report.html amapFillAttribution for campaign rows that have non-zero Meta spend/results, no workbook rows, and a non-empty workbook response, removed on re-fill or workbook error - covered by two Playwright tests in test_the_account_tree_on_screen.py. normalize_account_alias is untouched, as required. Tests run: tests/test_dashboard_review.py -> 32 passed, 3 failed (test_period_does_not_change_account_identity x2, test_unique_account_drills_into_zero_deposit_ads_in_the_same_period; all fail with a jinja2 TypeError 'cannot use tuple as a dict key' in template rendering identically in two local venvs, tests not touched by the diff and not related to alias matching - environmental, CI is green); tests/test_the_account_tree_on_screen.py -k 'workbook or dashes' -> 14 passed including the new hint tests. CI on head 613739de: all checks SUCCESS (CI linux 1/2/3, windows tests, ACL verification, tracker-link, installer verification; installer build jobs SKIPPED), mergeable MERGEABLE. Non-blocking nits: the issue text says a trailing _\\d{10,} while the code reuses the existing >=8-digit rule from ACL-1824 (consistent with main, acceptable); the issue's owner check on the live dashboard and a serve.py restart remain outstanding as stated in the Issue. Base binding: the reviewed diff is origin/main...HEAD, whose merge-base equals the PR recorded base af0ade29; git merge-tree against current main 1c6ab78e is conflict-free. Delta re-review on new head e548e74f (merge of main 1c6ab78e into the branch): the PR diff against main (git diff work/main...HEAD) has the same stable patch-id as the previously reviewed diff at 613739de, and the delta 613739de..e548e74f in app.py/report.html has the same patch-id as what main itself changed there since the old merge-base, so the merge brings only main; the same touched tests were re-run with the same interpreter (39 passed, including the new alias, account-map and not-in-workbook hint tests). CI on e548e74f finished green: ACL verification, linux tests 1/2/3, windows tests, tracker-link, installer verification, descriptor, process instructions all pass; installer build jobs skipped. No live checks claimed.",
+            "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "recorded_at": "2026-10-19T17:35:43+00:00",
+            "issue_scopes": {
+              "377": "ba1d91de10f6ab2391b19b6d8e3faeff12e10c23d3500ddb0530bf15a1ad84d1"
+            }
+          },
+          "lane": {
+            "id": "f9c07d4263c64bc8a0710687acb1e97b",
+            "pr": 935,
+            "issues": [
+              377
+            ],
+            "actor": "Reviewer-R1377X",
+            "session": "reviewer-r1377x-20261019",
+            "coordinator": "Coordinator-M1011A",
+            "started_at": "2026-10-19T14:43:28+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-19T17:36:36+00:00"
+        }
       },
       "843": {
         "id": "eb0c8d9eba93438f886e993859f16f32",
