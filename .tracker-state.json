@@ -44994,20 +44994,6 @@
   },
   "execution": {
     "claims": {
-      "854": {
-        "actor": "Worker-L1854",
-        "session": "run_l1_854",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1854-current-draft-status",
-        "worktree": "C:\\acl-1854-wt",
-        "id": "b8169b241e534348a6481cd456a225cb",
-        "issue": 854,
-        "state": "handoff",
-        "started_at": "2026-10-20T08:59:08+00:00",
-        "from_status": "status:todo",
-        "pr": 869,
-        "report": "Review fix (ACL-1854, 2026-10-20): blocking finding fixed - added job_id to the ACL-1781 test fixtures that seed _jobs without it (the KeyError in _persist_job); re-ran all test files that seed _jobs (12 files, all passed). Spawn waits of the cross-process lock test raised from 10 s to 30 s (load flake). Non-blocking notes (unverified badge for never-built accounts, malformed record blocking builds) left for a follow-up Issue. Branch contains current work/main."
-      },
       "990": {
         "actor": "Worker-L1990",
         "session": "run_l1_990",
@@ -50104,25 +50090,25 @@
             "session": "run_l1_854"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-L1854",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-R1019854",
-          "session": "run_r1019_854",
+          "actor": "Worker-L1854",
+          "session": "run_l1_854",
           "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1854-current-draft-status",
           "worktree": "C:\\acl-1854-wt",
-          "id": "8ed5474077a24ef0af7a92f863e035c5",
+          "id": "b8169b241e534348a6481cd456a225cb",
           "issue": 854,
           "state": "handoff",
-          "started_at": "2026-10-19T20:30:34+00:00",
+          "started_at": "2026-10-20T08:59:08+00:00",
           "from_status": "status:todo",
           "pr": 869,
-          "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main. Conflicts: CHANGELOG, PROJECT.md (kept both notes), src/web/publish_jobs.py (imports: hashlib, json from this branch + logging from main), report.html (kept the previous-ready line and main's text-size token). Tests: test_acl1854_current_draft_status 31 passed (one cross-process lock test timed out once under heavy laptop load and passed on rerun), test_a_job_exception_reaches_sentry_tagged 4 passed, test_a_finished_clean_profile_closes_itself 46 passed. No live runs."
+          "report": "Review fix (ACL-1854, 2026-10-20): blocking finding fixed - added job_id to the ACL-1781 test fixtures that seed _jobs without it (the KeyError in _persist_job); re-ran all test files that seed _jobs (12 files, all passed). Spawn waits of the cross-process lock test raised from 10 s to 30 s (load flake). Non-blocking notes (unverified badge for never-built accounts, malformed record blocking builds) left for a follow-up Issue. Branch contains current work/main."
         },
         "pr": 869,
-        "queued_at": "2026-10-19T20:32:17+00:00",
+        "queued_at": "2026-10-20T09:12:07+00:00",
         "review_report": "Independent review of PR #869 (ACL-1854), head dbc06748, which contains current main (c6150160). RETURNED - one blocking finding.\n\nBLOCKING (high): the PR breaks tests that pass on main, and hosted CI is red. `_persist_job` in src/web/publish_jobs.py:857 now reads `job[\"job_id\"]` unconditionally. tests/test_acl1781_meta_rules.py (test_run_rpa_violation_goes_to_draft_errors_and_is_not_sent, test_run_rpa_registry_failure_fails_open_and_is_logged, test_run_rpa_real_hook_with_broken_registry_fails_open) put a job into `jobs._jobs` without `job_id` and now fail with `KeyError: 'job_id'` (CI \"linux tests (3.13, 2)\" red; the same file passes 19/19 on main, 3 fail on the PR head, reproduced locally). \"ACL verification\" is red as well. The PR already patched two similar fixtures (test_a_finished_clean_profile_closes_itself, test_a_job_exception_reaches_sentry_tagged) but missed this third file. Fix: add `\"job_id\": job_id` to the fixtures in tests/test_acl1781_meta_rules.py (or make the code tolerate it), re-run every test file that seeds `pj._jobs` / `jobs._jobs` directly (grep tests for `_jobs`), then get CI green.\n\nWhat I verified as correct (no change needed): the earlier changes_requested finding (failed-admission error masking a later saved success) is fixed in draft_status.load via the observed predecessor job and revision, with test_failed_admission_overlay_respects_predecessor_revision. The scope matches the Issue acceptance criteria. Accepted jobs invalidate readiness before the worker starts and keep the old success as previous_ready history. Late or stale writers are fenced by job id and status_revision. Partial, failure, cancel and abandon paths persist. Unfinished records not owned by a live job load as interrupted. The whole read-modify-write runs under a thread lock plus the machine file lock, with I/O outside _jobs_lock. A corrupt or missing store gives an unverified state and a visible error. User text is English. One Tracker issues line. CHANGELOG and PROJECT are updated. No Meta writes or live paths are added, and the change stays draft-only.\n\nLocal tests (Windows, py3.14): test_acl1854_current_draft_status, the two patched fixtures, test_publish_safety_contract, test_acl1614, test_acl1603, test_campaign_build_progress, test_config_locations and test_three_accounts_publish_at_once gave 209 passed, 5 failed. Four of the failures also fail on main locally (environmental, 500 vs 403 endpoint tests). The fifth, test_separate_processes_lock_the_entire_read_modify_write, hit a 10 s spawn timeout under machine load (passes in Windows CI), so it is flaky under load.\n\nNon-blocking notes: (1) Snapshot.get returns a synthetic \"unverified / No saved build result for this account\" entry for any account that has no record, even when the file is healthy, so every never-built account now shows a \"Draft unverified\" warning badge in the account header (before this PR it showed nothing). Consider showing it only when the file itself is missing or unreadable. (2) A single malformed record makes the whole file unreadable and blocks all new builds on the machine with a generic RuntimeError (503), with no recovery hint in the message.",
         "return_operation": {
           "id": "91201340047f423fa6a6747b1c5dc404",
@@ -58825,7 +58811,8 @@
       767,
       768,
       184,
-      770
+      770,
+      854
     ],
     "review": null,
     "history": [
@@ -97915,6 +97902,13 @@
         "issue": 770,
         "pr": 979,
         "actor": "Worker-B1019770"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T09:12:07+00:00",
+        "issue": 854,
+        "pr": 869,
+        "actor": "Worker-L1854"
       }
     ],
     "policy": {
