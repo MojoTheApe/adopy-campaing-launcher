@@ -27,7 +27,7 @@ legacy addresses, which all answer 404, so a read left the profile window open
 and the error showed the last 404 instead of the cause (TEST9095, Doc120,
 2026-10-16 23:10). The raised error now names the main-address failure. 404 on the
 main address still falls through to the legacy tail; other 4xx still stop at once.
-A read timeout is not retried (a hung launcher would otherwise hold the profile lock for
+A timeout (connect or read) is not retried (a hung launcher would otherwise hold the profile lock for
 several more timeouts). A 5xx from an older address now moves on to the next address
 instead of ending the search.
 
