@@ -45674,9 +45674,11 @@
         "worktree": "C:\\acl-1774",
         "id": "68374b5be0854219a86b0da09173ad0c",
         "issue": 774,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T13:37:18+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 834,
+        "report": "ACL-1774: up to 5 primary texts as Dynamic Creative (is_dynamic_creative on the ad set, asset_feed_spec without rules, one ad per ad set), Stories/Reels vertical file with one text via two labelled files and two rules. Both write-policy layers and pre-flight rules carry the limits; read-back compares texts as a multiset and the dynamic flag both ways.\n\nLive spike (Doc120, 2026-10-20, owner-authorized, one attempt, PAUSED only): Meta accepted the Dynamic Creative route; 45 of 46 read-back checks match. The earlier 2026-10-14 refusal (100/1885878) was for 3 bodies plus placement rules. One unrelated mismatch: ad set languages expected [1002], got [7, 23] (separate task). Ads Manager eye check not done (separate Live check).\n\nReview: Opus read-only, no blockers; major findings fixed. Open minor items: text dedup by body only (enrich_draft), field numbering after an empty slot, creative name independent of texts 2-5. Branch contains ACL-1767 history (PR #830 in review); merged with work/main 259ae7f1. Tests: affected files only (1774, 1819, 1761, 1767, 1775, second primary text, creative pairing)."
       }
     },
     "tasks": {
