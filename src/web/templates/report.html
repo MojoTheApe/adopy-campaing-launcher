@@ -8432,6 +8432,33 @@ function amapCalendar(btn) {
   document.addEventListener('mousedown', amapCalOutside, true);
   document.addEventListener('keydown', amapCalEsc, true);
 
+  /* ACL-110: «Compare with» — предыдущий период той же длины или свой диапазон. */
+  function cmpPrevText() {
+    if (draft.span === 'all' || !draft.from) return '';
+    var s = new Date(draft.from + 'T00:00:00'), e = new Date((draft.to || draft.from) + 'T00:00:00');
+    var n = Math.round((e - s) / 86400000) + 1;
+    var pe = new Date(s.getTime() - 86400000), ps = new Date(pe.getTime() - (n - 1) * 86400000);
+    return amapIso(ps) + (n > 1 ? ' – ' + amapIso(pe) : '');
+  }
+  function cmpHtml() {
+    var off = draft.span === 'all' || !draft.from;
+    var m = off ? '' : cmpDraft.mode;
+    var noPick = off ? 'disabled' : '';   /* только когда нет периода, не по книге */
+    var h = '<div class="amap-cmp"><label>Compare with <select data-cmp-mode="1" ' + noPick + '>'
+      + '<option value=""' + (m === '' ? ' selected' : '') + '>Nothing</option>'
+      + '<option value="prev"' + (m === 'prev' ? ' selected' : '') + '>Previous period</option>'
+      + '<option value="custom"' + (m === 'custom' ? ' selected' : '') + '>Custom range</option>'
+      + '</select></label>';
+    if (m === 'prev') h += '<span class="amap-cmp-note">' + cmpPrevText() + '</span>';
+    if (m === 'custom') {
+      h += '<input type="date" data-cmp-from="1" value="' + cmpDraft.from + '" aria-label="Comparison start">'
+        + '<span class="amap-cal-arrow">–</span>'
+        + '<input type="date" data-cmp-to="1" value="' + cmpDraft.to + '" aria-label="Comparison end">';
+    }
+    if (off) h += '<span class="amap-cmp-note">pick a date range to compare</span>';
+    return h + '</div>';
+  }
+
   function hasData(p) {
     if (p.key === 'all') return true;
     for (var i = 0; i < have.length; i++) if (have[i] >= p.from && have[i] <= p.to) return true;
@@ -8486,32 +8513,6 @@ function amapCalendar(btn) {
         + (has ? '' : ' title="no rows in the workbook for this day"') + '>' + day + '</button>';
     }
     return h + '</div></div>';
-  }
-
-  /* ACL-110: «Compare with» — предыдущий период той же длины или свой диапазон. */
-  function cmpPrevText() {
-    if (draft.span === 'all' || !draft.from) return '';
-    var s = new Date(draft.from + 'T00:00:00'), e = new Date((draft.to || draft.from) + 'T00:00:00');
-    var n = Math.round((e - s) / 86400000) + 1;
-    var pe = new Date(s.getTime() - 86400000), ps = new Date(pe.getTime() - (n - 1) * 86400000);
-    return amapIso(ps) + (n > 1 ? ' – ' + amapIso(pe) : '');
-  }
-  function cmpHtml() {
-    var off = draft.span === 'all' || !draft.from;
-    var m = off ? '' : cmpDraft.mode;
-    var h = '<div class="amap-cmp"><label>Compare with <select data-cmp-mode="1"' + (off ? ' disabled' : '') + '>'
-      + '<option value=""' + (m === '' ? ' selected' : '') + '>Nothing</option>'
-      + '<option value="prev"' + (m === 'prev' ? ' selected' : '') + '>Previous period</option>'
-      + '<option value="custom"' + (m === 'custom' ? ' selected' : '') + '>Custom range</option>'
-      + '</select></label>';
-    if (m === 'prev') h += '<span class="amap-cmp-note">' + cmpPrevText() + '</span>';
-    if (m === 'custom') {
-      h += '<input type="date" data-cmp-from="1" value="' + cmpDraft.from + '" aria-label="Comparison start">'
-        + '<span class="amap-cal-arrow">–</span>'
-        + '<input type="date" data-cmp-to="1" value="' + cmpDraft.to + '" aria-label="Comparison end">';
-    }
-    if (off) h += '<span class="amap-cmp-note">pick a date range to compare</span>';
-    return h + '</div>';
   }
 
   function draw() {
