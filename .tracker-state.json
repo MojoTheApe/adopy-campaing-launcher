@@ -45006,20 +45006,6 @@
         "started_at": "2026-10-20T09:25:52+00:00",
         "from_status": "status:todo"
       },
-      "53": {
-        "actor": "Worker-L453",
-        "session": "run_l4_53",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-402-failure-signatures",
-        "worktree": "C:\\acl-402",
-        "id": "8fc5a3d0d1b1415299e6bee28d740b92",
-        "issue": 53,
-        "state": "handoff",
-        "started_at": "2026-10-20T09:31:48+00:00",
-        "from_status": "status:backlog",
-        "pr": 1032,
-        "report": "## Summary\nTelemetry summary gains a repeated-failure section (report only per owner decision 2026-10-20): step+reason signatures, machines out of fleet, confidence, evidence.\n\n## Verification\ntests/test_failure_signatures.py + tests/test_acl1806_obsidian_path.py: 16 passed. Opus read-only review done; findings fixed (truncated diag, no-reason cap, fleet-share confidence)."
-      },
       "230": {
         "actor": "Worker-L5230",
         "session": "run_l5_230",
@@ -53454,9 +53440,25 @@
             "session": "run_l4_53"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-L453",
-        "coordinator": "Coordinator-M1011A"
+        "coordinator": "Coordinator-M1011A",
+        "handoff": {
+          "actor": "Worker-L453",
+          "session": "run_l4_53",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "work/acl-402-failure-signatures",
+          "worktree": "C:\\acl-402",
+          "id": "8fc5a3d0d1b1415299e6bee28d740b92",
+          "issue": 53,
+          "state": "handoff",
+          "started_at": "2026-10-20T09:31:48+00:00",
+          "from_status": "status:backlog",
+          "pr": 1032,
+          "report": "## Summary\nTelemetry summary gains a repeated-failure section (report only per owner decision 2026-10-20): step+reason signatures, machines out of fleet, confidence, evidence.\n\n## Verification\ntests/test_failure_signatures.py + tests/test_acl1806_obsidian_path.py: 16 passed. Opus read-only review done; findings fixed (truncated diag, no-reason cap, fleet-share confidence)."
+        },
+        "pr": 1032,
+        "queued_at": "2026-10-20T09:45:38+00:00"
       },
       "230": {
         "implementers": [
@@ -58929,7 +58931,8 @@
       854,
       309,
       990,
-      836
+      836,
+      53
     ],
     "review": null,
     "history": [
@@ -98243,6 +98246,13 @@
         "pr": 830,
         "lane": "bcc490b838574247992ee272f3de034b",
         "actor": "Reviewer-Q2001D"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T09:45:38+00:00",
+        "issue": 53,
+        "pr": 1032,
+        "actor": "Worker-L453"
       }
     ],
     "policy": {
