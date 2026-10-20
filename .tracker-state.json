@@ -46005,6 +46005,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T12:56:11+00:00",
         "from_status": "status:todo"
+      },
+      "836": {
+        "actor": "Worker-RF836",
+        "session": "rf836-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "codex/acl-1836-session-recovery",
+        "worktree": "C:\\acl-rf-836",
+        "id": "42bcc54ba21e44fb8e1918aa9e09d4ef",
+        "issue": 836,
+        "state": "implementing",
+        "started_at": "2026-10-20T14:04:04+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -50604,10 +50616,14 @@
           {
             "actor": "Worker-L2836",
             "session": "run_l2_836"
+          },
+          {
+            "actor": "Worker-RF836",
+            "session": "rf836-20261020"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-L2836",
+        "state": "implementing",
+        "worker": "Worker-RF836",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-L2836",
@@ -50636,13 +50652,6 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578002+00:00",
           "remote_process_stopped_verified": false
-        },
-        "reviewer": "Reviewer-R1836W",
-        "return": {
-          "id": "0835bf7a0c454958959fbed9e2cde602",
-          "actor": "Coordinator-M1011A",
-          "session": "coord-m1011a-20261015",
-          "report": "Main moved to 259ae7f1 (batch #1034: ACL-602, 1202, 1680, 1401, 341). Pure refresh: merge current main (merge commit), re-run affected tests, re-handoff, fresh independent review. Independent trial merge already shows it merges cleanly and its tests pass on the merged tree."
         }
       },
       "838": {
@@ -57497,6 +57506,10 @@
       },
       "Worker-RF920": {
         "session": "rf920-20261020",
+        "role": "Worker"
+      },
+      "Worker-RF836": {
+        "session": "rf836-20261020",
         "role": "Worker"
       }
     },
@@ -102019,6 +102032,13 @@
         "issue": 920,
         "pr": 921,
         "actor": "Worker-RF920"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T14:04:04+00:00",
+        "issue": 836,
+        "claim": "42bcc54ba21e44fb8e1918aa9e09d4ef",
+        "actor": "Worker-RF836"
       }
     ],
     "policy": {
