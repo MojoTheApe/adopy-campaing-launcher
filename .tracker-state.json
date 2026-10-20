@@ -45002,9 +45002,11 @@
         "worktree": "C:\\acl-1854-wt",
         "id": "b8169b241e534348a6481cd456a225cb",
         "issue": 854,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T08:59:08+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 869,
+        "report": "Review fix (ACL-1854, 2026-10-20): blocking finding fixed - added job_id to the ACL-1781 test fixtures that seed _jobs without it (the KeyError in _persist_job); re-ran all test files that seed _jobs (12 files, all passed). Spawn waits of the cross-process lock test raised from 10 s to 30 s (load flake). Non-blocking notes (unverified badge for never-built accounts, malformed record blocking builds) left for a follow-up Issue. Branch contains current work/main."
       },
       "770": {
         "actor": "Worker-B1019770",
