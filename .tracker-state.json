@@ -52701,7 +52701,7 @@
             "session": "run_r1019_992"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-R1019992",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -52720,7 +52720,8 @@
         },
         "pr": 993,
         "queued_at": "2026-10-19T20:01:13+00:00",
-        "review_report": "PR #993 (ACL-1992) conflicts with current main 435bc154 in docs/system/CHANGELOG.md (content conflict; src/web/templates/report.html auto-merges cleanly). Head a62a352f. Author must merge current origin/main into the original branch, resolve, re-run affected checks and hand off again."
+        "review_report": "PR #993 (ACL-1992) conflicts with current main 435bc154 in docs/system/CHANGELOG.md (content conflict; src/web/templates/report.html auto-merges cleanly). Head a62a352f. Author must merge current origin/main into the original branch, resolve, re-run affected checks and hand off again.",
+        "reviewer": "Reviewer-C1992"
       },
       "994": {
         "implementers": [
@@ -55621,6 +55622,10 @@
       "Reviewer-C1990": {
         "session": "reviewer-c1990-20261020",
         "role": "Reviewer"
+      },
+      "Reviewer-C1992": {
+        "session": "reviewer-c1992-20261020",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -58486,7 +58491,6 @@
       }
     },
     "review_queue": [
-      992,
       739,
       840,
       841,
@@ -96653,6 +96657,13 @@
           "report": "# Returned to the author: merge conflict with main, content not reviewed\n\nPR 991 cannot be brought up to current main c61501607ce11744e45add8b0d3b314368c216c5: `gh pr update-branch` reports a merge conflict (checked 2026-10-19/20). A source review must bind the current main baseline, so this task cannot be reviewed or approved as is.\n\nThe content of this PR was NOT reviewed in this pass; this return carries no code findings.\n\nNext step for the author: merge current main into the original branch, resolve the conflict, run the affected tests, push, and hand off again for a full independent review.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-20T06:32:29+00:00",
+        "pr": 993,
+        "lane": "23f9efed6b024a458164458098f56d20",
+        "actor": "Reviewer-C1992"
       }
     ],
     "policy": {
@@ -104540,6 +104551,18 @@
         "session": "r1816v-20261019",
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-19T13:01:50+00:00",
+        "state": "reviewing"
+      },
+      "993": {
+        "id": "23f9efed6b024a458164458098f56d20",
+        "pr": 993,
+        "issues": [
+          992
+        ],
+        "actor": "Reviewer-C1992",
+        "session": "reviewer-c1992-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-20T06:32:29+00:00",
         "state": "reviewing"
       }
     },
