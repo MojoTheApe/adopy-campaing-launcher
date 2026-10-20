@@ -46035,9 +46035,11 @@
         "worktree": "C:\\acl-rf-836",
         "id": "42bcc54ba21e44fb8e1918aa9e09d4ef",
         "issue": 836,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T14:04:04+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 837,
+        "report": "Pure refresh: merged main 259ae7f1 (merge commit 681c2d84), no conflicts. Tests: test_acl1836_session_recovery - 32 passed."
       }
     },
     "tasks": {
