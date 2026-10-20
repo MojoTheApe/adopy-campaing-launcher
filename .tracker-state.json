@@ -44994,20 +44994,6 @@
   },
   "execution": {
     "claims": {
-      "990": {
-        "actor": "Worker-L1990",
-        "session": "run_l1_990",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1990-preflight-topics",
-        "worktree": "C:\\acl-1990-preflight-topics",
-        "id": "2f750e0abb424a5fb8c0eab3f92d23cb",
-        "issue": 990,
-        "state": "handoff",
-        "started_at": "2026-10-20T09:07:38+00:00",
-        "from_status": "status:todo",
-        "pr": 991,
-        "report": "Review fix (ACL-1990, 2026-10-20): the pre-flight status sign font-size 0.6rem replaced by the --adopy-text-xs token (test_acl1797_design_system 16 passed); CHANGELOG diff limited to the new entry. test_acl1819_preflight 92 and test_acl1819_preflight_browser 6 passed (one case there is a known ~1-in-4 flake, also at the earlier approved head). Branch contains current work/main."
-      },
       "739": {
         "actor": "Worker-L1739",
         "session": "run_l1_739",
@@ -52898,25 +52884,25 @@
             "session": "run_l1_990"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-L1990",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-RH2020W",
-          "session": "rh2020w-20261020",
+          "actor": "Worker-L1990",
+          "session": "run_l1_990",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1990-preflight-topics",
-          "worktree": "C:\\rh20-990",
-          "id": "656badbcc9fc4fb7aa5fc5775a53af3c",
+          "worktree": "C:\\acl-1990-preflight-topics",
+          "id": "2f750e0abb424a5fb8c0eab3f92d23cb",
           "issue": 990,
           "state": "handoff",
-          "started_at": "2026-10-20T06:58:50+00:00",
+          "started_at": "2026-10-20T09:07:38+00:00",
           "from_status": "status:todo",
           "pr": 991,
-          "report": "Re-handoff without code change. The 2026-10-20 return ('merge conflict with main, content not reviewed') was a false positive: head b7489b55 already contains current main c6150160 and merges cleanly (git merge-tree). Content needs a full independent review."
+          "report": "Review fix (ACL-1990, 2026-10-20): the pre-flight status sign font-size 0.6rem replaced by the --adopy-text-xs token (test_acl1797_design_system 16 passed); CHANGELOG diff limited to the new entry. test_acl1819_preflight 92 and test_acl1819_preflight_browser 6 passed (one case there is a known ~1-in-4 flake, also at the earlier approved head). Branch contains current work/main."
         },
         "pr": 991,
-        "queued_at": "2026-10-20T07:00:21+00:00",
+        "queued_at": "2026-10-20T09:27:37+00:00",
         "review_report": "# Returned to the author: CI red, a design-token test fails on this PR's own CSS\n\nReview of PR 991 / ACL-1990, head b7489b55 (contains current main c6150160), by Reviewer-Q2001B.\n\n## Blocking\n\n1. **src/web/templates/report.html, new rule `.cbd-pf-list .cbd-pf-sign { width: 0.95rem; height: 0.95rem; font-size: 0.6rem; }`** (about line 3390). `tests/test_acl1797_design_system.py::test_no_text_is_smaller_than_the_token_minimum` fails with \"small text is back: .cbd-pf-list .cbd-pf-sign { ... font-size: 0.6rem; }\". I reproduced it locally on this head (1 failed, 15 passed), and it is the single failure in CI job `linux tests (3.13, 3)`; the aggregate `ACL verification` check is red because of it. Fix: use a size token at or above the minimum (or drop the font-size override and size the sign box differently), then re-run test_acl1797_design_system.py together with test_acl1819_preflight*.py.\n\n## Non-blocking notes\n\n- docs/system/CHANGELOG.md: the diff also inserts a blank line before about 25 unrelated older headings. Harmless, but noise; keep the diff to the new entry.\n- `check_plan` marks every non-`account` exception of the read session as `not_checked` (including ones raised after some campaigns were checked). Acceptable because the publish job meets the same cause, but worth keeping in mind.\n- test_under_api_the_check_button_loads... is already noted by the author as flaky (~1 in 4).\n\n## Rest of the review\n\nScope matches Issue #990 (topics, Check with Meta strip, not_checked does not block Publish, account/plan still block, rules JSON/Python parity, tests, CHANGELOG, English UI text, one Tracker issues line). Not live-checked. Content otherwise looks sound; once the CSS token failure is fixed and CI is green this should be approvable."
       },
       "992": {
@@ -58849,7 +58835,8 @@
       768,
       184,
       854,
-      309
+      309,
+      990
     ],
     "review": null,
     "history": [
@@ -98075,6 +98062,13 @@
         "at": "2026-10-20T09:27:20+00:00",
         "issue": 318,
         "reason": "Done in main: phase 1 (sentry_signal.py, tests test_sentry_gets_only_campaign_failures / test_run_summary_reaches_sentry, PRs #314/#322) and phase 2 docs + scripts/sentry_triage.py. The remaining live part (Sentry alert starts the repair routine, clean-run check) is tracked in ACL-1497 (#497). Archived on owner instruction 2026-10-20."
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T09:27:37+00:00",
+        "issue": 990,
+        "pr": 991,
+        "actor": "Worker-L1990"
       }
     ],
     "policy": {
