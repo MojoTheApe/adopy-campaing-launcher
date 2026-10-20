@@ -46068,6 +46068,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T12:56:11+00:00",
         "from_status": "status:todo"
+      },
+      "309": {
+        "actor": "Worker-L2309c",
+        "session": "run_l2_309c",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1309-own-dashboard",
+        "worktree": "C:\\acl-1309-v2",
+        "id": "a759abd02bc246a685c2ee720602265b",
+        "issue": 309,
+        "state": "implementing",
+        "started_at": "2026-10-20T14:56:13+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -52301,10 +52313,14 @@
           {
             "actor": "Worker-L2309b",
             "session": "run_l2_309b"
+          },
+          {
+            "actor": "Worker-L2309c",
+            "session": "run_l2_309c"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-L2309b",
+        "state": "implementing",
+        "worker": "Worker-L2309c",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-L2309b",
@@ -52327,8 +52343,7 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578042+00:00",
           "remote_process_stopped_verified": false
-        },
-        "reviewer": "Reviewer-R1309V"
+        }
       },
       "163": {
         "implementers": [],
@@ -57584,6 +57599,10 @@
       "Reviewer-RR1020": {
         "session": "rr1020-20261020",
         "role": "Reviewer"
+      },
+      "Worker-L2309c": {
+        "session": "run_l2_309c",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -102600,6 +102619,13 @@
           "report": "# Review return \u2014 PR #1044 ACL-1880 (Issue #880), head 672db9f2\n\nReviewer-SR1020, session sr1020-20261020. Reviewed against main 259ae7f1.\n\n## Blocking\n\n1. HIGH \u2014 Source CI failed on the exact head (run 39426605705, all three Linux shards) and the same 5 tests fail locally in a worktree of 672db9f2:\n   - `tests/test_readable_problems.py::test_every_policy_step_has_title_impact_and_action` \u2014 new step `page_identity` is in `POLICY` (src/fb_ads_rpa/failure_policy.py:45) but has no `GUIDE` entry (src/fb_ads_rpa/failure_policy.py:311). Scenario: an Identity refusal on the dashboard renders without title/impact/action.\n   - `tests/test_build_progress_model.py::test_every_step_the_robot_names_maps_to_a_stage` \u2014 `page_identity` (returned by src/fb_ads_rpa/meta_dom.py run_recorded_campaign_flow) is not mapped in the cb-build-model `rules` (src/web/templates/report.html:7458 block). Scenario: build progress cannot place the step.\n   - `tests/test_rpa_job_start_is_measured.py::test_the_publisher_measures_the_queue_and_the_attach` \u2014 `AttributeError: '_Draft' object has no attribute 'page_provided'` at src/fb_ads_rpa/rpa_publisher.py:153. The new check uses `d.page_provided` directly; every other new access uses `getattr(draft, \"page_provided\", False)` (ads_manager_flow.explicit_page_choice). Scenario: any draft object without the new field (test doubles, older duck-typed drafts) crashes the publish before the profile opens. Use getattr here and in the loop below.\n   - `tests/test_duplicate_campaign_copies_everything.py::test_the_skipped_fields_are_few_and_named` (line 63) \u2014 `page_id` added to `SKIP_FIELDS` (src/web/templates/report.html:13754) is the intended Issue behaviour (duplicate resolves Automatic in the destination), so update the test's expected set and its explanation, not the code.\n   - `tests/test_acl1775_builder_forms.py::test_the_page_code_behaves_in_node` \u2014 `TypeError: Cannot read properties of null (reading 'querySelector')` at src/web/templates/report.html:13221 (`row.closest('.cb-slot').querySelector(...)`); the same pattern is at 13309. Scenario: a form row not inside `.cb-slot` (the harness case) throws inside `cbFillFormSelects` and stops the rest of `cbSyncDestination`. Use the `slot` argument already passed to `cbFillFormSelects`, or guard null, and keep the harness green.\n\n2. Source does not contain current main: merge base is c6150160, 25 commits behind main 259ae7f1 (merge is conflict-free in a trial `git merge-tree`). Record-review requires the current main baseline; merge main before the re-handoff.\n\n## Checked and fine (no change requested)\n\n- RPA Automatic (empty page_id) never touches Identity: `explicit_page_choice` requires `page_provided and page_id`; `page_identity_kwargs` is empty otherwise; rpa_publisher Page re-read only for explicit choices; enrich_draft does not fall back to the account-map Page when the builder sent the field.\n- Builder render is cache-only: `cbSyncPages` -> `cbRefreshPages(slot,false,true)` -> `cached=1` -> `account_pages.cached_only` (never opens a profile). Profile opens only on focus (`cbLoadPages`, only from `not_loaded`) or Refresh (`force=1`).\n- 12 h cache (`account_pages.remember_pages`) stores only `ok` results with state ready/empty; result holds page ids/names, act, account and message \u2014 no token or secret.\n- Explicit Page never written to the account map; stale-account responses ignored in JS (`states[key] !== request`) and checked on RPA (`act` vs `normalize_act`).",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T14:56:13+00:00",
+        "issue": 309,
+        "claim": "a759abd02bc246a685c2ee720602265b",
+        "actor": "Worker-L2309c"
       }
     ],
     "policy": {
