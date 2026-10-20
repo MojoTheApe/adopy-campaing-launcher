@@ -52454,7 +52454,7 @@
             "session": "run_l2_681"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-L2681",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -99489,6 +99489,68 @@
         "issue": 309,
         "claim": "ab8eb677481b47c7a8ac8b75c6d66bd0",
         "actor": "Worker-L2309b"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-20T11:16:39+00:00",
+        "issue": 681,
+        "pr": 970,
+        "review": {
+          "id": "23583591d050413da74d168664f47883",
+          "pr": 970,
+          "issues": [
+            681
+          ],
+          "actor": "Reviewer-R1681W",
+          "session": "reviewer-r1681w-20261020",
+          "coordinator": "Coordinator-E1019A",
+          "started_at": "2026-10-20T10:54:31+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 681,
+            "pr": 970,
+            "branch": "work/acl-1681-server-drafts",
+            "head_sha": "3279532900533a722fd853f959b4370e3cedbfde",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "bae9ca1c09dabb0cdae7e312080ebb5f98456bd4975df80c00f791ce9636dd17",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-R1681W",
+              "review_session": "reviewer-r1681w-20261020",
+              "execution_lane": "23583591d050413da74d168664f47883",
+              "implementer": "Worker-L2681",
+              "head_sha": "3279532900533a722fd853f959b4370e3cedbfde",
+              "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "tree_sha": "f37751da5c3f5454e813d44a855fc4ead802a43d",
+              "issues": [
+                681
+              ],
+              "report": "Adds a server-side copy of Campaign Builder drafts. New src/web/builder_drafts.py stores three documents (keep = campaign cards, jobs = publish-jobs memory, ui = drawer open/wide) in builder_drafts.json inside the local ACL config dir (per Windows user, same place as account notes, so nothing is shared across OS users), under a machine file lock with atomic writes, a corrupt/wrong-shape file moved aside to .corrupt-<time> instead of being overwritten, a 2 MB per-document cap and name/shape validation. Conflicts: each doc has a ms saved_at; an older incoming write is refused (server copy returned) and itself kept in builder_drafts.<name>.older.json; an accepted write that displaces a server copy the client never saw (base mismatch, different content) first stores that copy as .older, so neither side is silently lost. GET/POST /api/builder-state in app.py (loopback host and cross-site mutation blocking come from the existing middleware; dashboard binds 127.0.0.1). Client (report.html): a cbSrv module debounces 800 ms, flushes on pagehide with keepalive, never posts before the first server reconcile so an empty localStorage after a crash cannot overwrite the server copy, restores the server doc when newer and keeps the displaced local keep doc in localStorage acl.builder.v2.older, merges jobs rather than replacing, and degrades to plain localStorage if the server is unreachable. Spec items 1-4 are met, including tests for fresh profile, 127.0.0.1 vs localhost, cleared localStorage plus restart, drawer state, jobs. Prior finding (conflict with main's size modes) is resolved correctly: setExpanded dropped, rememberSize notes the ui doc, apply() maps expanded to wide/normal via applySize and leaves custom width local; main's SIZE_KEY changes are intact. The branch is not stacked: work/main..HEAD contains only the task commit and two merges of main. Tests run on the head: tests/test_acl1681_server_drafts.py, tests/test_campaign_build_percent_browser.py, tests/test_acl1769_two_column_layout.py - 48 passed. CI on head 32795329: all checks pass (linux 1-3, windows, process instructions, ACL verification, tracker-link); installer build jobs skipped. Non-blocking nits: only the last .older backup per doc is kept; a live second tab only notices a newer server copy on its next write or reload (conflict is then resolved without loss); the jobs doc intentionally excludes track and is union-merged so removed jobs may reappear from another profile. No live checks claimed.",
+              "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "recorded_at": "2026-10-20T11:11:54+00:00",
+              "issue_scopes": {
+                "681": "bae9ca1c09dabb0cdae7e312080ebb5f98456bd4975df80c00f791ce9636dd17"
+              }
+            },
+            "lane": {
+              "id": "23583591d050413da74d168664f47883",
+              "pr": 970,
+              "issues": [
+                681
+              ],
+              "actor": "Reviewer-R1681W",
+              "session": "reviewer-r1681w-20261020",
+              "coordinator": "Coordinator-E1019A",
+              "started_at": "2026-10-20T10:54:31+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-20T11:12:43+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -103186,6 +103248,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-20T11:02:36+00:00"
+      },
+      "681": {
+        "issue": 681,
+        "pr": 970,
+        "branch": "work/acl-1681-server-drafts",
+        "head_sha": "3279532900533a722fd853f959b4370e3cedbfde",
+        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "bae9ca1c09dabb0cdae7e312080ebb5f98456bd4975df80c00f791ce9636dd17",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-R1681W",
+          "review_session": "reviewer-r1681w-20261020",
+          "execution_lane": "23583591d050413da74d168664f47883",
+          "implementer": "Worker-L2681",
+          "head_sha": "3279532900533a722fd853f959b4370e3cedbfde",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "tree_sha": "f37751da5c3f5454e813d44a855fc4ead802a43d",
+          "issues": [
+            681
+          ],
+          "report": "Adds a server-side copy of Campaign Builder drafts. New src/web/builder_drafts.py stores three documents (keep = campaign cards, jobs = publish-jobs memory, ui = drawer open/wide) in builder_drafts.json inside the local ACL config dir (per Windows user, same place as account notes, so nothing is shared across OS users), under a machine file lock with atomic writes, a corrupt/wrong-shape file moved aside to .corrupt-<time> instead of being overwritten, a 2 MB per-document cap and name/shape validation. Conflicts: each doc has a ms saved_at; an older incoming write is refused (server copy returned) and itself kept in builder_drafts.<name>.older.json; an accepted write that displaces a server copy the client never saw (base mismatch, different content) first stores that copy as .older, so neither side is silently lost. GET/POST /api/builder-state in app.py (loopback host and cross-site mutation blocking come from the existing middleware; dashboard binds 127.0.0.1). Client (report.html): a cbSrv module debounces 800 ms, flushes on pagehide with keepalive, never posts before the first server reconcile so an empty localStorage after a crash cannot overwrite the server copy, restores the server doc when newer and keeps the displaced local keep doc in localStorage acl.builder.v2.older, merges jobs rather than replacing, and degrades to plain localStorage if the server is unreachable. Spec items 1-4 are met, including tests for fresh profile, 127.0.0.1 vs localhost, cleared localStorage plus restart, drawer state, jobs. Prior finding (conflict with main's size modes) is resolved correctly: setExpanded dropped, rememberSize notes the ui doc, apply() maps expanded to wide/normal via applySize and leaves custom width local; main's SIZE_KEY changes are intact. The branch is not stacked: work/main..HEAD contains only the task commit and two merges of main. Tests run on the head: tests/test_acl1681_server_drafts.py, tests/test_campaign_build_percent_browser.py, tests/test_acl1769_two_column_layout.py - 48 passed. CI on head 32795329: all checks pass (linux 1-3, windows, process instructions, ACL verification, tracker-link); installer build jobs skipped. Non-blocking nits: only the last .older backup per doc is kept; a live second tab only notices a newer server copy on its next write or reload (conflict is then resolved without loss); the jobs doc intentionally excludes track and is union-merged so removed jobs may reappear from another profile. No live checks claimed.",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "recorded_at": "2026-10-20T11:11:54+00:00",
+          "issue_scopes": {
+            "681": "bae9ca1c09dabb0cdae7e312080ebb5f98456bd4975df80c00f791ce9636dd17"
+          }
+        },
+        "lane": {
+          "id": "23583591d050413da74d168664f47883",
+          "pr": 970,
+          "issues": [
+            681
+          ],
+          "actor": "Reviewer-R1681W",
+          "session": "reviewer-r1681w-20261020",
+          "coordinator": "Coordinator-E1019A",
+          "started_at": "2026-10-20T10:54:31+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-20T11:12:43+00:00"
       }
     },
     "batches": {
@@ -108194,62 +108300,6 @@
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T10:46:01+00:00",
         "state": "reviewing"
-      },
-      "970": {
-        "id": "23583591d050413da74d168664f47883",
-        "pr": 970,
-        "issues": [
-          681
-        ],
-        "actor": "Reviewer-R1681W",
-        "session": "reviewer-r1681w-20261020",
-        "coordinator": "Coordinator-E1019A",
-        "started_at": "2026-10-20T10:54:31+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 681,
-          "pr": 970,
-          "branch": "work/acl-1681-server-drafts",
-          "head_sha": "3279532900533a722fd853f959b4370e3cedbfde",
-          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "bae9ca1c09dabb0cdae7e312080ebb5f98456bd4975df80c00f791ce9636dd17",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-R1681W",
-            "review_session": "reviewer-r1681w-20261020",
-            "execution_lane": "23583591d050413da74d168664f47883",
-            "implementer": "Worker-L2681",
-            "head_sha": "3279532900533a722fd853f959b4370e3cedbfde",
-            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-            "tree_sha": "f37751da5c3f5454e813d44a855fc4ead802a43d",
-            "issues": [
-              681
-            ],
-            "report": "Adds a server-side copy of Campaign Builder drafts. New src/web/builder_drafts.py stores three documents (keep = campaign cards, jobs = publish-jobs memory, ui = drawer open/wide) in builder_drafts.json inside the local ACL config dir (per Windows user, same place as account notes, so nothing is shared across OS users), under a machine file lock with atomic writes, a corrupt/wrong-shape file moved aside to .corrupt-<time> instead of being overwritten, a 2 MB per-document cap and name/shape validation. Conflicts: each doc has a ms saved_at; an older incoming write is refused (server copy returned) and itself kept in builder_drafts.<name>.older.json; an accepted write that displaces a server copy the client never saw (base mismatch, different content) first stores that copy as .older, so neither side is silently lost. GET/POST /api/builder-state in app.py (loopback host and cross-site mutation blocking come from the existing middleware; dashboard binds 127.0.0.1). Client (report.html): a cbSrv module debounces 800 ms, flushes on pagehide with keepalive, never posts before the first server reconcile so an empty localStorage after a crash cannot overwrite the server copy, restores the server doc when newer and keeps the displaced local keep doc in localStorage acl.builder.v2.older, merges jobs rather than replacing, and degrades to plain localStorage if the server is unreachable. Spec items 1-4 are met, including tests for fresh profile, 127.0.0.1 vs localhost, cleared localStorage plus restart, drawer state, jobs. Prior finding (conflict with main's size modes) is resolved correctly: setExpanded dropped, rememberSize notes the ui doc, apply() maps expanded to wide/normal via applySize and leaves custom width local; main's SIZE_KEY changes are intact. The branch is not stacked: work/main..HEAD contains only the task commit and two merges of main. Tests run on the head: tests/test_acl1681_server_drafts.py, tests/test_campaign_build_percent_browser.py, tests/test_acl1769_two_column_layout.py - 48 passed. CI on head 32795329: all checks pass (linux 1-3, windows, process instructions, ACL verification, tracker-link); installer build jobs skipped. Non-blocking nits: only the last .older backup per doc is kept; a live second tab only notices a newer server copy on its next write or reload (conflict is then resolved without loss); the jobs doc intentionally excludes track and is union-merged so removed jobs may reappear from another profile. No live checks claimed.",
-            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "recorded_at": "2026-10-20T11:11:54+00:00",
-            "issue_scopes": {
-              "681": "bae9ca1c09dabb0cdae7e312080ebb5f98456bd4975df80c00f791ce9636dd17"
-            }
-          },
-          "lane": {
-            "id": "23583591d050413da74d168664f47883",
-            "pr": 970,
-            "issues": [
-              681
-            ],
-            "actor": "Reviewer-R1681W",
-            "session": "reviewer-r1681w-20261020",
-            "coordinator": "Coordinator-E1019A",
-            "started_at": "2026-10-20T10:54:31+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-20T11:12:43+00:00"
-        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
