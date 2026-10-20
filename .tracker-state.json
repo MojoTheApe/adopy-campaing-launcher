@@ -5534,6 +5534,27 @@
         "issue_scopes": {
           "19": "ce291401dfa6489828ba973eb602b744efb113657552fbfff1bcb7f342232d99"
         }
+      },
+      "1032": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R402W",
+        "review_session": "reviewer-r402w-20261020",
+        "execution_lane": "55fd2c64f2c941acacf6817710a5c07f",
+        "implementer": "Worker-L453",
+        "head_sha": "6c46f921deaf63a69b0d3b2298970e316e578aab",
+        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "tree_sha": "3b4c1051aff0451851d88d6a4d600c3f920efdf0",
+        "issues": [
+          53
+        ],
+        "report": "PR 1032 adds src/failure_signatures.py and wires it into scripts/acl_telemetry_report.py: telemetry failures in the window are grouped into signatures (step + normalised reason; reason taken from note, then diag why/error/how, including a regex recovery from diag truncated at 900 chars), passed through run_telemetry.scrub, digits/uuids/long hex replaced by placeholders, and capped at 160 chars. Only signatures with 2+ incidents are shown, each with machines affected out of the reporting fleet, incidents, runs, flow versions, period, confidence (high needs 3+ machines and at least half the fleet; no-reason bucket capped at low) and up to 3 examples (ts, machine label, run id, version). Criteria: comparable signatures with evidence - met; summary with scope and confidence - met; rule kept separate from approval/distribution - met, the section states it is a report only and nothing is proposed or applied, matching the owner decision comment of 2026-10-20 (report only). The PR title narrower than the Issue title is consistent with that decision. Existing per-step analysis is untouched (only an added key and an appended section), so existing grouping does not regress; no Sentry or network calls, no ids or secrets in code or tests (act id built at runtime). Tests: tests/test_failure_signatures.py plus tests/test_acl1806_obsidian_path.py, 16 passed locally; CI on the head is fully green (linux 1-3, windows, tracker-link, verification, installer jobs). Not stacked: 4 commits above main, all ACL-402. Non-blocking nits: the PR description says backticks are stripped from table cells, but the code does not do that (reason text goes into the table with only pipes escaped); report section text is Russian, consistent with the existing local Obsidian report; free-text notes may still contain names (local report, acknowledged). No live checks claimed.",
+        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "recorded_at": "2026-10-20T12:40:54+00:00",
+        "issue_scopes": {
+          "53": "e422537de9fdf02be347310b1d1b6a4ad717569d42ac5e4380170ffe2e257df9"
+        }
       }
     },
     "stage": {
