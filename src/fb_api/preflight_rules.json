@@ -1,0 +1,390 @@
+{
+  "consts": {
+    "age_max": 65,
+    "age_min": 18,
+    "allowed_cta": {
+      "leads": [
+        "LEARN_MORE",
+        "SIGN_UP",
+        "APPLY_NOW",
+        "GET_QUOTE",
+        "SUBSCRIBE",
+        "CONTACT_US",
+        "DOWNLOAD",
+        "GET_OFFER"
+      ]
+    },
+    "default_objective": "leads",
+    "link_re": "^https://[^\\s/?#:]+\\.[^\\s/?#:]+(:\\d+)?([/?#]\\S*)?$",
+    "max_headline": 40,
+    "max_primary_visible": 125,
+    "track_re": "\\?[^#\\s]*[^=&#\\s]="
+  },
+  "rules": [
+    {
+      "applies": "always",
+      "field": {
+        "level": "campaign",
+        "sel": ""
+      },
+      "hint": "the profile has no access to the ad account, or the account is not active: check the Accounts page",
+      "id": "account_active",
+      "label": "Ad account is active",
+      "severity": "error",
+      "side": "server",
+      "unit": "campaign"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "campaign",
+        "sel": ""
+      },
+      "hint": "choose a Page that belongs to this ad account on the Accounts page (page_id)",
+      "id": "page_ok",
+      "label": "Facebook Page",
+      "severity": "error",
+      "side": "server",
+      "unit": "campaign"
+    },
+    {
+      "applies": "website",
+      "field": {
+        "level": "campaign",
+        "sel": ""
+      },
+      "hint": "website conversions need exactly one pixel on the ad account; set pixel_id on the Accounts page",
+      "id": "pixel_ok",
+      "label": "Pixel for conversions",
+      "severity": "error",
+      "side": "server",
+      "unit": "campaign"
+    },
+    {
+      "applies": "instant_form",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-form-select"
+      },
+      "hint": "pick an ACTIVE form of this Page (Refresh forms)",
+      "id": "form_active",
+      "label": "Instant Form of the Page",
+      "severity": "error",
+      "side": "server",
+      "unit": "ad"
+    },
+    {
+      "applies": "instant_form",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-form-select"
+      },
+      "hint": "choose one of the Page's forms or a template in the ad",
+      "id": "form_chosen",
+      "label": "Instant Form chosen",
+      "severity": "error",
+      "side": "client",
+      "unit": "ad"
+    },
+    {
+      "applies": "instant_form",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-form-template-select"
+      },
+      "hint": "the template needs a privacy policy URL that starts with https://",
+      "id": "form_template_privacy",
+      "label": "Form template: privacy policy URL (https)",
+      "severity": "error",
+      "side": "client",
+      "unit": "ad"
+    },
+    {
+      "applies": "instant_form",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-form-template-select"
+      },
+      "hint": "the template needs at least one contact field (name, email or phone)",
+      "id": "form_template_contacts",
+      "label": "Form template: a contact field",
+      "severity": "error",
+      "side": "client",
+      "unit": "ad"
+    },
+    {
+      "applies": "instant_form",
+      "field": {
+        "level": "campaign",
+        "sel": ""
+      },
+      "hint": "accept the Lead Ads terms for this Page in Meta (the robot never accepts them), then check again",
+      "id": "form_terms",
+      "label": "Lead Ads terms accepted on the Page",
+      "severity": "error",
+      "side": "server",
+      "unit": "campaign"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "campaign",
+        "sel": ""
+      },
+      "hint": "pick the country in the account",
+      "id": "country_set",
+      "label": "Country",
+      "severity": "error",
+      "side": "client",
+      "unit": "campaign"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "campaign",
+        "sel": ""
+      },
+      "hint": "Meta found no exact match for the country: check its name or ISO code",
+      "id": "country_resolves",
+      "label": "Country found in Meta targeting",
+      "severity": "error",
+      "side": "server",
+      "unit": "campaign"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "adset",
+        "sel": "[name$=\"_language\"]"
+      },
+      "hint": "Meta found no exact match for the language: pick it from the list or clear the field",
+      "id": "language_resolves",
+      "label": "Language found in Meta targeting",
+      "severity": "error",
+      "side": "server",
+      "unit": "campaign"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "adset",
+        "sel": ".cb-targeting-search"
+      },
+      "hint": "Meta found no exact match for some interests: pick rows from the list",
+      "id": "interests_resolve",
+      "label": "Detailed targeting found in Meta",
+      "severity": "error",
+      "side": "server",
+      "unit": "campaign"
+    },
+    {
+      "applies": "website",
+      "field": {
+        "level": "campaign",
+        "sel": "input[name=\"tracking_link\"]"
+      },
+      "hint": "enter the website URL, starting with https://",
+      "id": "link_https",
+      "label": "Link https://",
+      "severity": "error",
+      "side": "client",
+      "unit": "campaign"
+    },
+    {
+      "applies": "website",
+      "field": {
+        "level": "campaign",
+        "sel": "input[name=\"tracking_link\"]"
+      },
+      "hint": "the link has no ?key=value parameters: clicks may not be attributed",
+      "id": "link_tracking",
+      "label": "Tracking parameters in the link",
+      "severity": "warning",
+      "side": "client",
+      "unit": "campaign"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-creative-search"
+      },
+      "hint": "choose a file in each ad",
+      "id": "media_chosen",
+      "label": "Media chosen",
+      "severity": "error",
+      "side": "client",
+      "unit": "ad"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-creative-search"
+      },
+      "hint": "the file is missing, empty or unreadable: choose another file",
+      "id": "media_readable",
+      "label": "Media file exists and is readable",
+      "severity": "error",
+      "side": "server",
+      "unit": "ad"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-creative-search"
+      },
+      "hint": "file type, size (image 30 MB, video 200 MB) or video length is over the limit",
+      "id": "media_limits",
+      "label": "Media within Meta limits",
+      "severity": "error",
+      "side": "server",
+      "unit": "ad"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-creative-search"
+      },
+      "hint": "no 9:16 file: without one Facebook crops the picture itself",
+      "id": "media_vertical",
+      "label": "Vertical file for Stories and Reels",
+      "severity": "warning",
+      "side": "server",
+      "unit": "ad"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-adtitle-search"
+      },
+      "hint": "choose a primary text in each ad",
+      "id": "primary_text",
+      "label": "Primary text",
+      "severity": "error",
+      "side": "client",
+      "unit": "ad"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-adtitle-search"
+      },
+      "hint": "the chosen text has no headline: pick another library entry",
+      "id": "headline",
+      "label": "Headline",
+      "severity": "error",
+      "side": "client",
+      "unit": "ad"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-adtitle-search"
+      },
+      "hint": "a longer headline may be cut off",
+      "id": "headline_len",
+      "label": "Headline up to 40 characters",
+      "severity": "warning",
+      "side": "client",
+      "unit": "ad"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-adtitle-search"
+      },
+      "hint": "after 125 characters the text is folded behind 'See more'",
+      "id": "primary_len",
+      "label": "Text visible in full (up to 125)",
+      "severity": "warning",
+      "side": "client",
+      "unit": "ad"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "ad",
+        "sel": ""
+      },
+      "hint": "choose a call to action that the objective accepts",
+      "id": "cta_allowed",
+      "label": "CTA allowed for the objective",
+      "severity": "error",
+      "side": "client",
+      "unit": "ad"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "campaign",
+        "sel": "[name$=\"_budget\"]"
+      },
+      "hint": "enter a daily budget above zero",
+      "id": "budget_set",
+      "label": "Daily budget",
+      "severity": "error",
+      "side": "client",
+      "unit": "campaign"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "campaign",
+        "sel": "[name$=\"_budget\"]"
+      },
+      "hint": "raise the daily budget to Meta's minimum for the account currency",
+      "id": "budget_min",
+      "label": "Budget is at least Meta's minimum",
+      "severity": "error",
+      "side": "server",
+      "unit": "campaign"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "adset",
+        "sel": "[name$=\"_age\"]"
+      },
+      "hint": "age must be between 18 and 65, and min not above max",
+      "id": "age_range",
+      "label": "Age 18-65",
+      "severity": "error",
+      "side": "client",
+      "unit": "campaign"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-adtitle-search"
+      },
+      "hint": "give the ads different creatives or texts: their names must differ inside a campaign",
+      "id": "ad_names_unique",
+      "label": "Ad names are unique",
+      "severity": "error",
+      "side": "client",
+      "unit": "ad"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "campaign",
+        "sel": ""
+      },
+      "hint": "if a different campaign already has this name, the robot publishes as NAME_2, NAME_3 ... (up to _20); an error only when all 20 names are taken: rename the campaign",
+      "id": "existing_diffs",
+      "label": "Campaign name is free, or gets a _2, _3 suffix",
+      "severity": "error",
+      "side": "server",
+      "unit": "campaign"
+    }
+  ],
+  "version": 1
+}

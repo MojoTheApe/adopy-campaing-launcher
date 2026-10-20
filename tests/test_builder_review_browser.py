@@ -1,6 +1,9 @@
 """Run the real builder factory, duplicate and targeting handlers offline."""
+import asyncio
 import json
 import os
+import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import re
 
@@ -9,6 +12,7 @@ from jinja2 import Environment
 from playwright.sync_api import sync_playwright
 
 REPORT = Path(__file__).resolve().parents[1] / 'src/web/templates/report.html'
+sys.path.insert(0, str(REPORT.parents[3]))
 
 @pytest.fixture(scope='module')
 def browser():
@@ -107,3 +111,222 @@ def test_mouse_selected_targeting_reaches_the_server_library(page, monkeypatch, 
     data = page.evaluate('Object.fromEntries(cbCollectFormData(document.querySelector("form")))')
     assert data['camp_0_targeting'] == 'FX'
     assert tr.resolve_interests(data['camp_0_targeting']) == 'Foreign exchange'
+
+
+# ── ACL-1651: список креативов обновляется, новый файл находится без перезагрузки ──
+# Настоящий /api/creatives читает временную папку (get_creatives_root), JS Билдера настоящий.
+
+@pytest.fixture
+def creatives_env(browser, tmp_path, monkeypatch):
+    from src.web import app as webapp
+    monkeypatch.setattr(webapp, 'get_creatives_root', lambda: str(tmp_path))
+    (tmp_path / '1111_old.jpg').write_bytes(b'x')
+    hits = []
+
+    def scan() -> bytes:
+        return asyncio.run(webapp.api_creatives()).body
+
+    pool = ThreadPoolExecutor(max_workers=1)
+
+    def route(r):
+        if r.request.url.endswith('/api/creatives') or '/api/creatives?' in r.request.url:
+            hits.append(1)
+            r.fulfill(content_type='application/json', body=pool.submit(scan).result())
+        else:
+            r.fulfill(content_type='application/json', body='{"files":[],"texts":[]}')
+
+    src = REPORT.read_text(encoding='utf-8')
+    start = src.index('// ── Campaign Builder JS')
+    end = src.index('// ── Preview & Publish', start)
+    esc = src[src.index('    function aclEscHtml'):src.index('\n    }', src.index('    function aclEscHtml')) + 6]
+    script = Environment().from_string(src[start:end]).render(
+        ref_options_json={'targetings': [], 'os': ['All']}, account_alias_map_json={},
+        account_preflight_json={})
+    ctx = browser.new_context()
+    ctx.route('**/*', route)
+    pg = ctx.new_page()
+    errors = []
+    pg.on('pageerror', lambda e: errors.append(str(e)))
+    pg.goto('http://acl.test/')
+    pg.set_content('<form id="form" data-country="Mexico"><input name="country" value="Mexico">'
+                   '<input name="account_label" value="Demo"><input name="tracking_link" value="">'
+                   '<input name="camp_count" class="cb-count" value="0"><div class="cb-slots"></div></form>')
+    pg.add_script_tag(content=esc + '\n' + script)
+    pg.evaluate("cbAddSlot(document.querySelector('form'))")
+    pg.wait_for_function('window.CB_CREATIVES_REFRESH_COUNT >= 1')
+    pg.wait_for_function('document.querySelector(".cb-slot") !== null')
+    pg.wait_for_timeout(300)
+    yield pg, tmp_path, hits
+    assert not errors, errors
+    ctx.close()
+    pool.shutdown()
+
+
+def _options(pg):
+    return pg.locator('.cb-sel-dropdown:not([hidden]) .cb-sel-opt').all_inner_texts()
+
+
+def _options(pg):
+    return pg.locator('.cb-sel-dropdown:not([hidden]) .cb-sel-opt').all_inner_texts()
+
+
+def _focus_and_settle(pg, box, hits):
+    """Фокус в поиске делает свой запрос; ждём, пока он отработает."""
+    pg.evaluate("cbCreativesAge(1e12)")
+    n = len(hits)
+    pg.locator('body').click()
+    box.focus()
+    pg.wait_for_function('window.CB_CREATIVES_REFRESH_COUNT >= %d' % (n + 1), timeout=5000)
+    pg.wait_for_timeout(300)
+    assert len(hits) == n + 1
+
+
+def test_creatives_new_file_found_on_focus_and_deleted_file_disappears(creatives_env):
+    pg, folder, hits = creatives_env
+    box = pg.locator('.cb-creative-search').first
+    pg.evaluate("cbCreativesAge(60000)")
+    (folder / '2222_new.jpg').write_bytes(b'x')
+    box.fill('2222')  # fill() ставит фокус: фокусный запрос приносит новый файл
+    pg.wait_for_function('document.querySelector(".cb-sel-dropdown:not([hidden])")'
+                         ' && document.querySelector(".cb-sel-dropdown:not([hidden])").textContent.includes("2222_new.jpg")',
+                         timeout=5000)
+    box.fill('1111')
+    pg.wait_for_function('document.querySelector(".cb-sel-dropdown:not([hidden]) .cb-sel-opt")', timeout=5000)
+    assert any('1111_old.jpg' in t for t in _options(pg))
+    (folder / '1111_old.jpg').unlink()
+    pg.evaluate("cbCreativesAge(1e12)")
+    pg.locator('body').click()
+    box.focus()
+    pg.wait_for_function('!document.querySelector(".cb-sel-dropdown:not([hidden])")'
+                         ' || !document.querySelector(".cb-sel-dropdown:not([hidden])").textContent.includes("1111_old.jpg")',
+                         timeout=5000)
+
+
+def test_creatives_miss_refreshes_once_per_streak(creatives_env):
+    pg, folder, hits = creatives_env
+    box = pg.locator('.cb-creative-search').first
+    _focus_and_settle(pg, box, hits)
+    # Фокусный запрос был 3 с назад: выше порога промаха (2 с), ниже фокусного (10 с).
+    # Значит новый запрос может дать только ветка промаха.
+    (folder / 'zz_new.jpg').write_bytes(b'x')
+    pg.evaluate("cbCreativesAge(3000)")
+    n = len(hits)
+    box.press_sequentially('zz', delay=30)
+    pg.wait_for_function('document.querySelector(".cb-sel-dropdown:not([hidden])")'
+                         ' && document.querySelector(".cb-sel-dropdown:not([hidden])").textContent.includes("zz_new.jpg")',
+                         timeout=5000)
+    assert len(hits) == n + 1
+    box.fill('')
+    pg.evaluate("cbCreativesAge(3000)")
+    n = len(hits)
+    box.press_sequentially('qq', delay=30)
+    pg.wait_for_timeout(400)
+    assert len(hits) == n + 1
+    pg.evaluate("cbCreativesAge(3000)")  # даже за порогом: серия промахов не повторяет запрос
+    box.press_sequentially('qqq', delay=30)
+    pg.wait_for_timeout(400)
+    assert len(hits) == n + 1
+    box.fill('1111')  # попадание сбрасывает защёлку
+    pg.evaluate("cbCreativesAge(3000)")
+    box.fill('qq')
+    pg.wait_for_timeout(400)
+    assert len(hits) == n + 2
+
+
+def test_creatives_focus_refresh_is_throttled(creatives_env):
+    pg, folder, hits = creatives_env
+    box = pg.locator('.cb-creative-search').first
+    pg.evaluate("cbCreativesAge(1e12)")
+    n = len(hits)
+    for _ in range(4):
+        pg.locator('body').click()
+        box.focus()
+        pg.wait_for_timeout(80)
+    pg.wait_for_timeout(300)
+    assert len(hits) == n + 1  # четыре фокуса в пределах 10 с = один запрос
+    pg.evaluate("cbCreativesAge(10500)")
+    pg.locator('body').click()
+    box.focus()
+    pg.wait_for_timeout(300)
+    assert len(hits) == n + 2
+
+
+def test_replacement_photo_is_found_after_immediate_post_refresh_miss(creatives_env):
+    pg, folder, hits = creatives_env
+    box = pg.locator('.cb-creative-search').first
+    _focus_and_settle(pg, box, hits)
+    box.fill('1111')
+    pg.locator('.cb-sel-dropdown:not([hidden]) .cb-sel-opt').first.dispatch_event('mousedown')
+    assert pg.locator('[name="camp_0_ad_0_creative_file"]').input_value() == '1111_old.jpg'
+    pg.locator('[name="camp_0_budget"]').fill('42')
+    # Replace the selected photo immediately after a successful refresh. Unlike
+    # the older miss test, do not age the clock past the throttle window.
+    (folder / 'zz_replacement.jpg').write_bytes(b'x')
+    n = len(hits)
+    box.fill('zz')
+    box.press_sequentially('_replacement', delay=30)
+    pg.wait_for_function('document.querySelector(".cb-sel-dropdown:not([hidden])")'
+                         ' && document.querySelector(".cb-sel-dropdown:not([hidden])").textContent.includes("zz_replacement.jpg")',
+                         timeout=5000)
+    assert len(hits) == n + 1
+    pg.locator('.cb-sel-dropdown:not([hidden]) .cb-sel-opt').first.dispatch_event('mousedown')
+    assert pg.locator('[name="camp_0_ad_0_creative_file"]').input_value() == 'zz_replacement.jpg'
+    assert pg.locator('[name="camp_0_budget"]').input_value() == '42'
+    assert pg.locator('[name="camp_0_ad_0_creative_type"][value="Image"]').is_checked()
+    assert pg.locator('.cb-sel-dropdown:not([hidden])').count() == 0
+
+
+def test_pending_miss_refresh_does_not_reopen_closed_dropdown(creatives_env):
+    pg, folder, hits = creatives_env
+    box = pg.locator('.cb-creative-search').first
+    _focus_and_settle(pg, box, hits)
+    (folder / 'zz_replacement.jpg').write_bytes(b'x')
+    n = len(hits)
+    box.fill('zz_replacement')
+    pg.locator('[name="camp_0_budget"]').click()
+    pg.locator('[name="camp_0_budget"]').fill('42')
+    assert pg.locator('.cb-sel-dropdown:not([hidden])').count() == 0
+    pg.wait_for_function('window.CB_CREATIVES_REFRESH_COUNT >= %d' % (n + 1), timeout=5000)
+    pg.wait_for_timeout(300)
+    assert len(hits) == n + 1
+    assert pg.locator('.cb-sel-dropdown:not([hidden])').count() == 0
+    assert pg.locator('[name="camp_0_budget"]').input_value() == '42'
+
+
+def test_immediate_miss_refreshes_without_further_typing(creatives_env):
+    pg, folder, hits = creatives_env
+    box = pg.locator('.cb-creative-search').first
+    _focus_and_settle(pg, box, hits)
+    (folder / 'zz_immediate.jpg').write_bytes(b'x')
+    n = len(hits)
+    box.fill('zz_immediate')
+    pg.wait_for_function('document.querySelector(".cb-sel-dropdown:not([hidden])")'
+                         ' && document.querySelector(".cb-sel-dropdown:not([hidden])").textContent.includes("zz_immediate.jpg")',
+                         timeout=5000)
+    assert len(hits) == n + 1
+
+
+def test_creatives_list_change_keeps_closed_dropdown_and_unchanged_previews(creatives_env):
+    pg, folder, hits = creatives_env
+    box = pg.locator('.cb-creative-search').first
+    pg.evaluate("""() => {
+      const row = document.querySelector('.cb-ad-row');
+      row.querySelector('[name$="_creative_file"]').value = '1111_old.jpg';
+      row.querySelector('.cb-creative-search').value = '1111_old.jpg';
+      row.querySelector('.cb-creative-search').dispatchEvent(new Event('input', {bubbles: true}));
+    }""")
+    pg.wait_for_selector('.cbp-media', state='attached', timeout=5000)
+    box.fill('1111')
+    pg.wait_for_function('document.querySelector(".cb-sel-dropdown:not([hidden]) .cb-sel-opt")', timeout=5000)
+    pg.evaluate("document.querySelector('.cb-sel-dropdown:not([hidden]) .cb-sel-opt').dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true}))")
+    assert pg.locator('.cb-sel-dropdown:not([hidden])').count() == 0
+    pg.wait_for_timeout(400)  # отложенная перерисовка от самого ввода уже прошла
+    pg.evaluate("document.querySelector('.cbp-media').dataset.mark = 'same'")
+    (folder / '3333_new.jpg').write_bytes(b'x')
+    pg.evaluate("cbCreativesAge(1e12)")
+    n = len(hits)
+    pg.evaluate("window.dispatchEvent(new Event('focus'))")
+    pg.wait_for_function('window.CB_CREATIVES_REFRESH_COUNT >= %d' % (n + 1), timeout=5000)
+    pg.wait_for_timeout(400)
+    assert pg.locator('.cb-sel-dropdown:not([hidden])').count() == 0  # закрытый список не открываем
+    assert pg.locator('.cbp-media').first.get_attribute('data-mark') == 'same'  # чужой файл: превью не трогаем

@@ -1,0 +1,385 @@
+{
+ "schema": 1,
+ "note": "Official Meta pages only; seeded from owner research pack 2026-10-11 (03_SOURCES.csv). The pack's version26.0 URL returns 404 and was dropped; the changelog index covers it. facebook.com/business/help pages are JS shells (little text): weak signal.",
+ "sources": [
+  {
+   "url": "https://developers.facebook.com/documentation/facebook-login/guides/access-tokens",
+   "title": "Access tokens",
+   "category": "guide"
+  },
+  {
+   "url": "https://www.facebook.com/business/help/181290242815171",
+   "title": "Accounts in your business portfolio",
+   "category": "help",
+   "weak": true
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/reference/ad-account/ads",
+   "title": "Ad Account / ads",
+   "category": "reference"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/reference/ad-account/adsets",
+   "title": "Ad Account / adsets",
+   "category": "reference"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/reference/ad-account/campaigns",
+   "title": "Ad Account / campaigns",
+   "category": "reference"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/ads-webhooks/ad-recommendations",
+   "title": "ad recommendations",
+   "category": "guide"
+  },
+  {
+   "url": "https://www.facebook.com/business/help/915885887059947",
+   "title": "Add / Claim / Share an ad account",
+   "category": "help",
+   "weak": true
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/ads-in-whatsapp-status",
+   "title": "Ads in WhatsApp Status",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/ads-webhooks/ads-webhooks-overview",
+   "title": "Ads Webhooks overview",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/ad-rules/guides/advanced-scheduling",
+   "title": "Advanced scheduling",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/ad-rules/guides/api-calls",
+   "title": "API calls",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/docs/app-review",
+   "title": "App Review",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/get-started/authentication",
+   "title": "Authentication",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/get-started/authorization",
+   "title": "Authorization",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/get-started/basic-ad-creation",
+   "title": "Basic Ad Creation",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/insights/best-practices",
+   "title": "best practices",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/insights/breakdowns",
+   "title": "breakdowns",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/catalog",
+   "title": "Catalog",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/conversions-api",
+   "title": "Conversions API",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/get-started/basic-ad-creation/create-an-ad",
+   "title": "Create an Ad",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/get-started/basic-ad-creation/create-an-ad-campaign",
+   "title": "Create an Ad Campaign",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/get-started/basic-ad-creation/create-an-ad-creative",
+   "title": "Create an Ad Creative",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/get-started/basic-ad-creation/create-an-ad-set",
+   "title": "Create an Ad Set",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/ads-webhooks/creative-fatigue",
+   "title": "Creative fatigue",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/ads-webhooks/effective-status",
+   "title": "Effective status",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/ad-rules/overview/evaluation-spec",
+   "title": "Evaluation spec",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/ad-rules/overview/execution-spec",
+   "title": "Execution spec",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/docs/graph-api/batch-requests",
+   "title": "Graph API batch requests",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/docs/graph-api/guides/error-handling",
+   "title": "Graph API error handling",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/insights",
+   "title": "Insights API",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/guides/lift-studies",
+   "title": "lift studies",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/facebook-login/guides/access-tokens/get-long-lived",
+   "title": "long-lived tokens",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/get-started/manage-campaigns",
+   "title": "Manage Campaigns",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api",
+   "title": "Marketing API",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/marketing-api-changelog/",
+   "title": "Marketing API changelog",
+   "category": "changelog"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/error-reference",
+   "title": "Marketing API error reference",
+   "category": "reference"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/overview/rate-limiting",
+   "title": "Marketing API rate limiting",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/ads-ai-connectors/ads-mcp-server/ads-mcp-server-tools-activity-logs",
+   "title": "MCP activity logs",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/ads-ai-connectors/ads-mcp-server/ads-mcp-server-tools-comprehensive-reporting",
+   "title": "MCP comprehensive reporting",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/ads-ai-connectors/ads-mcp-server/ads-mcp-server-tools-ad-creation-and-management",
+   "title": "MCP: Ad Creation and Management",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/ads-ai-connectors/ads-cli/ads-cli-overview",
+   "title": "Meta Ads CLI",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/ads-ai-connectors/ads-mcp-server/ads-mcp-server-overview",
+   "title": "Meta Ads MCP server",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/docs/business-sdk",
+   "title": "Meta Business SDK",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/ads-webhooks/with-issues-ad-objects",
+   "title": "objects with issues",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/ad-rules/guides/rebalance-budget",
+   "title": "Rebalance budget",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/ad-rules/guides/roas-ad-rules",
+   "title": "ROAS ad rules",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/ad-rules/guides/scheduled-based-rules",
+   "title": "Schedule-based rules",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/guides/split-testing",
+   "title": "Split testing",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/ads-webhooks/subscriptions",
+   "title": "subscriptions",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/docs/business-management-apis/system-users",
+   "title": "System users",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/tools/debug/accesstoken",
+   "title": "Token Debugger",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/ad-rules/guides/trigger-based-rules",
+   "title": "Trigger-based rules",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/docs/marketing-api/system-users/install-apps-and-generate-tokens",
+   "title": "выдача system-user tokens",
+   "category": "guide"
+  },
+  {
+   "url": "https://www.facebook.com/business/help/1253008271714847",
+   "title": "где посмотреть лимит",
+   "category": "help",
+   "weak": true
+  },
+  {
+   "url": "https://www.facebook.com/business/help/190760004667059",
+   "title": "закрытие",
+   "category": "help",
+   "weak": true
+  },
+  {
+   "url": "https://www.facebook.com/business/help/375950529870841",
+   "title": "инструкция для партнёрского доступа",
+   "category": "help",
+   "weak": true
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/ads-ai-connectors/ads-mcp-server/ads-mcp-server-get-started",
+   "title": "Инструкция подключения MCP",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/ads-ai-connectors/ads-cli/setup/configuration",
+   "title": "конфигурация",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/ads-ai-connectors/ads-cli/ad-creatives",
+   "title": "Креативы через CLI",
+   "category": "guide"
+  },
+  {
+   "url": "https://www.facebook.com/business/help/1026272311098874",
+   "title": "лимит кабинетов",
+   "category": "help",
+   "weak": true
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/ads-webhooks/setup/get-started",
+   "title": "настройка",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/get-started",
+   "title": "Начало работы",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/ad-rules",
+   "title": "Обзор Ad Rules Engine",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/docs/graph-api/changelog",
+   "title": "официальная таблица версий Graph API и Marketing API",
+   "category": "versions"
+  },
+  {
+   "url": "https://about.fb.com/ltam/news/2026/10/advertising-week-new-york-2026-nuevas-capacidades-de-ia-para-guiar-campanas-y-llegar-a-los-clientes/",
+   "title": "официального анонса Meta от 6 октября 2026 года",
+   "category": "announcements"
+  },
+  {
+   "url": "https://developers.meta.com/blog/updates-to-ads-management-standard-access-feature/",
+   "title": "Официальное объявление",
+   "category": "announcements"
+  },
+  {
+   "url": "https://www.facebook.com/business/help/675406303122941",
+   "title": "повторная активация",
+   "category": "help",
+   "weak": true
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/overview/versioning",
+   "title": "правила версионирования",
+   "category": "versions"
+  },
+  {
+   "url": "https://www.facebook.com/business/help/443041549525801",
+   "title": "проблемы создания",
+   "category": "help",
+   "weak": true
+  },
+  {
+   "url": "https://www.facebook.com/business/help/350066115746201",
+   "title": "работа от имени другого бизнеса",
+   "category": "help",
+   "weak": true
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/ads-ai-connectors/ads-cli/command-reference",
+   "title": "справочник команд",
+   "category": "reference"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/ads-ai-connectors/ads-cli/tutorials-and-recipes",
+   "title": "сценарии и примеры",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/ads-ai-connectors/ads-cli/setup/get-started",
+   "title": "установка и первый запуск",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/ad-rules/guides/evaluation-spec-filters",
+   "title": "фильтры",
+   "category": "guide"
+  }
+ ]
+}
