@@ -3104,6 +3104,10 @@ from the tooltip inside a row with a switch when no name links exist, and, witho
 - Lost targets, identity changes, unavailable transport and repeat detachment
   produce a sticky typed stop. Login/checkpoint remain distinct stops; missing
   tokens after recovery do not trigger a reload. Read clients retain the stop.
+- Behaviour change: the readiness check now turns any browser-transport error
+  (`CdpError`/`OSError`), including an ordinary page error without session loss,
+  into the same sticky `PageFailed` instead of letting the raw error propagate.
+  Warm reuse still catches it and replaces the robot tab once.
 - Review found that warm mode changes create a new helper without navigating.
   The tab now retains successful explicit navigation intent and its recovery
   guard for replacement helpers. Failed navigation cannot rebind the expected
