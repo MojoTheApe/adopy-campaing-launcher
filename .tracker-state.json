@@ -45239,6 +45239,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T12:11:12+00:00",
         "from_status": "status:todo"
+      },
+      "1040": {
+        "actor": "Worker-MLX60",
+        "session": "mlx60-run-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-2040-mlx-close-retry",
+        "worktree": "C:\\acl-1040-mlx-close",
+        "id": "3894c879a5964047bdf3606e65655cc5",
+        "issue": 1040,
+        "state": "implementing",
+        "started_at": "2026-10-20T12:23:30+00:00",
+        "from_status": "status:idea"
       }
     },
     "tasks": {
@@ -53799,6 +53811,17 @@
         "state": "implementing",
         "worker": "Worker-L31038",
         "coordinator": "Coordinator-M1011A"
+      },
+      "1040": {
+        "implementers": [
+          {
+            "actor": "Worker-MLX60",
+            "session": "mlx60-run-20261020"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-MLX60",
+        "coordinator": "Coordinator-M1011A"
       }
     },
     "actors": {
@@ -56488,6 +56511,10 @@
       },
       "Worker-L31038": {
         "session": "run_l3_1038",
+        "role": "Worker"
+      },
+      "Worker-MLX60": {
+        "session": "mlx60-run-20261020",
         "role": "Worker"
       }
     },
@@ -100024,6 +100051,13 @@
         "issue": 1037,
         "pr": 1041,
         "actor": "Worker-c8f54e83"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T12:23:30+00:00",
+        "issue": 1040,
+        "claim": "3894c879a5964047bdf3606e65655cc5",
+        "actor": "Worker-MLX60"
       }
     ],
     "policy": {
