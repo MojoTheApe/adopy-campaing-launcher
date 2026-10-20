@@ -52668,7 +52668,7 @@
             "session": "run_r1019_990"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-R1019990",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -52686,7 +52686,8 @@
           "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main into the branch; conflicts only in docs/system/CHANGELOG.md (kept both entries). Re-ran the touched tests: test_acl1819_preflight 86 passed, test_acl1819_preflight_browser 5 passed (branch first fast-forwarded to work/ branch tip 0257ddb0). No functional change beyond the merge; no live runs."
         },
         "pr": 991,
-        "queued_at": "2026-10-19T19:57:25+00:00"
+        "queued_at": "2026-10-19T19:57:25+00:00",
+        "reviewer": "Reviewer-C1990"
       },
       "992": {
         "implementers": [
@@ -55615,6 +55616,10 @@
       "Reviewer-C1920": {
         "session": "reviewer-c1920-20261020",
         "role": "Reviewer"
+      },
+      "Reviewer-C1990": {
+        "session": "reviewer-c1990-20261020",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -58480,7 +58485,6 @@
       }
     },
     "review_queue": [
-      990,
       992,
       739,
       840,
@@ -96623,6 +96627,13 @@
         "issue": 891,
         "pr": 909,
         "actor": "Worker-M1020891"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-20T06:30:00+00:00",
+        "pr": 991,
+        "lane": "5b9e29bd43a142598b8225cdad7efb37",
+        "actor": "Reviewer-C1990"
       }
     ],
     "policy": {
@@ -104510,6 +104521,18 @@
         "session": "r1816v-20261019",
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-19T13:01:50+00:00",
+        "state": "reviewing"
+      },
+      "991": {
+        "id": "5b9e29bd43a142598b8225cdad7efb37",
+        "pr": 991,
+        "issues": [
+          990
+        ],
+        "actor": "Reviewer-C1990",
+        "session": "reviewer-c1990-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-20T06:30:00+00:00",
         "state": "reviewing"
       }
     },
