@@ -45017,6 +45017,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:31:48+00:00",
         "from_status": "status:backlog"
+      },
+      "230": {
+        "actor": "Worker-L5230",
+        "session": "run_l5_230",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1230-sentry-support-tickets",
+        "worktree": "C:\\acl-1230",
+        "id": "17919e7558b447eea17c374f294b972d",
+        "issue": 230,
+        "state": "implementing",
+        "started_at": "2026-10-20T09:33:29+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -53423,6 +53435,17 @@
         "state": "implementing",
         "worker": "Worker-L453",
         "coordinator": "Coordinator-M1011A"
+      },
+      "230": {
+        "implementers": [
+          {
+            "actor": "Worker-L5230",
+            "session": "run_l5_230"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-L5230",
+        "coordinator": "Coordinator-M1011A"
       }
     },
     "actors": {
@@ -55996,6 +56019,10 @@
       },
       "Worker-L453": {
         "session": "run_l4_53",
+        "role": "Worker"
+      },
+      "Worker-L5230": {
+        "session": "run_l5_230",
         "role": "Worker"
       }
     },
@@ -98141,6 +98168,13 @@
         "issue": 175,
         "actor": "Worker-L2175",
         "report": "Parked: the release-pipeline change (publish setup-guide.html as a release asset) needs owner approval to commit; it is uncommitted in C:/acl-1175-guide, 118 related tests pass. PR #930 is unchanged."
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T09:33:29+00:00",
+        "issue": 230,
+        "claim": "17919e7558b447eea17c374f294b972d",
+        "actor": "Worker-L5230"
       }
     ],
     "policy": {
