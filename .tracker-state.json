@@ -44846,7 +44846,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "739": {
+        "actor": "Worker-RH2020W",
+        "session": "rh2020w-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "codex/acl-1739-doc124-frozen",
+        "worktree": "C:\\rh20-739",
+        "id": "79fdfb246ee943769a6c3b9426fb04ee",
+        "issue": 739,
+        "state": "implementing",
+        "started_at": "2026-10-20T07:09:21+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -47906,10 +47919,14 @@
           {
             "actor": "Worker-R1019739",
             "session": "run_r1019_739"
+          },
+          {
+            "actor": "Worker-RH2020W",
+            "session": "rh2020w-20261020"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-R1019739",
+        "state": "implementing",
+        "worker": "Worker-RH2020W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-R1019739",
@@ -47932,8 +47949,7 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.577988+00:00",
           "remote_process_stopped_verified": false
-        },
-        "reviewer": "Reviewer-C1739"
+        }
       },
       "743": {
         "implementers": [
@@ -96955,6 +96971,13 @@
         "at": "2026-10-20T07:08:32+00:00",
         "issue": 992,
         "pr": 993,
+        "actor": "Worker-RH2020W"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T07:09:21+00:00",
+        "issue": 739,
+        "claim": "79fdfb246ee943769a6c3b9426fb04ee",
         "actor": "Worker-RH2020W"
       }
     ],
