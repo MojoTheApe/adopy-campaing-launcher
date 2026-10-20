@@ -5718,6 +5718,27 @@
         "issue_scopes": {
           "1037": "63ab9afd123776df93881b7fc0d961bb5eb25318e4fedcec40fd69af6b75223f"
         }
+      },
+      "1047": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R2046V",
+        "review_session": "reviewer-r2046v-20261020",
+        "execution_lane": "b1283a38f75b45f19674c4bc763cec5c",
+        "implementer": "Worker-c8f54e83",
+        "head_sha": "982d1209e98f3c6b23e4304bbca72ddf6bf4b1c6",
+        "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+        "tree_sha": "de9132b08a94c8bd4e5999c84845829b4ba4f35c",
+        "issues": [
+          1046
+        ],
+        "report": "PR 1047 is docs-only (2 files, +17 lines): it adds a CHANGELOG-fragment fold paragraph to docs/repository/BATCH_INTEGRATION_ACL.md and its own fragment docs/system/changelog.d/ACL-2046.md; it contains only its own commit plus a merge of main and is NOT stacked on PR 1041 (ACL-2037, still open, so scripts/fold_changelog.py and the fragment convention are not yet in main). The Issue asked to fold in the batch branch as one commit; the implementer deliberately deviates and documents folding as one docs-only PR from current main after the batch lands. I verified the reason in .workflow/tools/tracker_batch_policy.py composition(): any commit on the integration branch that is not the baseline, an approved source tip or a two-parent merge is rejected ('Integration branch contains work outside the approved source tips'), so an extra fold commit would indeed be refused, and the Issue's 'change the script only if needed' check is thereby answered without touching scripts/acl_batch.py, so the existing batch/promotion flow and its tests are unaffected. Documented flow: fold once per batch after landing, deterministic from current main, fragments deleted by the same fold PR (only after the fold output is produced), one open fold PR at a time to avoid conflicts, title [ACL-NNNN] Fold CHANGELOG fragments for batch BATCH_ID. Idempotence, malformed-fragment fail-closed behaviour and history preservation are properties of scripts/fold_changelog.py in PR 1041 and cannot be verified here; this PR only references it and must merge after 1041. No secrets in the diff. No code changed so no tests were run; CI on head is green (ACL verification, Process instructions, Installer verification, project tooling, descriptor, tracker-link pass; test jobs skipped as docs-only). Non-blocking nits: the doc does not say who owns the fold PR's task Issue or how to handle a batch that lands with zero fragments; the fold step is manual and can be forgotten, a check in a later task would help. No live checks claimed.",
+        "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "recorded_at": "2026-10-20T17:16:45+00:00",
+        "issue_scopes": {
+          "1046": "3d18b05f6962ee63da815495191058465dc3c69edad05dfc45c8adf55421ad5a"
+        }
       }
     },
     "stage": {
