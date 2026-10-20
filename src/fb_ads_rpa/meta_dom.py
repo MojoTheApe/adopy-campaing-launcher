@@ -1,6 +1,7 @@
 """DOM helpers for Meta Ads Manager — label-based fills that survive UI refactors."""
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import os
@@ -3699,7 +3700,10 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
         if _simple_create_ready(page):
             found, outcome = True, "simple_create"
             break
-        frozen = _tab_frozen(page)
+        # ACL-1739: цикл сам требует OBJECTIVE_FROZEN_POLLS промахов подряд, длинная
+        # проверка внутри каждого опроса только растягивала бы сдачу вкладки.
+        with _no_frozen_confirm():
+            frozen = _tab_frozen(page)
         woke = watch.check(frozen=True) if frozen else watch.check()
         now = time.time()
         if woke:
@@ -3942,6 +3946,20 @@ LIVENESS_PROBE_S = 5.0
 FROZEN_CONFIRM_S = 10.0
 
 
+#: ACL-1739: поток, которому длинная проверка `FROZEN_CONFIRM_S` не нужна
+#: (ожидание окна цели само требует нескольких промахов подряд).
+_NO_CONFIRM = threading.local()
+
+
+@contextlib.contextmanager
+def _no_frozen_confirm():
+    _NO_CONFIRM.on = True
+    try:
+        yield
+    finally:
+        _NO_CONFIRM.on = False
+
+
 def _tab_frozen(page: Page) -> bool:
     """Вкладка не ответила за `LIVENESS_PROBE_S` (таймаут соблюдает драйвер).
 
@@ -3965,7 +3983,7 @@ def _tab_frozen(page: Page) -> bool:
             woke = {}
         if woke.get("woke") and _page_responsive(page, LIVENESS_PROBE_S) is True:
             return False
-    if frozen and _page_responsive(page, FROZEN_CONFIRM_S) is True:
+    if frozen and not getattr(_NO_CONFIRM, "on", False) and _page_responsive(page, FROZEN_CONFIRM_S) is True:
         # ACL-1739 (Doc124, df8549045b4a и др.): одна неотвеченная 5-секундная
         # проба — ещё не застой. Окно профиля под 4–7 другими окнами, Chrome
         # придерживает рендерер; вкладка занята, но живая (через минуту
