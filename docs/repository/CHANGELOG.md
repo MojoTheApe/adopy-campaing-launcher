@@ -1,5 +1,78 @@
 # Repository process history
 
+## 2026-10-20 — ACL-2026 cumulative common support
+
+The owner requested one cumulative ACL update on the original Issue/PR. After the
+genuine source Reviewer returned it, the original Worker reclaimed its real task,
+merged current main 259ae7f and adopted published Master1.7.2 / Tracker3.9.2 through
+the maintained three-way upgrade. Previous source revisions, approvals and owner
+amendments remain historical; they do not approve this changed cumulative head.
+
+The source includes shared activity/history, process-only completion, explicit
+Pause support, Delivery/Ready for integration and Needs fixes/Fixing guidance.
+Phase-preserving Pause remains conditional on separate compatible reader/all-writer
+readiness and owned idle outer8 activation. No live activation, foreign-owner
+cleanup, installer publication or product request is performed by this source.
+All current-main product inputs and non-pin choices are preserved. Fresh full-scope
+independent source/combined review, applicable CI, ordinary frozen admission and
+exact process completion remain required. The two template overlaps only update
+Master SHA references while retaining complete ACL-local controls.
+
+
+## ACL-2026 — Adopt the global process/product boundary — 2026-10-20
+
+The latest owner instruction separates process delivery from product delivery for
+every repository and installation profile. After the genuine Coordinator returned
+the original Approved source, the same actual author resumed the original task,
+branch and worktree. The complete original Issue body and prior approval remain
+in history; the dated owner amendment governs this revised process-only outcome.
+Select published Master1.6.0 `6cbc2bbfd5df76fc2f1ad6f285d33a45dd5ff504`
+and Tracker3.8.0 `9c3ad4deec6b3596d5ef48400430b126155012dd` through
+the maintained three-way upgrade, retaining its genuine pristine target.
+
+Resolve Action/DELIVERY/VERIFICATION overlaps explicitly while retaining ACL-local
+controls. Restore the descriptor's explanatory exception to actual main: every
+non-pin field, config choice, product/build input and existing request remains
+unchanged. Record the real [product boundary](PROCESS_SUPPORT_ACL.md), including
+release-governance reachability, for fresh independent review. Shared sources are
+[TT-177](https://github.com/MojoTheApe/task-tracker/issues/177) and
+[MR-68](https://github.com/MojoTheApe/master-repo/issues/68).
+
+Ordinary source approval, frozen batch, independent combined review and applicable
+checks remain required. Exact canonical proof plus whole-scope independent review
+can establish process completion after actual admitted main integration. No
+consumer product-release request or Windows publication is created; the earlier
+automatically rejected publication is not resumed. Actual product changes and
+existing explicit publication obligations retain package verification/delivery.
+The earlier activity-source entry below records its original delivery assumption.
+
+## ACL-2026 — Adopt shared executor activity — 2026-10-20
+
+Select published Master1.5.4 `10da6de5b496a21e10188f2df63bef1f0254afbf`
+and Tracker3.7.3 `5d0a915c9fdb8dea4e3aded38beaa8dd1a024ecc` through
+the maintained three-way upgrade. Preserve the genuine rendered target baseline
+and exact portable export; existing common client/helper bytes and ACL's guarded
+adapter need no change. The adapter passes the shared activity commands through
+its original adoption checks. Owners report their own running, waiting and stopped
+state; unknown activity and waiting gaps do not grow confirmed work time. Existing
+owners without activity reports remain unknown, retaining all reservations.
+
+Resolve three template overlaps explicitly: the delivery-check Action and shared
+verification links change only their exact Master pin; append the canonical
+Executor activity section to the complete retained ACL workflow. Preserve the
+local triggers, draft validation, all checks, execution3/5-5-5, process1, Stage-off
+package route, absent optional policies, IDs/aliases and historical receipts.
+Update the owner guide for confirmed activity and bounded native status history.
+Shared upstream sources are [TT-174](https://github.com/MojoTheApe/task-tracker/issues/174)
+and [MR-65](https://github.com/MojoTheApe/master-repo/issues/65).
+
+The shared reader is already published; this source is consumer preparation and
+still requires genuine independent source/combined review, CI, main admission and
+verified package delivery. No state migration, detached heartbeat, campaign code,
+product skill, employee data, installer/updater or system/runtime behavior changes.
+Other adoption/pilot acceptance retains its original scope. Task:
+https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1026.
+
 ## ACL-2014 — Clarify verification repeats without changing CI — 2026-10-18
 
 Distinguish agent-requested repetitions from current automatic GitHub checks.
