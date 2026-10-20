@@ -45237,20 +45237,6 @@
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
       },
-      "1038": {
-        "actor": "Worker-L31038",
-        "session": "run_l3_1038",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-2038-connect-team-library",
-        "worktree": "C:\\acl-2038",
-        "id": "8d9f96c7f4de42edac97f2096d7d3cd6",
-        "issue": 1038,
-        "state": "handoff",
-        "started_at": "2026-10-20T12:11:12+00:00",
-        "from_status": "status:todo",
-        "pr": 1043,
-        "report": "ACL-2038 handoff (Worker-L31038): PR #1043, branch work/acl-2038-connect-team-library. Default repo/branch, token-only setup, dashboard \"Connect team library\" (masked field, one authenticated read, machine settings, add-missing seed with counts), Disconnect. Token never logged/returned/in errors or URLs.\nVerification: new tests/test_acl2038_connect_team_library.py + test_team_library, test_targeting_integration, ad-text and header tests pass locally with a fake library; no real token or acl-lib writes. Independent Opus security review: no leak path; HIGH/MEDIUM functional findings fixed. Known: no file lock in update_machine_env; disconnect affects the dashboard process only. No live run."
-      },
       "1040": {
         "actor": "Worker-MLX60",
         "session": "mlx60-run-20261020",
@@ -53847,9 +53833,25 @@
             "session": "run_l3_1038"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-L31038",
-        "coordinator": "Coordinator-M1011A"
+        "coordinator": "Coordinator-M1011A",
+        "handoff": {
+          "actor": "Worker-L31038",
+          "session": "run_l3_1038",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "work/acl-2038-connect-team-library",
+          "worktree": "C:\\acl-2038",
+          "id": "8d9f96c7f4de42edac97f2096d7d3cd6",
+          "issue": 1038,
+          "state": "handoff",
+          "started_at": "2026-10-20T12:11:12+00:00",
+          "from_status": "status:todo",
+          "pr": 1043,
+          "report": "ACL-2038 handoff (Worker-L31038): PR #1043, branch work/acl-2038-connect-team-library. Default repo/branch, token-only setup, dashboard \"Connect team library\" (masked field, one authenticated read, machine settings, add-missing seed with counts), Disconnect. Token never logged/returned/in errors or URLs.\nVerification: new tests/test_acl2038_connect_team_library.py + test_team_library, test_targeting_integration, ad-text and header tests pass locally with a fake library; no real token or acl-lib writes. Independent Opus security review: no leak path; HIGH/MEDIUM functional findings fixed. Known: no file lock in update_machine_env; disconnect affects the dashboard process only. No live run."
+        },
+        "pr": 1043,
+        "queued_at": "2026-10-20T12:32:24+00:00"
       },
       "1040": {
         "implementers": [
@@ -59448,7 +59450,8 @@
       854,
       305,
       1037,
-      838
+      838,
+      1038
     ],
     "review": {
       "id": "1ea28d1b292c4ef3baeda760fa52b87b",
@@ -100138,6 +100141,13 @@
         "issue": 1039,
         "claim": "204876da555149a18bfca8d6a12b4dc3",
         "actor": "Worker-BCHIP"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T12:32:24+00:00",
+        "issue": 1038,
+        "pr": 1043,
+        "actor": "Worker-L31038"
       }
     ],
     "policy": {
