@@ -104689,7 +104689,9 @@
         "session": "reviewer-c1841-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T06:46:31+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "# Returned to the author: merge conflict with main, content not reviewed\n\nPR 848 cannot be brought up to current main c61501607ce11744e45add8b0d3b314368c216c5: `gh pr update-branch` reports a merge conflict (checked 2026-10-19/20). A source review must bind the current main baseline, so this task cannot be reviewed or approved as is.\n\nThe content of this PR was NOT reviewed in this pass; this return carries no code findings.\n\nNext step for the author: merge current main into the original branch, resolve the conflict, run the affected tests, push, and hand off again for a full independent review.",
+        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
