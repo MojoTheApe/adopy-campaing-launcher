@@ -49647,7 +49647,7 @@
             "session": "run_r1019_845"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-R1019845",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -49666,7 +49666,7 @@
         },
         "pr": 850,
         "queued_at": "2026-10-19T20:57:05+00:00",
-        "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
+        "review_report": "# Returned to the author: merge conflict with main, content not reviewed\n\nPR 850 cannot be brought up to current main c61501607ce11744e45add8b0d3b314368c216c5: `gh pr update-branch` reports a merge conflict (checked 2026-10-19/20). A source review must bind the current main baseline, so this task cannot be reviewed or approved as is.\n\nThe content of this PR was NOT reviewed in this pass; this return carries no code findings.\n\nNext step for the author: merge current main into the original branch, resolve the conflict, run the affected tests, push, and hand off again for a full independent review.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578011+00:00",
@@ -96877,6 +96877,24 @@
         "pr": 850,
         "lane": "44d32685e63648fc952523ad6156ace8",
         "actor": "Reviewer-C1845"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-20T07:02:13+00:00",
+        "review": {
+          "id": "44d32685e63648fc952523ad6156ace8",
+          "pr": 850,
+          "issues": [
+            845
+          ],
+          "actor": "Reviewer-C1845",
+          "session": "reviewer-c1845-20261020",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-20T07:01:34+00:00",
+          "state": "returning",
+          "report": "# Returned to the author: merge conflict with main, content not reviewed\n\nPR 850 cannot be brought up to current main c61501607ce11744e45add8b0d3b314368c216c5: `gh pr update-branch` reports a merge conflict (checked 2026-10-19/20). A source review must bind the current main baseline, so this task cannot be reviewed or approved as is.\n\nThe content of this PR was NOT reviewed in this pass; this return carries no code findings.\n\nNext step for the author: merge current main into the original branch, resolve the conflict, run the affected tests, push, and hand off again for a full independent review.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -104765,20 +104783,6 @@
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-19T13:01:50+00:00",
         "state": "reviewing"
-      },
-      "850": {
-        "id": "44d32685e63648fc952523ad6156ace8",
-        "pr": 850,
-        "issues": [
-          845
-        ],
-        "actor": "Reviewer-C1845",
-        "session": "reviewer-c1845-20261020",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-20T07:01:34+00:00",
-        "state": "returning",
-        "report": "# Returned to the author: merge conflict with main, content not reviewed\n\nPR 850 cannot be brought up to current main c61501607ce11744e45add8b0d3b314368c216c5: `gh pr update-branch` reports a merge conflict (checked 2026-10-19/20). A source review must bind the current main baseline, so this task cannot be reviewed or approved as is.\n\nThe content of this PR was NOT reviewed in this pass; this return carries no code findings.\n\nNext step for the author: merge current main into the original branch, resolve the conflict, run the affected tests, push, and hand off again for a full independent review.",
-        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
