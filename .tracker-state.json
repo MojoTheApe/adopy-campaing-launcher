@@ -45068,20 +45068,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
-      },
-      "805": {
-        "actor": "Worker-L1805",
-        "session": "run_l1_805",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1805-rules-before-write",
-        "worktree": "C:\\acl-1805",
-        "id": "fbe8480ea7484cf9a37dbe6b7c0001c6",
-        "issue": 805,
-        "state": "handoff",
-        "started_at": "2026-10-20T10:41:39+00:00",
-        "from_status": "status:todo",
-        "pr": 1019,
-        "report": "Review fix (ACL-1805, 2026-10-20): added the required top entry to docs/system/CHANGELOG.md. Code unchanged (approved). tests/test_acl1805_rules_before_write.py 14 passed; branch contains current work/main. Non-blocking notes left for a possible follow-up Issue."
       }
     },
     "tasks": {
@@ -53270,25 +53256,25 @@
             "session": "run_l1_805"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-L1805",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-RH2020W",
-          "session": "rh2020w-20261020",
+          "actor": "Worker-L1805",
+          "session": "run_l1_805",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1805-rules-before-write",
-          "worktree": "C:\\rh20-805",
-          "id": "b66e6b48d8094fb8affb2fa7cf4cc08f",
+          "worktree": "C:\\acl-1805",
+          "id": "fbe8480ea7484cf9a37dbe6b7c0001c6",
           "issue": 805,
           "state": "handoff",
-          "started_at": "2026-10-20T06:52:42+00:00",
+          "started_at": "2026-10-20T10:41:39+00:00",
           "from_status": "status:todo",
           "pr": 1019,
-          "report": "Re-handoff without code change. The 2026-10-20 return ('merge conflict with main, content not reviewed') was a false positive: head aefcaee6 already contains current main c6150160 and merges cleanly (git merge-tree). Content needs a full independent review."
+          "report": "Review fix (ACL-1805, 2026-10-20): added the required top entry to docs/system/CHANGELOG.md. Code unchanged (approved). tests/test_acl1805_rules_before_write.py 14 passed; branch contains current work/main. Non-blocking notes left for a possible follow-up Issue."
         },
         "pr": 1019,
-        "queued_at": "2026-10-20T06:55:22+00:00",
+        "queued_at": "2026-10-20T10:44:20+00:00",
         "review_report": "# Returned: ACL-1805 / PR 1019, one required fix (CHANGELOG), code approved\n\nReviewed head aefcaee6 (contains current main, CI all green, 240 tests passed locally: 1805, 1761, 1775*, 1786*, 1756).\n\nCode review: no blocking code findings.\n- The Meta rules check runs in `_prepare`, which is the first step of `_run` and `plan_only`, so fresh runs, reruns and dry runs are all covered and nothing is POSTed before it. `RulesViolation` is a `PlanError`, so the run stops with stop_kind \"plan\" and \"Nothing more was created\".\n- No new write path: the check only builds payloads with the same `campaign_params`, `adset_params` and `_story` that the POSTs use, and makes no Graph call. write_policy and request limits are untouched.\n- graph.py: codes 1404078, 2859015 and 1404163 (as code or subcode) now map to `policy`, which stops the client permanently; this only makes the API stricter. `classify(code, sub)` is backward compatible, and the \"(368)\" text became \"({code})\"; no test or consumer depends on it.\n- Error output goes through the catalog, and unknown codes show the raw (already scrubbed) text.\n\nRequired fix (blocking, process): `docs/system/CHANGELOG.md` has no entry. PROJECT.md \"Maintaining this document\" requires what/why plus ticket/PR links in CHANGELOG.md for system changes, and this adds user-visible behavior (a pre-write stop, the problem list for Meta refusals, new stop codes). Add a short entry at the top of docs/system/CHANGELOG.md.\n\nNon-blocking notes:\n1. `_check_meta_rules` fails open on any exception, including a bug inside `meta_rule_jobs`, not only a registry load failure. The log line is there, but consider logging at a level that Sentry picks up, or keep only load_rules inside the try.\n2. `error_catalog.explain` now falls back to `CATALOG.get((subcode, None))`. Fine for the 7-digit codes added here, but a small subcode that equals an unrelated general code key would pick the wrong entry; consider restricting that fallback to codes in BLOCK_CODES.\n\nNot claimed: no live Meta calls."
       },
       "807": {
@@ -59080,7 +59066,8 @@
       71,
       770,
       681,
-      739
+      739,
+      805
     ],
     "review": null,
     "history": [
@@ -98838,6 +98825,13 @@
         "issue": 739,
         "pr": 740,
         "actor": "Worker-L1739"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T10:44:20+00:00",
+        "issue": 805,
+        "pr": 1019,
+        "actor": "Worker-L1805"
       }
     ],
     "policy": {
