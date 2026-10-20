@@ -54648,7 +54648,7 @@
             "session": "c8f54e83"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-c8f54e83",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -54666,7 +54666,8 @@
           "report": "Per-task CHANGELOG fragments (docs/system/changelog.d/ACL-NNNN.md) plus scripts/fold_changelog.py; docs updated. Tests: tests/test_fold_changelog_2037.py (14 passed), tests/test_acl_ci_scope.py passed. Read-only Opus review done, findings applied. Not folded by batch integration yet (open question for owner)."
         },
         "pr": 1041,
-        "queued_at": "2026-10-20T12:20:42+00:00"
+        "queued_at": "2026-10-20T12:20:42+00:00",
+        "reviewer": "Reviewer-R2037V"
       },
       "1038": {
         "implementers": [
@@ -57534,6 +57535,10 @@
       "Worker-RF184": {
         "session": "rf184-20261020",
         "role": "Worker"
+      },
+      "Reviewer-R2037V": {
+        "session": "reviewer-r2037v-20261020",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -60416,7 +60421,6 @@
       }
     },
     "review_queue": [
-      1037,
       838,
       1040,
       880,
@@ -102154,6 +102158,13 @@
         "issue": 184,
         "claim": "04fa0eecd18a456eb3759b5513da689a",
         "actor": "Worker-RF184"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-20T14:12:43+00:00",
+        "pr": 1041,
+        "lane": "7f0832547fd94b108d587c92d8926c4d",
+        "actor": "Reviewer-R2037V"
       }
     ],
     "policy": {
@@ -111108,6 +111119,18 @@
         "session": "sr1020-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T13:49:44+00:00",
+        "state": "reviewing"
+      },
+      "1041": {
+        "id": "7f0832547fd94b108d587c92d8926c4d",
+        "pr": 1041,
+        "issues": [
+          1037
+        ],
+        "actor": "Reviewer-R2037V",
+        "session": "reviewer-r2037v-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-20T14:12:43+00:00",
         "state": "reviewing"
       }
     },
