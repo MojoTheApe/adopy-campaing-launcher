@@ -84,15 +84,23 @@ Object.keys(L.FUTURE).forEach((key) => {
     assert.ok(h.includes('coming in ' + L.FUTURE[key].task), key + ': подсказка не называет задачу');
   });
 });
-assert.equal(L.futureTip('adsets'), 'Multiple ad sets — coming in ACL-1768');
+assert.equal(L.futureTip('adsets'), '', 'ACL-1768: несколько наборов больше не заглушка');
+assert.equal(L.futureTip('copyAdset'), '', 'ACL-1768: копия набора больше не заглушка');
+// ACL-1768: имя набора - своё, иначе имя кампании (набор 0) или «<кампания> - Ad set N».
+assert.equal(L.adsetName('Camp', 0, ''), 'Camp');
+assert.equal(L.adsetName('Camp', 2, ''), 'Camp - Ad set 3');
+assert.equal(L.adsetName('Camp', 1, '  Own '), 'Own');
+assert.equal(L.adsetLabel('Camp', 1, '', 3), 'Ad set 2 · Camp - Ad set 2 · 3 ads');
+assert.equal(L.adsetLabel('Camp', 0, '', 1), 'Ad set 1 · Camp · 1 ad');
 assert.equal(L.futureTip('forms'), '', 'ACL-1775: формы больше не заглушка');
 assert.equal(L.futureTip('texts'), 'Up to 5 primary texts — coming in ACL-1774');
 assert.equal(L.futureTip('placements'), 'Placement editor — coming in ACL-1772');
 assert.equal(L.futureTip('copyTo'), 'Copy to accounts — coming in ACL-1773');
-assert.equal(L.futureTip('cta'), 'CTA list — coming in ACL-1767');
+assert.equal(L.futureTip('cta'), '', 'ACL-1767: кнопка больше не заглушка');
+['gender', 'languages'].forEach((k) => assert.equal(L.futureTip(k), '', k + ': ACL-1767 больше не заглушка'));
 assert.equal(L.futureHtml('нет-такого', 'button'), '', 'неизвестный ключ нарисовал элемент');
 // Показанное в выключенном списке экранируется.
-assert.ok(!/<script/.test(L.futureHtml('cta', 'select', '<script>x</script>')));
+assert.ok(!/<script/.test(L.futureHtml('texts', 'select', '<script>x</script>')));
 
 // ── сообщения сервера → поля ──────────────────────────────────────────
 const sels = (m) => L.routes(m).map((r) => r.sel);

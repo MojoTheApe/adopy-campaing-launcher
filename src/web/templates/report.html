@@ -1406,6 +1406,7 @@
     .cb-sel-opt:hover, .cb-sel-opt.cb-sel-focused { background: var(--bg-hover); color: var(--accent); }
     .cb-sel-opt[data-val=""] { color: var(--muted); }
     .cb-sel-opt[hidden] { display: none; }
+    .cb-sel-opt[aria-disabled="true"] { opacity: 0.45; pointer-events: none; cursor: not-allowed; }
 
     /* Campaign name headline in slot */
     .cb-slot-name {
@@ -3406,6 +3407,30 @@
     .cbd-host[data-level="campaign"] .cb-lvl:not(.cb-lvl-campaign),
     .cbd-host[data-level="adset"] .cb-lvl:not(.cb-lvl-adset),
     .cbd-host[data-level="ad"] .cb-lvl:not(.cb-lvl-ad) { display: none; }
+    /* ACL-1768: показан только выбранный набор. */
+    .cbd-host .cb-adset-sec.cbd-set-off { display: none; }
+    .cb-adsets { display: block; }
+    /* Наборы в дереве: узлы под открытой кампанией. */
+    .cbd-sets { display: flex; flex-direction: column; padding: 0 var(--space-xs) var(--space-xs) 1.6rem; gap: 1px; }
+    .cbd-set {
+      display: flex; align-items: baseline; gap: var(--space-xs); width: 100%;
+      min-height: var(--adopy-control-sm); padding: 0.2rem 0.4rem; text-align: left;
+      background: none; border: 0; border-radius: var(--radius-sm); color: var(--text);
+      font: inherit; font-size: var(--adopy-text-body); cursor: pointer;
+    }
+    .cbd-set:hover { background: var(--bg-hover); }
+    .cbd-set:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+    .cbd-set[aria-current="true"] { background: var(--adopy-selected-bg); color: var(--adopy-selected-text); font-weight: 600; }
+    .cbd-set-branch { color: var(--muted); flex-shrink: 0; }
+    .cbd-set-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cbd-set-sub { color: var(--muted); font-size: var(--adopy-text-sm); flex-shrink: 0; font-weight: 400; }
+    #cbd-panel[data-names-only="1"] .cbd-sets { display: none; }
+    .cbd-camp-sets::before { content: "·"; margin-right: var(--space-xs); }
+    .cbd-ed-actions { gap: var(--space-xs); }
+    .cbd-ed-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .cbd-ed-note { font-size: 0.75rem; color: var(--text-muted, #8a8f98); margin-top: var(--space-xs); }
+    .cbd-ed-inset { display: flex; flex-wrap: wrap; gap: var(--space-xs); align-items: center; }
+    .cbd-ed-inset .cbd-ed-inset-label { color: var(--muted); font-size: var(--adopy-text-sm); }
     /* Настройка аккаунта (ссылка, поля карты) — контекст кампании, не набора и не объявления. */
     .cbd-host[data-level="adset"] .cb-preflight, .cbd-host[data-level="ad"] .cb-preflight { display: none; }
     .cbd-host .cb-lvl { padding-top: var(--space-xs); }
@@ -5441,7 +5466,7 @@ window.cbDrawer = (function () {
  */
 window.cbKeep = (function () {
   var KEY = 'acl.builder.v2';
-  var VERSION = 2;
+  var VERSION = 4;
   /* Две недели без прикосновения — это уже не «собираю». Срок щедрый
      нарочно: выбросить чужую работу хуже, чем подержать лишнее. */
   var STALE_MS = 14 * 24 * 60 * 60 * 1000;
@@ -5449,12 +5474,50 @@ window.cbKeep = (function () {
   var state = { v: VERSION, forms: {} };
   var restoring = false;
 
+  /* v2 -> v3 (ACL-1767): появились пол, языки, устройства, версия ОС и старт. Поля v2
+     сохраняются как есть; новые - пустые (умолчание = прежнее поведение). Кнопку не трогаем:
+     у объявления без сохранённого значения остаётся Learn more. */
+  var NEW_V3_FIELDS = ['gender', 'languages', 'device', 'os_min', 'start_time'];
+  function migrate(parsed) {
+    if (!parsed || typeof parsed !== 'object' || !parsed.forms || typeof parsed.forms !== 'object') return parsed;
+    if (parsed.v === 2) {
+      Object.keys(parsed.forms).forEach(function (k) {
+        var entry = parsed.forms[k];
+        if (!entry || !Array.isArray(entry.campaigns)) return;
+        entry.campaigns.forEach(function (c) {
+          if (!c || !c.fields || typeof c.fields !== 'object') return;
+          NEW_V3_FIELDS.forEach(function (f) { if (!(f in c.fields)) c.fields[f] = ''; });
+        });
+      });
+      parsed.v = 3;
+    }
+    /* v3 -> v4 (ACL-1768): появились наборы. Старый черновик - это один набор, и все его
+       объявления в нём; всё остальное остаётся как есть. */
+    if (parsed.v === 3) {
+      Object.keys(parsed.forms).forEach(function (k) {
+        var entry = parsed.forms[k];
+        if (!entry || !Array.isArray(entry.campaigns)) return;
+        entry.campaigns.forEach(function (c) {
+          if (!c || !c.fields || typeof c.fields !== 'object') return;
+          if (!('adset_count' in c.fields)) c.fields.adset_count = '1';
+          var n = Number.isInteger(c.ads) ? c.ads : 1;
+          for (var i = 0; i < n; i += 1) {
+            if (!(('ad_' + i + '_adset') in c.fields)) c.fields['ad_' + i + '_adset'] = '0';
+          }
+        });
+      });
+      parsed.v = 4;
+    }
+    return parsed;
+  }
+
   function read() {
     var raw;
     try { raw = localStorage.getItem(KEY); } catch (e) { return null; }
     if (!raw) return null;
     var parsed;
     try { parsed = JSON.parse(raw); } catch (e) { return null; }
+    parsed = migrate(parsed);
     if (!parsed || parsed.v !== VERSION || !parsed.forms) return null;
     var fresh = {}, now = Date.now();
     Object.keys(parsed.forms).forEach(function (k) {
@@ -5511,10 +5574,13 @@ window.cbKeep = (function () {
     var ov = slot.querySelector('.cb-name-override');
     if (ov) fields.name_override = ov.value;
     var hint = slot.querySelector('.cb-targeting-hint');
+    /* ACL-1768: подсказки таргетинга по наборам (у набора 0 - прежнее поле `hint`). */
+    var hints = Array.prototype.map.call(slot.querySelectorAll('.cb-targeting-hint'), function (h) { return h.textContent; });
     var out = {
       fields: fields,
       shown: shown,
       hint: hint ? hint.textContent : '',
+      hints: hints,
       ads: slot.querySelectorAll('.cb-ad-row').length
     };
     // Галочка «собрать эту» (ACL-1360) едет вместе с карточкой: номер
@@ -5524,6 +5590,11 @@ window.cbKeep = (function () {
   }
 
   function writeSlot(slot, data) {
+    /* ACL-1768: сначала наборы - поля и принадлежность объявлений ложатся по готовым разделам.
+       Нет сохранённого числа (старый черновик) - один набор. */
+    var wantSets = parseInt(data.fields && data.fields.adset_count, 10) || 1;
+    var haveSets = slot.querySelectorAll('.cb-adset-sec').length;
+    for (var ks = haveSets; ks < wantSets && ks < 10 && window.cbAddAdset; ks += 1) window.cbAddAdset(slot, { noAd: true });
     var have = slot.querySelectorAll('.cb-ad-row').length;
     var addAd = slot.querySelector('.cb-add-btn-sm');
     for (var i = have; i < (data.ads || 1) && addAd; i += 1) window.cbAddAd(addAd);
@@ -5550,6 +5621,11 @@ window.cbKeep = (function () {
     if (ov && typeof data.fields.name_override === 'string') ov.value = data.fields.name_override;
     var hint = slot.querySelector('.cb-targeting-hint');
     if (hint) hint.textContent = data.hint || '';
+    if (Array.isArray(data.hints)) {
+      slot.querySelectorAll('.cb-targeting-hint').forEach(function (h, i) {
+        if (typeof data.hints[i] === 'string') h.textContent = data.hints[i];
+      });
+    }
     slot._cbdPick = data.picked === true;
     if (window.cbSyncDestination) window.cbSyncDestination(slot);
     if (window.cbUpdateName) window.cbUpdateName(slot);
@@ -5654,6 +5730,7 @@ window.cbKeep = (function () {
 
   return {
     save: save,
+    migrate: migrate,
     saveSoon: saveSoon,
     restore: restore,
     watch: watchStructure,
@@ -5676,8 +5753,7 @@ window.cbKeep = (function () {
  * его ответ ложится на поля редактора.
  */
 window.cbLayout = (function () {
-  /* Объект редактора. Сегодня у кампании ровно один набор объявлений —
-     уровень «Ad set» показывает его отдельно; несколько наборов — ACL-1768. */
+  /* Объект редактора. Кампания состоит из наборов (ACL-1768), набор - из объявлений. */
   var LEVELS = ['campaign', 'adset', 'ad'];
   var LEVEL_LABEL = { campaign: 'Campaign', adset: 'Ad set', ad: 'Ad' };
 
@@ -5687,14 +5763,9 @@ window.cbLayout = (function () {
      выключенным, без `name` (в форму не попадает, значения не подменяет), с
      подсказкой, называющей задачу. Подставлять ему состояние нельзя. */
   var FUTURE = {
-    adsets:     { task: 'ACL-1768', what: 'Multiple ad sets' },
-    copyAdset:  { task: 'ACL-1768', what: 'Copy ad set' },
     texts:      { task: 'ACL-1774', what: 'Up to 5 primary texts' },
     placements: { task: 'ACL-1772', what: 'Placement editor' },
     media:      { task: 'ACL-1772', what: 'Separate Stories / Reels file' },
-    gender:     { task: 'ACL-1767', what: 'Gender' },
-    languages:  { task: 'ACL-1767', what: 'Several languages' },
-    cta:        { task: 'ACL-1767', what: 'CTA list' },
     copyTo:     { task: 'ACL-1773', what: 'Copy to accounts' }
   };
 
@@ -5741,6 +5812,21 @@ window.cbLayout = (function () {
     (pf.missing_map_fields || []).forEach(function (f) { missing.push(f); });
     if (missing.length) return { state: 'warn', sign: '!', why: 'Needs setup: ' + missing.join(', ') };
     return { state: 'ok', sign: '✓', why: 'Account is configured' };
+  }
+
+  /* Имя набора: своё, иначе имя кампании (набор 0, как всегда) или «<кампания> - Ad set N».
+     Зеркало build_draft.slots_to_campaign_drafts. */
+  function adsetName(campName, k, own) {
+    var o = String(own == null ? '' : own).trim();
+    if (o) return o;
+    var c = String(campName == null ? '' : campName).trim();
+    return k === 0 ? c : c + ' - Ad set ' + (k + 1);
+  }
+
+  /* Подпись набора в списке и дереве. */
+  function adsetLabel(campName, k, own, ads) {
+    var n = ads | 0;
+    return 'Ad set ' + (k + 1) + ' · ' + (adsetName(campName, k, own) || 'Untitled') + ' · ' + n + (n === 1 ? ' ad' : ' ads');
   }
 
   function clampAd(count, idx) {
@@ -5924,7 +6010,7 @@ window.cbLayout = (function () {
     validateTemplate: validateTemplate, formSource: formSource, templateOptions: templateOptions,
     httpsUrl: httpsUrl, FORM_LIMITS: FORM_LIMITS,
     level: level, futureTip: futureTip, futureHtml: futureHtml, effectiveName: effectiveName,
-    accountState: accountState, clampAd: clampAd, routes: routes, campMeta: campMeta, parseList: parseList
+    accountState: accountState, adsetName: adsetName, adsetLabel: adsetLabel, clampAd: clampAd, routes: routes, campMeta: campMeta, parseList: parseList
   };
 })();
 </script>
@@ -5943,35 +6029,75 @@ window.cbPreflight = (function () {
   function table() { return (window.CB_PREFLIGHT_RULES && window.CB_PREFLIGHT_RULES.rules) || []; }
   function consts() { return (window.CB_PREFLIGHT_RULES && window.CB_PREFLIGHT_RULES.consts) || {}; }
   function s(v) { return String(v == null ? '' : v).trim(); }
-  function v(rule, status, detail, ads) { return { rule: rule, status: status, detail: detail || '', ads: ads || [] }; }
+  function v(rule, status, detail, ads, sets) {
+    var o = { rule: rule, status: status, detail: detail || '', ads: ads || [] };
+    if (sets && sets.length) o.sets = sets;       // ACL-1768: какие наборы (1-based), только у нескольких
+    return o;
+  }
 
   function applies(rule, dest) { return rule.applies === 'always' || rule.applies === dest; }
 
-  function perAd(rule, inp, bad, status) {
+  /* ACL-1768: наборы входа; плоский вход прежней формы - один набор (зеркало audit_sets). */
+  function auditSets(inp) {
+    if (Array.isArray(inp.ad_sets) && inp.ad_sets.length) return inp.ad_sets;
+    return [{ name: inp.name, destination: inp.destination, age_min: inp.age_min, age_max: inp.age_max,
+              os: inp.os, device: inp.device, os_min: inp.os_min, start_time: inp.start_time, ads: inp.ads }];
+  }
+  function destOf(st) { return s(st.destination) === 'instant_form' ? 'instant_form' : 'website'; }
+  function campaignDests(inp) {
+    var d = {};
+    auditSets(inp).forEach(function (st) { d[destOf(st)] = true; });
+    return d;
+  }
+  /* [{si: набор 1-based, n: сквозной номер объявления, st: набор, ad: объявление}] */
+  function numbered(inp) {
+    var out = [], n = 0;
+    auditSets(inp).forEach(function (st, i) {
+      (st.ads || []).forEach(function (ad) { n += 1; out.push({ si: i + 1, n: n, st: st, ad: ad }); });
+    });
+    return out;
+  }
+
+  function perAd(rule, inp, bad, status, onlyDest) {
     var ads = [];
-    (inp.ads || []).forEach(function (ad, i) { if (bad(ad)) ads.push(i + 1); });
+    numbered(inp).forEach(function (x) {
+      if ((!onlyDest || destOf(x.st) === onlyDest) && bad(x.ad, x.st)) ads.push(x.n);
+    });
     return v(rule, ads.length ? (status || 'error') : 'ok', ads.length ? 'Ad ' + ads.join(', ') : '', ads);
+  }
+
+  /* Правило уровня набора: check(набор) -> код ошибки или ''. */
+  function perSet(rule, inp, check) {
+    var bad = [];
+    auditSets(inp).forEach(function (st, i) {
+      var code = check(st);
+      if (code) bad.push({ i: i + 1, code: code });
+    });
+    if (!bad.length) return v(rule, 'ok');
+    if (auditSets(inp).length === 1) return v(rule, 'error', bad[0].code);
+    var idx = bad.map(function (b) { return b.i; });
+    return v(rule, 'error', 'Ad set ' + idx.join(', '), [], idx);
   }
 
   /* Клиентские вердикты в порядке таблицы (зеркало evaluate_client). */
   function evaluate(inp, rules) {
     rules = rules || table();
     var C = consts();
-    var dest = s(inp.destination) === 'instant_form' ? 'instant_form' : 'website';
+    var sets = auditSets(inp), dests = campaignDests(inp);
     var link = s(inp.link);
     var linkRe = new RegExp(C.link_re || '^$', 'i'), trackRe = new RegExp(C.track_re || '^$');
     var linkOk = linkRe.test(link);
     var out = [];
     rules.forEach(function (rule) {
-      if (rule.side !== 'client' || !applies(rule, dest)) return;
-      var id = rule.id, ads = inp.ads || [];
-      if (id === 'form_chosen') out.push(perAd(id, inp, function (a) { return !s(a.form_id) && !a.template; }));
+      if (rule.side !== 'client' || !(rule.applies === 'always' || dests[rule.applies])) return;
+      var id = rule.id;
+      if (id === 'form_chosen') out.push(perAd(id, inp, function (a) { return !s(a.form_id) && !a.template; }, 'error', 'instant_form'));
       else if (id === 'form_template_privacy') out.push(perAd(id, inp, function (a) {
         return !!a.template && !new RegExp(C.link_re || '^$', 'i').test(s(a.template.privacy_url));
-      }));
+      }, 'error', 'instant_form'));
       else if (id === 'form_template_contacts') out.push(perAd(id, inp, function (a) {
         return !!a.template && !(a.template.contact_fields || []).length;
-      }));
+      }, 'error', 'instant_form'));
       else if (id === 'country_set') out.push(v(id, s(inp.country) ? 'ok' : 'error'));
       else if (id === 'link_https') out.push(!link ? v(id, 'error', 'empty') : !linkOk ? v(id, 'error', 'not_https') : v(id, 'ok'));
       else if (id === 'link_tracking') out.push(!linkOk ? v(id, 'unknown', 'no_valid_link') : v(id, trackRe.test(link) ? 'ok' : 'warning'));
@@ -5981,22 +6107,60 @@ window.cbPreflight = (function () {
       else if (id === 'headline_len') out.push(perAd(id, inp, function (a) { return s(a.headline).length > C.max_headline; }, 'warning'));
       else if (id === 'primary_len') out.push(perAd(id, inp, function (a) { return s(a.body).length > C.max_primary_visible; }, 'warning'));
       else if (id === 'cta_allowed') {
-        var allowed = (C.allowed_cta || {})[s(inp.objective).toLowerCase() || C.default_objective] || [];
-        out.push(perAd(id, inp, function (a) { return allowed.indexOf(s(a.cta) || 'LEARN_MORE') === -1; }));
+        var objective = s(inp.objective).toLowerCase() || C.default_objective;
+        out.push(perAd(id, inp, function (a, st) {
+          var allowed = (C.allowed_cta || {})[objective + (destOf(st) === 'instant_form' ? '_instant_form' : '')] || [];
+          return allowed.indexOf(s(a.cta) || 'LEARN_MORE') === -1;
+        }));
       } else if (id === 'budget_set') {
         var b = inp.budget, n = Number(b);
         out.push(v(id, b !== null && b !== undefined && b !== '' && isFinite(n) && n > 0 ? 'ok' : 'error'));
       } else if (id === 'age_range') {
-        var lo = parseInt(inp.age_min, 10), hi = parseInt(inp.age_max, 10);
-        var good = isFinite(lo) && isFinite(hi) && lo >= C.age_min && lo <= C.age_max
-          && hi >= C.age_min && hi <= C.age_max && lo <= hi;
-        out.push(v(id, good ? 'ok' : 'error'));
+        out.push(perSet(id, inp, function (st) {
+          var lo = parseInt(st.age_min, 10), hi = parseInt(st.age_max, 10);
+          var good = isFinite(lo) && isFinite(hi) && lo >= C.age_min && lo <= C.age_max
+            && hi >= C.age_min && hi <= C.age_max && lo <= hi;
+          return good ? '' : 'range';
+        }));
+      } else if (id === 'devices_consistent') {
+        out.push(perSet(id, inp, function (st) {
+          var os = s(st.os).toLowerCase() || 'all', dev = s(st.device).toLowerCase(), ver = s(st.os_min);
+          var mobile = os === 'ios' || os === 'android';
+          if (mobile && dev === 'desktop') return 'mobile_os_desktop';
+          if (ver && !mobile) return 'version_needs_os';
+          if (ver && !new RegExp(C.os_min_re || '^$').test(ver)) return 'bad_version';
+          return '';
+        }));
+      } else if (id === 'start_time_valid') {
+        var nw = s(inp.now), stRe = new RegExp(C.start_re || '^$');
+        out.push(perSet(id, inp, function (st) {
+          var t = s(st.start_time);
+          if (!t) return '';
+          if (!stRe.test(t)) return 'format';
+          if (stRe.test(nw) && t.slice(0, 10) < nw.slice(0, 10)) return 'past';
+          return '';
+        }));
       } else if (id === 'ad_names_unique') {
-        var names = ads.map(function (a) { return s(a.name); }), bad = [];
-        names.forEach(function (nm, i) {
-          if (nm && names.filter(function (x) { return x === nm; }).length > 1) bad.push(i + 1);
+        /* Имена различаются внутри набора (так создатель ищет и сверяет объявления). */
+        var bad = [], all = numbered(inp);
+        sets.forEach(function (st, i) {
+          var mine = all.filter(function (x) { return x.si === i + 1; });
+          mine.forEach(function (x) {
+            var nm = s(x.ad.name);
+            if (nm && mine.filter(function (y) { return s(y.ad.name) === nm; }).length > 1) bad.push(x.n);
+          });
         });
         out.push(v(id, bad.length ? 'error' : 'ok', bad.length ? 'Ad ' + bad.join(', ') : '', bad));
+      } else if (id === 'adset_names_unique') {
+        var names = sets.map(function (st) { return s(st.name).toLowerCase(); }), badSets = [];
+        names.forEach(function (nm, i) {
+          if (nm && names.filter(function (x) { return x === nm; }).length > 1) badSets.push(i + 1);
+        });
+        out.push(v(id, badSets.length ? 'error' : 'ok', badSets.length ? 'Ad set ' + badSets.join(', ') : '', [], badSets));
+      } else if (id === 'adset_has_ads') {
+        var empty = [];
+        sets.forEach(function (st, i) { if (!(st.ads || []).length) empty.push(i + 1); });
+        out.push(v(id, empty.length ? 'error' : 'ok', empty.length ? 'Ad set ' + empty.join(', ') : '', [], empty));
       }
     });
     return out;
@@ -6008,7 +6172,7 @@ window.cbPreflight = (function () {
   function lines(inp, opts, rules) {
     rules = rules || table();
     opts = opts || {};
-    var dest = s(inp.destination) === 'instant_form' ? 'instant_form' : 'website';
+    var dests = campaignDests(inp);
     var client = {}, server = {}, out = [];
     evaluate(inp, rules).forEach(function (x) { client[x.rule] = x; });
     var serverOn = opts.backend === 'api';
@@ -6016,7 +6180,7 @@ window.cbPreflight = (function () {
     if (fresh) opts.server.forEach(function (x) { server[x.rule] = x; });
     if (fresh && opts.accountAudit) server.account_active = opts.accountAudit;
     rules.forEach(function (rule) {
-      if (!applies(rule, dest)) return;
+      if (!(rule.applies === 'always' || dests[rule.applies])) return;
       var got = rule.side === 'client' ? client[rule.id] : server[rule.id];
       if (rule.side === 'server' && !serverOn) return;     // RPA: серверных строк нет
       if (!got) {
@@ -6025,7 +6189,7 @@ window.cbPreflight = (function () {
         got = v(rule.id, 'unknown', why);
       }
       out.push({ rule: rule.id, label: rule.label, hint: rule.hint, status: got.status, detail: got.detail,
-                 ads: got.ads || [], field: rule.field, side: rule.side, severity: rule.severity });
+                 ads: got.ads || [], sets: got.sets || [], field: rule.field, side: rule.side, severity: rule.severity });
     });
     if (fresh && opts.planError && !out.some(function (x) { return x.status === 'error' && x.side === 'server'; })) {
       out.push({ rule: 'plan_error', label: 'Plan check', hint: '', status: 'error', detail: opts.planError,
@@ -6123,6 +6287,9 @@ window.cbTree = (function () {
   var level = L.level(store(LEVEL_KEY));
   var namesOnly = store(NAMES_KEY) === '1';
   var folded = L.parseList(store(FOLD_KEY));
+  var adIdx = 0, lastAdFor = '', lastAdCount = 0;
+  /* ACL-1768: выбранный набор выбранной кампании (интерфейс, не данные). */
+  var setIdx = 0, lastSetFor = '', lastSetCount = 0;
 
   var openId = '';
   try { openId = localStorage.getItem(OPEN_KEY) || ''; } catch (e) { openId = ''; }
@@ -6165,6 +6332,22 @@ window.cbTree = (function () {
     return '';
   }
 
+  /* ACL-1768: наборы карточки: номер, своё имя, сколько объявлений. Нет разделов
+     (чужая разметка) - один набор со всеми объявлениями. */
+  function slotSets(slot) {
+    var secs = slot.querySelectorAll('.cb-adset-sec'), rows = slot.querySelectorAll('.cb-ad-row'), out = [];
+    if (!secs.length) return [{ idx: 0, own: '', ads: rows.length }];
+    Array.prototype.forEach.call(secs, function (sec, k) {
+      var nm = sec.querySelector('.cb-adset-name');
+      out.push({ idx: k, own: nm ? String(nm.value || '') : '', ads: 0 });
+    });
+    Array.prototype.forEach.call(rows, function (row) {
+      var k = window.cbRowSet ? window.cbRowSet(row) : 0;
+      if (out[k]) out[k].ads += 1;
+    });
+    return out;
+  }
+
   function realTree() {
     var out = [], byCountry = Object.create(null);
     document.querySelectorAll('.view-panel[data-country]').forEach(function (panel) {
@@ -6186,6 +6369,7 @@ window.cbTree = (function () {
             slot: slot,
             name: slotName(slot),
             ads: slot.querySelectorAll('.cb-ad-row').length,
+            sets: slotSets(slot),
             budget: slotBudget(slot)
           };
         });
@@ -6425,6 +6609,7 @@ window.cbTree = (function () {
           : '<span class="cbd-camp-name cbd-camp-name-empty">Untitled campaign</span>')
       /* Под именем — то, что «Names only» прячет: счётчик объявлений и бюджет. */
       + '<span class="cbd-camp-sub"><span class="cbd-camp-ads">' + c.ads + (c.ads === 1 ? ' ad' : ' ads') + '</span>'
+      + (c.sets.length > 1 ? '<span class="cbd-camp-sets">' + c.sets.length + ' ad sets</span>' : '')
       + '<span class="cbd-camp-meta">' + aclEscHtml(meta) + '</span>'
       + '<span class="cbd-pf-tree" hidden></span></span>'
       + '</span>'
@@ -6432,7 +6617,20 @@ window.cbTree = (function () {
       + '<button type="button" class="cbd-camp-drop" data-act="drop"'
       + ' title="Remove this campaign" aria-label="Remove this campaign">×</button>'
       + '</div>'
+      + (open ? '<div class="cbd-sets" role="group" aria-label="Ad sets">' + setsHtml(c) + '</div>' : '')
       + '</div>';
+  }
+
+  /* Узлы наборов под открытой кампанией: набор - узел дерева, как в дизайне. */
+  function setsHtml(c) {
+    return c.sets.map(function (st) {
+      var name = L.adsetName(c.name, st.idx, st.own) || 'Untitled ad set';
+      return '<button type="button" class="cbd-set" data-act="pick-set" data-set="' + st.idx + '"'
+        + ' aria-current="' + (st.idx === setIdx ? 'true' : 'false') + '" title="' + aclEscHtml(name) + '">'
+        + '<span class="cbd-set-branch" aria-hidden="true">└</span>'
+        + '<span class="cbd-set-name">' + aclEscHtml(name) + '</span>'
+        + '<span class="cbd-set-sub">' + st.ads + (st.ads === 1 ? ' ad' : ' ads') + '</span></button>';
+    }).join('');
   }
 
   /* Аккаунт в дереве: стрелка сворачивает его кампании до одной строки,
@@ -6677,12 +6875,44 @@ window.cbTree = (function () {
         + L.LEVEL_LABEL[lv] + '</button>';
     }).join('');
     var pick = '';
+    var sets = slotSets(slot);
     /* Вкладка Ad без выбора объявления: все карточки набора идут одним
        вертикальным списком (владелец, 13.10), добавление и копия видны сразу. */
-    if (level === 'adset') {
-      /* Сегодня у кампании один набор объявлений; несколько — ACL-1768. */
-      pick = '<div class="cbd-ed-pick"><span class="cbd-ed-fixed">Ad set 1 · the only ad set of this campaign</span>'
-        + L.futureHtml('adsets', 'button', '+ Ad set') + L.futureHtml('copyAdset', 'button', 'Copy ad set') + '</div>';
+    if (level === 'ad') {
+      /* ACL-1768: все карточки видны, подпись «Ad set N»; выбор набора задаёт, куда встанет «+ Ad». */
+      if (sets.length > 1) {
+        pick = '<div class="cbd-ed-pick"><label for="cbd-ed-set">Ad set</label>'
+          + '<select id="cbd-ed-set" class="cbd-ed-set">'
+          + sets.map(function (st) {
+              return '<option value="' + st.idx + '"' + (st.idx === setIdx ? ' selected' : '') + '>'
+                + aclEscHtml(L.adsetLabel(c.name, st.idx, st.own, st.ads)) + '</option>';
+            }).join('') + '</select></div>';
+      }
+    } else if (level === 'adset') {
+      var atMax = sets.length >= 10;
+      pick = '<div class="cbd-ed-pick"><label for="cbd-ed-set">Ad set</label>'
+        + '<select id="cbd-ed-set" class="cbd-ed-set">'
+        + sets.map(function (st) {
+            return '<option value="' + st.idx + '"' + (st.idx === setIdx ? ' selected' : '') + '>'
+              + aclEscHtml(L.adsetLabel(c.name, st.idx, st.own, st.ads)) + '</option>';
+          }).join('')
+        + '</select></div>'
+        + '<div class="cbd-ed-pick cbd-ed-actions">'
+        + '<button type="button" class="cbd-add" data-act="add-adset"' + (atMax ? ' disabled title="A campaign can have at most 10 ad sets."' : ' title="Add an ad set to this campaign"') + '>+ Ad set</button>'
+        + '<button type="button" class="cbd-add" data-act="copy-adset"' + (atMax ? ' disabled title="A campaign can have at most 10 ad sets."' : ' title="Copy this ad set with its ads"') + '>Copy ad set</button>'
+        + '<button type="button" class="cbd-add" data-act="remove-adset"'
+        + (setIdx === 0 ? ' disabled title="The first ad set stays; remove the campaign instead"' : ' title="Remove this ad set and its ads"')
+        + '>Remove ad set</button></div>'
+        + (atMax ? '<div class="cbd-ed-note" role="note">A campaign can have at most 10 ad sets.</div>' : '');
+      /* Объявления выбранного набора: открыть любое одним нажатием. */
+      var mine = [], all = slot.querySelectorAll('.cb-ad-row');
+      Array.prototype.forEach.call(all, function (row, i) {
+        if ((window.cbRowSet ? window.cbRowSet(row) : 0) === setIdx) {
+          mine.push('<button type="button" class="cbd-add" data-act="open-ad" data-ad="' + i + '">Ad ' + (i + 1) + '</button>');
+        }
+      });
+      pick += '<div class="cbd-ed-pick cbd-ed-inset"><span class="cbd-ed-inset-label">Ads in this ad set</span>'
+        + (mine.length ? mine.join('') : '<span class="cbd-ed-inset-label">none yet</span>') + '</div>';
     }
     return '<div class="cbd-ed-crumb" title="' + aclEscHtml(found.account.account + ' › ' + (c.name || 'Untitled campaign')) + '">'
       + '<strong>' + aclEscHtml(found.account.account) + '</strong> › ' + aclEscHtml(c.name || 'Untitled campaign') + '</div>'
@@ -6693,6 +6923,14 @@ window.cbTree = (function () {
   function syncHost(found) {
     host.dataset.level = level;
     var rows = found.camp.slot.querySelectorAll('.cb-ad-row');
+    var secs = found.camp.slot.querySelectorAll('.cb-adset-sec');
+    /* ACL-1768: набор. Добавили набор - открыть его; открыто объявление - показать его набор. */
+    if (lastSetFor !== openId) { setIdx = 0; lastSetFor = openId; lastSetCount = secs.length; }
+    if (secs.length > lastSetCount) setIdx = secs.length - 1;
+    lastSetCount = secs.length;
+    setIdx = Math.max(0, Math.min(setIdx, Math.max(0, secs.length - 1)));
+    found.camp.slot.dataset.activeSet = String(setIdx);
+    Array.prototype.forEach.call(secs, function (sec, i) { sec.classList.toggle('cbd-set-off', i !== setIdx); });
     var api = window.ACL_FB_BACKEND === 'api';
     if (window.cbSyncDestination) window.cbSyncDestination(found.camp.slot);
     for (var i = 0; i < rows.length; i += 1) {
@@ -6755,6 +6993,11 @@ window.cbTree = (function () {
   }
   window.cbPfRev = pfRev;
 
+  function cbNowLocal() {
+    var d = new Date(), z = function (n) { return (n < 10 ? '0' : '') + n; };
+    return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate()) + 'T' + z(d.getHours()) + ':' + z(d.getMinutes());
+  }
+
   function formMode(row) {
     var sel = row.querySelector('.cb-form-source');
     return L.formSource(sel ? sel.value : '');
@@ -6770,31 +7013,50 @@ window.cbTree = (function () {
     return { privacy_url: hit ? String(hit.privacy_url || '') : '', contact_fields: hit ? (hit.contact_fields || []) : [] };
   }
 
-  /* Вход аудита с карточки (то, что понимает evaluate_client / cbPreflight.evaluate). */
+  /* Вход аудита с карточки (то, что понимает evaluate_client / cbPreflight.evaluate).
+     ACL-1768: поля уровня набора и объявления - по каждому набору (`ad_sets`). */
   function auditInput(slot) {
     var form = slot.closest ? slot.closest('form') : null;
     function val(root, sel) { var el = root && root.querySelector(sel); return el ? String(el.value || '') : ''; }
-    var destEl = slot.querySelector('.cb-destination');
-    var age = parseInt(val(slot, '[name$="_age"]'), 10);
     var budget = val(slot, '[name$="_budget"]').trim();
-    var ads = [];
-    slot.querySelectorAll('.cb-ad-row').forEach(function (row) {
-      var file = val(row, 'input[type="hidden"][name$="_creative_file"]').trim();
-      var copy = val(row, 'input[type="hidden"][name$="_copy"]').trim();
-      var entry = copy && window.cbAdLibraryEntry ? window.cbAdLibraryEntry(copy) : null;
-      ads.push({
-        /* Имя — как у сервера (AdDraft.ad_name): номер креатива из файла и текст. */
-        name: window.cbPreflight.adName(file, copy),
-        file: file, body: entry ? String(entry.body || '') : '',
-        headline: entry ? String(entry.headline || entry.ad_title || '') : '',
-        form_id: formMode(row) === 'template' ? '' : val(row, 'input[type="hidden"][name$="_form_id"]').trim(),
-        template: templateAudit(row), cta: 'LEARN_MORE'
+    var campName = slotName(slot);
+    var secs = Array.prototype.slice.call(slot.querySelectorAll('.cb-adset-sec'));
+    if (!secs.length) secs = [slot];
+    var rows = Array.prototype.slice.call(slot.querySelectorAll('.cb-ad-row'));
+    var sets = secs.map(function (sec, k) {
+      var destEl = sec.querySelector('.cb-destination');
+      var age = parseInt(val(sec, '[name$="_age"]'), 10);
+      var ads = [];
+      rows.forEach(function (row) {
+        if ((window.cbRowSet ? window.cbRowSet(row) : 0) !== k) return;
+        var file = val(row, 'input[type="hidden"][name$="_creative_file"]').trim();
+        var copy = val(row, 'input[type="hidden"][name$="_copy"]').trim();
+        var entry = copy && window.cbAdLibraryEntry ? window.cbAdLibraryEntry(copy) : null;
+        ads.push({
+          /* Имя — как у сервера (AdDraft.ad_name): номер креатива из файла и текст. */
+          name: window.cbPreflight.adName(file, copy),
+          file: file, body: entry ? String(entry.body || '') : '',
+          headline: entry ? String(entry.headline || entry.ad_title || '') : '',
+          form_id: formMode(row) === 'template' ? '' : val(row, 'input[type="hidden"][name$="_form_id"]').trim(),
+          template: templateAudit(row), cta: val(row, 'select[name$="_cta"]').trim() || 'LEARN_MORE'
+        });
       });
+      var nameEl = sec.querySelector('.cb-adset-name');
+      return {
+        name: L.adsetName(campName, k, nameEl ? nameEl.value : ''),
+        destination: L.destination(destEl ? destEl.value : 'website'),
+        age_min: age, age_max: age, ads: ads,
+        /* ACL-1767: устройства, версия ОС и старт набора. */
+        os: val(sec, 'input[name$="_os"]').trim() || 'All', device: val(sec, '[name$="_device"]').trim(),
+        os_min: val(sec, '[name$="_os_min"]').trim(), start_time: val(sec, '[name$="_start_time"]').trim()
+      };
     });
     return {
-      destination: L.destination(destEl ? destEl.value : 'website'), objective: 'leads',
+      objective: 'leads',
       link: val(form, 'input[name="tracking_link"]'), country: val(form, '[name="country"]'),
-      budget: budget === '' ? null : budget, age_min: age, age_max: age, ads: ads
+      budget: budget === '' ? null : budget, ad_sets: sets,
+      /* «Сейчас» - часы страницы (сверка по дате). */
+      now: cbNowLocal()
     };
   }
 
@@ -6931,9 +7193,16 @@ window.cbTree = (function () {
     var line = ls.filter(function (x) { return x.rule === rule; })[0];
     if (!line || !line.field || !line.field.sel) return;
     if (line.field.level === 'ad' && line.ads && line.ads.length) adIdx = L.clampAd(found.camp.slot.querySelectorAll('.cb-ad-row').length, line.ads[0] - 1);
+    /* ACL-1768: у объявления из другого набора открывается его набор. */
+    if (line.field.level === 'ad' && line.ads && line.ads.length && window.cbRowSet) {
+      var jr = found.camp.slot.querySelectorAll('.cb-ad-row')[adIdx];
+      if (jr) setIdx = window.cbRowSet(jr);
+    }
+    if (line.field.level === 'adset' && line.sets && line.sets.length) setIdx = line.sets[0] - 1;
     setLevel(line.field.level);
     var slot = found.camp.slot, root = slot, el = null;
     if (line.field.level === 'ad') root = slot.querySelectorAll('.cb-ad-row')[adIdx] || slot;
+    if (line.field.level === 'adset') root = slot.querySelectorAll('.cb-adset-sec')[setIdx] || slot;
     el = root.querySelector(line.field.sel) || (BORROWED ? BORROWED.form.querySelector(line.field.sel) : null);
     if (!el) return;
     if (window.cbHighlightField) window.cbHighlightField(el);
@@ -6992,6 +7261,13 @@ window.cbTree = (function () {
     if (again && again.focus) again.focus();
   }
 
+  editor.addEventListener('change', function (e) {
+    if (!e.target.classList) return;
+    if (e.target.classList.contains('cbd-ed-set')) {
+      setIdx = parseInt(e.target.value, 10) || 0;
+      paint();
+    }
+  });
   editor.addEventListener('scroll', function () { cbdPlaceDropdowns(); });
 
   /* Дублирование кампании живёт в её карточке (ACL-1459). Ящик отвечает за
@@ -7241,6 +7517,27 @@ window.cbTree = (function () {
       } else if (id === openId) closeCampaign(); else openCampaign(id);   // одна за раз
     } else if (act === 'level') {
       setLevel(hit.dataset.level);
+    } else if (act === 'pick-set') {
+      var wantSet = parseInt(hit.dataset.set, 10) || 0;
+      if (id && id !== openId) openCampaign(id);
+      setIdx = wantSet;
+      setLevel('adset');
+      paint();
+    } else if (act === 'add-adset' || act === 'copy-adset' || act === 'remove-adset') {
+      var cur = openId ? findCampaign(openId) : null;
+      if (!cur) return;
+      if (act === 'add-adset') window.cbAddAdset(cur.camp.slot);          /* на 10 наборах вернёт null */
+      else if (act === 'copy-adset') window.cbCopyAdset(cur.camp.slot, setIdx);
+      else {
+        if (setIdx < 1) return;
+        if (!window.confirm('Remove this ad set and its ads from the campaign?')) return;
+        window.cbRemoveAdset(cur.camp.slot, setIdx);
+        setIdx = Math.max(0, setIdx - 1);
+      }
+      paint();
+    } else if (act === 'open-ad') {
+      adIdx = parseInt(hit.dataset.ad, 10) || 0;
+      setLevel('ad');
     } else if (act === 'acc-toggle') {
       toggleFold(hit.dataset.key || '');
     } else if (act === 'names-only') {
@@ -7403,6 +7700,11 @@ window.cbTree = (function () {
     }
     var adsEl = card.querySelector('.cbd-camp-ads');
     if (adsEl) adsEl.textContent = c.ads + (c.ads === 1 ? ' ad' : ' ads');
+    var setsEl = card.querySelector('.cbd-sets');
+    if (setsEl) {
+      var setsHtmlNow = setsHtml(c);
+      if (setsEl.innerHTML !== setsHtmlNow) setsEl.innerHTML = setsHtmlNow;
+    }
     var metaEl = card.querySelector('.cbd-camp-meta');
     if (metaEl) metaEl.textContent = L.campMeta(c);
     paintEditor();
@@ -12682,8 +12984,11 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       var copyHidden = row.querySelector('input[type="hidden"][name$="_copy"]');
       var copySearch = row.querySelector('.cb-adtitle-search');
       var copyVal = ((copyHidden && copyHidden.value) || (copySearch && copySearch.value) || '').trim();
-      // ACL-1344: выбор CTA убран из билдера — превью показывает постоянную.
-      var cta = CB_PREVIEW_CTA;
+      // ACL-1767: превью показывает выбранную кнопку; без выбора - постоянную «Learn More».
+      var ctaSel = row.querySelector('select[name$="_cta"]');
+      var cta = ctaSel && ctaSel.value
+        ? ctaSel.value.toLowerCase().split('_').map(function(w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(' ')
+        : CB_PREVIEW_CTA;
       var vidRadio = row.querySelector('input[type="radio"][value="Video"]');
       var isVideo = !!(vidRadio && vidRadio.checked);
 
@@ -13006,6 +13311,13 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     if (nameDisplay) nameDisplay.textContent = name;
     var autoEl = slot.querySelector('[data-auto-name]');
     if (autoEl) autoEl.textContent = auto;
+    /* ACL-1768: имя набора по умолчанию зависит от имени кампании. */
+    slot.querySelectorAll('.cb-adset-name').forEach(function (inp) {
+      var sec = inp.closest('.cb-adset-sec');
+      var k = sec ? (parseInt(sec.dataset.adset, 10) || 0) : 0;
+      var ph = window.cbLayout ? window.cbLayout.adsetName(name, k, '') : name;
+      if (inp.placeholder !== ph) inp.placeholder = ph;
+    });
   };
 
   // ── Searchable select ─────────────────────────────────────────────────
@@ -13294,13 +13606,16 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     Array.prototype.forEach.call(slots, function (slot) {
       var entry = window.cbPagePixels[formAccount(slot)] || null;
       var map = (entry && entry.map) || {};
-      var psel = slot.querySelector('.cb-pixel-select'), phid = slot.querySelector('input[name$="_pixel"]');
-      if (psel && phid) {
-        ppFill(psel, phid, entry && entry.pixels, map.pixel_id, 'Account default');
-        var off = !api && !phid.value;
-        if (psel.disabled !== off) psel.disabled = off;
-        if (psel.title !== tip) psel.title = tip;
-      }
+      var psecs = slot.querySelectorAll('.cb-adset-sec');
+      Array.prototype.forEach.call(psecs.length ? psecs : [slot], function (sec) {
+        var psel = sec.querySelector('.cb-pixel-select'), phid = sec.querySelector('input[name$="_pixel"]');
+        if (psel && phid) {
+          ppFill(psel, phid, entry && entry.pixels, map.pixel_id, 'Account default');
+          var off = !api && !phid.value;
+          if (psel.disabled !== off) psel.disabled = off;
+          if (psel.title !== tip) psel.title = tip;
+        }
+      });
       var pnote = slot.querySelector('[data-pp-note]');
       var text = L.ppStatus(entry);
       if (pnote && pnote.textContent !== text && !pnote.dataset.keep) pnote.textContent = text;
@@ -13344,7 +13659,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   }
 
   function ppChosen(sel, kind) {
-    var host = kind === 'page' ? sel.closest('.cb-ad-row') : sel.closest('.cb-slot');
+    var host = kind === 'page' ? sel.closest('.cb-ad-row') : (sel.closest('.cb-adset-sec') || sel.closest('.cb-slot'));
     var hid = host ? host.querySelector(kind === 'page' ? 'input[name$="_page"]' : 'input[name$="_pixel"]') : null;
     if (!hid) return;
     hid.value = sel.value;
@@ -13387,24 +13702,51 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       });
   };
 
-  /* Место конверсии набора -> что видно и что уходит на сервер. */
+
+  /* ACL-1768: к какому набору относится объявление (скрытое поле `camp_N_ad_M_adset`). */
+  function rowSet(row) {
+    var h = row && row.querySelector ? row.querySelector('input[name$="_adset"]') : null;
+    return h ? (parseInt(h.value, 10) || 0) : 0;
+  }
+  window.cbRowSet = rowSet;
+
+  /* Место конверсии набора -> что видно и что уходит на сервер. Набор у каждого свой:
+     у одного Instant Form, у другого сайт. */
   window.cbSyncDestination = function (slot) {
     var L = window.cbLayout;
-    var sel = slot && slot.querySelector ? slot.querySelector('.cb-destination') : null;
-    if (!L || !sel) return;
+    if (!L || !slot || !slot.querySelectorAll) return;
+    var secs = Array.prototype.slice.call(slot.querySelectorAll('.cb-adset-sec'));
+    if (!secs.length) secs = [slot];
+    if (!slot.querySelector('.cb-destination')) return;
     var api = window.ACL_FB_BACKEND === 'api';
-    var instant = L.destination(sel.value) === 'instant_form';
-    /* RPA: Instant Form не выбрать; уже выбранное остаётся рабочим, чтобы
-       проверка сказала об этом вслух, а не молча вернула сайт. */
-    var opt = sel.querySelector('option[value="instant_form"]');
-    if (opt && opt.disabled !== !api) opt.disabled = !api;
-    var off = !api && !instant;
-    if (sel.disabled !== off) sel.disabled = off;
-    var tip = off ? 'API backend only: Instant Forms are created through the Graph API' : '';
-    if (sel.title !== tip) sel.title = tip;
-    var note = slot.querySelector('[data-forms-api-only]');
-    if (note && note.hidden === !api) note.hidden = api;
+    var instantOf = {};
+    secs.forEach(function (sec, i) {
+      var sel = sec.querySelector('.cb-destination');
+      if (!sel) return;
+      var k = sec === slot ? 0 : (parseInt(sec.dataset.adset, 10) || 0);
+      var instant = L.destination(sel.value) === 'instant_form';
+      instantOf[k] = instant;
+      /* ACL-1770: пиксель только у сайтового набора (у Instant Form цель - форма Страницы). */
+      sec.querySelectorAll('.cb-web-only').forEach(function (el) {
+        if (el.hidden !== instant) el.hidden = instant;
+      });
+      /* RPA: Instant Form не выбрать; уже выбранное остаётся рабочим, чтобы
+         проверка сказала об этом вслух, а не молча вернула сайт. */
+      var opt = sel.querySelector('option[value="instant_form"]');
+      if (opt && opt.disabled !== !api) opt.disabled = !api;
+      var off = !api && !instant;
+      if (sel.disabled !== off) sel.disabled = off;
+      var tip = off ? 'API backend only: Instant Forms are created through the Graph API' : '';
+      if (sel.title !== tip) sel.title = tip;
+      var note = sec.querySelector('[data-forms-api-only]');
+      if (note && note.hidden === !api) note.hidden = api;
+    });
     slot.querySelectorAll('.cb-ad-row').forEach(function (row) {
+      var instant = !!instantOf[rowSet(row)];
+      /* ACL-1770: ссылка объявления только у сайтового набора. */
+      row.querySelectorAll('.cb-web-only').forEach(function (el) {
+        if (el.hidden !== instant) el.hidden = instant;
+      });
       row.querySelectorAll('.cb-form-only').forEach(function (el) {
         if (el.hidden === instant) el.hidden = !instant;
       });
@@ -13429,15 +13771,44 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       var hidT = row.querySelector('input[name$="_form_template"]');
       var wantT = !(instant && tmpl);
       if (hidT && hidT.disabled !== wantT) hidT.disabled = wantT;
+      /* ACL-1767: список кнопок зависит от места конверсии набора объявления. */
+      var cta = row.querySelector('select.cb-cta');
+      if (cta) {
+        var dest = instant ? 'instant_form' : 'website';
+        if (cta.dataset.dest !== dest) {
+          var cur = cta.value || 'LEARN_MORE';
+          cta.innerHTML = cbCtaOptionsHtml(dest, cur);
+          cta.value = cur;
+          cta.dataset.dest = dest;
+        }
+      }
     });
-    if (instant) window.cbLoadFormTemplates();
+    if (Object.keys(instantOf).some(function (k) { return instantOf[k]; })) window.cbLoadFormTemplates();
     window.cbFillFormSelects(slot);
-    /* Пиксель и ссылка только у сайтового набора (у Instant Form цель - форма Страницы). */
-    slot.querySelectorAll('.cb-web-only').forEach(function (el) {
-      if (el.hidden !== instant) el.hidden = instant;
-    });
     window.cbFillPagePixelSelects(slot);
     window.cbFillTemplateSelects(slot);
+    window.cbSyncApiOnly(slot);
+  };
+
+  /* ACL-1767: поля только для API. RPA: пустое поле выключено с причиной; заполненное
+     остаётся рабочим, чтобы сервер отказал вслух, а не молча сбросил значение. */
+  window.cbSyncApiOnly = function (slot) {
+    if (!slot || !slot.querySelectorAll) return;
+    var api = window.ACL_FB_BACKEND === 'api';
+    slot.querySelectorAll('.cb-api-field').forEach(function (el) {
+      var off = !api && String(el.value || '') === String(el.dataset.default || '');
+      if (el.disabled !== off) el.disabled = off;
+      var tip = off ? 'API backend only: ' + (el.dataset.tip || 'this field') + ' is set through the Graph API' : (el.dataset.tip || '');
+      if (el.title !== tip && el.dataset.tip) el.title = tip;
+    });
+    slot.querySelectorAll('[data-api-fields-note]').forEach(function (note) {
+      if (note.hidden === !api) note.hidden = api;
+    });
+    slot.querySelectorAll('.cb-sel-opt[data-val="Android"]').forEach(function (o) {
+      var bad = !api ? 'true' : 'false';
+      if (o.getAttribute('aria-disabled') !== bad) o.setAttribute('aria-disabled', bad);
+      o.title = api ? '' : 'API backend only: Android targeting is set through the Graph API';
+    });
   };
 
   window.cbDestinationChanged = function (sel) {
@@ -13480,6 +13851,24 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
         done({ state: 'failed', ok: false, forms: [], message: 'The dashboard did not answer; try again' });
       });
   };
+
+  /* ACL-1767: список кнопок приходит с сервера (CB_PREFLIGHT_RULES.consts.allowed_cta). */
+  var CB_CTA_FALLBACK = ['LEARN_MORE'];
+  function cbCtaLabel(t) { var x = String(t).toLowerCase().replace(/_/g, ' '); return x.charAt(0).toUpperCase() + x.slice(1); }
+  function cbCtaOptionsHtml(dest, current) {
+    var all = (window.CB_PREFLIGHT_RULES && window.CB_PREFLIGHT_RULES.consts && window.CB_PREFLIGHT_RULES.consts.allowed_cta) || {};
+    var list = (all[dest === 'instant_form' ? 'leads_instant_form' : 'leads'] || CB_CTA_FALLBACK).slice();
+    /* Значение вне списка (ушли на Instant Form с «Order now») не пропадает молча: остаётся
+       выбранным с пометкой, а проверка называет ошибку. */
+    if (current && list.indexOf(current) === -1) list.push(current);
+    var html = '';
+    list.forEach(function (t) {
+      var off = all && (all[dest === 'instant_form' ? 'leads_instant_form' : 'leads'] || CB_CTA_FALLBACK).indexOf(t) === -1;
+      html += '<option value="' + aclEscHtml(t) + '"' + (t === (current || 'LEARN_MORE') ? ' selected' : '') + '>'
+        + aclEscHtml(cbCtaLabel(t) + (off ? ' (not available here)' : '')) + '</option>';
+    });
+    return html;
+  }
 
   /* ACL-1776: шаблоны форм. Библиотека лежит на этом компьютере (в Meta не ходит);
      форму из шаблона создаёт РОБОТ при публикации, в билдере её нет. */
@@ -13656,9 +14045,11 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   }
 
   // ── Ad row HTML builder ───────────────────────────────────────────────
-  function buildAdRowHTML(cIdx, aIdx) {
+  function buildAdRowHTML(cIdx, aIdx, setIdx) {
     var pfx = 'camp_' + cIdx + '_ad_' + aIdx + '_';
     return '<div class="cb-ad-row" data-ad-idx="' + aIdx + '">' +
+      /* ACL-1768: объявление принадлежит набору; номер набора - скрытое поле. */
+      '<input type="hidden" name="' + pfx + 'adset" class="cb-ad-adset" value="' + (setIdx | 0) + '">' +
       '<div class="cb-ad-row-header">' +
       '<span class="cb-ad-row-label">Ad ' + (aIdx + 1) + '</span>' +
       '<button type="button" class="cb-dup-ad-btn" onclick="cbDuplicateAd(this)" title="Duplicate this ad">Duplicate</button>' +
@@ -13739,25 +14130,49 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<input type="url" name="' + pfx + 'link" class="cb-input" value="" placeholder="Same as the campaign link" autocomplete="off" aria-label="Tracking link of the ad" title="Leave empty to use the campaign tracking link">' +
       '</div>' +
       '<span class="cb-label">More primary texts</span>' + future('texts', 'button', '+ Primary text 3–5') +
-      '<span class="cb-label">CTA</span>' + future('cta', 'select', 'Learn more', 'Every ad uses Learn more today') +
+      /* ACL-1767: кнопка из списка Meta для цели Leads (сайт или Instant Form). Умолчание -
+         Learn more. При бэкенде RPA пустой выбор выключен с причиной (cbSyncApiOnly). */
+      '<span class="cb-label">CTA</span>' +
+      '<select name="' + pfx + 'cta" class="cb-input cb-select cb-cta cb-api-field" data-default="LEARN_MORE" data-tip="Button of the ad" aria-label="Call to action">' +
+      cbCtaOptionsHtml('website', 'LEARN_MORE') + '</select>' +
       '<span class="cb-label">Stories / Reels file</span>' + future('media', 'button', 'Choose a vertical file') +
       '</div></div>';
   }
 
   // ── Add / Remove ad within campaign ──────────────────────────────────
-  window.cbAddAd = function(btn) {
-    var slot = btn.closest('.cb-slot');
-    if (!slot) return;
-    var cIdx = slot.dataset.idx;
-    var rows = slot.querySelectorAll('.cb-ad-row');
-    var aIdx = rows.length;
+  /* ACL-1768: объявления лежат в форме по порядку наборов, и «Ad N» в редакторе - тот же
+     номер, что у сервера и плана. Новое объявление встаёт после последнего своего набора. */
+  function placeAdRow(slot, k, html) {
     var container = slot.querySelector('.cb-ad-rows');
-    container.insertAdjacentHTML('beforeend', buildAdRowHTML(cIdx, aIdx));
-    var newRow = container.querySelector('.cb-ad-row[data-ad-idx="' + aIdx + '"]');
+    var anchor = null;
+    container.querySelectorAll('.cb-ad-row').forEach(function (r) { if (rowSet(r) <= k) anchor = r; });
+    if (anchor) { anchor.insertAdjacentHTML('afterend', html); return anchor.nextElementSibling; }
+    container.insertAdjacentHTML('afterbegin', html);
+    return container.firstElementChild;
+  }
+
+  function activeSet(slot) {
+    var n = slot.querySelectorAll('.cb-adset-sec').length || 1;
+    var k = parseInt(slot.dataset.activeSet, 10) || 0;
+    return k < 0 ? 0 : k > n - 1 ? n - 1 : k;
+  }
+
+  function addAdRow(slot, k) {
+    var cIdx = slot.dataset.idx;
+    var aIdx = slot.querySelectorAll('.cb-ad-row').length;
+    var newRow = placeAdRow(slot, k, buildAdRowHTML(cIdx, aIdx, k));
     if (newRow) initAllSelects(newRow);
+    cbRenumberAds(slot);
     cbUpdateAdCount(slot);
     cbUpdateAdLabels(slot);
     window.cbSyncDestination(slot);
+    return newRow;
+  }
+
+  window.cbAddAd = function(btn) {
+    var slot = btn.closest('.cb-slot');
+    if (!slot) return;
+    addAdRow(slot, activeSet(slot));
   };
 
   window.cbRemoveAd = function(btn) {
@@ -13811,6 +14226,18 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       var b = newRow.querySelector('[name$="_' + suffix + '"]');
       if (a && b) b.value = a.value;
     });
+    // ACL-1767: кнопка объявления едет в копию.
+    var srcCta = srcRow.querySelector('select[name$="_cta"]');
+    var newCta = newRow.querySelector('select[name$="_cta"]');
+    if (srcCta && newCta) {
+      newCta.innerHTML = cbCtaOptionsHtml(srcCta.dataset.dest || 'website', srcCta.value);
+      newCta.value = srcCta.value;
+      newCta.dataset.dest = srcCta.dataset.dest || 'website';
+    }
+    // ACL-1768: объявление остаётся в своём наборе (копия набора переопределяет).
+    var srcSet = srcRow.querySelector('input[name$="_adset"]');
+    var newSet = newRow.querySelector('input[name$="_adset"]');
+    if (srcSet && newSet) newSet.value = srcSet.value;
     // ACL-1775: выбранная форма Страницы едет в копию.
     var srcForm = srcRow.querySelector('input[name$="_form_id"]');
     var newForm = newRow.querySelector('input[name$="_form_id"]');
@@ -13846,7 +14273,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     if (!srcRow || !slot) return;
     var cIdx = slot.dataset.idx;
     var aIdx = slot.querySelectorAll('.cb-ad-row').length;
-    srcRow.insertAdjacentHTML('afterend', buildAdRowHTML(cIdx, aIdx));
+    srcRow.insertAdjacentHTML('afterend', buildAdRowHTML(cIdx, aIdx, rowSet(srcRow)));
     var newRow = srcRow.nextElementSibling;
     _copyAdRowValues(srcRow, newRow);
     cbRenumberAds(slot);
@@ -13878,6 +14305,11 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     if (!newSlot) return;
     initAllSelects(newSlot);
 
+    // ACL-1768: у копии столько же наборов, сколько у источника (разделы - до копирования полей).
+    var srcSecs = srcSlot.querySelectorAll('.cb-adset-sec');
+    for (var ks = newSlot.querySelectorAll('.cb-adset-sec').length; ks < srcSecs.length; ks += 1) {
+      window.cbAddAdset(newSlot, { noAd: true });
+    }
     var srcIdx = srcSlot.dataset.idx;
     var srcTgtSearch = srcSlot.querySelector('.cb-targeting-search');
     var newTgtSearch = newSlot.querySelector('.cb-targeting-search');
@@ -13932,6 +14364,9 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
         if (a && b) b.value = a.value;
       }
     });
+    // ACL-1768: подсказки таргетинга остальных наборов (у набора 0 - выше).
+    var srcHints = srcSlot.querySelectorAll('.cb-targeting-hint'), newHints = newSlot.querySelectorAll('.cb-targeting-hint');
+    for (var kh = 1; kh < srcHints.length && kh < newHints.length; kh += 1) newHints[kh].textContent = srcHints[kh].textContent;
     // ACL-1769: своё имя живёт вне `name` — копируется отдельно.
     var srcOv = srcSlot.querySelector('.cb-name-override');
     var newOv = newSlot.querySelector('.cb-name-override');
@@ -13943,7 +14378,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     var newAdRows = newSlot.querySelector('.cb-ad-rows');
     newAdRows.innerHTML = '';
     srcSlot.querySelectorAll('.cb-ad-row').forEach(function(srcRow, aIdx) {
-      newAdRows.insertAdjacentHTML('beforeend', buildAdRowHTML(idx, aIdx));
+      newAdRows.insertAdjacentHTML('beforeend', buildAdRowHTML(idx, aIdx, rowSet(srcRow)));
       _copyAdRowValues(srcRow, newAdRows.lastElementChild);
     });
     cbRenumberAds(newSlot);
@@ -13955,6 +14390,112 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     cbRenumber(form);
     cbUpdateCount(form);
     window.cbSyncDestination(newSlot);
+  };
+
+  // ── Ad sets (ACL-1768) ───────────────────────────────────────────────
+  function adsetPrefix(idx, k) { return k === 0 ? 'camp_' + idx + '_' : 'camp_' + idx + '_adset_' + k + '_'; }
+
+  function adsetSections(slot) { return Array.prototype.slice.call(slot.querySelectorAll('.cb-adset-sec')); }
+
+  function updateAdsetCount(slot) {
+    var c = slot.querySelector('.cb-adset-count');
+    if (c) c.value = slot.querySelectorAll('.cb-adset-sec').length || 1;
+  }
+
+  /* ACL-1768: не больше 10 наборов в кампании (как MAX_AD_SETS на сервере). */
+  var CB_MAX_ADSETS = 10;
+
+  /* Новый набор в конец кампании. `noAd`: без объявления (его положит вызывающий). */
+  window.cbAddAdset = function (slot, opts) {
+    opts = opts || {};
+    var wrap = slot && slot.querySelector('.cb-adsets');
+    if (!wrap) return null;
+    var idx = slot.dataset.idx;
+    var k = wrap.querySelectorAll('.cb-adset-sec').length;
+    if (k >= CB_MAX_ADSETS) return null;     /* потолок: и кнопки, и восстановление черновика */
+    wrap.insertAdjacentHTML('beforeend', buildAdsetSectionHTML(idx, k));
+    var sec = wrap.lastElementChild;
+    initAllSelects(sec);
+    updateAdsetCount(slot);
+    if (!opts.noAd) addAdRow(slot, k);
+    cbUpdateName(slot);
+    cbUpdateAdLabels(slot);
+    window.cbSyncDestination(slot);
+    return sec;
+  };
+
+  /* Копия набора k: поля и объявления; имя пустое (по умолчанию), чтобы имена не совпали. */
+  window.cbCopyAdset = function (slot, k) {
+    var secs = adsetSections(slot);
+    var src = secs[k];
+    if (!src) return -1;
+    var idx = slot.dataset.idx;
+    var dst = window.cbAddAdset(slot, { noAd: true });
+    if (!dst) return -1;                     /* уже 10 наборов */
+    var nk = secs.length;
+    var from = adsetPrefix(idx, k), to = adsetPrefix(idx, nk);
+    src.querySelectorAll('[name]').forEach(function (el) {
+      if (el.classList.contains('cb-adset-name')) return;
+      var suffix = el.name.slice(from.length);
+      if (el.name.indexOf(from) !== 0) return;
+      var twin = dst.querySelector('[name="' + to + suffix + '"]');
+      if (!twin) return;
+      twin.value = el.value;
+      var sw = el.closest('.cb-sel-wrap'), tw = twin.closest('.cb-sel-wrap');
+      if (sw && tw) {
+        var a = sw.querySelector('.cb-sel-text'), b = tw.querySelector('.cb-sel-text');
+        if (a && b) b.value = a.value;
+      }
+    });
+    var sh = src.querySelector('.cb-targeting-hint'), dh = dst.querySelector('.cb-targeting-hint');
+    if (sh && dh) dh.textContent = sh.textContent;
+    var copied = 0;
+    Array.prototype.slice.call(slot.querySelectorAll('.cb-ad-row')).forEach(function (row) {
+      if (rowSet(row) !== k) return;
+      var aIdx = slot.querySelectorAll('.cb-ad-row').length;
+      var made = placeAdRow(slot, nk, buildAdRowHTML(idx, aIdx, nk));
+      _copyAdRowValues(row, made);
+      var hid = made.querySelector('input[name$="_adset"]');
+      if (hid) hid.value = String(nk);
+      cbRenumberAds(slot);
+      copied += 1;
+    });
+    if (!copied) addAdRow(slot, nk);
+    cbUpdateAdCount(slot);
+    cbUpdateName(slot);
+    cbUpdateAdLabels(slot);
+    window.cbSyncDestination(slot);
+    return nk;
+  };
+
+  /* Убрать набор k (кроме первого) вместе с его объявлениями; следующие сдвигаются вниз. */
+  window.cbRemoveAdset = function (slot, k) {
+    var secs = adsetSections(slot);
+    if (k < 1 || !secs[k]) return false;
+    var idx = slot.dataset.idx;
+    slot.querySelectorAll('.cb-ad-row').forEach(function (row) {
+      var set = rowSet(row);
+      if (set === k) row.remove();
+      else if (set > k) row.querySelector('input[name$="_adset"]').value = String(set - 1);
+    });
+    secs[k].remove();
+    for (var j = k + 1; j < secs.length; j += 1) {
+      var from = adsetPrefix(idx, j), to = adsetPrefix(idx, j - 1);
+      secs[j].dataset.adset = String(j - 1);
+      secs[j].querySelectorAll('[name]').forEach(function (el) {
+        if (el.name.indexOf(from) === 0) el.name = to + el.name.slice(from.length);
+      });
+      var names = secs[j].querySelectorAll('.cb-adset-name');
+      names.forEach(function (el) { el.name = 'camp_' + idx + '_adset_' + (j - 1) + '_name'; });
+    }
+    updateAdsetCount(slot);
+    if (!slot.querySelectorAll('.cb-ad-row').length) addAdRow(slot, 0);
+    cbRenumberAds(slot);
+    cbUpdateAdCount(slot);
+    cbUpdateName(slot);
+    cbUpdateAdLabels(slot);
+    window.cbSyncDestination(slot);
+    return true;
   };
 
   function cbRenumberAds(slot) {
@@ -13976,9 +14517,11 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   }
 
   function cbUpdateAdLabels(slot) {
+    var many = slot.querySelectorAll('.cb-adset-sec').length > 1;
     slot.querySelectorAll('.cb-ad-row').forEach(function(row, i) {
       var lbl = row.querySelector('.cb-ad-row-label');
-      if (lbl) lbl.textContent = 'Ad ' + (i + 1);
+      var want = 'Ad ' + (i + 1) + (many ? ' · Ad set ' + (rowSet(row) + 1) : '');
+      if (lbl && lbl.textContent !== want) lbl.textContent = want;
     });
   }
 
@@ -14038,7 +14581,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   };
 
   // ── Build blank campaign slot ─────────────────────────────────────────
-  function mkSel(cIdx, field, opts, placeholder) {
+  function mkSel(cIdx, field, opts, placeholder, pfx) {
     var optsHtml = '<div class="cb-sel-opt" data-val="">— select —</div>';
     opts.forEach(function(o) {
       var val = typeof o === 'string' ? o : o.id;
@@ -14048,8 +14591,65 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     return '<div class="cb-sel-wrap">' +
       '<input type="text" class="cb-sel-text" placeholder="' + placeholder + '" autocomplete="off" value="">' +
       '<div class="cb-sel-dropdown" hidden>' + optsHtml + '</div>' +
-      '<input type="hidden" name="camp_' + cIdx + '_' + field + '" value="">' +
+      '<input type="hidden" name="' + (pfx || ('camp_' + cIdx + '_')) + field + '" value="">' +
       '</div>';
+  }
+
+  /* ACL-1768: раздел «Ad set». Набор 0 живёт под прежними именами `camp_N_*`; остальные -
+     под `camp_N_adset_K_*`. Имя набора - `camp_N_adset_K_name` у всех. */
+  function buildAdsetSectionHTML(idx, k) {
+    var pfx = k === 0 ? 'camp_' + idx + '_' : 'camp_' + idx + '_adset_' + k + '_';
+    var lang = k === 0 ? idx + '' : idx + '-' + k;
+    return '<section class="cb-lvl cb-lvl-adset cb-adset-sec" data-adset="' + k + '">' +
+      '<div class="cb-fields">' +
+      '<span class="cb-label">Ad set name</span>' +
+      '<input type="text" name="camp_' + idx + '_adset_' + k + '_name" class="cb-input cb-api-field cb-adset-name" data-default="" data-tip="Own name of the ad set" value="" placeholder="" autocomplete="off" title="Optional. Empty = the default shown here.">' +
+      '<span class="cb-label">Targeting</span>' +
+      '<div class="cb-sel-wrap cb-targeting-wrap">' +
+      '<input type="text" class="cb-sel-text cb-targeting-search" placeholder="— search by code or interest —" autocomplete="off" value="" oninput="cbTargetingSearch(this)">' +
+      '<div class="cb-sel-dropdown" hidden></div>' +
+      '<input type="hidden" name="' + pfx + 'targeting" class="cb-targeting-hidden" value="">' +
+      '<div class="cb-targeting-hint" style="font-size:var(--adopy-text-xs);color:var(--muted);margin-top:0.15rem;word-break:break-word"></div>' +
+      '</div>' +
+      '<span class="cb-label">OS / Age / Language</span>' +
+      '<div class="cb-inline">' + mkSel(idx, 'os', ['All', 'iOS', 'Android'], 'OS', pfx) +
+      '<input type="number" name="' + pfx + 'age" class="cb-input cb-input-sm" value="35" min="18" max="65" oninput="cbUpdateName(this.closest(\'.cb-slot\'))">' +
+      /* Язык набора 0 - язык кампании (пусто = пропустить шаг, как всегда). У остальных наборов
+         пусто значит «как у набора 1». */
+      '<input type="text" name="' + pfx + 'language" class="cb-input cb-input-sm' + (k === 0 ? ' cb-language' : '') + '" value="" placeholder="' + (k === 0 ? 'Language' : 'Same as ad set 1') + '"' + (k === 0 ? ' oninput="cbLanguageChanged(this)"' : '') + ' title="Audience language. Leave empty to skip the Language step in Ads Manager.">' +
+      '</div>' +
+      '<span class="cb-label">Gender</span>' +
+      '<select name="' + pfx + 'gender" class="cb-input cb-select cb-api-field" data-default="" data-tip="Audience gender" aria-label="Gender">' +
+      '<option value="" selected>All</option><option value="men">Men</option><option value="women">Women</option></select>' +
+      '<span class="cb-label">More languages</span>' +
+      '<input type="text" name="' + pfx + 'languages" class="cb-input cb-api-field" data-default="" data-tip="Extra audience languages, comma separated" value="" placeholder="e.g. Portuguese, English" autocomplete="off" list="cb-lang-' + lang + '" title="Extra audience languages next to the one above. Each must match a Meta language exactly.">' +
+      '<datalist id="cb-lang-' + lang + '"><option value="English"><option value="Spanish"><option value="Portuguese"><option value="French"><option value="German"><option value="Italian"><option value="Arabic"><option value="Turkish"><option value="Russian"></datalist>' +
+      '<span class="cb-label">Devices</span>' +
+      '<div class="cb-inline"><select name="' + pfx + 'device" class="cb-input cb-select cb-api-field" data-default="" data-tip="Devices" aria-label="Devices">' +
+      '<option value="" selected>All devices</option><option value="mobile">Mobile only</option><option value="desktop">Desktop only</option></select>' +
+      '<input type="text" name="' + pfx + 'os_min" class="cb-input cb-input-sm cb-api-field" data-default="" data-tip="Minimum iOS or Android version" value="" placeholder="Min OS, e.g. 14" inputmode="decimal" autocomplete="off" title="Minimum iOS or Android version (needs the OS above)"></div>' +
+      '<span class="cb-label">Start time</span>' +
+      '<input type="datetime-local" name="' + pfx + 'start_time" class="cb-input cb-api-field" data-default="" data-tip="Start time of the ad set (ad account time zone)" value="" title="Optional. Ad account time zone. Empty = starts when you turn it on.">' +
+      '<div class="cb-api-note" data-api-fields-note hidden>Gender, more languages, devices, OS version, Android, Start time and the ad set name work only with the API backend.</div>' +
+      '<span class="cb-label">Conversion location</span>' +
+      '<div class="cb-dest-wrap">' +
+      '<select name="' + pfx + 'destination" class="cb-input cb-select cb-destination" onchange="cbDestinationChanged(this)" aria-label="Conversion location">' +
+      '<option value="website" selected>Website</option>' +
+      '<option value="instant_form">Instant Form</option>' +
+      '</select>' +
+      '<div class="cb-api-note" data-forms-api-only hidden>Instant Form works only with the API backend.</div>' +
+      '</div>' +
+      /* ACL-1770: пиксель принадлежит набору; список Страниц/пикселей читается по нажатию. */
+      '<span class="cb-label cb-web-only">Pixel</span>' +
+      '<div class="cb-pp-wrap cb-web-only">' +
+      '<select class="cb-input cb-select cb-pixel-select" onchange="cbPixelChosen(this)" aria-label="Pixel of the ad set"></select>' +
+      '<button type="button" class="cb-form-refresh" onclick="cbRefreshPagePixels(this)" title="Read the Pages and pixels of the ad account from Meta now">Read Pages and pixels</button>' +
+      '<input type="hidden" name="' + pfx + 'pixel" value="">' +
+      '<div class="cb-form-note" data-pp-note></div>' +
+      '</div>' +
+      '<span class="cb-label">Placements</span>' + future('placements', 'button', 'Configure placements', 'Today every ad set gets the same fixed manual Facebook and Instagram list') +
+      '</div>' +
+      '</section>';
   }
 
   /* ACL-1769: карточка кампании поделена на три раздела — Campaign, Ad set,
@@ -14063,6 +14663,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<button type="button" class="cb-remove-btn" onclick="cbRemoveSlot(this)" title="Remove campaign">×</button>' +
       '</div>' +
       '<div class="cb-slot-name" data-name-display></div>' +
+      /* ACL-1768: сколько наборов у кампании (нет поля у старой страницы = один). */
+      '<input type="hidden" name="camp_' + idx + '_adset_count" class="cb-adset-count" value="1">' +
       '<section class="cb-lvl cb-lvl-campaign">' +
       '<div class="cb-fields">' +
       /* Имя: собранное, как раньше, плюс необязательное своё. Своё берётся,
@@ -14085,52 +14687,12 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       future('copyTo', 'button', 'Copy to accounts') +
       '</div>' +
       '</section>' +
-      '<section class="cb-lvl cb-lvl-adset">' +
-      '<div class="cb-fields">' +
-      '<span class="cb-label">Targeting</span>' +
-      '<div class="cb-sel-wrap cb-targeting-wrap">' +
-      '<input type="text" class="cb-sel-text cb-targeting-search" placeholder="— search by code or interest —" autocomplete="off" value="" oninput="cbTargetingSearch(this)">' +
-      '<div class="cb-sel-dropdown" hidden></div>' +
-      '<input type="hidden" name="camp_' + idx + '_targeting" class="cb-targeting-hidden" value="">' +
-      '<div class="cb-targeting-hint" style="font-size:var(--adopy-text-xs);color:var(--muted);margin-top:0.15rem;word-break:break-word"></div>' +
-      '</div>' +
-      '<span class="cb-label">OS / Age / Language</span>' +
-      '<div class="cb-inline">' + mkSel(idx, 'os', ['All', 'iOS'], 'OS') +
-      '<input type="number" name="camp_' + idx + '_age" class="cb-input cb-input-sm" value="35" min="18" max="65" oninput="cbUpdateName(this.closest(\'.cb-slot\'))">' +
-      /* Язык — и здесь тоже. Карточку строит одно место — эта функция по
-         «+ Add Campaign»; поле, добавленное не сюда, выглядит добавленным, а
-         на половине, которой человек пользуется, его нет. Значение подставляется
-         из `data-language` формы, чтобы правило считалось в одном месте. */
-      '<input type="text" name="camp_' + idx + '_language" class="cb-input cb-input-sm cb-language" value="" placeholder="Language" oninput="cbLanguageChanged(this)" title="Audience language. Leave empty to skip the Language step in Ads Manager.">' +
-      '</div>' +
-      '<span class="cb-label">Gender</span>' + future('gender', 'select', 'All') +
-      '<span class="cb-label">Several languages</span>' + future('languages', 'button', 'Choose languages') +
-      /* ACL-1775: Website / Instant Form. При бэкенде RPA выключено с причиной
-         (cbSyncDestination); без `name` оно не уходит, а значение сайта - умолчание сервера. */
-      '<span class="cb-label">Conversion location</span>' +
-      '<div class="cb-dest-wrap">' +
-      '<select name="camp_' + idx + '_destination" class="cb-input cb-select cb-destination" onchange="cbDestinationChanged(this)" aria-label="Conversion location">' +
-      '<option value="website" selected>Website</option>' +
-      '<option value="instant_form">Instant Form</option>' +
-      '</select>' +
-      '<div class="cb-api-note" data-forms-api-only hidden>Instant Form works only with the API backend.</div>' +
-      '</div>' +
-      /* ACL-1770: пиксель принадлежит набору; список Страниц/пикселей читается по нажатию. */
-      '<span class="cb-label cb-web-only">Pixel</span>' +
-      '<div class="cb-pp-wrap cb-web-only">' +
-      '<select class="cb-input cb-select cb-pixel-select" onchange="cbPixelChosen(this)" aria-label="Pixel of the ad set"></select>' +
-      '<button type="button" class="cb-form-refresh" onclick="cbRefreshPagePixels(this)" title="Read the Pages and pixels of the ad account from Meta now">Read Pages and pixels</button>' +
-      '<input type="hidden" name="camp_' + idx + '_pixel" value="">' +
-      '<div class="cb-form-note" data-pp-note></div>' +
-      '</div>' +
-      '<span class="cb-label">Placements</span>' + future('placements', 'button', 'Configure placements', 'Today every ad set gets the same fixed manual Facebook and Instagram list') +
-      '</div>' +
-      '</section>' +
+      '<div class="cb-adsets">' + buildAdsetSectionHTML(idx, 0) + '</div>' +
       '<div class="cb-slot-grid cb-lvl cb-lvl-ad">' +
       '<div class="cb-slot-main">' +
       '<div class="cb-ads-section">' +
       '<div class="cb-ads-divider">Ads</div>' +
-      '<div class="cb-ad-rows">' + buildAdRowHTML(idx, 0) + '</div>' +
+      '<div class="cb-ad-rows">' + buildAdRowHTML(idx, 0, 0) + '</div>' +
       '<input type="hidden" name="camp_' + idx + '_ad_count" class="cb-ad-count" value="1">' +
       '<button type="button" class="cb-add-btn-sm" onclick="cbAddAd(this)">+ Ad</button>' +
       '</div>' +
@@ -15180,6 +15742,44 @@ function cbPlanMoney(s) {
   return (isFinite(n) ? n.toFixed(2) : '?') + ' ' + ((s && s.currency) || '') + ' / day';
 }
 
+/* ACL-1771: термины таргетинга. Точное имя берётся само; всё остальное - «picked X for Y?»
+ * с кандидатами и кнопкой Confirm (запоминается на этой машине), подтверждённое - с Clear. */
+function cbTargetingHtml(items) {
+  var rows = '';
+  function cand(term, c) {
+    return '<li>' + aclEscHtml(c.name) + ' <span style="color:var(--muted)">[' + aclEscHtml(c.type) + ']</span> '
+      + '<button type="button" class="cbd-add" data-act="confirm-target" data-term="' + aclEscHtml(term)
+      + '" data-id="' + aclEscHtml(c.id) + '" data-type="' + aclEscHtml(c.type)
+      + '" data-name="' + aclEscHtml(c.name) + '">Confirm</button></li>';
+  }
+  function ask(i) {
+    var cs = i.candidates || [];
+    var head = i.suggested
+      ? 'Picked <strong>' + aclEscHtml(i.suggested.name) + '</strong> [' + aclEscHtml(i.suggested.type)
+        + '] for <strong>' + aclEscHtml(i.term) + '</strong>? Publish is blocked until you confirm or pick another.'
+      : '<strong>' + aclEscHtml(i.term) + '</strong> was not found in Meta'
+        + (cs.length ? '. Pick a candidate:' : ' and there are no candidates.');
+    return '<div class="cbd-plan-warn" style="color:var(--bad);margin:0.15rem 0">&#10005; ' + head
+      + (i.reason ? ' (' + aclEscHtml(i.reason) + ')' : '')
+      + (cs.length ? '<ul style="margin:0.1rem 0 0 1.1rem">' + cs.map(function (c) { return cand(i.term, c); }).join('') + '</ul>' : '')
+      + '</div>';
+  }
+  (items || []).forEach(function (i) {
+    if (i.state === 'unknown') {
+      rows += '<div class="cbd-plan-warn" style="color:#b45309;margin:0.15rem 0">&#9888; ' + aclEscHtml(i.term)
+        + ': ' + aclEscHtml(i.reason || "Couldn't check all interests — press Check plan again") + '</div>';
+    } else if (i.state === 'pending' || i.state === 'unresolved') {
+      (i.bad_parts && i.bad_parts.length ? i.bad_parts : [i]).forEach(function (p) { rows += ask(p); });
+    } else if (i.state === 'confirmed' && (i.picks || [])[0]) {
+      rows += '<div style="font-size:0.72rem">' + aclEscHtml(i.term) + ' &rarr; '
+        + i.picks.map(function (p) { return aclEscHtml(p.name) + ' [' + aclEscHtml(p.type) + ']'; }).join(' + ')
+        + ' (confirmed earlier) <button type="button" class="cbd-add" '
+        + 'data-act="clear-target" data-term="' + aclEscHtml(i.term) + '">Clear</button></div>';
+    }
+  });
+  return rows ? '<div class="cbd-plan-targeting" style="margin:0.2rem 0">' + rows + '</div>' : '';
+}
+
 /* Ответ /publish-plan → HTML (чистая функция: её проверяют тесты). */
 function cbPlanHtml(data) {
   var h = '<div class="cbd-plan-acc"><div class="cbd-plan-head">Plan for <strong>'
@@ -15201,6 +15801,7 @@ function cbPlanHtml(data) {
       if (w === 'Dry run: nothing was created') return;
       h += '<div class="cbd-plan-warn" style="color:#b45309">⚠ ' + aclEscHtml(w) + '</div>';
     });
+    h += cbTargetingHtml(r.targeting || []);
     if (s) {
       var allForms = (s.ad_sets || []).length && (s.ad_sets || []).every(function (x) { return x.destination === 'Instant Form'; });
       h += '<div class="cbd-plan-meta" style="font-size:var(--adopy-text-sm);color:var(--muted)">page '
@@ -15215,6 +15816,12 @@ function cbPlanHtml(data) {
           + ' · age ' + aclEscHtml(a.age) + ' · language ' + aclEscHtml(a.language || 'any')
           + ' · interests ' + aclEscHtml(interests || 'none') + ' · placements '
           + aclEscHtml(a.placements || '') + (a.destination ? ' · ' + aclEscHtml(a.destination) : '')
+          + (a.gender ? ' · gender ' + aclEscHtml(a.gender) : '')
+          + (a.languages_picked ? ' · languages picked ' + aclEscHtml(a.languages_picked.join(', ')) : '')
+          + (a.devices ? ' · devices ' + aclEscHtml(a.devices) : '')
+          + (a.os_min ? ' · OS ' + aclEscHtml(a.os_min) : '')
+          + (a.start_time ? ' · starts ' + aclEscHtml(a.start_time) : '')
+          + (a.multi_advertiser ? ' · multi-advertiser ads ' + aclEscHtml(a.multi_advertiser) : '')
           + '</div><ol class="cbd-plan-ads" style="font-size:var(--adopy-text-sm);margin:0.1rem 0 0 1rem">';
         (a.ads || []).forEach(function (ad) {
           h += '<li><strong>' + aclEscHtml(ad.name) + '</strong> · ' + aclEscHtml(ad.format) + ' '
@@ -15253,6 +15860,20 @@ function cbPlanBindFrame(out) {
     var b = ev.target && ev.target.closest ? ev.target.closest('[data-act]') : null;
     if (!b) return;
     var act = b.getAttribute('data-act');
+    if (act === 'confirm-target' || act === 'clear-target') {
+      ev.stopPropagation();
+      var confirm = act === 'confirm-target';
+      b.disabled = true;
+      fetch(confirm ? '/targeting-resolver/confirm' : '/targeting-resolver/clear', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(confirm
+          ? { term: b.dataset.term, id: b.dataset.id, type: b.dataset.type, name: b.dataset.name }
+          : { term: b.dataset.term })
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        b.outerHTML = '<em>' + (d && d.error ? aclEscHtml(d.error) : (confirm ? 'Saved' : 'Cleared') + ' - run Check plan again') + '</em>';
+      }).catch(function () { b.disabled = false; });
+      return;
+    }
     if (act === 'close-plan') {
       ev.stopPropagation();
       out.hidden = true;
