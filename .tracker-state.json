@@ -53780,7 +53780,7 @@
             "session": "run_l3_018"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-L3018",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -53798,7 +53798,8 @@
           "report": "ACL-110 handoff (Worker-L3018): PR #1033, branch work/acl-110-compare-period. Compare with previous period / custom range across account map, CM Comparison, Optimization, open recommendations; \"\u2014\" for zero/missing earlier value; new/gone markers (owner decisions of 2026-10-20 in the Issue).\nVerification: tests/test_acl110_period_compare.py (43) + test_header, test_metric_columns, test_account_map_columns, test_calendar_days_selectable, test_period_picker_not_capped_by_workbook, test_account_map_view/period, test_section_filters: pass locally. Independent Opus review done; HIGH (XSS via cmp_from) and MEDIUM (shared-cache mutation, live reads for earlier period, ad-set flag wording) fixed. Known limits: earlier period not pre-warmed; no \"gone\" rows on Home CM section or for vanished countries; CR change is relative percent. No live run."
         },
         "pr": 1033,
-        "queued_at": "2026-10-20T10:06:03+00:00"
+        "queued_at": "2026-10-20T10:06:03+00:00",
+        "reviewer": "Reviewer-R110W"
       },
       "1037": {
         "implementers": [
@@ -56580,6 +56581,10 @@
       },
       "Reviewer-R402W": {
         "session": "reviewer-r402w-20261020",
+        "role": "Reviewer"
+      },
+      "Reviewer-R110W": {
+        "session": "reviewer-r110w-20261020",
         "role": "Reviewer"
       }
     },
@@ -59446,7 +59451,6 @@
       }
     },
     "review_queue": [
-      18,
       309,
       175,
       845,
@@ -100221,6 +100225,13 @@
         "pr": 1032,
         "lane": "55fd2c64f2c941acacf6817710a5c07f",
         "actor": "Reviewer-R402W"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-20T12:36:09+00:00",
+        "pr": 1033,
+        "lane": "d4687482b5454de1857356e1e69c7040",
+        "actor": "Reviewer-R110W"
       }
     ],
     "policy": {
@@ -109157,6 +109168,18 @@
         "session": "reviewer-r402w-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T12:35:18+00:00",
+        "state": "reviewing"
+      },
+      "1033": {
+        "id": "d4687482b5454de1857356e1e69c7040",
+        "pr": 1033,
+        "issues": [
+          18
+        ],
+        "actor": "Reviewer-R110W",
+        "session": "reviewer-r110w-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-20T12:36:09+00:00",
         "state": "reviewing"
       }
     },
