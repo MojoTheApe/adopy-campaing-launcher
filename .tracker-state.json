@@ -46014,9 +46014,11 @@
         "worktree": "C:\\acl-rf-920",
         "id": "9244977fbf9b4bc3ae87f3de91c54969",
         "issue": 920,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T13:59:13+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 921,
+        "report": "Pure refresh: merged main 259ae7f1 (merge commit 81a4e74b), no conflicts. Tests: test_acl1920_search_refused + test_acl1771_targeting_resolver, test_acl1819_preflight, test_goals, test_acl_1202_overview_profile_search, test_acl1680_one_config_dir - 192 passed."
       }
     },
     "tasks": {
