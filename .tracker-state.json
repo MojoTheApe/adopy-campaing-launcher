@@ -49601,7 +49601,7 @@
             "session": "run_r1019_841"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-R1019841",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -49620,7 +49620,7 @@
         },
         "pr": 848,
         "queued_at": "2026-10-19T20:29:54+00:00",
-        "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
+        "review_report": "# Returned to the author: merge conflict with main, content not reviewed\n\nPR 848 cannot be brought up to current main c61501607ce11744e45add8b0d3b314368c216c5: `gh pr update-branch` reports a merge conflict (checked 2026-10-19/20). A source review must bind the current main baseline, so this task cannot be reviewed or approved as is.\n\nThe content of this PR was NOT reviewed in this pass; this return carries no code findings.\n\nNext step for the author: merge current main into the original branch, resolve the conflict, run the affected tests, push, and hand off again for a full independent review.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578009+00:00",
@@ -96790,6 +96790,24 @@
           "report": "Independent review of PR #869 (ACL-1854), head dbc06748, which contains current main (c6150160). RETURNED - one blocking finding.\n\nBLOCKING (high): the PR breaks tests that pass on main, and hosted CI is red. `_persist_job` in src/web/publish_jobs.py:857 now reads `job[\"job_id\"]` unconditionally. tests/test_acl1781_meta_rules.py (test_run_rpa_violation_goes_to_draft_errors_and_is_not_sent, test_run_rpa_registry_failure_fails_open_and_is_logged, test_run_rpa_real_hook_with_broken_registry_fails_open) put a job into `jobs._jobs` without `job_id` and now fail with `KeyError: 'job_id'` (CI \"linux tests (3.13, 2)\" red; the same file passes 19/19 on main, 3 fail on the PR head, reproduced locally). \"ACL verification\" is red as well. The PR already patched two similar fixtures (test_a_finished_clean_profile_closes_itself, test_a_job_exception_reaches_sentry_tagged) but missed this third file. Fix: add `\"job_id\": job_id` to the fixtures in tests/test_acl1781_meta_rules.py (or make the code tolerate it), re-run every test file that seeds `pj._jobs` / `jobs._jobs` directly (grep tests for `_jobs`), then get CI green.\n\nWhat I verified as correct (no change needed): the earlier changes_requested finding (failed-admission error masking a later saved success) is fixed in draft_status.load via the observed predecessor job and revision, with test_failed_admission_overlay_respects_predecessor_revision. The scope matches the Issue acceptance criteria. Accepted jobs invalidate readiness before the worker starts and keep the old success as previous_ready history. Late or stale writers are fenced by job id and status_revision. Partial, failure, cancel and abandon paths persist. Unfinished records not owned by a live job load as interrupted. The whole read-modify-write runs under a thread lock plus the machine file lock, with I/O outside _jobs_lock. A corrupt or missing store gives an unverified state and a visible error. User text is English. One Tracker issues line. CHANGELOG and PROJECT are updated. No Meta writes or live paths are added, and the change stays draft-only.\n\nLocal tests (Windows, py3.14): test_acl1854_current_draft_status, the two patched fixtures, test_publish_safety_contract, test_acl1614, test_acl1603, test_campaign_build_progress, test_config_locations and test_three_accounts_publish_at_once gave 209 passed, 5 failed. Four of the failures also fail on main locally (environmental, 500 vs 403 endpoint tests). The fifth, test_separate_processes_lock_the_entire_read_modify_write, hit a 10 s spawn timeout under machine load (passes in Windows CI), so it is flaky under load.\n\nNon-blocking notes: (1) Snapshot.get returns a synthetic \"unverified / No saved build result for this account\" entry for any account that has no record, even when the file is healthy, so every never-built account now shows a \"Draft unverified\" warning badge in the account header (before this PR it showed nothing). Consider showing it only when the file itself is missing or unreadable. (2) A single malformed record makes the whole file unreadable and blocks all new builds on the machine with a generic RuntimeError (503), with no recovery hint in the message.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-20T06:50:27+00:00",
+        "review": {
+          "id": "0a152b21d56547e89dc5262d6958d0a5",
+          "pr": 848,
+          "issues": [
+            841
+          ],
+          "actor": "Reviewer-C1841",
+          "session": "reviewer-c1841-20261020",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-20T06:46:31+00:00",
+          "state": "returning",
+          "report": "# Returned to the author: merge conflict with main, content not reviewed\n\nPR 848 cannot be brought up to current main c61501607ce11744e45add8b0d3b314368c216c5: `gh pr update-branch` reports a merge conflict (checked 2026-10-19/20). A source review must bind the current main baseline, so this task cannot be reviewed or approved as is.\n\nThe content of this PR was NOT reviewed in this pass; this return carries no code findings.\n\nNext step for the author: merge current main into the original branch, resolve the conflict, run the affected tests, push, and hand off again for a full independent review.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -104678,20 +104696,6 @@
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-19T13:01:50+00:00",
         "state": "reviewing"
-      },
-      "848": {
-        "id": "0a152b21d56547e89dc5262d6958d0a5",
-        "pr": 848,
-        "issues": [
-          841
-        ],
-        "actor": "Reviewer-C1841",
-        "session": "reviewer-c1841-20261020",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-20T06:46:31+00:00",
-        "state": "returning",
-        "report": "# Returned to the author: merge conflict with main, content not reviewed\n\nPR 848 cannot be brought up to current main c61501607ce11744e45add8b0d3b314368c216c5: `gh pr update-branch` reports a merge conflict (checked 2026-10-19/20). A source review must bind the current main baseline, so this task cannot be reviewed or approved as is.\n\nThe content of this PR was NOT reviewed in this pass; this return carries no code findings.\n\nNext step for the author: merge current main into the original branch, resolve the conflict, run the affected tests, push, and hand off again for a full independent review.",
-        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
