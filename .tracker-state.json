@@ -46140,9 +46140,11 @@
         "worktree": "C:\\acl-1880-clean",
         "id": "a19c4bc78bb74d62ad689e3d15a5686f",
         "issue": 880,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T17:41:53+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 1044,
+        "report": "Returned by independent review: /build-upload silently dropped an explicitly chosen Page. Fixed in ec2a527d: /build-upload refuses when any slot has an explicit page_id (same as Instant Forms on this path), visible English error; Automatic still builds. Two new tests in tests/test_web_build_upload.py. Branch already contains current main. Affected tests: 302 passed. Source CI on ec2a527d green (linux 1-3, windows, installer, ACL verification)."
       }
     },
     "tasks": {
