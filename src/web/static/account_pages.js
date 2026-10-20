@@ -5,7 +5,7 @@
   function account(slot) {
     var form = slot && slot.closest('form');
     var field = form && form.querySelector('[name="account_label"]');
-    return field ? field.value : '';
+    return field ? String(field.value || '').trim() : '';
   }
   function paint(slot) {
     var key = account(slot), state = states[key];
@@ -25,10 +25,10 @@
     var chosen = pages.find(function (p) { return p.id === hidden.value; });
     if (hidden.value && !chosen) select.add(new Option('Unavailable Page (' + hidden.value + ')', hidden.value));
     select.value = hidden.value;
-    select.disabled = !state || (state.state !== 'ready' && state.state !== 'empty');
+    select.disabled = !state || state.state === 'loading' || state.state === 'failed';
     if (!key) note.textContent = 'Connect an account to load its Facebook Pages.';
     else if (!state || state.state === 'loading') note.textContent = 'Loading Facebook Pages…';
-    else if (state.state !== 'ready') note.textContent = state.message;
+    else if (state.state !== 'ready') note.textContent = state.message || 'No Facebook Pages are available.';
     else if (hidden.value && !chosen) note.textContent = 'This Page is unavailable. Choose another Page or Automatic.';
     else {
       var resolved = chosen || pages[0];
@@ -50,14 +50,17 @@
     var found = selected ? state.pages.find(function (p) { return p.id === selected; }) : state.pages[0];
     return found ? found.id : '';
   };
-  window.cbRefreshPages = function (slot, force) {
+  // cachedOnly: render-time sync asks the server for its cached list only (no profile opened).
+  window.cbRefreshPages = function (slot, force, cachedOnly) {
     var key = account(slot);
-    if (!key || (states[key] && (!force || states[key].state === 'loading'))) return;
+    var known = states[key];
+    if (!key || (known && (known.state === 'loading' || (!force && !(known.state === 'not_loaded' && !cachedOnly))))) return;
     var request = {state: 'loading', pages: []};
     states[key] = request;
     paintAccount(key);
     var body = new FormData();
     body.append('account_label', key);
+    if (cachedOnly) body.append('cached', '1');
     if (force) body.append('force', '1');   // «Refresh pages» — мимо кэша сервера
     fetch('/api/account-pages', {method: 'POST', body: body})
       .then(function (r) { return r.json().then(function (data) {
@@ -74,8 +77,9 @@
   window.cbSyncPages = function (slot) {
     if (!slot) return;
     paint(slot);
-    if (slot.getClientRects().length) window.cbRefreshPages(slot, false);
+    if (slot.getClientRects().length) window.cbRefreshPages(slot, false, true);
   };
+  window.cbLoadPages = function (slot) { window.cbRefreshPages(slot, false, false); };
   window.cbPageChanged = function (select) {
     var slot = select.closest('.cb-slot');
     var hidden = slot.querySelector('input[name$="_page_id"]');

@@ -150,13 +150,14 @@ class RpaPublisher:
                 preview_mode=preview_mode,
             )
         self._built_at = time.monotonic()
-        if not preview_mode and any(d.page_provided and not d.errors for d in drafts):
+        if not preview_mode and any(d.page_provided and d.page_id and not d.errors for d in drafts):
             from src.web.account_pages import read_pages, resolve_selection
             from src.fb_api.graph import normalize_act
 
-            available = read_pages(account_label)
+            available = read_pages(account_label, force=True)
             for draft in drafts:
-                if not draft.page_provided or draft.errors:
+                # Automatic (empty) on RPA leaves Identity untouched: no pick, no verification.
+                if not draft.page_provided or not draft.page_id or draft.errors:
                     continue
                 try:
                     if not available.get("ok"):

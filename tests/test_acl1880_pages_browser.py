@@ -107,3 +107,21 @@ def test_full_builder_drops_old_automatic_page_forms(full_page):
     # A late response is stored under the requested Page, never the current automatic choice.
     p.evaluate("cbForms['Demo|123']={state:'ok',ok:true,page_id:'123',forms:[{id:'790',name:'Late form'}]}; cbFillFormSelects(document.querySelector('.cb-slot'))")
     assert 'Late form' not in p.locator('.cb-form-select').first.inner_text()
+
+
+def test_render_requests_cache_only_and_click_loads(page):
+    seen = []
+    def handler(route):
+        body = route.request.post_data or ''
+        seen.append(body)
+        if 'cached=1' in body or 'name="cached"' in body:
+            route.fulfill(json={'ok': True, 'state': 'not_loaded', 'pages': [], 'message': 'Pages are not loaded yet.'})
+        else:
+            route.fulfill(json={'ok': True, 'state': 'ready', 'pages': PAGES})
+    page.route('**/api/account-pages', handler)
+    page.add_script_tag(path=str(SCRIPT))
+    page.wait_for_function("document.querySelector('[data-page-note]').textContent.includes('not loaded')")
+    assert seen and all('cached' in b for b in seen)
+    page.locator('.cb-page-select').first.focus()
+    page.wait_for_function("document.querySelector('[data-page-note]').textContent.includes('First Page')")
+    assert any('cached' not in b for b in seen)

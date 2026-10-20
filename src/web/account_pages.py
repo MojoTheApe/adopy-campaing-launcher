@@ -93,9 +93,20 @@ def _read_in_session(account: str) -> dict:
         pages = pages_from_client(sess.client, sess.act)
         return {"ok": True, "state": "ready" if pages else "empty", "pages": pages,
                 "act": sess.act, "account": account, "message": "" if pages else
-                "No Page is available. Automatic can create only the website campaign and ad sets PAUSED; "
-                "add a Page and ads manually in Ads Manager, or Refresh pages after restoring access. "
-                "Instant Forms require a Page."}
+                "No Page is available for this account. With Automatic, the Graph API backend creates only "
+                "the website campaign and ad sets PAUSED (add a Page and ads in Ads Manager), and the RPA "
+                "backend leaves the Identity as Ads Manager sets it. A specific Page or an Instant Form "
+                "requires a Page; Refresh pages after restoring access."}
+
+
+def cached_only(account: str) -> dict:
+    """Render-time answer: the cached list or "not loaded". Never opens a profile."""
+    hit = cached_pages(account)
+    if hit is not None:
+        return hit
+    return {"ok": True, "state": "not_loaded", "pages": [], "account": account,
+            "message": "Pages are not loaded yet. Click the Page control or Refresh pages to load them "
+                       "(this opens the account profile)."}
 
 
 def read_pages(account: str, *, force: bool = False) -> dict:

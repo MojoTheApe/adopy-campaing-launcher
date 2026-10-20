@@ -2386,7 +2386,7 @@ class AdsManagerFlow:
         # priority over both the LLM agent and the recipe player when enabled.
         from src.fb_ads_rpa.config import get_use_llm_agent, get_use_recipe_player, get_use_recorded_flow
 
-        if draft.page_provided and not get_use_recorded_flow():
+        if explicit_page_choice(draft) and not get_use_recorded_flow():
             result.error = "Facebook Page Identity verification requires the recorded RPA flow. No campaign was created."
             result.blocking_failures.append("page_identity")
             return result
@@ -2452,8 +2452,7 @@ class AdsManagerFlow:
                         soft_fails_out=ad_soft_fails,
                         on_new_page=self._adopt_page,
                         expected_act=draft.ad_account_id or "",
-                        **({"page_id": draft.page_id or "", "page_name": draft.page_name,
-                            "page_name_unique": draft.page_name_unique} if draft.page_provided else {}),
+                        **page_identity_kwargs(draft),
                         **({"ad_body2": ad.ad_body2} if ad.ad_body2 else {}),
                     )
                     if fail_step == profile_trouble.WRONG_AD_ACCOUNT and _md.last_wrong_ad_account():
@@ -2698,3 +2697,15 @@ class AdsManagerFlow:
                     pass
 
         return result
+
+
+def explicit_page_choice(draft) -> bool:
+    """ACL-1880: Identity is verified only when the person chose a Page; Automatic (empty) leaves it untouched."""
+    return bool(getattr(draft, "page_provided", False) and getattr(draft, "page_id", None))
+
+
+def page_identity_kwargs(draft) -> dict:
+    if not explicit_page_choice(draft):
+        return {}
+    return {"page_id": draft.page_id or "", "page_name": draft.page_name,
+            "page_name_unique": draft.page_name_unique}

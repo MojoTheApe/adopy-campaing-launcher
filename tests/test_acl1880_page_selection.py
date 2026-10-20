@@ -53,19 +53,21 @@ def test_page_discovery_preserves_order_names_and_rejects_truncation():
         pages_from_client(client, 'act_1234567890')
 
 
-def test_failed_read_differs_from_empty_and_retry_succeeds(monkeypatch):
+def test_failed_read_differs_from_empty_and_retry_succeeds(monkeypatch, tmp_path):
     from src.web import account_pages as p
     from src.analysis_agent import account_spend as accounts, account_spend_api as api
     monkeypatch.setattr(accounts, 'serialized_browser', lambda **kw: lambda fn: fn)
     monkeypatch.setattr(api, '_failure', lambda account, exc: ('Session unavailable', 'failed'))
     def failed(account):
         raise RuntimeError('failed')
+    monkeypatch.setattr(p, '_cache_path', lambda: tmp_path / 'account_pages_cache.json')
     monkeypatch.setattr(p, '_read_in_session', failed)
     assert p.read_pages('Demo')['state'] == 'failed'
     monkeypatch.setattr(p, '_read_in_session', lambda account: {'ok': True, 'state': 'empty', 'pages': []})
-    assert p.read_pages('Demo')['state'] == 'empty'
+    assert p.read_pages('Demo', force=True)['state'] == 'empty'
     monkeypatch.setattr(p, '_read_in_session', lambda account: {'ok': True, 'state': 'ready', 'pages': [{'id': '123', 'name': 'Page'}]})
-    assert p.read_pages('Demo')['ok']
+    retried = p.read_pages('Demo', force=True)
+    assert retried['ok'] and retried['state'] == 'ready' and 'cached_at' not in retried
 
 
 def test_form_parser_carries_campaign_specific_selection():
@@ -76,11 +78,13 @@ def test_form_parser_carries_campaign_specific_selection():
 
 
 @pytest.mark.parametrize('available,selected,expected,error', [
-    ({'ok': True, 'act': 'act_1234567890', 'pages': [{'id': '123', 'name': 'First'}, {'id': '456', 'name': 'Second'}]}, '', '123', False),
+    # Automatic (empty) on RPA: Identity untouched, nothing resolved, nothing refused.
+    ({'ok': True, 'act': 'act_1234567890', 'pages': [{'id': '123', 'name': 'First'}]}, '', None, False),
+    ({'ok': True, 'act': 'act_1234567890', 'pages': []}, '', None, False),
     ({'ok': True, 'act': 'act_1234567890', 'pages': [{'id': '123', 'name': 'First'}, {'id': '456', 'name': 'Second'}]}, '456', '456', False),
-    ({'ok': True, 'act': 'act_1234567890', 'pages': []}, '', None, True),
-    ({'ok': False, 'message': 'Could not load pages'}, '', None, True),
-    ({'ok': True, 'act': 'act_999', 'pages': [{'id': '123', 'name': 'Wrong account'}]}, '', None, True),
+    ({'ok': True, 'act': 'act_1234567890', 'pages': []}, '456', None, True),
+    ({'ok': False, 'message': 'Could not load pages'}, '456', None, True),
+    ({'ok': True, 'act': 'act_999', 'pages': [{'id': '456', 'name': 'Wrong account'}]}, '456', None, True),
 ])
 def test_rpa_receives_resolved_page_or_stops_before_browser(monkeypatch, available, selected, expected, error):
     from src.fb_ads_rpa import rpa_publisher as rpa
@@ -89,13 +93,15 @@ def test_rpa_receives_resolved_page_or_stops_before_browser(monkeypatch, availab
     draft = CampaignDraft('C', 'MX', 'Demo', page_id=selected or None, page_provided=True, ad_account_id='act_1234567890')
     monkeypatch.setattr(rpa, 'slots_to_campaign_drafts', lambda *a, **k: [draft])
     monkeypatch.setattr(rpa, 'enrich_campaign_drafts', lambda drafts, **k: drafts)
-    monkeypatch.setattr(account_pages, 'read_pages', lambda account: available)
+    monkeypatch.setattr(account_pages, 'read_pages', lambda account, **k: available)
     publisher = rpa.RpaPublisher()
     result = publisher.build_drafts([], account_label='Demo', country='MX')[0]
     assert bool(result.errors) is error
-    if not error:
+    if not error and expected:
         assert result.page_id == expected
         assert result.page_name_unique and result.page_name
+    if not error and not expected:
+        assert not result.page_id
 
 
 def test_conflicting_page_choices_cannot_be_silently_grouped():
@@ -103,3 +109,45 @@ def test_conflicting_page_choices_cannot_be_silently_grouped():
     drafts = slots_to_campaign_drafts([{'name':'Same', 'budget':'50', 'page_id':'123'},
                                        {'name':'Same', 'budget':'50', 'page_id':''}], account_label='Demo',country='MX')
     assert any('different Facebook Page choices' in e for e in drafts[0].errors)
+
+
+def test_automatic_rpa_draft_never_touches_identity(monkeypatch):
+    """Empty page_id (Automatic) on RPA: no Pages read, no Identity kwargs, no ensure_page_identity."""
+    from src.fb_ads_rpa import rpa_publisher as rpa, page_identity
+    from src.fb_ads_rpa.ads_manager_flow import page_identity_kwargs, explicit_page_choice
+    from src.fb_ads_rpa.build_draft import slots_to_campaign_drafts
+    from src.fb_ads_rpa.draft import CampaignDraft
+    from src.web import account_pages
+    drafts = slots_to_campaign_drafts([{'name': 'C', 'budget': '50', 'page_id': ''}], account_label='Demo', country='MX')
+    assert drafts[0].page_provided and not drafts[0].page_id
+    calls = []
+    monkeypatch.setattr(account_pages, 'read_pages', lambda *a, **k: calls.append(a) or {'ok': True, 'pages': []})
+    monkeypatch.setattr(page_identity, 'ensure_page_identity', lambda *a, **k: calls.append('identity'))
+    monkeypatch.setattr(rpa, 'slots_to_campaign_drafts', lambda *a, **k: drafts)
+    monkeypatch.setattr(rpa, 'enrich_campaign_drafts', lambda d, **k: d)
+    out = rpa.RpaPublisher().build_drafts([], account_label='Demo', country='MX')
+    assert calls == [] and not out[0].errors and page_identity_kwargs(out[0]) == {}
+    assert not explicit_page_choice(out[0])
+    chosen = CampaignDraft('C', 'MX', 'Demo', page_id='123', page_provided=True, page_name='P', page_name_unique=True)
+    assert page_identity_kwargs(chosen) == {'page_id': '123', 'page_name': 'P', 'page_name_unique': True}
+
+
+def test_render_time_read_is_cache_only_and_never_opens_a_profile(monkeypatch, tmp_path):
+    from src.web import account_pages as p
+    monkeypatch.setattr(p, '_cache_path', lambda: tmp_path / 'account_pages_cache.json')
+    def boom(account):
+        raise AssertionError('profile must not be opened')
+    monkeypatch.setattr(p, '_read_in_session', boom)
+    miss = p.cached_only('Demo')
+    assert miss['state'] == 'not_loaded' and miss['ok'] and miss['pages'] == []
+    p.remember_pages('Demo', {'ok': True, 'state': 'ready', 'pages': [{'id': '1', 'name': 'A'}]})
+    assert p.cached_only('Demo')['state'] == 'ready'
+
+
+def test_account_pages_endpoint_cached_flag(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+    from src.web import account_pages as p, app as webapp
+    monkeypatch.setattr(p, '_cache_path', lambda: tmp_path / 'account_pages_cache.json')
+    monkeypatch.setattr(p, '_read_in_session', lambda a: (_ for _ in ()).throw(AssertionError('opened')))
+    r = TestClient(webapp.app, base_url='http://127.0.0.1:9090').post('/api/account-pages', headers={'Origin': 'http://127.0.0.1:9090'}, data={'account_label': 'Demo', 'cached': '1'})
+    assert r.status_code == 200 and r.json()['state'] == 'not_loaded'

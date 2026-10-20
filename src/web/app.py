@@ -2285,9 +2285,9 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                     "language_provided": f"camp_{idx}_language" in form,
                 }
             # Ключ — только у объявлений со вторым текстом: остальные слоты
+            # (и записанные из них задания) остаются прежними.
             if f"camp_{idx}_page_id" in form:
                 slot["page_id"] = str(form.get(f"camp_{idx}_page_id") or "").strip()
-            # (и записанные из них задания) остаются прежними.
             if copy2:
                 slot["copy2"] = copy2
             # ACL-1775: Instant Form. Ключи есть только у слотов с формой; значения
@@ -5236,12 +5236,15 @@ def _instant_form_refusal(slots: list[dict]) -> JSONResponse | None:
 @app.post("/api/account-pages")
 async def api_account_pages(request: Request) -> JSONResponse:
     """Read available Pages under the existing profile read lock; no Meta writes."""
-    from src.web.account_pages import read_pages
+    from src.web.account_pages import cached_only, read_pages
 
     form = await request.form()
     account = str(form.get("account_label") or "").strip()
     if not account:
         return JSONResponse({"ok": False, "state": "failed", "message": "account is required"}, status_code=400)
+    if str(form.get("cached") or "") == "1":
+        # Отрисовка билдера: только кэш на машине, профиль не открывается.
+        return JSONResponse(await asyncio.to_thread(cached_only, account))
     # Без force — ответ из кэша на машине (12 ч): лишний запуск профиля ради списка Страниц не нужен.
     force = str(form.get("force") or "") == "1"
     return JSONResponse(await asyncio.to_thread(read_pages, account, force=force))
