@@ -106936,7 +106936,9 @@
         "session": "q2001d-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T10:21:17+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "Returned (Reviewer-Q2001D). Needs a refresh onto current main (39 commits behind). Blocking: CI red, tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis fails (windows tests, linux shard 2, Process instructions, project tooling): the new test files use Windows-only APIs or paths and need the platform marker. The PR is stacked on unmerged #820 (ACL-1816: its commits 9751ca45 and f3f8e082 are inside this PR), so it must not land before #820. Content: rules_api.py has no direct Meta writes; Apply goes only through campaign commands, with the op bound to the suggestion (account, command, value, single object, saved result); Automatic refused; API backend and loopback only. No safety findings; tests not run locally.",
+        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
