@@ -45182,9 +45182,11 @@
         "worktree": "C:\\acl-1845-wt",
         "id": "ebe5ab1745374d82b2a35babaf952efb",
         "issue": 845,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T10:44:50+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 850,
+        "report": "Review fix (ACL-1845, 2026-10-20): the new aria-busy writes (cbNewRun form loop, showQueue) and the zero-count term in showQueue are guarded so stub buttons/forms of the harness tests no longer throw (test_acl1826_mlx_session_lost + test_publishing_everything_at_once 42 passed). Publish/drawer/build browser tests passed (see PR comment). Branch contains current work/main."
       }
     },
     "tasks": {
