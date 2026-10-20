@@ -45344,20 +45344,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T12:56:11+00:00",
         "from_status": "status:todo"
-      },
-      "1046": {
-        "actor": "Worker-c8f54e83",
-        "session": "c8f54e83",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-2046-batch-fold-changelog",
-        "worktree": "C:\\acl-batch-fold",
-        "id": "2aa18fff3d7a4280bd804a114a8e6724",
-        "issue": 1046,
-        "state": "handoff",
-        "started_at": "2026-10-20T12:59:34+00:00",
-        "from_status": "status:idea",
-        "pr": 1047,
-        "report": "Docs-only: documents the post-batch CHANGELOG fragment fold in BATCH_INTEGRATION_ACL.md (fold after landing in main, not on the batch branch: composition admission rejects extra commits). No tests."
       }
     },
     "tasks": {
@@ -53996,9 +53982,25 @@
             "session": "c8f54e83"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-c8f54e83",
-        "coordinator": "Coordinator-M1011A"
+        "coordinator": "Coordinator-M1011A",
+        "handoff": {
+          "actor": "Worker-c8f54e83",
+          "session": "c8f54e83",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "work/acl-2046-batch-fold-changelog",
+          "worktree": "C:\\acl-batch-fold",
+          "id": "2aa18fff3d7a4280bd804a114a8e6724",
+          "issue": 1046,
+          "state": "handoff",
+          "started_at": "2026-10-20T12:59:34+00:00",
+          "from_status": "status:idea",
+          "pr": 1047,
+          "report": "Docs-only: documents the post-batch CHANGELOG fragment fold in BATCH_INTEGRATION_ACL.md (fold after landing in main, not on the batch branch: composition admission rejects extra commits). No tests."
+        },
+        "pr": 1047,
+        "queued_at": "2026-10-20T13:04:45+00:00"
       }
     },
     "actors": {
@@ -59597,7 +59599,8 @@
       838,
       1038,
       1040,
-      880
+      880,
+      1046
     ],
     "review": {
       "id": "1ea28d1b292c4ef3baeda760fa52b87b",
@@ -100605,6 +100608,13 @@
         "issue": 880,
         "pr": 1044,
         "actor": "Worker-1880C"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T13:04:45+00:00",
+        "issue": 1046,
+        "pr": 1047,
+        "actor": "Worker-c8f54e83"
       }
     ],
     "policy": {
