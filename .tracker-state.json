@@ -45203,9 +45203,11 @@
         "worktree": "C:\\acl-1854-wt",
         "id": "9a51ebf3b26f48dea6fc57ff99920e6e",
         "issue": 854,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T11:40:35+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 869,
+        "report": "Review fix round 2 (ACL-1854, 2026-10-20): test-only. The holder child of test_separate_processes_lock_the_entire_read_modify_write now waits 120 s (longer than every parent wait) and the parent asserts the holder is alive before the lock check. test_acl1854_current_draft_status 31 passed; the lock test alone passed under load. Branch contains current work/main."
       }
     },
     "tasks": {
