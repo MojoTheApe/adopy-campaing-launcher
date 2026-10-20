@@ -45173,20 +45173,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
-      },
-      "845": {
-        "actor": "Worker-L1845",
-        "session": "run_l1_845",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1845-publish-button-design",
-        "worktree": "C:\\acl-1845-wt",
-        "id": "ebe5ab1745374d82b2a35babaf952efb",
-        "issue": 845,
-        "state": "handoff",
-        "started_at": "2026-10-20T10:44:50+00:00",
-        "from_status": "status:todo",
-        "pr": 850,
-        "report": "Review fix (ACL-1845, 2026-10-20): the new aria-busy writes (cbNewRun form loop, showQueue) and the zero-count term in showQueue are guarded so stub buttons/forms of the harness tests no longer throw (test_acl1826_mlx_session_lost + test_publishing_everything_at_once 42 passed). Publish/drawer/build browser tests passed (see PR comment). Branch contains current work/main."
       }
     },
     "tasks": {
@@ -50012,25 +49998,25 @@
             "session": "run_l1_845"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-L1845",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-R1019845",
-          "session": "run_r1019_845",
+          "actor": "Worker-L1845",
+          "session": "run_l1_845",
           "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1845-publish-button-design",
           "worktree": "C:\\acl-1845-wt",
-          "id": "cfb922d7daa24c9d855ac71aa04fdcf8",
+          "id": "ebe5ab1745374d82b2a35babaf952efb",
           "issue": 845,
           "state": "handoff",
-          "started_at": "2026-10-19T20:55:16+00:00",
+          "started_at": "2026-10-20T10:44:50+00:00",
           "from_status": "status:todo",
           "pr": 850,
-          "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main; resolved 4 report.html hunks and CHANGELOG. Review findings addressed: (1) blocking zero-count overwrite: showQueue() and applyGate() now also disable the button when no campaign is available (count of tick.send / tick.open), so a queue update or the preflight gate cannot re-enable it; (2) main's ACL-1761 publishLabel kept (PAUSED/drafts), only the count (open campaigns) differs; main's Check plan button, account-state refresh and the sfc confirmation dialog kept (dialog keeps this PR's classes with main's font-size tokens); CHANGELOG sentences about the gate and API label updated. Tests: test_publish_button_design_browser 12, test_builder_multi_publish_browser 12, test_builder_publish_selected_browser 12, test_drawer_review_browser 13 passed. NOTE: no new dedicated regression test for the zero-count/showQueue fix; covered only by the existing browser tests (they pass)."
+          "report": "Review fix (ACL-1845, 2026-10-20): the new aria-busy writes (cbNewRun form loop, showQueue) and the zero-count term in showQueue are guarded so stub buttons/forms of the harness tests no longer throw (test_acl1826_mlx_session_lost + test_publishing_everything_at_once 42 passed). Publish/drawer/build browser tests passed (see PR comment). Branch contains current work/main."
         },
         "pr": 850,
-        "queued_at": "2026-10-19T20:57:05+00:00",
+        "queued_at": "2026-10-20T11:34:45+00:00",
         "review_report": "# Returned to the author: merge conflict with main, content not reviewed\n\nPR 850 cannot be brought up to current main c61501607ce11744e45add8b0d3b314368c216c5: `gh pr update-branch` reports a merge conflict (checked 2026-10-19/20). A source review must bind the current main baseline, so this task cannot be reviewed or approved as is.\n\nThe content of this PR was NOT reviewed in this pass; this return carries no code findings.\n\nNext step for the author: merge current main into the original branch, resolve the conflict, run the affected tests, push, and hand off again for a full independent review.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -59231,7 +59217,8 @@
       18,
       71,
       309,
-      175
+      175,
+      845
     ],
     "review": {
       "id": "1ea28d1b292c4ef3baeda760fa52b87b",
@@ -99678,6 +99665,13 @@
             "approved_at": "2026-10-20T11:32:13+00:00"
           }
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T11:34:45+00:00",
+        "issue": 845,
+        "pr": 850,
+        "actor": "Worker-L1845"
       }
     ],
     "policy": {
