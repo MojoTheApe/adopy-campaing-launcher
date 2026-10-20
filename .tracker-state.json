@@ -5307,20 +5307,20 @@
       "937": {
         "kind": "independent-review",
         "verdict": "approved",
-        "reviewer": "Reviewer-R1184Z",
-        "review_session": "reviewer-r1184z-20261020",
-        "execution_lane": "7082e3edec6545d5b3d8cb94c9027a3f",
-        "implementer": "Worker-L2184",
-        "head_sha": "f185f693e45bdf4ec257d69e1d340ddc7b34805e",
-        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-        "tree_sha": "d44a82d76c1e331b9390198d5d5d50d5193f26cf",
+        "reviewer": "Reviewer-RR1020",
+        "review_session": "rr1020-20261020",
+        "execution_lane": "168c3d8482c947cc8cee380002dc118e",
+        "implementer": "Worker-RF184",
+        "head_sha": "a0ff853e45691c76aeec45541c71a8c068b0e084",
+        "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+        "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+        "tree_sha": "699feb2980e3eefa81406c1dac0bc936839c6730",
         "issues": [
           184
         ],
-        "report": "Re-review of PR #937 at head f185f693 on base c6150160. The change replaces the bare RuntimeError for a hand-opened Multilogin profile with a single profile_is_running check (covering long and 8.3 profile folder spellings in profile_dir.py) that raises ProfileStop(OPEN_BY_HAND) with a clear message instead of a traceback; the ACL-1606 reopen retry is preserved and hand-opened windows are never restarted or killed; account_spend.py and test_acl1812_warm_sessions.py were adjusted accordingly. The previous blocker (a real Multilogin profile id in tests/test_acl1184_hand_open_message.py, flagged by scripts/acl_scan_secrets.py) is fixed: the delta since 257a2161 is exactly one line replacing the id with the synthetic 'profile-1184'; grep finds no trace of the real id in the tree and no other UUID-like ids are added by the PR diff, and acl_scan_secrets.py reports no secrets or real ids. Locally the 1184 tests pass (98 passed with -x up to the first failure); test_acl1812_warm_sessions has one failure (row-open over HTTP returning 500) that I attribute to the old Starlette in the shared venv (environment), since the same test passes in CI on linux and windows. CI on the head: Classify and check project tooling, Process instructions, windows tests (3.13), linux tests 1/2/3, ACL verification and installer checks are all green; only tracker-link is red because the issue has not yet been moved to Review (reported separately, not a code defect). Nit: none blocking. No live checks claimed.",
-        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "report": "Verdict: approved (fresh re-review after main moved to 259ae7f1). Delta from previous approved head f185f693 is only the merge of main 259ae7f1: it touches only files main changed since the merge base, no overlap with the author's files; no other author changes. Full scope read against ACL-1184: one shared 'profile is running' check (MultiloginDirectCDPProvider.profile_is_running) used by dashboard and RPA, checking both folder spellings (long and 8.3, moved to the light src/fb_ads_rpa/profile_dir.py) and falling back to a lookup by profile id when the folder is not found; the bare RuntimeError 'profile is already running' is replaced by the profile_open_by_hand ProfileStop, which the dashboard turns into hand_message() with the way out (close the window in MLX Desktop, press again); no restart or stop of a hand-opened profile is introduced; check failures without a folder do not block the start. Source CI on exact head green (descriptor, tracker-link, ACL verification, Installer verification, linux/windows tests). Coordinator trial merge: compatible, 122 tests passed.",
         "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "recorded_at": "2026-10-20T10:08:31+00:00",
+        "recorded_at": "2026-10-20T15:11:10+00:00",
         "issue_scopes": {
           "184": "e3abbfa50edd0ea258c0d88c656573e254e5ed920737b164ed96eb9cf0e9044c"
         }
