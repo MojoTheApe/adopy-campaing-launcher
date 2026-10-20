@@ -50726,7 +50726,7 @@
             "session": "t1020-838"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-T1020838",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -102684,6 +102684,68 @@
         "issue": 309,
         "pr": 929,
         "actor": "Worker-L2309c"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-20T15:04:25+00:00",
+        "issue": 838,
+        "pr": 842,
+        "review": {
+          "id": "fa2d4b5c65e2494a966276ea4ffff2bb",
+          "pr": 842,
+          "issues": [
+            838
+          ],
+          "actor": "Reviewer-R1838V",
+          "session": "reviewer-r1838v-20261020",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-20T14:21:00+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 838,
+            "pr": 842,
+            "branch": "codex/acl-1838-country-active-line",
+            "head_sha": "bc9ba5c808673dd775511c85e90ffe30c7b9beb1",
+            "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+            "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "cf3992329999eade635234966dc6a7d8224ec279020d8cb4239227bab85df07b",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-R1838V",
+              "review_session": "reviewer-r1838v-20261020",
+              "execution_lane": "fa2d4b5c65e2494a966276ea4ffff2bb",
+              "implementer": "Worker-T1020838",
+              "head_sha": "bc9ba5c808673dd775511c85e90ffe30c7b9beb1",
+              "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+              "tree_sha": "e01e80bf7434010597c336993964e4c30a47d944",
+              "issues": [
+                838
+              ],
+              "report": "Reviewed PR #842 at head bc9ba5c8 against main 259ae7f1 (merge-base equals main, so the main refresh kept all of main's changes; git log work/main..HEAD shows only the four ACL-1838 commits, no stacking on other unmerged tasks). The diff is 3 files: in src/web/templates/report.html the 5px inline dot on .sidebar-country-btn.live::before is replaced by an absolutely positioned 2px accent-token line (left 4px, top/bottom 9px, radius 1px, pointer-events none) with position:relative added to the button; docs/system/CHANGELOG.md and PROJECT.md gain the ACL-1838 entries. Criteria: active rows (existing .live predicate untouched) get the 2px accent line; inactive rows have no pseudo-element; the pseudo-element is part of the button with pointer-events none, no handlers and no hover rule, so there is no separate target; selection, FTD counts and JS are untouched; activity stays distinct from the expanded-row highlight (background plus accent text colour versus a left line); colour is the existing --accent token, so both themes are covered, the marker is absolutely positioned inside the 0.75rem padding so labels do not shift and narrow width/zoom is unaffected. Information is preserved: activity is still a presence/absence shape cue, not colour alone (the former dot had no accessible name either, so no accessibility regression); the Issue says the design prototype defines no activity marker so owner option 3 governs; no user-facing text added. Tests: tests/test_manage_behavior.py and tests/test_the_builder_tree.py 15 passed locally. CI on this head: all required checks green (linux 1/2/3, windows, descriptor, installer classification, process instructions, tracker-link); installer build jobs skipped by classification. Non-blocking nits: there is no automated assertion for the new line (the Worker's browser checks are private harness evidence I did not re-run), and the new CSS marker has no accessible text equivalent, same as the old dot. No live checks claimed.",
+              "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "recorded_at": "2026-10-20T15:01:53+00:00",
+              "issue_scopes": {
+                "838": "cf3992329999eade635234966dc6a7d8224ec279020d8cb4239227bab85df07b"
+              }
+            },
+            "lane": {
+              "id": "fa2d4b5c65e2494a966276ea4ffff2bb",
+              "pr": 842,
+              "issues": [
+                838
+              ],
+              "actor": "Reviewer-R1838V",
+              "session": "reviewer-r1838v-20261020",
+              "coordinator": "Coordinator-M1011A",
+              "started_at": "2026-10-20T14:21:00+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-20T15:03:16+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -106865,6 +106927,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-20T14:50:16+00:00"
+      },
+      "838": {
+        "issue": 838,
+        "pr": 842,
+        "branch": "codex/acl-1838-country-active-line",
+        "head_sha": "bc9ba5c808673dd775511c85e90ffe30c7b9beb1",
+        "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+        "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "cf3992329999eade635234966dc6a7d8224ec279020d8cb4239227bab85df07b",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-R1838V",
+          "review_session": "reviewer-r1838v-20261020",
+          "execution_lane": "fa2d4b5c65e2494a966276ea4ffff2bb",
+          "implementer": "Worker-T1020838",
+          "head_sha": "bc9ba5c808673dd775511c85e90ffe30c7b9beb1",
+          "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+          "tree_sha": "e01e80bf7434010597c336993964e4c30a47d944",
+          "issues": [
+            838
+          ],
+          "report": "Reviewed PR #842 at head bc9ba5c8 against main 259ae7f1 (merge-base equals main, so the main refresh kept all of main's changes; git log work/main..HEAD shows only the four ACL-1838 commits, no stacking on other unmerged tasks). The diff is 3 files: in src/web/templates/report.html the 5px inline dot on .sidebar-country-btn.live::before is replaced by an absolutely positioned 2px accent-token line (left 4px, top/bottom 9px, radius 1px, pointer-events none) with position:relative added to the button; docs/system/CHANGELOG.md and PROJECT.md gain the ACL-1838 entries. Criteria: active rows (existing .live predicate untouched) get the 2px accent line; inactive rows have no pseudo-element; the pseudo-element is part of the button with pointer-events none, no handlers and no hover rule, so there is no separate target; selection, FTD counts and JS are untouched; activity stays distinct from the expanded-row highlight (background plus accent text colour versus a left line); colour is the existing --accent token, so both themes are covered, the marker is absolutely positioned inside the 0.75rem padding so labels do not shift and narrow width/zoom is unaffected. Information is preserved: activity is still a presence/absence shape cue, not colour alone (the former dot had no accessible name either, so no accessibility regression); the Issue says the design prototype defines no activity marker so owner option 3 governs; no user-facing text added. Tests: tests/test_manage_behavior.py and tests/test_the_builder_tree.py 15 passed locally. CI on this head: all required checks green (linux 1/2/3, windows, descriptor, installer classification, process instructions, tracker-link); installer build jobs skipped by classification. Non-blocking nits: there is no automated assertion for the new line (the Worker's browser checks are private harness evidence I did not re-run), and the new CSS marker has no accessible text equivalent, same as the old dot. No live checks claimed.",
+          "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "recorded_at": "2026-10-20T15:01:53+00:00",
+          "issue_scopes": {
+            "838": "cf3992329999eade635234966dc6a7d8224ec279020d8cb4239227bab85df07b"
+          }
+        },
+        "lane": {
+          "id": "fa2d4b5c65e2494a966276ea4ffff2bb",
+          "pr": 842,
+          "issues": [
+            838
+          ],
+          "actor": "Reviewer-R1838V",
+          "session": "reviewer-r1838v-20261020",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-20T14:21:00+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-20T15:03:16+00:00"
       }
     },
     "batches": {
@@ -111879,62 +111985,6 @@
         "coordinator": "Coordinator-ACT174",
         "started_at": "2026-10-20T08:55:10+00:00",
         "state": "reviewing"
-      },
-      "842": {
-        "id": "fa2d4b5c65e2494a966276ea4ffff2bb",
-        "pr": 842,
-        "issues": [
-          838
-        ],
-        "actor": "Reviewer-R1838V",
-        "session": "reviewer-r1838v-20261020",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-20T14:21:00+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 838,
-          "pr": 842,
-          "branch": "codex/acl-1838-country-active-line",
-          "head_sha": "bc9ba5c808673dd775511c85e90ffe30c7b9beb1",
-          "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-          "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "cf3992329999eade635234966dc6a7d8224ec279020d8cb4239227bab85df07b",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-R1838V",
-            "review_session": "reviewer-r1838v-20261020",
-            "execution_lane": "fa2d4b5c65e2494a966276ea4ffff2bb",
-            "implementer": "Worker-T1020838",
-            "head_sha": "bc9ba5c808673dd775511c85e90ffe30c7b9beb1",
-            "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-            "tree_sha": "e01e80bf7434010597c336993964e4c30a47d944",
-            "issues": [
-              838
-            ],
-            "report": "Reviewed PR #842 at head bc9ba5c8 against main 259ae7f1 (merge-base equals main, so the main refresh kept all of main's changes; git log work/main..HEAD shows only the four ACL-1838 commits, no stacking on other unmerged tasks). The diff is 3 files: in src/web/templates/report.html the 5px inline dot on .sidebar-country-btn.live::before is replaced by an absolutely positioned 2px accent-token line (left 4px, top/bottom 9px, radius 1px, pointer-events none) with position:relative added to the button; docs/system/CHANGELOG.md and PROJECT.md gain the ACL-1838 entries. Criteria: active rows (existing .live predicate untouched) get the 2px accent line; inactive rows have no pseudo-element; the pseudo-element is part of the button with pointer-events none, no handlers and no hover rule, so there is no separate target; selection, FTD counts and JS are untouched; activity stays distinct from the expanded-row highlight (background plus accent text colour versus a left line); colour is the existing --accent token, so both themes are covered, the marker is absolutely positioned inside the 0.75rem padding so labels do not shift and narrow width/zoom is unaffected. Information is preserved: activity is still a presence/absence shape cue, not colour alone (the former dot had no accessible name either, so no accessibility regression); the Issue says the design prototype defines no activity marker so owner option 3 governs; no user-facing text added. Tests: tests/test_manage_behavior.py and tests/test_the_builder_tree.py 15 passed locally. CI on this head: all required checks green (linux 1/2/3, windows, descriptor, installer classification, process instructions, tracker-link); installer build jobs skipped by classification. Non-blocking nits: there is no automated assertion for the new line (the Worker's browser checks are private harness evidence I did not re-run), and the new CSS marker has no accessible text equivalent, same as the old dot. No live checks claimed.",
-            "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "recorded_at": "2026-10-20T15:01:53+00:00",
-            "issue_scopes": {
-              "838": "cf3992329999eade635234966dc6a7d8224ec279020d8cb4239227bab85df07b"
-            }
-          },
-          "lane": {
-            "id": "fa2d4b5c65e2494a966276ea4ffff2bb",
-            "pr": 842,
-            "issues": [
-              838
-            ],
-            "actor": "Reviewer-R1838V",
-            "session": "reviewer-r1838v-20261020",
-            "coordinator": "Coordinator-M1011A",
-            "started_at": "2026-10-20T14:21:00+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-20T15:03:16+00:00"
-        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
