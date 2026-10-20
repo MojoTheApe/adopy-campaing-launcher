@@ -45674,9 +45674,11 @@
         "worktree": "C:\\acl-1138-remerge",
         "id": "c5d1648443e14ffdb4111088fd46e008",
         "issue": 138,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T13:42:41+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 947,
+        "report": "Merged origin/main (259ae7f1, batch #1034) into work/acl-1138-proxy-gate; pushed 7b5a9e68.\nConflicts: docs/system/PROJECT.md (kept both: ACL-1138 paragraph + main's fb_api entry); src/fb_ads_rpa/profile_trouble.py (kept both NO_PROXY and MLX_NOT_RUNNING constants and messages); src/web/templates/report.html (main's telemetry rule line plus proxy_gate_ in the profile stage rule).\nTests (affected only): test_acl1138_profile_proxy_gate, test_publish_stops_when_multilogin_is_not_running, test_reads_open_a_closed_profile, test_attach_short_path, test_a_covered_profile_window_is_woken, test_review_ui_regressions (111 passed); test_report_loading_stages, test_stage_badge, test_telemetry_says_why, test_run_telemetry (79 passed)."
       }
     },
     "tasks": {
