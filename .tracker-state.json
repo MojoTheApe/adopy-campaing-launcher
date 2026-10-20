@@ -45080,9 +45080,11 @@
         "worktree": "C:\\acl-1768",
         "id": "bd75c8f9bdde4106bf2f36a8262adeb0",
         "issue": 768,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T10:23:55+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 833,
+        "report": "# ACL-1768 handoff (round 3)\n\n- Fixed the last blocker: src/fb_ads_rpa/rpa_publisher.py reads ad_sets via getattr(d, \"ad_sets\", None) or [] so stub drafts without ad_sets work. tests/test_rpa_job_start_is_measured.py + tests/test_acl1768_ad_sets.py: 74 passed locally. Full suite left to CI."
       }
     },
     "tasks": {
