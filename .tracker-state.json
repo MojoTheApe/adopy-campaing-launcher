@@ -44972,7 +44972,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "767": {
+        "actor": "Worker-B1019767",
+        "session": "run_b1019_767",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "codex/acl-1767-audience-cta-devices",
+        "worktree": "C:\\acl-1767",
+        "id": "38ca26ceda3440819ca80f93b1f780c6",
+        "issue": 767,
+        "state": "implementing",
+        "started_at": "2026-10-20T08:46:08+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -49299,9 +49312,13 @@
           {
             "actor": "Worker-B1019767",
             "session": "run_b1019_767"
+          },
+          {
+            "actor": "Worker-B1019767",
+            "session": "run_b1019_767"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-B1019767",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -49325,8 +49342,7 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.577994+00:00",
           "remote_process_stopped_verified": false
-        },
-        "reviewer": "Reviewer-R1767Z"
+        }
       },
       "827": {
         "implementers": [
@@ -97665,6 +97681,13 @@
           "report": "# ACL-1767 / PR #830 - changes requested\n\nReviewer-R1767Z (session reviewer-r1767z-20261020). Head 7a78e2c6c7f58740dfae4801456345060d72c287, base work/main c61501607ce11744e45add8b0d3b314368c216c5 (unchanged), tree d4406316bda06bd5ff4e18a8aaeb1eb8212a7122.\n\nStacking: `git log work/main..HEAD` shows only ACL-1767 commits (e40efbe1, 2d28e0fd, ecd525f2) plus the merge of work/main (7a78e2c6). No other unmerged task's code.\n\n## Blocking\n\n### B1. Required CI is red: `tests/test_distribution_boundary.py::test_requirements_carry_nothing_only_the_rest_of_the_repo_needs`\n- Where: `requirements.txt:64-65` (new `tzdata==2026.3`) vs `tests/test_distribution_boundary.py:187`.\n- Why: the boundary test lists every requirement that the shipping code does not import by name as a stray. `tzdata` is never imported; `zoneinfo` loads it as data. Both `linux tests (3.11, 2)` and `linux tests (3.13, 2)` fail with `assert not ['tzdata']` on the head run 39330906228, and `ACL verification` is red because of them. Reproduced locally (1 failed, 474 passed across the affected files).\n- The dependency itself is right: on Windows `ZoneInfo(name)` without `tzdata` raises `ZoneInfoNotFoundError`, and `CampaignCreator._start_dt` would refuse every start time.\n- Fix: add `\"tzdata\"` to the explicit set on `tests/test_distribution_boundary.py:187`, with a short comment (\"data package loaded by zoneinfo, not imported by name; ACL-1767 start time\"). Keep the requirements line.\n\n### B2. `/build-upload` (Upload FB xlsx) silently drops the new fields\n- Where: `src/web/app.py:5677-5712` (`build_upload`), `src/campaign_bridge/assembly.py:25`, `src/upload_agent/build_upload_excel.py:59,80` (`\"Campaign Start Time\": \"\"`, `\"Gender\": \"all\"`).\n- Why: `_parse_build_upload_form` now puts `gender`, `languages`, `device`, `os_min`, `start_time` and `cta` into the slots, and `/build-upload` builds the xlsx from the same slots without looking at them. A buyer who picks Women, Sign up or a start time and clicks Upload FB gets a file with All genders, Learn more and no start, with no message. The Issue rule is \"never drops a value silently\", and the PR already applies it to `preview_publish` / `publish_jobs_start` (`_api_only_fields_refusal`) and to Instant Form on this very endpoint (`app.py:5682-5688`).\n- Fix: in `build_upload`, after the Instant Form check, refuse when any slot carries a key from `API_ONLY_SLOT_KEYS` (and `os == \"Android\"` if the xlsx cannot express it), with an English message in `upload_errors` like \"Gender, CTA ... cannot be exported to Upload FB; use Publish with the API backend.\" Add a test next to the existing 1775 Upload FB refusal test.\n\n## Non-blocking (can stay)\n- `src/fb_api/write_policy.py` `_check_targeting`: `x in DEVICE_PLATFORMS` / `x in GENDER_VALUES` with an unhashable value (dict/list) raises `TypeError` instead of `WriteRefused`. The write is still blocked, but the message is a traceback. `isinstance(x, str) and x in ...` would make it a clean refusal.\n- PR body says start time uses `timezone_offset_hours_utc`; after ecd525f2 it uses `timezone_name` via zoneinfo. Update the body.\n- PR body says a wrong CTA / `user_os` value is \"a #100 refusal with nothing created\". The campaign is written before the ad set and creative, so a refusal there leaves a PAUSED campaign shell. Worth saying in the 9095 live-check note.\n\n## Checked and fine\nWrite policy parity (Python `write_policy.py` and the page helper in `token_capture.py`): `contextual_multi_ads` only exactly `{\"enroll_status\": \"OPT_OUT\"}` and only at the top level; CTA type from the per-destination list (null CTA refused in both); closed `targeting` key list with value checks for genders, device_platforms, user_os (`iOS_ver_14.0_and_above` form), locales. Nothing beyond the new fields is opened; `targeting` is tightened from open to a closed list that matches exactly what `targeting_for` sends. Objects stay PAUSED; readback covers gender, start_time (compared in UTC), CTA per ad, multi-advertiser per ad. Empty fields add no keys (byte-identical plan test). v2 -> v3 draft migration has a harness test. RPA backend: empty API-only controls disabled with a reason, filled ones refused with 409. No ids or secrets in tests. All Graph calls go through the existing in-profile client. No live checks claimed.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T08:46:08+00:00",
+        "issue": 767,
+        "claim": "38ca26ceda3440819ca80f93b1f780c6",
+        "actor": "Worker-B1019767"
       }
     ],
     "policy": {
