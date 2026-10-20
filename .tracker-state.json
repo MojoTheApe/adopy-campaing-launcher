@@ -45194,20 +45194,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
-      },
-      "841": {
-        "actor": "Worker-L1841",
-        "session": "run_l1_841",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1841-account-table-responsive",
-        "worktree": "C:\\acl-1841-wt",
-        "id": "47d7d49d108844dcb260cb11594dcead",
-        "issue": 841,
-        "state": "handoff",
-        "started_at": "2026-10-20T11:35:40+00:00",
-        "from_status": "status:todo",
-        "pr": 848,
-        "report": "Review fix (ACL-1841, 2026-10-20): the blocking finding is addressed through option 2 - the remaining #841 criteria (toolbar grouping when the ACL-1800 campaign toolbar wraps; country footer/form and builder handle not covering table actions) are explicitly out of this slice and deferred to a follow-up Issue that the coordinator must create/accept; the PR must not close #841. CHANGELOG now states covered vs deferred, the stale \"toolbar absent\" sentence is removed and the whitespace churn is gone. Code and tests unchanged (24 passed at the previous head). Needs: coordinator acceptance of the partial slice + follow-up Issue."
       }
     },
     "tasks": {
@@ -49987,25 +49973,25 @@
             "session": "run_l1_841"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-L1841",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-R1019841",
-          "session": "run_r1019_841",
+          "actor": "Worker-L1841",
+          "session": "run_l1_841",
           "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1841-account-table-responsive",
           "worktree": "C:\\acl-1841-wt",
-          "id": "13c1ca850b834ef5b33e616519c551df",
+          "id": "47d7d49d108844dcb260cb11594dcead",
           "issue": 841,
           "state": "handoff",
-          "started_at": "2026-10-19T20:28:15+00:00",
+          "started_at": "2026-10-20T11:35:40+00:00",
           "from_status": "status:todo",
           "pr": 848,
-          "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main. Conflicts resolved: _account_map_country.html (kept main's ACL-1800 campaigns section above the table and hc-after footer mount below it, outside the scroll region; our scroll wrapper kept around the table only) and CHANGELOG. Added the review's minor request: a test with campaign_table_api true that checks the order (campaigns section, scroller with only the table, footer mount), no page overflow and reachable actions at 1280/1024/768/390 on Home and Manage. Tests are now explicit about scrolling to the end (End key scrolls vertically, which made the 1024 case flaky on the new main layout). tests/test_account_table_responsive.py: 24 collected, 1024 cases re-run green (6 passed); 1280/768/390 passed earlier in the run.\nNOT DONE: review finding 2 (issue #841 criteria for search/filter, expansion, column settings and batch-command grouping, and footer/builder handle not covering actions, in the integrated toolbar). This remains a partial slice (as the CHANGELOG says). Needs the coordinator to accept it as a partial slice with a follow-up Issue, or a separate task for the toolbar grouping; it should not close #841."
+          "report": "Review fix (ACL-1841, 2026-10-20): the blocking finding is addressed through option 2 - the remaining #841 criteria (toolbar grouping when the ACL-1800 campaign toolbar wraps; country footer/form and builder handle not covering table actions) are explicitly out of this slice and deferred to a follow-up Issue that the coordinator must create/accept; the PR must not close #841. CHANGELOG now states covered vs deferred, the stale \"toolbar absent\" sentence is removed and the whitespace churn is gone. Code and tests unchanged (24 passed at the previous head). Needs: coordinator acceptance of the partial slice + follow-up Issue."
         },
         "pr": 848,
-        "queued_at": "2026-10-19T20:29:54+00:00",
+        "queued_at": "2026-10-20T11:38:33+00:00",
         "review_report": "# Returned to the author: merge conflict with main, content not reviewed\n\nPR 848 cannot be brought up to current main c61501607ce11744e45add8b0d3b314368c216c5: `gh pr update-branch` reports a merge conflict (checked 2026-10-19/20). A source review must bind the current main baseline, so this task cannot be reviewed or approved as is.\n\nThe content of this PR was NOT reviewed in this pass; this return carries no code findings.\n\nNext step for the author: merge current main into the original branch, resolve the conflict, run the affected tests, push, and hand off again for a full independent review.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -59260,7 +59246,8 @@
       71,
       309,
       175,
-      845
+      845,
+      841
     ],
     "review": {
       "id": "1ea28d1b292c4ef3baeda760fa52b87b",
@@ -99720,6 +99707,13 @@
         "at": "2026-10-20T11:35:40+00:00",
         "issue": 841,
         "claim": "47d7d49d108844dcb260cb11594dcead",
+        "actor": "Worker-L1841"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T11:38:33+00:00",
+        "issue": 841,
+        "pr": 848,
         "actor": "Worker-L1841"
       }
     ],
