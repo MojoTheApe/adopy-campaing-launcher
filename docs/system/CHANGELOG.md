@@ -1,5 +1,14 @@
 # System history
 
+## ACL-402 — Repeated failures grouped into a report — 2026-10-20
+
+The telemetry summary gains a "Повторяющиеся отказы" section: failures are grouped
+by step and normalised reason, with machines affected out of those reporting,
+incident and run counts, flow versions, period, a confidence level (high/medium/low)
+and the latest examples. It is a report only — no rule is proposed, approved or
+distributed; turning a repeat into a rule remains a manual owner decision.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/53).
+
 ## ACL-1381 — Consistent Builder ad-text wording — 2026-10-18
 
 Complete the older text-label request while preserving ACL-1769's later numbered
