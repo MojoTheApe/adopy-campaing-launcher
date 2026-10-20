@@ -44858,20 +44858,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T06:37:45+00:00",
         "from_status": "status:backlog"
-      },
-      "990": {
-        "actor": "Worker-RH2020W",
-        "session": "rh2020w-20261020",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1990-preflight-topics",
-        "worktree": "C:\\rh20-990",
-        "id": "656badbcc9fc4fb7aa5fc5775a53af3c",
-        "issue": 990,
-        "state": "handoff",
-        "started_at": "2026-10-20T06:58:50+00:00",
-        "from_status": "status:todo",
-        "pr": 991,
-        "report": "Re-handoff without code change. The 2026-10-20 return ('merge conflict with main, content not reviewed') was a false positive: head b7489b55 already contains current main c6150160 and merges cleanly (git merge-tree). Content needs a full independent review."
       }
     },
     "tasks": {
@@ -52692,25 +52678,25 @@
             "session": "rh2020w-20261020"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RH2020W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-R1019990",
-          "session": "run_r1019_990",
+          "actor": "Worker-RH2020W",
+          "session": "rh2020w-20261020",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1990-preflight-topics",
-          "worktree": "C:\\acl-1990-preflight-topics",
-          "id": "502d6b12f7014fea8fef14fe7251d600",
+          "worktree": "C:\\rh20-990",
+          "id": "656badbcc9fc4fb7aa5fc5775a53af3c",
           "issue": 990,
           "state": "handoff",
-          "started_at": "2026-10-19T19:55:13+00:00",
+          "started_at": "2026-10-20T06:58:50+00:00",
           "from_status": "status:todo",
           "pr": 991,
-          "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main into the branch; conflicts only in docs/system/CHANGELOG.md (kept both entries). Re-ran the touched tests: test_acl1819_preflight 86 passed, test_acl1819_preflight_browser 5 passed (branch first fast-forwarded to work/ branch tip 0257ddb0). No functional change beyond the merge; no live runs."
+          "report": "Re-handoff without code change. The 2026-10-20 return ('merge conflict with main, content not reviewed') was a false positive: head b7489b55 already contains current main c6150160 and merges cleanly (git merge-tree). Content needs a full independent review."
         },
         "pr": 991,
-        "queued_at": "2026-10-19T19:57:25+00:00",
+        "queued_at": "2026-10-20T07:00:21+00:00",
         "review_report": "# Returned to the author: merge conflict with main, content not reviewed\n\nPR 991 cannot be brought up to current main c61501607ce11744e45add8b0d3b314368c216c5: `gh pr update-branch` reports a merge conflict (checked 2026-10-19/20). A source review must bind the current main baseline, so this task cannot be reviewed or approved as is.\n\nThe content of this PR was NOT reviewed in this pass; this return carries no code findings.\n\nNext step for the author: merge current main into the original branch, resolve the conflict, run the affected tests, push, and hand off again for a full independent review."
       },
       "992": {
@@ -58551,7 +58537,8 @@
       771,
       891,
       805,
-      920
+      920,
+      990
     ],
     "review": null,
     "history": [
@@ -96871,6 +96858,13 @@
         "at": "2026-10-20T06:58:50+00:00",
         "issue": 990,
         "claim": "656badbcc9fc4fb7aa5fc5775a53af3c",
+        "actor": "Worker-RH2020W"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T07:00:21+00:00",
+        "issue": 990,
+        "pr": 991,
         "actor": "Worker-RH2020W"
       }
     ],
