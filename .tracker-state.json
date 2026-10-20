@@ -51825,7 +51825,7 @@
             "session": "claude-w1855b-20261019"
           }
         ],
-        "state": "approved",
+        "state": "returning_approval",
         "worker": "Worker-W1855B",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -51850,7 +51850,19 @@
           "at": "2026-10-17T16:30:39.578041+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-R1855X"
+        "reviewer": "Reviewer-R1855X",
+        "return_operation": {
+          "id": "4a9eb5a450174e5e94593efb3f921734",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "report": "Main moved to 259ae7f1 (batch #1034: ACL-602, 1202, 1680, 1401, 341). Pure refresh: merge current main (merge commit), re-run affected tests, re-handoff, fresh independent review. Independent trial merge already shows it merges cleanly and its tests pass on the merged tree."
+        },
+        "return": {
+          "id": "4a9eb5a450174e5e94593efb3f921734",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "report": "Main moved to 259ae7f1 (batch #1034: ACL-602, 1202, 1680, 1401, 341). Pure refresh: merge current main (merge commit), re-run affected tests, re-handoff, fresh independent review. Independent trial merge already shows it merges cleanly and its tests pass on the merged tree."
+        }
       },
       "309": {
         "implementers": [
