@@ -46131,20 +46131,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T12:56:11+00:00",
         "from_status": "status:todo"
-      },
-      "880": {
-        "actor": "Worker-1880E",
-        "session": "w1880e-20261020",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1880-page-selection",
-        "worktree": "C:\\acl-1880-clean",
-        "id": "a19c4bc78bb74d62ad689e3d15a5686f",
-        "issue": 880,
-        "state": "handoff",
-        "started_at": "2026-10-20T17:41:53+00:00",
-        "from_status": "status:todo",
-        "pr": 1044,
-        "report": "Returned by independent review: /build-upload silently dropped an explicitly chosen Page. Fixed in ec2a527d: /build-upload refuses when any slot has an explicit page_id (same as Instant Forms on this path), visible English error; Automatic still builds. Two new tests in tests/test_web_build_upload.py. Branch already contains current main. Affected tests: 302 passed. Source CI on ec2a527d green (linux 1-3, windows, installer, ACL verification)."
       }
     },
     "tasks": {
@@ -51593,22 +51579,22 @@
             "session": "w1880e-20261020"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-1880E",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-1880D",
-          "session": "w1880d-20261020",
+          "actor": "Worker-1880E",
+          "session": "w1880e-20261020",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1880-page-selection",
           "worktree": "C:\\acl-1880-clean",
-          "id": "530e9116e0534cafa0f9aaa5b0773acb",
+          "id": "a19c4bc78bb74d62ad689e3d15a5686f",
           "issue": 880,
           "state": "handoff",
-          "started_at": "2026-10-20T17:11:59+00:00",
+          "started_at": "2026-10-20T17:41:53+00:00",
           "from_status": "status:todo",
           "pr": 1044,
-          "report": "Returned by independent review (CI failures + stale main). Fixed in 654a5d48: GUIDE entry and cb-build-model mapping for page_identity, getattr for page_provided/page_id in rpa_publisher, duplicate test expectation (page_id intentionally not copied), null-guard for row.closest(.cb-slot) in report.html. Merged current main 259ae7f1. Source CI on head 89dc6c56: all Linux/Windows test shards, ACL verification and Installer verification green."
+          "report": "Returned by independent review: /build-upload silently dropped an explicitly chosen Page. Fixed in ec2a527d: /build-upload refuses when any slot has an explicit page_id (same as Instant Forms on this path), visible English error; Automatic still builds. Two new tests in tests/test_web_build_upload.py. Branch already contains current main. Affected tests: 302 passed. Source CI on ec2a527d green (linux 1-3, windows, installer, ACL verification)."
         },
         "review_report": "# Return: PR #1044 (ACL-1880) \u2014 independent review by Reviewer-R1880W\n\nHead 89dc6c5674aef838589db9b022c7d959f8055b4a, base main 259ae7f1283a0a0acab40354b6b97d55162c91b5 (verified via ls-remote), tree ab369ee14dbe3691008665c7e5bd1f331c37028c. Implementer: Worker-1880D.\n\n## Blocking\n\n1. **An explicit Facebook Page is silently dropped by the `/build-upload` (Upload FB xlsx) export.**\n   - `src/web/app.py:2289-2290` now puts `page_id` into every builder slot, and the same parser feeds `build_upload` (`src/web/app.py:5676`).\n   - `build_upload` refuses only Instant Forms (`src/web/app.py:5681-5687`). It then calls `assemble_from_form_slots` \u2192 `slot_to_plan_row` (`src/campaign_bridge/open_rec_mapper.py:73`), which never reads `page_id`. The xlsx template's `Link Object ID` (`src/upload_agent/build_upload_excel.py:73`) stays empty.\n   - Result: a buyer picks a specific Page, clicks the builder's export, and gets a file without that Page and without any warning. This breaks the \"never drop a user's value silently (incl. /build-upload export)\" rule.\n   - Fix (either option, plus a test in `tests/test_acl1880_page_selection.py`):\n     - (a) Mirror the Instant Forms refusal. If any slot has a non-empty `page_id`, return `upload_errors` with an English message such as \"A specific Facebook Page cannot be exported to Upload FB; choose Automatic or use Publish.\"\n     - (b) Carry the slot `page_id` into `Link Object ID` in the format Meta bulk import expects, and test the written cell.\n   - Automatic (empty `page_id`) can keep exporting as today.\n\n## Non-blocking observations\n\n- The RPA path deliberately leaves Identity untouched for Automatic (672db9f2). The builder note still says \"Automatic: <first Page> (<id>)\" for both backends. On RPA, Ads Manager's own default Identity may differ from that Page. Consider wording the note per backend, or saying the RPA backend uses the Ads Manager default.\n- Live verification of the custom Identity picker has not been done (stated in PR/docs); offline coverage is adequate and unknown layouts fail closed.\n\n## Verified OK\n\n- Explicit choice never writes the account map. With `page_provided` the map fallback is skipped (`enrich_draft.py`), and duplicates reset `page_id` (`SKIP_FIELDS`).\n- Graph reads use only the existing read-only `_session` under `serialized_browser(reading=True)`, with an `allow_writes` assertion. There is no new client and no polling. The 12 h cache stores only ready/empty results, `force=1` bypasses it, and render is cache-only.\n- On RPA, an explicit Page is re-read before creation, checked against the account, and verified on every ad (first ad and the extra-ads loop). `page_identity` is BLOCKING, non-retryable and in the flow-stop list. Non-recorded engines are refused.\n- In the API manual-completion shell, the campaign and ad sets are created PAUSED and no ads are created. It reports `manual_required` and `publishable=false`, and the UI shows it as a warning. Instant Forms still require a Page.\n- Affected tests: 126 passed, 1 failed. The failure is `test_account_pages_endpoint_cached_flag` (Starlette TestClient `app=` TypeError), which is an old-env problem and passes in CI. CI is all green on the head, tracker-link included.\n\n## Stacking / overlap\n\n`git log work/main..HEAD` contains only ACL-1880 commits (6273e735, 9be96c29, b74461e9, 672db9f2, 654a5d48 and main merges). Nothing from ACL-1897 is stacked. PR #1025 is still OPEN, not merged. `git merge-tree` of the head with #1025 (5ee9d332) conflicts in `src/fb_api/creator.py` and `tests/test_acl1819_preflight.py`; `page_forms.py` auto-merges. Both sides implement \"Automatic takes the first Page\", so the conflict is textual. Whichever PR lands second must be rebased.\n\nNo live checks claimed.",
         "administrative_pause": {
@@ -51617,7 +51603,7 @@
           "remote_process_stopped_verified": false
         },
         "pr": 1044,
-        "queued_at": "2026-10-20T17:14:57+00:00"
+        "queued_at": "2026-10-20T18:07:16+00:00"
       },
       "886": {
         "implementers": [
@@ -60605,7 +60591,9 @@
         "started_at": "2026-10-20T11:08:46+00:00"
       }
     },
-    "review_queue": [],
+    "review_queue": [
+      880
+    ],
     "review": null,
     "history": [
       {
@@ -103378,6 +103366,13 @@
         "at": "2026-10-20T17:41:53+00:00",
         "issue": 880,
         "claim": "a19c4bc78bb74d62ad689e3d15a5686f",
+        "actor": "Worker-1880E"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T18:07:16+00:00",
+        "issue": 880,
+        "pr": 1044,
         "actor": "Worker-1880E"
       }
     ],
