@@ -45224,9 +45224,11 @@
         "worktree": "C:\\acl-1838-w",
         "id": "34a1f79b60f64615acff75608efa1c9e",
         "issue": 838,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T12:07:42+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 842,
+        "report": "ACL-1838 resumed (Worker-T1020838). Block was stale (owner pause for the five-review Flow activation is over). Merged current work/main into codex/acl-1838-country-active-line; only conflict docs/system/PROJECT.md, both entries kept (read-only Opus review: lossless, no findings). Diff vs main unchanged: 3 files (report.html 2px accent line, PROJECT.md, CHANGELOG.md). Tests: tests/test_manage_behavior.py + tests/test_the_builder_tree.py 15 passed. The design prototype in C:\\acl-design\\inbox does not define an activity marker, so the owner's option 3 in the Issue governs. PR #866 (batch into stage) is the old route and should be closed in favour of #842 into main. Branch contains current work/main."
       },
       "1038": {
         "actor": "Worker-L31038",
