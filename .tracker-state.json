@@ -54796,7 +54796,7 @@
             "session": "mlx61-20261020"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-MLX61",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -54815,7 +54815,8 @@
         },
         "pr": 1042,
         "queued_at": "2026-10-20T17:31:09+00:00",
-        "review_report": "# Review return \u2014 PR #1042 ACL-2040 (Issue #1040), head a00c496a\n\nReviewer-SR1020, session sr1020-20261020. Reviewed against main 259ae7f1.\n\n## Blocking\n\n1. Source does not contain current main: the PR's merge base is c6150160, 25 commits behind main 259ae7f1. The tracker requires the current main baseline for source approval (record-review dry run at this head answered \"Source review must use the current main baseline\"), so it cannot be approved as is. A trial `git merge-tree 259ae7f1 a00c496a` is conflict-free. Merge current main, let source CI finish, and hand off again.\n\n## Code review \u2014 no defects found\n\n- src/meta_campaign_agent/multilogin_launcher.py `stop_profile`: main address `v1/profile/stop/p/{id}` asked up to 3 times, 2 s apart, on a dropped request (non-timeout exception) or a 5xx that is not \"already stopped\"; `requests.Timeout` (read and connect timeout) is not retried; then the legacy addresses; 404 on main still falls through; other 4xx stop at once; the raised error names the main-address failure (\"(main address) \u2026; older addresses: \u2026\").\n- tests/test_the_api_stop_is_asked_first.py and all tests calling `stop_profile`: 482 passed locally at head.\n- LOW (optional): CHANGELOG says \"A read timeout is not retried\"; the code also does not retry a connect timeout (`ConnectTimeout` is a `Timeout`). Consider wording \"a timeout\"."
+        "review_report": "# Review return \u2014 PR #1042 ACL-2040 (Issue #1040), head a00c496a\n\nReviewer-SR1020, session sr1020-20261020. Reviewed against main 259ae7f1.\n\n## Blocking\n\n1. Source does not contain current main: the PR's merge base is c6150160, 25 commits behind main 259ae7f1. The tracker requires the current main baseline for source approval (record-review dry run at this head answered \"Source review must use the current main baseline\"), so it cannot be approved as is. A trial `git merge-tree 259ae7f1 a00c496a` is conflict-free. Merge current main, let source CI finish, and hand off again.\n\n## Code review \u2014 no defects found\n\n- src/meta_campaign_agent/multilogin_launcher.py `stop_profile`: main address `v1/profile/stop/p/{id}` asked up to 3 times, 2 s apart, on a dropped request (non-timeout exception) or a 5xx that is not \"already stopped\"; `requests.Timeout` (read and connect timeout) is not retried; then the legacy addresses; 404 on main still falls through; other 4xx stop at once; the raised error names the main-address failure (\"(main address) \u2026; older addresses: \u2026\").\n- tests/test_the_api_stop_is_asked_first.py and all tests calling `stop_profile`: 482 passed locally at head.\n- LOW (optional): CHANGELOG says \"A read timeout is not retried\"; the code also does not retry a connect timeout (`ConnectTimeout` is a `Timeout`). Consider wording \"a timeout\".",
+        "reviewer": "Reviewer-R2040W"
       },
       "1039": {
         "implementers": [
@@ -57676,6 +57677,10 @@
       },
       "Reviewer-R1880W": {
         "session": "reviewer-r1880w-20261020",
+        "role": "Reviewer"
+      },
+      "Reviewer-R2040W": {
+        "session": "reviewer-r2040w-20261020",
         "role": "Reviewer"
       }
     },
@@ -60558,9 +60563,7 @@
         "started_at": "2026-10-20T11:08:46+00:00"
       }
     },
-    "review_queue": [
-      1040
-    ],
+    "review_queue": [],
     "review": null,
     "history": [
       {
@@ -103258,6 +103261,13 @@
           "report": "# Return: PR #1044 (ACL-1880) \u2014 independent review by Reviewer-R1880W\n\nHead 89dc6c5674aef838589db9b022c7d959f8055b4a, base main 259ae7f1283a0a0acab40354b6b97d55162c91b5 (verified via ls-remote), tree ab369ee14dbe3691008665c7e5bd1f331c37028c. Implementer: Worker-1880D.\n\n## Blocking\n\n1. **An explicit Facebook Page is silently dropped by the `/build-upload` (Upload FB xlsx) export.**\n   - `src/web/app.py:2289-2290` now puts `page_id` into every builder slot, and the same parser feeds `build_upload` (`src/web/app.py:5676`).\n   - `build_upload` refuses only Instant Forms (`src/web/app.py:5681-5687`). It then calls `assemble_from_form_slots` \u2192 `slot_to_plan_row` (`src/campaign_bridge/open_rec_mapper.py:73`), which never reads `page_id`. The xlsx template's `Link Object ID` (`src/upload_agent/build_upload_excel.py:73`) stays empty.\n   - Result: a buyer picks a specific Page, clicks the builder's export, and gets a file without that Page and without any warning. This breaks the \"never drop a user's value silently (incl. /build-upload export)\" rule.\n   - Fix (either option, plus a test in `tests/test_acl1880_page_selection.py`):\n     - (a) Mirror the Instant Forms refusal. If any slot has a non-empty `page_id`, return `upload_errors` with an English message such as \"A specific Facebook Page cannot be exported to Upload FB; choose Automatic or use Publish.\"\n     - (b) Carry the slot `page_id` into `Link Object ID` in the format Meta bulk import expects, and test the written cell.\n   - Automatic (empty `page_id`) can keep exporting as today.\n\n## Non-blocking observations\n\n- The RPA path deliberately leaves Identity untouched for Automatic (672db9f2). The builder note still says \"Automatic: <first Page> (<id>)\" for both backends. On RPA, Ads Manager's own default Identity may differ from that Page. Consider wording the note per backend, or saying the RPA backend uses the Ads Manager default.\n- Live verification of the custom Identity picker has not been done (stated in PR/docs); offline coverage is adequate and unknown layouts fail closed.\n\n## Verified OK\n\n- Explicit choice never writes the account map. With `page_provided` the map fallback is skipped (`enrich_draft.py`), and duplicates reset `page_id` (`SKIP_FIELDS`).\n- Graph reads use only the existing read-only `_session` under `serialized_browser(reading=True)`, with an `allow_writes` assertion. There is no new client and no polling. The 12 h cache stores only ready/empty results, `force=1` bypasses it, and render is cache-only.\n- On RPA, an explicit Page is re-read before creation, checked against the account, and verified on every ad (first ad and the extra-ads loop). `page_identity` is BLOCKING, non-retryable and in the flow-stop list. Non-recorded engines are refused.\n- In the API manual-completion shell, the campaign and ad sets are created PAUSED and no ads are created. It reports `manual_required` and `publishable=false`, and the UI shows it as a warning. Instant Forms still require a Page.\n- Affected tests: 126 passed, 1 failed. The failure is `test_account_pages_endpoint_cached_flag` (Starlette TestClient `app=` TypeError), which is an old-env problem and passes in CI. CI is all green on the head, tracker-link included.\n\n## Stacking / overlap\n\n`git log work/main..HEAD` contains only ACL-1880 commits (6273e735, 9be96c29, b74461e9, 672db9f2, 654a5d48 and main merges). Nothing from ACL-1897 is stacked. PR #1025 is still OPEN, not merged. `git merge-tree` of the head with #1025 (5ee9d332) conflicts in `src/fb_api/creator.py` and `tests/test_acl1819_preflight.py`; `page_forms.py` auto-merges. Both sides implement \"Automatic takes the first Page\", so the conflict is textual. Whichever PR lands second must be rebased.\n\nNo live checks claimed.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-20T17:32:39+00:00",
+        "pr": 1042,
+        "lane": "5cf4308285d54daf87f25650280be074",
+        "actor": "Reviewer-R2040W"
       }
     ],
     "policy": {
@@ -112676,6 +112686,18 @@
         "session": "review_389daa0fe6cff6b3e53c56eee4bdd46509f80512",
         "coordinator": "Coordinator-ACT174",
         "started_at": "2026-10-20T08:55:10+00:00",
+        "state": "reviewing"
+      },
+      "1042": {
+        "id": "5cf4308285d54daf87f25650280be074",
+        "pr": 1042,
+        "issues": [
+          1040
+        ],
+        "actor": "Reviewer-R2040W",
+        "session": "reviewer-r2040w-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-20T17:32:39+00:00",
         "state": "reviewing"
       }
     },
