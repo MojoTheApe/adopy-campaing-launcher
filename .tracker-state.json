@@ -52989,7 +52989,7 @@
             "session": "run_l1_990"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-L1990",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -98741,6 +98741,68 @@
         "pr": 833,
         "lane": "3259dd747cd94624b37651935b453a9a",
         "actor": "Reviewer-Q2001D"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-20T10:39:16+00:00",
+        "issue": 990,
+        "pr": 991,
+        "review": {
+          "id": "8d8bbcf0f2774ed1a13965e1f613d52e",
+          "pr": 991,
+          "issues": [
+            990
+          ],
+          "actor": "Reviewer-R1990Y",
+          "session": "reviewer-r1990y-20261020",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-20T10:11:58+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 990,
+            "pr": 991,
+            "branch": "work/acl-1990-preflight-topics",
+            "head_sha": "c54d8d621ecc8ae15cac4a1dc74b4d4af53319c0",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "eac9ad3e214ca27ffa21f78946d4a1956e204185322655f0a99b8e9fa36cfc00",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-R1990Y",
+              "review_session": "reviewer-r1990y-20261020",
+              "execution_lane": "8d8bbcf0f2774ed1a13965e1f613d52e",
+              "implementer": "Worker-L1990",
+              "head_sha": "c54d8d621ecc8ae15cac4a1dc74b4d4af53319c0",
+              "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "tree_sha": "d9f8e7ed3ba05c3ebeb7d60f7b9f71a8bf43ae06",
+              "issues": [
+                990
+              ],
+              "report": "Independent review of PR #991 (ACL-1990) at head c54d8d621ecc8ae15cac4a1dc74b4d4af53319c0 on base c61501607ce11744e45add8b0d3b314368c216c5. The branch is not stacked on any other unmerged task: git log work/main..HEAD shows only the task's own commits plus two merges of main (the conflict resolution kept main's changes; the regenerated preflight_rules.json carries the topics of the rules main added, and the CHANGELOG diff is limited to +19 lines for the new entry). What changes: every pre-flight rule gets a topic (TOPICS/_TOPIC_OF in preflight_rules.py, exported to the page and to preflight_rules.json, with a fallback to the Meta topic for a rule without one); the audit card in report.html renders seven topics with the worst status winning (error > warning > not checked > ok), opens topics with errors, warnings or a retry by itself, keeps click-to-field on checks, moves the control into the card header as 'Check with Meta' with elapsed time, a 30 s to 3 min hint, 'Checked with Meta at HH:MM' and 'Edited since the check' states, and renames the drawer-foot button. check_plan now tags results with error_kind: 'account' (inactive or unavailable ad account, still an error that blocks), 'plan' (draft build failure or no campaigns, still blocks) and 'not_checked' (any other read-session failure); the page shows not_checked as 'Could not check' with Retry, status unknown, which the Publish gate (errors only) does not count, while an error without a kind or a client-side error still blocks. The busy display remap is screen-only and the gate reads the unmapped lines; an error inside a topic is never hidden because such topics open by themselves. No write is retried: Retry is a manual click on a dry-run read check. Acceptance criteria: topics instead of 20 rows and auto-open on error - met (test_topics_take_the_worst_status_of_their_checks, browser tests); whole-session failure gives a not-checked Meta plan check with Retry and Publish stays on - met (test_a_check_that_could_not_run_is_not_checked_and_does_not_block, test_check_plan_marks_a_failed_read_session_as_not_checked for connection reset, CDP timeout and profile busy); inactive ad account still blocks - met (test_check_plan_kinds_for_the_account_and_a_broken_draft); Python/JS rules parity and updated tests - met; the HTML prototype criterion was handled by the author outside the diff and I did not re-verify it. Tests run locally with the fb_agents venv from the review worktree: test_acl1819_preflight.py, test_acl1819_preflight_browser.py, test_acl1797_design_system.py and test_acl1769_two_column_layout.py: 126 passed in 441 s (the earlier design-token failure on .cbd-pf-sign is fixed with var(--adopy-text-xs)). CI on the head: ACL verification, linux tests (1, 2, 3), windows tests, installer verification, descriptor, classify and process-instruction checks all pass; the installer build jobs are skipped; only tracker-link fails and is reported separately. Non-blocking nits: check_plan marks any non-account exception as not_checked even if it happens after some campaigns were checked, dropping partial results (acceptable, the Publish job meets the same cause); a future rule missing from _TOPIC_OF silently lands in the Meta topic; test_under_api_the_check_button_loads... is flaky about 1 in 4 per the author (passed in my run). No live checks claimed.",
+              "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "recorded_at": "2026-10-20T10:32:30+00:00",
+              "issue_scopes": {
+                "990": "eac9ad3e214ca27ffa21f78946d4a1956e204185322655f0a99b8e9fa36cfc00"
+              }
+            },
+            "lane": {
+              "id": "8d8bbcf0f2774ed1a13965e1f613d52e",
+              "pr": 991,
+              "issues": [
+                990
+              ],
+              "actor": "Reviewer-R1990Y",
+              "session": "reviewer-r1990y-20261020",
+              "coordinator": "Coordinator-M1011A",
+              "started_at": "2026-10-20T10:11:58+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-20T10:34:07+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -102262,6 +102324,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-20T10:09:06+00:00"
+      },
+      "990": {
+        "issue": 990,
+        "pr": 991,
+        "branch": "work/acl-1990-preflight-topics",
+        "head_sha": "c54d8d621ecc8ae15cac4a1dc74b4d4af53319c0",
+        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "eac9ad3e214ca27ffa21f78946d4a1956e204185322655f0a99b8e9fa36cfc00",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-R1990Y",
+          "review_session": "reviewer-r1990y-20261020",
+          "execution_lane": "8d8bbcf0f2774ed1a13965e1f613d52e",
+          "implementer": "Worker-L1990",
+          "head_sha": "c54d8d621ecc8ae15cac4a1dc74b4d4af53319c0",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "tree_sha": "d9f8e7ed3ba05c3ebeb7d60f7b9f71a8bf43ae06",
+          "issues": [
+            990
+          ],
+          "report": "Independent review of PR #991 (ACL-1990) at head c54d8d621ecc8ae15cac4a1dc74b4d4af53319c0 on base c61501607ce11744e45add8b0d3b314368c216c5. The branch is not stacked on any other unmerged task: git log work/main..HEAD shows only the task's own commits plus two merges of main (the conflict resolution kept main's changes; the regenerated preflight_rules.json carries the topics of the rules main added, and the CHANGELOG diff is limited to +19 lines for the new entry). What changes: every pre-flight rule gets a topic (TOPICS/_TOPIC_OF in preflight_rules.py, exported to the page and to preflight_rules.json, with a fallback to the Meta topic for a rule without one); the audit card in report.html renders seven topics with the worst status winning (error > warning > not checked > ok), opens topics with errors, warnings or a retry by itself, keeps click-to-field on checks, moves the control into the card header as 'Check with Meta' with elapsed time, a 30 s to 3 min hint, 'Checked with Meta at HH:MM' and 'Edited since the check' states, and renames the drawer-foot button. check_plan now tags results with error_kind: 'account' (inactive or unavailable ad account, still an error that blocks), 'plan' (draft build failure or no campaigns, still blocks) and 'not_checked' (any other read-session failure); the page shows not_checked as 'Could not check' with Retry, status unknown, which the Publish gate (errors only) does not count, while an error without a kind or a client-side error still blocks. The busy display remap is screen-only and the gate reads the unmapped lines; an error inside a topic is never hidden because such topics open by themselves. No write is retried: Retry is a manual click on a dry-run read check. Acceptance criteria: topics instead of 20 rows and auto-open on error - met (test_topics_take_the_worst_status_of_their_checks, browser tests); whole-session failure gives a not-checked Meta plan check with Retry and Publish stays on - met (test_a_check_that_could_not_run_is_not_checked_and_does_not_block, test_check_plan_marks_a_failed_read_session_as_not_checked for connection reset, CDP timeout and profile busy); inactive ad account still blocks - met (test_check_plan_kinds_for_the_account_and_a_broken_draft); Python/JS rules parity and updated tests - met; the HTML prototype criterion was handled by the author outside the diff and I did not re-verify it. Tests run locally with the fb_agents venv from the review worktree: test_acl1819_preflight.py, test_acl1819_preflight_browser.py, test_acl1797_design_system.py and test_acl1769_two_column_layout.py: 126 passed in 441 s (the earlier design-token failure on .cbd-pf-sign is fixed with var(--adopy-text-xs)). CI on the head: ACL verification, linux tests (1, 2, 3), windows tests, installer verification, descriptor, classify and process-instruction checks all pass; the installer build jobs are skipped; only tracker-link fails and is reported separately. Non-blocking nits: check_plan marks any non-account exception as not_checked even if it happens after some campaigns were checked, dropping partial results (acceptable, the Publish job meets the same cause); a future rule missing from _TOPIC_OF silently lands in the Meta topic; test_under_api_the_check_button_loads... is flaky about 1 in 4 per the author (passed in my run). No live checks claimed.",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "recorded_at": "2026-10-20T10:32:30+00:00",
+          "issue_scopes": {
+            "990": "eac9ad3e214ca27ffa21f78946d4a1956e204185322655f0a99b8e9fa36cfc00"
+          }
+        },
+        "lane": {
+          "id": "8d8bbcf0f2774ed1a13965e1f613d52e",
+          "pr": 991,
+          "issues": [
+            990
+          ],
+          "actor": "Reviewer-R1990Y",
+          "session": "reviewer-r1990y-20261020",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-20T10:11:58+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-20T10:34:07+00:00"
       }
     },
     "batches": {
@@ -106998,62 +107104,6 @@
         "coordinator": "Coordinator-ACT174",
         "started_at": "2026-10-20T08:55:10+00:00",
         "state": "reviewing"
-      },
-      "991": {
-        "id": "8d8bbcf0f2774ed1a13965e1f613d52e",
-        "pr": 991,
-        "issues": [
-          990
-        ],
-        "actor": "Reviewer-R1990Y",
-        "session": "reviewer-r1990y-20261020",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-20T10:11:58+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 990,
-          "pr": 991,
-          "branch": "work/acl-1990-preflight-topics",
-          "head_sha": "c54d8d621ecc8ae15cac4a1dc74b4d4af53319c0",
-          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "eac9ad3e214ca27ffa21f78946d4a1956e204185322655f0a99b8e9fa36cfc00",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-R1990Y",
-            "review_session": "reviewer-r1990y-20261020",
-            "execution_lane": "8d8bbcf0f2774ed1a13965e1f613d52e",
-            "implementer": "Worker-L1990",
-            "head_sha": "c54d8d621ecc8ae15cac4a1dc74b4d4af53319c0",
-            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-            "tree_sha": "d9f8e7ed3ba05c3ebeb7d60f7b9f71a8bf43ae06",
-            "issues": [
-              990
-            ],
-            "report": "Independent review of PR #991 (ACL-1990) at head c54d8d621ecc8ae15cac4a1dc74b4d4af53319c0 on base c61501607ce11744e45add8b0d3b314368c216c5. The branch is not stacked on any other unmerged task: git log work/main..HEAD shows only the task's own commits plus two merges of main (the conflict resolution kept main's changes; the regenerated preflight_rules.json carries the topics of the rules main added, and the CHANGELOG diff is limited to +19 lines for the new entry). What changes: every pre-flight rule gets a topic (TOPICS/_TOPIC_OF in preflight_rules.py, exported to the page and to preflight_rules.json, with a fallback to the Meta topic for a rule without one); the audit card in report.html renders seven topics with the worst status winning (error > warning > not checked > ok), opens topics with errors, warnings or a retry by itself, keeps click-to-field on checks, moves the control into the card header as 'Check with Meta' with elapsed time, a 30 s to 3 min hint, 'Checked with Meta at HH:MM' and 'Edited since the check' states, and renames the drawer-foot button. check_plan now tags results with error_kind: 'account' (inactive or unavailable ad account, still an error that blocks), 'plan' (draft build failure or no campaigns, still blocks) and 'not_checked' (any other read-session failure); the page shows not_checked as 'Could not check' with Retry, status unknown, which the Publish gate (errors only) does not count, while an error without a kind or a client-side error still blocks. The busy display remap is screen-only and the gate reads the unmapped lines; an error inside a topic is never hidden because such topics open by themselves. No write is retried: Retry is a manual click on a dry-run read check. Acceptance criteria: topics instead of 20 rows and auto-open on error - met (test_topics_take_the_worst_status_of_their_checks, browser tests); whole-session failure gives a not-checked Meta plan check with Retry and Publish stays on - met (test_a_check_that_could_not_run_is_not_checked_and_does_not_block, test_check_plan_marks_a_failed_read_session_as_not_checked for connection reset, CDP timeout and profile busy); inactive ad account still blocks - met (test_check_plan_kinds_for_the_account_and_a_broken_draft); Python/JS rules parity and updated tests - met; the HTML prototype criterion was handled by the author outside the diff and I did not re-verify it. Tests run locally with the fb_agents venv from the review worktree: test_acl1819_preflight.py, test_acl1819_preflight_browser.py, test_acl1797_design_system.py and test_acl1769_two_column_layout.py: 126 passed in 441 s (the earlier design-token failure on .cbd-pf-sign is fixed with var(--adopy-text-xs)). CI on the head: ACL verification, linux tests (1, 2, 3), windows tests, installer verification, descriptor, classify and process-instruction checks all pass; the installer build jobs are skipped; only tracker-link fails and is reported separately. Non-blocking nits: check_plan marks any non-account exception as not_checked even if it happens after some campaigns were checked, dropping partial results (acceptable, the Publish job meets the same cause); a future rule missing from _TOPIC_OF silently lands in the Meta topic; test_under_api_the_check_button_loads... is flaky about 1 in 4 per the author (passed in my run). No live checks claimed.",
-            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "recorded_at": "2026-10-20T10:32:30+00:00",
-            "issue_scopes": {
-              "990": "eac9ad3e214ca27ffa21f78946d4a1956e204185322655f0a99b8e9fa36cfc00"
-            }
-          },
-          "lane": {
-            "id": "8d8bbcf0f2774ed1a13965e1f613d52e",
-            "pr": 991,
-            "issues": [
-              990
-            ],
-            "actor": "Reviewer-R1990Y",
-            "session": "reviewer-r1990y-20261020",
-            "coordinator": "Coordinator-M1011A",
-            "started_at": "2026-10-20T10:11:58+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-20T10:34:07+00:00"
-        }
       },
       "833": {
         "id": "3259dd747cd94624b37651935b453a9a",
