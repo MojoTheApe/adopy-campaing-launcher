@@ -102953,6 +102953,31 @@
         "pr": 929,
         "lane": "8fd7cbd65e5d402e8d7ca41fda960659",
         "actor": "Reviewer-R1309U"
+      },
+      {
+        "event": "intake-cancelled",
+        "at": "2026-10-20T15:21:35+00:00",
+        "intake": {
+          "id": "5d3c52259f7b47419544ec1a3e3214fc",
+          "actor": "Coordinator-I1020A",
+          "session": "9fea0133-b18f-4277-a1b8-225a9a665b61",
+          "state": "cancelled",
+          "issues": [
+            771
+          ],
+          "remaining": [
+            771
+          ],
+          "batches": [],
+          "started_at": "2026-10-20T15:19:18+00:00",
+          "ineligible": {
+            "529": "#529: source approval is stale for its PR, main or policy",
+            "739": "#739: source approval is stale for its PR, main or policy",
+            "767": "#767: source approval is stale for its PR, main or policy",
+            "827": "#827: source approval is stale for its PR, main or policy"
+          },
+          "report": "Withdrawing duplicate intake 5d3c52259f7b47419544ec1a3e3214fc (only ACL-1771 eligible). The owner-requested integration of the Approved queue is already being prepared by Coordinator-M1011A, which is refreshing approvals onto main 259ae7f1. No batch was begun; nothing was assembled or merged."
+        }
       }
     ],
     "policy": {
@@ -112241,7 +112266,7 @@
       "id": "5d3c52259f7b47419544ec1a3e3214fc",
       "actor": "Coordinator-I1020A",
       "session": "9fea0133-b18f-4277-a1b8-225a9a665b61",
-      "state": "running",
+      "state": "cancelled",
       "issues": [
         771
       ],
@@ -112255,7 +112280,8 @@
         "739": "#739: source approval is stale for its PR, main or policy",
         "767": "#767: source approval is stale for its PR, main or policy",
         "827": "#827: source approval is stale for its PR, main or policy"
-      }
+      },
+      "report": "Withdrawing duplicate intake 5d3c52259f7b47419544ec1a3e3214fc (only ACL-1771 eligible). The owner-requested integration of the Approved queue is already being prepared by Coordinator-M1011A, which is refreshing approvals onto main 259ae7f1. No batch was begun; nothing was assembled or merged."
     },
     "source_reviews": {
       "820": {
