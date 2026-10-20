@@ -46005,20 +46005,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T12:56:11+00:00",
         "from_status": "status:todo"
-      },
-      "771": {
-        "actor": "Worker-RF771",
-        "session": "rf771-20261020",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1771-targeting-resolver",
-        "worktree": "C:\\acl-rf-771",
-        "id": "3bcb419e564844039daf0ee815d04ba8",
-        "issue": 771,
-        "state": "handoff",
-        "started_at": "2026-10-20T13:55:32+00:00",
-        "from_status": "status:todo",
-        "pr": 832,
-        "report": "Pure refresh: merged main 259ae7f1 (merge commit ebac53f8), no conflicts. Tests: test_acl1771_targeting_resolver, test_acl1819_preflight, test_goals, test_acl_1202_overview_profile_search, test_acl1680_one_config_dir - 169 passed."
       }
     },
     "tasks": {
@@ -50450,25 +50436,25 @@
             "session": "rf771-20261020"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RF771",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-B1019771",
-          "session": "run_b1019_771",
+          "actor": "Worker-RF771",
+          "session": "rf771-20261020",
           "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1771-targeting-resolver",
-          "worktree": "C:\\acl-1771",
-          "id": "28eb07cec66b4d3b9ed05b20907e0bf7",
+          "worktree": "C:\\acl-rf-771",
+          "id": "3bcb419e564844039daf0ee815d04ba8",
           "issue": 771,
           "state": "handoff",
-          "started_at": "2026-10-19T22:31:50+00:00",
+          "started_at": "2026-10-20T13:55:32+00:00",
           "from_status": "status:todo",
           "pr": 832,
-          "report": "# ACL-1771 handoff\n\n- Merged current work/main into codex/acl-1771-targeting-resolver; 2 conflicts (creator.py audit call keeps the targeting report and main's renamed/name_error args; report.html drops the old existing_differences block that main removed).\n- Independent read-only Opus review of the resolution: no defects.\n- Touched tests passed locally: test_acl1771_targeting_resolver 50, test_acl1819_preflight 84, test_acl1761_api_create 121, test_acl1761_country_resolve 5, test_acl1761_existing_check 10, test_acl1761_plan_check 17, test_acl1769_two_column_layout 12. Full suite left to CI. No live runs."
+          "report": "Pure refresh: merged main 259ae7f1 (merge commit ebac53f8), no conflicts. Tests: test_acl1771_targeting_resolver, test_acl1819_preflight, test_goals, test_acl_1202_overview_profile_search, test_acl1680_one_config_dir - 169 passed."
         },
         "pr": 832,
-        "queued_at": "2026-10-19T22:35:28+00:00",
+        "queued_at": "2026-10-20T13:57:52+00:00",
         "review_report": "Main moved to 259ae7f1 (batch #1034: ACL-602, 1202, 1680, 1401, 341). Pure refresh: merge current main (merge commit), re-run affected tests, re-handoff, fresh independent review. Independent trial merge already shows it merges cleanly and its tests pass on the merged tree.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -60398,7 +60384,8 @@
       1040,
       880,
       1046,
-      774
+      774,
+      771
     ],
     "review": null,
     "history": [
@@ -102008,6 +101995,13 @@
         "at": "2026-10-20T13:55:32+00:00",
         "issue": 771,
         "claim": "3bcb419e564844039daf0ee815d04ba8",
+        "actor": "Worker-RF771"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T13:57:52+00:00",
+        "issue": 771,
+        "pr": 832,
         "actor": "Worker-RF771"
       }
     ],
