@@ -53333,7 +53333,7 @@
             "session": "run_l2_184"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-L2184",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -98513,6 +98513,68 @@
           "report": "Returned again (Reviewer-Q2001D), head 20af245d. Delta checked: the tzdata test, the two test_upload_without_workbook tests and the two 1768 browser tests are fixed, and the #832 merge resolution is sound. One blocking CI failure remains, reproduced locally: tests/test_rpa_job_start_is_measured.py::test_the_publisher_measures_the_queue_and_the_attach fails with AttributeError: '_Draft' object has no attribute 'ad_sets' at src/fb_ads_rpa/rpa_publisher.py:154. The new loop `for d in drafts: if len(d.ad_sets) > 1` breaks an existing test whose stub draft has no ad_sets (linux shards 3 on 3.11 and 3.13). Fix: use len(getattr(d, \"ad_sets\", None) or []) or give the test stub ad_sets, then rerun CI. Content otherwise approved; approval waits on #830 being Approved.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-20T10:09:58+00:00",
+        "issue": 184,
+        "pr": 937,
+        "review": {
+          "id": "7082e3edec6545d5b3d8cb94c9027a3f",
+          "pr": 937,
+          "issues": [
+            184
+          ],
+          "actor": "Reviewer-R1184Z",
+          "session": "reviewer-r1184z-20261020",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-20T09:36:20+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 184,
+            "pr": 937,
+            "branch": "work/acl-1184-hand-open-message",
+            "head_sha": "f185f693e45bdf4ec257d69e1d340ddc7b34805e",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "e3abbfa50edd0ea258c0d88c656573e254e5ed920737b164ed96eb9cf0e9044c",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-R1184Z",
+              "review_session": "reviewer-r1184z-20261020",
+              "execution_lane": "7082e3edec6545d5b3d8cb94c9027a3f",
+              "implementer": "Worker-L2184",
+              "head_sha": "f185f693e45bdf4ec257d69e1d340ddc7b34805e",
+              "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "tree_sha": "d44a82d76c1e331b9390198d5d5d50d5193f26cf",
+              "issues": [
+                184
+              ],
+              "report": "Re-review of PR #937 at head f185f693 on base c6150160. The change replaces the bare RuntimeError for a hand-opened Multilogin profile with a single profile_is_running check (covering long and 8.3 profile folder spellings in profile_dir.py) that raises ProfileStop(OPEN_BY_HAND) with a clear message instead of a traceback; the ACL-1606 reopen retry is preserved and hand-opened windows are never restarted or killed; account_spend.py and test_acl1812_warm_sessions.py were adjusted accordingly. The previous blocker (a real Multilogin profile id in tests/test_acl1184_hand_open_message.py, flagged by scripts/acl_scan_secrets.py) is fixed: the delta since 257a2161 is exactly one line replacing the id with the synthetic 'profile-1184'; grep finds no trace of the real id in the tree and no other UUID-like ids are added by the PR diff, and acl_scan_secrets.py reports no secrets or real ids. Locally the 1184 tests pass (98 passed with -x up to the first failure); test_acl1812_warm_sessions has one failure (row-open over HTTP returning 500) that I attribute to the old Starlette in the shared venv (environment), since the same test passes in CI on linux and windows. CI on the head: Classify and check project tooling, Process instructions, windows tests (3.13), linux tests 1/2/3, ACL verification and installer checks are all green; only tracker-link is red because the issue has not yet been moved to Review (reported separately, not a code defect). Nit: none blocking. No live checks claimed.",
+              "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "recorded_at": "2026-10-20T10:08:31+00:00",
+              "issue_scopes": {
+                "184": "e3abbfa50edd0ea258c0d88c656573e254e5ed920737b164ed96eb9cf0e9044c"
+              }
+            },
+            "lane": {
+              "id": "7082e3edec6545d5b3d8cb94c9027a3f",
+              "pr": 937,
+              "issues": [
+                184
+              ],
+              "actor": "Reviewer-R1184Z",
+              "session": "reviewer-r1184z-20261020",
+              "coordinator": "Coordinator-M1011A",
+              "started_at": "2026-10-20T09:36:20+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-20T10:09:06+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -101990,6 +102052,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-20T09:56:54+00:00"
+      },
+      "184": {
+        "issue": 184,
+        "pr": 937,
+        "branch": "work/acl-1184-hand-open-message",
+        "head_sha": "f185f693e45bdf4ec257d69e1d340ddc7b34805e",
+        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "e3abbfa50edd0ea258c0d88c656573e254e5ed920737b164ed96eb9cf0e9044c",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-R1184Z",
+          "review_session": "reviewer-r1184z-20261020",
+          "execution_lane": "7082e3edec6545d5b3d8cb94c9027a3f",
+          "implementer": "Worker-L2184",
+          "head_sha": "f185f693e45bdf4ec257d69e1d340ddc7b34805e",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "tree_sha": "d44a82d76c1e331b9390198d5d5d50d5193f26cf",
+          "issues": [
+            184
+          ],
+          "report": "Re-review of PR #937 at head f185f693 on base c6150160. The change replaces the bare RuntimeError for a hand-opened Multilogin profile with a single profile_is_running check (covering long and 8.3 profile folder spellings in profile_dir.py) that raises ProfileStop(OPEN_BY_HAND) with a clear message instead of a traceback; the ACL-1606 reopen retry is preserved and hand-opened windows are never restarted or killed; account_spend.py and test_acl1812_warm_sessions.py were adjusted accordingly. The previous blocker (a real Multilogin profile id in tests/test_acl1184_hand_open_message.py, flagged by scripts/acl_scan_secrets.py) is fixed: the delta since 257a2161 is exactly one line replacing the id with the synthetic 'profile-1184'; grep finds no trace of the real id in the tree and no other UUID-like ids are added by the PR diff, and acl_scan_secrets.py reports no secrets or real ids. Locally the 1184 tests pass (98 passed with -x up to the first failure); test_acl1812_warm_sessions has one failure (row-open over HTTP returning 500) that I attribute to the old Starlette in the shared venv (environment), since the same test passes in CI on linux and windows. CI on the head: Classify and check project tooling, Process instructions, windows tests (3.13), linux tests 1/2/3, ACL verification and installer checks are all green; only tracker-link is red because the issue has not yet been moved to Review (reported separately, not a code defect). Nit: none blocking. No live checks claimed.",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "recorded_at": "2026-10-20T10:08:31+00:00",
+          "issue_scopes": {
+            "184": "e3abbfa50edd0ea258c0d88c656573e254e5ed920737b164ed96eb9cf0e9044c"
+          }
+        },
+        "lane": {
+          "id": "7082e3edec6545d5b3d8cb94c9027a3f",
+          "pr": 937,
+          "issues": [
+            184
+          ],
+          "actor": "Reviewer-R1184Z",
+          "session": "reviewer-r1184z-20261020",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-20T09:36:20+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-20T10:09:06+00:00"
       }
     },
     "batches": {
@@ -106726,62 +106832,6 @@
         "coordinator": "Coordinator-ACT174",
         "started_at": "2026-10-20T08:55:10+00:00",
         "state": "reviewing"
-      },
-      "937": {
-        "id": "7082e3edec6545d5b3d8cb94c9027a3f",
-        "pr": 937,
-        "issues": [
-          184
-        ],
-        "actor": "Reviewer-R1184Z",
-        "session": "reviewer-r1184z-20261020",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-20T09:36:20+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 184,
-          "pr": 937,
-          "branch": "work/acl-1184-hand-open-message",
-          "head_sha": "f185f693e45bdf4ec257d69e1d340ddc7b34805e",
-          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "e3abbfa50edd0ea258c0d88c656573e254e5ed920737b164ed96eb9cf0e9044c",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-R1184Z",
-            "review_session": "reviewer-r1184z-20261020",
-            "execution_lane": "7082e3edec6545d5b3d8cb94c9027a3f",
-            "implementer": "Worker-L2184",
-            "head_sha": "f185f693e45bdf4ec257d69e1d340ddc7b34805e",
-            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-            "tree_sha": "d44a82d76c1e331b9390198d5d5d50d5193f26cf",
-            "issues": [
-              184
-            ],
-            "report": "Re-review of PR #937 at head f185f693 on base c6150160. The change replaces the bare RuntimeError for a hand-opened Multilogin profile with a single profile_is_running check (covering long and 8.3 profile folder spellings in profile_dir.py) that raises ProfileStop(OPEN_BY_HAND) with a clear message instead of a traceback; the ACL-1606 reopen retry is preserved and hand-opened windows are never restarted or killed; account_spend.py and test_acl1812_warm_sessions.py were adjusted accordingly. The previous blocker (a real Multilogin profile id in tests/test_acl1184_hand_open_message.py, flagged by scripts/acl_scan_secrets.py) is fixed: the delta since 257a2161 is exactly one line replacing the id with the synthetic 'profile-1184'; grep finds no trace of the real id in the tree and no other UUID-like ids are added by the PR diff, and acl_scan_secrets.py reports no secrets or real ids. Locally the 1184 tests pass (98 passed with -x up to the first failure); test_acl1812_warm_sessions has one failure (row-open over HTTP returning 500) that I attribute to the old Starlette in the shared venv (environment), since the same test passes in CI on linux and windows. CI on the head: Classify and check project tooling, Process instructions, windows tests (3.13), linux tests 1/2/3, ACL verification and installer checks are all green; only tracker-link is red because the issue has not yet been moved to Review (reported separately, not a code defect). Nit: none blocking. No live checks claimed.",
-            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "recorded_at": "2026-10-20T10:08:31+00:00",
-            "issue_scopes": {
-              "184": "e3abbfa50edd0ea258c0d88c656573e254e5ed920737b164ed96eb9cf0e9044c"
-            }
-          },
-          "lane": {
-            "id": "7082e3edec6545d5b3d8cb94c9027a3f",
-            "pr": 937,
-            "issues": [
-              184
-            ],
-            "actor": "Reviewer-R1184Z",
-            "session": "reviewer-r1184z-20261020",
-            "coordinator": "Coordinator-M1011A",
-            "started_at": "2026-10-20T09:36:20+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-20T10:09:06+00:00"
-        }
       },
       "929": {
         "id": "4af54f4a22e44ad0b24a3a94dc8c82b7",
