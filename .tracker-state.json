@@ -5387,6 +5387,27 @@
         "issue_scopes": {
           "768": "088a388fb4b12b4ce68f0f1f012234005058896d5a35d5087c9c8a1fb9fbc968"
         }
+      },
+      "979": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-Q2001D",
+        "review_session": "q2001d-20261020",
+        "execution_lane": "fb615fb16b554327a99d79ea40e96878",
+        "implementer": "Worker-B1019770",
+        "head_sha": "6aa85d9755c694db38130ab31665e8efd567ca57",
+        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "tree_sha": "72be2a835c021c67d664a614e62a33b86d85d867",
+        "report": "ACL-1770 Page and link on the ad, pixel on the ad set, choice saved to the account map. Now on top of #833 (Approved): the pixel is #833's set-level field, the earlier 5-file conflict is gone. Scope matches the Issue: per-ad page_id and link and per-set pixel_id are checked against /promote_pages and /adspixels (a bad value names the ad or ad set and nothing is created), an empty link names the ad, Instant Form ads must use the set Page, readback and Check plan use the effective Page/link/pixel; Page and pixel options are read only on a button click (no polling, no timers); POST /api/account-defaults writes only into an empty cell of the machine-local account map and never overwrites a different value; RPA backend refuses the API-only values with a 409. Safety: PAUSED-only unchanged, no deletes, no new Meta write path, write_policy not bypassed. Earlier blocker (inherited test_rpa_job_start_is_measured failure) fixed at head 6aa85d97 via getattr in rpa_publisher.py. Tests run locally at this head: 130 passed (acl1770_page_pixel_levels, rpa_job_start_is_measured, acl1769 layout, acl1775 instant forms). CI all green; head contains current work/main. Known non-blocking: resolve_page conflict with #1025 in creator.py, whichever lands second refreshes. Not claimed: live Meta runs.",
+        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          770
+        ],
+        "recorded_at": "2026-10-20T11:01:45+00:00",
+        "issue_scopes": {
+          "770": "dccdba11e9c87e30406bc2abb248e2f6af571d1c0caa311a11dbbd773aa4cce8"
+        }
       }
     },
     "stage": {
