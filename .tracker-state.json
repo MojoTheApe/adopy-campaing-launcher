@@ -49214,7 +49214,7 @@
             "session": "run_r1019_822"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-R1019822",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -49233,7 +49233,7 @@
         },
         "pr": 823,
         "queued_at": "2026-10-19T21:36:48+00:00",
-        "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
+        "review_report": "Returned (Reviewer-Q2001D). Needs a refresh onto current main (39 commits behind). Blocking: CI red, tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis fails (windows tests, linux shard 2, Process instructions, project tooling): the new test files use Windows-only APIs or paths and need the platform marker. The PR is stacked on unmerged #820 (ACL-1816: its commits 9751ca45 and f3f8e082 are inside this PR), so it must not land before #820. Content: rules_api.py has no direct Meta writes; Apply goes only through campaign commands, with the op bound to the suggestion (account, command, value, single object, saved result); Automatic refused; API backend and loopback only. No safety findings; tests not run locally.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.577992+00:00",
@@ -98644,6 +98644,24 @@
         "pr": 823,
         "lane": "1c7ff098520340b0b7bd3da9bfddfaee",
         "actor": "Reviewer-Q2001D"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-20T10:22:23+00:00",
+        "review": {
+          "id": "1c7ff098520340b0b7bd3da9bfddfaee",
+          "pr": 823,
+          "issues": [
+            822
+          ],
+          "actor": "Reviewer-Q2001D",
+          "session": "q2001d-20261020",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-20T10:21:17+00:00",
+          "state": "returning",
+          "report": "Returned (Reviewer-Q2001D). Needs a refresh onto current main (39 commits behind). Blocking: CI red, tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis fails (windows tests, linux shard 2, Process instructions, project tooling): the new test files use Windows-only APIs or paths and need the platform marker. The PR is stacked on unmerged #820 (ACL-1816: its commits 9751ca45 and f3f8e082 are inside this PR), so it must not land before #820. Content: rules_api.py has no direct Meta writes; Apply goes only through campaign commands, with the op bound to the suggestion (account, command, value, single object, saved result); Automatic refused; API backend and loopback only. No safety findings; tests not run locally.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -106925,20 +106943,6 @@
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T10:17:05+00:00",
         "state": "reviewing"
-      },
-      "823": {
-        "id": "1c7ff098520340b0b7bd3da9bfddfaee",
-        "pr": 823,
-        "issues": [
-          822
-        ],
-        "actor": "Reviewer-Q2001D",
-        "session": "q2001d-20261020",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-20T10:21:17+00:00",
-        "state": "returning",
-        "report": "Returned (Reviewer-Q2001D). Needs a refresh onto current main (39 commits behind). Blocking: CI red, tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis fails (windows tests, linux shard 2, Process instructions, project tooling): the new test files use Windows-only APIs or paths and need the platform marker. The PR is stacked on unmerged #820 (ACL-1816: its commits 9751ca45 and f3f8e082 are inside this PR), so it must not land before #820. Content: rules_api.py has no direct Meta writes; Apply goes only through campaign commands, with the op bound to the suggestion (account, command, value, single object, saved result); Automatic refused; API backend and loopback only. No safety findings; tests not run locally.",
-        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
