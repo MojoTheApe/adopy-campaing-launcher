@@ -112719,7 +112719,51 @@
         "session": "reviewer-r2040w-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T17:32:39+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 1040,
+          "pr": 1042,
+          "branch": "work/acl-2040-mlx-close-retry",
+          "head_sha": "cc71566d9b9802090da5a889a705de5265125dc9",
+          "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+          "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "1eb66f9bbd037e9071939f20c51aacf198717125fbe6142912c7352a57b193f3",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-R2040W",
+            "review_session": "reviewer-r2040w-20261020",
+            "execution_lane": "5cf4308285d54daf87f25650280be074",
+            "implementer": "Worker-MLX61",
+            "head_sha": "cc71566d9b9802090da5a889a705de5265125dc9",
+            "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+            "tree_sha": "9f1111711052aec9407b5220e6931f4a53f9cf25",
+            "issues": [
+              1040
+            ],
+            "report": "Reviewed git diff work/main...cc71566d (4 own commits incl. a merge of main, not stacked on another PR) against every Issue #1040 specification: MultiloginLauncher.stop_profile now asks the main address v1/profile/stop/p/{id} up to three times on a dropped request or a 5xx, two seconds apart; a 404 there still falls through to the legacy addresses, other 4xx stop at once, and the raised error names the main-address failure instead of the last legacy 404. The stop is idempotent and 'already stopped' (also on a 5xx) counts as done; a requests.Timeout is deliberately not repeated, so the added wait is bounded to at most 4 s of pauses. No kill path or allow_kill value, account opening outside Multilogin, or live-account polling is touched; log and error text is English and carries no token. PR 1017 (ACL-1959) rewrites the same stop_profile retry loop and conflicts; per the owner's decision of 2026-10-20 this PR's logic is kept and ACL-1959/PR 1017 is superseded and excluded from integration. Non-blocking nit: after a main-address timeout the loop still asks the three legacy addresses, each with the full timeout (pre-existing behaviour, not a regression), which partly undercuts the profile-lock rationale for not retrying timeouts. tests/test_the_api_stop_is_asked_first.py: 16 passed locally; CI on the head is green except the separately reportable tracker-link check. No live checks claimed.",
+            "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "recorded_at": "2026-10-20T17:39:40+00:00",
+            "issue_scopes": {
+              "1040": "1eb66f9bbd037e9071939f20c51aacf198717125fbe6142912c7352a57b193f3"
+            }
+          },
+          "lane": {
+            "id": "5cf4308285d54daf87f25650280be074",
+            "pr": 1042,
+            "issues": [
+              1040
+            ],
+            "actor": "Reviewer-R2040W",
+            "session": "reviewer-r2040w-20261020",
+            "coordinator": "Coordinator-M1011A",
+            "started_at": "2026-10-20T17:32:39+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-20T17:40:01+00:00"
+        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
