@@ -45216,20 +45216,6 @@
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
       },
-      "838": {
-        "actor": "Worker-T1020838",
-        "session": "t1020-838",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1838-country-active-line",
-        "worktree": "C:\\acl-1838-w",
-        "id": "34a1f79b60f64615acff75608efa1c9e",
-        "issue": 838,
-        "state": "handoff",
-        "started_at": "2026-10-20T12:07:42+00:00",
-        "from_status": "status:todo",
-        "pr": 842,
-        "report": "ACL-1838 resumed (Worker-T1020838). Block was stale (owner pause for the five-review Flow activation is over). Merged current work/main into codex/acl-1838-country-active-line; only conflict docs/system/PROJECT.md, both entries kept (read-only Opus review: lossless, no findings). Diff vs main unchanged: 3 files (report.html 2px accent line, PROJECT.md, CHANGELOG.md). Tests: tests/test_manage_behavior.py + tests/test_the_builder_tree.py 15 passed. The design prototype in C:\\acl-design\\inbox does not define an activity marker, so the owner's option 3 in the Issue governs. PR #866 (batch into stage) is the old route and should be closed in favour of #842 into main. Branch contains current work/main."
-      },
       "1038": {
         "actor": "Worker-L31038",
         "session": "run_l3_1038",
@@ -49898,25 +49884,25 @@
             "session": "t1020-838"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-T1020838",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-CN6B92",
-          "session": "worker_countryline_cn6b92_20261013",
-          "coordinator": "Coordinator-CV1013",
+          "actor": "Worker-T1020838",
+          "session": "t1020-838",
+          "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1838-country-active-line",
-          "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-country-active-line",
-          "id": "ed344663bc00405187778f3381959f61",
+          "worktree": "C:\\acl-1838-w",
+          "id": "34a1f79b60f64615acff75608efa1c9e",
           "issue": 838,
           "state": "handoff",
-          "started_at": "2026-10-13T08:06:39+00:00",
+          "started_at": "2026-10-20T12:07:42+00:00",
           "from_status": "status:todo",
           "pr": 842,
-          "report": "ACL-1838 current-main source handoff \u2014 2026-10-13\nActual Worker: Worker-CN6B92\nSession: worker_countryline_cn6b92_20261013\nClaim: ed344663bc00405187778f3381959f61\nCoordinator: Coordinator-CV1013\nBranch: codex/acl-1838-country-active-line\nWorktree: C:\\Users\\EvgeniSedin\\Desktop\\ACM-country-active-line\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/842\nIssue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/838\nExact head: ecfdfa51a214c787cb2f0b7251c5f66501da09fe\nExact tree: a64cc1a357ed0b78b902add9535a689039dae4a5\nOfficial main/base: 3327465fcbd46ccff9b64eb7c574ff5b84b99b80\nMerge parents: 520b988cbaefcb856759bdc00a45d3908d9b9e1b and 3327465fcbd46ccff9b64eb7c574ff5b84b99b80\n\nTracker issues: ACL-1838\n\nReplace the Countries sidebar's blue activity dots with static 2 px vertical accent lines, following the owner's selected option 3. Activity uses the existing live predicate; inactive countries have no marker, and the expanded-country background continues to indicate selection. Absolute positioning keeps country labels aligned; pointer-events: none preserves the owning row's interactions. System behavior/history are updated.\n\nThe original source normally merged current official main 3327465fcbd46ccff9b64eb7c574ff5b84b99b80, preserving both system-history entries. Current HEAD: ecfdfa51a214c787cb2f0b7251c5f66501da09fe; tree: a64cc1a357ed0b78b902add9535a689039dae4a5. Relative to current main, only report.html, docs/system/PROJECT.md and docs/system/CHANGELOG.md change. Original Worker-CL7F31 history is preserved; the refresh was performed by actual Worker-CN6B92 after independent review-return and a fresh claim.\n\nValidation on this exact refreshed source (Windows, Python 3.14.3 project venv; isolated synthetic config/temp, empty external-library environment):\n- 28 affected sidebar/builder/manage regressions passed (24.59 s).\n- 46 packaging unit tests passed (86.64 s).\n- Secret/identifier scanner, dashboard/RPA import smoke and git diff checks passed.\n- All six fresh Chromium scenario assertions passed: light/dark at 1440 px, 390 px and 150% zoom at 980 px; geometry, label alignment, marker-coordinate row click, keyboard selection and hover. Both fresh theme screenshots visually verified. Browser cleanup stalled after the harness printed ALL SIX SCENARIOS PASS; only the owned invocation was interrupted. Scenario success and cleanup limitation are recorded separately.\n\nFull applicable source checks remain in CI; tracker-link must be rerun after the durable Review handoff because its first refreshed run saw In Progress. Independent exact-head/current-main review and Approved/batch/stage/main integration remain required. No release or installation is claimed.\n\nFresh private Chromium harness: C:\\Users\\EvgeniSedin\\Desktop\\countryline-cn6b92-browser-check.py.\nActual tool stdout before cleanup: SCENARIO PASS light 1440 1; SCENARIO PASS light 390 1; SCENARIO PASS light 980 1.5; SCENARIO PASS dark 1440 1; SCENARIO PASS dark 390 1; SCENARIO PASS dark 980 1.5; ALL SIX SCENARIOS PASS.\nFresh screenshots: countryline-cn6b92-light.png / countryline-cn6b92-dark.png, visually verified. Original full run also stalled in cleanup; the progress-instrumented retry changed only private logging/isolated paths, no product files. Both owned invocations interrupted after scenario evidence; no other browser touched.\nCI run38367683466 is in progress, descriptor38367683470 passed, installer aggregate38367683490 passed with classified build/install skips. Tracker-link38367683457 failed before durable handoff; rerun pending after supported handoff. Local clean worktree verified. Original WorkerCL7F31 preserved in implementer history; this new Worker does not review or integrate source."
+          "report": "ACL-1838 resumed (Worker-T1020838). Block was stale (owner pause for the five-review Flow activation is over). Merged current work/main into codex/acl-1838-country-active-line; only conflict docs/system/PROJECT.md, both entries kept (read-only Opus review: lossless, no findings). Diff vs main unchanged: 3 files (report.html 2px accent line, PROJECT.md, CHANGELOG.md). Tests: tests/test_manage_behavior.py + tests/test_the_builder_tree.py 15 passed. The design prototype in C:\\acl-design\\inbox does not define an activity marker, so the owner's option 3 in the Issue governs. PR #866 (batch into stage) is the old route and should be closed in favour of #842 into main. Branch contains current work/main."
         },
         "pr": 842,
-        "queued_at": "2026-10-13T08:18:58+00:00",
+        "queued_at": "2026-10-20T12:27:40+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "return_operation": {
           "id": "91201340047f423fa6a6747b1c5dc404",
@@ -59411,7 +59397,8 @@
       841,
       854,
       305,
-      1037
+      1037,
+      838
     ],
     "review": {
       "id": "1ea28d1b292c4ef3baeda760fa52b87b",
@@ -100087,6 +100074,13 @@
         "issue": 880,
         "claim": "ba5d5b872010498e806a8c43fe252a55",
         "actor": "Worker-1880C"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T12:27:40+00:00",
+        "issue": 838,
+        "pr": 842,
+        "actor": "Worker-T1020838"
       }
     ],
     "policy": {
