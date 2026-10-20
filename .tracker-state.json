@@ -45224,9 +45224,11 @@
         "worktree": "C:\\acl-changelog-fragments",
         "id": "fb617ab8681d4b529cbe186bde2c8b0c",
         "issue": 1037,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T11:52:01+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 1041,
+        "report": "Per-task CHANGELOG fragments (docs/system/changelog.d/ACL-NNNN.md) plus scripts/fold_changelog.py; docs updated. Tests: tests/test_fold_changelog_2037.py (14 passed), tests/test_acl_ci_scope.py passed. Read-only Opus review done, findings applied. Not folded by batch integration yet (open question for owner)."
       },
       "838": {
         "actor": "Worker-T1020838",
