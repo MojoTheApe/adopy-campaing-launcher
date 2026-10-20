@@ -53411,7 +53411,7 @@
       },
       "318": {
         "implementers": [],
-        "state": "archiving"
+        "state": "archived"
       }
     },
     "actors": {
@@ -98069,6 +98069,12 @@
         "issue": 739,
         "claim": "bb831a247ec14c33900a663b20fe7219",
         "actor": "Worker-L1739"
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-20T09:27:20+00:00",
+        "issue": 318,
+        "reason": "Done in main: phase 1 (sentry_signal.py, tests test_sentry_gets_only_campaign_failures / test_run_summary_reaches_sentry, PRs #314/#322) and phase 2 docs + scripts/sentry_triage.py. The remaining live part (Sentry alert starts the repair routine, clean-run check) is tracked in ACL-1497 (#497). Archived on owner instruction 2026-10-20."
       }
     ],
     "policy": {
