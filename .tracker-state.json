@@ -44867,7 +44867,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "13": {
+        "actor": "Worker-B1020A",
+        "session": "25925e36-bi1020",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1013-bi-mysql-source",
+        "worktree": "C:\\acl-bi-source",
+        "id": "92091ffc2a58485188f99186cb5426bc",
+        "issue": 13,
+        "state": "implementing",
+        "started_at": "2026-10-20T06:37:45+00:00",
+        "from_status": "status:backlog"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -51174,8 +51187,15 @@
         "state": "archived"
       },
       "13": {
-        "implementers": [],
-        "state": "archived"
+        "implementers": [
+          {
+            "actor": "Worker-B1020A",
+            "session": "25925e36-bi1020"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-B1020A",
+        "coordinator": "Coordinator-M1011A"
       },
       "896": {
         "implementers": [
@@ -55631,6 +55651,10 @@
       "Reviewer-C1739": {
         "session": "reviewer-c1739-20261020",
         "role": "Reviewer"
+      },
+      "Worker-B1020A": {
+        "session": "25925e36-bi1020",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -96711,6 +96735,13 @@
           "report": "# Returned to the author: merge conflict with main, content not reviewed\n\nPR 740 cannot be brought up to current main c61501607ce11744e45add8b0d3b314368c216c5: `gh pr update-branch` reports a merge conflict (checked 2026-10-19/20). A source review must bind the current main baseline, so this task cannot be reviewed or approved as is.\n\nThe content of this PR was NOT reviewed in this pass; this return carries no code findings.\n\nNext step for the author: merge current main into the original branch, resolve the conflict, run the affected tests, push, and hand off again for a full independent review.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T06:37:45+00:00",
+        "issue": 13,
+        "claim": "92091ffc2a58485188f99186cb5426bc",
+        "actor": "Worker-B1020A"
       }
     ],
     "policy": {
