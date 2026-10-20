@@ -98869,6 +98869,271 @@
         "pr": 863,
         "lane": "2c146c2c081641d090130feef2d08f50",
         "actor": "Reviewer-R1853W"
+      },
+      {
+        "event": "batch-frozen",
+        "at": "2026-10-20T10:48:36+00:00",
+        "batch": {
+          "id": "5cc83b63094747b7942c0f90ab608793",
+          "actor": "Coordinator-E1019A",
+          "session": "coord-c0a1de70",
+          "state": "assembling",
+          "issues": [
+            70,
+            202,
+            680,
+            401,
+            47
+          ],
+          "members": [
+            {
+              "issue": 70,
+              "pr": 982,
+              "branch": "work/acl-602-lead-goals-overview",
+              "head_sha": "5fcb857ccfe6c2b7407837d39c661eee6c9ed273",
+              "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "e203742e52229f146fe31b5b1af11599dfae6b44fe0f9749da06c140e57f6e99",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-X20982",
+                "implementer": "Worker-H19602",
+                "head_sha": "5fcb857ccfe6c2b7407837d39c661eee6c9ed273",
+                "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+                "tree_sha": "8f019c46ce6553bd22f559ca69418723f25f8624",
+                "execution_lane": "a930a10c05b34ae59dcca59c7dde6308",
+                "review_session": "rx982-1c30cbbe",
+                "report": "# ACL-602 / PR #982 \u2014 refresh-round source review (Reviewer-X20982)\n\nSeparate reviewer session `rx982-1c30cbbe`; I implemented none of this work.\nHead `5fcb857ccfe6c2b7407837d39c661eee6c9ed273`, base main `c61501607ce1`.\nPreviously approved head `0a35b7086190cf483a0117e9258ecc90122e3b99` (source-approved\n2026-10-19T18:44:11Z, base main 1c6ab78e).\n\n## Delta check\n\n- New head is one merge commit with parents 0a35b708 (previous approved head) and\n  c6150160 (current main). Its tree `8f019c46` equals `git merge-tree --write-tree`\n  of those parents: clean merge, no extra edits.\n- PR diff vs main is unchanged: same 3 files (src/web/app.py, src/web/goals.py,\n  tests/test_goals.py, +83/-0); `git diff 1c6ab78e 0a35b708` and\n  `git diff c6150160 5fcb857c` differ only in blob index hashes and hunk offsets\n  (+4 lines from main in app.py). range-diff: the single feature commit 85d18fba is identical.\n- Interaction with main (batch 1016/1018 incl. ACL-1356): the added `/goals/overview`\n  is a GET returning JSON, no request body/form parsing; no `request.form()` outside\n  `read_form` in src. Error texts are English.\n\n## Checks\n\n- Local with the current pins (fastapi 0.141.1 / starlette 1.7.0): tests/test_goals.py,\n  tests/test_web_form_endpoints.py, tests/test_one_button_reads_what_is_needed.py \u2014\n  60 passed. The author's 5 HTTP 500 failures in the last two files come from a stale\n  local venv (old FastAPI); with the pinned versions they pass.\n- Required CI on 5fcb857c (`gh pr checks 982`): ACL verification, project tooling,\n  installer classify/verification, process instructions, descriptor, linux 3.13 x3,\n  windows 3.13, tracker-link \u2014 all pass; installer build jobs skipped (no installer inputs).\n\nBlocking findings: none. Verdict: approved.\n",
+                "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  70
+                ],
+                "recorded_at": "2026-10-19T23:21:59+00:00",
+                "issue_scopes": {
+                  "70": "e203742e52229f146fe31b5b1af11599dfae6b44fe0f9749da06c140e57f6e99"
+                }
+              },
+              "lane": {
+                "id": "a930a10c05b34ae59dcca59c7dde6308",
+                "pr": 982,
+                "issues": [
+                  70
+                ],
+                "actor": "Reviewer-X20982",
+                "session": "rx982-1c30cbbe",
+                "coordinator": "Coordinator-E1019A",
+                "started_at": "2026-10-19T23:19:51+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-19T23:22:19+00:00"
+            },
+            {
+              "issue": 202,
+              "pr": 976,
+              "branch": "work/acl-1202-overview-profile-search",
+              "head_sha": "294f4120d70f31d603fb55d1acb0e6788c892c2c",
+              "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "874916528a5e419af368f88079d8af38988995625b9d8492c34a8c8ce7d6c3f7",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-X20976",
+                "implementer": "Worker-H19202",
+                "head_sha": "294f4120d70f31d603fb55d1acb0e6788c892c2c",
+                "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+                "tree_sha": "5a945757e1fd56b7deb3a5cb793d42b37094cd57",
+                "execution_lane": "84ef96e04f654a3c9c927d9dc0dda9a9",
+                "review_session": "rx976-1c30cbbe",
+                "report": "# ACL-1202 / PR #976 \u2014 refresh-round source review (Reviewer-X20976)\n\nSeparate reviewer session `rx976-1c30cbbe`; I implemented none of this work.\nHead `294f4120d70f31d603fb55d1acb0e6788c892c2c`, base main `c61501607ce1`.\nPreviously approved head `728489279502a6738da2b2d17d431f317290c29f` (source-approved\n2026-10-19T11:53:43Z, base main 435bc154).\n\n## Delta check\n\n- New head is one merge commit with parents 72848927 (previous approved head) and\n  c6150160 (current main). Its tree `5a945757` equals `git merge-tree --write-tree`\n  of those parents: clean merge, no extra edits.\n- PR diff vs main is unchanged (same 4 files: src/web/app.py, report.html,\n  tests/acl_1202_overview_search_harness.cjs, tests/test_acl_1202_overview_profile_search.py,\n  +301/-5); `git diff 435bc154 72848927` and `git diff c6150160 294f4120` are identical\n  apart from blob index lines and hunk headers.\n- Interaction with what main gained since the previous approval (batch 1016: ACL-1871\n  drawer in report.html, ACL-1356 FastAPI/Starlette + read_form in app.py; batch 1018):\n  the app.py change only adds `label_key`/`key` fields to JSON answers\n  (`profile_name_key` imported in both places); no new form parsing, no\n  `request.form()` outside `read_form`. The report.html change does not touch the\n  cbd drawer.\n\n## Checks\n\n- Local on 294f4120 with the current pins: `node tests/acl_1202_overview_search_harness.cjs`\n  exit 0, `node tests/builder_drawer_harness.cjs` ok; pytest\n  test_acl_1202_overview_profile_search, test_acl1871_side_tab_browser,\n  test_request_limits \u2014 51 passed.\n- Required CI on 294f4120 (`gh pr checks 976`): ACL verification, project tooling,\n  installer classify/verification, process instructions, descriptor, linux 3.13 x3,\n  windows 3.13, tracker-link \u2014 all pass; installer build jobs skipped.\n- Author's two local failures (test_acl_1588 fails identically on main; an order-dependent\n  currency test) are outside this diff; CI full suite is green.\n\nBlocking findings: none. Verdict: approved.\n",
+                "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  202
+                ],
+                "recorded_at": "2026-10-19T23:25:32+00:00",
+                "issue_scopes": {
+                  "202": "874916528a5e419af368f88079d8af38988995625b9d8492c34a8c8ce7d6c3f7"
+                }
+              },
+              "lane": {
+                "id": "84ef96e04f654a3c9c927d9dc0dda9a9",
+                "pr": 976,
+                "issues": [
+                  202
+                ],
+                "actor": "Reviewer-X20976",
+                "session": "rx976-1c30cbbe",
+                "coordinator": "Coordinator-E1019A",
+                "started_at": "2026-10-19T23:23:17+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-19T23:25:50+00:00"
+            },
+            {
+              "issue": 680,
+              "pr": 966,
+              "branch": "work/acl-1680-one-config-dir",
+              "head_sha": "04c179278bb9d0e0cdf1c8456bf0b04b6583b08a",
+              "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "503e07e2c8a0717c8914ace1daad97c1516a28140c4528063b28e8ab786dbafb",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-Y19B",
+                "implementer": "Worker-H19680",
+                "head_sha": "04c179278bb9d0e0cdf1c8456bf0b04b6583b08a",
+                "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+                "tree_sha": "014a55492c8bedca0e598ab99a9653f6f8c25204",
+                "execution_lane": "4d6b0c393e44486483099c2672682425",
+                "review_session": "rev-y19b-s1",
+                "report": "Independent source review (refresh) of PR 966 (ACL-1680, Issue 680), head 04c17927, base main c6150160. I approved b9684b1a earlier; this head is a clean merge of main into it.\nDelta check: files that differ between b9684b1a and 04c17927 are exactly files changed on main between 435bc154 and c6150160; none of the PR's own files (config/paths.py, config/config_unify.py, launcher.py, serve.py, scripts/acl_migrate_config.py, README, tests/test_acl1680_one_config_dir.py) overlaps with main's changes, so the reviewed content is unchanged.\nCI on this exact head: all required checks pass. The Windows installer job \"Build, install, repair, and uninstall\" hit the 25-minute limit once (cancelled, same code passed in 12.5 minutes on the previous head); after one `gh run rerun --failed` it completed successfully, so it was a runner stall.\nVerdict: approved.\n",
+                "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  680
+                ],
+                "recorded_at": "2026-10-19T23:37:00+00:00",
+                "issue_scopes": {
+                  "680": "503e07e2c8a0717c8914ace1daad97c1516a28140c4528063b28e8ab786dbafb"
+                }
+              },
+              "lane": {
+                "id": "4d6b0c393e44486483099c2672682425",
+                "pr": 966,
+                "issues": [
+                  680
+                ],
+                "actor": "Reviewer-Y19B",
+                "session": "rev-y19b-s1",
+                "coordinator": "Coordinator-E1019A",
+                "started_at": "2026-10-19T22:32:46+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-19T23:37:23+00:00"
+            },
+            {
+              "issue": 401,
+              "pr": 960,
+              "branch": "work/acl-1401-mlx-not-running",
+              "head_sha": "60382abba4f6ca04f14b6f038335f12f28312852",
+              "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "3351b093cb2255ee6b77516b3761e09397e28c493d1eb8f788ec3947b8eabc8c",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-Y19B",
+                "implementer": "Worker-H19401",
+                "head_sha": "60382abba4f6ca04f14b6f038335f12f28312852",
+                "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+                "tree_sha": "fe797a9868770b02809864327aac95e34f4cbe2a",
+                "execution_lane": "e8313764ab1445f4872e398763ccda14",
+                "review_session": "rev-y19b-s1",
+                "report": "Independent source review (refresh) of PR 960 (ACL-1401, Issue 401), head 60382aba, base main c6150160. I approved 53e93b2b earlier; this head is a clean merge of main into it.\nDelta check: the only file touched both by main (435bc154..c6150160) and by this PR is src/web/templates/report.html. The PR's diff there is still exactly one line: `multilogin_not_running$` added to the \"hold\" rule in the cb-build-model rules, next to account_blocked$ (re-read the PR diff against the new base). All other differences between 53e93b2b and 60382aba are files changed only on main. The PR's file list and sizes are unchanged (7 source/config files + the 182-line test file).\nCI on this exact head: all 11 required checks pass (linux shards 1-3 on 3.11 and 3.13, windows tests, ACL verification, Process instructions, Classify, Installer verification, tracker-link, descriptor); installer build skipped as not applicable.\nVerdict: approved.\n",
+                "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  401
+                ],
+                "recorded_at": "2026-10-19T23:39:01+00:00",
+                "issue_scopes": {
+                  "401": "3351b093cb2255ee6b77516b3761e09397e28c493d1eb8f788ec3947b8eabc8c"
+                }
+              },
+              "lane": {
+                "id": "e8313764ab1445f4872e398763ccda14",
+                "pr": 960,
+                "issues": [
+                  401
+                ],
+                "actor": "Reviewer-Y19B",
+                "session": "rev-y19b-s1",
+                "coordinator": "Coordinator-E1019A",
+                "started_at": "2026-10-19T23:38:23+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-19T23:39:24+00:00"
+            },
+            {
+              "issue": 47,
+              "pr": 980,
+              "branch": "work/acl-341-recipe-player-tests",
+              "head_sha": "adf74b65b877c17b6f442ab0a00ffb39458a3f56",
+              "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "be9479208e9a0731a6c08e48e1baa5ada1999d8e5201c15b07423025fe9b60df",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-Y19B",
+                "implementer": "Worker-H19341",
+                "head_sha": "adf74b65b877c17b6f442ab0a00ffb39458a3f56",
+                "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+                "tree_sha": "6685a699bc70e4680aee945f51d09b361dd041d3",
+                "execution_lane": "21d1a5e5136949018b9b159a7e186381",
+                "review_session": "rev-y19b-s1",
+                "report": "Independent source review (refresh) of PR 980 (ACL-341, Issue 47), head adf74b65, base main c6150160. I approved 7d89abc6 earlier; this head is a clean merge of main into it.\nDelta check: files that differ between 7d89abc6 and adf74b65 are exactly files changed on main between 435bc154 and c6150160; the PR's only file, tests/test_recipe_player_sequences.py (+307), does not overlap with main's changes, so the reviewed content is unchanged.\nCI on this exact head: the first run failed \"windows tests (3.13)\" on tests/test_a_stopped_profile_never_spins_the_robot.py::test_a_poll_round_is_never_shorter_than_its_step (\"neighbour thread got 46% CPU\"), a CPU-timing test unrelated to this test-only PR; ACL verification failed only as a consequence. After one `gh run rerun --failed` every required check passes (linux shards 1-3, windows tests, ACL verification, Process instructions, Classify, Installer verification, tracker-link, descriptor).\nVerdict: approved.\n",
+                "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  47
+                ],
+                "recorded_at": "2026-10-19T23:47:12+00:00",
+                "issue_scopes": {
+                  "47": "be9479208e9a0731a6c08e48e1baa5ada1999d8e5201c15b07423025fe9b60df"
+                }
+              },
+              "lane": {
+                "id": "21d1a5e5136949018b9b159a7e186381",
+                "pr": 980,
+                "issues": [
+                  47
+                ],
+                "actor": "Reviewer-Y19B",
+                "session": "rev-y19b-s1",
+                "coordinator": "Coordinator-E1019A",
+                "started_at": "2026-10-19T23:40:37+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-19T23:47:34+00:00"
+            }
+          ],
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "branch": "codex/batch-5cc83b63094747b7942c0f90ab608793",
+          "intake": "a94b4944da0a475db9dfdf3711ea143a",
+          "started_at": "2026-10-20T10:48:36+00:00",
+          "pr": null,
+          "entered_stage": false,
+          "history": [],
+          "delivery_request": {
+            "schema_version": 1,
+            "state": "requested",
+            "batch_id": "5cc83b63094747b7942c0f90ab608793",
+            "issues": [
+              70,
+              202,
+              680,
+              401,
+              47
+            ],
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "target": "ACL stable Windows installer and update channel",
+            "workflow": ".github/workflows/complete-delivery.yml",
+            "job": "Verify published Windows package",
+            "actor": "Coordinator-E1019A",
+            "session": "coord-c0a1de70",
+            "requested_at": "2026-10-20T10:48:36+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -107122,7 +107387,267 @@
         "sources_closed": true
       }
     },
-    "integration": null,
+    "integration": {
+      "id": "5cc83b63094747b7942c0f90ab608793",
+      "actor": "Coordinator-E1019A",
+      "session": "coord-c0a1de70",
+      "state": "assembling",
+      "issues": [
+        70,
+        202,
+        680,
+        401,
+        47
+      ],
+      "members": [
+        {
+          "issue": 70,
+          "pr": 982,
+          "branch": "work/acl-602-lead-goals-overview",
+          "head_sha": "5fcb857ccfe6c2b7407837d39c661eee6c9ed273",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "e203742e52229f146fe31b5b1af11599dfae6b44fe0f9749da06c140e57f6e99",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-X20982",
+            "implementer": "Worker-H19602",
+            "head_sha": "5fcb857ccfe6c2b7407837d39c661eee6c9ed273",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "tree_sha": "8f019c46ce6553bd22f559ca69418723f25f8624",
+            "execution_lane": "a930a10c05b34ae59dcca59c7dde6308",
+            "review_session": "rx982-1c30cbbe",
+            "report": "# ACL-602 / PR #982 \u2014 refresh-round source review (Reviewer-X20982)\n\nSeparate reviewer session `rx982-1c30cbbe`; I implemented none of this work.\nHead `5fcb857ccfe6c2b7407837d39c661eee6c9ed273`, base main `c61501607ce1`.\nPreviously approved head `0a35b7086190cf483a0117e9258ecc90122e3b99` (source-approved\n2026-10-19T18:44:11Z, base main 1c6ab78e).\n\n## Delta check\n\n- New head is one merge commit with parents 0a35b708 (previous approved head) and\n  c6150160 (current main). Its tree `8f019c46` equals `git merge-tree --write-tree`\n  of those parents: clean merge, no extra edits.\n- PR diff vs main is unchanged: same 3 files (src/web/app.py, src/web/goals.py,\n  tests/test_goals.py, +83/-0); `git diff 1c6ab78e 0a35b708` and\n  `git diff c6150160 5fcb857c` differ only in blob index hashes and hunk offsets\n  (+4 lines from main in app.py). range-diff: the single feature commit 85d18fba is identical.\n- Interaction with main (batch 1016/1018 incl. ACL-1356): the added `/goals/overview`\n  is a GET returning JSON, no request body/form parsing; no `request.form()` outside\n  `read_form` in src. Error texts are English.\n\n## Checks\n\n- Local with the current pins (fastapi 0.141.1 / starlette 1.7.0): tests/test_goals.py,\n  tests/test_web_form_endpoints.py, tests/test_one_button_reads_what_is_needed.py \u2014\n  60 passed. The author's 5 HTTP 500 failures in the last two files come from a stale\n  local venv (old FastAPI); with the pinned versions they pass.\n- Required CI on 5fcb857c (`gh pr checks 982`): ACL verification, project tooling,\n  installer classify/verification, process instructions, descriptor, linux 3.13 x3,\n  windows 3.13, tracker-link \u2014 all pass; installer build jobs skipped (no installer inputs).\n\nBlocking findings: none. Verdict: approved.\n",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              70
+            ],
+            "recorded_at": "2026-10-19T23:21:59+00:00",
+            "issue_scopes": {
+              "70": "e203742e52229f146fe31b5b1af11599dfae6b44fe0f9749da06c140e57f6e99"
+            }
+          },
+          "lane": {
+            "id": "a930a10c05b34ae59dcca59c7dde6308",
+            "pr": 982,
+            "issues": [
+              70
+            ],
+            "actor": "Reviewer-X20982",
+            "session": "rx982-1c30cbbe",
+            "coordinator": "Coordinator-E1019A",
+            "started_at": "2026-10-19T23:19:51+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-19T23:22:19+00:00"
+        },
+        {
+          "issue": 202,
+          "pr": 976,
+          "branch": "work/acl-1202-overview-profile-search",
+          "head_sha": "294f4120d70f31d603fb55d1acb0e6788c892c2c",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "874916528a5e419af368f88079d8af38988995625b9d8492c34a8c8ce7d6c3f7",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-X20976",
+            "implementer": "Worker-H19202",
+            "head_sha": "294f4120d70f31d603fb55d1acb0e6788c892c2c",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "tree_sha": "5a945757e1fd56b7deb3a5cb793d42b37094cd57",
+            "execution_lane": "84ef96e04f654a3c9c927d9dc0dda9a9",
+            "review_session": "rx976-1c30cbbe",
+            "report": "# ACL-1202 / PR #976 \u2014 refresh-round source review (Reviewer-X20976)\n\nSeparate reviewer session `rx976-1c30cbbe`; I implemented none of this work.\nHead `294f4120d70f31d603fb55d1acb0e6788c892c2c`, base main `c61501607ce1`.\nPreviously approved head `728489279502a6738da2b2d17d431f317290c29f` (source-approved\n2026-10-19T11:53:43Z, base main 435bc154).\n\n## Delta check\n\n- New head is one merge commit with parents 72848927 (previous approved head) and\n  c6150160 (current main). Its tree `5a945757` equals `git merge-tree --write-tree`\n  of those parents: clean merge, no extra edits.\n- PR diff vs main is unchanged (same 4 files: src/web/app.py, report.html,\n  tests/acl_1202_overview_search_harness.cjs, tests/test_acl_1202_overview_profile_search.py,\n  +301/-5); `git diff 435bc154 72848927` and `git diff c6150160 294f4120` are identical\n  apart from blob index lines and hunk headers.\n- Interaction with what main gained since the previous approval (batch 1016: ACL-1871\n  drawer in report.html, ACL-1356 FastAPI/Starlette + read_form in app.py; batch 1018):\n  the app.py change only adds `label_key`/`key` fields to JSON answers\n  (`profile_name_key` imported in both places); no new form parsing, no\n  `request.form()` outside `read_form`. The report.html change does not touch the\n  cbd drawer.\n\n## Checks\n\n- Local on 294f4120 with the current pins: `node tests/acl_1202_overview_search_harness.cjs`\n  exit 0, `node tests/builder_drawer_harness.cjs` ok; pytest\n  test_acl_1202_overview_profile_search, test_acl1871_side_tab_browser,\n  test_request_limits \u2014 51 passed.\n- Required CI on 294f4120 (`gh pr checks 976`): ACL verification, project tooling,\n  installer classify/verification, process instructions, descriptor, linux 3.13 x3,\n  windows 3.13, tracker-link \u2014 all pass; installer build jobs skipped.\n- Author's two local failures (test_acl_1588 fails identically on main; an order-dependent\n  currency test) are outside this diff; CI full suite is green.\n\nBlocking findings: none. Verdict: approved.\n",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              202
+            ],
+            "recorded_at": "2026-10-19T23:25:32+00:00",
+            "issue_scopes": {
+              "202": "874916528a5e419af368f88079d8af38988995625b9d8492c34a8c8ce7d6c3f7"
+            }
+          },
+          "lane": {
+            "id": "84ef96e04f654a3c9c927d9dc0dda9a9",
+            "pr": 976,
+            "issues": [
+              202
+            ],
+            "actor": "Reviewer-X20976",
+            "session": "rx976-1c30cbbe",
+            "coordinator": "Coordinator-E1019A",
+            "started_at": "2026-10-19T23:23:17+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-19T23:25:50+00:00"
+        },
+        {
+          "issue": 680,
+          "pr": 966,
+          "branch": "work/acl-1680-one-config-dir",
+          "head_sha": "04c179278bb9d0e0cdf1c8456bf0b04b6583b08a",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "503e07e2c8a0717c8914ace1daad97c1516a28140c4528063b28e8ab786dbafb",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-Y19B",
+            "implementer": "Worker-H19680",
+            "head_sha": "04c179278bb9d0e0cdf1c8456bf0b04b6583b08a",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "tree_sha": "014a55492c8bedca0e598ab99a9653f6f8c25204",
+            "execution_lane": "4d6b0c393e44486483099c2672682425",
+            "review_session": "rev-y19b-s1",
+            "report": "Independent source review (refresh) of PR 966 (ACL-1680, Issue 680), head 04c17927, base main c6150160. I approved b9684b1a earlier; this head is a clean merge of main into it.\nDelta check: files that differ between b9684b1a and 04c17927 are exactly files changed on main between 435bc154 and c6150160; none of the PR's own files (config/paths.py, config/config_unify.py, launcher.py, serve.py, scripts/acl_migrate_config.py, README, tests/test_acl1680_one_config_dir.py) overlaps with main's changes, so the reviewed content is unchanged.\nCI on this exact head: all required checks pass. The Windows installer job \"Build, install, repair, and uninstall\" hit the 25-minute limit once (cancelled, same code passed in 12.5 minutes on the previous head); after one `gh run rerun --failed` it completed successfully, so it was a runner stall.\nVerdict: approved.\n",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              680
+            ],
+            "recorded_at": "2026-10-19T23:37:00+00:00",
+            "issue_scopes": {
+              "680": "503e07e2c8a0717c8914ace1daad97c1516a28140c4528063b28e8ab786dbafb"
+            }
+          },
+          "lane": {
+            "id": "4d6b0c393e44486483099c2672682425",
+            "pr": 966,
+            "issues": [
+              680
+            ],
+            "actor": "Reviewer-Y19B",
+            "session": "rev-y19b-s1",
+            "coordinator": "Coordinator-E1019A",
+            "started_at": "2026-10-19T22:32:46+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-19T23:37:23+00:00"
+        },
+        {
+          "issue": 401,
+          "pr": 960,
+          "branch": "work/acl-1401-mlx-not-running",
+          "head_sha": "60382abba4f6ca04f14b6f038335f12f28312852",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "3351b093cb2255ee6b77516b3761e09397e28c493d1eb8f788ec3947b8eabc8c",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-Y19B",
+            "implementer": "Worker-H19401",
+            "head_sha": "60382abba4f6ca04f14b6f038335f12f28312852",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "tree_sha": "fe797a9868770b02809864327aac95e34f4cbe2a",
+            "execution_lane": "e8313764ab1445f4872e398763ccda14",
+            "review_session": "rev-y19b-s1",
+            "report": "Independent source review (refresh) of PR 960 (ACL-1401, Issue 401), head 60382aba, base main c6150160. I approved 53e93b2b earlier; this head is a clean merge of main into it.\nDelta check: the only file touched both by main (435bc154..c6150160) and by this PR is src/web/templates/report.html. The PR's diff there is still exactly one line: `multilogin_not_running$` added to the \"hold\" rule in the cb-build-model rules, next to account_blocked$ (re-read the PR diff against the new base). All other differences between 53e93b2b and 60382aba are files changed only on main. The PR's file list and sizes are unchanged (7 source/config files + the 182-line test file).\nCI on this exact head: all 11 required checks pass (linux shards 1-3 on 3.11 and 3.13, windows tests, ACL verification, Process instructions, Classify, Installer verification, tracker-link, descriptor); installer build skipped as not applicable.\nVerdict: approved.\n",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              401
+            ],
+            "recorded_at": "2026-10-19T23:39:01+00:00",
+            "issue_scopes": {
+              "401": "3351b093cb2255ee6b77516b3761e09397e28c493d1eb8f788ec3947b8eabc8c"
+            }
+          },
+          "lane": {
+            "id": "e8313764ab1445f4872e398763ccda14",
+            "pr": 960,
+            "issues": [
+              401
+            ],
+            "actor": "Reviewer-Y19B",
+            "session": "rev-y19b-s1",
+            "coordinator": "Coordinator-E1019A",
+            "started_at": "2026-10-19T23:38:23+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-19T23:39:24+00:00"
+        },
+        {
+          "issue": 47,
+          "pr": 980,
+          "branch": "work/acl-341-recipe-player-tests",
+          "head_sha": "adf74b65b877c17b6f442ab0a00ffb39458a3f56",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "be9479208e9a0731a6c08e48e1baa5ada1999d8e5201c15b07423025fe9b60df",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-Y19B",
+            "implementer": "Worker-H19341",
+            "head_sha": "adf74b65b877c17b6f442ab0a00ffb39458a3f56",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "tree_sha": "6685a699bc70e4680aee945f51d09b361dd041d3",
+            "execution_lane": "21d1a5e5136949018b9b159a7e186381",
+            "review_session": "rev-y19b-s1",
+            "report": "Independent source review (refresh) of PR 980 (ACL-341, Issue 47), head adf74b65, base main c6150160. I approved 7d89abc6 earlier; this head is a clean merge of main into it.\nDelta check: files that differ between 7d89abc6 and adf74b65 are exactly files changed on main between 435bc154 and c6150160; the PR's only file, tests/test_recipe_player_sequences.py (+307), does not overlap with main's changes, so the reviewed content is unchanged.\nCI on this exact head: the first run failed \"windows tests (3.13)\" on tests/test_a_stopped_profile_never_spins_the_robot.py::test_a_poll_round_is_never_shorter_than_its_step (\"neighbour thread got 46% CPU\"), a CPU-timing test unrelated to this test-only PR; ACL verification failed only as a consequence. After one `gh run rerun --failed` every required check passes (linux shards 1-3, windows tests, ACL verification, Process instructions, Classify, Installer verification, tracker-link, descriptor).\nVerdict: approved.\n",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              47
+            ],
+            "recorded_at": "2026-10-19T23:47:12+00:00",
+            "issue_scopes": {
+              "47": "be9479208e9a0731a6c08e48e1baa5ada1999d8e5201c15b07423025fe9b60df"
+            }
+          },
+          "lane": {
+            "id": "21d1a5e5136949018b9b159a7e186381",
+            "pr": 980,
+            "issues": [
+              47
+            ],
+            "actor": "Reviewer-Y19B",
+            "session": "rev-y19b-s1",
+            "coordinator": "Coordinator-E1019A",
+            "started_at": "2026-10-19T23:40:37+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-19T23:47:34+00:00"
+        }
+      ],
+      "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+      "branch": "codex/batch-5cc83b63094747b7942c0f90ab608793",
+      "intake": "a94b4944da0a475db9dfdf3711ea143a",
+      "started_at": "2026-10-20T10:48:36+00:00",
+      "pr": null,
+      "entered_stage": false,
+      "history": [],
+      "delivery_request": {
+        "schema_version": 1,
+        "state": "requested",
+        "batch_id": "5cc83b63094747b7942c0f90ab608793",
+        "issues": [
+          70,
+          202,
+          680,
+          401,
+          47
+        ],
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "target": "ACL stable Windows installer and update channel",
+        "workflow": ".github/workflows/complete-delivery.yml",
+        "job": "Verify published Windows package",
+        "actor": "Coordinator-E1019A",
+        "session": "coord-c0a1de70",
+        "requested_at": "2026-10-20T10:48:36+00:00"
+      }
+    },
     "intake": {
       "id": "a94b4944da0a475db9dfdf3711ea143a",
       "actor": "Coordinator-E1019A",
