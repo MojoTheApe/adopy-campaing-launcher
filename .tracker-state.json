@@ -5471,6 +5471,27 @@
         "issue_scopes": {
           "739": "5f4e8b2bcb5e83bae5c9abddf7b76624e7b19f5c738c78c2f783590a1f4b560d"
         }
+      },
+      "1019": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1805W",
+        "review_session": "reviewer-r1805w-20261020",
+        "execution_lane": "6bc8d4798e48437caad3f86fa026e792",
+        "implementer": "Worker-L1805",
+        "head_sha": "f917bb4e5b9d474a9a3eb6c978051bbb3c795d0e",
+        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "tree_sha": "a96027a6ed514b807eaff71312d6974abe9dd7c8",
+        "issues": [
+          805
+        ],
+        "report": "PR 1019 connects the Meta rules registry (ACL-1781 check_job) and the plain-English error catalog (ACL-1786) to the API creation path. creator.py gains meta_rule_jobs/_check_meta_rules, run inside _prepare before any POST for fresh runs, reruns and dry runs; the checked values are built with the same campaign_params/adset_params/_story used by the POSTs, so the exact request values are validated and no new write path or Graph call is added. A violation raises RulesViolation (a PlanError) that stops with an English 'Meta rules: ...' message, stop_kind plan, 'Nothing more was created', and a problems list. GraphError/GraphStop on the API path go through error_catalog.problem_line and graph_problem, so the dashboard problem list shows the catalog message and action, an unknown code shows the raw scrubbed text, and the original code/subcode stay in the raw field; publish_api.py passes outcome.problems through and report.html keeps the API readback panel next to the list. graph.py adds BLOCK_CODES (1404078, 2859015, 1404163, as code or subcode) to the policy stop set, which only makes the client stricter, and classify stays backward compatible. Fail-open on an unreadable rules registry is accepted per the owner's decision of 2026-10-20 to keep Issue #805 as specified; recorded here as an accepted risk. Acceptance criteria are met: a violating spec is stopped before any POST (fake transport test), and a known Meta error shows catalog message plus action while an unknown code shows raw text. The main-conflict merge (aefcaee6) kept main's changes; the branch has 4 own commits and is not stacked on other unmerged tasks. I ran tests/test_acl1805, test_acl1786*, test_acl1761*, test_acl1775*: 352 passed. CI on the head is green for all required checks (linux 1/2/3, windows, ACL verification, process instructions); only tracker-link is red, reported separately. Non-blocking nits: (1) the error_catalog.explain fallback CATALOG.get((subcode, None)) could match an unrelated small general code and should be restricted to BLOCK_CODES; (2) _check_meta_rules also swallows bugs inside meta_rule_jobs/check_job, not only registry load failures, so consider logging at a Sentry-visible level or narrowing the try to load_rules. No live checks claimed.",
+        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "recorded_at": "2026-10-20T11:55:25+00:00",
+        "issue_scopes": {
+          "805": "68400c28065eb3be0172a00af8f0f5b4178ab74241f9b4fcddab541a835fb61f"
+        }
       }
     },
     "stage": {
