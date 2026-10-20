@@ -151,7 +151,7 @@ class RpaPublisher:
             )
             # ACL-1768: робот ведёт один набор (`ad_sets[0]`); остальные не отбрасываем молча.
             for d in drafts:
-                if len(d.ad_sets) > 1:
+                if len(getattr(d, "ad_sets", None) or []) > 1:
                     d.errors.append("Several ad sets need the API backend: the RPA backend builds "
                                     "one ad set per campaign")
         self._built_at = time.monotonic()
