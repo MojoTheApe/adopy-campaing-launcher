@@ -50478,7 +50478,7 @@
             "session": "rf771-20261020"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-RF771",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -50508,7 +50508,8 @@
           "actor": "Coordinator-M1011A",
           "session": "coord-m1011a-20261015",
           "report": "Main moved to 259ae7f1 (batch #1034: ACL-602, 1202, 1680, 1401, 341). Pure refresh: merge current main (merge commit), re-run affected tests, re-handoff, fresh independent review. Independent trial merge already shows it merges cleanly and its tests pass on the merged tree."
-        }
+        },
+        "reviewer": "Reviewer-RR1020"
       },
       "768": {
         "implementers": [
@@ -57553,6 +57554,10 @@
       "Reviewer-R1838V": {
         "session": "reviewer-r1838v-20261020",
         "role": "Reviewer"
+      },
+      "Reviewer-RR1020": {
+        "session": "rr1020-20261020",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -60439,7 +60444,6 @@
       880,
       1046,
       774,
-      771,
       920,
       836,
       855,
@@ -102317,6 +102321,13 @@
             "approved_at": "2026-10-20T14:21:27+00:00"
           }
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-20T14:24:37+00:00",
+        "pr": 832,
+        "lane": "3faaae4dee8b490087328dafea957a2a",
+        "actor": "Reviewer-RR1020"
       }
     ],
     "policy": {
@@ -111359,6 +111370,18 @@
         "session": "reviewer-r1838v-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T14:21:00+00:00",
+        "state": "reviewing"
+      },
+      "832": {
+        "id": "3faaae4dee8b490087328dafea957a2a",
+        "pr": 832,
+        "issues": [
+          771
+        ],
+        "actor": "Reviewer-RR1020",
+        "session": "rr1020-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-20T14:24:37+00:00",
         "state": "reviewing"
       }
     },
