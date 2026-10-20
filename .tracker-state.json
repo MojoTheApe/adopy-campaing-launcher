@@ -109177,7 +109177,51 @@
         "session": "reviewer-r106w-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T11:42:13+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 19,
+          "pr": 955,
+          "branch": "codex/acl-106-empty-period-owner",
+          "head_sha": "64499cb326cc234c94177a51c2d002ae93ec0061",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "ce291401dfa6489828ba973eb602b744efb113657552fbfff1bcb7f342232d99",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-R106W",
+            "review_session": "reviewer-r106w-20261020",
+            "execution_lane": "df11f3d8eb8b4aa09d271dddd4e322ba",
+            "implementer": "Worker-L219",
+            "head_sha": "64499cb326cc234c94177a51c2d002ae93ec0061",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "tree_sha": "66644864c2bfc0fac653d2aa6ff3f418cf6f8b55",
+            "issues": [
+              19
+            ],
+            "report": "Independent re-review of PR #955 (ACL-106, empty period says whose emptiness it is) at head 64499cb3 on base main c6150160. The change adds _period_owner(report) in src/web/app.py, computed from the already-cached period report with no workbook frame rescan: it returns a manager-scoped owner only when my_cm and a period are set, countries exist, other managers have cm_comparison rows (rows without a CM name, nan or none are ignored) and none of them is the current manager; it is passed to the template as period_owner. report.html gets a new manager-scoped notice (manager name autoescaped by Jinja) shown only when report.countries is truthy and the book covers the period, while the existing whole-workbook notice (shown when there are no countries or the book does not cover the period) gets one extra sentence that nobody has rows for these dates; the conditions are mutually exclusive, so at most one notice renders. Docs CHANGELOG/PROJECT got short entries and tests/test_empty_period_owner.py adds 110 lines of tests. Delta check versus the previously approved head 33cde2ba: the PR's own added/removed lines relative to each merge-base hash identically (md5 of the +/- line sets equal), so the approved content is unchanged and the main merge only brought main's own changes; the diff work/main...HEAD touches exactly five files (CHANGELOG, PROJECT, app.py +29, report.html +12, the new test). Tests run in the worktree with the repo venv: tests/test_empty_period_owner.py and tests/test_sidebar_without_workbook.py (the only tests referencing the notice markup) gave 23 passed, no failures. CI on the head is fully green: ACL verification, Classify and check project tooling, Installer verification, Process instructions, descriptor, linux tests 3.13 shards 1/2/3, windows tests 3.13 and tracker-link all pass; two installer build jobs were skipped as not applicable. Nits: none blocking; the new notice reuses the id workbook-period-notice, which is harmless because the blocks are mutually exclusive. No live checks claimed.",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "recorded_at": "2026-10-20T12:37:10+00:00",
+            "issue_scopes": {
+              "19": "ce291401dfa6489828ba973eb602b744efb113657552fbfff1bcb7f342232d99"
+            }
+          },
+          "lane": {
+            "id": "df11f3d8eb8b4aa09d271dddd4e322ba",
+            "pr": 955,
+            "issues": [
+              19
+            ],
+            "actor": "Reviewer-R106W",
+            "session": "reviewer-r106w-20261020",
+            "coordinator": "Coordinator-M1011A",
+            "started_at": "2026-10-20T11:42:13+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-20T12:38:06+00:00"
+        }
       },
       "1032": {
         "id": "55fd2c64f2c941acacf6817710a5c07f",
