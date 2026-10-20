@@ -53231,7 +53231,7 @@
             "session": "act174a-78a5f7133f0f4cfbad8ecebf63811c02"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-ACT174A",
         "coordinator": "Coordinator-ACT174",
         "handoff": {
@@ -53262,7 +53262,8 @@
           "actor": "Coordinator-ACT174",
           "session": "f489c98f-9d9f-42a7-aafc-5dfb361caba8",
           "report": "The owner explicitly requires process updates to be delivered separately from the product for every repository/install profile and instructed implementation on2026-10-20. Common implementation is now independently reviewed, checked and published as Tracker3.8.0 / Master1.6.0, with the compatible reader deployed.\n\nReturn only ACL-2026 / Issue1026 / PR1027 for its genuine original author to update the source and scope under this newly supported global rule. Do not reuse the old ca9a650 approval for changed content or requirements. Preserve original task, evidence, prior approval/history, genuine author and all unrelated owners. No intake/integration batch exists for this source.\n\nThe revised source must use the exact published canonical pair, retain the complete original scope plus a clear latest owner amendment, restore the descriptor non-pin exception explanation to actual main, preserve all product/configuration/installation/release controls, and undergo fresh independent whole-scope/product-isolation source and combined review through the ordinary frozen batch route. This is not schema1 instruction admission.\n\nNo consumer product-delivery request or ACL/Windows publication is authorized or created by this return. The earlier rejected publication is not resumed. Process completion requires the genuine new canonical proof after ordinary admitted main integration; unsupported/mixed/unknown content remains unfinished. Foreign review reservations are preserved."
-        }
+        },
+        "review_report": "The owner explicitly requires process updates to be delivered separately from the product for every repository/install profile and instructed implementation on2026-10-20. Common implementation is now independently reviewed, checked and published as Tracker3.8.0 / Master1.6.0, with the compatible reader deployed.\n\nReturn only ACL-2026 / Issue1026 / PR1027 for its genuine original author to update the source and scope under this newly supported global rule. Do not reuse the old ca9a650 approval for changed content or requirements. Preserve original task, evidence, prior approval/history, genuine author and all unrelated owners. No intake/integration batch exists for this source.\n\nThe revised source must use the exact published canonical pair, retain the complete original scope plus a clear latest owner amendment, restore the descriptor non-pin exception explanation to actual main, preserve all product/configuration/installation/release controls, and undergo fresh independent whole-scope/product-isolation source and combined review through the ordinary frozen batch route. This is not schema1 instruction admission.\n\nNo consumer product-delivery request or ACL/Windows publication is authorized or created by this return. The earlier rejected publication is not resumed. Process completion requires the genuine new canonical proof after ordinary admitted main integration; unsupported/mixed/unknown content remains unfinished. Foreign review reservations are preserved."
       },
       "1028": {
         "implementers": [
@@ -97416,6 +97417,18 @@
         "pr": 846,
         "lane": "bbcea4d98c114acfb962d09dde96db1b",
         "actor": "Reviewer-Q2001B"
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-20T08:15:56+00:00",
+        "issue": 1026,
+        "operation": {
+          "id": "d7268464064f4a908b0416f776e72342",
+          "actor": "Coordinator-ACT174",
+          "session": "f489c98f-9d9f-42a7-aafc-5dfb361caba8",
+          "report": "The owner explicitly requires process updates to be delivered separately from the product for every repository/install profile and instructed implementation on2026-10-20. Common implementation is now independently reviewed, checked and published as Tracker3.8.0 / Master1.6.0, with the compatible reader deployed.\n\nReturn only ACL-2026 / Issue1026 / PR1027 for its genuine original author to update the source and scope under this newly supported global rule. Do not reuse the old ca9a650 approval for changed content or requirements. Preserve original task, evidence, prior approval/history, genuine author and all unrelated owners. No intake/integration batch exists for this source.\n\nThe revised source must use the exact published canonical pair, retain the complete original scope plus a clear latest owner amendment, restore the descriptor non-pin exception explanation to actual main, preserve all product/configuration/installation/release controls, and undergo fresh independent whole-scope/product-isolation source and combined review through the ordinary frozen batch route. This is not schema1 instruction admission.\n\nNo consumer product-delivery request or ACL/Windows publication is authorized or created by this return. The earlier rejected publication is not resumed. Process completion requires the genuine new canonical proof after ordinary admitted main integration; unsupported/mixed/unknown content remains unfinished. Foreign review reservations are preserved."
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -100453,50 +100466,6 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-19T23:39:24+00:00"
-      },
-      "1026": {
-        "issue": 1026,
-        "pr": 1027,
-        "branch": "codex/acl-2026-shared-executor-activity",
-        "head_sha": "ca9a650db33dcae8f32976cf7fdd900b72e28dd9",
-        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "scope": "1bea4d58e45f845fc670218b36d74f6295f360fff1dd234699f996c52f113532",
-        "review": {
-          "kind": "independent-review",
-          "verdict": "approved",
-          "implementer": "Worker-ACT174A",
-          "reviewer": "Reviewer-ACT174R",
-          "head_sha": "ca9a650db33dcae8f32976cf7fdd900b72e28dd9",
-          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "tree_sha": "8c9589638cf35df29172a1ea0cd333d75858f2f4",
-          "execution_lane": "653626d99fe24572a85ee6f0036ab108",
-          "review_session": "bab3ffa025194f6295928e0ce3aca6cc",
-          "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1027#issuecomment-6279820016",
-          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "issues": [
-            1026
-          ],
-          "recorded_at": "2026-10-19T23:45:29+00:00",
-          "issue_scopes": {
-            "1026": "1bea4d58e45f845fc670218b36d74f6295f360fff1dd234699f996c52f113532"
-          }
-        },
-        "lane": {
-          "id": "653626d99fe24572a85ee6f0036ab108",
-          "pr": 1027,
-          "issues": [
-            1026
-          ],
-          "actor": "Reviewer-ACT174R",
-          "session": "bab3ffa025194f6295928e0ce3aca6cc",
-          "coordinator": "Coordinator-ACT174",
-          "started_at": "2026-10-19T23:23:53+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-19T23:46:10+00:00"
       },
       "47": {
         "issue": 47,
