@@ -43435,6 +43435,67 @@
           }
         },
         "recorded_at": "2026-10-19T20:18:29+00:00"
+      },
+      "5cc83b63094747b7942c0f90ab608793": {
+        "evidence": {
+          "kind": "post-main-acceptance",
+          "batch_id": "5cc83b63094747b7942c0f90ab608793",
+          "pr": 1034,
+          "merge_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+          "head_sha": "b8f34a4bf134def078ed49eef6a58492de0c7872",
+          "tree_sha": "25162d0003eaffb3110e202e6f3a28713153c9e9",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            70,
+            202,
+            680,
+            401,
+            47
+          ],
+          "source_heads": [
+            "5fcb857ccfe6c2b7407837d39c661eee6c9ed273",
+            "294f4120d70f31d603fb55d1acb0e6788c892c2c",
+            "04c179278bb9d0e0cdf1c8456bf0b04b6583b08a",
+            "60382abba4f6ca04f14b6f038335f12f28312852",
+            "adf74b65b877c17b6f442ab0a00ffb39458a3f56"
+          ],
+          "issue_scopes": {
+            "70": "e203742e52229f146fe31b5b1af11599dfae6b44fe0f9749da06c140e57f6e99",
+            "202": "874916528a5e419af368f88079d8af38988995625b9d8492c34a8c8ce7d6c3f7",
+            "680": "503e07e2c8a0717c8914ace1daad97c1516a28140c4528063b28e8ab786dbafb",
+            "401": "3351b093cb2255ee6b77516b3761e09397e28c493d1eb8f788ec3947b8eabc8c",
+            "47": "be9479208e9a0731a6c08e48e1baa5ada1999d8e5201c15b07423025fe9b60df"
+          },
+          "reviewer": "Reviewer-X20BAT",
+          "review_session": "rxbat2-1c30cbbe",
+          "execution_lane": "1ea28d1b292c4ef3baeda760fa52b87b",
+          "coordinator": "Coordinator-E1019A",
+          "coordinator_session": "coord-c0a1de70",
+          "criteria": {
+            "401": [
+              {
+                "line": 21,
+                "criterion": "- [ ] A unit test with a fake launcher raising `requests.ConnectionError` (connection refused) fails on current code and passes after the fix: the job ends with the named reason and English message.",
+                "result": "passed",
+                "evidence": "main merge 259ae7f1 (parents c6150160 + batch head b8f34a4b; tree 25162d00 = reviewed batch tree): tests/test_publish_stops_when_multilogin_is_not_running.py fakes the launcher with requests.ConnectionError (connection refused to launcher.mlx.yt:45001, also wrapped in RuntimeError and as ConnectTimeout). Run by me: on pre-fix main c6150160 with this test file copied in, 12 failed; on 259ae7f1, 39 passed (with test_sentry_triage and test_failure_policy). The job ends with ProfileStop multilogin_not_running, English message 'Multilogin is not running on this computer - start the Multilogin app, then press Publish again', blocking_failures == [multilogin_not_running], one profile open, no DirectCDP/plain-browser fallback."
+              },
+              {
+                "line": 22,
+                "criterion": "- [ ] The Sentry event carries `step`/`reason`/`failure_kind` like other stops (not `RuntimeError: unknown`).",
+                "result": "passed",
+                "evidence": "main merge 259ae7f1 (parents c6150160 + batch head b8f34a4b; tree 25162d00 = reviewed batch tree): rpa_publisher raises ProfileStop(MLX_NOT_RUNNING) instead of a bare exception; test_publish_ends_with_the_message_and_reports_the_stop asserts sentry_signal.report_campaign_stop is called with step multilogin_not_running; test_sentry_tags_step_and_reason asserts acl_sentry.report_step_failure gets step=multilogin_not_running, kind=campaign_stop and that _reason_kind maps the message to 'mlx-not-running'; report_step_failure (src/acl_sentry.py) sets tags step, reason and failure_kind=kind. Passed on main (run by me)."
+              },
+              {
+                "line": 23,
+                "criterion": "- [ ] `config/sentry_triage_map.json` maps the new reason as a buyer-side stop.",
+                "result": "passed",
+                "evidence": "main merge 259ae7f1 (parents c6150160 + batch head b8f34a4b; tree 25162d00 = reviewed batch tree): config/sentry_triage_map.json has {step: multilogin_not_running, reason: *, task: ACL-1401, note: 'Multilogin app not running (launcher refused the connection) - buyer action, not code'}; test_the_stop_is_blocking_and_known_to_triage asserts it plus BLOCKING severity and BLOCKING_REVIEW_STEPS membership. Passed on main (run by me); PR 1034 CI 16/16 green on the same tree."
+              }
+            ]
+          },
+          "report": "Post-main acceptance for batch 5cc83b63 / PR 1034 by the retained independent integration Reviewer-X20BAT. Main merge 259ae7f1 has parents c6150160 and batch head b8f34a4b; tree 25162d00 equals the reviewed batch tree. Issues #70, #202, #680 and #47 have no unchecked criteria. The three unchecked lines of #401 were verified against merged code and tests run by me (new test fails 12/12 on pre-fix main c6150160, passes on 259ae7f1: 39 passed with triage/failure-policy suites) and PR 1034 CI 16/16. No criterion needed a live check."
+        },
+        "recorded_at": "2026-10-20T13:23:36+00:00"
       }
     },
     "policy_migrations": [
@@ -100808,6 +100869,12 @@
             "approved_at": "2026-10-20T13:10:43+00:00"
           }
         }
+      },
+      {
+        "event": "post-main-acceptance-recorded",
+        "at": "2026-10-20T13:23:36+00:00",
+        "batch_id": "5cc83b63094747b7942c0f90ab608793",
+        "pr": 1034
       }
     ],
     "policy": {
