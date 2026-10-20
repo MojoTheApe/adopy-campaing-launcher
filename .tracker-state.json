@@ -45080,9 +45080,11 @@
         "worktree": "C:\\acl-1770",
         "id": "3f446639a5684d478f46dfb9d163db53",
         "issue": 770,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T10:28:34+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 979,
+        "report": "# ACL-1770 handoff (round 3)\n\n- Merged the #833 fix (rpa_publisher.py tolerates drafts without ad_sets). tests/test_rpa_job_start_is_measured.py + tests/test_acl1770_page_pixel_levels.py pass locally. Only remaining conflict is non-blocking #1025 resolve_page. Full suite left to CI."
       }
     },
     "tasks": {
