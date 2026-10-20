@@ -45029,6 +45029,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
+      },
+      "836": {
+        "actor": "Worker-L2836",
+        "session": "run_l2_836",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "codex/acl-1836-session-recovery",
+        "worktree": "C:\\acl-1836",
+        "id": "3c7d63703c9a4e749a0fabc634ddc024",
+        "issue": 836,
+        "state": "implementing",
+        "started_at": "2026-10-20T09:34:35+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -49596,10 +49608,14 @@
           {
             "actor": "Worker-U1019836",
             "session": "run_u1019_836"
+          },
+          {
+            "actor": "Worker-L2836",
+            "session": "run_l2_836"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-U1019836",
+        "state": "implementing",
+        "worker": "Worker-L2836",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-U1019836",
@@ -49628,8 +49644,7 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578002+00:00",
           "remote_process_stopped_verified": false
-        },
-        "reviewer": "Reviewer-R1836Y"
+        }
       },
       "838": {
         "implementers": [
@@ -56023,6 +56038,10 @@
       },
       "Worker-L5230": {
         "session": "run_l5_230",
+        "role": "Worker"
+      },
+      "Worker-L2836": {
+        "session": "run_l2_836",
         "role": "Worker"
       }
     },
@@ -98175,6 +98194,13 @@
         "issue": 230,
         "claim": "17919e7558b447eea17c374f294b972d",
         "actor": "Worker-L5230"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T09:34:35+00:00",
+        "issue": 836,
+        "claim": "3c7d63703c9a4e749a0fabc634ddc024",
+        "actor": "Worker-L2836"
       }
     ],
     "policy": {
