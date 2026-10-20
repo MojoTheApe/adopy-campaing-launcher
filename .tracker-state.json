@@ -44867,7 +44867,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "891": {
+        "actor": "Worker-M1020891",
+        "session": "run_m1020_891",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "codex/acl-1891-video-chunks",
+        "worktree": "C:\\acl-1891-v2",
+        "id": "a5343bb740414c45aae8b1a7290faf33",
+        "issue": 891,
+        "state": "implementing",
+        "started_at": "2026-10-20T06:21:25+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -50562,11 +50575,15 @@
           {
             "actor": "Worker-S1891A",
             "session": "ws1891a-20261014"
+          },
+          {
+            "actor": "Worker-M1020891",
+            "session": "run_m1020_891"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-S1891A",
-        "coordinator": "Coordinator-C0930A",
+        "state": "implementing",
+        "worker": "Worker-M1020891",
+        "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-S1891A",
           "session": "ws1891a-20261014",
@@ -55596,6 +55613,10 @@
       "Reviewer-R2028": {
         "session": "rv-2028-a",
         "role": "Reviewer"
+      },
+      "Worker-M1020891": {
+        "session": "run_m1020_891",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -96541,6 +96562,13 @@
             "approved_at": "2026-10-20T06:18:19+00:00"
           }
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T06:21:25+00:00",
+        "issue": 891,
+        "claim": "a5343bb740414c45aae8b1a7290faf33",
+        "actor": "Worker-M1020891"
       }
     ],
     "policy": {
