@@ -46035,9 +46035,11 @@
         "worktree": "C:\\acl-rf-184",
         "id": "04fa0eecd18a456eb3759b5513da689a",
         "issue": 184,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T14:11:31+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 937,
+        "report": "Pure refresh: merged main 259ae7f1 (merge commit a0ff853e), no conflicts. Worktree is detached at the branch head because the branch is checked out in C:\\acl-1184-hand-open (untouched). Tests: test_acl1184_hand_open_message, test_acl1812_warm_sessions, test_publish_stops_when_multilogin_is_not_running, test_acl1680_one_config_dir - 122 passed."
       }
     },
     "tasks": {
