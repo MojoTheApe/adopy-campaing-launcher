@@ -106556,7 +106556,51 @@
         "session": "q2001d-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T09:42:39+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 767,
+          "pr": 830,
+          "branch": "codex/acl-1767-audience-cta-devices",
+          "head_sha": "8ef0046d82236d7e334fc6cc2359fff184b6e57e",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "1d4ea1f570762231d03d88e3ac3300b05e44ab25573bbd77db926b9fb8e3e3d1",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-Q2001D",
+            "review_session": "q2001d-20261020",
+            "execution_lane": "bcc490b838574247992ee272f3de034b",
+            "implementer": "Worker-B1019767",
+            "head_sha": "8ef0046d82236d7e334fc6cc2359fff184b6e57e",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "tree_sha": "3927eb008c485e683440cb0c2e7420392c251f1b",
+            "report": "ACL-1767 Builder 1 on the API path (gender, several languages, devices and OS minimum version, optional start time by the ad account IANA zone, CTA list per Website/Instant Form, multi-advertiser ads explicitly OPT_OUT). Scope matches the Issue acceptance: filled fields show in Check plan and readback, empty fields add no keys (golden test strips only the explicit OPT_OUT), draft v2 to v3 migration tested, RPA backend shows fields disabled and a filled value gets a 409 naming the field. Safety: objects stay PAUSED-only, no deletes, no polling; write_policy and the page helper in token_capture mirror a closed targeting key list, value checks for genders/devices/OS/locales, CTA type list and contextual_multi_ads only exactly OPT_OUT at the top of a creative; start in the past is refused before any write. Earlier finding (tzdata in requirements failing test_distribution_boundary) is fixed by head 8ef0046d allowing tzdata in that test. Tests run locally: 98 passed (distribution_boundary, acl1767_audience_fields) at this head plus 440 passed on the previous head (acl1767, acl1761 x2, acl1819, acl1775). CI all green on this head after one tracker-link rerun. Head contains current work/main. Not claimed: live Meta behaviour of the user_os version string and the per-objective CTA list (documented as unverified in the PR; a wrong value is a #100 refusal with nothing created); Playwright browser tests not run locally.",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              767
+            ],
+            "recorded_at": "2026-10-20T09:52:31+00:00",
+            "issue_scopes": {
+              "767": "1d4ea1f570762231d03d88e3ac3300b05e44ab25573bbd77db926b9fb8e3e3d1"
+            }
+          },
+          "lane": {
+            "id": "bcc490b838574247992ee272f3de034b",
+            "pr": 830,
+            "issues": [
+              767
+            ],
+            "actor": "Reviewer-Q2001D",
+            "session": "q2001d-20261020",
+            "coordinator": "Coordinator-M1011A",
+            "started_at": "2026-10-20T09:42:39+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-20T09:56:54+00:00"
+        }
       },
       "869": {
         "id": "f5138208ba0f4d589834315ed3cfbd0c",
