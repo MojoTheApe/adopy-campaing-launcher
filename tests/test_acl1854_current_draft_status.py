@@ -448,7 +448,7 @@ def _process_writer(path, label, read_entered, release, attempted, output):
         data = original(target)
         read_entered.set()
         if release is not None:
-            assert release.wait(10)
+            assert release.wait(120)   # дольше любого ожидания родителя (30 с на запуск процессов)
         return data
 
     draft_status._read = held_read
@@ -471,6 +471,7 @@ def test_separate_processes_lock_the_entire_read_modify_write(run):
         assert first_read.wait(30)
         two.start()
         assert second_attempt.wait(30)
+        assert one.is_alive(), "the first process died while holding the lock"
         assert not second_read.wait(.15), "second process read outside the transaction lock"
     finally:
         release.set()
