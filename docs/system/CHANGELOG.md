@@ -1,5 +1,17 @@
 # System history
 
+## ACL-110 — Compare the dashboard with another period — 2026-10-20
+
+The date-range popup has a "Compare with" choice: nothing, the previous period of the
+same length, or a custom range. With a comparison on, the account map (accounts,
+country rows, totals, campaign managers), CM Comparison, Optimization ad sets and the
+Builder's open recommendations show the earlier value and the change beside each number.
+The change is a percent of the earlier value; it is "—" when the earlier value is zero
+or missing. A row present in only one period is marked "new" or "gone". The selected
+period itself is unchanged and the comparison is kept in the address (`compare`,
+`cmp_from`, `cmp_to`). Without a comparison nothing on the page changes.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/18).
+
 ## ACL-1381 — Consistent Builder ad-text wording — 2026-10-18
 
 Complete the older text-label request while preserving ACL-1769's later numbered

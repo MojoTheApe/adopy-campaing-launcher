@@ -2091,6 +2091,22 @@
     .amap-cal-grid button.has:hover { border-color: var(--accent); }
     .amap-cal-grid button.sel { background: var(--accent); color: var(--on-accent); }
     .amap-cal-grid button.inrange { background: var(--accent-soft); }
+    /* ACL-110: сравнение периодов */
+    .amap-cmp { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; padding: 0.5rem 0.9rem 0; font-size: var(--adopy-text-sm); color: var(--muted); }
+    .amap-cmp select, .amap-cmp input[type=date] { font: inherit; color: var(--text); background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 6px; padding: 0.2rem 0.4rem; }
+    .amap-cmp-note { color: var(--muted); }
+    .cmp-chip { display: inline-flex; align-items: center; gap: 0.35rem; margin-left: 0.5rem; padding: 0.15rem 0.5rem; border: 1px solid var(--border); border-radius: 999px; font-size: var(--adopy-text-sm); color: var(--muted); white-space: nowrap; }
+    .cmp-chip a { color: var(--muted); text-decoration: none; }
+    .cmp-note { margin: 0.25rem 0 0; font-size: var(--adopy-text-sm); color: var(--bad); }
+    small.cmp { display: flex; justify-content: flex-end; gap: 0.35rem; font-size: var(--adopy-text-xs); font-weight: 400; color: var(--muted); line-height: 1.25; }
+    .cmp-delta.up, .cmp-delta.down { font-weight: 600; }
+    .cmp-delta.good { color: var(--good); }
+    .cmp-delta.bad { color: var(--bad); }
+    .cmp-flag { display: inline-block; margin-left: 0.4rem; padding: 0 0.35rem; border-radius: 4px; font-size: var(--adopy-text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+    .cmp-flag.new { color: var(--good); border: 1px solid var(--good); }
+    .cmp-flag.gone { color: var(--muted); border: 1px solid var(--border); }
+    tr.cmp-gone-row td { opacity: 0.75; font-style: italic; }
+    .cmp-recs { margin-left: 0.5rem; font-size: var(--adopy-text-xs); color: var(--muted); font-weight: 400; }
     .amap-cal-foot {
       display: flex; align-items: center; margin-top: 0.6rem; gap: 0.5rem;
       color: var(--muted); font-size: var(--adopy-text-sm);
@@ -3729,7 +3745,13 @@
       </span>
       <svg class="period-caret" viewBox="0 0 12 8" width="11" height="8" aria-hidden="true"><path d="M1 1.5h10L6 6.5Z"/></svg>
     </button>
+    {%- if compare %}
+    <span class="cmp-chip" title="Every number below also shows the earlier value and the change">vs {{ compare.label }}
+      <a href="javascript:void(0)" onclick="amapApply(_amapPick.from, _amapPick.to, _amapPick.span, {mode: ''})" aria-label="Stop comparing" title="Stop comparing">×</a></span>
+    {%- endif %}
     <script type="application/json" id="amap-dates">{{ (account_map.dates if account_map else []) | tojson }}</script>
+    {%- if compare_note %}<p class="cmp-note" role="status">{{ compare_note }}</p>{% endif %}
+    {%- if compare and compare.empty %}<p class="cmp-note" role="status">The workbook has no rows for {{ compare.label }}, so every row is new.</p>{% endif %}
   </div>
   {#- «Под кем смотрим» — отдельный элемент, а не строчка под логотипом.
       Это не свойство продукта, а положение зрителя, и меняется оно чаще,
@@ -4422,8 +4444,9 @@ async function dashRefresh(ev) {
         hx-swap="afterend"
         hx-trigger="click"
         {% endif %}>
-      <td class="{% if row.is_me %}me{% endif %}">{{ row.cm or '(unknown)' }}</td>
-      {{ mx.cells(row.spend, row.leads, row.deposits) }}
+      {%- set cpv = compare.cm(c.country, row.cm) if compare else false %}
+      <td class="{% if row.is_me %}me{% endif %}">{{ row.cm or '(unknown)' }}{% if compare %}{{ mx.flag(compare_state(row, cpv)) }}{% endif %}</td>
+      {{ mx.cells(row.spend, row.leads, row.deposits, prev=cpv) }}
       <td class="num">{{ row.net | fmt_usd }}</td>
       <td class="num {% if row.roi > 1 %}roi-pos{% elif row.roi and row.roi < 1 %}roi-neg{% endif %}">
         {% if row.roi %}{{ '%.2f' % row.roi }}{% else %}—{% endif %}
@@ -4431,6 +4454,14 @@ async function dashRefresh(ev) {
       <td style="color:var(--muted);font-size:var(--adopy-text-sm)">{% if row.deposits > 0 %}▸{% endif %}</td>
     </tr>
   {% endfor %}
+  {#- ACL-110: менеджеры, которые были в прошлом периоде и пропали из этого. -#}
+  {% if compare %}{% for g in compare.cm_gone(c.country, c.cm_comparison | map(attribute='cm')) %}
+    <tr class="cmp-gone-row">
+      <td>{{ g.cm or '(unknown)' }}{{ mx.flag('gone') }}</td>
+      {{ mx.cells(0, 0, 0, prev=g, gone=true) }}
+      <td class="num">—</td><td class="num">—</td><td></td>
+    </tr>
+  {% endfor %}{% endif %}
   </tbody>
 </table>
 
@@ -4542,6 +4573,10 @@ async function dashRefresh(ev) {
     <div class="cb-acc-header" data-acc-id="{{ acc_id }}">
       <span class="cb-acc-chevron" id="cb-chev-{{ acc_id }}">▸</span>
       <span class="cb-acc-title">{{ acc_label }}</span>
+      {#- ACL-110: что изменилось в рекомендациях на открытие против сравниваемого периода. -#}
+      {%- if compare %}{% set rd = compare.open_recs_diff(c.country, acc_label, recs) %}
+      <span class="cmp-recs" title="Open recommendations in the selected period compared with {{ compare.label }}{% if rd.new %}. New: {{ rd.new | join(', ') }}{% endif %}{% if rd.gone %}. Gone: {{ rd.gone | join(', ') }}{% endif %}">vs {{ rd.before }}: {{ rd.now }} now{% if rd.new %} · {{ rd.new | length }} new{% endif %}{% if rd.gone %} · {{ rd.gone | length }} gone{% endif %}</span>
+      {%- endif %}
       <span class="cb-acc-meta">
         {% if pf.missing_map_fields %}
           <span class="cb-pf-err" style="font-size:var(--adopy-text-sm)">⚠ missing: {{ pf.missing_map_fields | join(', ') }}</span>
@@ -4951,11 +4986,20 @@ async function dashRefresh(ev) {
             hx-swap="afterend"
             hx-trigger="click"
             {% endif %}>
-          <td class="adset">{{ r.adset_name[:60] }}</td>
-          {{ mx.cells(r.spend, r.leads, r.deposits, 'bad' if (r.deposits == 0 and r.spend > 0) else ('good' if r.deposits > 0 else '')) }}
+          {%- set apv = compare.adset(c.country, label, r.adset_name) if compare else false %}
+          <td class="adset">{{ r.adset_name[:60] }}{% if compare %}{{ mx.flag(compare_state(r, apv), 'the close recommendations of the earlier period') }}{% endif %}</td>
+          {{ mx.cells(r.spend, r.leads, r.deposits, 'bad' if (r.deposits == 0 and r.spend > 0) else ('good' if r.deposits > 0 else ''), prev=apv) }}
           <td class="{% if r.reason %}bad{% endif %}">{{ r.reason or '' }}</td>
         </tr>
       {% endfor %}
+      {#- ACL-110: ad sets, которые просили закрыть в прошлом периоде и которых нет в этом. -#}
+      {% if compare %}{% for g in compare.adset_gone(c.country, label, recs | map(attribute='adset_name')) %}
+        <tr class="cmp-gone-row">
+          <td class="adset">{{ g.adset_name[:60] }}{{ mx.flag('gone', 'the close recommendations of the earlier period') }}</td>
+          {{ mx.cells(0, 0, 0, prev=g, gone=true) }}
+          <td></td>
+        </tr>
+      {% endfor %}{% endif %}
       </tbody>
     </table>
   {% endif %}
@@ -8266,6 +8310,8 @@ function _safeConfirm(title, bodyHtml, onConfirm, opts) {
 
 // ── Календарь периода для карты аккаунтов ────────────────────────────
 var _amapPick = { from: '{{ pd.date_from }}', to: '{{ pd.date_to }}', span: '{{ pd.span }}' };
+/* ACL-110: с чем сравниваем выбранный период. mode: '' | 'prev' | 'custom'. */
+var _amapCmp = { mode: {{ ((compare_pick or {}).mode or '') | tojson }}, from: {{ ((compare_pick or {}).date_from or '') | tojson }}, to: {{ ((compare_pick or {}).date_to or '') | tojson }} };
 
 function amapDates() {
   var el = document.getElementById('amap-dates');
@@ -8340,6 +8386,7 @@ function amapCalendar(btn) {
      грузил период немедленно: увидеть, что выбрал, было негде, а закрыть окно
      после первого клика — значило потерять его молча. */
   var draft = { from: _amapPick.from, to: _amapPick.to, span: _amapPick.span || '' };
+  var cmpDraft = { mode: _amapCmp.mode || '', from: _amapCmp.from || '', to: _amapCmp.to || '' };
   var last = have[have.length - 1];
   var first = have[0];
   /* Открываемся на месяце выбранного периода, а не на последнем месяце книги:
@@ -8441,6 +8488,32 @@ function amapCalendar(btn) {
     return h + '</div></div>';
   }
 
+  /* ACL-110: «Compare with» — предыдущий период той же длины или свой диапазон. */
+  function cmpPrevText() {
+    if (draft.span === 'all' || !draft.from) return '';
+    var s = new Date(draft.from + 'T00:00:00'), e = new Date((draft.to || draft.from) + 'T00:00:00');
+    var n = Math.round((e - s) / 86400000) + 1;
+    var pe = new Date(s.getTime() - 86400000), ps = new Date(pe.getTime() - (n - 1) * 86400000);
+    return amapIso(ps) + (n > 1 ? ' – ' + amapIso(pe) : '');
+  }
+  function cmpHtml() {
+    var off = draft.span === 'all' || !draft.from;
+    var m = off ? '' : cmpDraft.mode;
+    var h = '<div class="amap-cmp"><label>Compare with <select data-cmp-mode="1"' + (off ? ' disabled' : '') + '>'
+      + '<option value=""' + (m === '' ? ' selected' : '') + '>Nothing</option>'
+      + '<option value="prev"' + (m === 'prev' ? ' selected' : '') + '>Previous period</option>'
+      + '<option value="custom"' + (m === 'custom' ? ' selected' : '') + '>Custom range</option>'
+      + '</select></label>';
+    if (m === 'prev') h += '<span class="amap-cmp-note">' + cmpPrevText() + '</span>';
+    if (m === 'custom') {
+      h += '<input type="date" data-cmp-from="1" value="' + cmpDraft.from + '" aria-label="Comparison start">'
+        + '<span class="amap-cal-arrow">–</span>'
+        + '<input type="date" data-cmp-to="1" value="' + cmpDraft.to + '" aria-label="Comparison end">';
+    }
+    if (off) h += '<span class="amap-cmp-note">pick a date range to compare</span>';
+    return h + '</div>';
+  }
+
   function draw() {
     var active = activePreset();
     var left = new Date(right.getFullYear(), right.getMonth() - 1, 1);
@@ -8468,6 +8541,7 @@ function amapCalendar(btn) {
           : '<span class="amap-cal-arrow">–</span><span class="amap-cal-field">' + b + '</span>')
       + '<button type="button" class="amap-cal-x" data-close="1" title="Close">×</button>'
       + '</div>'
+      + cmpHtml()
       + '<div class="amap-cal-foot">'
       + '<span>' + have.length + ' days in the workbook'
         + (last < amapIso(new Date()) ? ', last ' + last : '') + '</span>'
@@ -8510,11 +8584,22 @@ function amapCalendar(btn) {
         draw();
       };
     });
+    var cm = box.querySelector('[data-cmp-mode]');
+    if (cm) cm.onchange = function () { cmpDraft.mode = cm.value; draw(); };
+    var cf = box.querySelector('[data-cmp-from]'), ct = box.querySelector('[data-cmp-to]');
+    if (cf) cf.onchange = function () { cmpDraft.from = cf.value; if (!cmpDraft.to || cmpDraft.to < cf.value) { cmpDraft.to = cf.value; if (ct) ct.value = cf.value; } };
+    if (ct) ct.onchange = function () { cmpDraft.to = ct.value; };
     box.querySelector('[data-close]').onclick = function () { amapCalClose(true); };
     box.querySelector('[data-cancel]').onclick = function () { amapCalClose(true); };
     box.querySelector('[data-apply]').onclick = function () {
       // Начали период и не закончили — концом считается его начало: один день.
-      amapApply(draft.from, draft.to || draft.from, draft.span);
+      var off = draft.span === 'all' || !draft.from;
+      if (!off && cmpDraft.mode === 'custom' && !cmpDraft.from) {
+        alert('Pick the start of the comparison range, or choose another way to compare.');
+        return;
+      }
+      amapApply(draft.from, draft.to || draft.from, draft.span,
+                off ? { mode: '' } : { mode: cmpDraft.mode, from: cmpDraft.from, to: cmpDraft.to || cmpDraft.from });
     };
   }
   draw();
@@ -8524,17 +8609,28 @@ function amapCalendar(btn) {
    перезагружается целиком. Подменять фрагменты по одному значило бы держать
    на экране числа за разные периоды, пока догружаются остальные, — и в этот
    момент любые два соседних блока выглядели бы одинаково достоверно. */
-function amapApply(from, to, span) {
+function amapApply(from, to, span, cmp) {
   var cal = document.querySelector('.amap-cal');
   /* Тем же закрытием, что Cancel: тот же адрес с якорем — это переход по
      якорю без перезагрузки, и кнопка осталась бы «открытой» (ACL-1778). */
   if (cal) { if (cal._amapClose) cal._amapClose(false); else cal.remove(); }
   _amapPick = { from: from, to: to, span: span || '' };
+  /* Сравнение остаётся в адресе, пока его не выключили: выбранный период и
+     сравниваемый — одна пара, и смена периода не должна её терять. */
+  cmp = cmp || (span === 'all' ? { mode: '' } : _amapCmp);
+  _amapCmp = { mode: cmp.mode || '', from: cmp.from || '', to: cmp.to || '' };
   var q = [];
   if (span === 'all') q.push('span=all');
   else {
     if (from) q.push('date_from=' + encodeURIComponent(from));
     if (to) q.push('date_to=' + encodeURIComponent(to));
+    if (_amapCmp.mode) {
+      q.push('compare=' + encodeURIComponent(_amapCmp.mode));
+      if (_amapCmp.mode === 'custom') {
+        q.push('cmp_from=' + encodeURIComponent(_amapCmp.from));
+        q.push('cmp_to=' + encodeURIComponent(_amapCmp.to || _amapCmp.from));
+      }
+    }
   }
   var hash = window.location.hash || '';
   window.location.href = window.location.pathname + (q.length ? '?' + q.join('&') : '') + hash;

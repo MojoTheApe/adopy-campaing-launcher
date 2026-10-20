@@ -54,6 +54,8 @@
              data-country-name="{{ mc.country | e }}">
       <summary class="amap-row">
         <span class="amap-cell-name">{{ mc.country }}
+          {%- set cpv = compare.country_book(mc.country) if compare else false -%}
+          {%- if compare %}{{ mx.flag(compare_state(bk if bk else none, cpv)) }}{% endif %}
           {#- ACL-1721: заметки у стран убраны (хранятся в файле, но не показываются и не правятся); остались только заметки аккаунтов. -#}
         </span>
         {#- Спенд, снятый с самих кабинетов (Read). Прочерк значит «никто не
@@ -93,7 +95,7 @@
           {%- endif %}
         </span>
         {#- У страны без строк в книге (`book` пуст) чисел нет — прочерки, а не нули. -#}
-        {% if bk %}{{ mx.spans(bk.spend, bk.leads, bk.deposits) }}{% else %}{{ mx.dash_spans() }}{% endif %}
+        {% if bk %}{{ mx.spans(bk.spend, bk.leads, bk.deposits, prev=cpv) }}{% elif compare and cpv %}{{ mx.spans(0, 0, 0, prev=cpv, gone=true) }}{% else %}{{ mx.dash_spans() }}{% endif %}
         <span class="num{% if not mc.rows %} amap-nocov-count{% endif %}"><b>{{ mc.rows | length }}</b></span>
         <span class="amap-cell-act">
           {%- if not mc.virtual %}
@@ -145,7 +147,7 @@
       <span class="amap-cell-read"
             title="{{ tt.read_count }} of {{ tt.accounts }} accounts read. The accounts' own spend, added up once per account; shown only when every read account is in the same currency{% if tt.mixed %} — mixed currencies here, so not added up{% endif %}, otherwise a dash.">
         {%- if tt.read %}<b>{{ tt.read.spend | fmt_summary_amount(tt.read.currency) }}</b>{% else %}<b>—</b>{% endif %}</span>
-      {{ mx.spans(tt.spend, tt.leads, tt.deposits) }}
+      {{ mx.spans(tt.spend, tt.leads, tt.deposits, prev=(compare.totals() if compare else false)) }}
       <span class="num"><b>{{ amap.countries | sum(attribute='rows', start=[]) | length }}</b></span>
       <span></span>
     </div>
@@ -170,14 +172,15 @@
       <details class="amap-cm-country" data-country="__cm__:{{ g.country | e }}">
         <summary class="amap-cm-row amap-row">
           <span class="amap-cell-name">{{ g.country }}</span>
-          {{ mx.spans(g.spend, g.leads, g.deposits) }}
+          {{ mx.spans(g.spend, g.leads, g.deposits, prev=(compare.cm_group(g.country) if compare else false)) }}
           <span></span><span></span>
         </summary>
         {% for r in g.rows %}
         <div class="amap-cm-row amap-row amap-cm-person{% if r.is_me %} me{% endif %}">
           <span></span>
-          <span class="amap-cell-name">{{ r.cm }}{% if r.is_me %} (you){% endif %}</span>
-          {{ mx.spans(r.spend, r.leads, r.deposits) }}
+          {%- set cpv2 = compare.cm(g.country, r.cm) if compare else false %}
+          <span class="amap-cell-name">{{ r.cm }}{% if r.is_me %} (you){% endif %}{% if compare %}{{ mx.flag(compare_state(r, cpv2)) }}{% endif %}</span>
+          {{ mx.spans(r.spend, r.leads, r.deposits, prev=cpv2) }}
           <span></span><span></span>
         </div>
         {% endfor %}
