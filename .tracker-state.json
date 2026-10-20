@@ -53306,7 +53306,7 @@
             "session": "act174a-78a5f7133f0f4cfbad8ecebf63811c02"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-ACT174A",
         "coordinator": "Coordinator-ACT174",
         "handoff": {
@@ -53331,7 +53331,8 @@
           "session": "f489c98f-9d9f-42a7-aafc-5dfb361caba8",
           "report": "The owner explicitly requires process updates to be delivered separately from the product for every repository/install profile and instructed implementation on2026-10-20. Common implementation is now independently reviewed, checked and published as Tracker3.8.0 / Master1.6.0, with the compatible reader deployed.\n\nReturn only ACL-2026 / Issue1026 / PR1027 for its genuine original author to update the source and scope under this newly supported global rule. Do not reuse the old ca9a650 approval for changed content or requirements. Preserve original task, evidence, prior approval/history, genuine author and all unrelated owners. No intake/integration batch exists for this source.\n\nThe revised source must use the exact published canonical pair, retain the complete original scope plus a clear latest owner amendment, restore the descriptor non-pin exception explanation to actual main, preserve all product/configuration/installation/release controls, and undergo fresh independent whole-scope/product-isolation source and combined review through the ordinary frozen batch route. This is not schema1 instruction admission.\n\nNo consumer product-delivery request or ACL/Windows publication is authorized or created by this return. The earlier rejected publication is not resumed. Process completion requires the genuine new canonical proof after ordinary admitted main integration; unsupported/mixed/unknown content remains unfinished. Foreign review reservations are preserved."
         },
-        "review_report": "The owner explicitly requires process updates to be delivered separately from the product for every repository/install profile and instructed implementation on2026-10-20. Common implementation is now independently reviewed, checked and published as Tracker3.8.0 / Master1.6.0, with the compatible reader deployed.\n\nReturn only ACL-2026 / Issue1026 / PR1027 for its genuine original author to update the source and scope under this newly supported global rule. Do not reuse the old ca9a650 approval for changed content or requirements. Preserve original task, evidence, prior approval/history, genuine author and all unrelated owners. No intake/integration batch exists for this source.\n\nThe revised source must use the exact published canonical pair, retain the complete original scope plus a clear latest owner amendment, restore the descriptor non-pin exception explanation to actual main, preserve all product/configuration/installation/release controls, and undergo fresh independent whole-scope/product-isolation source and combined review through the ordinary frozen batch route. This is not schema1 instruction admission.\n\nNo consumer product-delivery request or ACL/Windows publication is authorized or created by this return. The earlier rejected publication is not resumed. Process completion requires the genuine new canonical proof after ordinary admitted main integration; unsupported/mixed/unknown content remains unfinished. Foreign review reservations are preserved."
+        "review_report": "The owner explicitly requires process updates to be delivered separately from the product for every repository/install profile and instructed implementation on2026-10-20. Common implementation is now independently reviewed, checked and published as Tracker3.8.0 / Master1.6.0, with the compatible reader deployed.\n\nReturn only ACL-2026 / Issue1026 / PR1027 for its genuine original author to update the source and scope under this newly supported global rule. Do not reuse the old ca9a650 approval for changed content or requirements. Preserve original task, evidence, prior approval/history, genuine author and all unrelated owners. No intake/integration batch exists for this source.\n\nThe revised source must use the exact published canonical pair, retain the complete original scope plus a clear latest owner amendment, restore the descriptor non-pin exception explanation to actual main, preserve all product/configuration/installation/release controls, and undergo fresh independent whole-scope/product-isolation source and combined review through the ordinary frozen batch route. This is not schema1 instruction admission.\n\nNo consumer product-delivery request or ACL/Windows publication is authorized or created by this return. The earlier rejected publication is not resumed. Process completion requires the genuine new canonical proof after ordinary admitted main integration; unsupported/mixed/unknown content remains unfinished. Foreign review reservations are preserved.",
+        "reviewer": "Reviewer-ACT177G"
       },
       "1028": {
         "implementers": [
@@ -55897,6 +55898,10 @@
       },
       "Reviewer-Q2001D": {
         "session": "q2001d-20261020",
+        "role": "Reviewer"
+      },
+      "Reviewer-ACT177G": {
+        "session": "review_389daa0fe6cff6b3e53c56eee4bdd46509f80512",
         "role": "Reviewer"
       }
     },
@@ -58766,7 +58771,6 @@
       822,
       770,
       13,
-      1026,
       767,
       768
     ],
@@ -97784,6 +97788,13 @@
         "issue": 768,
         "pr": 833,
         "actor": "Worker-B1019768"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-20T08:55:10+00:00",
+        "pr": 1027,
+        "lane": "ebca21aee3644ffeb6a9c583b4971b7b",
+        "actor": "Reviewer-ACT177G"
       }
     ],
     "policy": {
@@ -105903,6 +105914,18 @@
         "session": "reviewer-r1920z-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T07:05:44+00:00",
+        "state": "reviewing"
+      },
+      "1027": {
+        "id": "ebca21aee3644ffeb6a9c583b4971b7b",
+        "pr": 1027,
+        "issues": [
+          1026
+        ],
+        "actor": "Reviewer-ACT177G",
+        "session": "review_389daa0fe6cff6b3e53c56eee4bdd46509f80512",
+        "coordinator": "Coordinator-ACT174",
+        "started_at": "2026-10-20T08:55:10+00:00",
         "state": "reviewing"
       }
     },
