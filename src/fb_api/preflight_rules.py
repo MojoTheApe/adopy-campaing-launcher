@@ -108,7 +108,10 @@ RULES: list[dict[str, Any]] = [
        "Meta found no exact match for the language: pick it from the list or clear the field",
        sel='[name$="_language"]', level="adset"),
     _r("interests_resolve", "Detailed targeting found in Meta", ERROR, "server",
-       "Meta found no exact match for some interests: pick rows from the list",
+       "Meta found no exact match for some terms: pick one of the candidates or fix the term in the library",
+       sel=".cb-targeting-search", level="adset"),
+    _r("interests_confirmed", "Detailed targeting picks confirmed", ERROR, "server",
+       "Meta has only a near match for some terms: Confirm the pick in Check plan (it is remembered)",
        sel=".cb-targeting-search", level="adset"),
     _r("link_https", "Link https://", ERROR, "client", "enter the website URL, starting with https://",
        sel='input[name="tracking_link"]', level="campaign", applies="website"),
@@ -463,6 +466,14 @@ def min_budget_for(currency: str) -> float | None:
     return MIN_DAILY_BUDGET.get((currency or "").strip().upper())
 
 
+def _item_text(item: dict) -> str:
+    """Термин без находки: имя и кандидаты (или честное «кандидатов нет»)."""
+    rows = item.get("candidates") or []
+    cands = ("candidates: " + ", ".join(f"{c['name']} [{c['type']}]" for c in rows[:5])
+             if rows else "no candidates")
+    return f"'{item['term']}' not found ({cands})" + (f" - {item['reason']}" if item.get("reason") else "")
+
+
 def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = None,
                     existing_checked: bool = False, files: dict[str, bytes] | None = None,
                     renamed: str = "", name_error: str = "") -> list[dict[str, Any]]:
@@ -548,7 +559,49 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
             if s.interest_groups:
                 resolver.interests(s.interest_groups)
         put("interests_resolve", OK)
-    guarded("interests_resolve", interests)
+        put("interests_confirmed", OK)
+
+    def interests_guard() -> None:
+        # ACL-1771: непонятый термин — ошибка с кандидатами; близкое совпадение — ошибка с Confirm.
+        try:
+            interests()
+        except cr.TargetingUnresolved as exc:
+            lost = [i for i in exc.items if i.get("state") not in ("pending", "unknown")]
+            asks = [i for i in exc.items if i.get("state") == "pending"]
+            if any(i.get("state") == "unknown" for i in exc.items):
+                # Бюджет чтений вышел: не угадываем. Блокирует план (plan_error), человек жмёт Check plan снова.
+                put("interests_resolve", UNKNOWN, cr._tr.UNKNOWN_MESSAGE)
+            elif lost:
+                put("interests_resolve", ERROR,
+                    "Detailed targeting not found by Meta: " + "; ".join(_item_text(i) for i in lost))
+                out["interests_resolve"]["items"] = lost
+            else:
+                put("interests_resolve", OK)
+            if asks:
+                put("interests_confirmed", ERROR,
+                    "; ".join(f"picked '{i['suggested']['name']}' [{i['suggested']['type']}] for '{i['term']}'?"
+                              for i in asks))
+                out["interests_confirmed"]["items"] = asks
+                out["interests_confirmed"]["action"] = "confirm"
+            else:
+                put("interests_confirmed", OK)
+
+    if state["stopped"]:
+        for rid in ("interests_resolve", "interests_confirmed"):
+            put(rid, UNKNOWN, "Not checked: " + state["stopped"])
+    else:
+        try:
+            interests_guard()
+        except cr.PlanError as exc:
+            put("interests_resolve", ERROR, str(exc))
+            put("interests_confirmed", OK)
+        except GraphStop as exc:
+            state["stopped"] = str(exc) or "Graph API stopped"
+            for rid in ("interests_resolve", "interests_confirmed"):
+                put(rid, UNKNOWN, "Not checked: " + state["stopped"])
+        except GraphError as exc:
+            for rid in ("interests_resolve", "interests_confirmed"):
+                put(rid, UNKNOWN, f"Meta did not answer: {exc}")
 
     # Файлы: читаем с диска как создатель (или берём уже прочитанные).
     readable: list[int] = []

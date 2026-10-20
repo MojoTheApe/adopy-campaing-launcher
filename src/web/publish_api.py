@@ -213,6 +213,8 @@ def dry_run_result(outcome: Outcome) -> dict[str, Any]:
         "readback": {}, "plan": outcome.plan, "created": {}, "reused": {}, "ts": _now_iso(),
         # ACL-1819: вердикты серверных правил pre-flight audit (пусто, если аудит не шёл).
         "audit": list(outcome.audit),
+        # ACL-1771: термины таргетинга (найдены / ждут подтверждения) и кэш подтверждённых.
+        "targeting": list(outcome.targeting),
     }
 
 
@@ -549,7 +551,8 @@ class ApiPublisher:
 # записи (помощник с WRITE=null, `GraphClient(allow_writes=False)`).
 
 #: Потолок вызовов на предпроверку кабинета внутри «Check plan».
-PLAN_PREFLIGHT_MAX_CALLS = 12
+# ACL-1771: поиск детального таргетинга ходит за списками Meta (в резолвере свои потолки в чтениях: 8 на термин, 16 на задание).
+PLAN_PREFLIGHT_MAX_CALLS = 30
 
 
 def _plan_in_read_session(account_label: str, drafts: list[Any]) -> list[dict[str, Any]]:

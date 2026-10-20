@@ -187,9 +187,22 @@
         "level": "adset",
         "sel": ".cb-targeting-search"
       },
-      "hint": "Meta found no exact match for some interests: pick rows from the list",
+      "hint": "Meta found no exact match for some terms: pick one of the candidates or fix the term in the library",
       "id": "interests_resolve",
       "label": "Detailed targeting found in Meta",
+      "severity": "error",
+      "side": "server",
+      "unit": "campaign"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "adset",
+        "sel": ".cb-targeting-search"
+      },
+      "hint": "Meta has only a near match for some terms: Confirm the pick in Check plan (it is remembered)",
+      "id": "interests_confirmed",
+      "label": "Detailed targeting picks confirmed",
       "severity": "error",
       "side": "server",
       "unit": "campaign"
