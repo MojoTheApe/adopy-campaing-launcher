@@ -111786,7 +111786,9 @@
         "session": "sr1020-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T14:46:59+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "# Review return \u2014 PR #1042 ACL-2040 (Issue #1040), head a00c496a\n\nReviewer-SR1020, session sr1020-20261020. Reviewed against main 259ae7f1.\n\n## Blocking\n\n1. Source does not contain current main: the PR's merge base is c6150160, 25 commits behind main 259ae7f1. The tracker requires the current main baseline for source approval (record-review dry run at this head answered \"Source review must use the current main baseline\"), so it cannot be approved as is. A trial `git merge-tree 259ae7f1 a00c496a` is conflict-free. Merge current main, let source CI finish, and hand off again.\n\n## Code review \u2014 no defects found\n\n- src/meta_campaign_agent/multilogin_launcher.py `stop_profile`: main address `v1/profile/stop/p/{id}` asked up to 3 times, 2 s apart, on a dropped request (non-timeout exception) or a 5xx that is not \"already stopped\"; `requests.Timeout` (read and connect timeout) is not retried; then the legacy addresses; 404 on main still falls through; other 4xx stop at once; the raised error names the main-address failure (\"(main address) \u2026; older addresses: \u2026\").\n- tests/test_the_api_stop_is_asked_first.py and all tests calling `stop_profile`: 482 passed locally at head.\n- LOW (optional): CHANGELOG says \"A read timeout is not retried\"; the code also does not retry a connect timeout (`ConnectTimeout` is a `Timeout`). Consider wording \"a timeout\".",
+        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
