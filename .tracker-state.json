@@ -45164,6 +45164,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T10:44:50+00:00",
         "from_status": "status:todo"
+      },
+      "309": {
+        "actor": "Worker-L2309b",
+        "session": "run_l2_309b",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1309-own-dashboard",
+        "worktree": "C:\\acl-1309-v2",
+        "id": "ab8eb677481b47c7a8ac8b75c6d66bd0",
+        "issue": 309,
+        "state": "implementing",
+        "started_at": "2026-10-20T11:14:01+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -51333,10 +51345,14 @@
           {
             "actor": "Worker-L2309",
             "session": "run_l2_309"
+          },
+          {
+            "actor": "Worker-L2309b",
+            "session": "run_l2_309b"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-L2309",
+        "state": "implementing",
+        "worker": "Worker-L2309b",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-L2309",
@@ -51359,8 +51375,7 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578042+00:00",
           "remote_process_stopped_verified": false
-        },
-        "reviewer": "Reviewer-R1309Z"
+        }
       },
       "163": {
         "implementers": [],
@@ -56312,6 +56327,10 @@
       "Reviewer-X20BAT": {
         "session": "rxbat2-1c30cbbe",
         "role": "Reviewer"
+      },
+      "Worker-L2309b": {
+        "session": "run_l2_309b",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -99463,6 +99482,13 @@
           "state": "reviewing",
           "started_at": "2026-10-20T11:08:46+00:00"
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T11:14:01+00:00",
+        "issue": 309,
+        "claim": "ab8eb677481b47c7a8ac8b75c6d66bd0",
+        "actor": "Worker-L2309b"
       }
     ],
     "policy": {
