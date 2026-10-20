@@ -50502,7 +50502,7 @@
             "session": "run_l1_845"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-L1845",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -50526,7 +50526,8 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578011+00:00",
           "remote_process_stopped_verified": false
-        }
+        },
+        "reviewer": "Reviewer-R1845V"
       },
       "844": {
         "implementers": [
@@ -57092,6 +57093,10 @@
       "Reviewer-R1841V": {
         "session": "reviewer-r1841v-20261020",
         "role": "Reviewer"
+      },
+      "Reviewer-R1845V": {
+        "session": "reviewer-r1845v-20261020",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -59974,7 +59979,6 @@
       }
     },
     "review_queue": [
-      845,
       1037,
       838,
       1040,
@@ -101511,6 +101515,13 @@
           "report": "# Return: PR #848 / ACL-1841 (head b4936919)\n\n1. [blocking] Acceptance criteria of Issue #841 are only partly met. Not covered (docs/system/CHANGELOG.md:12-16 says so itself): \"Search/filter, expansion, column settings and batch commands retain coherent groups when wrapping\" (.hc-toolbar untouched, untested) and \"Country footer/form and builder handle do not cover table actions\" (no builder-handle test). tests/test_account_table_responsive.py covers only scroll containment of .amap-grid. Fix: either add geometry tests plus any needed CSS for these two criteria on main's markup, or get explicit coordinator acceptance of a partial slice and create the follow-up Issue (none exists: only #841 matches), keeping #841 open.\n2. [blocking-minor] PR body is stale: it still says \"Current main does not include the ACL-1797/1798 campaign-table toolbar\", which is false on this base (the PR's own test renders it). Update the body to match the CHANGELOG.\nCI on the head was still pending at review time (4 jobs pending) - not usable for approval.\nPositives: wrapper contains only the table; campaign section above and hc-after below stay outside; 24 tests pass locally; no stacking on unmerged tasks.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-20T13:48:54+00:00",
+        "pr": 850,
+        "lane": "766eb6ba60734c0ca9270121d9c239e3",
+        "actor": "Reviewer-R1845V"
       }
     ],
     "policy": {
@@ -110629,6 +110640,18 @@
         "session": "reviewer-r2038v-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T13:07:10+00:00",
+        "state": "reviewing"
+      },
+      "850": {
+        "id": "766eb6ba60734c0ca9270121d9c239e3",
+        "pr": 850,
+        "issues": [
+          845
+        ],
+        "actor": "Reviewer-R1845V",
+        "session": "reviewer-r1845v-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-20T13:48:54+00:00",
         "state": "reviewing"
       }
     },
