@@ -12,6 +12,7 @@ What changed and why, a few lines.
 [Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/NNN).
 ```
 
+A second entry for the same task uses `ACL-NNNN-suffix.md` (e.g. `ACL-NNNN-followup.md`).
 The heading format is the same as in `CHANGELOG.md`; the number must match the file
 name. Batch integration or release folds all fragments into `CHANGELOG.md`
 (newest first) and deletes them:

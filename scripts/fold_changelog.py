@@ -18,7 +18,8 @@ _ROOT = Path(__file__).resolve().parents[1]
 FRAGMENTS = Path("docs/system/changelog.d")
 CHANGELOG = Path("docs/system/CHANGELOG.md")
 HEADER = "# System history\n\n"
-FILE_NAME = re.compile(r"^ACL-(\d+)\.md$")
+# Допускается суффикс (ACL-N-followup.md): повторная запись по той же задаче.
+FILE_NAME = re.compile(r"^ACL-(\d+)(?:-[A-Za-z0-9-]+)?\.md$")
 HEADING = re.compile(r"^## ACL-(\d+) — .+ — (\d{4}-\d{2}-\d{2})$")
 
 
@@ -30,12 +31,12 @@ def read_fragments(directory: Path) -> list[tuple[str, int, str, Path]]:
         if path.name.lower() == "readme.md":
             continue
         if not match:
-            raise ValueError(f"{path.name}: expected the name ACL-NNNN.md")
-        text = path.read_text(encoding="utf-8").strip("\n")
+            raise ValueError(f"{path.name}: expected the name ACL-NNNN.md or ACL-NNNN-suffix.md")
+        text = path.read_text(encoding="utf-8-sig").strip("\n")
         first = text.split("\n", 1)[0]
         heading = HEADING.match(first)
         if not heading:
-            raise ValueError(f"{path.name}: first line must be '## ACL-NNNN — Title — YYYY-MM-DD'")
+            raise ValueError(f"{path.name}: first line must be '## ACL-NNNN — Title — YYYY-MM-DD' (use ' — ', an em dash)")
         if heading.group(1) != match.group(1):
             raise ValueError(f"{path.name}: heading number {heading.group(1)} differs from the file name")
         found.append((heading.group(2), int(heading.group(1)), text, path))
@@ -48,17 +49,18 @@ def fold(root: Path = _ROOT, *, check: bool = False) -> list[str]:
     if not fragments or check:
         return [f"ACL-{number}" for _, number, _, _ in fragments]
     changelog = root / CHANGELOG
-    body = changelog.read_text(encoding="utf-8")
+    body = changelog.read_text(encoding="utf-8-sig")
     if not body.startswith(HEADER):
         raise ValueError(f"{CHANGELOG} must start with '{HEADER.strip()}'")
     rest = body[len(HEADER):]
     # Новые записи выше старых: по дате, при равенстве — по номеру задачи.
     ordered = sorted(fragments, key=lambda item: (item[0], item[1]), reverse=True)
-    # Повторный запуск после частичного сбоя не должен дублировать запись.
-    fresh = [item for item in ordered if f"## ACL-{item[1]} — " not in rest]
+    # Повторный запуск после частичного сбоя не должен дублировать запись; сравниваем текст
+    # целиком, иначе новая запись по уже упомянутой задаче потерялась бы вместе с фрагментом.
+    fresh = [item for item in ordered if item[2] not in rest]
     if fresh:
         block = "\n\n".join(item[2] for item in fresh)
-        changelog.write_text(HEADER + block + "\n\n" + rest, encoding="utf-8")
+        changelog.write_text(HEADER + block + "\n\n" + rest, encoding="utf-8", newline="\n")
     for _, _, _, path in fragments:
         path.unlink()
     return [f"ACL-{number}" for _, number, _, _ in ordered]
@@ -71,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         folded = fold(args.root, check=args.check)
-    except ValueError as error:
+    except (ValueError, OSError) as error:
         print(f"fold_changelog: {error}", file=sys.stderr)
         return 1
     verb = "valid" if args.check else "folded"

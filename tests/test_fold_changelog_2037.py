@@ -61,6 +61,31 @@ def test_rerun_does_not_duplicate_entry(tmp_path):
     assert (root / fc.CHANGELOG).read_text(encoding="utf-8").count("## ACL-10 — ") == 1
 
 
+def test_new_entry_for_already_listed_task_is_kept(tmp_path):
+    root = _tree(tmp_path, "## ACL-5 — Old — 2026-01-01\n\nOld.\n")
+    path = root / fc.FRAGMENTS / "ACL-5-followup.md"
+    path.write_text("## ACL-5 — Follow-up — 2026-02-01\n\nMore.\n", encoding="utf-8")
+    fc.fold(root)
+    text = (root / fc.CHANGELOG).read_text(encoding="utf-8")
+    assert "Follow-up" in text and "Old." in text and not path.exists()
+
+
+def test_bom_crlf_fragment_and_lf_output(tmp_path):
+    root = _tree(tmp_path)
+    raw = "\ufeff## ACL-7 — T — 2026-10-01\r\n\r\nB.\r\n".encode("utf-8")
+    (root / fc.FRAGMENTS / "ACL-7.md").write_bytes(raw)
+    fc.fold(root)
+    assert b"\r\n" not in (root / fc.CHANGELOG).read_bytes()
+    assert "## ACL-7 — T" in (root / fc.CHANGELOG).read_text(encoding="utf-8")
+
+
+def test_missing_changelog_is_a_clean_error(tmp_path):
+    root = _tree(tmp_path)
+    _fragment(root, 3, "2026-10-01")
+    (root / fc.CHANGELOG).unlink()
+    assert fc.main(["--root", str(root)]) == 1
+
+
 @pytest.mark.parametrize("name,content", [
     ("notes.md", "## ACL-1 — T — 2026-01-01\n"),
     ("ACL-5.md", "## ACL-6 — T — 2026-01-01\n"),
