@@ -3,11 +3,12 @@
 ## Current instruction pin
 
 [ACL-2026](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1026)
-selects published Master 1.6.0
-`6cbc2bbfd5df76fc2f1ad6f285d33a45dd5ff504` for common instructions. Tracker 3.8.0
-`9c3ad4deec6b3596d5ef48400430b126155012dd` retains the support introduced by ACL-1987
+selects published Master 1.7.2
+`4f148cbbbc2c9c65a7fdebba9b37551f91566e04` for common instructions. Tracker 3.9.2
+`3d32586d72e4621f70d56d35f1e199a19fa13b00` retains the support introduced by ACL-1987
 and the shared [executor activity contract](EXECUTOR_ACTIVITY.md), and adds
-canonical [process-support completion](PROCESS_SUPPORT.md). Existing
+canonical [process-support completion](PROCESS_SUPPORT.md), explicit phase-preserving
+[Pause/Resume support](TASK_PAUSE.md), and shared lifecycle/correction guidance. Existing
 activated choices, local checks and package completion remain unchanged.
 The prior ACL-2011 instruction-pin adoption remains in the dated process history.
 This source update still requires ordinary independent source review, frozen
@@ -18,6 +19,24 @@ changes, explicit publication scope and optional-policy selections keep their
 actual package requirements. A source branch alone is not process completion.
 Use the actual current-main pinned ACL adapter for current ownership and delivery;
 the old operative866 instructions below describe ACL-1987's original source path.
+
+## Pause readiness and live boundary
+
+The cumulative ACL-2026 source supplies compatible commands and the complete
+portable helper closure. It does not activate outer8, resume a stopped agent,
+stop foreign owners, select a new optional policy or publish an ACL product.
+The published shared service reader and all actual writers/adapters/CI recorders
+must be verified at compatible exact revisions, with recovery and genuine current
+ownership evidence. The Coordinator records that private readiness inventory.
+
+Only the actual maintained idle reservation may preview/apply `pause activate`
+and resume its same maintenance owner after every real owner, frozen intake,
+integration, legacy timer and pending effect is reconciled through supported
+operations. Existing ownership or unknown writer readiness leaves activation
+pending. Preserve the complete incumbent1..7 guard bundle and never downgrade
+outer8 after pause history. See the canonical [commands](TASK_PAUSE.md).
+Until real activation is verified, use the existing pre-activation stop/reclaim
+procedure; do not present its To Do move as phase-preserving Pause.
 
 ## Retained ACL-1987 support scope
 

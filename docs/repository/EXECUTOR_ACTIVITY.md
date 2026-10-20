@@ -5,7 +5,7 @@ recorded owner/session/claim reports its own activity. Report at least once a
 minute while working, and report `waiting` before waiting for checks or input.
 Report `running` on actual continuation and `stopped` when execution ends.
 Running and waiting observations expire after five minutes; this freezes work time at
-the last report and shows Activity unconfirmed. It never frees a claim, approves
+the last report and shows Connection lost. Never-confirmed activity stays Activity unconfirmed. It never frees a claim, approves
 a source, releases a review lane or changes a task's native workflow status.
 A recorded stop is retained while that same owner remains assigned; another
 executor's heartbeat or retention cleanup cannot turn that known stop into a run.
@@ -72,8 +72,10 @@ resurrect a completed, archived or transferred claim.
 
 Task history is a read-only window of native GitHub status/archive label events,
 including direct and bulk changes. It records the actual GitHub actor, not an
-invented individual behind a shared account. Review includes Approved in the
-current workspace: a Review-to-Approved change is internal to that category.
+invented individual behind a shared account. Genuine approved waiting work appears
+in Delivery as Ready for integration; Review contains unfinished review. Native
+history preserves the actual label changes. Approval waiting age is separate from
+confirmed Work/Review/Merge time, and missing history stays unknown.
 History does not claim that every label edit changes a category count. Initial
 and reconciliation reads cover at most ten pages, with overlap on incremental
 reads; retain at most 500 relevant events and show 25 per page. Missing/truncated
@@ -83,3 +85,6 @@ Raw webhook bodies, unrelated labels, Issue prose and credentials are not publis
 Master companion: [MR-65](https://github.com/MojoTheApe/master-repo/issues/65).
 ACL adopts the common engine and guidance separately; no campaign code or
 execution/delivery policy migration is required.
+
+Explicit phase-preserving pause and fresh-authority resume are separate owned
+[task pause](TASK_PAUSE.md) operations; heartbeat expiry never invokes them.

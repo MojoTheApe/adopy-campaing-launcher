@@ -416,10 +416,20 @@ def file_bytes(request, root, row):
 def read_full_state(request, repo):
     root = 'repos/' + repo
     row = request(root + '/contents/.tracker-state.json?ref=tracker-state')
-    state = json.loads(file_bytes(request, root, row),object_pairs_hook=direct_module().unique_object)
+    state = pause_module().decode(json.loads(file_bytes(request, root, row),object_pairs_hook=direct_module().unique_object))
+    if 'task_pause' in state and state['task_pause']['repository'].lower() != repo.lower():
+        raise ValueError('Task pause belongs to a different repository')
     if state_schema(state) not in (1, 2):
         raise ValueError('Invalid tracker state')
     return state
+
+
+def pause_module():
+    try:
+        from . import pause_policy
+    except ImportError:
+        import tracker_pause_policy as pause_policy
+    return pause_policy
 
 
 def retry_module():
@@ -436,6 +446,9 @@ def state_schema(state):
     Older engines reject outer schema 3. No old writer can read a held fence and
     obtain a fresh SHA for a write that silently ignores maintenance.
     """
+    if state.get('schema_version') == 8:
+        return state_schema(pause_module().decode(state))
+    pause_module().validate(state)
     version = state.get('schema_version')
     held = state.get('maintenance')
     if type(version) is not int or version not in (1, 2, 3, 4, 5, 6, 7):
@@ -738,16 +751,30 @@ def review_matches(receipt, config, pr, content, numbers):
     return pr.get('merged') or receipt.get('base_sha') == pr['base']['sha']
 
 
+def require_settled_corrections(state, number):
+    """A real unfinished legacy return cannot receive new approval or admission."""
+    rows = state.get('rework')
+    row = rows.get(str(number), {}) if isinstance(rows, dict) else {}
+    if (isinstance(row, dict) and row.get('state') == 'returning'
+            and isinstance(row.get('id'), str) and re.fullmatch(r'[a-f0-9]{32}', row['id'])):
+        raise ValueError('Finish the original pending correction return with its same report and identity first')
+
+
 def admit(request, config, pr, numbers):
     value = policy(config)
     process = process_module() if 'process_instructions' in config else None
+    shared = read_full_state(request, config['project']['repository'])
+    for number in numbers:
+        require_settled_corrections(shared, number)
+        pause_module().require_unpaused(shared, number)
+    if pause_module().integration_held(shared):
+        raise ValueError('Paused frozen integration must resume/recover before admitting a conflicting main change')
     if not value and not process:
         return None
     if pr.get('draft') or (pr.get('state') == 'closed' and not pr.get('merged')):
         raise ValueError('A draft or abandoned PR cannot be admitted')
     root = 'repos/' + config['project']['repository']
     content = pr_tree(request, root, pr)
-    shared = read_full_state(request, config['project']['repository'])
     execution = execution_state(shared, config)
     if config.get('execution_policy', {}).get('schema_version') == 4:
         direction = route(config, pr, request)
@@ -809,6 +836,14 @@ def admit(request, config, pr, numbers):
                 if (tree(request, root, receipt['base_sha']) != tree(request, root, main_ref['object']['sha'])
                         and not (process and process.stage_base_compatible(request, config, receipt['base_sha'], main_ref['object']['sha'], shared))):
                     raise ValueError('Stage must start from current main or an exactly receipted instruction-only gap')
+    if execution is None and pause_module().legacy_review_bindings(shared,numbers,receipt.get('pr') if direction=='promotion' else pr['number']):
+        reviewed = state.get('reviews',{}).get(str(receipt.get('pr')), {}) if direction=='promotion' else receipt
+        # A Stage receipt proves the tested tree, not a replacement Reviewer's approval.
+        pause_module().require_legacy_review(shared,numbers,reviewed,receipt.get('pr') if direction=='promotion' else pr['number'])
+        source = request(root+'/pulls/'+str(receipt['pr'])) if direction=='promotion' else pr
+        if (not review_matches(reviewed,config,source,content,numbers)
+                or any(not scope_matches(request(root+f'/issues/{n}'),reviewed.get('issue_scopes',{}).get(str(n)),config) for n in numbers)):
+            raise ValueError('Fresh bound legacy review must match the actual source/tree and current task scope')
     page = 1
     while True:
         commits = request(root + f'/pulls/{pr["number"]}/commits?per_page=100&page={page}')

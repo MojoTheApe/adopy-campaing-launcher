@@ -8,14 +8,16 @@ whole-scope review remain authoritative.
 
 ## Accepted scope and provenance
 
-Select published Master1.6.0 `6cbc2bbfd5df76fc2f1ad6f285d33a45dd5ff504`
-and Tracker3.8.0 `9c3ad4deec6b3596d5ef48400430b126155012dd`.
-The task adopts common executor activity and the global separation of process
-delivery from product delivery. The owner expressly requested the latter outcome
-after the original source approval. The genuine Coordinator returned the source
-before the same author resumed it; old approval does not cover the revision.
+Select published Master1.7.2 `4f148cbbbc2c9c65a7fdebba9b37551f91566e04`
+and Tracker3.9.2 `3d32586d72e4621f70d56d35f1e199a19fa13b00`.
+The cumulative task adopts common activity/history, process/product separation,
+Pause support and shared lifecycle/correction guidance. The owner explicitly
+selected one combined update on the original Issue/PR. The genuine source Reviewer
+returned the current source before its original Worker reclaimed the same branch.
+Previous ca9a650 and 8ce4862 scopes, checks and handoffs remain historical; none
+approves this changed cumulative source or proves live Pause activation.
 
-Compare against actual ACL main `c61501607ce11744e45add8b0d3b314368c216c5`.
+Compare against actual ACL main `259ae7f1283a0a0acab40354b6b97d55162c91b5`.
 Keep every non-pin descriptor field, Tracker config and separated layout unchanged,
 including the descriptor's historical explanatory exception. Preserve execution3,
 5/5/5 capacity, process1, no Stage with permanent stage retained, package target,
@@ -25,11 +27,15 @@ retains the genuine upstream pristine baseline and authenticated helper closure.
 
 ## Product and frozen bundle inputs
 
-The immutable comparison covers 306 unchanged blobs across `src`, `config`,
+The current-main comparison covers 307 unchanged product/build input blobs across `src`, `config`,
 `knowledge_base`, `assets`, `packaging/windows`, runtime/development requirements,
 `.env.example`, `serve.py`, the runtime/smoke/update-gate helpers, release manifest,
 publication/continuation/CI-reuse scripts, and release/complete-delivery workflows.
-Recheck the final candidate rather than inferring isolation from those paths.
+The current main includes unrelated product changes (configuration unification,
+goals/profile search and RPA guards/tests); this candidate includes them unchanged.
+Recheck the final immutable diff rather than inferring isolation from those paths.
+Existing Git attributes check out four PowerShell inputs as CRLF; their normalized
+Git blobs are identical to main. No new line-ending rule is introduced.
 
 `packaging/windows/build.ps1` runs the existing clean-input guard, creates build
 metadata, then invokes PyInstaller with `acl_windows.spec`. The spec's `Analysis`
@@ -40,7 +46,10 @@ and Playwright. Hidden imports cover the reviewed product/runtime modules plus
 delivery descriptor, Tracker config and `.workflow/tools` are not bundled as data.
 No packaging, dependency, launcher or imported product input changes here.
 
-The source import scan also checks indirect paths. `src.web.acl_update` imports
+The current-main import scan starts from 233 product Python roots and reaches
+234 local modules; its only extra project helper is `scripts/_console.py`. The
+new `config.config_unify` module imports product configuration and standard-library
+modules, with no Tracker/governance dependency. The scan also checks indirect paths. `src.web.acl_update` imports
 `scripts.acl_update_gate`, which imports `scripts._console` and product configuration;
 none imports the changed shared governance helpers. The runtime manager likewise
 uses product configuration and `_console`. Smoke imports its explicit dependency
@@ -57,8 +66,8 @@ changes or explicit publication still need their real checks and configured deli
 
 `scripts/acl_release_manifest.py:tracker_issues` imports
 `scripts/tracker_pr_check.py`, which forwards to the exact portable PR helper.
-The consumed `linked_numbers` function is unchanged from actual main and from
-Tracker3.7.3 to 3.8.0. Its globals are ordinary parsing dependencies; it never
+The consumed `linked_numbers` function is unchanged from the actual main pin
+through Tracker3.9.2. Its globals are ordinary parsing dependencies; it never
 references `delivery_policy` or calls completion/projection functions. Legacy
 aliases and the +1000 identity mapping remain unchanged.
 
@@ -68,8 +77,8 @@ Its canonical engine source is unchanged; the existing separated-layout transfor
 only adjusts the CLI default config path. Module-import statements and other
 non-definition top-level AST in the transitively imported `delivery_policy` are
 unchanged. Loading the parser does not execute new completion behavior. Five
-offline cases of the actual manifest parser, using the unchanged candidate
-function without a policy global, retain valid IDs/aliases and reject missing,
+offline cases of the actual candidate manifest parser retain valid IDs/aliases
+and reject missing,
 duplicate or capture linkage. No API, publication or product operation is invoked.
 
 ## Reachable release governance
@@ -77,10 +86,14 @@ duplicate or capture linkage. No API, publication or product operation is invoke
 Do not describe all release tooling as independent of shared policy.
 The existing complete-delivery workflow invokes `tracker_delivery_receipt`;
 its resolver/recorder reaches `require_completion_scope`, then
-`completion_assessment` and `summary`. Those policy functions intentionally gain
-handling for authenticated process-support receipts. The receipt helper's own
-source bytes are unchanged from Tracker3.7.3 to 3.8.0. The new policy branches
-remain process governance, outside the frozen product and manifest-parser path.
+`completion_assessment` and `summary`. Those policy functions gain handling for
+authenticated process-support receipts.
+The latest shared policy additionally validates pause state and blocks conflicting
+admission; the portable receipt resolver/recorder now decodes/encodes the outer8
+state envelope. Retry/direct helpers retain the same pause-aware guard closure.
+These are reachable release-governance changes, outside the frozen product and
+manifest-parser path. They are exact canonical support, with applicable bridge
+regressions and native checks; they must not be described as unchanged tooling.
 
 Ordinary product receipts retain their existing admission, target, request,
 scope, checks and actual verification path. Existing requests are neither
@@ -102,3 +115,14 @@ publication is not resumed. Unknown/mixed content cannot receive process-only
 completion; explicit product publication and unfinished product/business outcomes
 keep their real acceptance. This task changes no campaign behavior, employee data,
 live advertising or optional state policy and performs no migration.
+
+## Live Pause is a separate boundary
+
+The new pin and exact 14-helper closure supply actual `pause stop/resume` commands.
+They are usable only after compatible reader/every-writer readiness, recovery and
+genuinely idle owned `pause activate` preview/apply/resume are verified. Existing
+foreign owners/intake and unknown writers are preserved rather than cleared to
+create idleness. Source, actual process completion and live outer8 activation are
+separate facts; the current source establishes no live activation. The previous
+To Do-moving stop procedure remains explicit pre-activation behavior. See
+[the recorded readiness boundary](EARLY_ADOPTION.md#pause-readiness-and-live-boundary).

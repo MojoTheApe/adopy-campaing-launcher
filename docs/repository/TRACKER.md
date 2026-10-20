@@ -139,6 +139,49 @@ consumer product delivery for a proven process-only outcome. Preserve explicit
 publication scope and any existing requested delivery. Schema1 instruction admission
 is unchanged. Read [canonical process support](PROCESS_SUPPORT.md).
 
+## Read the workspace lifecycle
+
+Review contains unfinished review. Actual approved waiting work appears in Delivery
+as Ready for integration; its native approved key and ownership remain unchanged.
+Integrating means the current held composition/Stage/main operation. Awaiting Release
+requires a genuinely pending required publication after main acceptance. Queue
+length, occupied slots and confirmed executor activity are separate facts. Waiting
+age comes from the actual current approval timestamp, never from Issue updates or
+an active-work clock. Missing history remains unknown. The UI grants no admission;
+use the existing current source/scope/main/dependency and delivery checks.
+
+A genuine author return waits in Backlog as Needs fixes (native To Do). Only its
+actual implementation claim shows Fixing in In Progress. Fresh handoff ends that
+correction cycle and requires current independent Review, then the selected
+Delivery and Done gates. Explicit Paused wins; stop/takeover/resume retain genuine
+origin without inventing running activity. Old missing origin stays neutral.
+Publication-only failure remains in Delivery; an integration-only finding does
+not return every frozen source member. Source corrections use the selected owned
+author-return command and preserve frozen intake, Stage and pending delivery.
+
+The active Coordinator may continue corrections of the owner's already selected
+task set when actual capacity/admission allow, without another routine approval.
+A free slot does not launch an agent or restart a stopped run. New unselected
+work, explicit pause resumption and materially changed outcomes retain their
+actual owner decisions. Source approval alone does not authorize integration;
+already authorized integration includes the actual required delivery. No scheduler,
+new order/limit, automatic merge or live policy activation is introduced.
+
+## Pause without losing the current phase
+
+A confirmed stopped executor uses `pause stop TASK_ID --kind implementing|reviewing|merging`
+with its actual current identity/claim, `--stopped` and a durable `--report-file`;
+preview then apply. The task displays Paused in its saved category and releases
+only that executor slot. Keep native phase, branch/worktree, source/history,
+frozen selection, requested delivery and real blockers. Silence means Connection
+lost after prior confirmation (otherwise Activity unconfirmed); it never frees
+ownership. Resume explicitly with the saved pause ID, a genuine available slot
+and fresh authority after current scope/source/dependency checks. A frozen batch
+Coordinator resumes with a genuinely new run/session before its combined Reviewer.
+Readers and all writers must be verified compatible before owned idle `pause activate`;
+a pin/publication alone does not activate outer8. Never run this migration while
+old writers or actual owners are active. See [task pause](TASK_PAUSE.md).
+
 ## Selected instruction-only exception
 
 Only the pinned complete-diff classifier can prove the eligible one-task

@@ -105,7 +105,14 @@ currently reports a plan restriction for branch protection/rulesets. Never prese
 an unenforced agent rule as a server-enforced guarantee. Do not purchase a plan or
 make the repository public as an implicit part of adoption.
 
-## Pause and resume
+## Pause and resume before outer8 activation
+
+The source includes compatible phase-preserving [pause support](TASK_PAUSE.md),
+but a pin update does not activate it. Use `pause stop/resume` only after actual
+owned idle outer8 activation with compatible reader/every-writer evidence. Until
+that boundary is verified, the previously adopted procedure below remains in
+force. Its stop moves to To Do; it does not preserve Review or Delivery phase.
+Keep its historical instructions and evidence distinct from the new mechanism.
 
 Accept the owner's direct confirmation that an agent has stopped; do not demand
 Windows access solely to reconfirm it. Read the actual claim and use the exact
@@ -310,12 +317,45 @@ and docs/runtime for operational procedures. Preserve original specifications.
 Assess Master Repo and Task Tracker impact for process changes; link the owning
 companion change rather than silently modifying another repository.
 
+## Read the task lifecycle
+
+Review contains unfinished review. Actual approved waiting work appears in Delivery
+as Ready for integration, preserving the native approved key and current admission
+rules. Queue size, occupied slots and confirmed activity are different facts.
+Waiting age uses the actual current approval timestamp; missing history stays
+unknown and never counts as active work. Paused ready work retains Delivery.
+Genuine owned author returns wait as Needs fixes in Backlog (native To Do); only
+actual implementation ownership shows Fixing in In Progress. Preserve genuine
+origin through supported stop/takeover/pause/resume, then require fresh independent
+Review. Old missing origin stays neutral; a claim never proves running activity.
+The active Coordinator continues corrections of the owner's already selected set
+within actual capacity/admission. New unselected work, explicit pause resumption
+and materially changed outcomes retain owner decisions. A free slot launches no
+agent. Source approval alone does not authorize integration; already authorized
+integration includes necessary verified delivery. Integration-only findings do not
+return every frozen source; publication-only failure remains Delivery.
+Integrating and required publication remain separate steps; Done follows the
+project's actual whole-scope delivery, without a consumer installer for process-only work.
+
 ## Executor activity
 
 Follow the selected pinned Tracker guide for `activity report` and the foreground
 `activity run --exec` wrapper when supported. Only the current owner/session/claim
 reports running, waiting and stopped. Confirm once a minute while running; five
-minutes without a running/waiting report freezes work time and means activity
-unconfirmed. A recorded stop remains while that owner is assigned. Neither
+minutes without a running/waiting report freezes work time and means Connection lost after prior confirmation; never-confirmed work stays Activity unconfirmed. A recorded stop remains while that owner is assigned. Neither
 condition releases ownership. No detached endless reporter or coordinator heartbeat
 for another executor. Existing runs without a producer remain unknown.
+
+## Explicit phase-preserving pause after verified activation
+
+Source support is installed separately from live activation; see the actual
+readiness boundary in [EARLY_ADOPTION.md](EARLY_ADOPTION.md#pause-readiness-and-live-boundary).
+Only after that boundary is verified, follow the compatible selected Tracker guide for owned `pause stop/resume`.
+A confirmed stopped executor displays Paused inside its saved category and
+releases only its own slot. Preserve native phase, saved work, history, frozen
+integration/Stage and genuine blockers. Resume requires current scope/source
+checks, role independence, genuine capacity and fresh authority; otherwise remain
+paused with an explanation. A frozen Coordinator needs a genuinely new session
+before its combined Reviewer. Silence never invokes pause or releases ownership.
+Publish compatible readers/all writers before owned idle `pause activate`; source,
+exports, pin and skill updates never activate live state or publish a product.

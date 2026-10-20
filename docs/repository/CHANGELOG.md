@@ -1,5 +1,24 @@
 # Repository process history
 
+## 2026-10-20 — ACL-2026 cumulative common support
+
+The owner requested one cumulative ACL update on the original Issue/PR. After the
+genuine source Reviewer returned it, the original Worker reclaimed its real task,
+merged current main 259ae7f and adopted published Master1.7.2 / Tracker3.9.2 through
+the maintained three-way upgrade. Previous source revisions, approvals and owner
+amendments remain historical; they do not approve this changed cumulative head.
+
+The source includes shared activity/history, process-only completion, explicit
+Pause support, Delivery/Ready for integration and Needs fixes/Fixing guidance.
+Phase-preserving Pause remains conditional on separate compatible reader/all-writer
+readiness and owned idle outer8 activation. No live activation, foreign-owner
+cleanup, installer publication or product request is performed by this source.
+All current-main product inputs and non-pin choices are preserved. Fresh full-scope
+independent source/combined review, applicable CI, ordinary frozen admission and
+exact process completion remain required. The two template overlaps only update
+Master SHA references while retaining complete ACL-local controls.
+
+
 ## ACL-2026 — Adopt the global process/product boundary — 2026-10-20
 
 The latest owner instruction separates process delivery from product delivery for
