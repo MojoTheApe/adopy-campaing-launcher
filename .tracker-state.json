@@ -52320,7 +52320,7 @@
             "session": "run_l2_309c"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-L2309c",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -52344,7 +52344,8 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578042+00:00",
           "remote_process_stopped_verified": false
-        }
+        },
+        "reviewer": "Reviewer-R1309U"
       },
       "163": {
         "implementers": [],
@@ -57620,6 +57621,10 @@
       "Coordinator-I1020A": {
         "session": "9fea0133-b18f-4277-a1b8-225a9a665b61",
         "role": "Coordinator"
+      },
+      "Reviewer-R1309U": {
+        "session": "reviewer-r1309u-20261020",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -60503,8 +60508,7 @@
     },
     "review_queue": [
       1046,
-      774,
-      309
+      774
     ],
     "review": null,
     "history": [
@@ -102942,6 +102946,13 @@
             "827": "#827: source approval is stale for its PR, main or policy"
           }
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-20T15:20:58+00:00",
+        "pr": 929,
+        "lane": "8fd7cbd65e5d402e8d7ca41fda960659",
+        "actor": "Reviewer-R1309U"
       }
     ],
     "policy": {
@@ -112269,6 +112280,18 @@
         "session": "review_389daa0fe6cff6b3e53c56eee4bdd46509f80512",
         "coordinator": "Coordinator-ACT174",
         "started_at": "2026-10-20T08:55:10+00:00",
+        "state": "reviewing"
+      },
+      "929": {
+        "id": "8fd7cbd65e5d402e8d7ca41fda960659",
+        "pr": 929,
+        "issues": [
+          309
+        ],
+        "actor": "Reviewer-R1309U",
+        "session": "reviewer-r1309u-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-20T15:20:58+00:00",
         "state": "reviewing"
       }
     },
