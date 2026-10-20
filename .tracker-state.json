@@ -44846,22 +44846,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "992": {
-        "actor": "Worker-RH2020W",
-        "session": "rh2020w-20261020",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1992-api-build-percent",
-        "worktree": "C:\\rh20-992",
-        "id": "720a690f7e104a1e9632c890708f9906",
-        "issue": 992,
-        "state": "handoff",
-        "started_at": "2026-10-20T07:07:19+00:00",
-        "from_status": "status:todo",
-        "pr": 993,
-        "report": "Re-handoff without code change. The 2026-10-20 return ('merge conflict with main, content not reviewed') was a false positive: head 720ecab7 already contains current main c6150160 and merges cleanly (git merge-tree). Content needs a full independent review."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -52735,25 +52720,25 @@
             "session": "rh2020w-20261020"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RH2020W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-R1019992",
-          "session": "run_r1019_992",
+          "actor": "Worker-RH2020W",
+          "session": "rh2020w-20261020",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1992-api-build-percent",
-          "worktree": "C:\\acl-1992-wt",
-          "id": "65d64514edec4788b290eb0040dc975a",
+          "worktree": "C:\\rh20-992",
+          "id": "720a690f7e104a1e9632c890708f9906",
           "issue": 992,
           "state": "handoff",
-          "started_at": "2026-10-19T19:59:07+00:00",
+          "started_at": "2026-10-20T07:07:19+00:00",
           "from_status": "status:todo",
           "pr": 993,
-          "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main into the branch; conflicts only in docs/system/CHANGELOG.md (kept both entries). Re-ran the touched tests: test_acl1992_api_build_percent 15 passed, test_acl1992_api_build_percent_browser 2 passed. No functional change beyond the merge; no live runs."
+          "report": "Re-handoff without code change. The 2026-10-20 return ('merge conflict with main, content not reviewed') was a false positive: head 720ecab7 already contains current main c6150160 and merges cleanly (git merge-tree). Content needs a full independent review."
         },
         "pr": 993,
-        "queued_at": "2026-10-19T20:01:13+00:00",
+        "queued_at": "2026-10-20T07:08:32+00:00",
         "review_report": "# Returned to the author: merge conflict with main, content not reviewed\n\nPR 993 cannot be brought up to current main c61501607ce11744e45add8b0d3b314368c216c5: `gh pr update-branch` reports a merge conflict (checked 2026-10-19/20). A source review must bind the current main baseline, so this task cannot be reviewed or approved as is.\n\nThe content of this PR was NOT reviewed in this pass; this return carries no code findings.\n\nNext step for the author: merge current main into the original branch, resolve the conflict, run the affected tests, push, and hand off again for a full independent review."
       },
       "994": {
@@ -58568,7 +58553,8 @@
       891,
       805,
       990,
-      840
+      840,
+      992
     ],
     "review": null,
     "history": [
@@ -96962,6 +96948,13 @@
         "at": "2026-10-20T07:07:19+00:00",
         "issue": 992,
         "claim": "720a690f7e104a1e9632c890708f9906",
+        "actor": "Worker-RH2020W"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T07:08:32+00:00",
+        "issue": 992,
+        "pr": 993,
         "actor": "Worker-RH2020W"
       }
     ],
