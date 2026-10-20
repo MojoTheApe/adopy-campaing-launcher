@@ -107739,7 +107739,51 @@
         "session": "reviewer-r1836w-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T10:41:05+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 836,
+          "pr": 837,
+          "branch": "codex/acl-1836-session-recovery",
+          "head_sha": "3813fbe77e0aee3d4602108bdc481abf632c91e5",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "50752e44ec4b4103a48807f7bea9a0fa562f1b01651d742295d2cd0055e94151",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-R1836W",
+            "review_session": "reviewer-r1836w-20261020",
+            "execution_lane": "9ef9908a508642e1a49587f4a21a472f",
+            "implementer": "Worker-L2836",
+            "head_sha": "3813fbe77e0aee3d4602108bdc481abf632c91e5",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "tree_sha": "5521c1646ae2662295d76d0ed75d11a5394dc6fb",
+            "issues": [
+              836
+            ],
+            "report": "Re-review of PR #837 after a return. The change lets the browser tab recover once from a lost browser session during account reads and campaign work: one reattach per tab lifetime to the same targetId over the existing browser connection, with URL checks against what ACL itself opened and typed stops for login/checkpoint, lost target, identity change, unavailable transport and repeat detachment. It never retries Graph GET/POST or upload jobs after session loss (call_unknown is preserved), never opens a new tab, reloads, restarts the browser or goes outside Multilogin; this source was judged correct in the first review and is unchanged since. The only delta since 1ab1af9d is two files: tests/bench/CATALOGUE.md (summary line regenerated to 25 steps x 123 layouts, 68 fixtures, which fixes the earlier blocker) and a docs/system/CHANGELOG.md note documenting that the readiness check now turns any CdpError/OSError into a sticky PageFailed (my earlier non-blocking nit, now addressed). No src changes in the delta. Tests run locally: tests/test_bench_catalogue.py and tests/test_acl1836_session_recovery.py, 39 passed. CI on the head is fully green: ACL verification, linux tests 1/2/3, windows tests, tracker-link, process instructions and tooling checks pass (installer build jobs skipped, not applicable). No remaining nits. No live checks claimed.",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "recorded_at": "2026-10-20T10:52:39+00:00",
+            "issue_scopes": {
+              "836": "50752e44ec4b4103a48807f7bea9a0fa562f1b01651d742295d2cd0055e94151"
+            }
+          },
+          "lane": {
+            "id": "9ef9908a508642e1a49587f4a21a472f",
+            "pr": 837,
+            "issues": [
+              836
+            ],
+            "actor": "Reviewer-R1836W",
+            "session": "reviewer-r1836w-20261020",
+            "coordinator": "Coordinator-M1011A",
+            "started_at": "2026-10-20T10:41:05+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-20T10:53:12+00:00"
+        }
       },
       "863": {
         "id": "2c146c2c081641d090130feef2d08f50",
