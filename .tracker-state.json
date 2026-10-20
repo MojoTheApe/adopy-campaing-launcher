@@ -44867,9 +44867,11 @@
         "worktree": "C:\\rh20-990",
         "id": "656badbcc9fc4fb7aa5fc5775a53af3c",
         "issue": 990,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T06:58:50+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 991,
+        "report": "Re-handoff without code change. The 2026-10-20 return ('merge conflict with main, content not reviewed') was a false positive: head b7489b55 already contains current main c6150160 and merges cleanly (git merge-tree). Content needs a full independent review."
       }
     },
     "tasks": {
