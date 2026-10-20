@@ -52670,7 +52670,7 @@
             "session": "run_b1019_770"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-B1019770",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -52689,7 +52689,7 @@
         },
         "pr": 979,
         "queued_at": "2026-10-19T22:30:58+00:00",
-        "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
+        "review_report": "Returned (Reviewer-Q2001D). Content is OK (per-ad Page/link and per-set pixel checked against promote_pages/adspixels, read on click only, map written only into an empty cell, no new Meta write path, PAUSED-only unchanged; 258 affected tests passed, CI green), but it cannot be batched as is: it conflicts with #833 in 5 files (build_draft.py, draft.py, creator.py, app.py, report.html, set-level pixel_id overlap) and with #1025 in src/fb_api/creator.py (resolve_page). An order is needed: whichever of #833 / #1025 / #979 lands first, the others need a refresh onto the new main (the author noted a follow-up pixel merge after #833).",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578104+00:00",
@@ -97855,6 +97855,24 @@
         "pr": 979,
         "lane": "4bcdf717c2ba4c1e80a92c466f1dfe28",
         "actor": "Reviewer-Q2001D"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-20T09:03:48+00:00",
+        "review": {
+          "id": "4bcdf717c2ba4c1e80a92c466f1dfe28",
+          "pr": 979,
+          "issues": [
+            770
+          ],
+          "actor": "Reviewer-Q2001D",
+          "session": "q2001d-20261020",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-20T09:02:45+00:00",
+          "state": "returning",
+          "report": "Returned (Reviewer-Q2001D). Content is OK (per-ad Page/link and per-set pixel checked against promote_pages/adspixels, read on click only, map written only into an empty cell, no new Meta write path, PAUSED-only unchanged; 258 affected tests passed, CI green), but it cannot be batched as is: it conflicts with #833 in 5 files (build_draft.py, draft.py, creator.py, app.py, report.html, set-level pixel_id overlap) and with #1025 in src/fb_api/creator.py (resolve_page). An order is needed: whichever of #833 / #1025 / #979 lands first, the others need a refresh onto the new main (the author noted a follow-up pixel merge after #833).",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -105987,20 +106005,6 @@
         "coordinator": "Coordinator-ACT174",
         "started_at": "2026-10-20T08:55:10+00:00",
         "state": "reviewing"
-      },
-      "979": {
-        "id": "4bcdf717c2ba4c1e80a92c466f1dfe28",
-        "pr": 979,
-        "issues": [
-          770
-        ],
-        "actor": "Reviewer-Q2001D",
-        "session": "q2001d-20261020",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-20T09:02:45+00:00",
-        "state": "returning",
-        "report": "Returned (Reviewer-Q2001D). Content is OK (per-ad Page/link and per-set pixel checked against promote_pages/adspixels, read on click only, map written only into an empty cell, no new Meta write path, PAUSED-only unchanged; 258 affected tests passed, CI green), but it cannot be batched as is: it conflicts with #833 in 5 files (build_draft.py, draft.py, creator.py, app.py, report.html, set-level pixel_id overlap) and with #1025 in src/fb_api/creator.py (resolve_page). An order is needed: whichever of #833 / #1025 / #979 lands first, the others need a refresh onto the new main (the author noted a follow-up pixel merge after #833).",
-        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
