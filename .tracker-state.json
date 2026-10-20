@@ -45687,7 +45687,7 @@
             "session": "run_b1433t_1001"
           }
         ],
-        "state": "archiving",
+        "state": "archived",
         "worker": "Worker-B1433T",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -98031,6 +98031,12 @@
           "started_at": "2026-10-20T09:23:07+00:00",
           "ineligible": {}
         }
+      },
+      {
+        "event": "archived",
+        "at": "2026-10-20T09:24:40+00:00",
+        "issue": 433,
+        "reason": "Done in main: bench catalogue (tests/bench/catalogue.json, 122 layouts, 67 fixtures), capture_to_fixture.py, test_bench_catalogue.py and the PR-template checklist are on main (ACL-1445/1533/1543/1544). Captures from before 2026-09-29 are not on disk; this is recorded in the catalogue. Archived on owner instruction 2026-10-20."
       }
     ],
     "policy": {
