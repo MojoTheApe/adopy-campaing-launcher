@@ -54462,7 +54462,7 @@
             "session": "rf184-20261020"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-RF184",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -102790,6 +102790,68 @@
         "issue": 1040,
         "claim": "bebf96390d5246ffb5f7f527efe85455",
         "actor": "Worker-MLX61"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-20T15:13:18+00:00",
+        "issue": 184,
+        "pr": 937,
+        "review": {
+          "id": "168c3d8482c947cc8cee380002dc118e",
+          "pr": 937,
+          "issues": [
+            184
+          ],
+          "actor": "Reviewer-RR1020",
+          "session": "rr1020-20261020",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-20T15:08:34+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 184,
+            "pr": 937,
+            "branch": "work/acl-1184-hand-open-message",
+            "head_sha": "a0ff853e45691c76aeec45541c71a8c068b0e084",
+            "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+            "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "e3abbfa50edd0ea258c0d88c656573e254e5ed920737b164ed96eb9cf0e9044c",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-RR1020",
+              "review_session": "rr1020-20261020",
+              "execution_lane": "168c3d8482c947cc8cee380002dc118e",
+              "implementer": "Worker-RF184",
+              "head_sha": "a0ff853e45691c76aeec45541c71a8c068b0e084",
+              "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+              "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+              "tree_sha": "699feb2980e3eefa81406c1dac0bc936839c6730",
+              "issues": [
+                184
+              ],
+              "report": "Verdict: approved (fresh re-review after main moved to 259ae7f1). Delta from previous approved head f185f693 is only the merge of main 259ae7f1: it touches only files main changed since the merge base, no overlap with the author's files; no other author changes. Full scope read against ACL-1184: one shared 'profile is running' check (MultiloginDirectCDPProvider.profile_is_running) used by dashboard and RPA, checking both folder spellings (long and 8.3, moved to the light src/fb_ads_rpa/profile_dir.py) and falling back to a lookup by profile id when the folder is not found; the bare RuntimeError 'profile is already running' is replaced by the profile_open_by_hand ProfileStop, which the dashboard turns into hand_message() with the way out (close the window in MLX Desktop, press again); no restart or stop of a hand-opened profile is introduced; check failures without a folder do not block the start. Source CI on exact head green (descriptor, tracker-link, ACL verification, Installer verification, linux/windows tests). Coordinator trial merge: compatible, 122 tests passed.",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "recorded_at": "2026-10-20T15:11:10+00:00",
+              "issue_scopes": {
+                "184": "e3abbfa50edd0ea258c0d88c656573e254e5ed920737b164ed96eb9cf0e9044c"
+              }
+            },
+            "lane": {
+              "id": "168c3d8482c947cc8cee380002dc118e",
+              "pr": 937,
+              "issues": [
+                184
+              ],
+              "actor": "Reviewer-RR1020",
+              "session": "rr1020-20261020",
+              "coordinator": "Coordinator-M1011A",
+              "started_at": "2026-10-20T15:08:34+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-20T15:12:00+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -107015,6 +107077,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-20T15:03:16+00:00"
+      },
+      "184": {
+        "issue": 184,
+        "pr": 937,
+        "branch": "work/acl-1184-hand-open-message",
+        "head_sha": "a0ff853e45691c76aeec45541c71a8c068b0e084",
+        "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+        "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "e3abbfa50edd0ea258c0d88c656573e254e5ed920737b164ed96eb9cf0e9044c",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-RR1020",
+          "review_session": "rr1020-20261020",
+          "execution_lane": "168c3d8482c947cc8cee380002dc118e",
+          "implementer": "Worker-RF184",
+          "head_sha": "a0ff853e45691c76aeec45541c71a8c068b0e084",
+          "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+          "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+          "tree_sha": "699feb2980e3eefa81406c1dac0bc936839c6730",
+          "issues": [
+            184
+          ],
+          "report": "Verdict: approved (fresh re-review after main moved to 259ae7f1). Delta from previous approved head f185f693 is only the merge of main 259ae7f1: it touches only files main changed since the merge base, no overlap with the author's files; no other author changes. Full scope read against ACL-1184: one shared 'profile is running' check (MultiloginDirectCDPProvider.profile_is_running) used by dashboard and RPA, checking both folder spellings (long and 8.3, moved to the light src/fb_ads_rpa/profile_dir.py) and falling back to a lookup by profile id when the folder is not found; the bare RuntimeError 'profile is already running' is replaced by the profile_open_by_hand ProfileStop, which the dashboard turns into hand_message() with the way out (close the window in MLX Desktop, press again); no restart or stop of a hand-opened profile is introduced; check failures without a folder do not block the start. Source CI on exact head green (descriptor, tracker-link, ACL verification, Installer verification, linux/windows tests). Coordinator trial merge: compatible, 122 tests passed.",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "recorded_at": "2026-10-20T15:11:10+00:00",
+          "issue_scopes": {
+            "184": "e3abbfa50edd0ea258c0d88c656573e254e5ed920737b164ed96eb9cf0e9044c"
+          }
+        },
+        "lane": {
+          "id": "168c3d8482c947cc8cee380002dc118e",
+          "pr": 937,
+          "issues": [
+            184
+          ],
+          "actor": "Reviewer-RR1020",
+          "session": "rr1020-20261020",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-20T15:08:34+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-20T15:12:00+00:00"
       }
     },
     "batches": {
@@ -112041,62 +112147,6 @@
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T15:05:35+00:00",
         "state": "reviewing"
-      },
-      "937": {
-        "id": "168c3d8482c947cc8cee380002dc118e",
-        "pr": 937,
-        "issues": [
-          184
-        ],
-        "actor": "Reviewer-RR1020",
-        "session": "rr1020-20261020",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-20T15:08:34+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 184,
-          "pr": 937,
-          "branch": "work/acl-1184-hand-open-message",
-          "head_sha": "a0ff853e45691c76aeec45541c71a8c068b0e084",
-          "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-          "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "e3abbfa50edd0ea258c0d88c656573e254e5ed920737b164ed96eb9cf0e9044c",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-RR1020",
-            "review_session": "rr1020-20261020",
-            "execution_lane": "168c3d8482c947cc8cee380002dc118e",
-            "implementer": "Worker-RF184",
-            "head_sha": "a0ff853e45691c76aeec45541c71a8c068b0e084",
-            "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-            "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-            "tree_sha": "699feb2980e3eefa81406c1dac0bc936839c6730",
-            "issues": [
-              184
-            ],
-            "report": "Verdict: approved (fresh re-review after main moved to 259ae7f1). Delta from previous approved head f185f693 is only the merge of main 259ae7f1: it touches only files main changed since the merge base, no overlap with the author's files; no other author changes. Full scope read against ACL-1184: one shared 'profile is running' check (MultiloginDirectCDPProvider.profile_is_running) used by dashboard and RPA, checking both folder spellings (long and 8.3, moved to the light src/fb_ads_rpa/profile_dir.py) and falling back to a lookup by profile id when the folder is not found; the bare RuntimeError 'profile is already running' is replaced by the profile_open_by_hand ProfileStop, which the dashboard turns into hand_message() with the way out (close the window in MLX Desktop, press again); no restart or stop of a hand-opened profile is introduced; check failures without a folder do not block the start. Source CI on exact head green (descriptor, tracker-link, ACL verification, Installer verification, linux/windows tests). Coordinator trial merge: compatible, 122 tests passed.",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "recorded_at": "2026-10-20T15:11:10+00:00",
-            "issue_scopes": {
-              "184": "e3abbfa50edd0ea258c0d88c656573e254e5ed920737b164ed96eb9cf0e9044c"
-            }
-          },
-          "lane": {
-            "id": "168c3d8482c947cc8cee380002dc118e",
-            "pr": 937,
-            "issues": [
-              184
-            ],
-            "actor": "Reviewer-RR1020",
-            "session": "rr1020-20261020",
-            "coordinator": "Coordinator-M1011A",
-            "started_at": "2026-10-20T15:08:34+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-20T15:12:00+00:00"
-        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
