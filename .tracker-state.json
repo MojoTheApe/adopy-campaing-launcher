@@ -5265,20 +5265,20 @@
       "921": {
         "kind": "independent-review",
         "verdict": "approved",
-        "reviewer": "Reviewer-R1920Z",
-        "review_session": "reviewer-r1920z-20261020",
-        "execution_lane": "1c52cdff66fa49169dc8057a1f957dad",
-        "implementer": "Worker-RH2020W",
-        "head_sha": "7134984c61813653ae2778990187ac78bd719a6e",
-        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-        "tree_sha": "d6f99e355e530bae059d2ae4e84f3adc93551b78",
+        "reviewer": "Reviewer-RR1020",
+        "review_session": "rr1020-20261020",
+        "execution_lane": "05bf5691cf434b36b574c3a79c291c79",
+        "implementer": "Worker-RF920",
+        "head_sha": "81a4e74bffc548cc5e11fa0b37a58795b3d7ff24",
+        "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+        "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+        "tree_sha": "1e18f7e2a0222f8db07bd7bb0a23bcb9addf11fc",
         "issues": [
           920
         ],
-        "report": "PR #921 (ACL-1920) lets Check plan on the API backend skip optional targeting lookups that Meta refuses with a permission error (Graph code 10, also 200 and 294) instead of failing the whole campaign. In src/fb_api/targeting_resolver.py a permission refusal on adinterestvalid, behaviors (adTargetingCategory), work (adworkposition, adworkemployer) or education (adeducationschool, adeducationmajor) is remembered for the job, the type is not asked again (no retry, no extra calls; the refused read still counts in the read budget), and when adinterestvalid is refused interests resolve through adinterest. Any other Graph error from a resolver search now carries search_type=<type>; refusal of adinterest, adgeolocation or adlocale is not treated as optional and still fails (geo/locale code untouched). A term that could only match through a refused bucket ends unknown with a reason naming the lookup (or pending/needs-choice with a close adinterest candidate), never a guess; split parts propagate unknown. creator.py adds refusal_warnings() which puts English warnings such as 'Meta refused the behaviors lookup (adTargetingCategory) on this account; behaviors were not matched.' into Outcome.warnings per draft, also when the plan fails for another reason; preflight_rules.py shows the resolver reason instead of the generic text; the cached-confirmed-interest case warns that it was not re-verified. GraphStop and token (190) errors are not treated as refusals. Everything is read-only through the existing in-profile client; no secrets or ids in code or tests. Acceptance: a fake client answering code 10 to the four optional searches passes Check plan with warnings (test_check_plan_passes_with_refused_optional_lookups_and_lists_them_as_warnings); code 10 on adinterest/adgeolocation/adlocale still fails with the search type (test_check_plan_still_fails_on_refusal_of_core_searches_with_the_type); resolver and preflight tests and a CHANGELOG entry exist; the live criterion is left to the owner. The diff against main includes the stacked ACL-1771 resolver commits; main is an ancestor of head, so the conflict resolution kept main's changes. Tests run: tests/test_acl1920_search_refused.py, test_acl1771_targeting_resolver.py, test_acl1761_plan_check.py, test_acl1819_preflight.py, test_acl1604_preflight.py: 193 passed in 72s. CI on head 7134984c: all required checks pass (linux 1-3, windows, process instructions, ACL verification) and tracker-link passes. Non-blocking nits: the CHANGELOG diff adds stray blank lines before many unrelated headings; PLAN_PREFLIGHT_MAX_CALLS was raised from 12 to 30 for the 1771 resolver (worth confirming against the 'no extra Meta calls beyond the existing read budget' wording). No live checks claimed.",
-        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "report": "Verdict: approved (fresh re-review after main moved to 259ae7f1). Delta from previous approved head 7134984c is only the merge of main 259ae7f1: it touches only files main changed since the merge base; no other author changes. Stacked on 832: 832 head ebac53f8 to this head differs only by the 1920 files (CHANGELOG, creator.py, preflight_rules.py, targeting_resolver.py, tests/test_acl1920_search_refused.py). Scope read against ACL-1920: optional lookups (adinterestvalid, behaviors, work, education) skipped on permission codes 10/200/294 with English warnings naming the refused lookup; adinterest fallback; refusal of adinterest/geo/locale still fails with search_type in text; terms only matchable via refused bucket end unknown, never guessed; refused types cached for the job (no retries); refused read still counted in budget; read-only. Source CI on exact head green (descriptor, tracker-link, ACL verification, Installer verification, linux/windows tests). Coordinator trial merge: compatible, 192 tests passed.",
         "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "recorded_at": "2026-10-20T08:47:21+00:00",
+        "recorded_at": "2026-10-20T14:35:25+00:00",
         "issue_scopes": {
           "920": "d35d2e8a4ecc9f4c69c7a1111ac8996a5de43708265b77d75b0831dee9e0a42a"
         }
