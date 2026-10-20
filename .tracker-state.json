@@ -45068,9 +45068,11 @@
         "worktree": "C:\\acl-141-dialogs",
         "id": "36d716834e124e948768401b6bc322fc",
         "issue": 71,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T09:55:37+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 939,
+        "report": "Merged current main (CHANGELOG-only conflict, both entries kept). Affected tests 125 passed. No live checks."
       }
     },
     "tasks": {
