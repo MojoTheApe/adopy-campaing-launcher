@@ -45329,9 +45329,11 @@
         "worktree": "C:\\acl-1880-clean",
         "id": "ba5d5b872010498e806a8c43fe252a55",
         "issue": 880,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T12:27:04+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 1044,
+        "report": "Clean transplant of ae54e234 + fb6b6e6f + 12 h Pages cache (f88ecbe1) from the TEST9095 build onto main c6150160. Pre-handoff Opus review: HIGH (Automatic touched RPA Identity) and 2 MEDIUM + 4 LOW fixed in 672db9f2. Tests: 120 passed (test_acl1880_page_selection, _pages_browser, _manual_page, test_queue_wait_reads, test_acl1819_preflight). Not included: 10-min busy-profile wait (needs profile_lease, #863). Overlaps #1025 (ACL-1897): rebase after it merges."
       },
       "1039": {
         "actor": "Worker-BCHIP",
