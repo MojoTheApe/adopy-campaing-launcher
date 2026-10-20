@@ -54,12 +54,33 @@ def _local_dashboard():
     return local_dashboard
 
 
+LEGACY_PORT = 9090
+
+
+def find_dashboard(config, probe, in_use=None):
+    """(port, /health payload) of the dashboard under test, or None.
+
+    The current launcher answers with a `config` fingerprint and may sit on its
+    per-person port, so it is looked up exactly as the launcher does. A package built
+    before ACL-1309 -- every release published so far, which Complete Delivery installs
+    as the "old" version -- always binds 9090 and has no `config` in /health; it is
+    accepted there. A payload whose `config` is present but is someone else's is never ours.
+    """
+    module = _local_dashboard()
+    found = module.find_own(config, probe=probe, in_use=in_use or module.port_in_use)
+    if found is not None:
+        return found
+    payload = probe(LEGACY_PORT)
+    if payload and payload.get("app") == "ACL" and payload.get("ok") is True and "config" not in payload:
+        return LEGACY_PORT, payload
+    return None
+
+
 def health():
     if CONFIG_DIR is None:
-        port = 9090
+        port = LEGACY_PORT
     else:
-        found = _local_dashboard().find_own(
-            CONFIG_DIR, probe=lambda candidate: _local_dashboard().health(candidate, timeout=2))
+        found = find_dashboard(CONFIG_DIR, lambda candidate: _local_dashboard().health(candidate, timeout=2))
         if found is None:
             return None
         port = found[0]
