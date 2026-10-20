@@ -46068,6 +46068,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T12:56:11+00:00",
         "from_status": "status:todo"
+      },
+      "1040": {
+        "actor": "Worker-MLX61",
+        "session": "mlx61-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-2040-mlx-close-retry",
+        "worktree": "C:\\acl-1040-mlx-close",
+        "id": "bebf96390d5246ffb5f7f527efe85455",
+        "issue": 1040,
+        "state": "implementing",
+        "started_at": "2026-10-20T15:09:43+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -54742,10 +54754,14 @@
           {
             "actor": "Worker-MLX60",
             "session": "mlx60-run-20261020"
+          },
+          {
+            "actor": "Worker-MLX61",
+            "session": "mlx61-20261020"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-MLX60",
+        "state": "implementing",
+        "worker": "Worker-MLX61",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-MLX60",
@@ -54763,7 +54779,6 @@
         },
         "pr": 1042,
         "queued_at": "2026-10-20T12:51:11+00:00",
-        "reviewer": "Reviewer-SR1020",
         "review_report": "# Review return \u2014 PR #1042 ACL-2040 (Issue #1040), head a00c496a\n\nReviewer-SR1020, session sr1020-20261020. Reviewed against main 259ae7f1.\n\n## Blocking\n\n1. Source does not contain current main: the PR's merge base is c6150160, 25 commits behind main 259ae7f1. The tracker requires the current main baseline for source approval (record-review dry run at this head answered \"Source review must use the current main baseline\"), so it cannot be approved as is. A trial `git merge-tree 259ae7f1 a00c496a` is conflict-free. Merge current main, let source CI finish, and hand off again.\n\n## Code review \u2014 no defects found\n\n- src/meta_campaign_agent/multilogin_launcher.py `stop_profile`: main address `v1/profile/stop/p/{id}` asked up to 3 times, 2 s apart, on a dropped request (non-timeout exception) or a 5xx that is not \"already stopped\"; `requests.Timeout` (read and connect timeout) is not retried; then the legacy addresses; 404 on main still falls through; other 4xx stop at once; the raised error names the main-address failure (\"(main address) \u2026; older addresses: \u2026\").\n- tests/test_the_api_stop_is_asked_first.py and all tests calling `stop_profile`: 482 passed locally at head.\n- LOW (optional): CHANGELOG says \"A read timeout is not retried\"; the code also does not retry a connect timeout (`ConnectTimeout` is a `Timeout`). Consider wording \"a timeout\"."
       },
       "1039": {
@@ -57597,6 +57612,10 @@
       "Reviewer-R1855V": {
         "session": "reviewer-r1855v-20261020",
         "role": "Reviewer"
+      },
+      "Worker-MLX61": {
+        "session": "mlx61-20261020",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -102764,6 +102783,13 @@
         "pr": 937,
         "lane": "168c3d8482c947cc8cee380002dc118e",
         "actor": "Reviewer-RR1020"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T15:09:43+00:00",
+        "issue": 1040,
+        "claim": "bebf96390d5246ffb5f7f527efe85455",
+        "actor": "Worker-MLX61"
       }
     ],
     "policy": {
