@@ -45071,6 +45071,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T10:14:47+00:00",
         "from_status": "status:todo"
+      },
+      "768": {
+        "actor": "Worker-B1019768",
+        "session": "run_b1019_768",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "codex/acl-1768-multiple-ad-sets",
+        "worktree": "C:\\acl-1768",
+        "id": "bd75c8f9bdde4106bf2f36a8262adeb0",
+        "issue": 768,
+        "state": "implementing",
+        "started_at": "2026-10-20T10:23:55+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -49533,9 +49545,13 @@
           {
             "actor": "Worker-B1019768",
             "session": "run_b1019_768"
+          },
+          {
+            "actor": "Worker-B1019768",
+            "session": "run_b1019_768"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-B1019768",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -49559,8 +49575,7 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.577999+00:00",
           "remote_process_stopped_verified": false
-        },
-        "reviewer": "Reviewer-Q2001D"
+        }
       },
       "774": {
         "implementers": [
@@ -98662,6 +98677,13 @@
           "report": "Returned (Reviewer-Q2001D). Needs a refresh onto current main (39 commits behind). Blocking: CI red, tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis fails (windows tests, linux shard 2, Process instructions, project tooling): the new test files use Windows-only APIs or paths and need the platform marker. The PR is stacked on unmerged #820 (ACL-1816: its commits 9751ca45 and f3f8e082 are inside this PR), so it must not land before #820. Content: rules_api.py has no direct Meta writes; Apply goes only through campaign commands, with the op bound to the suggestion (account, command, value, single object, saved result); Automatic refused; API backend and loopback only. No safety findings; tests not run locally.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T10:23:55+00:00",
+        "issue": 768,
+        "claim": "bd75c8f9bdde4106bf2f36a8262adeb0",
+        "actor": "Worker-B1019768"
       }
     ],
     "policy": {
