@@ -172,15 +172,18 @@ def test_ad_sets_survive_a_reload_and_a_v3_draft_opens_as_one_ad_set(page):
     assert dict(_entries(page))["camp_0_adset_1_age"] == "44"
     assert _ad_sets(page) == ["0", "1"]
     # v3 без наборов
-    page.evaluate("""() => {
+    v3 = page.evaluate("""() => {
       const raw = JSON.parse(localStorage.getItem('acl.builder.v2'));
       raw.v = 3;
       Object.values(raw.forms).forEach(f => f.campaigns.forEach(c => {
         Object.keys(c.fields).forEach(k => { if (/^adset_|_adset$/.test(k)) delete c.fields[k]; });
         c.fields.ad_count = '2'; c.ads = 2; c.fields.age = '37';
       }));
-      localStorage.setItem('acl.builder.v2', JSON.stringify(raw));
+      return JSON.stringify(raw);
     }""")
+    # Уходящая страница на pagehide пишет своё живое состояние поверх; v3 кладём заново
+    # до скриптов новой страницы.
+    page.add_init_script("try { localStorage.setItem('acl.builder.v2', " + json.dumps(v3) + "); } catch (e) {}")
     page.reload()
     page.evaluate("cbDrawer.open()")
     page.wait_for_function("document.querySelectorAll('.cbd-camp').length > 0")
@@ -194,6 +197,10 @@ def test_ad_sets_survive_a_reload_and_a_v3_draft_opens_as_one_ad_set(page):
 
 def test_audit_lists_the_ad_set_with_a_problem(page):
     _open(page)
+    # Общая отрисовка страницы не несёт таблицу правил; без неё аудит пуст.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from src.fb_api import preflight_rules as pf
+    page.evaluate("rules => { window.CB_PREFLIGHT_RULES = rules; }", pf.export_rules())
     page.locator("[data-act='add-adset']").click()
     _fill_set(page, 1, age="17")
     page.wait_for_function("document.querySelector('.cbd-pf-list').textContent.includes('Age 18-65')")
