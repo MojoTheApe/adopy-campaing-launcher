@@ -45194,6 +45194,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
+      },
+      "305": {
+        "actor": "Worker-T1020305",
+        "session": "t1020-305",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1305-setup-name-check",
+        "worktree": "C:\\acl-1305",
+        "id": "29592c5679c240efa92d658b00e322d3",
+        "issue": 305,
+        "state": "implementing",
+        "started_at": "2026-10-20T11:50:46+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -52517,11 +52529,15 @@
           {
             "actor": "Worker-E19305",
             "session": "w305-c0a1de70"
+          },
+          {
+            "actor": "Worker-T1020305",
+            "session": "t1020-305"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-E19305",
-        "coordinator": "Coordinator-E1019A",
+        "state": "implementing",
+        "worker": "Worker-T1020305",
+        "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-E19305",
           "session": "w305-c0a1de70",
@@ -56388,6 +56404,10 @@
       "Reviewer-R141W": {
         "session": "reviewer-r141w-20261020",
         "role": "Reviewer"
+      },
+      "Worker-T1020305": {
+        "session": "t1020-305",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -99817,6 +99837,13 @@
         "issue": 854,
         "pr": 869,
         "actor": "Worker-L1854"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T11:50:46+00:00",
+        "issue": 305,
+        "claim": "29592c5679c240efa92d658b00e322d3",
+        "actor": "Worker-T1020305"
       }
     ],
     "policy": {
