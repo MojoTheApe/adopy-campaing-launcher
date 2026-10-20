@@ -45089,9 +45089,11 @@
         "worktree": "C:\\acl-1681",
         "id": "da69090bd2ff4eb6baf2eeb2b5449d87",
         "issue": 681,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T10:14:47+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 970,
+        "report": "Merged current main; one conflict in the Builder drawer script (main's size modes vs our server 'ui' sync) resolved: setExpanded dropped, rememberSize notes the server, apply() maps expanded to wide/normal. Read-only Opus review: no problems. 48 tests passed. No live checks."
       }
     },
     "tasks": {
