@@ -1614,7 +1614,9 @@ class CampaignCreator:
             fs = {}
 
         def texts(key: str) -> list[str]:
-            return [str(x.get("text") or "") for x in (fs.get(key) or []) if isinstance(x, dict)]
+            # Пустой текст Meta отдаёт пробелом (живой прогон 19.10: descriptions [] → [' ']).
+            got = [str(x.get("text") or "") for x in (fs.get(key) or []) if isinstance(x, dict)]
+            return [t for t in got if t.strip()]
 
         check(aobj, "primary_texts", list(ad.bodies), texts("bodies"))
         check(aobj, "headlines", list(ad.titles), texts("titles"))
@@ -1646,9 +1648,11 @@ class CampaignCreator:
                           rec.get("vertical_video_id") or rec.get("vertical_image_hash")))
         for slot, name, path, made in wants:
             got = bound[slot] or ""
-            if made:
-                check(aobj, name, str(made), got)
             data = files.get(path, b"")
+            # Видео в ленте ассетов Meta отдаёт копией под новым id (живой прогон 19.10); тогда файл
+            # доказывает название с md5 ниже, а равенство id сверяем только без такой проверки.
+            if made and not (ad.kind == "video" and data and got):
+                check(aobj, name, str(made), got)
             if not (data and got):
                 continue
             if ad.kind == "video":

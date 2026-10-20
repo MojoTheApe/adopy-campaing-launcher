@@ -231,6 +231,73 @@ def test_readback_checks_both_files_and_their_placements(tmp_path):
     assert {"main_file", "stories_reels_file"} <= bad, out.mismatches
 
 
+class CopyingMeta(FakeMeta):
+    """Meta вживую (19.10): видео ленты ассетов отдаёт копией под новым id, название у копии то же."""
+
+    def __init__(self, title_of=None, **kw):
+        super().__init__(**kw)
+        self.next_id = 10_000_000          # id видео у Meta не короче 5 цифр (политика записи)
+        self.title_of = title_of or (lambda t: t)
+        self.copies: dict[str, str] = {}
+
+    def _get(self, path, params):
+        body = super()._get(path, params)
+        if path.endswith("/ads"):
+            for row in body.get("data") or []:
+                for v in ((row.get("creative") or {}).get("asset_feed_spec") or {}).get("videos") or []:
+                    src = v["video_id"]
+                    if src not in self.copies:
+                        self.copies[src] = self._new("video", title=self.title_of(self.objects[src]["title"]),
+                                                     _polls=0)
+                    v["video_id"] = self.copies[src]
+        return body
+
+
+def _video_pair(tmp_path):
+    from tests.test_acl1819_preflight import _mp4
+
+    d = _draft(tmp_path, video=True, ads=1)
+    ad = d.ad_sets[0].ads[0]
+    Path(ad.creative_path).write_bytes(_mp4(15, 1080, 1080))
+    v = tmp_path / "1000_story.mp4"
+    v.write_bytes(_mp4(15, 1080, 1920) + b"vertical")
+    ad.vertical_filename, ad.vertical_path = v.name, str(v)
+    return d
+
+
+def test_readback_accepts_meta_copies_of_the_feed_videos_by_their_content(tmp_path):
+    meta = CopyingMeta()
+    out, _ = _run(meta, _video_pair(tmp_path))
+    assert len(meta.copies) == 2
+    assert out.error == "" and out.readback["ok"], out.mismatches
+    fields = {c["field"] for c in out.readback["checks"]}
+    assert {"main_file_content", "stories_reels_file_content"} <= fields
+    assert not {"main_file", "stories_reels_file"} & fields
+
+
+def test_readback_still_flags_a_feed_video_copy_with_other_content(tmp_path):
+    meta = CopyingMeta(title_of=lambda t: t + "-other")
+    out, _ = _run(meta, _video_pair(tmp_path))
+    bad = {m["field"] for m in out.mismatches}
+    assert {"main_file_content", "stories_reels_file_content"} <= bad, out.mismatches
+
+
+@pytest.mark.parametrize("key", ["descriptions", "titles", "bodies"])
+def test_readback_reads_a_blank_text_from_meta_as_no_text(tmp_path, key):
+    meta = CopyingMeta()
+    meta.mutate_ads[f"creative.asset_feed_spec.{key}"] = [{"text": " "}]
+    d = _video_pair(tmp_path)
+    ad = d.ad_sets[0].ads[0]
+    ad.ad_link_description = ""
+    out, _ = _run(meta, d)
+    field = {"descriptions": "descriptions", "titles": "headlines", "bodies": "primary_texts"}[key]
+    bad = {m["field"] for m in out.mismatches}
+    if key == "descriptions":
+        assert out.readback["ok"], out.mismatches          # описания не было - пробел от Meta не расхождение
+    else:
+        assert field in bad, out.mismatches                # заголовок и текст были - пустой ответ всё ещё ловим
+
+
 def test_readback_catches_a_swapped_placement_rule(tmp_path):
     meta = FakeMeta()
     meta.mutate_ads["creative.asset_feed_spec.asset_customization_rules"] = [
