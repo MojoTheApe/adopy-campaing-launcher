@@ -54450,7 +54450,7 @@
             "session": "rf184-20261020"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-RF184",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -54475,7 +54475,8 @@
           "actor": "Coordinator-M1011A",
           "session": "coord-m1011a-20261015",
           "report": "Main moved to 259ae7f1 (batch #1034: ACL-602, 1202, 1680, 1401, 341). Pure refresh: merge current main (merge commit), re-run affected tests, re-handoff, fresh independent review. Independent trial merge already shows it merges cleanly and its tests pass on the merged tree."
-        }
+        },
+        "reviewer": "Reviewer-RR1020"
       },
       "175": {
         "implementers": [
@@ -60480,7 +60481,6 @@
     "review_queue": [
       1046,
       774,
-      184,
       309
     ],
     "review": null,
@@ -102757,6 +102757,13 @@
         "pr": 927,
         "lane": "ba1c00234ad2464ca41045b666ab9a9f",
         "actor": "Reviewer-R1855V"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-20T15:08:34+00:00",
+        "pr": 937,
+        "lane": "168c3d8482c947cc8cee380002dc118e",
+        "actor": "Reviewer-RR1020"
       }
     ],
     "policy": {
@@ -112007,6 +112014,18 @@
         "session": "reviewer-r1855v-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T15:05:35+00:00",
+        "state": "reviewing"
+      },
+      "937": {
+        "id": "168c3d8482c947cc8cee380002dc118e",
+        "pr": 937,
+        "issues": [
+          184
+        ],
+        "actor": "Reviewer-RR1020",
+        "session": "rr1020-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-20T15:08:34+00:00",
         "state": "reviewing"
       }
     },
