@@ -282,6 +282,22 @@ def test_readback_still_flags_a_feed_video_copy_with_other_content(tmp_path):
     assert {"main_file_content", "stories_reels_file_content"} <= bad, out.mismatches
 
 
+@pytest.mark.parametrize("key", ["descriptions", "titles", "bodies"])
+def test_readback_reads_a_blank_text_from_meta_as_no_text(tmp_path, key):
+    meta = CopyingMeta()
+    meta.mutate_ads[f"creative.asset_feed_spec.{key}"] = [{"text": " "}]
+    d = _video_pair(tmp_path)
+    ad = d.ad_sets[0].ads[0]
+    ad.ad_link_description = ""
+    out, _ = _run(meta, d)
+    field = {"descriptions": "descriptions", "titles": "headlines", "bodies": "primary_texts"}[key]
+    bad = {m["field"] for m in out.mismatches}
+    if key == "descriptions":
+        assert out.readback["ok"], out.mismatches          # описания не было - пробел от Meta не расхождение
+    else:
+        assert field in bad, out.mismatches                # заголовок и текст были - пустой ответ всё ещё ловим
+
+
 def test_readback_catches_a_swapped_placement_rule(tmp_path):
     meta = FakeMeta()
     meta.mutate_ads["creative.asset_feed_spec.asset_customization_rules"] = [

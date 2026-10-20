@@ -1614,7 +1614,9 @@ class CampaignCreator:
             fs = {}
 
         def texts(key: str) -> list[str]:
-            return [str(x.get("text") or "") for x in (fs.get(key) or []) if isinstance(x, dict)]
+            # Пустой текст Meta отдаёт пробелом (живой прогон 19.10: descriptions [] → [' ']).
+            got = [str(x.get("text") or "") for x in (fs.get(key) or []) if isinstance(x, dict)]
+            return [t for t in got if t.strip()]
 
         check(aobj, "primary_texts", list(ad.bodies), texts("bodies"))
         check(aobj, "headlines", list(ad.titles), texts("titles"))
