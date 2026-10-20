@@ -5739,6 +5739,27 @@
         "issue_scopes": {
           "1046": "3d18b05f6962ee63da815495191058465dc3c69edad05dfc45c8adf55421ad5a"
         }
+      },
+      "929": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1309U",
+        "review_session": "reviewer-r1309u-20261020",
+        "execution_lane": "8fd7cbd65e5d402e8d7ca41fda960659",
+        "implementer": "Worker-L2309c",
+        "head_sha": "0e812bb282907a8059043d761bacdb62192efe2d",
+        "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+        "tree_sha": "8a476a6dcc28a30e102689a45fe829ee013bfe28",
+        "issues": [
+          309
+        ],
+        "report": "Re-review of PR #929 (ACL-1309: each person gets their own dashboard keyed by a config-directory fingerprint and a per-person port, instead of whoever holds 9090) after the third return. The product code was already judged correct and is unchanged since fa3cd6c8; the only new commits are a clean merge of main 259ae7f1 (no conflict resolutions) and 0e812bb2, which fixes the last blocker in packaging/windows/test_update_cycle.py: the new find_dashboard() first uses local_dashboard.find_own (own fingerprint on any per-person port) and, only if that finds nothing, probes legacy port 9090 and accepts an ACL ok answer that has no `config` key (every pre-1309 published release, which Complete Delivery installs as the old version), while still rejecting a 9090 answer whose `config` is present but foreign. health() now uses it, so start(old_exe)/wait_version, the restart-old-version recovery step and the finally cleanup (which additionally checks the version is one of the installers before stopping) all see the old build again. New packaging/windows/tests/test_update_cycle_health.py covers the three requested cases (own fingerprint on 9091 found; legacy no-config payload on 9090 found; foreign fingerprint on 9090 not found) plus nothing-answering. Locally: test_update_cycle_health.py 4 passed; with test_local_dashboard.py, test_launcher.py and test_integration_fixes.py 56 passed, 6 subtests passed. CI on head 0e812bb2 is fully green, including the Windows installer workflow (Build, install, repair, and uninstall; Installer verification), windows tests, all six linux shards, process checks and tracker-link. Nits (non-blocking): the legacy fallback probes 9090 without the in_use pre-check (costs at most one 2 s probe) and accepts any pre-1309 ACL on 9090 regardless of config dir, which is acceptable on the isolated CI runner and is guarded by the version checks. No live checks claimed.",
+        "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "recorded_at": "2026-10-20T17:20:58+00:00",
+        "issue_scopes": {
+          "309": "44c1196854447c8e0b1e0e322f68d3a7464aabbef8d70bdff820248de1c2cddd"
+        }
       }
     },
     "stage": {
