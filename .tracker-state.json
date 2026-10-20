@@ -56287,6 +56287,10 @@
       "Reviewer-R1681W": {
         "session": "reviewer-r1681w-20261020",
         "role": "Reviewer"
+      },
+      "Reviewer-X20BAT": {
+        "session": "rxbat2-1c30cbbe",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -59159,7 +59163,23 @@
       739,
       805
     ],
-    "review": null,
+    "review": {
+      "id": "1ea28d1b292c4ef3baeda760fa52b87b",
+      "batch_id": "5cc83b63094747b7942c0f90ab608793",
+      "pr": 1034,
+      "issues": [
+        70,
+        202,
+        680,
+        401,
+        47
+      ],
+      "actor": "Reviewer-X20BAT",
+      "session": "rxbat2-1c30cbbe",
+      "coordinator": "Coordinator-E1019A",
+      "state": "reviewing",
+      "started_at": "2026-10-20T11:08:46+00:00"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -99401,6 +99421,27 @@
             "approved_at": "2026-10-20T11:02:36+00:00"
           }
         }
+      },
+      {
+        "event": "batch-review-acquired",
+        "at": "2026-10-20T11:08:46+00:00",
+        "review": {
+          "id": "1ea28d1b292c4ef3baeda760fa52b87b",
+          "batch_id": "5cc83b63094747b7942c0f90ab608793",
+          "pr": 1034,
+          "issues": [
+            70,
+            202,
+            680,
+            401,
+            47
+          ],
+          "actor": "Reviewer-X20BAT",
+          "session": "rxbat2-1c30cbbe",
+          "coordinator": "Coordinator-E1019A",
+          "state": "reviewing",
+          "started_at": "2026-10-20T11:08:46+00:00"
+        }
       }
     ],
     "policy": {
@@ -107790,7 +107831,7 @@
       "id": "5cc83b63094747b7942c0f90ab608793",
       "actor": "Coordinator-E1019A",
       "session": "coord-c0a1de70",
-      "state": "assembling",
+      "state": "reviewing",
       "issues": [
         70,
         202,
@@ -108024,7 +108065,7 @@
       "branch": "codex/batch-5cc83b63094747b7942c0f90ab608793",
       "intake": "a94b4944da0a475db9dfdf3711ea143a",
       "started_at": "2026-10-20T10:48:36+00:00",
-      "pr": null,
+      "pr": 1034,
       "entered_stage": false,
       "history": [],
       "delivery_request": {
