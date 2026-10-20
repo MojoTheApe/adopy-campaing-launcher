@@ -46035,9 +46035,11 @@
         "worktree": "C:\\acl-rf-855",
         "id": "ff3e35308139450991074e4067b69ffd",
         "issue": 855,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T14:07:57+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 927,
+        "report": "Pure refresh: merged main 259ae7f1 (merge commit 48f11d2e), no conflicts. Tests: test_acl1855_durable_intent, test_acl1800_campaign_commands - 233 passed."
       }
     },
     "tasks": {
