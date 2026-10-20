@@ -93,15 +93,12 @@ the current real approval; missing history stays unknown. The history window is 
 an incomplete or unavailable history is marked and earlier records remain linked
 from each GitHub task. A shared GitHub account does not identify an individual agent.
 
-**Details** contains supporting operational records. A reservation is recorded
-ownership. "Admission not assessed" means eligibility for the next step has not
-been checked; it is not itself a failure. "Batch selection required" means the
-agent coordinating delivery must select approved work to combine. "Integration
-paused" describes that delivery activity, not every task. "Activity not recorded"
-means no activity evidence was recorded. A waiting approval and a batch size are
-queue/capacity information. These messages alone are not requests for you to act;
-a real blocker should name the obstacle and the specific help needed. A stale or
-unavailable board should be checked against the original GitHub task.
+Open the task and its linked GitHub Issue/PR for supporting records. **Batches**
+shows recorded composition and integration. A reservation records ownership; it
+does not prove confirmed execution or eligibility for the next step. Batch size
+and waiting approval describe composition and queue state. These facts alone do
+not ask you to act: a real blocker names its obstacle and the specific help needed.
+Check a stale or unavailable board against the original GitHub task.
 
 ## Find the result or help with a blocker
 
