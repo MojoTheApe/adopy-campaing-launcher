@@ -45068,6 +45068,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
+      },
+      "845": {
+        "actor": "Worker-L1845",
+        "session": "run_l1_845",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "codex/acl-1845-publish-button-design",
+        "worktree": "C:\\acl-1845-wt",
+        "id": "ebe5ab1745374d82b2a35babaf952efb",
+        "issue": 845,
+        "state": "implementing",
+        "started_at": "2026-10-20T10:44:50+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -49886,10 +49898,14 @@
           {
             "actor": "Worker-R1019845",
             "session": "run_r1019_845"
+          },
+          {
+            "actor": "Worker-L1845",
+            "session": "run_l1_845"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-R1019845",
+        "state": "implementing",
+        "worker": "Worker-L1845",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-R1019845",
@@ -49912,8 +49928,7 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578011+00:00",
           "remote_process_stopped_verified": false
-        },
-        "reviewer": "Reviewer-C1845"
+        }
       },
       "844": {
         "implementers": [
@@ -56193,6 +56208,10 @@
       },
       "Worker-L1805": {
         "session": "run_l1_805",
+        "role": "Worker"
+      },
+      "Worker-L1845": {
+        "session": "run_l1_845",
         "role": "Worker"
       }
     },
@@ -98832,6 +98851,13 @@
         "issue": 805,
         "pr": 1019,
         "actor": "Worker-L1805"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T10:44:50+00:00",
+        "issue": 845,
+        "claim": "ebe5ab1745374d82b2a35babaf952efb",
+        "actor": "Worker-L1845"
       }
     ],
     "policy": {
