@@ -45039,20 +45039,6 @@
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
       },
-      "18": {
-        "actor": "Worker-L3018",
-        "session": "run_l3_018",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-110-compare-period",
-        "worktree": "C:\\acl-110",
-        "id": "81ea92892ef24fe8bc54891ece7c96fa",
-        "issue": 18,
-        "state": "handoff",
-        "started_at": "2026-10-20T09:47:27+00:00",
-        "from_status": "status:backlog",
-        "pr": 1033,
-        "report": "ACL-110 handoff (Worker-L3018): PR #1033, branch work/acl-110-compare-period. Compare with previous period / custom range across account map, CM Comparison, Optimization, open recommendations; \"\u2014\" for zero/missing earlier value; new/gone markers (owner decisions of 2026-10-20 in the Issue).\nVerification: tests/test_acl110_period_compare.py (43) + test_header, test_metric_columns, test_account_map_columns, test_calendar_days_selectable, test_period_picker_not_capped_by_workbook, test_account_map_view/period, test_section_filters: pass locally. Independent Opus review done; HIGH (XSS via cmp_from) and MEDIUM (shared-cache mutation, live reads for earlier period, ad-set flag wording) fixed. Known limits: earlier period not pre-warmed; no \"gone\" rows on Home CM section or for vanished countries; CR change is relative percent. No live run."
-      },
       "71": {
         "actor": "Worker-L271",
         "session": "run_l2_71",
@@ -53523,9 +53509,25 @@
             "session": "run_l3_018"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-L3018",
-        "coordinator": "Coordinator-M1011A"
+        "coordinator": "Coordinator-M1011A",
+        "handoff": {
+          "actor": "Worker-L3018",
+          "session": "run_l3_018",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "work/acl-110-compare-period",
+          "worktree": "C:\\acl-110",
+          "id": "81ea92892ef24fe8bc54891ece7c96fa",
+          "issue": 18,
+          "state": "handoff",
+          "started_at": "2026-10-20T09:47:27+00:00",
+          "from_status": "status:backlog",
+          "pr": 1033,
+          "report": "ACL-110 handoff (Worker-L3018): PR #1033, branch work/acl-110-compare-period. Compare with previous period / custom range across account map, CM Comparison, Optimization, open recommendations; \"\u2014\" for zero/missing earlier value; new/gone markers (owner decisions of 2026-10-20 in the Issue).\nVerification: tests/test_acl110_period_compare.py (43) + test_header, test_metric_columns, test_account_map_columns, test_calendar_days_selectable, test_period_picker_not_capped_by_workbook, test_account_map_view/period, test_section_filters: pass locally. Independent Opus review done; HIGH (XSS via cmp_from) and MEDIUM (shared-cache mutation, live reads for earlier period, ad-set flag wording) fixed. Known limits: earlier period not pre-warmed; no \"gone\" rows on Home CM section or for vanished countries; CR change is relative percent. No live run."
+        },
+        "pr": 1033,
+        "queued_at": "2026-10-20T10:06:03+00:00"
       }
     },
     "actors": {
@@ -59007,7 +59009,8 @@
       836,
       53,
       853,
-      19
+      19,
+      18
     ],
     "review": null,
     "history": [
@@ -98464,6 +98467,13 @@
         "pr": 833,
         "lane": "702b08be95284668a8035e47f145b4fc",
         "actor": "Reviewer-Q2001D"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T10:06:03+00:00",
+        "issue": 18,
+        "pr": 1033,
+        "actor": "Worker-L3018"
       }
     ],
     "policy": {
