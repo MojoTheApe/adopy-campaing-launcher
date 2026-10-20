@@ -109695,7 +109695,51 @@
         "session": "reviewer-r1305v-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T12:48:33+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 305,
+          "pr": 965,
+          "branch": "work/acl-1305-setup-name-check",
+          "head_sha": "a34ec45e6c24c3c474e136320020d9e593a921bf",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "d8cde8e9211dd3e65188627262e609ab1a0fcc95e48bad8454fa02bbb772b770",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-R1305V",
+            "review_session": "reviewer-r1305v-20261020",
+            "execution_lane": "f9d8f33f1e8d421d872f84b5830dc3ec",
+            "implementer": "Worker-T1020305",
+            "head_sha": "a34ec45e6c24c3c474e136320020d9e593a921bf",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "tree_sha": "e3e38f99c308ecb6a50a3f608fd97608c3e146b7",
+            "issues": [
+              305
+            ],
+            "report": "PR #965 changes packaging/windows/setup_wizard.py so that setup checks the entered campaign manager name against the chosen workbook's CM column: on a mismatch build_manual_setup raises a WizardValidationError naming the name, saying the dashboard would show no accounts, and offering up to three case-insensitive close matches (difflib, cutoff 0.6) or, when none are close, telling the person to check spelling or ask the team lead; a case-only or whitespace difference still passes (casefold match, unchanged). Step 4 now shows STATS_WORKBOOK_HELP (what the workbook is, that ACL does not create it, ask team lead or support, save it locally), pre-fills the path from config.paths.get_excel_path() only when the file exists (default_stats_workbook, exceptions swallowed), and shows a green note when the prefilled file is the one found; an empty or missing path now yields an explanatory English message instead of a bare error, so a manager with no workbook yet is told what to do rather than dead-ended (the workbook was already required before; the install is not made stricter and no distribution mechanism is invented). Existing validation is kept and only wrapped; update/repair paths are untouched since only wizard text, defaults and the name lookup changed. Docs troubleshooting row and the old test expectation were updated. All messages are English; tests use synthetic names only, no personal data or secrets. Tests run locally in a worktree of the head: tests/test_setup_checks_name_against_workbook.py plus packaging/windows/tests/test_setup_wizard.py, 13 passed; they cover exact and case-only match, one-letter-off with near match, unknown name guidance, missing/empty workbook explanation, and prefill only when present. CI on the head: all green including Build, install, repair, and uninstall (Windows installer), windows tests, linux tests; only tracker-link is red (reported separately). Stacking: git log work/main..HEAD shows only the task's own commits plus two merges of main, no other unmerged tasks. Non-blocking nits: validation of the name against the workbook happens only on the files step submit, and the error text says to go back to the name step, which is acceptable; the test_setup_wizard docstring/test names could mention the new message. No live checks claimed.",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "recorded_at": "2026-10-20T13:01:25+00:00",
+            "issue_scopes": {
+              "305": "d8cde8e9211dd3e65188627262e609ab1a0fcc95e48bad8454fa02bbb772b770"
+            }
+          },
+          "lane": {
+            "id": "f9d8f33f1e8d421d872f84b5830dc3ec",
+            "pr": 965,
+            "issues": [
+              305
+            ],
+            "actor": "Reviewer-R1305V",
+            "session": "reviewer-r1305v-20261020",
+            "coordinator": "Coordinator-M1011A",
+            "started_at": "2026-10-20T12:48:33+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-20T13:05:36+00:00"
+        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
