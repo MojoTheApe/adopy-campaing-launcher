@@ -5597,6 +5597,27 @@
         "issue_scopes": {
           "305": "d8cde8e9211dd3e65188627262e609ab1a0fcc95e48bad8454fa02bbb772b770"
         }
+      },
+      "869": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1854V",
+        "review_session": "reviewer-r1854v-20261020",
+        "execution_lane": "f9d87ebd24b8497ab9153ddefd5ee6ad",
+        "implementer": "Worker-L1854",
+        "head_sha": "d3c47af959e3c69cbfb007f9c8a512ae47179087",
+        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "tree_sha": "16c418cb8e83722848000b5b47864ee4a1ef833c",
+        "issues": [
+          854
+        ],
+        "report": "Independent re-review of PR #869 (ACL-1854, publish status: persist the current run and preserve concurrent runs) at head d3c47af959e3c69cbfb007f9c8a512ae47179087 on base c61501607ce11744e45add8b0d3b314368c216c5. The change makes the publish status an atomic read-modify-write guarded by a thread lock plus a cross-process file lock, keyed per profile; stale workers are rejected by job id and revision so a late worker cannot overwrite a newer run, concurrent runs of other profiles are preserved, and after a restart a persisted running state is reported as interrupted/unverified instead of being shown as live. The previous review at 81a6f80f found a single test-only blocker: in tests/test_acl1854_current_draft_status.py the child process holding the lock waited on release for only 10 s while the parent waited up to 30 s, so under load the child could release the lock early and cause a false 'second process read outside the transaction lock'. The delta since 81a6f80f is exactly that test file (2 insertions, 1 deletion, no product code): release.wait(10) became release.wait(120), longer than every parent wait (30 s), and an assertion one.is_alive() with an honest message was added before the 0.15 s check, which resolves the finding properly. I ran tests/test_acl1854_current_draft_status.py twice from the PR worktree: 31 passed both times (61 s and 56 s) under load. CI on the head: all required checks pass (ACL verification, Classify and check project tooling, Process instructions, linux tests 3.13 shards 1/2/3, windows tests 3.13, descriptor, installer classification/verification); the only red check is tracker-link, which is a tracker metadata check unrelated to the code. Nits: the new inline comment is in Russian while the surrounding assertions are English, which is acceptable per repo convention. No live checks claimed.",
+        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "recorded_at": "2026-10-20T13:10:03+00:00",
+        "issue_scopes": {
+          "854": "7d3b0db0943e8e6f6e2f40c00b7896f815e417861a67a79e54407fcf65d2da2c"
+        }
       }
     },
     "stage": {
