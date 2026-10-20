@@ -45321,20 +45321,6 @@
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
       },
-      "880": {
-        "actor": "Worker-1880C",
-        "session": "w1880c-20261020-700920560",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1880-page-selection",
-        "worktree": "C:\\acl-1880-clean",
-        "id": "ba5d5b872010498e806a8c43fe252a55",
-        "issue": 880,
-        "state": "handoff",
-        "started_at": "2026-10-20T12:27:04+00:00",
-        "from_status": "status:todo",
-        "pr": 1044,
-        "report": "Clean transplant of ae54e234 + fb6b6e6f + 12 h Pages cache (f88ecbe1) from the TEST9095 build onto main c6150160. Pre-handoff Opus review: HIGH (Automatic touched RPA Identity) and 2 MEDIUM + 4 LOW fixed in 672db9f2. Tests: 120 passed (test_acl1880_page_selection, _pages_browser, _manual_page, test_queue_wait_reads, test_acl1819_preflight). Not included: 10-min busy-profile wait (needs profile_lease, #863). Overlaps #1025 (ACL-1897): rebase after it merges."
-      },
       "1039": {
         "actor": "Worker-BCHIP",
         "session": "bchip_20261020",
@@ -50785,28 +50771,31 @@
             "session": "w1880c-20261020-700920560"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-1880C",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-T880R",
-          "session": "t880r-20261014",
-          "coordinator": "Coordinator-C0930A",
-          "branch": "codex/facebook-page-selection",
-          "worktree": "C:\\Users\\EvgeniSedin\\fb_agents\\output\\facebook-page-selection",
-          "id": "7b0fb36cfdb4465497a95e3dcd5203dd",
+          "actor": "Worker-1880C",
+          "session": "w1880c-20261020-700920560",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "work/acl-1880-page-selection",
+          "worktree": "C:\\acl-1880-clean",
+          "id": "ba5d5b872010498e806a8c43fe252a55",
           "issue": 880,
-          "state": "stopping",
-          "started_at": "2026-10-14T12:48:16+00:00",
+          "state": "handoff",
+          "started_at": "2026-10-20T12:27:04+00:00",
           "from_status": "status:todo",
-          "report": "# Release of the ACL-1880 implementation claim\n\nReleased by Coordinator-C0930A on the owner's explicit instruction in chat on 2026-10-14 (\"\u043e\u0441\u0432\u043e\u0431\u043e\u0434\u0438 \u0437\u0430\u0445\u0432\u0430\u0442 1880\").\n\n- Claim: Worker-PG86 / session 01a135aa-a82d-77d2-8057-5116cc969c86, coordinator Coordinator-PG86, branch codex/facebook-page-selection, started 2026-10-13T16:13:25Z.\n- Reason: the claim has been idle since 2026-10-13; the owner decided the Page behaviour on 2026-10-14 (Automatic takes the first Page; #888/#889 closed). An implementation slot is needed for ACL-1760, the base of the API chain.\n- Work preserved: branch origin/codex/facebook-page-selection (ae54e234, fb6b6e6f) is untouched; nothing was deleted. The task can be resumed by a new claim."
+          "pr": 1044,
+          "report": "Clean transplant of ae54e234 + fb6b6e6f + 12 h Pages cache (f88ecbe1) from the TEST9095 build onto main c6150160. Pre-handoff Opus review: HIGH (Automatic touched RPA Identity) and 2 MEDIUM + 4 LOW fixed in 672db9f2. Tests: 120 passed (test_acl1880_page_selection, _pages_browser, _manual_page, test_queue_wait_reads, test_acl1819_preflight). Not included: 10-min busy-profile wait (needs profile_lease, #863). Overlaps #1025 (ACL-1897): rebase after it merges."
         },
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578025+00:00",
           "remote_process_stopped_verified": false
-        }
+        },
+        "pr": 1044,
+        "queued_at": "2026-10-20T13:03:24+00:00"
       },
       "886": {
         "implementers": [
@@ -59605,7 +59594,8 @@
       1037,
       838,
       1038,
-      1040
+      1040,
+      880
     ],
     "review": {
       "id": "1ea28d1b292c4ef3baeda760fa52b87b",
@@ -100606,6 +100596,13 @@
         "issue": 1046,
         "claim": "2aa18fff3d7a4280bd804a114a8e6724",
         "actor": "Worker-c8f54e83"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T13:03:24+00:00",
+        "issue": 880,
+        "pr": 1044,
+        "actor": "Worker-1880C"
       }
     ],
     "policy": {
