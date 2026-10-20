@@ -46014,9 +46014,11 @@
         "worktree": "C:\\acl-rf-771",
         "id": "3bcb419e564844039daf0ee815d04ba8",
         "issue": 771,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T13:55:32+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 832,
+        "report": "Pure refresh: merged main 259ae7f1 (merge commit ebac53f8), no conflicts. Tests: test_acl1771_targeting_resolver, test_acl1819_preflight, test_goals, test_acl_1202_overview_profile_search, test_acl1680_one_config_dir - 169 passed."
       }
     },
     "tasks": {
