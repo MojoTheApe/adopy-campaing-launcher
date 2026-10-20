@@ -52252,7 +52252,7 @@
             "session": "rf855-20261020"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-RF855",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -52282,7 +52282,8 @@
           "actor": "Coordinator-M1011A",
           "session": "coord-m1011a-20261015",
           "report": "Main moved to 259ae7f1 (batch #1034: ACL-602, 1202, 1680, 1401, 341). Pure refresh: merge current main (merge commit), re-run affected tests, re-handoff, fresh independent review. Independent trial merge already shows it merges cleanly and its tests pass on the merged tree."
-        }
+        },
+        "reviewer": "Reviewer-R1855V"
       },
       "309": {
         "implementers": [
@@ -57591,6 +57592,10 @@
       "Worker-L2309c": {
         "session": "run_l2_309c",
         "role": "Worker"
+      },
+      "Reviewer-R1855V": {
+        "session": "reviewer-r1855v-20261020",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -60475,7 +60480,6 @@
     "review_queue": [
       1046,
       774,
-      855,
       184,
       309
     ],
@@ -102746,6 +102750,13 @@
             "approved_at": "2026-10-20T15:03:16+00:00"
           }
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-20T15:05:35+00:00",
+        "pr": 927,
+        "lane": "ba1c00234ad2464ca41045b666ab9a9f",
+        "actor": "Reviewer-R1855V"
       }
     ],
     "policy": {
@@ -111984,6 +111995,18 @@
         "session": "review_389daa0fe6cff6b3e53c56eee4bdd46509f80512",
         "coordinator": "Coordinator-ACT174",
         "started_at": "2026-10-20T08:55:10+00:00",
+        "state": "reviewing"
+      },
+      "927": {
+        "id": "ba1c00234ad2464ca41045b666ab9a9f",
+        "pr": 927,
+        "issues": [
+          855
+        ],
+        "actor": "Reviewer-R1855V",
+        "session": "reviewer-r1855v-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-20T15:05:35+00:00",
         "state": "reviewing"
       }
     },
