@@ -45308,9 +45308,11 @@
         "worktree": "C:\\acl-1040-mlx-close",
         "id": "3894c879a5964047bdf3606e65655cc5",
         "issue": 1040,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T12:23:30+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 1042,
+        "report": "Clean transplant of bbeb26be from the TEST9095 build onto main. Pre-handoff review (Opus) findings fixed in a00c496a: timeouts are not retried; 5xx-on-old-address behaviour documented; ids fixed. Tests: tests/test_the_api_stop_is_asked_first.py 16 passed plus 10 launcher-related files earlier (342 passed)."
       },
       "880": {
         "actor": "Worker-1880C",
