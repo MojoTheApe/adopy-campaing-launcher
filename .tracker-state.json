@@ -110578,7 +110578,9 @@
         "session": "reviewer-r1175v-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T13:39:02+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "# ACL-1175 / PR #930 re-review (head df1feabf) - RETURNED\n\nBlocking: criterion 1 of Issue #175 still not met. Delta 28a2ffab..df1feabf contains only the merge of main (no change in docs, setup_guide.py, or .github). No workflow change: nothing publishes setup-guide.html as a Release asset next to .sha256 / release.json, Step 0 and the page top have no stable pre-install link, and no check verifies asset publication. The guide is still readable only from _internal/setup-guide.html inside the installed bundle.\n\nRequired: publish the rendered setup-guide.html in release.yml (same Release), point Step 0 / page top to a stable link, add a check that the asset is published, keep the bundled copy.\nNon-blocking (unchanged): criterion 3 rows for dashboard Update-button failures; live pass (criterion 4).",
+        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
