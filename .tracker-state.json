@@ -45002,9 +45002,11 @@
         "worktree": "C:\\acl-1767",
         "id": "38ca26ceda3440819ca80f93b1f780c6",
         "issue": 767,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T08:46:08+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 830,
+        "report": "# ACL-1767 handoff (after changes_requested)\n\n- Fixed the review finding: requirements.txt now carries tzdata (zoneinfo needs it on Windows), so tests/test_distribution_boundary.py allows `tzdata` in ship_names (commit on top of 7a78e2c6). tests/test_distribution_boundary.py: 6 passed locally.\n- No other changes since the previous handoff. Full suite left to CI."
       }
     },
     "tasks": {
