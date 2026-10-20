@@ -7151,7 +7151,7 @@ window.cbTree = (function () {
   function showQueue(p) {
     var box = foot.querySelector('.cbd-queue');
     var btn = foot.querySelector('.cbd-publish-all');
-    if (btn) btn.setAttribute('aria-busy', String(!!(p.live && p.live.length)));
+    if (btn && typeof btn.setAttribute === 'function') btn.setAttribute('aria-busy', String(!!(p.live && p.live.length)));
     if (!box) {
       // Сборка вернулась после F5 раньше, чем в ящике появилось, что собирать.
       if (window.CB_QUEUE && window.CB_QUEUE.progress === p) paintFoot();
@@ -7174,9 +7174,9 @@ window.cbTree = (function () {
     // ACL-1845: ноль доступных кампаний тоже держит кнопку (иначе showQueue
     // включал её обратно сразу после refreshPublication).
     if (btn) {
-      var tk = ticks();
+      var tk = typeof ticks === 'function' ? ticks() : null;
       btn.disabled = !!(window.CB_QUEUE && window.CB_QUEUE.uncertain) || !!(window.CB_PF_GATE && window.CB_PF_GATE.blocked)
-        || !(tk.some ? tk.send.length : tk.open.length);
+        || !!(tk && !(tk.some ? tk.send.length : tk.open.length));
     }
     if (p.done) {
       var ok = (p.report || []).filter(function (r) { return r.state === 'ok'; }).length;
@@ -15344,7 +15344,7 @@ function cbNewRun(notify) {
     // Keep existing enqueue/duplicate guards; busy is informative, not a new lock.
     document.querySelectorAll('form.open-account-form').forEach(function (form) {
       var button = form.querySelector('.cb-publish-btn');
-      if (button) button.setAttribute('aria-busy', String(cbAccountBusy(cbFormKey(form))));
+      if (button && typeof button.setAttribute === 'function') button.setAttribute('aria-busy', String(cbAccountBusy(cbFormKey(form))));
     });
     notify(p);
   }
