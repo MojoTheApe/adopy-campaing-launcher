@@ -44858,6 +44858,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T06:37:45+00:00",
         "from_status": "status:backlog"
+      },
+      "805": {
+        "actor": "Worker-RH2020W",
+        "session": "rh2020w-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1805-rules-before-write",
+        "worktree": "C:\\rh20-805",
+        "id": "b66e6b48d8094fb8affb2fa7cf4cc08f",
+        "issue": 805,
+        "state": "implementing",
+        "started_at": "2026-10-20T06:52:42+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -52935,10 +52947,14 @@
           {
             "actor": "Worker-S1019805",
             "session": "run_s1019_805"
+          },
+          {
+            "actor": "Worker-RH2020W",
+            "session": "rh2020w-20261020"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-S1019805",
+        "state": "implementing",
+        "worker": "Worker-RH2020W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-S1019805",
@@ -52956,7 +52972,6 @@
         },
         "pr": 1019,
         "queued_at": "2026-10-19T18:21:23+00:00",
-        "reviewer": "Reviewer-C1805",
         "review_report": "# Returned to the author: merge conflict with main, content not reviewed\n\nPR 1019 cannot be brought up to current main c61501607ce11744e45add8b0d3b314368c216c5: `gh pr update-branch` reports a merge conflict (checked 2026-10-19/20). A source review must bind the current main baseline, so this task cannot be reviewed or approved as is.\n\nThe content of this PR was NOT reviewed in this pass; this return carries no code findings.\n\nNext step for the author: merge current main into the original branch, resolve the conflict, run the affected tests, push, and hand off again for a full independent review."
       },
       "807": {
@@ -55649,6 +55664,10 @@
       "Reviewer-C1841": {
         "session": "reviewer-c1841-20261020",
         "role": "Reviewer"
+      },
+      "Worker-RH2020W": {
+        "session": "rh2020w-20261020",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -96808,6 +96827,13 @@
           "report": "# Returned to the author: merge conflict with main, content not reviewed\n\nPR 848 cannot be brought up to current main c61501607ce11744e45add8b0d3b314368c216c5: `gh pr update-branch` reports a merge conflict (checked 2026-10-19/20). A source review must bind the current main baseline, so this task cannot be reviewed or approved as is.\n\nThe content of this PR was NOT reviewed in this pass; this return carries no code findings.\n\nNext step for the author: merge current main into the original branch, resolve the conflict, run the affected tests, push, and hand off again for a full independent review.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T06:52:42+00:00",
+        "issue": 805,
+        "claim": "b66e6b48d8094fb8affb2fa7cf4cc08f",
+        "actor": "Worker-RH2020W"
       }
     ],
     "policy": {
