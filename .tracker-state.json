@@ -52818,7 +52818,7 @@
             "session": "rh2020w-20261020"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-RH2020W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -97331,6 +97331,68 @@
         "pr": 832,
         "lane": "ef97389083b5420699df3f66bf1473eb",
         "actor": "Reviewer-R1771Z"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-20T08:09:18+00:00",
+        "issue": 992,
+        "pr": 993,
+        "review": {
+          "id": "59f11be4c1a44303a680e6d1f154c677",
+          "pr": 993,
+          "issues": [
+            992
+          ],
+          "actor": "Reviewer-Q2001B",
+          "session": "q2001b-20261020",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-20T07:51:46+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 992,
+            "pr": 993,
+            "branch": "work/acl-1992-api-build-percent",
+            "head_sha": "720ecab78f090a049fe0df14b53763b9d06cb264",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "bd77b1d5096a47359965ac0be0e4ad5055c345193852c6f419b2a81a825c4f81",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-Q2001B",
+              "review_session": "q2001b-20261020",
+              "execution_lane": "59f11be4c1a44303a680e6d1f154c677",
+              "implementer": "Worker-RH2020W",
+              "head_sha": "720ecab78f090a049fe0df14b53763b9d06cb264",
+              "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "tree_sha": "ef72c7a92e83dfa7ca1b3df54d2207b0fefe3d43",
+              "report": "ACL-1992 / Issue 992 scope met: new src/web/api_build_progress.py (plan total, anchored progress-line counter, each unit counted once, found=done, dry run no units, forms add to both done and total), publish_api feeds it from the existing step callback with errors swallowed, publish_jobs stores a fresh units dict under the jobs lock, publish_progress returns units per campaign, report.html percent() prefers units (floor, max 99 before result, never backwards) and robot jobs keep the old model; creator.py untouched and pinned by a literal-line test; CHANGELOG entry present; English text; no secrets; one Tracker issues line. Head contains current main c6150160. Local tests: test_acl1992_api_build_percent (15), test_acl1992_api_build_percent_browser (2), test_campaign_build_progress all passed; one browser test failed once under machine load and passed on rerun (flaky timing, not code). CI all green on this head (windows job had a pre-existing flaky real-Chromium test_acl1702 failure unrelated to the PR, passed on rerun). Not claimed: live API publish on 9095.",
+              "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                992
+              ],
+              "recorded_at": "2026-10-20T08:06:14+00:00",
+              "issue_scopes": {
+                "992": "bd77b1d5096a47359965ac0be0e4ad5055c345193852c6f419b2a81a825c4f81"
+              }
+            },
+            "lane": {
+              "id": "59f11be4c1a44303a680e6d1f154c677",
+              "pr": 993,
+              "issues": [
+                992
+              ],
+              "actor": "Reviewer-Q2001B",
+              "session": "q2001b-20261020",
+              "coordinator": "Coordinator-M1011A",
+              "started_at": "2026-10-20T07:51:46+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-20T08:07:42+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -100588,6 +100650,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-20T07:55:08+00:00"
+      },
+      "992": {
+        "issue": 992,
+        "pr": 993,
+        "branch": "work/acl-1992-api-build-percent",
+        "head_sha": "720ecab78f090a049fe0df14b53763b9d06cb264",
+        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "bd77b1d5096a47359965ac0be0e4ad5055c345193852c6f419b2a81a825c4f81",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-Q2001B",
+          "review_session": "q2001b-20261020",
+          "execution_lane": "59f11be4c1a44303a680e6d1f154c677",
+          "implementer": "Worker-RH2020W",
+          "head_sha": "720ecab78f090a049fe0df14b53763b9d06cb264",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "tree_sha": "ef72c7a92e83dfa7ca1b3df54d2207b0fefe3d43",
+          "report": "ACL-1992 / Issue 992 scope met: new src/web/api_build_progress.py (plan total, anchored progress-line counter, each unit counted once, found=done, dry run no units, forms add to both done and total), publish_api feeds it from the existing step callback with errors swallowed, publish_jobs stores a fresh units dict under the jobs lock, publish_progress returns units per campaign, report.html percent() prefers units (floor, max 99 before result, never backwards) and robot jobs keep the old model; creator.py untouched and pinned by a literal-line test; CHANGELOG entry present; English text; no secrets; one Tracker issues line. Head contains current main c6150160. Local tests: test_acl1992_api_build_percent (15), test_acl1992_api_build_percent_browser (2), test_campaign_build_progress all passed; one browser test failed once under machine load and passed on rerun (flaky timing, not code). CI all green on this head (windows job had a pre-existing flaky real-Chromium test_acl1702 failure unrelated to the PR, passed on rerun). Not claimed: live API publish on 9095.",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            992
+          ],
+          "recorded_at": "2026-10-20T08:06:14+00:00",
+          "issue_scopes": {
+            "992": "bd77b1d5096a47359965ac0be0e4ad5055c345193852c6f419b2a81a825c4f81"
+          }
+        },
+        "lane": {
+          "id": "59f11be4c1a44303a680e6d1f154c677",
+          "pr": 993,
+          "issues": [
+            992
+          ],
+          "actor": "Reviewer-Q2001B",
+          "session": "q2001b-20261020",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-20T07:51:46+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-20T08:07:42+00:00"
       }
     },
     "batches": {
@@ -105374,62 +105480,6 @@
             "state": "reviewing"
           },
           "approved_at": "2026-10-20T08:02:13+00:00"
-        }
-      },
-      "993": {
-        "id": "59f11be4c1a44303a680e6d1f154c677",
-        "pr": 993,
-        "issues": [
-          992
-        ],
-        "actor": "Reviewer-Q2001B",
-        "session": "q2001b-20261020",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-20T07:51:46+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 992,
-          "pr": 993,
-          "branch": "work/acl-1992-api-build-percent",
-          "head_sha": "720ecab78f090a049fe0df14b53763b9d06cb264",
-          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "bd77b1d5096a47359965ac0be0e4ad5055c345193852c6f419b2a81a825c4f81",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-Q2001B",
-            "review_session": "q2001b-20261020",
-            "execution_lane": "59f11be4c1a44303a680e6d1f154c677",
-            "implementer": "Worker-RH2020W",
-            "head_sha": "720ecab78f090a049fe0df14b53763b9d06cb264",
-            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-            "tree_sha": "ef72c7a92e83dfa7ca1b3df54d2207b0fefe3d43",
-            "report": "ACL-1992 / Issue 992 scope met: new src/web/api_build_progress.py (plan total, anchored progress-line counter, each unit counted once, found=done, dry run no units, forms add to both done and total), publish_api feeds it from the existing step callback with errors swallowed, publish_jobs stores a fresh units dict under the jobs lock, publish_progress returns units per campaign, report.html percent() prefers units (floor, max 99 before result, never backwards) and robot jobs keep the old model; creator.py untouched and pinned by a literal-line test; CHANGELOG entry present; English text; no secrets; one Tracker issues line. Head contains current main c6150160. Local tests: test_acl1992_api_build_percent (15), test_acl1992_api_build_percent_browser (2), test_campaign_build_progress all passed; one browser test failed once under machine load and passed on rerun (flaky timing, not code). CI all green on this head (windows job had a pre-existing flaky real-Chromium test_acl1702 failure unrelated to the PR, passed on rerun). Not claimed: live API publish on 9095.",
-            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              992
-            ],
-            "recorded_at": "2026-10-20T08:06:14+00:00",
-            "issue_scopes": {
-              "992": "bd77b1d5096a47359965ac0be0e4ad5055c345193852c6f419b2a81a825c4f81"
-            }
-          },
-          "lane": {
-            "id": "59f11be4c1a44303a680e6d1f154c677",
-            "pr": 993,
-            "issues": [
-              992
-            ],
-            "actor": "Reviewer-Q2001B",
-            "session": "q2001b-20261020",
-            "coordinator": "Coordinator-M1011A",
-            "started_at": "2026-10-20T07:51:46+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-20T08:07:42+00:00"
         }
       },
       "832": {
