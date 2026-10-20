@@ -128,6 +128,9 @@ BLOCKING_REVIEW_STEPS = frozenset(
         "profile_logged_out",
         "profile_network",
         "profile_restart_failed",
+        # ACL-1401: the Multilogin app is not running (launcher refused the
+        # connection); decided by the publisher at attach, before any campaign.
+        "multilogin_not_running",
         # ACL-1320: the profile is open by hand; the publisher stops the
         # account's job before any campaign instead of closing the window.
         "profile_open_by_hand",

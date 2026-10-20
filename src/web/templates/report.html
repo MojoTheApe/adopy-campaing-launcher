@@ -7473,7 +7473,7 @@ window.cbTree = (function () {
   "derived": {"rows": 951, "attempts": 19, "until": "2026-09-28"},
   "stages": [["profile", 18], ["campaign", 57], ["adset", 178], ["ad", 175], ["final", 6]],
   "rules": [
-    ["^(window_|overlays_cleared$|foreign_window$|ai_rescue$|stall_|step_stuck$|tab_frozen$|tab_unblocked$|tab_unblock_skipped$|tab_hung$|click_|browser_addon|error_page_reload$|facebook_error_page$|wizard_recover$|account_controls_toast$|naming_template_dialog$|creative_setup_modal$|dynamic_creative_dialog$|name_suggestions$|review_error_other$|profile_|account_blocked$|lead_terms_not_accepted$|wrong_ad_account$|spend_profile_|api_read$|browser_closed$|simple_create_layout$|tab_frozen_budget_exceeded$|step_budget_exceeded$|campaign_budget_exceeded$)", "hold"],
+    ["^(window_|overlays_cleared$|foreign_window$|ai_rescue$|stall_|step_stuck$|tab_frozen$|tab_unblocked$|tab_unblock_skipped$|tab_hung$|click_|browser_addon|error_page_reload$|facebook_error_page$|wizard_recover$|account_controls_toast$|naming_template_dialog$|creative_setup_modal$|dynamic_creative_dialog$|name_suggestions$|review_error_other$|profile_|account_blocked$|multilogin_not_running$|lead_terms_not_accepted$|wrong_ad_account$|spend_profile_|api_read$|browser_closed$|simple_create_layout$|tab_frozen_budget_exceeded$|step_budget_exceeded$|campaign_budget_exceeded$)", "hold"],
     ["^(job_phase|campaigns_list_ready|fresh_tab|browser_error)", "profile"],
     ["^(browser_window|drafts_pending|tab_woken|create|objective_|campaign_|daily_budget|leads$|continue$|onboarding_modal$|simple_create$|simple_objective$|simple_adset_section$|next_to_adset$)", "campaign"],
     ["^(adset_|conversion_|website_|further_limit|pick_further_limit|advantage_plus|age_suggestion|audience_|before_audience|languages|locations_open|targeting|placements|account_placement|devices_ios|simple_card$|listbox_left_open$|next_to_ad(_stuck_on_adset)?$|simple_ad_section$)", "adset"],
@@ -16613,6 +16613,56 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
   });
 })();
 
+/* ACL-1202: поиск профиля по имени в списке обзора аккаунтов — тот же
+   /multilogin-search и тот же кэш (инстанс, текст), что и у карточки страны
+   (`amapProfiles`); второй реализации поиска здесь нет. Чистые функции вынесены
+   сюда, чтобы их проверял узловой стенд (tests/acl_1202_overview_search_harness.cjs). */
+/* ACL-1202:begin */
+/* Открытые профили идут первыми и помечены открытыми; найденные поиском и не
+   открытые — после них и помечены закрытыми. Профиль, найденный и там и там,
+   остаётся одной строкой — открытой. */
+function aclPickerMerge(openList, found) {
+  var seen = {}, out = [];
+  (openList || []).forEach(function (p) {
+    if (!p || !p.profile_id || seen[p.profile_id]) return;
+    seen[p.profile_id] = 1;
+    out.push({ profile_id: p.profile_id, name: p.name || '', folder_id: p.folder_id || '',
+               key: p.key || '', ad_account_id: p.ad_account_id || '', taken_by: p.taken_by || '', open: true });
+  });
+  (found || []).forEach(function (p) {
+    if (!p || !p.profile_id || seen[p.profile_id]) return;
+    seen[p.profile_id] = 1;
+    out.push({ profile_id: p.profile_id, name: p.name || '', folder_id: p.folder_id || '',
+               key: p.key || '', ad_account_id: '', taken_by: '', open: false });
+  });
+  return out;
+}
+
+/* Подсказка: ровно один профиль с ключом аккаунта — и среди открытых, и среди
+   найденных. Два с одним ключом — не угадываем (как и на сервере). */
+function aclPickerSuggest(labelKey, merged, current) {
+  if (current || !labelKey) return '';
+  var hits = (merged || []).filter(function (p) { return p.key && p.key === labelKey; });
+  return hits.length === 1 ? hits[0].profile_id : '';
+}
+
+/* Поиск по каталогу. Не бросает: сбой — это ответ «каталог не ответил», а
+   выбор среди открытых профилей остаётся как был. */
+function aclPickerSearch(inst, text) {
+  var q = String(text || '').trim();
+  return amapProfiles(inst, false, q).then(function (all) {
+    var profiles = amapRank(all || [], q);
+    return profiles.length
+      ? { state: 'found', profiles: profiles, message: '' }
+      : { state: 'empty', profiles: [], message: q + ' is not in Multilogin' };
+  }).catch(function (e) {
+    return { state: 'failed', profiles: [],
+             message: 'The Multilogin catalogue did not answer (' + String(e && e.message || e)
+                    + ') — showing open profiles only.' };
+  });
+}
+/* ACL-1202:end */
+
 // ── Аккаунты: подключение к этой машине ──────────────────────────────────
 // Одно решение оператора — какой профиль. Имя аккаунта и рекламный кабинет
 // выводятся из него: имя из названия профиля, кабинет из истории того же
@@ -16620,6 +16670,8 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
 // вывести не удалось.
 (function () {
   var loaded = false, openProfiles = [], knownLabels = [], showHidden = false, loading = false;
+  /* ACL-1202: найденное поиском по имени, по строке; и сам аккаунт строки. */
+  var rowExtras = {}, accByLabel = {};
 
   function esc(v) {
     return String(v == null ? '' : v)
@@ -16658,16 +16710,18 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     return uniq.length === 1 ? uniq[0] : '';
   }
 
-  function profileOptions(current, suggested) {
+  function profileOptions(current, suggested, extra) {
     var out = '<option value="">— pick a profile —</option>';
-    openProfiles.forEach(function (p) {
+    var merged = aclPickerMerge(openProfiles, extra);
+    merged.forEach(function (p) {
       var shown = p.name || (p.profile_id.slice(0, 8) + '…');
+      var state = p.open ? ' · open' : ' · closed (starts on Publish)';
       var note = p.taken_by ? ' · taken by: ' + p.taken_by
                : (p.profile_id === suggested ? ' · looks like this one' : '');
       var sel = (p.profile_id === current || (!current && p.profile_id === suggested)) ? ' selected' : '';
-      out += '<option value="' + esc(p.profile_id) + '"' + sel + '>' + esc(shown + note) + '</option>';
+      out += '<option value="' + esc(p.profile_id) + '"' + sel + '>' + esc(shown + state + note) + '</option>';
     });
-    if (current && !openProfiles.some(function (p) { return p.profile_id === current; })) {
+    if (current && !merged.some(function (p) { return p.profile_id === current; })) {
       out += '<option value="' + esc(current) + '" selected>'
            + esc(current.slice(0, 8)) + '… (saved, profile not open)</option>';
     }
@@ -16710,6 +16764,61 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
                   : '<span style="color:var(--warn)">ad account could not be worked out</span>');
     text.innerHTML = parts.join('&nbsp;&nbsp;·&nbsp;&nbsp;');
     if (nameField && nameField.value) checkLabel();
+  }
+
+  /* ACL-1202: поиск профиля по имени в строке аккаунта. Запрос — тот же
+     /multilogin-search и тот же кэш, что у карточки страны; на каждую букву он
+     не уходит: пауза после ввода, минимум два символа, повтор текста берётся из
+     кэша. Сбой не ломает выбор — открытые профили остаются в списке. */
+  var FIND_PAUSE_MS = 350, FIND_MIN_CHARS = 2;
+
+  function pickerInstance() {
+    var i = document.querySelector('.amap-add .amap-inst');
+    return (i && i.value) || 'A';
+  }
+
+  function repaintRow(row, label) {
+    var a = accByLabel[label] || {};
+    var sel = row.querySelector('.ac-prof'); if (!sel) return;
+    var current = sel.value || a.profile_id || '';
+    var extras = rowExtras[label] || [];
+    var suggested = a.suggested_profile
+      || aclPickerSuggest(a.label_key || '', aclPickerMerge(openProfiles, extras), current);
+    sel.innerHTML = profileOptions(current, suggested, extras);
+  }
+
+  function rowFind(input) {
+    var row = input.closest('tr'); if (!row) return;
+    var label = row.getAttribute('data-label');
+    var note = row.querySelector('.ac-prof-note');
+    var text = (input.value || '').trim();
+    var gen = input._gen = (input._gen || 0) + 1;
+    clearTimeout(input._timer);
+    if (text.length < FIND_MIN_CHARS) {
+      rowExtras[label] = [];
+      if (note) { note.style.color = ''; note.textContent = ''; }
+      repaintRow(row, label);
+      return;
+    }
+    if (note) { note.style.color = 'var(--muted)'; note.textContent = 'searching…'; }
+    input._timer = setTimeout(function () {
+      var inst = pickerInstance();
+      aclPickerSearch(inst, text).then(function (res) {
+        if (input._gen !== gen) return;      // пока искали, ввод изменился
+        rowExtras[label] = (res.profiles || []).map(function (p) {
+          return { profile_id: p.profile_id, name: p.name || '', folder_id: p.folder_id || '',
+                   key: p.key || '', inst: inst };
+        });
+        if (note) {
+          note.style.color = res.state === 'found' ? 'var(--muted)' : 'var(--warn)';
+          var closed = aclPickerMerge(openProfiles, rowExtras[label]).filter(function (p) { return !p.open; }).length;
+          note.textContent = res.state === 'found'
+            ? (res.profiles.length + ' found' + (closed ? ' · ' + closed + ' closed' : ''))
+            : res.message;
+        }
+        repaintRow(row, label);
+      });
+    }, FIND_PAUSE_MS);
   }
 
   function openManual() {
@@ -16775,6 +16884,8 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     }
     openProfiles = d.open_profiles || [];
     var accs = d.accounts || [];
+    rowExtras = {}; accByLabel = {};
+    accs.forEach(function (a) { accByLabel[a.label] = a; });
     knownLabels = (d.suggestions || []).concat(accs.map(function (a) { return a.label; }));
     var connected = accs.filter(function (a) { return a.connected; }).length;
 
@@ -16828,7 +16939,11 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
         + esc(a.ad_account_id || detectedFor(a.suggested_profile))
         + '" placeholder="link or act_…"></td>'
         + '<td><select class="ac-prof" style="max-width:15rem">'
-        + profileOptions(a.profile_id, a.suggested_profile) + '</select></td>'
+        + profileOptions(a.profile_id, a.suggested_profile) + '</select>'
+        /* ACL-1202: имя профиля можно найти, даже если он не открыт. */
+        + '<input class="ac-prof-find" type="text" style="display:block;margin-top:.25rem;width:15rem"'
+        + ' placeholder="find a profile by name" aria-label="find a profile by name for ' + esc(a.label) + '">'
+        + '<div class="ac-prof-note acc-meta"></div></td>'
         + '<td class="col-act"><button type="button" class="acc-btn ac-save">Save</button>'
         /* Удалить можно только то, что здесь записано. Строка из общей
            таблицы, про которую на машине ничего нет, удалению не поддаётся —
@@ -16906,11 +17021,16 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     var prof = (row.querySelector('.ac-prof') || {}).value || '';
     var msg = row.querySelector('.ac-row-msg');
     var picked = openProfiles.filter(function (p) { return p.profile_id === prof; })[0];
+    /* ACL-1202: профиль, найденный поиском (закрытый), несёт свой folder_id и
+       слот Multilogin, в котором его нашли, — запись в карте их не теряет. */
+    var foundHit = !picked && (rowExtras[label] || []).filter(function (p) { return p.profile_id === prof; })[0];
+    if (foundHit) picked = foundHit;
 
     var payload = { account_name: label };
     if (adid.trim()) payload.ad_account_id = adid.trim();
     if (prof.trim()) payload.profile_id = prof.trim();
     if (picked && picked.folder_id) payload.folder_id = picked.folder_id;
+    if (foundHit && foundHit.inst) payload.multilogin_instance = foundHit.inst;
 
     btn.disabled = true;
     if (msg) { msg.style.color = 'var(--muted)'; msg.textContent = 'saving…'; }
@@ -17258,6 +17378,11 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     var t = ev.target; if (!t) return;
     if (t.id === 'ac-new-label') { t.dataset.touched = '1'; checkLabel(); }
     if (t.id === 'ac-new-adid') { t.dataset.touched = '1'; }
+  });
+
+  document.addEventListener('input', function (ev) {
+    var t = ev.target;
+    if (t && t.classList && t.classList.contains('ac-prof-find')) rowFind(t);
   });
 
   document.addEventListener('change', function (ev) {
