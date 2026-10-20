@@ -5686,6 +5686,15 @@ async def build_upload(request: Request) -> Response:
                            {account_label: ["Instant Forms cannot be exported to Upload FB; use Publish with the API backend."]}},
         )
 
+    if any((s.get("page_id") or "").strip() for s in slots):
+        # ACL-1880: Upload FB собирается без выбора Page - выбранную явно не терять молча.
+        return await _in_report_pool(
+            _render_report, request,
+            upload_errors={(form.get("country") or "").strip() or country:
+                           {account_label: ["A Facebook Page chosen for a campaign cannot be exported to Upload FB; "
+                                            "use Publish, or set the campaign's Page to Automatic."]}},
+        )
+
     # The parser returns the country CODE ("MX"), which the RPA needs — without
     # it the audience Language step was silently skipped. But the template looks
     # errors up by the country NAME it renders the section under ("Mexico"), so
