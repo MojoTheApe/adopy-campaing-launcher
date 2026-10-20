@@ -45077,9 +45077,11 @@
         "worktree": "C:\\acl-1805",
         "id": "fbe8480ea7484cf9a37dbe6b7c0001c6",
         "issue": 805,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T10:41:39+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 1019,
+        "report": "Review fix (ACL-1805, 2026-10-20): added the required top entry to docs/system/CHANGELOG.md. Code unchanged (approved). tests/test_acl1805_rules_before_write.py 14 passed; branch contains current work/main. Non-blocking notes left for a possible follow-up Issue."
       }
     },
     "tasks": {
