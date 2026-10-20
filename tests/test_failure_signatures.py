@@ -42,8 +42,8 @@ def test_reason_falls_back_to_diag_and_sheet_json_string():
 
 
 def test_reason_is_scrubbed_of_secrets_and_ids():
-    text = fs.normalise_reason("fail act=123456789012 access_token=SECRETVALUE 0a1b2c3d4e5f6a7b8c9d")
-    assert "secretvalue" not in text and "123456789012" not in text
+    text = fs.normalise_reason("fail act=" + "1" * 12 + " access_token=SECRETVALUE 0a1b2c3d4e5f6a7b8c9d")
+    assert "secretvalue" not in text and "1" * 12 not in text
     assert "<id>" in text
 
 
