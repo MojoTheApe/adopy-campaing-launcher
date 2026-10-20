@@ -104971,7 +104971,51 @@
         "session": "q2001c-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T07:04:13+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 896,
+          "pr": 949,
+          "branch": "work/acl-1896-instagram-identity",
+          "head_sha": "ddb1b09370e3c4e8cdb0d4885e434d9db99752d2",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "79315eb283b26a5f7efca8f917d6e01c72368c0efb289dc8c0724efa63f00195",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-Q2001C",
+            "review_session": "q2001c-20261020",
+            "execution_lane": "71ebdb34b7534de1858e47f11d9c79c7",
+            "implementer": "Worker-R1020896",
+            "head_sha": "ddb1b09370e3c4e8cdb0d4885e434d9db99752d2",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "tree_sha": "d45a8732850005b76c0147ca82896d386c26ebe9",
+            "report": "Independent review of PR #949 (ACL-1896), head ddb1b093 containing current work/main c6150160, one Tracker issues line. Scope matches Issue 896: read-only Instagram identity discovery (src/fb_api/instagram.py, at most two Graph reads per Page, cached per run, failed read = unknown = refusal never a pass), new shared server pre-flight rule instagram_identity (preflight_rules.py plus regenerated JSON), same refusal again in creator._prepare before the first write, object_story_spec.instagram_user_id sent with the creative and read back, and the closed write policy extended in both layers (write_policy.py and the token_capture page helper) by exactly one numeric field allowed only as a direct key of a creative's object_story_spec, with instagram_actor_id forbidden everywhere. No Page-backed account is created, no new write path, no deletes, stays PAUSED, reads only at Check plan or prepare (no polling). English user messages; PROJECT.md and CHANGELOG updated with doc evidence and the live-check list. Tests run locally (Windows, py3.14): test_acl1896_instagram_identity, test_acl1761_api_create, test_acl1761_parity, test_acl1761_plan_check, test_acl1761_existing_check, test_acl1761_creative_lookup, test_acl1775_instant_forms, test_acl1776_create_forms, test_acl1819_preflight, test_acl1604_preflight: 533 passed, 0 failed (includes Python/node page-helper parity). Hosted CI on this head all green (linux 1/2/3, windows, tracker-link, ACL verification). Not claimed: no live Meta/Multilogin verification; whether the profile token returns the Page Instagram fields and where Meta returns the id on creative readback stay on the documented live-check list. Non-blocking notes: tests/fixtures/acl1896_doc120_publish_result.json carries the Doc120 test campaign and ad set ids (labelled test objects); I did not re-run the skip-the-rule mutation, relying on the author's 5-of-26 claim and the passing parity tests.",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              896
+            ],
+            "recorded_at": "2026-10-20T07:36:26+00:00",
+            "issue_scopes": {
+              "896": "79315eb283b26a5f7efca8f917d6e01c72368c0efb289dc8c0724efa63f00195"
+            }
+          },
+          "lane": {
+            "id": "71ebdb34b7534de1858e47f11d9c79c7",
+            "pr": 949,
+            "issues": [
+              896
+            ],
+            "actor": "Reviewer-Q2001C",
+            "session": "q2001c-20261020",
+            "coordinator": "Coordinator-M1011A",
+            "started_at": "2026-10-20T07:04:13+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-20T07:39:04+00:00"
+        }
       },
       "921": {
         "id": "1c52cdff66fa49169dc8057a1f957dad",
