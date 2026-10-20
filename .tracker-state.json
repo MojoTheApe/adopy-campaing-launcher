@@ -50686,7 +50686,7 @@
             "session": "rf836-20261020"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-RF836",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -102626,6 +102626,68 @@
         "issue": 309,
         "claim": "a759abd02bc246a685c2ee720602265b",
         "actor": "Worker-L2309c"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-20T14:57:55+00:00",
+        "issue": 836,
+        "pr": 837,
+        "review": {
+          "id": "a04ec64c02944f71ac88bd6d4cdb240c",
+          "pr": 837,
+          "issues": [
+            836
+          ],
+          "actor": "Reviewer-RR1020",
+          "session": "rr1020-20261020",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-20T14:44:54+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 836,
+            "pr": 837,
+            "branch": "codex/acl-1836-session-recovery",
+            "head_sha": "681c2d843c4f32ff8f035aa97d3cb8f7a6b01f05",
+            "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+            "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "50752e44ec4b4103a48807f7bea9a0fa562f1b01651d742295d2cd0055e94151",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-RR1020",
+              "review_session": "rr1020-20261020",
+              "execution_lane": "a04ec64c02944f71ac88bd6d4cdb240c",
+              "implementer": "Worker-RF836",
+              "head_sha": "681c2d843c4f32ff8f035aa97d3cb8f7a6b01f05",
+              "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+              "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+              "tree_sha": "95d3420f363eb68a3a870f94a4cfefae23b6637c",
+              "issues": [
+                836
+              ],
+              "report": "Verdict: approved (fresh re-review after main moved to 259ae7f1). Delta from previous approved head 3813fbe7 is only the merge of main 259ae7f1: it touches only files main changed since the merge base, no overlap with the author's files; no other author changes. Full scope read against ACL-1836: SessionLostError mapping of 'Session with given id not found' in PageTab.call; PageIdentityError (checkpoint/login/other) with URL/account check that never navigates; single bounded recover_session on the same owned target via Target.getTargetInfo/attachToTarget (no discovery, no replacement tab, no reload); only local helper evaluations (_eval_helper) are retried, Graph calls are never replayed; typed stops (Checkpoint, LoggedOut, PageFailed) latched for later reads; token/has_token checks preserved. Offline regression test and anonymized fixture included. Source CI on exact head green (descriptor, tracker-link, ACL verification, Installer verification, linux/windows tests). Coordinator trial merge: compatible, 32 tests passed.",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "recorded_at": "2026-10-20T14:48:55+00:00",
+              "issue_scopes": {
+                "836": "50752e44ec4b4103a48807f7bea9a0fa562f1b01651d742295d2cd0055e94151"
+              }
+            },
+            "lane": {
+              "id": "a04ec64c02944f71ac88bd6d4cdb240c",
+              "pr": 837,
+              "issues": [
+                836
+              ],
+              "actor": "Reviewer-RR1020",
+              "session": "rr1020-20261020",
+              "coordinator": "Coordinator-M1011A",
+              "started_at": "2026-10-20T14:44:54+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-20T14:50:16+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -106763,6 +106825,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-20T14:42:44+00:00"
+      },
+      "836": {
+        "issue": 836,
+        "pr": 837,
+        "branch": "codex/acl-1836-session-recovery",
+        "head_sha": "681c2d843c4f32ff8f035aa97d3cb8f7a6b01f05",
+        "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+        "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "50752e44ec4b4103a48807f7bea9a0fa562f1b01651d742295d2cd0055e94151",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-RR1020",
+          "review_session": "rr1020-20261020",
+          "execution_lane": "a04ec64c02944f71ac88bd6d4cdb240c",
+          "implementer": "Worker-RF836",
+          "head_sha": "681c2d843c4f32ff8f035aa97d3cb8f7a6b01f05",
+          "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+          "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+          "tree_sha": "95d3420f363eb68a3a870f94a4cfefae23b6637c",
+          "issues": [
+            836
+          ],
+          "report": "Verdict: approved (fresh re-review after main moved to 259ae7f1). Delta from previous approved head 3813fbe7 is only the merge of main 259ae7f1: it touches only files main changed since the merge base, no overlap with the author's files; no other author changes. Full scope read against ACL-1836: SessionLostError mapping of 'Session with given id not found' in PageTab.call; PageIdentityError (checkpoint/login/other) with URL/account check that never navigates; single bounded recover_session on the same owned target via Target.getTargetInfo/attachToTarget (no discovery, no replacement tab, no reload); only local helper evaluations (_eval_helper) are retried, Graph calls are never replayed; typed stops (Checkpoint, LoggedOut, PageFailed) latched for later reads; token/has_token checks preserved. Offline regression test and anonymized fixture included. Source CI on exact head green (descriptor, tracker-link, ACL verification, Installer verification, linux/windows tests). Coordinator trial merge: compatible, 32 tests passed.",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "recorded_at": "2026-10-20T14:48:55+00:00",
+          "issue_scopes": {
+            "836": "50752e44ec4b4103a48807f7bea9a0fa562f1b01651d742295d2cd0055e94151"
+          }
+        },
+        "lane": {
+          "id": "a04ec64c02944f71ac88bd6d4cdb240c",
+          "pr": 837,
+          "issues": [
+            836
+          ],
+          "actor": "Reviewer-RR1020",
+          "session": "rr1020-20261020",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-20T14:44:54+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-20T14:50:16+00:00"
       }
     },
     "batches": {
@@ -111789,62 +111895,6 @@
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T14:21:00+00:00",
         "state": "reviewing"
-      },
-      "837": {
-        "id": "a04ec64c02944f71ac88bd6d4cdb240c",
-        "pr": 837,
-        "issues": [
-          836
-        ],
-        "actor": "Reviewer-RR1020",
-        "session": "rr1020-20261020",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-20T14:44:54+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 836,
-          "pr": 837,
-          "branch": "codex/acl-1836-session-recovery",
-          "head_sha": "681c2d843c4f32ff8f035aa97d3cb8f7a6b01f05",
-          "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-          "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "50752e44ec4b4103a48807f7bea9a0fa562f1b01651d742295d2cd0055e94151",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-RR1020",
-            "review_session": "rr1020-20261020",
-            "execution_lane": "a04ec64c02944f71ac88bd6d4cdb240c",
-            "implementer": "Worker-RF836",
-            "head_sha": "681c2d843c4f32ff8f035aa97d3cb8f7a6b01f05",
-            "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-            "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-            "tree_sha": "95d3420f363eb68a3a870f94a4cfefae23b6637c",
-            "issues": [
-              836
-            ],
-            "report": "Verdict: approved (fresh re-review after main moved to 259ae7f1). Delta from previous approved head 3813fbe7 is only the merge of main 259ae7f1: it touches only files main changed since the merge base, no overlap with the author's files; no other author changes. Full scope read against ACL-1836: SessionLostError mapping of 'Session with given id not found' in PageTab.call; PageIdentityError (checkpoint/login/other) with URL/account check that never navigates; single bounded recover_session on the same owned target via Target.getTargetInfo/attachToTarget (no discovery, no replacement tab, no reload); only local helper evaluations (_eval_helper) are retried, Graph calls are never replayed; typed stops (Checkpoint, LoggedOut, PageFailed) latched for later reads; token/has_token checks preserved. Offline regression test and anonymized fixture included. Source CI on exact head green (descriptor, tracker-link, ACL verification, Installer verification, linux/windows tests). Coordinator trial merge: compatible, 32 tests passed.",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "recorded_at": "2026-10-20T14:48:55+00:00",
-            "issue_scopes": {
-              "836": "50752e44ec4b4103a48807f7bea9a0fa562f1b01651d742295d2cd0055e94151"
-            }
-          },
-          "lane": {
-            "id": "a04ec64c02944f71ac88bd6d4cdb240c",
-            "pr": 837,
-            "issues": [
-              836
-            ],
-            "actor": "Reviewer-RR1020",
-            "session": "rr1020-20261020",
-            "coordinator": "Coordinator-M1011A",
-            "started_at": "2026-10-20T14:44:54+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-20T14:50:16+00:00"
-        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
