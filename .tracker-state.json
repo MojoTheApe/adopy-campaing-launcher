@@ -46026,20 +46026,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T12:56:11+00:00",
         "from_status": "status:todo"
-      },
-      "855": {
-        "actor": "Worker-RF855",
-        "session": "rf855-20261020",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1855-durable-intent",
-        "worktree": "C:\\acl-rf-855",
-        "id": "ff3e35308139450991074e4067b69ffd",
-        "issue": 855,
-        "state": "handoff",
-        "started_at": "2026-10-20T14:07:57+00:00",
-        "from_status": "status:todo",
-        "pr": 927,
-        "report": "Pure refresh: merged main 259ae7f1 (merge commit 48f11d2e), no conflicts. Tests: test_acl1855_durable_intent, test_acl1800_campaign_commands - 233 passed."
       }
     },
     "tasks": {
@@ -52219,25 +52205,25 @@
             "session": "rf855-20261020"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RF855",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-W1855B",
-          "session": "claude-w1855b-20261019",
+          "actor": "Worker-RF855",
+          "session": "rf855-20261020",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1855-durable-intent",
-          "worktree": "C:\\acl-1855-durable-intent",
-          "id": "3596961efe2345d3b5b557bad32cd7ae",
+          "worktree": "C:\\acl-rf-855",
+          "id": "ff3e35308139450991074e4067b69ffd",
           "issue": 855,
           "state": "handoff",
-          "started_at": "2026-10-19T11:53:01+00:00",
+          "started_at": "2026-10-20T14:07:57+00:00",
           "from_status": "status:todo",
           "pr": 927,
-          "report": "ACL-1855 returned to review on the owner's instruction of 2026-10-19 (\"put it into review\"); the 2026-10-17 administrative pause on this task is lifted by that instruction. Fresh claim on the retained branch work/acl-1855-durable-intent, PR #927, head f493fd9a (merge of current main 435bc154; the code itself is unchanged since the earlier handoff at 363be1c8).\n- Mandatory durable \"sending\" record (append+flush+fsync) before every POST; storage refusal 503/code storage before the first write; a later object is not sent when its record cannot be saved (partial success stays visible); post-POST failures keep the durable intent and report Outcome unknown.\n- Restart after readback keeps confirmed results; torn lines (incl. mid-UTF-8) are skipped; the page says \"Not sent\" only when nothing reached Meta.\n- Checks: PR #927 all required checks green on f493fd9a (linux 1/2/3, windows, descriptor, tracker-link, verification, installer); targeted tests 330 passed, 1 skipped. Pre-handoff read-only Opus review: APPROVE at 363be1c8, no open findings.\n- No live Meta write. Remaining: official independent review, batch approval, delivery."
+          "report": "Pure refresh: merged main 259ae7f1 (merge commit 48f11d2e), no conflicts. Tests: test_acl1855_durable_intent, test_acl1800_campaign_commands - 233 passed."
         },
         "pr": 927,
-        "queued_at": "2026-10-19T11:55:16+00:00",
+        "queued_at": "2026-10-20T14:10:07+00:00",
         "review_report": "Main moved to 259ae7f1 (batch #1034: ACL-602, 1202, 1680, 1401, 341). Pure refresh: merge current main (merge commit), re-run affected tests, re-handoff, fresh independent review. Independent trial merge already shows it merges cleanly and its tests pass on the merged tree.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -60425,7 +60411,8 @@
       774,
       771,
       920,
-      836
+      836,
+      855
     ],
     "review": null,
     "history": [
@@ -102140,6 +102127,13 @@
             "approved_at": "2026-10-20T14:08:17+00:00"
           }
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T14:10:07+00:00",
+        "issue": 855,
+        "pr": 927,
+        "actor": "Worker-RF855"
       }
     ],
     "policy": {
