@@ -51438,7 +51438,7 @@
             "session": "25925e36-bi1020c"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-B1020C",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -51456,7 +51456,8 @@
           "report": "ACL-103 implemented in PR #1031 (work/acl-103-bi-mysql-source).\nDashboard reads BI MySQL `BI_Export`.`UF.Export` mapped to the Stats workbook schema, with fallback to the workbook.\nVerified live against BI 13-19.10 (FTDs/Net match workbook exactly for team CMs), new tests + report/cache tests 62 passed, pre-handoff Opus review fixed (1 HIGH, 4 MEDIUM)."
         },
         "pr": 1031,
-        "queued_at": "2026-10-20T07:21:39+00:00"
+        "queued_at": "2026-10-20T07:21:39+00:00",
+        "reviewer": "Reviewer-R103Z"
       },
       "896": {
         "implementers": [
@@ -56171,6 +56172,10 @@
       "Worker-L2681": {
         "session": "run_l2_681",
         "role": "Worker"
+      },
+      "Reviewer-R103Z": {
+        "session": "reviewer-r103z-20261020",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -59037,7 +59042,6 @@
     },
     "review_queue": [
       822,
-      13,
       836,
       53,
       853,
@@ -98608,6 +98612,13 @@
         "issue": 681,
         "claim": "da69090bd2ff4eb6baf2eeb2b5449d87",
         "actor": "Worker-L2681"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-20T10:17:05+00:00",
+        "pr": 1031,
+        "lane": "535284a1973f476e94dae20d88ebc6f4",
+        "actor": "Reviewer-R103Z"
       }
     ],
     "policy": {
@@ -106888,6 +106899,18 @@
         "session": "reviewer-r1990y-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T10:11:58+00:00",
+        "state": "reviewing"
+      },
+      "1031": {
+        "id": "535284a1973f476e94dae20d88ebc6f4",
+        "pr": 1031,
+        "issues": [
+          13
+        ],
+        "actor": "Reviewer-R103Z",
+        "session": "reviewer-r103z-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-20T10:17:05+00:00",
         "state": "reviewing"
       }
     },
