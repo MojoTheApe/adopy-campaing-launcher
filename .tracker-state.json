@@ -45008,20 +45008,6 @@
         "pr": 869,
         "report": "Review fix (ACL-1854, 2026-10-20): blocking finding fixed - added job_id to the ACL-1781 test fixtures that seed _jobs without it (the KeyError in _persist_job); re-ran all test files that seed _jobs (12 files, all passed). Spawn waits of the cross-process lock test raised from 10 s to 30 s (load flake). Non-blocking notes (unverified badge for never-built accounts, malformed record blocking builds) left for a follow-up Issue. Branch contains current work/main."
       },
-      "770": {
-        "actor": "Worker-B1019770",
-        "session": "run_b1019_770",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1770-page-pixel-levels",
-        "worktree": "C:\\acl-1770",
-        "id": "24dbb6ef41da402eab6d0aa47aebefb7",
-        "issue": 770,
-        "state": "handoff",
-        "started_at": "2026-10-20T09:06:32+00:00",
-        "from_status": "status:todo",
-        "pr": 979,
-        "report": "# ACL-1770 handoff (after changes_requested)\n\n- Merged codex/acl-1768-multiple-ad-sets (contains #830/#832) and current main into the branch; 5-file overlap with #833 resolved. The pixel is now the #833 ad-set field (camp_N_adset_K_pixel; set 0 also camp_N_pixel); Pixel selector sits in the ad-set section builder and is shown per ad set; Page/Link stay on the ad. Ad rows hide Link for Instant Form sets per row.\n- Updated tests/test_acl1770_page_pixel_levels.py for the new place of the pixel field.\n- Local: test_acl1770_page_pixel_levels 22, test_acl1768_ad_sets 64, test_upload_without_workbook 24, test_acl1769_two_column_layout 12, test_acl1761_api_create 121, test_acl1771_targeting_resolver 50, test_acl1819_preflight 110. Full suite left to CI.\n- Order: #830 -> #832 -> #833 -> #979. Remaining conflict is only with #1025 (src/fb_api/creator.py resolve_page); the later of #1025/#979 refreshes onto main."
-      },
       "990": {
         "actor": "Worker-L1990",
         "session": "run_l1_990",
@@ -52690,7 +52676,7 @@
             "session": "run_b1019_770"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-B1019770",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -52699,16 +52685,16 @@
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1770-page-pixel-levels",
           "worktree": "C:\\acl-1770",
-          "id": "94db45b07f7e46ad9f60bdf4a0c559e8",
+          "id": "24dbb6ef41da402eab6d0aa47aebefb7",
           "issue": 770,
           "state": "handoff",
-          "started_at": "2026-10-19T22:22:57+00:00",
+          "started_at": "2026-10-20T09:06:32+00:00",
           "from_status": "status:todo",
           "pr": 979,
-          "report": "# ACL-1770 handoff\n\n- Merged current work/main into work/acl-1770-page-pixel-levels (5 files, 11 conflict blocks, both sides kept; Page/Link fields placed after the closing div of the Instant Form block).\n- Independent read-only Opus review of the resolution: no defects.\n- Touched tests passed locally: test_acl1770_page_pixel_levels 22, test_acl1776_create_forms 120, test_acl1775_instant_forms 86, test_acl1775_builder_forms 10, test_acl1761_api_create 121, test_acl1769_two_column_layout 12, test_builder_second_primary_text 17, test_acl1819_preflight 84. Full suite left to CI. No live runs.\n- Note: ACL-1768 (#833) also adds a per-set pixel_id; a follow-up merge will be needed when it lands."
+          "report": "# ACL-1770 handoff (after changes_requested)\n\n- Merged codex/acl-1768-multiple-ad-sets (contains #830/#832) and current main into the branch; 5-file overlap with #833 resolved. The pixel is now the #833 ad-set field (camp_N_adset_K_pixel; set 0 also camp_N_pixel); Pixel selector sits in the ad-set section builder and is shown per ad set; Page/Link stay on the ad. Ad rows hide Link for Instant Form sets per row.\n- Updated tests/test_acl1770_page_pixel_levels.py for the new place of the pixel field.\n- Local: test_acl1770_page_pixel_levels 22, test_acl1768_ad_sets 64, test_upload_without_workbook 24, test_acl1769_two_column_layout 12, test_acl1761_api_create 121, test_acl1771_targeting_resolver 50, test_acl1819_preflight 110. Full suite left to CI.\n- Order: #830 -> #832 -> #833 -> #979. Remaining conflict is only with #1025 (src/fb_api/creator.py resolve_page); the later of #1025/#979 refreshes onto main."
         },
         "pr": 979,
-        "queued_at": "2026-10-19T22:30:58+00:00",
+        "queued_at": "2026-10-20T09:11:18+00:00",
         "review_report": "Returned (Reviewer-Q2001D). Content is OK (per-ad Page/link and per-set pixel checked against promote_pages/adspixels, read on click only, map written only into an empty cell, no new Meta write path, PAUSED-only unchanged; 258 affected tests passed, CI green), but it cannot be batched as is: it conflicts with #833 in 5 files (build_draft.py, draft.py, creator.py, app.py, report.html, set-level pixel_id overlap) and with #1025 in src/fb_api/creator.py (resolve_page). An order is needed: whichever of #833 / #1025 / #979 lands first, the others need a refresh onto the new main (the author noted a follow-up pixel merge after #833).",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -58838,7 +58824,8 @@
       13,
       767,
       768,
-      184
+      184,
+      770
     ],
     "review": null,
     "history": [
@@ -97921,6 +97908,13 @@
         "issue": 990,
         "claim": "2f750e0abb424a5fb8c0eab3f92d23cb",
         "actor": "Worker-L1990"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T09:11:18+00:00",
+        "issue": 770,
+        "pr": 979,
+        "actor": "Worker-B1019770"
       }
     ],
     "policy": {
