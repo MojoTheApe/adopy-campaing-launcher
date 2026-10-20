@@ -40254,6 +40254,482 @@
           "workflow": ".github/workflows/complete-delivery.yml",
           "authorization_sha256": "0a6476d9b677eec9e51aaf11988100144a14a816969275edc667811a22aac58f"
         }
+      },
+      "1026": {
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "sources": [
+          {
+            "pr": 1049,
+            "merge_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+            "tree_sha": "c3712538e6a3515563b9f5310f976e1642c73b3b"
+          }
+        ],
+        "state": "verified",
+        "recorded_at": "2026-10-20T21:13:04+00:00",
+        "process": true,
+        "verification": {
+          "schema_version": 1,
+          "kind": "canonical-process-support",
+          "route": "process-support",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "tree_sha": "c3712538e6a3515563b9f5310f976e1642c73b3b",
+          "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+          "support_proof": {
+            "schema_version": 1,
+            "kind": "canonical-process-support",
+            "base_tree_sha": "25162d0003eaffb3110e202e6f3a28713153c9e9",
+            "tree_sha": "c3712538e6a3515563b9f5310f976e1642c73b3b",
+            "standards": [
+              {
+                "repository": "https://github.com/MojoTheApe/master-repo",
+                "revision": "6f7e9416e68c66484a3b6c0213eab24847005b8f",
+                "version": "1.5.3"
+              },
+              {
+                "repository": "https://github.com/MojoTheApe/master-repo",
+                "revision": "4f148cbbbc2c9c65a7fdebba9b37551f91566e04",
+                "version": "1.7.2"
+              }
+            ],
+            "engines": [
+              {
+                "repository": "MojoTheApe/task-tracker",
+                "revision": "be87599d1b5e625058bbddc33c35bda86687b5bf"
+              },
+              {
+                "repository": "MojoTheApe/task-tracker",
+                "revision": "3d32586d72e4621f70d56d35f1e199a19fa13b00"
+              }
+            ],
+            "files": [
+              {
+                "path": ".github/workflows/delivery-check.yml",
+                "before": {
+                  "sha": "884bfe3545807ba88e951a87806440f8ae13e59a",
+                  "mode": "100644",
+                  "type": "blob"
+                },
+                "after": {
+                  "sha": "af24d40d6d1de631a49615522e96221a02751c42",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": ".workflow/template-base.json",
+                "before": {
+                  "sha": "b72fccbc93dad156bcf8c1cd1c0cb382e32788fc",
+                  "mode": "100644",
+                  "type": "blob"
+                },
+                "after": {
+                  "sha": "068678e01487bc7554b66dcdeffe2e6615815071",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": ".workflow/tools/tracker_ci_retry.py",
+                "before": {
+                  "sha": "7728b8675d7a68df0f7efd3f181985e465a14fdd",
+                  "mode": "100644",
+                  "type": "blob"
+                },
+                "after": {
+                  "sha": "dcd0e0a8f640438ab6317057987fe7571b0bc555",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": ".workflow/tools/tracker_delivery_policy.py",
+                "before": {
+                  "sha": "24f9af3870e0742930f853dbcb71b367be4ae228",
+                  "mode": "100644",
+                  "type": "blob"
+                },
+                "after": {
+                  "sha": "b2838d2f99e43cf5831ef25f84cd20a1890af5bb",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": ".workflow/tools/tracker_delivery_receipt.py",
+                "before": {
+                  "sha": "41691ba4ba54a4a69bb76f4248c0e0fab2d6ce01",
+                  "mode": "100644",
+                  "type": "blob"
+                },
+                "after": {
+                  "sha": "f8564e2678823d00d92355158e1858d3f4abfd0a",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": ".workflow/tools/tracker_direct_policy.py",
+                "before": {
+                  "sha": "9cbd1d6863a42a0d183201353a14176b2acfcbf7",
+                  "mode": "100644",
+                  "type": "blob"
+                },
+                "after": {
+                  "sha": "c610bc323edcb8309690e589882df05d14da982d",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": ".workflow/tools/tracker_pause_policy.py",
+                "before": null,
+                "after": {
+                  "sha": "c8b5d7bc12db775b41cc765e9d90fa0f7b07259b",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": ".workflow/tools/tracker_process_support.py",
+                "before": null,
+                "after": {
+                  "sha": "f21bd08bcac6b0434ca1f417be4613041bd11dfc",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": "AGENTS.md",
+                "before": {
+                  "sha": "76b58da5aead477bcd89275601f0dceb3ddce4cf",
+                  "mode": "100644",
+                  "type": "blob"
+                },
+                "after": {
+                  "sha": "3b59ded41476944ed96a9a5561c5d34ddd641cf9",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": "delivery.json",
+                "before": {
+                  "sha": "a63300143950e842e741ceaabe5c623bc8b98c99",
+                  "mode": "100644",
+                  "type": "blob"
+                },
+                "after": {
+                  "sha": "4c1ad56495c135f4863ea708991ab6985982d82a",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": "docs/EXECUTOR_ACTIVITY.md",
+                "before": null,
+                "after": {
+                  "sha": "fb4645bc9327cb4199aa21cea6334a16c0064f9e",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": "docs/PROCESS_SUPPORT.md",
+                "before": null,
+                "after": {
+                  "sha": "d6bf691c38809e3b52d2b6691247a54dea62bf53",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": "docs/TASK_PAUSE.md",
+                "before": null,
+                "after": {
+                  "sha": "033d366549196fd517f86ce61faf899509cf1b98",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": "docs/repository/CHANGELOG.md",
+                "before": {
+                  "sha": "984797b4b871c93eb1d06999fe408bf2b2dd5aa1",
+                  "mode": "100644",
+                  "type": "blob"
+                },
+                "after": {
+                  "sha": "9bc30f67a9fcf27911f13c0321a5c52dfe88ba74",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": "docs/repository/DELIVERY.md",
+                "before": {
+                  "sha": "46912f7ac821b7354e7bd83bae235e58de878749",
+                  "mode": "100644",
+                  "type": "blob"
+                },
+                "after": {
+                  "sha": "982c8b01104d3208b35de79b68653262b3f77bd4",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": "docs/repository/DELIVERY_CONTINUATION.md",
+                "before": {
+                  "sha": "675b9cc684a85e6eeab7acdbdd8592af1a1dab7a",
+                  "mode": "100644",
+                  "type": "blob"
+                },
+                "after": {
+                  "sha": "b1f3944f60af1373eec1dfb62a1974ebc373c48a",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": "docs/repository/EARLY_ADOPTION.md",
+                "before": {
+                  "sha": "2e7998734de3be78c97f536aff1ec83a99ef9595",
+                  "mode": "100644",
+                  "type": "blob"
+                },
+                "after": {
+                  "sha": "09bac223e1cb078a7e608335649e5933ce530281",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": "docs/repository/EXECUTOR_ACTIVITY.md",
+                "before": null,
+                "after": {
+                  "sha": "5ed0e273343e72ab0aec9e2d82c775c06f24071c",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": "docs/repository/OWNER_GUIDE.md",
+                "before": {
+                  "sha": "41cf70b6c3f3b0041dac42c87756819651a14542",
+                  "mode": "100644",
+                  "type": "blob"
+                },
+                "after": {
+                  "sha": "1b274f6288009ef7c27dc0d2b4b0b824c1251b6f",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": "docs/repository/PORTABLE_CONTRACT.md",
+                "before": {
+                  "sha": "2db4381c214ab96136df478076f51ace8d8f57da",
+                  "mode": "100644",
+                  "type": "blob"
+                },
+                "after": {
+                  "sha": "3b7f87fdf50e3291d16c9ee19f299d7a7c202b01",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": "docs/repository/PROCESS_INSTRUCTIONS_ACL.md",
+                "before": {
+                  "sha": "2970a90f649dcdbbaaefe994c0b31a619c8b8e0d",
+                  "mode": "100644",
+                  "type": "blob"
+                },
+                "after": {
+                  "sha": "f2f997c4375479fa8a195b9608db7e4b8cb7d2a4",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": "docs/repository/PROCESS_SUPPORT.md",
+                "before": null,
+                "after": {
+                  "sha": "ee314c0743b8275df16f29ade22f7f2b2d2bc0aa",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": "docs/repository/PROCESS_SUPPORT_ACL.md",
+                "before": null,
+                "after": {
+                  "sha": "57829a5b8244e3a7fc4b625a48bfb664f54de15e",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": "docs/repository/TASK_PAUSE.md",
+                "before": null,
+                "after": {
+                  "sha": "b4628b53a80173625015b7013ac56be0ebeda0f4",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": "docs/repository/TRACKER.md",
+                "before": {
+                  "sha": "11565a1535cf9ade336b77f5b2638da5964b343c",
+                  "mode": "100644",
+                  "type": "blob"
+                },
+                "after": {
+                  "sha": "56a9f768e495f2473b57b0471db47c7f58587351",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": "docs/repository/VERIFICATION.md",
+                "before": {
+                  "sha": "b447a449fb266e5095b6ef1b14ed2a89c97254c3",
+                  "mode": "100644",
+                  "type": "blob"
+                },
+                "after": {
+                  "sha": "3833a99ca68536bc3a4a803dd120ab83aafe7e82",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": "docs/repository/WORKFLOW.md",
+                "before": {
+                  "sha": "041d17e8eff05a34d15edaefc44feb58111ae03c",
+                  "mode": "100644",
+                  "type": "blob"
+                },
+                "after": {
+                  "sha": "e921bd772ebcab653f68a186fd39c8c64ed80e26",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": "docs/repository/WORKFLOW_REFERENCE.md",
+                "before": {
+                  "sha": "24edd383b78df96f7e573ab262a26c869a1e6963",
+                  "mode": "100644",
+                  "type": "blob"
+                },
+                "after": {
+                  "sha": "bc984c7cda30b64e4ecded884c1b9d10001a7757",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": "scripts/tracker_pause_policy.py",
+                "before": null,
+                "after": {
+                  "sha": "12ead2d62c3d84808c570e87f36d450efc58a9c9",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": "scripts/tracker_process_support.py",
+                "before": null,
+                "after": {
+                  "sha": "855e63a8f44c619a388f0a94e4edbb96a9023471",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": "tracker/engine.json",
+                "before": {
+                  "sha": "05efa2719afba512711b1a28ee3a2fd2e5622eae",
+                  "mode": "100644",
+                  "type": "blob"
+                },
+                "after": {
+                  "sha": "30259dd8199c88076e96de644d2a7355da43b11d",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              },
+              {
+                "path": "tracker/export-contract.json",
+                "before": {
+                  "sha": "1a6406b04f17a0ebe7428cc77e58dd39a15dbe2e",
+                  "mode": "100644",
+                  "type": "blob"
+                },
+                "after": {
+                  "sha": "ebdde2c517d678a2a1e1c6e0894ff58a3c388f01",
+                  "mode": "100644",
+                  "type": "blob"
+                }
+              }
+            ],
+            "proof_sha256": "5bcfe7299fc9eb092df1890c71db06748a5ede456e8d392ce7ce0bb8ea9dcae7"
+          },
+          "proof_sha256": "5bcfe7299fc9eb092df1890c71db06748a5ede456e8d392ce7ce0bb8ea9dcae7",
+          "review_sha256": "6d298cbc70c0f8147952d14c1ce2685de12065f7661956ce48ccb04104c17ec6",
+          "admission": {
+            "tree_sha": "c3712538e6a3515563b9f5310f976e1642c73b3b",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "route": "batch",
+            "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+            "batch_id": "3f30b816457f42ad82eb85e2f9afa52a"
+          },
+          "issue_scopes": {
+            "1026": "25ced1fdca52e7da6f52457508f7cdfd7354f55344e2454d39112e8a126b02d4"
+          },
+          "assessment": {
+            "schema_version": 1,
+            "kind": "canonical-process-support",
+            "outcome": "process-only",
+            "proof_sha256": "5bcfe7299fc9eb092df1890c71db06748a5ede456e8d392ce7ce0bb8ea9dcae7",
+            "issue_scopes": {
+              "1026": "25ced1fdca52e7da6f52457508f7cdfd7354f55344e2454d39112e8a126b02d4"
+            },
+            "report": "Genuine independent whole-outcome assessment for complete current Issue 1026 and both cumulative owner amendments, scope 25ced1fdca52e7da6f52457508f7cdfd7354f55344e2454d39112e8a126b02d4. Exact combined singleton composition/head/base/tree/source and all 32 diff entries were reviewed. The latest owner explicitly supersedes the original installer assumption for this proven isolated process upgrade; no actual product change, product-release request or publication-specific outcome is present. Preserve every original criterion, required ordinary source/batch/combined/main admission and actual-main process completion. Conditional live Pause readiness/activation is documented separately; missing readiness and existing real owners are not waived, stopped or reinterpreted. Canonical proof alone was insufficient: actual product/build/install/update/release inputs and reachable governance were independently assessed below.",
+            "product_isolation": {
+              "result": "isolated",
+              "evidence": "Fresh combinedPR 1049 is the exact two-parent composition of frozen main 259ae7f and approved source 5e02; combined tree c3712538 equals the source byte-for-byte,32complete diff entries and no extra implementation or conflict resolution. Thus the independently inspected source product-isolation evidence remains valid for these exact combined bytes. Independent immutable Git comparisons verify all307 product/build input blobs and37 project helper/workflow controls against actual main 259ae7f, including its new product configuration/search/RPA work. Actual product import scan233roots/234localmodules reaches only extra scripts/_console; fixed smoke dynamic imports, update/runtime subprocess/data paths and actual PyInstaller spec/data/hiddenimports were inspected and consume no changed governance helper. Product/config/assets/knowledge/packaging/dependencies/runtime/update/release inputs remain unchanged; generated source/version/time metadata means no claim of byte-identical newly built installer. Existing four CRLF inputs retain identical normalized Git blobs and attributes.\nThe release manifest consumes unchanged linked_numbers, canonical separated PR helper SHA2563760865632e2e0cb8e80255320e14a6aeacf5a4010c3e8e676148b522db48a0d. Its code and non-definition top-level policy AST are unchanged, no policy calls occur in that parser, and five actual candidate offline parser cases pass. Shared completion/summary/pause decode/encode/admission functions ARE reachable by complete-delivery governance, correctly disclosed rather than called unreachable. Their exact published canonical bytes retain genuine product target/request/scope/checks/verification gates. Existing release workflow needs an actual tag/call/manual authority; automatic continuation resolves a genuine admitted delivery request before publishing. No release trigger or producer code changes here.83 affected adoption/bridge/manifest regressions and final applicable native platform/installer checks pass. Full-tree canonical proof and this semantic isolation establish the complete owner-authorized process-only outcome; unknown/mixed product outcomes and explicit publication requests receive no waiver."
+            }
+          }
+        },
+        "verified_at": "2026-10-20T21:14:05+00:00",
+        "scope": "25ced1fdca52e7da6f52457508f7cdfd7354f55344e2454d39112e8a126b02d4",
+        "scope_provenance": {
+          "schema_version": 1,
+          "repository": "MojoTheApe/adopy-campaing-launcher",
+          "issue": 1026,
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "target": "ACL stable Windows installer and update channel",
+          "sources": [
+            {
+              "pr": 1049,
+              "merge_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "tree_sha": "c3712538e6a3515563b9f5310f976e1642c73b3b"
+            }
+          ],
+          "accepted_by": [
+            {
+              "kind": "batch-member",
+              "batch_id": "3f30b816457f42ad82eb85e2f9afa52a",
+              "pr": 1049,
+              "head_sha": "5e02ed6051644bc7aa8d3c2db860f8c2b1e30a60",
+              "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+              "tree_sha": "c3712538e6a3515563b9f5310f976e1642c73b3b"
+            }
+          ]
+        }
       }
     },
     "promotions": {
@@ -46275,6 +46751,19 @@
         ],
         "source_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
         "recorded_at": "2026-10-20T13:29:40+00:00"
+      },
+      "1049": {
+        "tree_sha": "c3712538e6a3515563b9f5310f976e1642c73b3b",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "route": "batch",
+        "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+        "batch_id": "3f30b816457f42ad82eb85e2f9afa52a",
+        "pr": 1049,
+        "issues": [
+          1026
+        ],
+        "source_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+        "recorded_at": "2026-10-20T21:14:08+00:00"
       }
     }
   },
