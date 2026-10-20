@@ -8,6 +8,7 @@
     {"step": "profile_network", "reason": "*", "task": "ACL-1320", "note": "profile proxy/network - buyer action, not code"},
     {"step": "profile_open_by_hand", "reason": "*", "task": "ACL-1320", "note": "profile open by hand - buyer action, not code"},
     {"step": "profile_restart_failed", "reason": "*", "task": "ACL-1320", "note": "MLX restart of an unresponsive profile failed"},
+    {"step": "multilogin_not_running", "reason": "*", "task": "ACL-1401", "note": "Multilogin app not running (launcher refused the connection) - buyer action, not code"},
     {"step": "profile_unresponsive", "reason": "*", "task": "ACL-1320", "note": "profile browser did not answer"},
     {"step": "account_blocked", "reason": "*", "task": "ACL-1313", "note": "Meta restricted the ad account - buyer action, not code"},
     {"step": "ad_copy", "reason": "no-creative", "task": "ACL-1348", "note": "ad text skipped because the ad's media did not attach - see the ad's creative_upload event"},
