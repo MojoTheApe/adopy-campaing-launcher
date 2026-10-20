@@ -46119,9 +46119,11 @@
         "worktree": "C:\\acl-1040-mlx-close",
         "id": "bebf96390d5246ffb5f7f527efe85455",
         "issue": 1040,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T15:09:43+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 1042,
+        "report": "Returned only for stale main. Merged current main 259ae7f1 (83750971, no conflicts); CHANGELOG wording fixed to \"A timeout (connect or read) is not retried\" (cc71566d). Tests: test_the_api_stop_is_asked_first.py + 11 launcher test files, 355 passed."
       }
     },
     "tasks": {
