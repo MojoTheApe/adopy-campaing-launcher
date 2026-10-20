@@ -53126,7 +53126,7 @@
             "session": "local_e4968c7b"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-W2028",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -96479,6 +96479,68 @@
         "pr": 1029,
         "lane": "c3fbe173f8dd474ab1c06073ae02764e",
         "actor": "Reviewer-R2028"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-20T06:19:18+00:00",
+        "issue": 1028,
+        "pr": 1029,
+        "review": {
+          "id": "c3fbe173f8dd474ab1c06073ae02764e",
+          "pr": 1029,
+          "issues": [
+            1028
+          ],
+          "actor": "Reviewer-R2028",
+          "session": "rv-2028-a",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-20T05:58:50+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 1028,
+            "pr": 1029,
+            "branch": "work/acl-2028-plan-check-snapshot",
+            "head_sha": "ee7388ed7014b14aee755f85249cbf6df2c18be3",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "58b0b37224a22a2d7c5d5b192a01c1149b7d1fc9e003144935930fa9ae1dbc80",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-R2028",
+              "review_session": "rv-2028-a",
+              "execution_lane": "c3fbe173f8dd474ab1c06073ae02764e",
+              "implementer": "Worker-W2028",
+              "head_sha": "ee7388ed7014b14aee755f85249cbf6df2c18be3",
+              "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "tree_sha": "92974bd6f779b834b595fe73f894592f25ad9d3e",
+              "issues": [
+                1028
+              ],
+              "report": "PR #1029 (ACL-2028) adds only tests/test_acl1886_plan_check_snapshot.py (103 lines, tests-only; no production, config, fixture or docs change). It runs the real src.web.publish_api.check_plan through the real GraphClient and Creator; only build_drafts (synthetic _draft), account_spend_api._session and _profile_key are patched, exactly as the neighbouring tests/test_acl1761_plan_check.py does. DeniedMeta subclasses the existing in-memory FakeMeta and returns the anonymized error10 fixture (tests/fixtures/ads_manager/fb_api_permission_denied_2026_10_13.json via test_acl1886_graph_error_context.denied) for GET paths ending in /search or, in a separate test, /campaigns. Criteria: (1) real check_plan against a fake Meta denying /search and separately /campaigns - met (two tests). (2) public result carries operation=search (with search_type=adgeolocation / adlocale in the audit details) and operation=campaigns via exact string equality on res['error'] and audit details; dry_run true, the single result has success=false and publishable=false, created/plan empty; meta.posts and meta.on_ad_posts empty; the opened read client has allow_writes=False and writes==0; socket connect/connect_ex are patched to fail and record zero attempts - met. (3) no leak: the synthetic account id (ACT placeholder digits) is asserted absent from json.dumps(out), and exact-equality on the error/detail strings proves no request value (query, params) is embedded - met. (4) affected tests run locally and hosted checks/review recorded - met (this review). Regression value: pre-ACL-1886 main (c6150160^1) src/fb_api/graph.py has no operation context at all, so the exact-string assertions would fail there. Deterministic and offline: sleep stubbed, min_interval 0, no clock, no profiles, no live Meta, no TEST9095; only placeholder ids. Style matches neighbouring ACL-1761/1886 tests (Russian docstrings/comments, shared helpers reused). Local run (C:/fb_agents/.venv, Python 3.13): tests/test_acl1886_plan_check_snapshot.py tests/test_acl1886_graph_error_context.py tests/test_acl1761_plan_check.py - 56 passed. Hosted CI on head ee7388ed at review time: process, tracker-link, windows tests, descriptor, tooling, installer classification/verification green; linux test shards pending. Non-blocking nits: the /campaigns test does not assert the audit rows (search succeeds there, so they are not under test); _DENIED hard-codes the fixture's error prefix, so a fixture wording change will need a test update (intended for a snapshot). No live checks claimed.",
+              "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "recorded_at": "2026-10-20T06:02:53+00:00",
+              "issue_scopes": {
+                "1028": "58b0b37224a22a2d7c5d5b192a01c1149b7d1fc9e003144935930fa9ae1dbc80"
+              }
+            },
+            "lane": {
+              "id": "c3fbe173f8dd474ab1c06073ae02764e",
+              "pr": 1029,
+              "issues": [
+                1028
+              ],
+              "actor": "Reviewer-R2028",
+              "session": "rv-2028-a",
+              "coordinator": "Coordinator-M1011A",
+              "started_at": "2026-10-20T05:58:50+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-20T06:18:19+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -99604,6 +99666,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-19T23:47:34+00:00"
+      },
+      "1028": {
+        "issue": 1028,
+        "pr": 1029,
+        "branch": "work/acl-2028-plan-check-snapshot",
+        "head_sha": "ee7388ed7014b14aee755f85249cbf6df2c18be3",
+        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "58b0b37224a22a2d7c5d5b192a01c1149b7d1fc9e003144935930fa9ae1dbc80",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-R2028",
+          "review_session": "rv-2028-a",
+          "execution_lane": "c3fbe173f8dd474ab1c06073ae02764e",
+          "implementer": "Worker-W2028",
+          "head_sha": "ee7388ed7014b14aee755f85249cbf6df2c18be3",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "tree_sha": "92974bd6f779b834b595fe73f894592f25ad9d3e",
+          "issues": [
+            1028
+          ],
+          "report": "PR #1029 (ACL-2028) adds only tests/test_acl1886_plan_check_snapshot.py (103 lines, tests-only; no production, config, fixture or docs change). It runs the real src.web.publish_api.check_plan through the real GraphClient and Creator; only build_drafts (synthetic _draft), account_spend_api._session and _profile_key are patched, exactly as the neighbouring tests/test_acl1761_plan_check.py does. DeniedMeta subclasses the existing in-memory FakeMeta and returns the anonymized error10 fixture (tests/fixtures/ads_manager/fb_api_permission_denied_2026_10_13.json via test_acl1886_graph_error_context.denied) for GET paths ending in /search or, in a separate test, /campaigns. Criteria: (1) real check_plan against a fake Meta denying /search and separately /campaigns - met (two tests). (2) public result carries operation=search (with search_type=adgeolocation / adlocale in the audit details) and operation=campaigns via exact string equality on res['error'] and audit details; dry_run true, the single result has success=false and publishable=false, created/plan empty; meta.posts and meta.on_ad_posts empty; the opened read client has allow_writes=False and writes==0; socket connect/connect_ex are patched to fail and record zero attempts - met. (3) no leak: the synthetic account id (ACT placeholder digits) is asserted absent from json.dumps(out), and exact-equality on the error/detail strings proves no request value (query, params) is embedded - met. (4) affected tests run locally and hosted checks/review recorded - met (this review). Regression value: pre-ACL-1886 main (c6150160^1) src/fb_api/graph.py has no operation context at all, so the exact-string assertions would fail there. Deterministic and offline: sleep stubbed, min_interval 0, no clock, no profiles, no live Meta, no TEST9095; only placeholder ids. Style matches neighbouring ACL-1761/1886 tests (Russian docstrings/comments, shared helpers reused). Local run (C:/fb_agents/.venv, Python 3.13): tests/test_acl1886_plan_check_snapshot.py tests/test_acl1886_graph_error_context.py tests/test_acl1761_plan_check.py - 56 passed. Hosted CI on head ee7388ed at review time: process, tracker-link, windows tests, descriptor, tooling, installer classification/verification green; linux test shards pending. Non-blocking nits: the /campaigns test does not assert the audit rows (search succeeds there, so they are not under test); _DENIED hard-codes the fixture's error prefix, so a fixture wording change will need a test update (intended for a snapshot). No live checks claimed.",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "recorded_at": "2026-10-20T06:02:53+00:00",
+          "issue_scopes": {
+            "1028": "58b0b37224a22a2d7c5d5b192a01c1149b7d1fc9e003144935930fa9ae1dbc80"
+          }
+        },
+        "lane": {
+          "id": "c3fbe173f8dd474ab1c06073ae02764e",
+          "pr": 1029,
+          "issues": [
+            1028
+          ],
+          "actor": "Reviewer-R2028",
+          "session": "rv-2028-a",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-20T05:58:50+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-20T06:18:19+00:00"
       }
     },
     "batches": {
@@ -104323,62 +104429,6 @@
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-19T13:01:50+00:00",
         "state": "reviewing"
-      },
-      "1029": {
-        "id": "c3fbe173f8dd474ab1c06073ae02764e",
-        "pr": 1029,
-        "issues": [
-          1028
-        ],
-        "actor": "Reviewer-R2028",
-        "session": "rv-2028-a",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-20T05:58:50+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 1028,
-          "pr": 1029,
-          "branch": "work/acl-2028-plan-check-snapshot",
-          "head_sha": "ee7388ed7014b14aee755f85249cbf6df2c18be3",
-          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "58b0b37224a22a2d7c5d5b192a01c1149b7d1fc9e003144935930fa9ae1dbc80",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-R2028",
-            "review_session": "rv-2028-a",
-            "execution_lane": "c3fbe173f8dd474ab1c06073ae02764e",
-            "implementer": "Worker-W2028",
-            "head_sha": "ee7388ed7014b14aee755f85249cbf6df2c18be3",
-            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-            "tree_sha": "92974bd6f779b834b595fe73f894592f25ad9d3e",
-            "issues": [
-              1028
-            ],
-            "report": "PR #1029 (ACL-2028) adds only tests/test_acl1886_plan_check_snapshot.py (103 lines, tests-only; no production, config, fixture or docs change). It runs the real src.web.publish_api.check_plan through the real GraphClient and Creator; only build_drafts (synthetic _draft), account_spend_api._session and _profile_key are patched, exactly as the neighbouring tests/test_acl1761_plan_check.py does. DeniedMeta subclasses the existing in-memory FakeMeta and returns the anonymized error10 fixture (tests/fixtures/ads_manager/fb_api_permission_denied_2026_10_13.json via test_acl1886_graph_error_context.denied) for GET paths ending in /search or, in a separate test, /campaigns. Criteria: (1) real check_plan against a fake Meta denying /search and separately /campaigns - met (two tests). (2) public result carries operation=search (with search_type=adgeolocation / adlocale in the audit details) and operation=campaigns via exact string equality on res['error'] and audit details; dry_run true, the single result has success=false and publishable=false, created/plan empty; meta.posts and meta.on_ad_posts empty; the opened read client has allow_writes=False and writes==0; socket connect/connect_ex are patched to fail and record zero attempts - met. (3) no leak: the synthetic account id (ACT placeholder digits) is asserted absent from json.dumps(out), and exact-equality on the error/detail strings proves no request value (query, params) is embedded - met. (4) affected tests run locally and hosted checks/review recorded - met (this review). Regression value: pre-ACL-1886 main (c6150160^1) src/fb_api/graph.py has no operation context at all, so the exact-string assertions would fail there. Deterministic and offline: sleep stubbed, min_interval 0, no clock, no profiles, no live Meta, no TEST9095; only placeholder ids. Style matches neighbouring ACL-1761/1886 tests (Russian docstrings/comments, shared helpers reused). Local run (C:/fb_agents/.venv, Python 3.13): tests/test_acl1886_plan_check_snapshot.py tests/test_acl1886_graph_error_context.py tests/test_acl1761_plan_check.py - 56 passed. Hosted CI on head ee7388ed at review time: process, tracker-link, windows tests, descriptor, tooling, installer classification/verification green; linux test shards pending. Non-blocking nits: the /campaigns test does not assert the audit rows (search succeeds there, so they are not under test); _DENIED hard-codes the fixture's error prefix, so a fixture wording change will need a test update (intended for a snapshot). No live checks claimed.",
-            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "recorded_at": "2026-10-20T06:02:53+00:00",
-            "issue_scopes": {
-              "1028": "58b0b37224a22a2d7c5d5b192a01c1149b7d1fc9e003144935930fa9ae1dbc80"
-            }
-          },
-          "lane": {
-            "id": "c3fbe173f8dd474ab1c06073ae02764e",
-            "pr": 1029,
-            "issues": [
-              1028
-            ],
-            "actor": "Reviewer-R2028",
-            "session": "rv-2028-a",
-            "coordinator": "Coordinator-M1011A",
-            "started_at": "2026-10-20T05:58:50+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-20T06:18:19+00:00"
-        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
