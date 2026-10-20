@@ -45029,20 +45029,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
-      },
-      "836": {
-        "actor": "Worker-L2836",
-        "session": "run_l2_836",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1836-session-recovery",
-        "worktree": "C:\\acl-1836",
-        "id": "3c7d63703c9a4e749a0fabc634ddc024",
-        "issue": 836,
-        "state": "handoff",
-        "started_at": "2026-10-20T09:34:35+00:00",
-        "from_status": "status:todo",
-        "pr": 837,
-        "report": "Review blocker fixed: bench CATALOGUE.md regenerated (test_bench_catalogue 7 passed); changelog note added for the PageFailed behaviour change. Branch up to date with main. No live checks."
       }
     },
     "tasks": {
@@ -49616,25 +49602,25 @@
             "session": "run_l2_836"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-L2836",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-U1019836",
-          "session": "run_u1019_836",
+          "actor": "Worker-L2836",
+          "session": "run_l2_836",
           "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1836-session-recovery",
           "worktree": "C:\\acl-1836",
-          "id": "2441527c16924c619a6a923fce875b9c",
+          "id": "3c7d63703c9a4e749a0fabc634ddc024",
           "issue": 836,
           "state": "handoff",
-          "started_at": "2026-10-19T19:48:27+00:00",
+          "started_at": "2026-10-20T09:34:35+00:00",
           "from_status": "status:todo",
           "pr": 837,
-          "report": "# ACL-1836 handoff (2026-10-19)\n\nSource PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/837 , head 1ab1af9d. PR was returned for conflicts with main; merged current main, resolved src/fb_api/graph.py and src/fb_api/token_capture.py by keeping both session-loss recovery (ACL-1836) and timeout-to-stop classification (ACL-1761). One review nit fixed: verify_url after recovery now runs inside _timeouts_as_stops.\nLocal checks: tests for 1836 recovery, 1761 hang/logout (61), 1756 (103), 1760 (79), 1761 create (121), 1812 warm (89), 1800 commands (200) all passed. Full suite left to CI.\nRead-only Opus review of the merge resolution: nothing blocking; no Graph request is replayed by the recovery path.\nNo live profile or Meta operations."
+          "report": "Review blocker fixed: bench CATALOGUE.md regenerated (test_bench_catalogue 7 passed); changelog note added for the PageFailed behaviour change. Branch up to date with main. No live checks."
         },
         "pr": 837,
-        "queued_at": "2026-10-19T19:53:50+00:00",
+        "queued_at": "2026-10-20T09:39:10+00:00",
         "review_report": "# PR #837 / ACL-1836 \u2014 review return (changes needed)\n\nReviewer: Reviewer-R1836Y (session reviewer-r1836y-20261019)\nHead: 1ab1af9d6beee6865593265dda615183b7e18265, base work/main c61501607ce11744e45add8b0d3b314368c216c5 (unchanged at review time)\n\n## Blocking\n\n1. `tests/bench/CATALOGUE.md:9`: the rendered summary line is stale after the merge of main (1ab1af9d).\n   - It reads `24 robot steps \u00d7 122 layouts, 67 fixtures`. `bench_catalogue.render()` over the current\n     `tests/bench/catalogue.json` gives `25 robot steps \u00d7 123 layouts, 68 fixtures`. Main and this branch\n     each added a catalogue entry and each updated the count on its own, and the merge kept the old total.\n   - Effect: `tests/test_bench_catalogue.py::test_the_markdown_is_current` fails on the PR head. It passes on\n     base main c6150160 (both checked locally). Required CI is red for the same reason:\n     `linux tests (3.13, 3)` gives 1 failed / 2616 passed, and the aggregate `ACL verification` fails with it\n     (run 39314307311).\n   - Fix: run `python scripts/bench_catalogue.py --write`, commit only `tests/bench/CATALOGUE.md`, and push.\n     Then wait for green required CI on the new head.\n\n## Not blocking (no change required)\n\n- The source review found no correctness or rule problems:\n  - Graph GET/POST and file-upload jobs never pass through the recovery retry. On a session loss they still\n    return `call_unknown`, with no replay.\n  - Recovery happens once per tab lifetime. It reattaches to the same targetId over the existing socket, with\n    no endpoint discovery, no new tab, no reload and no profile restart.\n  - The target URL and the main-frame URL are both checked against ACL's own navigation intent, never against\n    the URL the page currently shows.\n  - Login and checkpoint map to the existing typed stops.\n- `_ready_for_call` now turns any `CdpError`/`OSError` into a sticky `PageFailed`, including a plain PageError\n  with no session loss. Before, the raw error propagated. Warm reuse (`warm.py` `_reuse`) still catches it and\n  replaces the robot tab once, so this works, but the change in behaviour should go in the changelog note.\n- `tests/test_acl1812_warm_sessions.py::test_row_open_profile_answers_200_with_open_by_hand_over_http` fails\n  locally with HTTP 500 on both the PR head and base main. This is local and environmental, it is not caused by\n  this PR, and it passes in CI.\n\nNo live checks claimed.",
         "return_operation": {
           "id": "2ab69234dbc645ffab72d57e22133086",
@@ -58921,7 +58907,8 @@
       768,
       854,
       309,
-      990
+      990,
+      836
     ],
     "review": null,
     "history": [
@@ -98214,6 +98201,13 @@
         "pr": 937,
         "lane": "7082e3edec6545d5b3d8cb94c9027a3f",
         "actor": "Reviewer-R1184Z"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T09:39:10+00:00",
+        "issue": 836,
+        "pr": 837,
+        "actor": "Worker-L2836"
       }
     ],
     "policy": {
