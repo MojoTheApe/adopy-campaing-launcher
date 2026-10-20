@@ -45173,9 +45173,11 @@
         "worktree": "C:\\acl-1309-v2",
         "id": "ab8eb677481b47c7a8ac8b75c6d66bd0",
         "issue": 309,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T11:14:01+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 929,
+        "report": "Windows installer red: test_update_cycle.py polled a hard-coded 9090 while the launcher keeps a per-person port and skips registry-claimed ones (test_installer.ps1 earlier in the same job likely claims 9090). health() now uses local_dashboard.find_own with the test's config; the timeout error prints ports/registry for diagnosis. Local 92 tests passed; Windows job to be confirmed by CI. Cause not proven from logs."
       }
     },
     "tasks": {
