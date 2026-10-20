@@ -46005,20 +46005,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T12:56:11+00:00",
         "from_status": "status:todo"
-      },
-      "920": {
-        "actor": "Worker-RF920",
-        "session": "rf920-20261020",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1920-search-refused",
-        "worktree": "C:\\acl-rf-920",
-        "id": "9244977fbf9b4bc3ae87f3de91c54969",
-        "issue": 920,
-        "state": "handoff",
-        "started_at": "2026-10-20T13:59:13+00:00",
-        "from_status": "status:todo",
-        "pr": 921,
-        "report": "Pure refresh: merged main 259ae7f1 (merge commit 81a4e74b), no conflicts. Tests: test_acl1920_search_refused + test_acl1771_targeting_resolver, test_acl1819_preflight, test_goals, test_acl_1202_overview_profile_search, test_acl1680_one_config_dir - 192 passed."
       }
     },
     "tasks": {
@@ -51854,25 +51840,25 @@
             "session": "rf920-20261020"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RF920",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-RH2020W",
-          "session": "rh2020w-20261020",
+          "actor": "Worker-RF920",
+          "session": "rf920-20261020",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1920-search-refused",
-          "worktree": "C:\\rh20-920",
-          "id": "53d357ad8b0b4ab0b0205999e95218a3",
+          "worktree": "C:\\acl-rf-920",
+          "id": "9244977fbf9b4bc3ae87f3de91c54969",
           "issue": 920,
           "state": "handoff",
-          "started_at": "2026-10-20T06:56:29+00:00",
+          "started_at": "2026-10-20T13:59:13+00:00",
           "from_status": "status:todo",
           "pr": 921,
-          "report": "Re-handoff without code change. The 2026-10-20 return ('merge conflict with main, content not reviewed') was a false positive: head 7134984c already contains current main c6150160 and merges cleanly (git merge-tree). Content needs a full independent review."
+          "report": "Pure refresh: merged main 259ae7f1 (merge commit 81a4e74b), no conflicts. Tests: test_acl1920_search_refused + test_acl1771_targeting_resolver, test_acl1819_preflight, test_goals, test_acl_1202_overview_profile_search, test_acl1680_one_config_dir - 192 passed."
         },
         "pr": 921,
-        "queued_at": "2026-10-20T06:58:05+00:00",
+        "queued_at": "2026-10-20T14:02:23+00:00",
         "review_report": "Main moved to 259ae7f1 (batch #1034: ACL-602, 1202, 1680, 1401, 341). Pure refresh: merge current main (merge commit), re-run affected tests, re-handoff, fresh independent review. Independent trial merge already shows it merges cleanly and its tests pass on the merged tree.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -60400,7 +60386,8 @@
       880,
       1046,
       774,
-      771
+      771,
+      920
     ],
     "review": null,
     "history": [
@@ -102024,6 +102011,13 @@
         "at": "2026-10-20T13:59:13+00:00",
         "issue": 920,
         "claim": "9244977fbf9b4bc3ae87f3de91c54969",
+        "actor": "Worker-RF920"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T14:02:23+00:00",
+        "issue": 920,
+        "pr": 921,
         "actor": "Worker-RF920"
       }
     ],
