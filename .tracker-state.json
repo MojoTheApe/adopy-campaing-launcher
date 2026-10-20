@@ -4688,22 +4688,22 @@
         }
       },
       "947": {
-        "verdict": "approved",
-        "reviewer": "Reviewer-R1138",
-        "implementer": "Worker-P1138B",
-        "head_sha": "727e3d87897029858258969bcd491c3095877036",
-        "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
-        "tree_sha": "09376e311a24c6072e98ef2a46354bbe093905cb",
-        "execution_lane": "0ba906ea1b9d49e78736c18614d980d8",
-        "review_session": "acl1138_review_1019",
         "kind": "independent-review",
-        "report": "Independent read-only review of the whole change against current main: every route that opens or attaches to a Multilogin profile goes through the proxy gate before connect/launch/navigation; merge of main adds no behaviour; English actionable message; 98 targeted tests passed. LOW only: legacy unused MultiloginSession.__enter__ path ungated (follow-up). Re-review after CI fix 727e3d87 (proxy_gate_ mapped to the profile stage in cb-build-model): one-line change, no new findings; test_build_progress_model + gate tests 54 passed.",
-        "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+        "verdict": "approved",
+        "reviewer": "Reviewer-SR1020",
+        "implementer": "Worker-P1138C",
+        "review_session": "sr1020-20261020",
+        "execution_lane": "50a40a368bbb437a948abac8e4541cf1",
+        "head_sha": "7b5a9e68e101b7cd3fff7ddb6e1e0755c10c4d3e",
+        "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+        "tree_sha": "3f1fc610285a8257833741d5542f70a5b435652c",
+        "report": "Independent re-review of PR #947 (ACL-1138, Issue #138) at head 7b5a9e68 vs main 259ae7f1. Merge resolution checked with git show --cc: docs/system/PROJECT.md keeps the ACL-1138 paragraph and main's full src/fb_api entry intact; src/fb_ads_rpa/profile_trouble.py keeps both NO_PROXY and MLX_NOT_RUNNING constants and messages, ACCOUNT_STOPS=frozenset(MESSAGES) so both are account stops; report.html takes main's hold rule (with multilogin_not_running$) and adds proxy_gate_ to the profile stage; no other conflict leftovers. rpa_publisher: ProfileStop (incl. profile_no_proxy) re-raised before main's ACL-1401 launcher_unreachable branch, so no fallback to DirectCDP/plain browser. Full scope: gate reads profile proxy config from MLX API /profile/search before attach/start in Multilogin, DirectCDP (open and attach_existing_only), AttachOnly providers, account_spend attach paths, open-profile button, fb_api.profile.open_profile, warm pool open/adopt and checkout; missing proxy -> ProfileStop(profile_no_proxy) with an English what-to-do message; healthy profile passes and OK is cached 10 min; --proxy-server flag only logged as evidence (issue's 'check before gating' honoured; survey of http/socks5/no-proxy profiles documented). Accepted design (as in previous approval): API failure is fail-open with warning + proxy_gate_unchecked telemetry. LOW notes only: profile_no_proxy has no explicit failure_policy POLICY/GUIDE entry (unknown steps block by default, so safe; generic dashboard guide text). Tests run in worktree of head: test_acl1138_profile_proxy_gate, test_attach_short_path, test_account_spend*, test_acl1812_warm_sessions, test_an_open_profile_reaches_the_mlx_api, test_failure_policy (211 passed) plus test_publish_stops_when_multilogin_is_not_running and profile_trouble/cbTree-related files (207 passed). Verdict: approved.",
+        "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
         "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
         "issues": [
           138
         ],
-        "recorded_at": "2026-10-19T12:54:11+00:00",
+        "recorded_at": "2026-10-20T14:00:19+00:00",
         "issue_scopes": {
           "138": "dda7a0c1e14a09401c053051c5b626d8f01198c7b16ec8fff13e387c006d31b6"
         }
