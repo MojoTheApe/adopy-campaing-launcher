@@ -44846,22 +44846,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "739": {
-        "actor": "Worker-RH2020W",
-        "session": "rh2020w-20261020",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1739-doc124-frozen",
-        "worktree": "C:\\rh20-739",
-        "id": "79fdfb246ee943769a6c3b9426fb04ee",
-        "issue": 739,
-        "state": "handoff",
-        "started_at": "2026-10-20T07:09:21+00:00",
-        "from_status": "status:todo",
-        "pr": 740,
-        "report": "Re-handoff without code change. The 2026-10-20 return ('merge conflict with main, content not reviewed') was a false positive: head 0cb4dfc0 already contains current main c6150160 and merges cleanly (git merge-tree). Content needs a full independent review."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -47927,25 +47912,25 @@
             "session": "rh2020w-20261020"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RH2020W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-R1019739",
-          "session": "run_r1019_739",
+          "actor": "Worker-RH2020W",
+          "session": "rh2020w-20261020",
           "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1739-doc124-frozen",
-          "worktree": "C:\\acl-1739-doc124-frozen",
-          "id": "f15108458ff74ba3ab880d9866d3b7e9",
+          "worktree": "C:\\rh20-739",
+          "id": "79fdfb246ee943769a6c3b9426fb04ee",
           "issue": 739,
           "state": "handoff",
-          "started_at": "2026-10-19T20:23:28+00:00",
+          "started_at": "2026-10-20T07:09:21+00:00",
           "from_status": "status:todo",
           "pr": 740,
-          "report": "Revival of the PR returned by coordinator triage (2026-10-19): merged current work/main (only conflict: docs/system/CHANGELOG.md, kept both entries). tests/test_a_busy_tab_is_not_a_frozen_episode.py and test_a_frozen_tab_is_never_waited_on.py: 14 passed. No code change beyond the merge; no live runs."
+          "report": "Re-handoff without code change. The 2026-10-20 return ('merge conflict with main, content not reviewed') was a false positive: head 0cb4dfc0 already contains current main c6150160 and merges cleanly (git merge-tree). Content needs a full independent review."
         },
         "pr": 740,
-        "queued_at": "2026-10-19T20:25:03+00:00",
+        "queued_at": "2026-10-20T07:11:01+00:00",
         "review_report": "# Returned to the author: merge conflict with main, content not reviewed\n\nPR 740 cannot be brought up to current main c61501607ce11744e45add8b0d3b314368c216c5: `gh pr update-branch` reports a merge conflict (checked 2026-10-19/20). A source review must bind the current main baseline, so this task cannot be reviewed or approved as is.\n\nThe content of this PR was NOT reviewed in this pass; this return carries no code findings.\n\nNext step for the author: merge current main into the original branch, resolve the conflict, run the affected tests, push, and hand off again for a full independent review.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -58572,7 +58557,8 @@
       805,
       990,
       840,
-      992
+      992,
+      739
     ],
     "review": null,
     "history": [
@@ -96980,6 +96966,13 @@
         "at": "2026-10-20T07:09:21+00:00",
         "issue": 739,
         "claim": "79fdfb246ee943769a6c3b9426fb04ee",
+        "actor": "Worker-RH2020W"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T07:11:01+00:00",
+        "issue": 739,
+        "pr": 740,
         "actor": "Worker-RH2020W"
       }
     ],
