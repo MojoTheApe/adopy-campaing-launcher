@@ -44846,7 +44846,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "1028": {
+        "actor": "Worker-W2028",
+        "session": "local_e4968c7b",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-2028-plan-check-snapshot",
+        "worktree": "C:\\acl-2028",
+        "id": "d39e620929ae44ff87ea9933bbbc1a4f",
+        "issue": 1028,
+        "state": "implementing",
+        "started_at": "2026-10-20T05:51:46+00:00",
+        "from_status": "status:idea"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -53097,6 +53110,17 @@
         "pr": 1027,
         "queued_at": "2026-10-19T23:20:35+00:00",
         "reviewer": "Reviewer-ACT174R"
+      },
+      "1028": {
+        "implementers": [
+          {
+            "actor": "Worker-W2028",
+            "session": "local_e4968c7b"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W2028",
+        "coordinator": "Coordinator-M1011A"
       }
     },
     "actors": {
@@ -55539,6 +55563,10 @@
       "Reviewer-ACT174R": {
         "session": "bab3ffa025194f6295928e0ce3aca6cc",
         "role": "Reviewer"
+      },
+      "Worker-W2028": {
+        "session": "local_e4968c7b",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -96401,6 +96429,13 @@
             "approved_at": "2026-10-19T23:47:34+00:00"
           }
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T05:51:46+00:00",
+        "issue": 1028,
+        "claim": "d39e620929ae44ff87ea9933bbbc1a4f",
+        "actor": "Worker-W2028"
       }
     ],
     "policy": {
