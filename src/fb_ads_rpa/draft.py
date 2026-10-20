@@ -55,6 +55,8 @@ class AdDraft:
     # ACL-1774: необязательный вертикальный (9:16) файл Stories/Reels рядом с основным.
     vertical_filename: str = ""
     vertical_path: str | None = None
+    # ACL-1776: id шаблона формы из библиотеки (форму создаёт робот; только API-бэкенд).
+    lead_form_template: str = ""
 
     def ad_name(self) -> str:
         """Name for the ad in Ads Manager: "<creative> [<variant>] - <text>".
@@ -105,6 +107,8 @@ class AdDraft:
             out["more_copy_names"] = list(self.more_copy_names)
         if self.vertical_filename:
             out["vertical_file"] = self.vertical_filename
+        if self.lead_form_template:
+            out["lead_form_template"] = self.lead_form_template
         return out
 
 

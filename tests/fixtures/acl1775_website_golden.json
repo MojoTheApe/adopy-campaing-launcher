@@ -194,7 +194,9 @@
    "existing_differences": [],
    "objective": "OUTCOME_LEADS",
    "page_id": "111",
+   "page_source": "draft",
    "pixel_id": "222",
+   "pixel_source": "account default",
    "status": "PAUSED",
    "tag": "acl-6902d60c5a04"
   }
@@ -403,6 +405,7 @@
    "actual": "MX Leads 1",
    "expected": "MX Leads 1",
    "field": "name",
+   "not_read": false,
    "object": "campaign",
    "ok": true
   },
@@ -410,6 +413,7 @@
    "actual": "PAUSED",
    "expected": "PAUSED",
    "field": "status",
+   "not_read": false,
    "object": "campaign",
    "ok": true
   },
@@ -417,6 +421,7 @@
    "actual": "OUTCOME_LEADS",
    "expected": "OUTCOME_LEADS",
    "field": "objective",
+   "not_read": false,
    "object": "campaign",
    "ok": true
   },
@@ -424,6 +429,7 @@
    "actual": "2000",
    "expected": "2000",
    "field": "daily_budget",
+   "not_read": false,
    "object": "campaign",
    "ok": true
   },
@@ -431,6 +437,7 @@
    "actual": "LOWEST_COST_WITHOUT_CAP",
    "expected": "LOWEST_COST_WITHOUT_CAP",
    "field": "bid_strategy",
+   "not_read": false,
    "object": "campaign",
    "ok": true
   },
@@ -438,6 +445,7 @@
    "actual": "acl-6902d60c5a04",
    "expected": "acl-6902d60c5a04",
    "field": "tag",
+   "not_read": false,
    "object": "campaign",
    "ok": true
   },
@@ -445,6 +453,7 @@
    "actual": "MX Leads 1",
    "expected": "MX Leads 1",
    "field": "name",
+   "not_read": false,
    "object": "ad set MX Leads 1",
    "ok": true
   },
@@ -452,6 +461,7 @@
    "actual": "PAUSED",
    "expected": "PAUSED",
    "field": "status",
+   "not_read": false,
    "object": "ad set MX Leads 1",
    "ok": true
   },
@@ -459,6 +469,7 @@
    "actual": "101",
    "expected": "101",
    "field": "campaign_id",
+   "not_read": false,
    "object": "ad set MX Leads 1",
    "ok": true
   },
@@ -466,6 +477,7 @@
    "actual": "acl-6902d60c5a04",
    "expected": "acl-6902d60c5a04",
    "field": "tag",
+   "not_read": false,
    "object": "ad set MX Leads 1",
    "ok": true
   },
@@ -473,6 +485,7 @@
    "actual": "OFFSITE_CONVERSIONS",
    "expected": "OFFSITE_CONVERSIONS",
    "field": "optimization_goal",
+   "not_read": false,
    "object": "ad set MX Leads 1",
    "ok": true
   },
@@ -480,6 +493,7 @@
    "actual": "IMPRESSIONS",
    "expected": "IMPRESSIONS",
    "field": "billing_event",
+   "not_read": false,
    "object": "ad set MX Leads 1",
    "ok": true
   },
@@ -487,6 +501,7 @@
    "actual": "WEBSITE",
    "expected": "WEBSITE",
    "field": "destination_type",
+   "not_read": false,
    "object": "ad set MX Leads 1",
    "ok": true
   },
@@ -494,6 +509,7 @@
    "actual": "222",
    "expected": "222",
    "field": "pixel",
+   "not_read": false,
    "object": "ad set MX Leads 1",
    "ok": true
   },
@@ -501,6 +517,7 @@
    "actual": "LEAD",
    "expected": "LEAD",
    "field": "conversion_event",
+   "not_read": false,
    "object": "ad set MX Leads 1",
    "ok": true
   },
@@ -508,6 +525,7 @@
    "actual": "starts on activation, no end date",
    "expected": "starts on activation, no end date",
    "field": "schedule",
+   "not_read": false,
    "object": "ad set MX Leads 1",
    "ok": true
   },
@@ -519,6 +537,7 @@
     "MX"
    ],
    "field": "geo",
+   "not_read": false,
    "object": "ad set MX Leads 1",
    "ok": true
   },
@@ -526,6 +545,7 @@
    "actual": 25,
    "expected": 25,
    "field": "age_min",
+   "not_read": false,
    "object": "ad set MX Leads 1",
    "ok": true
   },
@@ -533,6 +553,7 @@
    "actual": 55,
    "expected": 55,
    "field": "age_max",
+   "not_read": false,
    "object": "ad set MX Leads 1",
    "ok": true
   },
@@ -544,6 +565,7 @@
     23
    ],
    "field": "languages",
+   "not_read": false,
    "object": "ad set MX Leads 1",
    "ok": true
   },
@@ -561,6 +583,7 @@
     ]
    ],
    "field": "detailed_targeting",
+   "not_read": false,
    "object": "ad set MX Leads 1",
    "ok": true
   },
@@ -568,6 +591,7 @@
    "actual": [],
    "expected": [],
    "field": "os",
+   "not_read": false,
    "object": "ad set MX Leads 1",
    "ok": true
   },
@@ -581,6 +605,7 @@
     "instagram"
    ],
    "field": "publisher_platforms",
+   "not_read": false,
    "object": "ad set MX Leads 1",
    "ok": true
   },
@@ -598,6 +623,7 @@
     "instream_video"
    ],
    "field": "facebook_positions",
+   "not_read": false,
    "object": "ad set MX Leads 1",
    "ok": true
   },
@@ -613,6 +639,7 @@
     "reels"
    ],
    "field": "instagram_positions",
+   "not_read": false,
    "object": "ad set MX Leads 1",
    "ok": true
   },
@@ -626,6 +653,7 @@
     "desktop"
    ],
    "field": "devices",
+   "not_read": false,
    "object": "ad set MX Leads 1",
    "ok": true
   },
@@ -633,6 +661,7 @@
    "actual": 1,
    "expected": 1,
    "field": "count",
+   "not_read": false,
    "object": "ad 1 (1000 - Text0)",
    "ok": true
   },
@@ -640,6 +669,7 @@
    "actual": "104",
    "expected": "104",
    "field": "ad_id",
+   "not_read": false,
    "object": "ad 1 (1000 - Text0)",
    "ok": true
   },
@@ -647,6 +677,7 @@
    "actual": "PAUSED",
    "expected": "PAUSED",
    "field": "status",
+   "not_read": false,
    "object": "ad 1 (1000 - Text0)",
    "ok": true
   },
@@ -654,6 +685,7 @@
    "actual": "102",
    "expected": "102",
    "field": "adset_id",
+   "not_read": false,
    "object": "ad 1 (1000 - Text0)",
    "ok": true
   },
@@ -661,6 +693,7 @@
    "actual": "acl-6902d60c5a04",
    "expected": "acl-6902d60c5a04",
    "field": "tag",
+   "not_read": false,
    "object": "ad 1 (1000 - Text0)",
    "ok": true
   },
@@ -668,6 +701,7 @@
    "actual": "103",
    "expected": "103",
    "field": "creative_id",
+   "not_read": false,
    "object": "ad 1 (1000 - Text0)",
    "ok": true
   },
@@ -675,6 +709,7 @@
    "actual": "acl-6902d60c5a04",
    "expected": "acl-6902d60c5a04",
    "field": "tag",
+   "not_read": false,
    "object": "ad 1 (1000 - Text0) creative",
    "ok": true
   },
@@ -682,6 +717,7 @@
    "actual": "OPT_OUT",
    "expected": "OPT_OUT",
    "field": "enhancement text_optimizations",
+   "not_read": false,
    "object": "ad 1 (1000 - Text0)",
    "ok": true
   },
@@ -689,6 +725,7 @@
    "actual": "111",
    "expected": "111",
    "field": "page",
+   "not_read": false,
    "object": "ad 1 (1000 - Text0)",
    "ok": true
   },
@@ -696,6 +733,7 @@
    "actual": "image",
    "expected": "image",
    "field": "format",
+   "not_read": false,
    "object": "ad 1 (1000 - Text0)",
    "ok": true
   },
@@ -703,6 +741,7 @@
    "actual": "4470b1b036851337f6a11facb26d3b88",
    "expected": "4470b1b036851337f6a11facb26d3b88",
    "field": "image_hash",
+   "not_read": false,
    "object": "ad 1 (1000 - Text0)",
    "ok": true
   },
@@ -710,6 +749,7 @@
    "actual": "LEARN_MORE",
    "expected": "LEARN_MORE",
    "field": "call_to_action",
+   "not_read": false,
    "object": "ad 1 (1000 - Text0)",
    "ok": true
   },
@@ -717,6 +757,7 @@
    "actual": "https://example.invalid/l",
    "expected": "https://example.invalid/l",
    "field": "cta_link",
+   "not_read": false,
    "object": "ad 1 (1000 - Text0)",
    "ok": true
   },
@@ -724,6 +765,7 @@
    "actual": "https://example.invalid/l",
    "expected": "https://example.invalid/l",
    "field": "link",
+   "not_read": false,
    "object": "ad 1 (1000 - Text0)",
    "ok": true
   },
@@ -731,6 +773,7 @@
    "actual": "Head 0",
    "expected": "Head 0",
    "field": "headline",
+   "not_read": false,
    "object": "ad 1 (1000 - Text0)",
    "ok": true
   },
@@ -738,6 +781,7 @@
    "actual": "Body 0",
    "expected": "Body 0",
    "field": "primary_text",
+   "not_read": false,
    "object": "ad 1 (1000 - Text0)",
    "ok": true
   },
@@ -745,6 +789,7 @@
    "actual": "Desc",
    "expected": "Desc",
    "field": "description",
+   "not_read": false,
    "object": "ad 1 (1000 - Text0)",
    "ok": true
   },
@@ -752,6 +797,7 @@
    "actual": 1,
    "expected": 1,
    "field": "count",
+   "not_read": false,
    "object": "ad 2 (1001 - Text1)",
    "ok": true
   },
@@ -759,6 +805,7 @@
    "actual": "107",
    "expected": "107",
    "field": "ad_id",
+   "not_read": false,
    "object": "ad 2 (1001 - Text1)",
    "ok": true
   },
@@ -766,6 +813,7 @@
    "actual": "PAUSED",
    "expected": "PAUSED",
    "field": "status",
+   "not_read": false,
    "object": "ad 2 (1001 - Text1)",
    "ok": true
   },
@@ -773,6 +821,7 @@
    "actual": "102",
    "expected": "102",
    "field": "adset_id",
+   "not_read": false,
    "object": "ad 2 (1001 - Text1)",
    "ok": true
   },
@@ -780,6 +829,7 @@
    "actual": "acl-6902d60c5a04",
    "expected": "acl-6902d60c5a04",
    "field": "tag",
+   "not_read": false,
    "object": "ad 2 (1001 - Text1)",
    "ok": true
   },
@@ -787,6 +837,7 @@
    "actual": "106",
    "expected": "106",
    "field": "creative_id",
+   "not_read": false,
    "object": "ad 2 (1001 - Text1)",
    "ok": true
   },
@@ -794,6 +845,7 @@
    "actual": "acl-6902d60c5a04",
    "expected": "acl-6902d60c5a04",
    "field": "tag",
+   "not_read": false,
    "object": "ad 2 (1001 - Text1) creative",
    "ok": true
   },
@@ -801,6 +853,7 @@
    "actual": "OPT_OUT",
    "expected": "OPT_OUT",
    "field": "enhancement text_optimizations",
+   "not_read": false,
    "object": "ad 2 (1001 - Text1)",
    "ok": true
   },
@@ -808,6 +861,7 @@
    "actual": "111",
    "expected": "111",
    "field": "page",
+   "not_read": false,
    "object": "ad 2 (1001 - Text1)",
    "ok": true
   },
@@ -815,6 +869,7 @@
    "actual": "video",
    "expected": "video",
    "field": "format",
+   "not_read": false,
    "object": "ad 2 (1001 - Text1)",
    "ok": true
   },
@@ -822,6 +877,7 @@
    "actual": "105",
    "expected": "105",
    "field": "video_id",
+   "not_read": false,
    "object": "ad 2 (1001 - Text1)",
    "ok": true
   },
@@ -829,6 +885,7 @@
    "actual": "acl-6902d60c5a04-74c4b9a63186",
    "expected": "acl-6902d60c5a04-74c4b9a63186",
    "field": "video_file",
+   "not_read": false,
    "object": "ad 2 (1001 - Text1)",
    "ok": true
   },
@@ -836,6 +893,7 @@
    "actual": "LEARN_MORE",
    "expected": "LEARN_MORE",
    "field": "call_to_action",
+   "not_read": false,
    "object": "ad 2 (1001 - Text1)",
    "ok": true
   },
@@ -843,6 +901,7 @@
    "actual": "https://example.invalid/l",
    "expected": "https://example.invalid/l",
    "field": "link",
+   "not_read": false,
    "object": "ad 2 (1001 - Text1)",
    "ok": true
   },
@@ -850,6 +909,7 @@
    "actual": "Head 1",
    "expected": "Head 1",
    "field": "headline",
+   "not_read": false,
    "object": "ad 2 (1001 - Text1)",
    "ok": true
   },
@@ -857,6 +917,7 @@
    "actual": "Body 1",
    "expected": "Body 1",
    "field": "primary_text",
+   "not_read": false,
    "object": "ad 2 (1001 - Text1)",
    "ok": true
   },
@@ -864,6 +925,7 @@
    "actual": "Desc",
    "expected": "Desc",
    "field": "description",
+   "not_read": false,
    "object": "ad 2 (1001 - Text1)",
    "ok": true
   }

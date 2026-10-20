@@ -78,6 +78,8 @@ def slots_to_campaign_drafts(
                 # ACL-1774: ключи есть в слоте только когда поле заполнено.
                 more_copy_names=[str(x).strip() for x in (s.get("copy_more") or []) if str(x).strip()],
                 vertical_filename=(s.get("creative_file_vertical") or "").strip(),
+                lead_form_template=((s.get("lead_form_template") or "").strip()
+                                    if destination == "instant_form" else ""),
             )
             for s in group
         ]

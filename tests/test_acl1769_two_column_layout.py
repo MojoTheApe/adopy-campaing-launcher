@@ -62,7 +62,9 @@ def test_the_panel_is_two_columns_with_expand_and_the_foot_kept():
     assert page.index('id="cbd-body"') < page.index('id="cbd-editor"') < page.index('id="cbd-foot"'), (
         "порядок: дерево, редактор, подвал"
     )
-    assert 'id="cbd-expand"' in page and 'aria-pressed="false"' in page
+    # ACL-1871: размер — на язычке (три кнопки), кнопки Expand в шапке больше нет.
+    assert 'id="cbd-expand"' not in page
+    assert all(f'id="cbd-preset-{n}"' in page for n in ("closed", "normal", "wide"))
     assert 'id="cbd-close"' in page, "крестик закрытия панели пропал"
     # Закрытие только прячет: у него нет обработчика, который чистит черновики.
     block = page[page.index("window.cbDrawer = (function () {"):]
@@ -254,3 +256,18 @@ console.log(JSON.stringify({{ marked, refreshed: refreshed.length }}));
     assert "SLOT .cb-creative-search" in sels and 'SLOT [name$="_budget"]' in sels
     assert all(m[1] == "cb-field-error" for m in out["marked"])
     assert out["refreshed"] >= 1, "редактор не узнал об ошибке (вкладка уровня не пометится)"
+
+
+def test_ad_tab_is_a_stack_of_cards_without_an_ad_dropdown():
+    """Правка владельца 13.10: выбора Ad / Ad 2 нет, карточки идут списком.
+    Подпись «Primary text 1» проверяется и без браузера (раньше её держал
+    только браузерный тест)."""
+    page = _page()
+    assert "cbd-ed-ad" not in page and "cbd-ad-off" not in page and "adNames" not in page
+    assert "Object to edit" in page, "вкладки Campaign / Ad set / Ad пропали"
+    row = page[page.index("function buildAdRowHTML"):]
+    row = re.sub(r"/\*.*?\*/", "", row[: row.index("function ", 30)], flags=re.S)
+    row = re.sub(r"^\s*//.*$", "", row, flags=re.M)
+    assert '<span class="cb-label">Primary text 1' in row and "Primary text 2" in row and "Ad Title" not in row
+    for name in ("copy", "copy2", "creative_file"):
+        assert "name=\"' + pfx + '" + name + "\"" in row, "имя поля camp_N_ad_M_" + name + " изменилось"
