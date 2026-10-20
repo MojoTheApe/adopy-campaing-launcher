@@ -5450,6 +5450,27 @@
         "issue_scopes": {
           "853": "48bbd0ada92f4fbd4f162a258be49f4b8cd417a35330115cf8bcbca2bf418ab5"
         }
+      },
+      "740": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1739W",
+        "review_session": "reviewer-r1739w-20261020",
+        "execution_lane": "8371c69632e34928aa1888a732eba616",
+        "implementer": "Worker-L1739",
+        "head_sha": "322939463230dd8340f4ba319141880d8e53e882",
+        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "tree_sha": "0f8c8f50f01addcd1d24f9ec32718955374fe77c",
+        "issues": [
+          739
+        ],
+        "report": "PR #740 (ACL-1739) changes `_tab_frozen` in src/fb_ads_rpa/meta_dom.py so that a missed 5 s liveness probe, which the ACL-1402 wake did not rescue, is confirmed once with the existing `FROZEN_CONFIRM_S` (10 s) probe before an ACL-1702 frozen episode is counted; if the long probe answers, the tab is treated as busy, no episode is noted, and telemetry writes `tab_frozen` with note `confirm_answered`; a tab that misses both probes is counted and budget-checked exactly as before, and a `None` probe result (cannot ask) keeps the old path. The follow-up commit 32293946 (addressing the 20.10 return) runs the objective-dialog wait's own `_tab_frozen` call inside a thread-local `_no_frozen_confirm()` context, because that loop already requires OBJECTIVE_FROZEN_POLLS consecutive misses; this restores its earlier hand-back timing and fixes the two failures in tests/test_the_objective_wait_after_a_wake.py without changing the `_tab_frozen` signature. Criterion 1 (cause named with evidence): the PR body and CHANGELOG name a false positive from probe timing on a covered profile window (`window_hidden_woken` reason `covered`, 4-7 windows above, not foreground), with episodes spread over objective, create, ad copy and upload steps, and `stall_evidence` reading `responsive: true` with about 500 MB heap and 6.3k nodes shortly after. Criterion 2: a busy-but-alive tab that answers the long probe no longer accumulates episodes outside the objective wait, so it cannot reach `tab_frozen_budget_exceeded` that way, while a truly hung tab misses both probes and is still counted, budget-stopped and handled by the unchanged hung-tab watchdog and fresh-tab paths, so real freezes are not hidden; nothing is reloaded or restarted, no browser is opened outside Multilogin, nothing polls live accounts, user-facing telemetry text is English, and no ids or secrets are added to code or tests (fake act=1 URL only). Merge history: HEAD's merge-base with work/main is c6150160 (= current main), and the two-dot diff against main touches only the four PR files, so the refresh kept all of main's changes; the CHANGELOG conflict kept both sides (only harmless blank-line separators added between existing entries). `git log work/main..HEAD` shows only ACL-1739 commits (681100a3, two merges of work/main, 32293946), so it is not stacked on other unmerged tasks. Tests run locally at the head (fakes only): test_a_busy_tab_is_not_a_frozen_episode, test_a_frozen_tab_is_never_waited_on, test_the_objective_wait_after_a_wake, test_a_campaign_has_a_time_budget, test_a_covered_profile_window_is_woken and test_stalled_page_is_woken_then_reloaded, 92 passed. CI on 32293946: all linux shards, windows tests, ACL verification, process and installer checks pass; only `tracker-link` fails, with 'start and implement the task, then move it to Review before a ready PR', which is tracker state, not code. Non-blocking nits: (1) inside the objective wait a busy tab can still note one budget episode per busy span (no confirm there; the 90 s episode gap merges consecutive misses), an accepted trade-off since that loop hands the tab back after consecutive misses anyway; (2) `_no_frozen_confirm()` resets the flag to False instead of restoring the previous value, so it is not re-entrant, which is fine for its single caller; (3) the CHANGELOG entry does not mention the objective-wait exception; (4) there is no direct unit test asserting that the no-confirm context skips the long probe (covered indirectly by the objective-wait tests); (5) a truly frozen tab costs up to 10 s more per check outside the objective wait. No live checks claimed.",
+        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "recorded_at": "2026-10-20T11:36:35+00:00",
+        "issue_scopes": {
+          "739": "5f4e8b2bcb5e83bae5c9abddf7b76624e7b19f5c738c78c2f783590a1f4b560d"
+        }
       }
     },
     "stage": {
