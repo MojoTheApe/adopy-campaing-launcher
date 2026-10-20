@@ -45071,20 +45071,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T10:14:47+00:00",
         "from_status": "status:todo"
-      },
-      "768": {
-        "actor": "Worker-B1019768",
-        "session": "run_b1019_768",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1768-multiple-ad-sets",
-        "worktree": "C:\\acl-1768",
-        "id": "bd75c8f9bdde4106bf2f36a8262adeb0",
-        "issue": 768,
-        "state": "handoff",
-        "started_at": "2026-10-20T10:23:55+00:00",
-        "from_status": "status:todo",
-        "pr": 833,
-        "report": "# ACL-1768 handoff (round 3)\n\n- Fixed the last blocker: src/fb_ads_rpa/rpa_publisher.py reads ad_sets via getattr(d, \"ad_sets\", None) or [] so stub drafts without ad_sets work. tests/test_rpa_job_start_is_measured.py + tests/test_acl1768_ad_sets.py: 74 passed locally. Full suite left to CI."
       }
     },
     "tasks": {
@@ -49553,7 +49539,7 @@
             "session": "run_b1019_768"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-B1019768",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -49562,16 +49548,16 @@
           "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1768-multiple-ad-sets",
           "worktree": "C:\\acl-1768",
-          "id": "349f0d90f930409ba385c2f42aaf3f70",
+          "id": "bd75c8f9bdde4106bf2f36a8262adeb0",
           "issue": 768,
           "state": "handoff",
-          "started_at": "2026-10-20T08:51:01+00:00",
+          "started_at": "2026-10-20T10:23:55+00:00",
           "from_status": "status:todo",
           "pr": 833,
-          "report": "# ACL-1768 handoff (after changes_requested)\n\n- Merged updated #830 head (with the tzdata test fix), #832 (ACL-1771) and current main; creator.py conflict with the targeting resolver resolved (TermResolver + locale_names kept). Stacked on #830/#832.\n- Fixed review findings: tests/test_upload_without_workbook.py (two tests follow the ad-set field builder), tests/test_acl1768_ad_sets_browser.py (reload-v3 test and audit test).\n- Local: test_acl1768_ad_sets_browser 9 passed (the two formerly failing ones included), test_upload_without_workbook 24, test_acl1768_ad_sets 64, test_acl1771_targeting_resolver 50, test_acl1761_api_create 121, test_acl1819_preflight 110, test_acl1767_audience_fields 92, test_distribution_boundary 6. Full suite left to CI."
+          "report": "# ACL-1768 handoff (round 3)\n\n- Fixed the last blocker: src/fb_ads_rpa/rpa_publisher.py reads ad_sets via getattr(d, \"ad_sets\", None) or [] so stub drafts without ad_sets work. tests/test_rpa_job_start_is_measured.py + tests/test_acl1768_ad_sets.py: 74 passed locally. Full suite left to CI."
         },
         "pr": 833,
-        "queued_at": "2026-10-20T08:54:35+00:00",
+        "queued_at": "2026-10-20T10:26:51+00:00",
         "review_report": "Returned again (Reviewer-Q2001D), head 20af245d. Delta checked: the tzdata test, the two test_upload_without_workbook tests and the two 1768 browser tests are fixed, and the #832 merge resolution is sound. One blocking CI failure remains, reproduced locally: tests/test_rpa_job_start_is_measured.py::test_the_publisher_measures_the_queue_and_the_attach fails with AttributeError: '_Draft' object has no attribute 'ad_sets' at src/fb_ads_rpa/rpa_publisher.py:154. The new loop `for d in drafts: if len(d.ad_sets) > 1` breaks an existing test whose stub draft has no ad_sets (linux shards 3 on 3.11 and 3.13). Fix: use len(getattr(d, \"ad_sets\", None) or []) or give the test stub ad_sets, then rerun CI. Content otherwise approved; approval waits on #830 being Approved.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -59064,7 +59050,8 @@
       853,
       19,
       18,
-      71
+      71,
+      768
     ],
     "review": null,
     "history": [
@@ -98685,6 +98672,13 @@
         "at": "2026-10-20T10:23:55+00:00",
         "issue": 768,
         "claim": "bd75c8f9bdde4106bf2f36a8262adeb0",
+        "actor": "Worker-B1019768"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T10:26:51+00:00",
+        "issue": 768,
+        "pr": 833,
         "actor": "Worker-B1019768"
       }
     ],
