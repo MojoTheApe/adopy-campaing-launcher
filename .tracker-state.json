@@ -103216,6 +103216,33 @@
         "pr": 1044,
         "lane": "6106da90d8974049af9267047ff24ea6",
         "actor": "Reviewer-R1880W"
+      },
+      {
+        "event": "intake-frozen",
+        "at": "2026-10-20T17:27:03+00:00",
+        "intake": {
+          "id": "09bba1d54ca5471b8c49e15a45a08056",
+          "actor": "Coordinator-I1020A",
+          "session": "9fea0133-b18f-4277-a1b8-225a9a665b61",
+          "state": "running",
+          "issues": [
+            1038,
+            1037,
+            836,
+            184,
+            771
+          ],
+          "remaining": [
+            1038,
+            1037,
+            836,
+            184,
+            771
+          ],
+          "batches": [],
+          "started_at": "2026-10-20T17:27:03+00:00",
+          "ineligible": {}
+        }
       }
     ],
     "policy": {
@@ -112589,25 +112616,27 @@
     },
     "integration": null,
     "intake": {
-      "id": "5d3c52259f7b47419544ec1a3e3214fc",
+      "id": "09bba1d54ca5471b8c49e15a45a08056",
       "actor": "Coordinator-I1020A",
       "session": "9fea0133-b18f-4277-a1b8-225a9a665b61",
-      "state": "cancelled",
+      "state": "running",
       "issues": [
+        1038,
+        1037,
+        836,
+        184,
         771
       ],
       "remaining": [
+        1038,
+        1037,
+        836,
+        184,
         771
       ],
       "batches": [],
-      "started_at": "2026-10-20T15:19:18+00:00",
-      "ineligible": {
-        "529": "#529: source approval is stale for its PR, main or policy",
-        "739": "#739: source approval is stale for its PR, main or policy",
-        "767": "#767: source approval is stale for its PR, main or policy",
-        "827": "#827: source approval is stale for its PR, main or policy"
-      },
-      "report": "Withdrawing duplicate intake 5d3c52259f7b47419544ec1a3e3214fc (only ACL-1771 eligible). The owner-requested integration of the Approved queue is already being prepared by Coordinator-M1011A, which is refreshing approvals onto main 259ae7f1. No batch was begun; nothing was assembled or merged."
+      "started_at": "2026-10-20T17:27:03+00:00",
+      "ineligible": {}
     },
     "source_reviews": {
       "820": {
