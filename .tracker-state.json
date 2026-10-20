@@ -45300,20 +45300,6 @@
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
       },
-      "1040": {
-        "actor": "Worker-MLX60",
-        "session": "mlx60-run-20261020",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-2040-mlx-close-retry",
-        "worktree": "C:\\acl-1040-mlx-close",
-        "id": "3894c879a5964047bdf3606e65655cc5",
-        "issue": 1040,
-        "state": "handoff",
-        "started_at": "2026-10-20T12:23:30+00:00",
-        "from_status": "status:idea",
-        "pr": 1042,
-        "report": "Clean transplant of bbeb26be from the TEST9095 build onto main. Pre-handoff review (Opus) findings fixed in a00c496a: timeouts are not retried; 5xx-on-old-address behaviour documented; ids fixed. Tests: tests/test_the_api_stop_is_asked_first.py 16 passed plus 10 launcher-related files earlier (342 passed)."
-      },
       "880": {
         "actor": "Worker-1880C",
         "session": "w1880c-20261020-700920560",
@@ -53930,9 +53916,25 @@
             "session": "mlx60-run-20261020"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-MLX60",
-        "coordinator": "Coordinator-M1011A"
+        "coordinator": "Coordinator-M1011A",
+        "handoff": {
+          "actor": "Worker-MLX60",
+          "session": "mlx60-run-20261020",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "work/acl-2040-mlx-close-retry",
+          "worktree": "C:\\acl-1040-mlx-close",
+          "id": "3894c879a5964047bdf3606e65655cc5",
+          "issue": 1040,
+          "state": "handoff",
+          "started_at": "2026-10-20T12:23:30+00:00",
+          "from_status": "status:idea",
+          "pr": 1042,
+          "report": "Clean transplant of bbeb26be from the TEST9095 build onto main. Pre-handoff review (Opus) findings fixed in a00c496a: timeouts are not retried; 5xx-on-old-address behaviour documented; ids fixed. Tests: tests/test_the_api_stop_is_asked_first.py 16 passed plus 10 launcher-related files earlier (342 passed)."
+        },
+        "pr": 1042,
+        "queued_at": "2026-10-20T12:51:11+00:00"
       },
       "1039": {
         "implementers": [
@@ -59536,7 +59538,8 @@
       841,
       1037,
       838,
-      1038
+      1038,
+      1040
     ],
     "review": {
       "id": "1ea28d1b292c4ef3baeda760fa52b87b",
@@ -100516,6 +100519,13 @@
         "pr": 965,
         "lane": "f9d8f33f1e8d421d872f84b5830dc3ec",
         "actor": "Reviewer-R1305V"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T12:51:11+00:00",
+        "issue": 1040,
+        "pr": 1042,
+        "actor": "Worker-MLX60"
       }
     ],
     "policy": {
