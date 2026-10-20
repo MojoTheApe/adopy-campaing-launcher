@@ -57616,6 +57616,10 @@
       "Worker-MLX61": {
         "session": "mlx61-20261020",
         "role": "Worker"
+      },
+      "Coordinator-I1020A": {
+        "session": "9fea0133-b18f-4277-a1b8-225a9a665b61",
+        "role": "Coordinator"
       }
     },
     "completed": {
@@ -102914,6 +102918,30 @@
             "approved_at": "2026-10-20T15:15:18+00:00"
           }
         }
+      },
+      {
+        "event": "intake-frozen",
+        "at": "2026-10-20T15:19:18+00:00",
+        "intake": {
+          "id": "5d3c52259f7b47419544ec1a3e3214fc",
+          "actor": "Coordinator-I1020A",
+          "session": "9fea0133-b18f-4277-a1b8-225a9a665b61",
+          "state": "running",
+          "issues": [
+            771
+          ],
+          "remaining": [
+            771
+          ],
+          "batches": [],
+          "started_at": "2026-10-20T15:19:18+00:00",
+          "ineligible": {
+            "529": "#529: source approval is stale for its PR, main or policy",
+            "739": "#739: source approval is stale for its PR, main or policy",
+            "767": "#767: source approval is stale for its PR, main or policy",
+            "827": "#827: source approval is stale for its PR, main or policy"
+          }
+        }
       }
     ],
     "policy": {
@@ -112199,23 +112227,24 @@
     },
     "integration": null,
     "intake": {
-      "id": "a94b4944da0a475db9dfdf3711ea143a",
-      "actor": "Coordinator-E1019A",
-      "session": "coord-c0a1de70",
-      "state": "finished",
+      "id": "5d3c52259f7b47419544ec1a3e3214fc",
+      "actor": "Coordinator-I1020A",
+      "session": "9fea0133-b18f-4277-a1b8-225a9a665b61",
+      "state": "running",
       "issues": [
-        70,
-        202,
-        680,
-        401,
-        47
+        771
       ],
-      "remaining": [],
-      "batches": [
-        "5cc83b63094747b7942c0f90ab608793"
+      "remaining": [
+        771
       ],
-      "started_at": "2026-10-20T09:23:07+00:00",
-      "ineligible": {}
+      "batches": [],
+      "started_at": "2026-10-20T15:19:18+00:00",
+      "ineligible": {
+        "529": "#529: source approval is stale for its PR, main or policy",
+        "739": "#739: source approval is stale for its PR, main or policy",
+        "767": "#767: source approval is stale for its PR, main or policy",
+        "827": "#827: source approval is stale for its PR, main or policy"
+      }
     },
     "source_reviews": {
       "820": {
