@@ -50257,7 +50257,7 @@
             "session": "run_l2_836"
           }
         ],
-        "state": "approved",
+        "state": "returning_approval",
         "worker": "Worker-L2836",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -50278,17 +50278,23 @@
         "queued_at": "2026-10-20T09:39:10+00:00",
         "review_report": "# PR #837 / ACL-1836 \u2014 review return (changes needed)\n\nReviewer: Reviewer-R1836Y (session reviewer-r1836y-20261019)\nHead: 1ab1af9d6beee6865593265dda615183b7e18265, base work/main c61501607ce11744e45add8b0d3b314368c216c5 (unchanged at review time)\n\n## Blocking\n\n1. `tests/bench/CATALOGUE.md:9`: the rendered summary line is stale after the merge of main (1ab1af9d).\n   - It reads `24 robot steps \u00d7 122 layouts, 67 fixtures`. `bench_catalogue.render()` over the current\n     `tests/bench/catalogue.json` gives `25 robot steps \u00d7 123 layouts, 68 fixtures`. Main and this branch\n     each added a catalogue entry and each updated the count on its own, and the merge kept the old total.\n   - Effect: `tests/test_bench_catalogue.py::test_the_markdown_is_current` fails on the PR head. It passes on\n     base main c6150160 (both checked locally). Required CI is red for the same reason:\n     `linux tests (3.13, 3)` gives 1 failed / 2616 passed, and the aggregate `ACL verification` fails with it\n     (run 39314307311).\n   - Fix: run `python scripts/bench_catalogue.py --write`, commit only `tests/bench/CATALOGUE.md`, and push.\n     Then wait for green required CI on the new head.\n\n## Not blocking (no change required)\n\n- The source review found no correctness or rule problems:\n  - Graph GET/POST and file-upload jobs never pass through the recovery retry. On a session loss they still\n    return `call_unknown`, with no replay.\n  - Recovery happens once per tab lifetime. It reattaches to the same targetId over the existing socket, with\n    no endpoint discovery, no new tab, no reload and no profile restart.\n  - The target URL and the main-frame URL are both checked against ACL's own navigation intent, never against\n    the URL the page currently shows.\n  - Login and checkpoint map to the existing typed stops.\n- `_ready_for_call` now turns any `CdpError`/`OSError` into a sticky `PageFailed`, including a plain PageError\n  with no session loss. Before, the raw error propagated. Warm reuse (`warm.py` `_reuse`) still catches it and\n  replaces the robot tab once, so this works, but the change in behaviour should go in the changelog note.\n- `tests/test_acl1812_warm_sessions.py::test_row_open_profile_answers_200_with_open_by_hand_over_http` fails\n  locally with HTTP 500 on both the PR head and base main. This is local and environmental, it is not caused by\n  this PR, and it passes in CI.\n\nNo live checks claimed.",
         "return_operation": {
-          "id": "2ab69234dbc645ffab72d57e22133086",
-          "actor": "Coordinator-CR1012",
-          "session": "acm_connection_coordinator_20261013",
-          "report": "Coordinator approval return for ACL-1836 / Issue836 / source PR837.\n\nActual Coordinator: Coordinator-CR1012.\nActual root session: acm_connection_coordinator_20261013.\nThe user resumed development, integration and installation with \"\u0432\u0441\u0435 \u0432\u043c\u0435\u0441\u0442\u0435\" and selected ACM TEST9095. Cross-chat coordination is explicitly authorized.\n\nFresh official readback confirms main7cee2857d4b374bc564c5ca84b9f6ede69f96430, while the existing Approved review for exact source d0d4b87305a4e1d25c045c67103da1637fe8c3d7 was bound to main777663bf539308c0898cc177f872a8e0f63b597e. PR837 is still OPEN, ready, targeting main, with that unchanged head. The latest private state confirms Approved, no implementation claim, no pending return, and recorded approval Coordinator-CR1012. The task is not a member of the foreign frozen integration or intake.\n\nReturn reason is only advancement of the authoritative baseline; no new product defect is asserted. Preserve full Issue scope/history, original Worker-SR1012 / connection_sr1012_worker, original source branch and review evidence. After this supported return, the actual original author must claim normally, reconcile current main, perform applicable checks, push the same source PR and hand off for fresh independent current-source review. The author currently owns ACL-1886 and must finish its normal handoff first; do not steal or fabricate a second Worker run.\n\nThis return does not edit source/runtime, change the foreign batch24551548a5084a13a4d81bb957a084f1 or its Coordinator-DLV13 ownership, start a competing intake, claim a new approval, publish a package or execute advertising."
+          "id": "0835bf7a0c454958959fbed9e2cde602",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "report": "Main moved to 259ae7f1 (batch #1034: ACL-602, 1202, 1680, 1401, 341). Pure refresh: merge current main (merge commit), re-run affected tests, re-handoff, fresh independent review. Independent trial merge already shows it merges cleanly and its tests pass on the merged tree."
         },
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578002+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-R1836W"
+        "reviewer": "Reviewer-R1836W",
+        "return": {
+          "id": "0835bf7a0c454958959fbed9e2cde602",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "report": "Main moved to 259ae7f1 (batch #1034: ACL-602, 1202, 1680, 1401, 341). Pure refresh: merge current main (merge commit), re-run affected tests, re-handoff, fresh independent review. Independent trial merge already shows it merges cleanly and its tests pass on the merged tree."
+        }
       },
       "838": {
         "implementers": [
