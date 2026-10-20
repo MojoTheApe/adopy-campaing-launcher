@@ -47933,7 +47933,7 @@
             "session": "rh2020w-20261020"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-RH2020W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -47957,7 +47957,8 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.577988+00:00",
           "remote_process_stopped_verified": false
-        }
+        },
+        "reviewer": "Reviewer-Q2001A"
       },
       "743": {
         "implementers": [
@@ -58606,7 +58607,6 @@
       771,
       840,
       992,
-      739,
       13
     ],
     "review": null,
@@ -97163,6 +97163,13 @@
           "report": "# Returned to the author: CI red, a design-token test fails on this PR's own CSS\n\nReview of PR 991 / ACL-1990, head b7489b55 (contains current main c6150160), by Reviewer-Q2001B.\n\n## Blocking\n\n1. **src/web/templates/report.html, new rule `.cbd-pf-list .cbd-pf-sign { width: 0.95rem; height: 0.95rem; font-size: 0.6rem; }`** (about line 3390). `tests/test_acl1797_design_system.py::test_no_text_is_smaller_than_the_token_minimum` fails with \"small text is back: .cbd-pf-list .cbd-pf-sign { ... font-size: 0.6rem; }\". I reproduced it locally on this head (1 failed, 15 passed), and it is the single failure in CI job `linux tests (3.13, 3)`; the aggregate `ACL verification` check is red because of it. Fix: use a size token at or above the minimum (or drop the font-size override and size the sign box differently), then re-run test_acl1797_design_system.py together with test_acl1819_preflight*.py.\n\n## Non-blocking notes\n\n- docs/system/CHANGELOG.md: the diff also inserts a blank line before about 25 unrelated older headings. Harmless, but noise; keep the diff to the new entry.\n- `check_plan` marks every non-`account` exception of the read session as `not_checked` (including ones raised after some campaigns were checked). Acceptable because the publish job meets the same cause, but worth keeping in mind.\n- test_under_api_the_check_button_loads... is already noted by the author as flaky (~1 in 4).\n\n## Rest of the review\n\nScope matches Issue #990 (topics, Check with Meta strip, not_checked does not block Publish, account/plan still block, rules JSON/Python parity, tests, CHANGELOG, English UI text, one Tracker issues line). Not live-checked. Content otherwise looks sound; once the CSS token failure is fixed and CI is green this should be approvable.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-20T07:48:08+00:00",
+        "pr": 740,
+        "lane": "d1f9c50687cd41df9d176043bb3d0fe2",
+        "actor": "Reviewer-Q2001A"
       }
     ],
     "policy": {
@@ -105130,6 +105137,18 @@
         "session": "reviewer-r1891z-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T07:33:41+00:00",
+        "state": "reviewing"
+      },
+      "740": {
+        "id": "d1f9c50687cd41df9d176043bb3d0fe2",
+        "pr": 740,
+        "issues": [
+          739
+        ],
+        "actor": "Reviewer-Q2001A",
+        "session": "q2001a-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-20T07:48:08+00:00",
         "state": "reviewing"
       }
     },
