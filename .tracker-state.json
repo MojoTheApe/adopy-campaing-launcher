@@ -5555,6 +5555,27 @@
         "issue_scopes": {
           "53": "e422537de9fdf02be347310b1d1b6a4ad717569d42ac5e4380170ffe2e257df9"
         }
+      },
+      "1033": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R110W",
+        "review_session": "reviewer-r110w-20261020",
+        "execution_lane": "d4687482b5454de1857356e1e69c7040",
+        "implementer": "Worker-L3018",
+        "head_sha": "e77d3e67e5b686dd5dbcf289fcb1bb2aa2fc4aae",
+        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "tree_sha": "14e26b514ccaa18c9b561645acb254ca4815987d",
+        "issues": [
+          18
+        ],
+        "report": "PR #1033 (two commits, both ACL-110, not stacked on any other unmerged task) adds a 'Compare with' choice to the date-range popup (Nothing / Previous period of the same length / Custom range, matching the owner decisions recorded on Issue #18). A new pure module src/web/period_compare.py resolves the comparison range, computes the delta (percent of the earlier value; '\u2014' when the earlier value is zero or missing; CPL/CPA inverted for good/bad tone), flags rows as new/gone, and provides name-normalised lookups into the earlier period. src/web/app.py builds the earlier period with the same report_for_period and _build_account_map_view code as the main period (span='all', so no live account reads and no extra Meta calls; same workbook sources, currency and timezone handling), on a deepcopy, and only when compare is requested; any failure keeps the normal page and shows an English note. Query values (compare, cmp_from, cmp_to) are validated before reaching the calendar markup (XSS guard, tested). Templates show 'earlier value + change' under every number in the account map (accounts, country rows, totals, CM section), CM Comparison, Optimization ad sets and Builder open recommendations (new/gone targeting counts), mark new/gone rows including gone rows that exist only in the earlier period, show a 'vs <range>' chip with a clear control, and leave the primary date range untouched; without compare the markup is unchanged (tested). Acceptance criteria: both values and a clear change per section - met; consistent row matching with explicit missing counterparts - met; selected comparison visible and primary range preserved - met; 'All dates' and invalid ranges give an explanatory note rather than a silent plain page. Tests: tests/test_acl110_period_compare.py 43 passed; neighbouring account-map/metric/period tests (test_account_map_columns, test_account_map_period, test_metric_columns, test_period_picker_not_capped_by_workbook, test_review_period_regressions) 67 passed. CI on the head is green (all checks pass including linux 1-3, windows, tracker-link, ACL verification; installer jobs skipped). Non-blocking nits: the earlier-period report is built synchronously inside the request pool (not warmed by the cold-start background build), so the first compare view on a cold cache costs one extra report build plus a deepcopy; the 'gone' filter for CM/ad-set rows relies on _present, so a row existing with all-zero numbers is not flagged; some user-facing wording is fine in English but code comments are Russian per project convention. Python changes require a serve.py restart (not done by the reviewer). No live checks claimed.",
+        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "recorded_at": "2026-10-20T12:43:19+00:00",
+        "issue_scopes": {
+          "18": "a030d54259816fce409f9402358307fcfcfa0d34da14577a0bca35ad39bc3e14"
+        }
       }
     },
     "stage": {
