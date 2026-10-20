@@ -45353,9 +45353,11 @@
         "worktree": "C:\\acl-batch-fold",
         "id": "2aa18fff3d7a4280bd804a114a8e6724",
         "issue": 1046,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T12:59:34+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 1047,
+        "report": "Docs-only: documents the post-batch CHANGELOG fragment fold in BATCH_INTEGRATION_ACL.md (fold after landing in main, not on the batch branch: composition admission rejects extra commits). No tests."
       }
     },
     "tasks": {
