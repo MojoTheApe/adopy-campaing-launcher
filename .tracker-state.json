@@ -52716,7 +52716,7 @@
             "session": "rh2020w-20261020"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-RH2020W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -52735,7 +52735,8 @@
         },
         "pr": 991,
         "queued_at": "2026-10-20T07:00:21+00:00",
-        "review_report": "# Returned to the author: merge conflict with main, content not reviewed\n\nPR 991 cannot be brought up to current main c61501607ce11744e45add8b0d3b314368c216c5: `gh pr update-branch` reports a merge conflict (checked 2026-10-19/20). A source review must bind the current main baseline, so this task cannot be reviewed or approved as is.\n\nThe content of this PR was NOT reviewed in this pass; this return carries no code findings.\n\nNext step for the author: merge current main into the original branch, resolve the conflict, run the affected tests, push, and hand off again for a full independent review."
+        "review_report": "# Returned to the author: merge conflict with main, content not reviewed\n\nPR 991 cannot be brought up to current main c61501607ce11744e45add8b0d3b314368c216c5: `gh pr update-branch` reports a merge conflict (checked 2026-10-19/20). A source review must bind the current main baseline, so this task cannot be reviewed or approved as is.\n\nThe content of this PR was NOT reviewed in this pass; this return carries no code findings.\n\nNext step for the author: merge current main into the original branch, resolve the conflict, run the affected tests, push, and hand off again for a full independent review.",
+        "reviewer": "Reviewer-Q2001B"
       },
       "992": {
         "implementers": [
@@ -55729,6 +55730,10 @@
       "Reviewer-R1891Z": {
         "session": "reviewer-r1891z-20261020",
         "role": "Reviewer"
+      },
+      "Reviewer-Q2001B": {
+        "session": "q2001b-20261020",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -58599,7 +58604,6 @@
       768,
       770,
       771,
-      990,
       840,
       992,
       739,
@@ -97134,6 +97138,13 @@
             "approved_at": "2026-10-20T07:39:04+00:00"
           }
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-20T07:45:02+00:00",
+        "pr": 991,
+        "lane": "64678c9d20bd4a31809296afd4563090",
+        "actor": "Reviewer-Q2001B"
       }
     ],
     "policy": {
@@ -105101,6 +105112,18 @@
         "session": "reviewer-r1891z-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T07:33:41+00:00",
+        "state": "reviewing"
+      },
+      "991": {
+        "id": "64678c9d20bd4a31809296afd4563090",
+        "pr": 991,
+        "issues": [
+          990
+        ],
+        "actor": "Reviewer-Q2001B",
+        "session": "q2001b-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-20T07:45:02+00:00",
         "state": "reviewing"
       }
     },
