@@ -60623,7 +60623,19 @@
     "review_queue": [
       880
     ],
-    "review": null,
+    "review": {
+      "id": "f9455fae63f14816a8f99386635c86bc",
+      "batch_id": "3f30b816457f42ad82eb85e2f9afa52a",
+      "pr": 1049,
+      "issues": [
+        1026
+      ],
+      "actor": "Reviewer-ACT177G",
+      "session": "review_389daa0fe6cff6b3e53c56eee4bdd46509f80512",
+      "coordinator": "Coordinator-ACT174",
+      "state": "reviewing",
+      "started_at": "2026-10-20T20:25:34+00:00"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -103704,6 +103716,23 @@
           "entered_stage": false,
           "history": []
         }
+      },
+      {
+        "event": "batch-review-acquired",
+        "at": "2026-10-20T20:25:34+00:00",
+        "review": {
+          "id": "f9455fae63f14816a8f99386635c86bc",
+          "batch_id": "3f30b816457f42ad82eb85e2f9afa52a",
+          "pr": 1049,
+          "issues": [
+            1026
+          ],
+          "actor": "Reviewer-ACT177G",
+          "session": "review_389daa0fe6cff6b3e53c56eee4bdd46509f80512",
+          "coordinator": "Coordinator-ACT174",
+          "state": "reviewing",
+          "started_at": "2026-10-20T20:25:34+00:00"
+        }
       }
     ],
     "policy": {
@@ -113192,7 +113221,7 @@
       "id": "3f30b816457f42ad82eb85e2f9afa52a",
       "actor": "Coordinator-ACT174",
       "session": "f489c98f-9d9f-42a7-aafc-5dfb361caba8",
-      "state": "assembling",
+      "state": "reviewing",
       "issues": [
         1026
       ],
@@ -113271,7 +113300,7 @@
       "branch": "codex/batch-3f30b816457f42ad82eb85e2f9afa52a",
       "intake": "c1e21f5e160346f4a0437abfe65bb821",
       "started_at": "2026-10-20T20:22:15+00:00",
-      "pr": null,
+      "pr": 1049,
       "entered_stage": false,
       "history": []
     },
