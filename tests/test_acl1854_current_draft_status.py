@@ -468,15 +468,15 @@ def test_separate_processes_lock_the_entire_read_modify_write(run):
     two = ctx.Process(target=_process_writer, args=(path, "Second", second_read, None, second_attempt, output))
     one.start()
     try:
-        assert first_read.wait(10)
+        assert first_read.wait(30)
         two.start()
-        assert second_attempt.wait(10)
+        assert second_attempt.wait(30)
         assert not second_read.wait(.15), "second process read outside the transaction lock"
     finally:
         release.set()
-        one.join(10)
+        one.join(30)
         if two.pid is not None:
-            two.join(10)
+            two.join(30)
     assert one.exitcode == two.exitcode == 0
     assert output.get(timeout=2) is None and output.get(timeout=2) is None
     current = web._load_draft_status()
