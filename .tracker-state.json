@@ -46026,20 +46026,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T12:56:11+00:00",
         "from_status": "status:todo"
-      },
-      "184": {
-        "actor": "Worker-RF184",
-        "session": "rf184-20261020",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1184-hand-open-message",
-        "worktree": "C:\\acl-rf-184",
-        "id": "04fa0eecd18a456eb3759b5513da689a",
-        "issue": 184,
-        "state": "handoff",
-        "started_at": "2026-10-20T14:11:31+00:00",
-        "from_status": "status:todo",
-        "pr": 937,
-        "report": "Pure refresh: merged main 259ae7f1 (merge commit a0ff853e), no conflicts. Worktree is detached at the branch head because the branch is checked out in C:\\acl-1184-hand-open (untouched). Tests: test_acl1184_hand_open_message, test_acl1812_warm_sessions, test_publish_stops_when_multilogin_is_not_running, test_acl1680_one_config_dir - 122 passed."
       }
     },
     "tasks": {
@@ -54413,25 +54399,25 @@
             "session": "rf184-20261020"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RF184",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-L2184",
-          "session": "run_l2_184",
+          "actor": "Worker-RF184",
+          "session": "rf184-20261020",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1184-hand-open-message",
-          "worktree": "C:\\acl-1184",
-          "id": "539f693d21ba4660934d0da93ad7c306",
+          "worktree": "C:\\acl-rf-184",
+          "id": "04fa0eecd18a456eb3759b5513da689a",
           "issue": 184,
           "state": "handoff",
-          "started_at": "2026-10-20T09:01:22+00:00",
+          "started_at": "2026-10-20T14:11:31+00:00",
           "from_status": "status:todo",
           "pr": 937,
-          "report": "Review B1 fixed: the test's live Multilogin profile id replaced by synthetic \"profile-1184\"; acl_scan_secrets.py clean; affected tests 100 passed; branch up to date with main. The old id stays in earlier branch commits, so squash on merge."
+          "report": "Pure refresh: merged main 259ae7f1 (merge commit a0ff853e), no conflicts. Worktree is detached at the branch head because the branch is checked out in C:\\acl-1184-hand-open (untouched). Tests: test_acl1184_hand_open_message, test_acl1812_warm_sessions, test_publish_stops_when_multilogin_is_not_running, test_acl1680_one_config_dir - 122 passed."
         },
         "pr": 937,
-        "queued_at": "2026-10-20T09:05:24+00:00",
+        "queued_at": "2026-10-20T14:15:09+00:00",
         "review_report": "Main moved to 259ae7f1 (batch #1034: ACL-602, 1202, 1680, 1401, 341). Pure refresh: merge current main (merge commit), re-run affected tests, re-handoff, fresh independent review. Independent trial merge already shows it merges cleanly and its tests pass on the merged tree.",
         "return_operation": {
           "id": "e6d166aa960c4bd4920af40f1b092332",
@@ -60431,7 +60417,8 @@
       771,
       920,
       836,
-      855
+      855,
+      184
     ],
     "review": null,
     "history": [
@@ -102167,6 +102154,13 @@
         "pr": 1041,
         "lane": "7f0832547fd94b108d587c92d8926c4d",
         "actor": "Reviewer-R2037V"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T14:15:09+00:00",
+        "issue": 184,
+        "pr": 937,
+        "actor": "Worker-RF184"
       }
     ],
     "policy": {
