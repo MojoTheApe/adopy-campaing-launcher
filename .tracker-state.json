@@ -53122,7 +53122,7 @@
             "session": "run_s1019_897"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-S1019897",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -53140,7 +53140,8 @@
           "report": "ACL-1897: Automatic Page now takes the first Page of promote_pages (one or several); zero Pages still refuses; chosen/map Page must be among promote_pages. page_for (Instant Forms) follows. Tests: 5 touched files in full, 349 passed. Opus review: no HIGH/MEDIUM; two LOWs noted in PR. No live Meta/Multilogin calls."
         },
         "pr": 1025,
-        "queued_at": "2026-10-19T21:42:41+00:00"
+        "queued_at": "2026-10-19T21:42:41+00:00",
+        "reviewer": "Reviewer-R1897Z"
       },
       "1026": {
         "implementers": [
@@ -55703,6 +55704,10 @@
       "Worker-B1020C": {
         "session": "25925e36-bi1020c",
         "role": "Worker"
+      },
+      "Reviewer-R1897Z": {
+        "session": "reviewer-r1897z-20261020",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -58569,7 +58574,6 @@
     },
     "review_queue": [
       822,
-      897,
       767,
       768,
       770,
@@ -97002,6 +97006,13 @@
         "issue": 13,
         "claim": "25501b7c896c4f529b9e45ffc251505d",
         "actor": "Worker-B1020C"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-20T07:17:09+00:00",
+        "pr": 1025,
+        "lane": "76936c3ee7694dd4ab267dc9a8645455",
+        "actor": "Reviewer-R1897Z"
       }
     ],
     "policy": {
@@ -104913,6 +104924,18 @@
         "session": "reviewer-r1920z-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T07:05:44+00:00",
+        "state": "reviewing"
+      },
+      "1025": {
+        "id": "76936c3ee7694dd4ab267dc9a8645455",
+        "pr": 1025,
+        "issues": [
+          897
+        ],
+        "actor": "Reviewer-R1897Z",
+        "session": "reviewer-r1897z-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-20T07:17:09+00:00",
         "state": "reviewing"
       }
     },
