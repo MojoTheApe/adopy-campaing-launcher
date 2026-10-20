@@ -106722,7 +106722,9 @@
         "session": "q2001d-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T10:04:42+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "Returned again (Reviewer-Q2001D), head 20af245d. Delta checked: the tzdata test, the two test_upload_without_workbook tests and the two 1768 browser tests are fixed, and the #832 merge resolution is sound. One blocking CI failure remains, reproduced locally: tests/test_rpa_job_start_is_measured.py::test_the_publisher_measures_the_queue_and_the_attach fails with AttributeError: '_Draft' object has no attribute 'ad_sets' at src/fb_ads_rpa/rpa_publisher.py:154. The new loop `for d in drafts: if len(d.ad_sets) > 1` breaks an existing test whose stub draft has no ad_sets (linux shards 3 on 3.11 and 3.13). Fix: use len(getattr(d, \"ad_sets\", None) or []) or give the test stub ad_sets, then rerun CI. Content otherwise approved; approval waits on #830 being Approved.",
+        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
