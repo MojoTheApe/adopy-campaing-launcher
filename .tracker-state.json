@@ -44858,20 +44858,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T06:37:45+00:00",
         "from_status": "status:backlog"
-      },
-      "805": {
-        "actor": "Worker-RH2020W",
-        "session": "rh2020w-20261020",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1805-rules-before-write",
-        "worktree": "C:\\rh20-805",
-        "id": "b66e6b48d8094fb8affb2fa7cf4cc08f",
-        "issue": 805,
-        "state": "handoff",
-        "started_at": "2026-10-20T06:52:42+00:00",
-        "from_status": "status:todo",
-        "pr": 1019,
-        "report": "Re-handoff without code change. The 2026-10-20 return ('merge conflict with main, content not reviewed') was a false positive: head aefcaee6 already contains current main c6150160 and merges cleanly (git merge-tree). Content needs a full independent review."
       }
     },
     "tasks": {
@@ -52955,25 +52941,25 @@
             "session": "rh2020w-20261020"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-RH2020W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-S1019805",
-          "session": "run_s1019_805",
+          "actor": "Worker-RH2020W",
+          "session": "rh2020w-20261020",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1805-rules-before-write",
-          "worktree": "C:\\acl-1805",
-          "id": "27d37ef9b03840b6922caf58ab943d8c",
+          "worktree": "C:\\rh20-805",
+          "id": "b66e6b48d8094fb8affb2fa7cf4cc08f",
           "issue": 805,
           "state": "handoff",
-          "started_at": "2026-10-19T17:48:11+00:00",
+          "started_at": "2026-10-20T06:52:42+00:00",
           "from_status": "status:todo",
           "pr": 1019,
-          "report": "ACL-1805: Meta rules registry runs in the API creator preflight before the first POST (exact payload values, also on rerun and dry run; fails open with a log). Meta refusals on the API path render through the ACL-1786 catalog in the dashboard problem list (message + action; unknown code = raw text); API status/readback panel kept. Codes 1404078/2859015/1404163 (code or subcode) now stop the client. Tests: tests/test_acl1805_rules_before_write.py + related 1761/1775/1781/1786 files pass locally; full suite in CI. Opus review done, HIGH/MEDIUM fixed. No live calls."
+          "report": "Re-handoff without code change. The 2026-10-20 return ('merge conflict with main, content not reviewed') was a false positive: head aefcaee6 already contains current main c6150160 and merges cleanly (git merge-tree). Content needs a full independent review."
         },
         "pr": 1019,
-        "queued_at": "2026-10-19T18:21:23+00:00",
+        "queued_at": "2026-10-20T06:55:22+00:00",
         "review_report": "# Returned to the author: merge conflict with main, content not reviewed\n\nPR 1019 cannot be brought up to current main c61501607ce11744e45add8b0d3b314368c216c5: `gh pr update-branch` reports a merge conflict (checked 2026-10-19/20). A source review must bind the current main baseline, so this task cannot be reviewed or approved as is.\n\nThe content of this PR was NOT reviewed in this pass; this return carries no code findings.\n\nNext step for the author: merge current main into the original branch, resolve the conflict, run the affected tests, push, and hand off again for a full independent review."
       },
       "807": {
@@ -58543,7 +58529,8 @@
       768,
       770,
       771,
-      891
+      891,
+      805
     ],
     "review": null,
     "history": [
@@ -96835,6 +96822,13 @@
         "at": "2026-10-20T06:52:42+00:00",
         "issue": 805,
         "claim": "b66e6b48d8094fb8affb2fa7cf4cc08f",
+        "actor": "Worker-RH2020W"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T06:55:22+00:00",
+        "issue": 805,
+        "pr": 1019,
         "actor": "Worker-RH2020W"
       }
     ],
