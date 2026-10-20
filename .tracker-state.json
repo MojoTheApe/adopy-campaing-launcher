@@ -53917,7 +53917,7 @@
             "session": "run_l3_1038"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-L31038",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -53935,7 +53935,8 @@
           "report": "ACL-2038 handoff (Worker-L31038): PR #1043, branch work/acl-2038-connect-team-library. Default repo/branch, token-only setup, dashboard \"Connect team library\" (masked field, one authenticated read, machine settings, add-missing seed with counts), Disconnect. Token never logged/returned/in errors or URLs.\nVerification: new tests/test_acl2038_connect_team_library.py + test_team_library, test_targeting_integration, ad-text and header tests pass locally with a fake library; no real token or acl-lib writes. Independent Opus security review: no leak path; HIGH/MEDIUM functional findings fixed. Known: no file lock in update_machine_env; disconnect affects the dashboard process only. No live run."
         },
         "pr": 1043,
-        "queued_at": "2026-10-20T12:32:24+00:00"
+        "queued_at": "2026-10-20T12:32:24+00:00",
+        "reviewer": "Reviewer-R2038V"
       },
       "1040": {
         "implementers": [
@@ -56727,6 +56728,10 @@
       "Worker-T1020710": {
         "session": "t1020-710",
         "role": "Worker"
+      },
+      "Reviewer-R2038V": {
+        "session": "reviewer-r2038v-20261020",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -59597,7 +59602,6 @@
       841,
       1037,
       838,
-      1038,
       1040,
       880,
       1046
@@ -100677,6 +100681,13 @@
             "approved_at": "2026-10-20T13:05:36+00:00"
           }
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-20T13:07:10+00:00",
+        "pr": 1043,
+        "lane": "c9ea988a0bbe4e10b0e9568d2ea9b570",
+        "actor": "Reviewer-R2038V"
       }
     ],
     "policy": {
@@ -109789,6 +109800,18 @@
         "session": "reviewer-r1309v-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T12:47:10+00:00",
+        "state": "reviewing"
+      },
+      "1043": {
+        "id": "c9ea988a0bbe4e10b0e9568d2ea9b570",
+        "pr": 1043,
+        "issues": [
+          1038
+        ],
+        "actor": "Reviewer-R2038V",
+        "session": "reviewer-r2038v-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-20T13:07:10+00:00",
         "state": "reviewing"
       }
     },
