@@ -44846,7 +44846,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "13": {
+        "actor": "Worker-B1020C",
+        "session": "25925e36-bi1020c",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-103-bi-mysql-source",
+        "worktree": "C:\\acl-bi-source",
+        "id": "25501b7c896c4f529b9e45ffc251505d",
+        "issue": 13,
+        "state": "implementing",
+        "started_at": "2026-10-20T07:12:31+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -51171,10 +51184,14 @@
           {
             "actor": "Worker-B1020A",
             "session": "25925e36-bi1020"
+          },
+          {
+            "actor": "Worker-B1020C",
+            "session": "25925e36-bi1020c"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-B1020A",
+        "state": "implementing",
+        "worker": "Worker-B1020C",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-B1020A",
@@ -55682,6 +55699,10 @@
       "Reviewer-R1920Z": {
         "session": "reviewer-r1920z-20261020",
         "role": "Reviewer"
+      },
+      "Worker-B1020C": {
+        "session": "25925e36-bi1020c",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -96974,6 +96995,13 @@
         "issue": 739,
         "pr": 740,
         "actor": "Worker-RH2020W"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T07:12:31+00:00",
+        "issue": 13,
+        "claim": "25501b7c896c4f529b9e45ffc251505d",
+        "actor": "Worker-B1020C"
       }
     ],
     "policy": {
