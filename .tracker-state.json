@@ -54738,7 +54738,7 @@
             "session": "mlx60-run-20261020"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-MLX60",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -54756,7 +54756,8 @@
           "report": "Clean transplant of bbeb26be from the TEST9095 build onto main. Pre-handoff review (Opus) findings fixed in a00c496a: timeouts are not retried; 5xx-on-old-address behaviour documented; ids fixed. Tests: tests/test_the_api_stop_is_asked_first.py 16 passed plus 10 launcher-related files earlier (342 passed)."
         },
         "pr": 1042,
-        "queued_at": "2026-10-20T12:51:11+00:00"
+        "queued_at": "2026-10-20T12:51:11+00:00",
+        "reviewer": "Reviewer-SR1020"
       },
       "1039": {
         "implementers": [
@@ -60463,7 +60464,6 @@
       }
     },
     "review_queue": [
-      1040,
       880,
       1046,
       774,
@@ -102549,6 +102549,13 @@
         "pr": 837,
         "lane": "a04ec64c02944f71ac88bd6d4cdb240c",
         "actor": "Reviewer-RR1020"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-20T14:46:59+00:00",
+        "pr": 1042,
+        "lane": "96c0e181216842a9bdc4f80c008f7e2e",
+        "actor": "Reviewer-SR1020"
       }
     ],
     "policy": {
@@ -111723,6 +111730,18 @@
         "session": "rr1020-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T14:44:54+00:00",
+        "state": "reviewing"
+      },
+      "1042": {
+        "id": "96c0e181216842a9bdc4f80c008f7e2e",
+        "pr": 1042,
+        "issues": [
+          1040
+        ],
+        "actor": "Reviewer-SR1020",
+        "session": "sr1020-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-20T14:46:59+00:00",
         "state": "reviewing"
       }
     },
