@@ -45687,7 +45687,7 @@
             "session": "run_b1433t_1001"
           }
         ],
-        "state": "stopped",
+        "state": "archiving",
         "worker": "Worker-B1433T",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
