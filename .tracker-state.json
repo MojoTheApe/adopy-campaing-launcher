@@ -45194,6 +45194,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
+      },
+      "854": {
+        "actor": "Worker-L1854",
+        "session": "run_l1_854",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "codex/acl-1854-current-draft-status",
+        "worktree": "C:\\acl-1854-wt",
+        "id": "9a51ebf3b26f48dea6fc57ff99920e6e",
+        "issue": 854,
+        "state": "implementing",
+        "started_at": "2026-10-20T11:40:35+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -50302,9 +50314,13 @@
           {
             "actor": "Worker-L1854",
             "session": "run_l1_854"
+          },
+          {
+            "actor": "Worker-L1854",
+            "session": "run_l1_854"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-L1854",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -50334,8 +50350,7 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578020+00:00",
           "remote_process_stopped_verified": false
-        },
-        "reviewer": "Reviewer-R1854Z"
+        }
       },
       "868": {
         "implementers": [
@@ -99777,6 +99792,13 @@
             "approved_at": "2026-10-20T11:37:14+00:00"
           }
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T11:40:35+00:00",
+        "issue": 854,
+        "claim": "9a51ebf3b26f48dea6fc57ff99920e6e",
+        "actor": "Worker-L1854"
       }
     ],
     "policy": {
