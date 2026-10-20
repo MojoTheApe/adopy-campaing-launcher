@@ -45057,20 +45057,6 @@
   },
   "execution": {
     "claims": {
-      "739": {
-        "actor": "Worker-L1739",
-        "session": "run_l1_739",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1739-doc124-frozen",
-        "worktree": "C:\\acl-1739-doc124-frozen",
-        "id": "bb831a247ec14c33900a663b20fe7219",
-        "issue": 739,
-        "state": "handoff",
-        "started_at": "2026-10-20T09:25:52+00:00",
-        "from_status": "status:todo",
-        "pr": 740,
-        "report": "Review fix (ACL-1739, 2026-10-20): the two failing tests of test_the_objective_wait_after_a_wake are fixed in code - the objective-wait loop (which already requires several misses in a row) runs _tab_frozen without the extra FROZEN_CONFIRM_S probe via a thread-local context; all other callers keep the confirm probe. All 17 test files that touch _tab_frozen/_page_responsive passed. No live runs."
-      },
       "230": {
         "actor": "Worker-L5230",
         "session": "run_l5_230",
@@ -48165,25 +48151,25 @@
             "session": "run_l1_739"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-L1739",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-RH2020W",
-          "session": "rh2020w-20261020",
+          "actor": "Worker-L1739",
+          "session": "run_l1_739",
           "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1739-doc124-frozen",
-          "worktree": "C:\\rh20-739",
-          "id": "79fdfb246ee943769a6c3b9426fb04ee",
+          "worktree": "C:\\acl-1739-doc124-frozen",
+          "id": "bb831a247ec14c33900a663b20fe7219",
           "issue": 739,
           "state": "handoff",
-          "started_at": "2026-10-20T07:09:21+00:00",
+          "started_at": "2026-10-20T09:25:52+00:00",
           "from_status": "status:todo",
           "pr": 740,
-          "report": "Re-handoff without code change. The 2026-10-20 return ('merge conflict with main, content not reviewed') was a false positive: head 0cb4dfc0 already contains current main c6150160 and merges cleanly (git merge-tree). Content needs a full independent review."
+          "report": "Review fix (ACL-1739, 2026-10-20): the two failing tests of test_the_objective_wait_after_a_wake are fixed in code - the objective-wait loop (which already requires several misses in a row) runs _tab_frozen without the extra FROZEN_CONFIRM_S probe via a thread-local context; all other callers keep the confirm probe. All 17 test files that touch _tab_frozen/_page_responsive passed. No live runs."
         },
         "pr": 740,
-        "queued_at": "2026-10-20T07:11:01+00:00",
+        "queued_at": "2026-10-20T10:42:43+00:00",
         "review_report": "# Returned: ACL-1739 / PR 740, two existing tests fail with the new confirm probe\n\nReviewed head 0cb4dfc0. It contains current main, and the change itself is the same as the one approved on 15.10 (the 13-line `_tab_frozen` change in src/fb_ads_rpa/meta_dom.py, plus CHANGELOG and tests). But the PR is red in CI and I reproduced the failure locally, so it is not flaky.\n\nBlocking: the extra `FROZEN_CONFIRM_S` probe breaks two tests in tests/test_the_objective_wait_after_a_wake.py. The new tests (test_a_busy_tab_is_not_a_frozen_episode, test_a_frozen_tab_is_never_waited_on) pass, 14 passed. That file is not in the touched-tests list, so it was not run before handoff.\n- test_a_tab_that_does_not_answer_is_handed_back: AssertionError `(1035.0 - 1000.0) < 20`. The fake clock now advances by an extra 10 s confirm probe before the tab is handed back.\n- test_a_busy_tab_that_answers_between_long_tasks_is_not_unresponsive: `assert out[\"frozen\"] >= md.OBJECTIVE_FROZEN_POLLS` fails with 0 >= 2. The fake `_page_responsive` alternates fail and pass by call count, so the confirm probe now consumes the \"pass\" and the miss is no longer counted.\n- CI shows the same two failures in \"linux tests (3.13, 1)\", and \"ACL verification\" is red because of it.\n\nNeeded: decide whether `_wait_objective_dialog` should keep going through `_tab_frozen` with the confirm probe. Either adjust the code so the objective-wait path keeps its earlier timing (for example, only confirm outside that path), or update those two tests so they model the confirm probe, with a justification. Then run tests/test_the_objective_wait_after_a_wake.py plus the two 1739 test files and push a refresh. Please also grep for other tests that call `_tab_frozen` or `_page_responsive` with call-count fakes.\n\nEverything else (scope vs issue, English telemetry, budget state unchanged, one Tracker issues line, CHANGELOG present) is fine. Not claimed: no live checks.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -59091,7 +59077,8 @@
       18,
       71,
       770,
-      681
+      681,
+      739
     ],
     "review": null,
     "history": [
@@ -98842,6 +98829,13 @@
         "issue": 805,
         "claim": "fbe8480ea7484cf9a37dbe6b7c0001c6",
         "actor": "Worker-L1805"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T10:42:43+00:00",
+        "issue": 739,
+        "pr": 740,
+        "actor": "Worker-L1739"
       }
     ],
     "policy": {
