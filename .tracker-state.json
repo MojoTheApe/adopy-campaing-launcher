@@ -108362,7 +108362,51 @@
         "session": "reviewer-r1853w-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T10:46:01+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 853,
+          "pr": 863,
+          "branch": "codex/acl-1853-profile-process-lease",
+          "head_sha": "ebf87607856f001d1dcbb06c5802d19e17813e7d",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "48bbd0ada92f4fbd4f162a258be49f4b8cd417a35330115cf8bcbca2bf418ab5",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-R1853W",
+            "review_session": "reviewer-r1853w-20261020",
+            "execution_lane": "2c146c2c081641d090130feef2d08f50",
+            "implementer": "Worker-L2853",
+            "head_sha": "ebf87607856f001d1dcbb06c5802d19e17813e7d",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "tree_sha": "e07e0d0d0744fb8d7eb7254e9fc0d8b10cb8a24f",
+            "issues": [
+              853
+            ],
+            "report": "Independent re-review of PR #863 at head ebf87607 (base main c6150160) after a merge-conflict return. The change adds an OS-backed lease per physical Multilogin UUID (src/fb_ads_rpa/profile_lease.py): in-process RLock plus machine_file_lock(timeout=0) across processes of the same OS user, reentrant, bounded and cancellable waits (reads 120 s, publish jobs 30 min with Stop), lock files in ~/.acl-profile-leases released by the OS on process death, canonical UUID keys with a separate Dolphin namespace, and profile-match checks before open/attach/close; it is wired into Read Spend, country split, RPA operations/publisher, warm adoption and publish_jobs, where a lock refusal becomes an ordinary finished error and frees the publish slot. The earlier content review at 8c9470d6 found no blocking problems. The conflict was only in docs/system/CHANGELOG.md; the merge keeps both the ACL-1853 entry and the new main entries (ACL-1924, ACL-1902). Delta since 8c9470d6 in the PR's own files is only the main merge (a 3-line ACL-1902 published_as addition in publish_jobs.py); publish_jobs.py still has cancelled= in _publish_serial and the ProfileLeaseError catch. Tests: test_profile_process_lease, test_acl1853_read_wait, test_account_spend (62 passed in isolation), test_acl1603_stable_slots, test_acl1812_warm_sessions, test_one_button_reads_what_is_needed and test_publish_safety_contract pass except 6 HTTP-route tests returning 500 from the old Starlette in the local venv, which fail identically on bare work/main (environment, not the PR); one Playwright set_content timeout in test_account_spend under load passed on rerun. CI on the head is fully green (linux 3.11/3.13, windows 3.13, ACL verification, tracker-link). Nit: none blocking; the Graph API reads and warm lifecycle still take no lease across a session, tracked as follow-up #862. No live checks claimed.",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "recorded_at": "2026-10-20T11:31:19+00:00",
+            "issue_scopes": {
+              "853": "48bbd0ada92f4fbd4f162a258be49f4b8cd417a35330115cf8bcbca2bf418ab5"
+            }
+          },
+          "lane": {
+            "id": "2c146c2c081641d090130feef2d08f50",
+            "pr": 863,
+            "issues": [
+              853
+            ],
+            "actor": "Reviewer-R1853W",
+            "session": "reviewer-r1853w-20261020",
+            "coordinator": "Coordinator-M1011A",
+            "started_at": "2026-10-20T10:46:01+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-20T11:32:13+00:00"
+        }
       },
       "740": {
         "id": "8371c69632e34928aa1888a732eba616",
