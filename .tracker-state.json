@@ -52034,7 +52034,7 @@
             "session": "p1138c-20261020"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-P1138C",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -52064,7 +52064,8 @@
           "actor": "Coordinator-M1011A",
           "session": "coord-m1011a-20261015",
           "report": "PR #947 (ACL-1138) no longer merges into current main 259ae7f1 (after batch #1034): conflicts in docs/system/PROJECT.md, src/fb_ads_rpa/profile_trouble.py, src/web/templates/report.html. Return to the author for a merge of current main, conflict resolution, checks, handoff and fresh independent approval. Owner wants it in the next batch for the buyer release."
-        }
+        },
+        "reviewer": "Reviewer-SR1020"
       },
       "785": {
         "implementers": [],
@@ -57097,6 +57098,10 @@
       "Reviewer-R1845V": {
         "session": "reviewer-r1845v-20261020",
         "role": "Reviewer"
+      },
+      "Reviewer-SR1020": {
+        "session": "sr1020-20261020",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -59984,8 +59989,7 @@
       1040,
       880,
       1046,
-      774,
-      138
+      774
     ],
     "review": null,
     "history": [
@@ -101522,6 +101526,13 @@
         "pr": 850,
         "lane": "766eb6ba60734c0ca9270121d9c239e3",
         "actor": "Reviewer-R1845V"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-20T13:49:44+00:00",
+        "pr": 947,
+        "lane": "50a40a368bbb437a948abac8e4541cf1",
+        "actor": "Reviewer-SR1020"
       }
     ],
     "policy": {
@@ -110652,6 +110663,18 @@
         "session": "reviewer-r1845v-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T13:48:54+00:00",
+        "state": "reviewing"
+      },
+      "947": {
+        "id": "50a40a368bbb437a948abac8e4541cf1",
+        "pr": 947,
+        "issues": [
+          138
+        ],
+        "actor": "Reviewer-SR1020",
+        "session": "sr1020-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-20T13:49:44+00:00",
         "state": "reviewing"
       }
     },
