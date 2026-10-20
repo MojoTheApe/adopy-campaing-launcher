@@ -5094,27 +5094,6 @@
           "379": "192bf5b868df45dee84613055bbdb740b50d0a0fbee228106e914f5420f7d4fa"
         }
       },
-      "1027": {
-        "kind": "independent-review",
-        "verdict": "approved",
-        "implementer": "Worker-ACT174A",
-        "reviewer": "Reviewer-ACT174R",
-        "head_sha": "ca9a650db33dcae8f32976cf7fdd900b72e28dd9",
-        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-        "tree_sha": "8c9589638cf35df29172a1ea0cd333d75858f2f4",
-        "execution_lane": "653626d99fe24572a85ee6f0036ab108",
-        "review_session": "bab3ffa025194f6295928e0ce3aca6cc",
-        "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1027#issuecomment-6279820016",
-        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "issues": [
-          1026
-        ],
-        "recorded_at": "2026-10-19T23:45:29+00:00",
-        "issue_scopes": {
-          "1026": "1bea4d58e45f845fc670218b36d74f6295f360fff1dd234699f996c52f113532"
-        }
-      },
       "1029": {
         "kind": "independent-review",
         "verdict": "approved",
@@ -112836,7 +112815,9 @@
         "session": "review_389daa0fe6cff6b3e53c56eee4bdd46509f80512",
         "coordinator": "Coordinator-ACT174",
         "started_at": "2026-10-20T08:55:10+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "# ACL-2026 / PR1027 \u2014 independent return for cumulative author revision\n\nVerdict: changes requested. This is a genuine own source-review return, not approval of the old candidate or any future revision.\n\nI am the distinct non-implementing Reviewer-ACT177G run that acquired the actual PR1027 source-review lane on 2026-10-20. Fresh native readback matches my saved actor, private session and claim exactly. I resumed only my own activity, read the entire current Issue1026 with all original requirements, owner amendments and historical handoffs, and inspected the ACL guarded-operator/selected workflow instructions. The lane was deferred with a recorded stop; it was never released by heartbeat expiry. Foreign PR820 and all other ownership remain untouched.\n\nThe existing source head is 8ce4862088834ff2c1233b911f2f4330c02cdb79, tree02e34e3f02bad33082ea971d00845ee96e945377. Its previous baseline was c61501607ce11744e45add8b0d3b314368c216c5. The owner has now explicitly requested one cumulative ACL update, as recorded in the latest full Issue amendment. The old candidate only carries the earlier Master1.6.0/Tracker3.8.0 support and therefore requires author revision before current whole-scope review. Earlier ca9a650 approval and all reports remain historical; none approves this new scope.\n\nRequired author revision:\n\n- Resume the original task/branch under a genuine fresh Worker claim before editing. Reconcile actual current ACL main259ae7f and preserve its unrelated completed product changes.\n- Use the maintained three-way upgrade and genuine pristine baseline to adopt actual published Master1.7.2 at4f148cbbbc2c9c65a7fdebba9b37551f91566e04 with compatible Tracker3.9.2 at3d32586d72e4621f70d56d35f1e199a19fa13b00. Preserve the complete canonical closure/provenance and intentionally resolve local instruction overlaps.\n- Cover accumulated truthful activity/history, process/product separation, phase-preserving Pause support, Ready for integration in Delivery, genuine Needs fixes/Fixing and fresh independent review, plus continuation of the owner-selected task set within actual capacity/admission and existing manual boundaries.\n- Preserve descriptor2 and all non-pin descriptor fields, actual config/layout, package target/checks, execution3 and5/5/5 limits, process1, Stage disabled with permanent stage history, absent optional context/completion/retry/CI policies,71 aliases/+1000 IDs, historical receipts and real owners. No unrelated runtime/build/install/update/release change or global skill installation.\n- Establish exact immutable full-diff canonical process-support proof and genuine independent typed product-isolation evidence. Retain ordinary approval-only source review, frozen batch, independent combined review, applicable CI and supported exact admitted-main process completion. This return grants no source approval or main admission and creates no product delivery request or Windows publication.\n- Pins supply Pause support only. Inspect actual service/every-writer/adapter/CI/recovery readiness and live ownership before considering outer8. Only a genuinely compatible installed set and idle supported owned maintenance may activate it. Preserve active/unknown foreign owners; no manufactured idleness, direct state rewrite, old-writer assumption or automatic restart. If activation is blocked, record the concrete unfinished boundary honestly.\n\nThe original author must self-check and provide a fresh durable handoff for the complete cumulative scope/head/base/tree. A genuine independent source review and later distinct combined-content review remain required. Shared upstream releases and reader deployment are prerequisites, not proof of ACL source adoption or live Pause activation.\n\nThis report is supplied to the supported execution review-return command under my actual existing identity/session/claim. My activity is stopped before the return releases my own source lane. No source files, foreign claims, policy, installer or application are changed by this reviewer.",
+        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
