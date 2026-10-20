@@ -45665,20 +45665,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T12:56:11+00:00",
         "from_status": "status:todo"
-      },
-      "774": {
-        "actor": "Worker-S1020774",
-        "session": "run_s1020_774",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1774-texts-vertical",
-        "worktree": "C:\\acl-1774",
-        "id": "68374b5be0854219a86b0da09173ad0c",
-        "issue": 774,
-        "state": "handoff",
-        "started_at": "2026-10-20T13:37:18+00:00",
-        "from_status": "status:todo",
-        "pr": 834,
-        "report": "ACL-1774: up to 5 primary texts as Dynamic Creative (is_dynamic_creative on the ad set, asset_feed_spec without rules, one ad per ad set), Stories/Reels vertical file with one text via two labelled files and two rules. Both write-policy layers and pre-flight rules carry the limits; read-back compares texts as a multiset and the dynamic flag both ways.\n\nLive spike (Doc120, 2026-10-20, owner-authorized, one attempt, PAUSED only): Meta accepted the Dynamic Creative route; 45 of 46 read-back checks match. The earlier 2026-10-14 refusal (100/1885878) was for 3 bodies plus placement rules. One unrelated mismatch: ad set languages expected [1002], got [7, 23] (separate task). Ads Manager eye check not done (separate Live check).\n\nReview: Opus read-only, no blockers; major findings fixed. Open minor items: text dedup by body only (enrich_draft), field numbering after an empty slot, creative name independent of texts 2-5. Branch contains ACL-1767 history (PR #830 in review); merged with work/main 259ae7f1. Tests: affected files only (1774, 1819, 1761, 1767, 1775, second primary text, creative pairing)."
       }
     },
     "tasks": {
@@ -50194,28 +50180,31 @@
             "session": "run_s1020_774"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-S1020774",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-WX1012A",
-          "session": "work_wx1012a_20261012",
-          "coordinator": "Coordinator-CX1012A",
+          "actor": "Worker-S1020774",
+          "session": "run_s1020_774",
+          "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1774-texts-vertical",
-          "worktree": "C:\\wk-1774",
-          "id": "8655e3ed36cb4151948eba056bb09db3",
+          "worktree": "C:\\acl-1774",
+          "id": "68374b5be0854219a86b0da09173ad0c",
           "issue": 774,
-          "state": "stopping",
-          "started_at": "2026-10-12T16:49:09+00:00",
-          "from_status": "status:idea",
-          "report": "### Recovery handoff \u2014 2026-10-12\n\nThe owner requested preservation and continuation after the previous Claude Worker stopped when its token allocation was exhausted. The stopped claim was transferred through the supported Tracker takeover to a real replacement Worker; the original branch and existing work were retained. The recovery verified that all 11 source files matched their preserved SHA256 manifest and committed their existing contents unchanged.\n\nDraft source PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/834\n\nRecovery commit: `d6c479f33aefec19b0dfd03ad25b89150091aa28` on `codex/acl-1774-texts-vertical`, based on `ecd525f20432a18b7d8f164e9d449f36ae2c9f88`.\n\nImplemented WIP: draft/form fields for additional texts and vertical media, asset-feed plan/upload/readback, media labels and ratio checks, both Python and in-page write-policy allowlists, and preliminary preflight/template wiring. No completion, independent approval, stage entry, merge, package release or live verification is claimed.\n\nRemaining work before ready review:\n\n- Complete controls for texts 3\u20135 and vertical files, persistence/restoration/copy behavior, and RPA disabled-with-reason behavior. The recovered template only adds preliminary rule/error-routing support for these controls.\n- Verify and finish reuse of `creative_pairing` for square + vertical pairs.\n- Add feature-specific regression coverage for text limits and deduplication, both policy layers, retry/idempotency, multiset readback and placement binding, UI persistence, and old-draft/RPA compatibility.\n- Run the required Meta capability spike with text optimizations OFF and manual placements after explicit owner authorization of the test-dashboard operation.\n- Complete the original 9095 PAUSED-ad acceptance with multiple texts and Feed/Story media, verify Ads Manager presentation and readback. Asset feeds with Instant Forms currently refuse explicitly and are unverified.\n- Resolve inherited ACL-1760/1761/1769/1775/1819/1767 source history relative to main before approval; the preservation draft does not approve those dependencies.\n\nVerification: 414 existing affected offline tests passed (93 warnings, 66.64 seconds): `test_acl1761_api_create.py`, `test_acl1756_fb_api.py`, `test_acl1767_audience_fields.py`, `test_acl1775_instant_forms.py`, and `test_creative_pairing.py`. The test configuration was isolated and external library settings empty. Secret scanner and `git diff --check` passed. No full suite, browser/live-profile test or advertising write was performed. New feature-specific regression tests remain to be written.\n\nPreservation is complete; feature implementation remains unfinished. The Worker records a supported stop rather than moving this draft into Review or declaring it complete."
+          "state": "handoff",
+          "started_at": "2026-10-20T13:37:18+00:00",
+          "from_status": "status:todo",
+          "pr": 834,
+          "report": "ACL-1774: up to 5 primary texts as Dynamic Creative (is_dynamic_creative on the ad set, asset_feed_spec without rules, one ad per ad set), Stories/Reels vertical file with one text via two labelled files and two rules. Both write-policy layers and pre-flight rules carry the limits; read-back compares texts as a multiset and the dynamic flag both ways.\n\nLive spike (Doc120, 2026-10-20, owner-authorized, one attempt, PAUSED only): Meta accepted the Dynamic Creative route; 45 of 46 read-back checks match. The earlier 2026-10-14 refusal (100/1885878) was for 3 bodies plus placement rules. One unrelated mismatch: ad set languages expected [1002], got [7, 23] (separate task). Ads Manager eye check not done (separate Live check).\n\nReview: Opus read-only, no blockers; major findings fixed. Open minor items: text dedup by body only (enrich_draft), field numbering after an empty slot, creative name independent of texts 2-5. Branch contains ACL-1767 history (PR #830 in review); merged with work/main 259ae7f1. Tests: affected files only (1774, 1819, 1761, 1767, 1775, second primary text, creative pairing)."
         },
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578001+00:00",
           "remote_process_stopped_verified": false
-        }
+        },
+        "pr": 834,
+        "queued_at": "2026-10-20T13:40:54+00:00"
       },
       "335": {
         "implementers": [
@@ -59985,7 +59974,8 @@
       838,
       1040,
       880,
-      1046
+      1046,
+      774
     ],
     "review": null,
     "history": [
@@ -101451,6 +101441,13 @@
           "report": "PR #947 (ACL-1138) no longer merges into current main 259ae7f1 (after batch #1034): conflicts in docs/system/PROJECT.md, src/fb_ads_rpa/profile_trouble.py, src/web/templates/report.html. Return to the author for a merge of current main, conflict resolution, checks, handoff and fresh independent approval. Owner wants it in the next batch for the buyer release."
         },
         "batch_id": null
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T13:40:54+00:00",
+        "issue": 774,
+        "pr": 834,
+        "actor": "Worker-S1020774"
       }
     ],
     "policy": {
