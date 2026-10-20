@@ -210,7 +210,7 @@ def load_json() -> dict[str, Any]:
 #    "os_min": str, "start_time": "YYYY-MM-DDTHH:MM", "now": "YYYY-MM-DDTHH:MM" (часы страницы)}
 
 def _multi_text(a: dict) -> bool:
-    """Больше одного разного текста/заголовка/описания (Meta: это Dynamic Creative, у нас не поддержан)."""
+    """Больше одного разного текста/заголовка/описания (Meta: это Dynamic Creative, идёт отдельным набором (Dynamic Creative, ACL-1774))."""
     return any(len(_distinct(a.get(k))) > 1 for k in ("bodies", "headlines", "descriptions"))
 
 

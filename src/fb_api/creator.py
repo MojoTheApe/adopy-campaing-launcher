@@ -218,7 +218,7 @@ class AdPlan:
 
         Один текст и один файл идут прежним `object_story_spec` — байт в байт как раньше.
         """
-        return len(self.bodies) > 1 or len(self.titles) > 1 or len(self.descriptions) > 1             or bool(self.vertical_path)
+        return self.multi_text or bool(self.vertical_path)
     #: Шаблон формы (ACL-1776): форму создаёт робот при публикации; `form_id` заполняется тогда же.
     form_template: dict | None = None
 
@@ -1436,8 +1436,9 @@ class CampaignCreator:
             check("destination_type", DESTINATION, row.get("destination_type"))
             check("pixel", plan.pixel_id, str(po.get("pixel_id") or ""))
             check("conversion_event", CUSTOM_EVENT, po.get("custom_event_type"))
-        if ad_set.dynamic:
-            check("dynamic_creative", True, row.get("is_dynamic_creative") is True)
+        # Оба направления: набор прошлого запуска мог быть динамическим, а объявление теперь с одним текстом.
+        check("dynamic_creative", ad_set.dynamic,
+              bool(row.get("is_dynamic_creative")) if ("is_dynamic_creative" in row or not ad_set.dynamic) else None)
         check("schedule", "starts on activation, no end date",
               "starts on activation, no end date" if not row.get("end_time") else
               f"ends {row.get('end_time')}")
@@ -1859,6 +1860,8 @@ class CampaignCreator:
                 "multi_advertiser": "off",
             })
             self._audience_summary(sets[-1], plan, ad_set, t)
+            if ad_set.dynamic:
+                sets[-1]["creative_mode"] = "Dynamic Creative (Meta mixes the texts; one ad in this ad set)"
             if ad_set.instant:
                 # ACL-1775: вместо сайта - форма Страницы (имя и id); ключей сайта у такого набора нет.
                 known = self._page_forms.by_id() if self._page_forms else {}

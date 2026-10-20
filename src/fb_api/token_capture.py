@@ -244,7 +244,7 @@ _HELPER_JS = r"""
   }
   function textListOk(items, kind, required, cap) {
     const AF = WRITE.asset_feed;
-    if (!Array.isArray(items) || items.length > cap || (required && !items.length)) return false;
+    if (typeof cap !== 'number' || !Array.isArray(items) || items.length > cap || (required && !items.length)) return false;
     return items.every((x) => isObj(x) && Object.keys(x).length === 1 && typeof x.text === 'string'
       && x.text.trim() !== '' && x.text.length <= AF.text_max[kind]);
   }

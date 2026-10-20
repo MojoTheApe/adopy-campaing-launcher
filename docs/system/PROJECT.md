@@ -163,3 +163,17 @@ existing release publisher, verifies actual published packages on isolated Windo
 and records exact task delivery only from the successful native acceptance job.
 Source preparation, policy activation and actual delivery remain distinct facts;
 see [the process runbook](../repository/POST_MAIN_DELIVERY.md) and parent ACL-1923.
+
+## Several primary texts and Stories / Reels media (ACL-1774)
+
+API backend only. One text and one file keep the old `object_story_spec`. Findings from the
+Meta capability spike (Doc120, 2026-10-14): `asset_feed_spec` with 3 bodies plus two placement
+customization rules was refused (error 100, subcode 1885878); a rule applies one asset per type.
+Owner decision 2026-10-20 (live acceptance of the Dynamic Creative route is still pending):
+
+- 2-5 texts (or several headlines/descriptions) go as Dynamic Creative: `is_dynamic_creative: true`
+  on the ad set (the only new ad-set key in the write allowlist, `true` only), one file, no rules,
+  text optimizations stay OFF. The ad must be alone in its ad set; Instant Form refuses it.
+- A Stories / Reels 9:16 file (two labelled files, two placement rules) works with one text per kind.
+- Both write-policy layers (`write_policy.py`, the in-page mirror in `token_capture.py`) and the
+  pre-flight rules (Python table + `cbPreflight` in `report.html`) carry the same limits.

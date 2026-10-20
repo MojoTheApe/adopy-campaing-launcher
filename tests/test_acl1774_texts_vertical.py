@@ -448,12 +448,25 @@ const cases = CASES;
 (async () => {
   const out = {};
   for (const c of cases) {
-    const r = await h.call({ method: 'POST', path: '/' + ACTV + '/adcreatives', params: c.params });
+    const r = await h.call({ method: 'POST', path: c.edge ? '/' + ACTV + '/' + c.edge : '/' + ACTV + '/adcreatives', params: c.params });
     out[c.name] = r.error === 'write_refused' ? 'refused' : (r.body ? 'sent' : JSON.stringify(r));
   }
   process.stdout.write(JSON.stringify(out));
 })();
 """
+
+
+_SET = {"name": "s", "campaign_id": "1", "status": "PAUSED"}
+ADSET_FLAG_CASES = [
+    ("flag_true", "adsets", {**_SET, "is_dynamic_creative": True}, True),
+    ("flag_false", "adsets", {**_SET, "is_dynamic_creative": False}, False),
+    ("flag_string", "adsets", {**_SET, "is_dynamic_creative": "true"}, False),
+    ("flag_one", "adsets", {**_SET, "is_dynamic_creative": 1}, False),
+    ("flag_on_ads", "ads", {"name": "a", "adset_id": "1", "status": "PAUSED", "creative": {"creative_id": "5"},
+                            "is_dynamic_creative": True}, False),
+    ("flag_on_campaigns", "campaigns", {"name": "c", "objective": "OUTCOME_LEADS", "status": "PAUSED",
+                                        "is_dynamic_creative": True}, False),
+]
 
 
 def _node_verdicts() -> dict:
@@ -462,6 +475,7 @@ def _node_verdicts() -> dict:
         pytest.skip("node is not installed")
     name = "__acl_graph_1774"
     cases = [{"name": n, "params": p} for n, p, _ in POLICY_CASES]
+    cases += [{"name": n, "params": p, "edge": e} for n, e, p, _ in ADSET_FLAG_CASES]
     script = (_NODE.replace("ACTV", json.dumps(ACT)).replace("TOKENV", json.dumps(TOKEN))
               .replace("NAME", json.dumps(name)).replace("CASES", json.dumps(cases))
               .replace("HELPER", json.dumps(tc.helper_source(name, wp.policy_for_page(ACT)))))
@@ -478,6 +492,8 @@ def _node_verdicts() -> dict:
 
 def test_the_page_helper_gives_the_same_verdicts_as_the_python_policy():
     got = _node_verdicts()
+    for name, _edge, _params, allowed in ADSET_FLAG_CASES:
+        assert got[name] == ("sent" if allowed else "refused"), (name, got[name])
     for name, _params, allowed in POLICY_CASES:
         assert got[name] == ("sent" if allowed else "refused"), (name, got[name])
 
@@ -627,3 +643,15 @@ def test_the_page_routes_errors_to_the_new_fields():
 def test_the_texts_and_the_vertical_file_are_copied_with_the_ad():
     p = _page()
     assert "cb-textx-sel-wrap" in p and "newRow.dataset.textsShown" in p and "srcVert" in p
+
+
+def test_check_plan_names_dynamic_creative_and_readback_covers_both_directions(tmp_path):
+    meta = FakeMeta()
+    out, _ = _run(meta, _ad_with(tmp_path, vertical=None, texts=1))
+    assert out.error == "" and out.readback["ok"], out.mismatches
+    flags = [c for c in out.readback["checks"] if c["field"] == "dynamic_creative"]
+    assert flags and all(c["expected"] is True and c["actual"] is True for c in flags)
+    single = FakeMeta()
+    out1, _ = _run(single, _ad_with(tmp_path, vertical=None))
+    flags1 = [c for c in out1.readback["checks"] if c["field"] == "dynamic_creative"]
+    assert flags1 and all(c["expected"] is False and c["actual"] is False and c["ok"] for c in flags1)
