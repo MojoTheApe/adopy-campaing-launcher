@@ -44858,6 +44858,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T06:37:45+00:00",
         "from_status": "status:backlog"
+      },
+      "840": {
+        "actor": "Worker-RH2020W",
+        "session": "rh2020w-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "codex/acl-1840-country-footer-inset",
+        "worktree": "C:\\rh20-840",
+        "id": "3f93b317adbe49bc878878febff086a5",
+        "issue": 840,
+        "state": "implementing",
+        "started_at": "2026-10-20T07:03:19+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -49557,10 +49569,14 @@
           {
             "actor": "Worker-R1019840",
             "session": "run_r1019_840"
+          },
+          {
+            "actor": "Worker-RH2020W",
+            "session": "rh2020w-20261020"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-R1019840",
+        "state": "implementing",
+        "worker": "Worker-RH2020W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-R1019840",
@@ -49583,8 +49599,7 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578008+00:00",
           "remote_process_stopped_verified": false
-        },
-        "reviewer": "Reviewer-C1840"
+        }
       },
       "841": {
         "implementers": [
@@ -96895,6 +96910,13 @@
           "report": "# Returned to the author: merge conflict with main, content not reviewed\n\nPR 850 cannot be brought up to current main c61501607ce11744e45add8b0d3b314368c216c5: `gh pr update-branch` reports a merge conflict (checked 2026-10-19/20). A source review must bind the current main baseline, so this task cannot be reviewed or approved as is.\n\nThe content of this PR was NOT reviewed in this pass; this return carries no code findings.\n\nNext step for the author: merge current main into the original branch, resolve the conflict, run the affected tests, push, and hand off again for a full independent review.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T07:03:19+00:00",
+        "issue": 840,
+        "claim": "3f93b317adbe49bc878878febff086a5",
+        "actor": "Worker-RH2020W"
       }
     ],
     "policy": {
