@@ -45006,19 +45006,6 @@
         "started_at": "2026-10-20T09:25:52+00:00",
         "from_status": "status:todo"
       },
-      "175": {
-        "actor": "Worker-L2175",
-        "session": "run_l2_175",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1175-install-guide",
-        "worktree": "C:\\acl-1175-guide",
-        "id": "d50aa785752143f5bfd5636a26b20264",
-        "issue": 175,
-        "state": "stopping",
-        "started_at": "2026-10-20T09:30:12+00:00",
-        "from_status": "status:todo",
-        "report": "Parked: the release-pipeline change (publish setup-guide.html as a release asset) needs owner approval to commit; it is uncommitted in C:/acl-1175-guide, 118 related tests pass. PR #930 is unchanged."
-      },
       "53": {
         "actor": "Worker-L453",
         "session": "run_l4_53",
@@ -53307,22 +53294,21 @@
             "session": "run_l2_175"
           }
         ],
-        "state": "implementing",
+        "state": "stopped",
         "worker": "Worker-L2175",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-R1019175",
-          "session": "run_r1019_175",
+          "actor": "Worker-L2175",
+          "session": "run_l2_175",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1175-install-guide",
           "worktree": "C:\\acl-1175-guide",
-          "id": "47cec4a2eaaa4b879080690b940741c4",
+          "id": "d50aa785752143f5bfd5636a26b20264",
           "issue": 175,
-          "state": "handoff",
-          "started_at": "2026-10-19T19:58:12+00:00",
+          "state": "stopping",
+          "started_at": "2026-10-20T09:30:12+00:00",
           "from_status": "status:todo",
-          "pr": 930,
-          "report": "Revived after the conflict return: merged work/main (clean). The merge brought new Stats workbook refusals that test_setup_guide requires the guide to explain, so docs/SETUP-NEW-PC.md now lists them (duplicated columns, Missing columns in Excel, empty/not usable). test_setup_guide: 11 passed. Full suite left to CI. Not verified live."
+          "report": "Parked: the release-pipeline change (publish setup-guide.html as a release asset) needs owner approval to commit; it is uncommitted in C:/acl-1175-guide, 118 related tests pass. PR #930 is unchanged."
         },
         "pr": 930,
         "queued_at": "2026-10-19T20:04:44+00:00",
@@ -98148,6 +98134,13 @@
         "issue": 53,
         "claim": "8fc5a3d0d1b1415299e6bee28d740b92",
         "actor": "Worker-L453"
+      },
+      {
+        "event": "stopped",
+        "at": "2026-10-20T09:32:36+00:00",
+        "issue": 175,
+        "actor": "Worker-L2175",
+        "report": "Parked: the release-pipeline change (publish setup-guide.html as a release asset) needs owner approval to commit; it is uncommitted in C:/acl-1175-guide, 118 related tests pass. PR #930 is unchanged."
       }
     ],
     "policy": {
