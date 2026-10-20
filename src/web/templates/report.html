@@ -2526,8 +2526,7 @@
        фокус-кольцо, мягкий ховер, тактильное нажатие. ── */
     .cb-preview-btn, .cb-publish-btn, .ml-connect-btn, .cb-field-save-btn,
     .cb-add-btn, .cb-add-btn-sm, .cb-dup-slot-btn,
-    .ml-profile-use-btn, .lp-chip-more,
-    #rpa-takeover-btn {
+    .ml-profile-use-btn, .lp-chip-more {
       border-radius: 6px;
       transition: background-color 150ms var(--ease-out),
                   border-color 150ms var(--ease-out),
@@ -2537,8 +2536,7 @@
     }
     .cb-preview-btn:active, .cb-publish-btn:active, .ml-connect-btn:active,
     .cb-field-save-btn:active, .cb-add-btn:active, .cb-add-btn-sm:active,
-    .cb-dup-slot-btn:active,
-    #rpa-takeover-btn:active {
+    .cb-dup-slot-btn:active {
       transform: translateY(0.5px) scale(0.98);
     }
     .cb-preview-btn:focus-visible, .cb-publish-btn:focus-visible,
@@ -4709,9 +4707,6 @@ async function dashRefresh(ev) {
       <button type="button" class="cb-publish-btn" disabled
               onclick="cbPublish(this.closest('form'))"
               title="Builds the campaign through Multilogin and leaves a draft in Ads Manager (does not click Publish in Facebook).">Publish</button>
-      <button type="button" id="rpa-takeover-btn"
-              style="padding:0.35rem 0.9rem;font-size:var(--adopy-text-table);background:#b45309;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600"
-              onclick="rpaTakeover()">⏸ Pause RPA</button>
       {# Record clicks / Website Lab dev tools removed from the builder UI
          2026-08-02 (user: "убираем ненужные кнопки, записи и шаги") — the
          /rpa-record and /rpa-website-lab endpoints and their JS stay for
@@ -15608,27 +15603,6 @@ window.cbpDiagClose = function() {
   if (wrap && wrap.style.display !== 'none') {
     wrap.style.display = 'none';
     if (wrap._trigger && wrap._trigger.isConnected) wrap._trigger.focus();
-  }
-};
-
-// ── RPA Human Takeover ────────────────────────────────────────────────
-var _rpaPaused = false;
-window.rpaTakeover = function() {
-  var btn = document.getElementById('rpa-takeover-btn');
-  if (!_rpaPaused) {
-    fetch('/rpa-takeover', { method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({action:'pause'}) })
-      .then(function() {
-        _rpaPaused = true;
-        if (btn) { btn.textContent = '▶ Resume RPA'; btn.style.background = '#15803d'; }
-      });
-  } else {
-    fetch('/rpa-takeover', { method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({action:'resume'}) })
-      .then(function() {
-        _rpaPaused = false;
-        if (btn) { btn.textContent = '⏸ Pause RPA'; btn.style.background = '#b45309'; }
-      });
   }
 };
 
