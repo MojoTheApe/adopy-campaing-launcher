@@ -52366,7 +52366,7 @@
             "session": "run_l2_309c"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-L2309c",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -103144,6 +103144,68 @@
           "report": "# Return: PR #834 [ACL-1774] \u2014 not approved\n\nReviewer: Reviewer-R1774V (session reviewer-r1774v-20261020, lane aa0790053ef841a88dab48f0faaeeba5)\nImplementer: Worker-S1020774\nHead: 22020ffe05e5d4d8681ec090f665620627d32dab\nBase: work/main 259ae7f1283a0a0acab40354b6b97d55162c91b5 (verified via ls-remote)\n\n## Blocker 1 \u2014 the PR ships unreviewed ACL-1767 code (stacking)\n\n`git log work/main..HEAD` includes these ACL-1767 commits. None of them is in main, and\n`git cherry work/main HEAD` marks each one `+`, so main has no equivalent patch either:\n\n- e40efbe1 [ACL-1767] API path: gender, languages, devices/OS version, start time, CTA list, multi-advertiser off\n- 2d28e0fd [ACL-1767] Builder: audience, devices, start time and CTA controls; drafts v2 to v3\n- ecd525f2 [ACL-1767] Review fixes: ...\n- 7a78e2c6 Merge work/main into codex/acl-1767-audience-cta-devices (merged into this branch by 9eb23799)\n\nThese are the commits of PR #830 (ACL-1767, OPEN, not Approved): e40efbe1, 2d28e0fd, ecd525f2, 7a78e2c6, 8ef0046d.\nThe current #830 head 8ef0046d is not an ancestor of the PR head, but the four commits above are.\nThe diff against main also carries all of tests/test_acl1767_audience_fields.py (+691 lines).\nIt also adds `tzdata==2026.3` to requirements.txt, and that line comes from 7a78e2c6 (ACL-1767).\nApproving #834 would therefore ship the unreviewed ACL-1767 code.\nThe heads of #832 (ebac53f8) and #833 (b581aaad, ACL-1768) are not ancestors of the PR head.\n\nFix: either rebase ACL-1774 onto work/main with only its own commits, or wait until ACL-1767 is approved and merged, then merge main again.\n\n## Blocker 2 \u2014 CI red on the head\n\nRun 39431874460: linux tests (3.11/3.13, shards 2 and 3) fail. The failing tests:\n- tests/test_acl1769_two_column_layout.py::test_the_api_backend_second_text_is_supported_and_the_rpa_gates_texts_3_to_5 \u2014 DID NOT RAISE\n- tests/test_acl1775_instant_forms.py::test_website_plan_posts_and_readback_are_identical_to_the_pre_forms_creator \u2014 plan/readback_checks differ from the pre-forms creator\n- tests/test_builder_review_browser.py::test_duplicate_copies_actual_slot_and_ad_fields_and_keeps_the_next_slot \u2014 KeyError: 'camp_1_ad_count'\n- tests/test_distribution_boundary.py::test_requirements_carry_nothing_only_the_rest_of_the_repo_needs \u2014 this is the tzdata line that came in with ACL-1767\n\"ACL verification\" is also red; it is the tracker/evidence gate, reported separately.\n\n## Content review\n\nI did not do a full content review, because Blocker 1 alone decides the verdict.\nPlease re-request review after the branch has been cleaned up.\nNo live checks claimed.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-20T17:22:31+00:00",
+        "issue": 309,
+        "pr": 929,
+        "review": {
+          "id": "8fd7cbd65e5d402e8d7ca41fda960659",
+          "pr": 929,
+          "issues": [
+            309
+          ],
+          "actor": "Reviewer-R1309U",
+          "session": "reviewer-r1309u-20261020",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-20T15:20:58+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 309,
+            "pr": 929,
+            "branch": "work/acl-1309-own-dashboard",
+            "head_sha": "0e812bb282907a8059043d761bacdb62192efe2d",
+            "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+            "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "44c1196854447c8e0b1e0e322f68d3a7464aabbef8d70bdff820248de1c2cddd",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-R1309U",
+              "review_session": "reviewer-r1309u-20261020",
+              "execution_lane": "8fd7cbd65e5d402e8d7ca41fda960659",
+              "implementer": "Worker-L2309c",
+              "head_sha": "0e812bb282907a8059043d761bacdb62192efe2d",
+              "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+              "tree_sha": "8a476a6dcc28a30e102689a45fe829ee013bfe28",
+              "issues": [
+                309
+              ],
+              "report": "Re-review of PR #929 (ACL-1309: each person gets their own dashboard keyed by a config-directory fingerprint and a per-person port, instead of whoever holds 9090) after the third return. The product code was already judged correct and is unchanged since fa3cd6c8; the only new commits are a clean merge of main 259ae7f1 (no conflict resolutions) and 0e812bb2, which fixes the last blocker in packaging/windows/test_update_cycle.py: the new find_dashboard() first uses local_dashboard.find_own (own fingerprint on any per-person port) and, only if that finds nothing, probes legacy port 9090 and accepts an ACL ok answer that has no `config` key (every pre-1309 published release, which Complete Delivery installs as the old version), while still rejecting a 9090 answer whose `config` is present but foreign. health() now uses it, so start(old_exe)/wait_version, the restart-old-version recovery step and the finally cleanup (which additionally checks the version is one of the installers before stopping) all see the old build again. New packaging/windows/tests/test_update_cycle_health.py covers the three requested cases (own fingerprint on 9091 found; legacy no-config payload on 9090 found; foreign fingerprint on 9090 not found) plus nothing-answering. Locally: test_update_cycle_health.py 4 passed; with test_local_dashboard.py, test_launcher.py and test_integration_fixes.py 56 passed, 6 subtests passed. CI on head 0e812bb2 is fully green, including the Windows installer workflow (Build, install, repair, and uninstall; Installer verification), windows tests, all six linux shards, process checks and tracker-link. Nits (non-blocking): the legacy fallback probes 9090 without the in_use pre-check (costs at most one 2 s probe) and accepts any pre-1309 ACL on 9090 regardless of config dir, which is acceptable on the isolated CI runner and is guarded by the version checks. No live checks claimed.",
+              "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "recorded_at": "2026-10-20T17:20:58+00:00",
+              "issue_scopes": {
+                "309": "44c1196854447c8e0b1e0e322f68d3a7464aabbef8d70bdff820248de1c2cddd"
+              }
+            },
+            "lane": {
+              "id": "8fd7cbd65e5d402e8d7ca41fda960659",
+              "pr": 929,
+              "issues": [
+                309
+              ],
+              "actor": "Reviewer-R1309U",
+              "session": "reviewer-r1309u-20261020",
+              "coordinator": "Coordinator-M1011A",
+              "started_at": "2026-10-20T15:20:58+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-20T17:21:36+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -107501,6 +107563,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-20T17:17:35+00:00"
+      },
+      "309": {
+        "issue": 309,
+        "pr": 929,
+        "branch": "work/acl-1309-own-dashboard",
+        "head_sha": "0e812bb282907a8059043d761bacdb62192efe2d",
+        "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+        "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "44c1196854447c8e0b1e0e322f68d3a7464aabbef8d70bdff820248de1c2cddd",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-R1309U",
+          "review_session": "reviewer-r1309u-20261020",
+          "execution_lane": "8fd7cbd65e5d402e8d7ca41fda960659",
+          "implementer": "Worker-L2309c",
+          "head_sha": "0e812bb282907a8059043d761bacdb62192efe2d",
+          "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+          "tree_sha": "8a476a6dcc28a30e102689a45fe829ee013bfe28",
+          "issues": [
+            309
+          ],
+          "report": "Re-review of PR #929 (ACL-1309: each person gets their own dashboard keyed by a config-directory fingerprint and a per-person port, instead of whoever holds 9090) after the third return. The product code was already judged correct and is unchanged since fa3cd6c8; the only new commits are a clean merge of main 259ae7f1 (no conflict resolutions) and 0e812bb2, which fixes the last blocker in packaging/windows/test_update_cycle.py: the new find_dashboard() first uses local_dashboard.find_own (own fingerprint on any per-person port) and, only if that finds nothing, probes legacy port 9090 and accepts an ACL ok answer that has no `config` key (every pre-1309 published release, which Complete Delivery installs as the old version), while still rejecting a 9090 answer whose `config` is present but foreign. health() now uses it, so start(old_exe)/wait_version, the restart-old-version recovery step and the finally cleanup (which additionally checks the version is one of the installers before stopping) all see the old build again. New packaging/windows/tests/test_update_cycle_health.py covers the three requested cases (own fingerprint on 9091 found; legacy no-config payload on 9090 found; foreign fingerprint on 9090 not found) plus nothing-answering. Locally: test_update_cycle_health.py 4 passed; with test_local_dashboard.py, test_launcher.py and test_integration_fixes.py 56 passed, 6 subtests passed. CI on head 0e812bb2 is fully green, including the Windows installer workflow (Build, install, repair, and uninstall; Installer verification), windows tests, all six linux shards, process checks and tracker-link. Nits (non-blocking): the legacy fallback probes 9090 without the in_use pre-check (costs at most one 2 s probe) and accepts any pre-1309 ACL on 9090 regardless of config dir, which is acceptable on the isolated CI runner and is guarded by the version checks. No live checks claimed.",
+          "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "recorded_at": "2026-10-20T17:20:58+00:00",
+          "issue_scopes": {
+            "309": "44c1196854447c8e0b1e0e322f68d3a7464aabbef8d70bdff820248de1c2cddd"
+          }
+        },
+        "lane": {
+          "id": "8fd7cbd65e5d402e8d7ca41fda960659",
+          "pr": 929,
+          "issues": [
+            309
+          ],
+          "actor": "Reviewer-R1309U",
+          "session": "reviewer-r1309u-20261020",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-20T15:20:58+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-20T17:21:36+00:00"
       }
     },
     "batches": {
@@ -112517,62 +112623,6 @@
         "coordinator": "Coordinator-ACT174",
         "started_at": "2026-10-20T08:55:10+00:00",
         "state": "reviewing"
-      },
-      "929": {
-        "id": "8fd7cbd65e5d402e8d7ca41fda960659",
-        "pr": 929,
-        "issues": [
-          309
-        ],
-        "actor": "Reviewer-R1309U",
-        "session": "reviewer-r1309u-20261020",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-20T15:20:58+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 309,
-          "pr": 929,
-          "branch": "work/acl-1309-own-dashboard",
-          "head_sha": "0e812bb282907a8059043d761bacdb62192efe2d",
-          "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-          "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "44c1196854447c8e0b1e0e322f68d3a7464aabbef8d70bdff820248de1c2cddd",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-R1309U",
-            "review_session": "reviewer-r1309u-20261020",
-            "execution_lane": "8fd7cbd65e5d402e8d7ca41fda960659",
-            "implementer": "Worker-L2309c",
-            "head_sha": "0e812bb282907a8059043d761bacdb62192efe2d",
-            "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-            "tree_sha": "8a476a6dcc28a30e102689a45fe829ee013bfe28",
-            "issues": [
-              309
-            ],
-            "report": "Re-review of PR #929 (ACL-1309: each person gets their own dashboard keyed by a config-directory fingerprint and a per-person port, instead of whoever holds 9090) after the third return. The product code was already judged correct and is unchanged since fa3cd6c8; the only new commits are a clean merge of main 259ae7f1 (no conflict resolutions) and 0e812bb2, which fixes the last blocker in packaging/windows/test_update_cycle.py: the new find_dashboard() first uses local_dashboard.find_own (own fingerprint on any per-person port) and, only if that finds nothing, probes legacy port 9090 and accepts an ACL ok answer that has no `config` key (every pre-1309 published release, which Complete Delivery installs as the old version), while still rejecting a 9090 answer whose `config` is present but foreign. health() now uses it, so start(old_exe)/wait_version, the restart-old-version recovery step and the finally cleanup (which additionally checks the version is one of the installers before stopping) all see the old build again. New packaging/windows/tests/test_update_cycle_health.py covers the three requested cases (own fingerprint on 9091 found; legacy no-config payload on 9090 found; foreign fingerprint on 9090 not found) plus nothing-answering. Locally: test_update_cycle_health.py 4 passed; with test_local_dashboard.py, test_launcher.py and test_integration_fixes.py 56 passed, 6 subtests passed. CI on head 0e812bb2 is fully green, including the Windows installer workflow (Build, install, repair, and uninstall; Installer verification), windows tests, all six linux shards, process checks and tracker-link. Nits (non-blocking): the legacy fallback probes 9090 without the in_use pre-check (costs at most one 2 s probe) and accepts any pre-1309 ACL on 9090 regardless of config dir, which is acceptable on the isolated CI runner and is guarded by the version checks. No live checks claimed.",
-            "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "recorded_at": "2026-10-20T17:20:58+00:00",
-            "issue_scopes": {
-              "309": "44c1196854447c8e0b1e0e322f68d3a7464aabbef8d70bdff820248de1c2cddd"
-            }
-          },
-          "lane": {
-            "id": "8fd7cbd65e5d402e8d7ca41fda960659",
-            "pr": 929,
-            "issues": [
-              309
-            ],
-            "actor": "Reviewer-R1309U",
-            "session": "reviewer-r1309u-20261020",
-            "coordinator": "Coordinator-M1011A",
-            "started_at": "2026-10-20T15:20:58+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-20T17:21:36+00:00"
-        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
