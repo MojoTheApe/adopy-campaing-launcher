@@ -50618,7 +50618,7 @@
             "session": "run_r1019_920"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-R1019920",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -50642,7 +50642,8 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578036+00:00",
           "remote_process_stopped_verified": false
-        }
+        },
+        "reviewer": "Reviewer-C1920"
       },
       "168": {
         "implementers": [],
@@ -55623,6 +55624,10 @@
       "Reviewer-C1805": {
         "session": "reviewer-c1805-20261020",
         "role": "Reviewer"
+      },
+      "Reviewer-C1920": {
+        "session": "reviewer-c1920-20261020",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -58488,7 +58493,6 @@
       }
     },
     "review_queue": [
-      920,
       990,
       992,
       739,
@@ -96599,6 +96603,13 @@
           "report": "# Returned to the author: merge conflict with main, content not reviewed\n\nPR 1019 cannot be brought up to current main c61501607ce11744e45add8b0d3b314368c216c5: `gh pr update-branch` reports a merge conflict (checked 2026-10-19/20). A source review must bind the current main baseline, so this task cannot be reviewed or approved as is.\n\nThe content of this PR was NOT reviewed in this pass; this return carries no code findings.\n\nNext step for the author: merge current main into the original branch, resolve the conflict, run the affected tests, push, and hand off again for a full independent review.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-20T06:25:00+00:00",
+        "pr": 921,
+        "lane": "7df31a3d60234762be0264a09400768b",
+        "actor": "Reviewer-C1920"
       }
     ],
     "policy": {
@@ -104486,6 +104497,18 @@
         "session": "r1816v-20261019",
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-19T13:01:50+00:00",
+        "state": "reviewing"
+      },
+      "921": {
+        "id": "7df31a3d60234762be0264a09400768b",
+        "pr": 921,
+        "issues": [
+          920
+        ],
+        "actor": "Reviewer-C1920",
+        "session": "reviewer-c1920-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-20T06:25:00+00:00",
         "state": "reviewing"
       }
     },
