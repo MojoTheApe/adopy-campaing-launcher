@@ -2706,24 +2706,24 @@
         }
       },
       "842": {
-        "tree_sha": "a64cc1a357ed0b78b902add9535a689039dae4a5",
-        "review_session": "rev_countryline_rl8c42_20261013",
-        "verdict": "approved",
-        "head_sha": "ecfdfa51a214c787cb2f0b7251c5f66501da09fe",
-        "reviewer": "Reviewer-RL8C42",
-        "report": "ACL-1838 / PR842 fresh independent source review findings, 2026-10-13\nActual reviewer Reviewer-RL8C42 / rev_countryline_rl8c42_20261013; nonimplementing throughout.\nLatest implementer Worker-CN6B92. Exact reviewed head ecfdfa51a214c787cb2f0b7251c5f66501da09fe, tree a64cc1a357ed0b78b902add9535a689039dae4a5, official main/base 3327465fcbd46ccff9b64eb7c574ff5b84b99b80.\n\nStandards: PASS, zero findings. Separate read-only Standards agent reviewed applicable AGENTS/CLAUDE, engineering context, workflow and layout plus heuristic smell baseline. Existing .live state and accent token are reused; no new state handlers or abstractions. System behavior/history are in correct ownership paths; main history retained.\n\nSpec: PASS, zero findings. Separate read-only Spec agent reviewed complete official Issue838 requirements, exact diff and private fresh evidence. Marker is static 2px blue accent at left; inactive rows have no marker. Absolute positioning preserves label inset, pointer-events:none preserves row interaction. Existing live predicate, country actions/focus/hover, expanded-country selection style, FTD paths and theme tokens remain unchanged. Scope is exactly three files with system docs/history and no release change.\n\nOwning independent reviewer also inspected complete diff, current main inclusion, clean committed worktree, CSS/markup/event context, current Issue/PR bodies, refreshed handoff, private browser harness and both fresh light/dark screenshots. Evidence includes reported 28 affected regressions and 46 packaging tests, scanner/smoke/diff pass. Six browser scenario assertion passes are distinguished from the accurately disclosed teardown stall; no clean browser-process exit claimed. No redundant tests rerun.\n\nNo admission evidence recorded yet: supported source-lane acquisition encountered a concurrent state write. Reload verified PR863 currently owns the lane under a different actual reviewer. PR842 remains queued, not approved; no foreign lane modified or taken over. Fresh tracker-link38368308776, Windows3.13, descriptor and Installer aggregate green; Linux3.13 shards pending at this review. Source installer build/install is classified skipped, not an installer deployment proof.\n\nFresh exact-head/main/scope checks, a genuine free-lane claim and complete source CI remain required before record-review/batch approve. No source merge, integration reservation, stage, release or installation performed.\r\n\nLane follow-up: supported review-acquire subsequently succeeded after the prior lane was normally returned; held genuine lane ec025c9a465d422280fe769b549516f6. Remote HEAD/base, full task scope, latest actual Worker and exact source tree reaffirmed unchanged. Both independent review axes and owning reviewer approve this exact source content. CI approval gate remains pending until required jobs finish; this report is source-content review, not integration or release approval.\r\n",
-        "base_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
-        "execution_lane": "ec025c9a465d422280fe769b549516f6",
         "kind": "independent-review",
-        "implementer": "Worker-CN6B92",
-        "main_sha": "3327465fcbd46ccff9b64eb7c574ff5b84b99b80",
-        "policy": "302d13abcb245858eb810380630d4a2845b1d0f516981281bb4c9dfa950dae21",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R1838V",
+        "review_session": "reviewer-r1838v-20261020",
+        "execution_lane": "fa2d4b5c65e2494a966276ea4ffff2bb",
+        "implementer": "Worker-T1020838",
+        "head_sha": "bc9ba5c808673dd775511c85e90ffe30c7b9beb1",
+        "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+        "tree_sha": "e01e80bf7434010597c336993964e4c30a47d944",
         "issues": [
           838
         ],
-        "recorded_at": "2026-10-13T08:28:29+00:00",
+        "report": "Reviewed PR #842 at head bc9ba5c8 against main 259ae7f1 (merge-base equals main, so the main refresh kept all of main's changes; git log work/main..HEAD shows only the four ACL-1838 commits, no stacking on other unmerged tasks). The diff is 3 files: in src/web/templates/report.html the 5px inline dot on .sidebar-country-btn.live::before is replaced by an absolutely positioned 2px accent-token line (left 4px, top/bottom 9px, radius 1px, pointer-events none) with position:relative added to the button; docs/system/CHANGELOG.md and PROJECT.md gain the ACL-1838 entries. Criteria: active rows (existing .live predicate untouched) get the 2px accent line; inactive rows have no pseudo-element; the pseudo-element is part of the button with pointer-events none, no handlers and no hover rule, so there is no separate target; selection, FTD counts and JS are untouched; activity stays distinct from the expanded-row highlight (background plus accent text colour versus a left line); colour is the existing --accent token, so both themes are covered, the marker is absolutely positioned inside the 0.75rem padding so labels do not shift and narrow width/zoom is unaffected. Information is preserved: activity is still a presence/absence shape cue, not colour alone (the former dot had no accessible name either, so no accessibility regression); the Issue says the design prototype defines no activity marker so owner option 3 governs; no user-facing text added. Tests: tests/test_manage_behavior.py and tests/test_the_builder_tree.py 15 passed locally. CI on this head: all required checks green (linux 1/2/3, windows, descriptor, installer classification, process instructions, tracker-link); installer build jobs skipped by classification. Non-blocking nits: there is no automated assertion for the new line (the Worker's browser checks are private harness evidence I did not re-run), and the new CSS marker has no accessible text equivalent, same as the old dot. No live checks claimed.",
+        "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "recorded_at": "2026-10-20T15:01:53+00:00",
         "issue_scopes": {
-          "838": "51ffb47cae8444b4897941ce27bb96afddf866c44f4b15c82446b3b86b7df3d6"
+          "838": "cf3992329999eade635234966dc6a7d8224ec279020d8cb4239227bab85df07b"
         }
       },
       "876": {
