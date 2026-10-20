@@ -52967,7 +52967,7 @@
             "session": "run_l1_990"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-L1990",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -52986,7 +52986,8 @@
         },
         "pr": 991,
         "queued_at": "2026-10-20T09:27:37+00:00",
-        "review_report": "# Returned to the author: CI red, a design-token test fails on this PR's own CSS\n\nReview of PR 991 / ACL-1990, head b7489b55 (contains current main c6150160), by Reviewer-Q2001B.\n\n## Blocking\n\n1. **src/web/templates/report.html, new rule `.cbd-pf-list .cbd-pf-sign { width: 0.95rem; height: 0.95rem; font-size: 0.6rem; }`** (about line 3390). `tests/test_acl1797_design_system.py::test_no_text_is_smaller_than_the_token_minimum` fails with \"small text is back: .cbd-pf-list .cbd-pf-sign { ... font-size: 0.6rem; }\". I reproduced it locally on this head (1 failed, 15 passed), and it is the single failure in CI job `linux tests (3.13, 3)`; the aggregate `ACL verification` check is red because of it. Fix: use a size token at or above the minimum (or drop the font-size override and size the sign box differently), then re-run test_acl1797_design_system.py together with test_acl1819_preflight*.py.\n\n## Non-blocking notes\n\n- docs/system/CHANGELOG.md: the diff also inserts a blank line before about 25 unrelated older headings. Harmless, but noise; keep the diff to the new entry.\n- `check_plan` marks every non-`account` exception of the read session as `not_checked` (including ones raised after some campaigns were checked). Acceptable because the publish job meets the same cause, but worth keeping in mind.\n- test_under_api_the_check_button_loads... is already noted by the author as flaky (~1 in 4).\n\n## Rest of the review\n\nScope matches Issue #990 (topics, Check with Meta strip, not_checked does not block Publish, account/plan still block, rules JSON/Python parity, tests, CHANGELOG, English UI text, one Tracker issues line). Not live-checked. Content otherwise looks sound; once the CSS token failure is fixed and CI is green this should be approvable."
+        "review_report": "# Returned to the author: CI red, a design-token test fails on this PR's own CSS\n\nReview of PR 991 / ACL-1990, head b7489b55 (contains current main c6150160), by Reviewer-Q2001B.\n\n## Blocking\n\n1. **src/web/templates/report.html, new rule `.cbd-pf-list .cbd-pf-sign { width: 0.95rem; height: 0.95rem; font-size: 0.6rem; }`** (about line 3390). `tests/test_acl1797_design_system.py::test_no_text_is_smaller_than_the_token_minimum` fails with \"small text is back: .cbd-pf-list .cbd-pf-sign { ... font-size: 0.6rem; }\". I reproduced it locally on this head (1 failed, 15 passed), and it is the single failure in CI job `linux tests (3.13, 3)`; the aggregate `ACL verification` check is red because of it. Fix: use a size token at or above the minimum (or drop the font-size override and size the sign box differently), then re-run test_acl1797_design_system.py together with test_acl1819_preflight*.py.\n\n## Non-blocking notes\n\n- docs/system/CHANGELOG.md: the diff also inserts a blank line before about 25 unrelated older headings. Harmless, but noise; keep the diff to the new entry.\n- `check_plan` marks every non-`account` exception of the read session as `not_checked` (including ones raised after some campaigns were checked). Acceptable because the publish job meets the same cause, but worth keeping in mind.\n- test_under_api_the_check_button_loads... is already noted by the author as flaky (~1 in 4).\n\n## Rest of the review\n\nScope matches Issue #990 (topics, Check with Meta strip, not_checked does not block Publish, account/plan still block, rules JSON/Python parity, tests, CHANGELOG, English UI text, one Tracker issues line). Not live-checked. Content otherwise looks sound; once the CSS token failure is fixed and CI is green this should be approvable.",
+        "reviewer": "Reviewer-R1990Y"
       },
       "992": {
         "implementers": [
@@ -56159,6 +56160,10 @@
       "Reviewer-R1309Z": {
         "session": "reviewer-r1309z-20261020",
         "role": "Reviewer"
+      },
+      "Reviewer-R1990Y": {
+        "session": "reviewer-r1990y-20261020",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -59026,7 +59031,6 @@
     "review_queue": [
       822,
       13,
-      990,
       836,
       53,
       853,
@@ -98575,6 +98579,13 @@
             "approved_at": "2026-10-20T10:09:06+00:00"
           }
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-20T10:11:58+00:00",
+        "pr": 991,
+        "lane": "8d8bbcf0f2774ed1a13965e1f613d52e",
+        "actor": "Reviewer-R1990Y"
       }
     ],
     "policy": {
@@ -106843,6 +106854,18 @@
         "session": "reviewer-r1309z-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T10:01:12+00:00",
+        "state": "reviewing"
+      },
+      "991": {
+        "id": "8d8bbcf0f2774ed1a13965e1f613d52e",
+        "pr": 991,
+        "issues": [
+          990
+        ],
+        "actor": "Reviewer-R1990Y",
+        "session": "reviewer-r1990y-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-20T10:11:58+00:00",
         "state": "reviewing"
       }
     },
