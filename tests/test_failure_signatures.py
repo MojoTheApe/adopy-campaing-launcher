@@ -37,7 +37,7 @@ def test_reason_falls_back_to_diag_and_sheet_json_string():
     row = _row("A", note="", diag='{"why": "selector gone"}')
     assert fs.raw_reason(row) == "selector gone"
     assert fs.raw_reason(_row("A", note="", diag={"error": "TimeoutError"})) == "TimeoutError"
-    assert fs.raw_reason(_row("A", note="", diag='{"why": "cut')) == ""  # обрезанный JSON не роняет
+    assert fs.raw_reason(_row("A", note="", diag='{"why": "cut')) == "cut"  # обрезанный JSON не роняет
     assert fs.normalise_reason("") == fs.NO_REASON
 
 
@@ -53,3 +53,15 @@ def test_markdown_states_it_proposes_no_rule_and_report_includes_it():
     text = acl_telemetry_report.render(a, "тест")
     assert "Повторяющиеся отказы" in text and "Автоматически ничего не применяется" in text
     assert "`create`" in text
+
+
+def test_truncated_diag_still_yields_reason():
+    cut = '{"url": "https://x/' + "a" * 50 + '", "why": "selector gone", "extra": "zz'
+    assert fs.raw_reason(_row("A", note="", diag=cut)) == "selector gone"
+
+
+def test_no_reason_and_small_share_are_not_high():
+    rows = [_row(m, note="", run=m) for m in "ABC"]
+    assert fs.find_repeated(rows, 7, today=TODAY)["signatures"][0]["confidence"] == "low"
+    rows = [_row(m, run=m) for m in "ABC"] + [_row(f"ok{i}", ok="1") for i in range(10)]
+    assert fs.find_repeated(rows, 7, today=TODAY)["signatures"][0]["confidence"] == "medium"

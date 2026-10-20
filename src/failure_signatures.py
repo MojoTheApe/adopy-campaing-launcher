@@ -32,6 +32,7 @@ _UUID = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 _HEX = re.compile(r"\b[0-9a-f]{12,}\b", re.I)
 _NUM = re.compile(r"\d+(?:[.,]\d+)?")
 _SPACE = re.compile(r"\s+")
+_CUT_REASON = re.compile(r'"(why|error|how)"\s*:\s*"((?:[^"\\]|\\.)*)')
 
 
 def _diag(row: dict[str, Any]) -> dict[str, Any]:
@@ -41,8 +42,12 @@ def _diag(row: dict[str, Any]) -> dict[str, Any]:
     if isinstance(d, str) and d.strip().startswith("{"):
         try:
             parsed = json.loads(d)
-        except ValueError:  # в таблице diag обрезан до 900 знаков — может не разобраться
-            return {}
+        except ValueError:
+            # В таблице diag обрезан до 900 знаков, а собственные ключи шага
+            # (why/error/how) стоят в конце — при обрезке пропадают первыми.
+            # Достаём причину из оборванной строки, пока она там есть.
+            m = _CUT_REASON.search(d)
+            return {m.group(1): m.group(2)} if m else {}
         return parsed if isinstance(parsed, dict) else {}
     return {}
 
@@ -72,9 +77,15 @@ def normalise_reason(text: str) -> str:
     return out or NO_REASON
 
 
-def confidence(machines: int, incidents: int) -> str:
-    """high — 3+ машин; medium — 2; low — одна машина (общий отказ не доказан)."""
-    if machines >= 3 and incidents >= 3:
+def confidence(machines: int, fleet: int, reason: str = "") -> str:
+    """high — 3+ машин и не меньше половины присылавших; medium — 2+; low — одна.
+
+    Без указанной причины («шаг не объяснил себя») разные отказы сливаются в
+    одну корзину, поэтому выше low она не поднимается. «3 из 40» — тоже не high.
+    """
+    if reason == NO_REASON:
+        return "low"
+    if machines >= 3 and machines * 2 >= fleet:
         return "high"
     if machines >= 2:
         return "medium"
@@ -122,7 +133,7 @@ def find_repeated(
                                 if i.get("flow_version_at_upload")}),
             "first": _day(str(items[0].get("ts", ""))),
             "last": _day(str(items[-1].get("ts", ""))),
-            "confidence": confidence(len(machines), len(items)),
+            "confidence": confidence(len(machines), len(fleet), reason),
             "evidence": [
                 {"ts": str(i.get("ts", "")), "machine": str(i.get("machine", "")),
                  "run_id": str(i.get("run_id", "")),
