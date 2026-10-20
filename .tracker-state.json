@@ -45014,9 +45014,10 @@
         "worktree": "C:\\acl-1175-guide",
         "id": "d50aa785752143f5bfd5636a26b20264",
         "issue": 175,
-        "state": "implementing",
+        "state": "stopping",
         "started_at": "2026-10-20T09:30:12+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "report": "Parked: the release-pipeline change (publish setup-guide.html as a release asset) needs owner approval to commit; it is uncommitted in C:/acl-1175-guide, 118 related tests pass. PR #930 is unchanged."
       },
       "53": {
         "actor": "Worker-L453",
