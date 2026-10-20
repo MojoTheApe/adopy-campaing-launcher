@@ -44855,9 +44855,11 @@
         "worktree": "C:\\rh20-840",
         "id": "3f93b317adbe49bc878878febff086a5",
         "issue": 840,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T07:03:19+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 846,
+        "report": "Re-handoff without code change. The 2026-10-20 return ('merge conflict with main, content not reviewed') was a false positive: head df22816f already contains current main c6150160 and merges cleanly (git merge-tree). Content needs a full independent review."
       }
     },
     "tasks": {
