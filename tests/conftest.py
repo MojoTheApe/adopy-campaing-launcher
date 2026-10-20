@@ -55,6 +55,9 @@ os.environ["ACL_SENTRY_RUN_SUMMARY"] = "0"
 # monkeypatch — позже, и действует его значение.
 for _name in ("ACL_LIBRARY_REPO", "ACL_LIBRARY_TOKEN", "ACL_LIBRARY_BRANCH"):
     os.environ[_name] = ""
+# ACL-103: с паролем BI из машинного .env тесты отчёта читали бы живую базу
+# вместо своих книг. Тесты BI включают его сами через monkeypatch.
+os.environ["BI_MYSQL_PASSWORD"] = ""
 
 
 # Маркер файлов, которым нужен Windows (ACL-1582). Это метка отбора для CI

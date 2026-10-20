@@ -32,10 +32,16 @@ CM_MAP = {"1106": "Evgeni Sedin"}
 
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch):
-    for name in ("BI_MYSQL_PASSWORD", "FB_STATS_SOURCE"):
+    for name in ("BI_MYSQL_HOST", "BI_MYSQL_USER", "BI_MYSQL_PASSWORD", "FB_STATS_SOURCE"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setitem(bi_stats._REV, "value", None)
     monkeypatch.setitem(bi_stats._REV, "checked", 0.0)
+
+
+def _enable_bi(monkeypatch):
+    monkeypatch.setenv("BI_MYSQL_HOST", "bi.invalid")
+    monkeypatch.setenv("BI_MYSQL_USER", "reader")
+    monkeypatch.setenv("BI_MYSQL_PASSWORD", "x")
 
 
 def test_rows_take_workbook_schema_and_types():
@@ -64,6 +70,12 @@ def test_unknown_cm_inherits_account_manager_and_foreign_teams_are_dropped():
     assert df["$ Net"].iloc[2] == 0.0
 
 
+def test_foreign_code_on_shared_account_is_not_ours():
+    foreign_on_ours = ["2101", *ROW_KNOWN[1:]]
+    df = bi_stats.to_workbook_frame(_raw([ROW_KNOWN, foreign_on_ours]), CM_MAP)
+    assert list(df["CM"]) == ["Evgeni Sedin"]
+
+
 def test_cm_map_file_is_codes_to_names(tmp_path: Path):
     path = tmp_path / "map.json"
     path.write_text('{"_comment": "x", "codes": {"1106": "Evgeni Sedin", "9": ""}}', encoding="utf-8")
@@ -73,9 +85,11 @@ def test_cm_map_file_is_codes_to_names(tmp_path: Path):
     assert "Evgeni Sedin" in bi_stats.load_cm_map().values()
 
 
-def test_bi_enabled_needs_password_and_respects_excel_override(monkeypatch):
+def test_bi_enabled_needs_host_user_password_and_respects_excel_override(monkeypatch):
     assert not bi_stats.bi_enabled()
     monkeypatch.setenv("BI_MYSQL_PASSWORD", "x")
+    assert not bi_stats.bi_enabled()  # адрес и логин не зашиты в код
+    _enable_bi(monkeypatch)
     assert bi_stats.bi_enabled()
     monkeypatch.setenv("FB_STATS_SOURCE", "excel")
     assert not bi_stats.bi_enabled()
@@ -97,7 +111,7 @@ def _book(path: Path) -> Path:
 
 
 def test_bi_is_read_first_when_enabled(monkeypatch, tmp_path):
-    monkeypatch.setenv("BI_MYSQL_PASSWORD", "x")
+    _enable_bi(monkeypatch)
     monkeypatch.setattr(bi_stats, "fetch_raw", lambda cfg=None: _raw([ROW_KNOWN]))
     monkeypatch.setattr(bi_stats, "load_cm_map", lambda path=None: CM_MAP)
 
@@ -109,7 +123,7 @@ def test_bi_is_read_first_when_enabled(monkeypatch, tmp_path):
 
 
 def test_bi_failure_falls_back_to_workbook_with_note(monkeypatch, tmp_path):
-    monkeypatch.setenv("BI_MYSQL_PASSWORD", "x")
+    _enable_bi(monkeypatch)
 
     def boom(cfg=None):
         raise ConnectionError("timed out")
@@ -125,9 +139,10 @@ def test_bi_failure_falls_back_to_workbook_with_note(monkeypatch, tmp_path):
 
 
 def test_bi_failure_without_workbook_is_an_error(monkeypatch, tmp_path):
-    monkeypatch.setenv("BI_MYSQL_PASSWORD", "x")
+    _enable_bi(monkeypatch)
     monkeypatch.setattr(bi_stats, "fetch_raw", lambda cfg=None: (_ for _ in ()).throw(OSError("down")))
-    with pytest.raises(RuntimeError, match="BI unavailable"):
+    # FileNotFoundError: страницы показывают «нет данных», а не 500.
+    with pytest.raises(FileNotFoundError, match="BI unavailable"):
         morning_service._load_enriched_df(str(tmp_path / "absent.xlsx"))
 
 
@@ -136,7 +151,7 @@ def test_cache_key_follows_bi_revision_without_network(monkeypatch, tmp_path):
     excel_only = cache._current_key(book)
     assert excel_only[0] == book
 
-    monkeypatch.setenv("BI_MYSQL_PASSWORD", "x")
+    _enable_bi(monkeypatch)
     # Ревизия ещё не известна — отчёт «не готов», а не построен по книге.
     assert cache._current_key(book) is None
 

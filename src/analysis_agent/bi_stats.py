@@ -7,9 +7,10 @@ ACL-103. BI отдаёт те же поля, что и `cursor example.xlsx`, т
 
 Настройки — в машинном `.env` (через ``config.paths.load_env``):
 
-- ``BI_MYSQL_PASSWORD`` — без него BI выключен, дешборд читает книгу;
-- ``BI_MYSQL_HOST`` / ``BI_MYSQL_PORT`` / ``BI_MYSQL_USER`` /
-  ``BI_MYSQL_DATABASE`` / ``BI_MYSQL_TABLE`` — по умолчанию выданные BI;
+- ``BI_MYSQL_HOST``, ``BI_MYSQL_USER``, ``BI_MYSQL_PASSWORD`` — без любого из
+  них BI выключен, дешборд читает книгу (адрес и логин в репо не храним);
+- ``BI_MYSQL_PORT`` / ``BI_MYSQL_DATABASE`` / ``BI_MYSQL_TABLE`` — по
+  умолчанию 3306 / BI_Export / UF.Export;
 - ``FB_STATS_SOURCE`` — ``excel`` принудительно возвращает книгу;
 - ``BI_STATS_ALL_CMS=1`` — оставить менеджеров вне config/bi_cm_map.json.
 
@@ -26,9 +27,7 @@ from typing import Any, Dict, Optional, Tuple
 
 import pandas as pd
 
-DEFAULT_HOST = "34.118.197.99"
 DEFAULT_PORT = 3306
-DEFAULT_USER = "media"
 DEFAULT_DATABASE = "BI_Export"
 DEFAULT_TABLE = "UF.Export"
 
@@ -63,15 +62,18 @@ def bi_enabled() -> bool:
     """BI включён: есть пароль и источник не переключён на книгу."""
     if (os.environ.get("FB_STATS_SOURCE") or "").strip().lower() == "excel":
         return False
-    return bool((os.environ.get("BI_MYSQL_PASSWORD") or "").strip())
+    return all(
+        (os.environ.get(name) or "").strip()
+        for name in ("BI_MYSQL_HOST", "BI_MYSQL_USER", "BI_MYSQL_PASSWORD")
+    )
 
 
 def _settings() -> Dict[str, Any]:
     env = os.environ.get
     return {
-        "host": (env("BI_MYSQL_HOST") or DEFAULT_HOST).strip(),
+        "host": (env("BI_MYSQL_HOST") or "").strip(),
         "port": int((env("BI_MYSQL_PORT") or DEFAULT_PORT)),
-        "user": (env("BI_MYSQL_USER") or DEFAULT_USER).strip(),
+        "user": (env("BI_MYSQL_USER") or "").strip(),
         "password": (env("BI_MYSQL_PASSWORD") or "").strip(),
         "database": (env("BI_MYSQL_DATABASE") or DEFAULT_DATABASE).strip(),
         "table": (env("BI_MYSQL_TABLE") or DEFAULT_TABLE).strip(),
@@ -126,9 +128,9 @@ def to_workbook_frame(
 ) -> pd.DataFrame:
     """Строки BI → схема книги Stats.
 
-    Имя CM берётся из карты кодов. Строке с ``CM_ID = Unknown`` (или кодом,
-    которого нет в карте) достаётся менеджер, к которому этот аккаунт
-    относится в остальных строках BI. Остальные строки — чужие команды и
+    Имя CM берётся из карты кодов. Строке с ``CM_ID = Unknown`` достаётся
+    менеджер, к которому этот аккаунт относится в остальных строках BI
+    (чужой код на общем аккаунте — не наш, его не присваиваем). Остальные строки — чужие команды и
     Taboola: книга их не содержала, поэтому по умолчанию они отбрасываются;
     с ``keep_unmapped`` остаются под именем ``CM <код>``.
     """
@@ -139,7 +141,8 @@ def to_workbook_frame(
     known = pd.DataFrame({"alias": df["Account Alias"], "cm": names}).dropna()
     if not known.empty:
         by_alias = known.groupby("alias")["cm"].agg(lambda s: s.value_counts().index[0])
-        names = names.fillna(df["Account Alias"].map(by_alias))
+        inherit = codes.eq(UNKNOWN) & names.isna()
+        names = names.where(~inherit, df["Account Alias"].map(by_alias))
     if not keep_unmapped:
         df, codes, names = df[names.notna()].copy(), codes[names.notna()], names[names.notna()]
     df["CM"] = names.fillna("CM " + codes)
@@ -172,6 +175,11 @@ def fetch_revision(cfg: Optional[Dict[str, Any]] = None) -> str:
     return f"{last}|{count}"
 
 
+class BIUnavailable(FileNotFoundError):
+    """BI не ответил, а книги-фолбэка нет. FileNotFoundError — чтобы страницы
+    показали обычную ошибку «нет данных», а не 500."""
+
+
 def known_revision() -> Optional[str]:
     """Последняя известная ревизия, без сети."""
     return _REV["value"]
@@ -189,6 +197,31 @@ def refresh_revision(*, force: bool = False) -> Optional[str]:
                 _REV["value"] = "unavailable"
         _REV["checked"] = time.monotonic()
         return _REV["value"]
+
+
+_WATCHER: Dict[str, Any] = {"thread": None}
+
+
+def ensure_revision_watcher() -> None:
+    """Фоновый поток: раз в REVISION_TTL обновляет ревизию.
+
+    Страница сама в BI не ходит (иначе запрос после загрузки BI ждал бы
+    сеть и холодную сборку — ACL-1399). Поток лишь меняет ключ; peek видит
+    новый ключ, и отчёт пересобирается фоном, как при новой книге.
+    """
+    with _REV_LOCK:
+        thread = _WATCHER["thread"]
+        if thread is not None and thread.is_alive():
+            return
+
+        def run() -> None:
+            while bi_enabled():
+                time.sleep(REVISION_TTL)
+                refresh_revision(force=True)
+
+        thread = threading.Thread(target=run, name="acl-bi-revision", daemon=True)
+        _WATCHER["thread"] = thread
+        thread.start()
 
 
 def source_key(excel_key: Optional[Tuple[str, float]]) -> Optional[Tuple[Any, ...]]:

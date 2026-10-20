@@ -147,7 +147,7 @@ def _read_stats_rows(excel_path: str) -> Tuple[pd.DataFrame, str, Optional[str]]
             return bi_stats.read_bi_stats(), "bi", None
         except Exception as e:  # noqa: BLE001 — фолбэк на книгу ниже
             if not os.path.isfile(excel_path):
-                raise RuntimeError(f"BI unavailable and no Stats workbook: {type(e).__name__}: {e}") from e
+                raise bi_stats.BIUnavailable(f"BI unavailable and no Stats workbook: {type(e).__name__}: {e}") from e
             note = f"BI unavailable ({type(e).__name__}: {e}) — showing the Stats workbook instead."
             print(f"[morning_service] {note}", file=sys.stderr)
             return read_stats_workbook(excel_path), "excel", note

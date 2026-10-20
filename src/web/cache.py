@@ -123,8 +123,11 @@ def get_cached_report(
     """
     excel_path = _resolve_excel_path(None)
     if bi_stats.bi_enabled():
-        # Сеть — здесь, в рабочем потоке; Refresh спрашивает BI без ожидания TTL.
-        bi_stats.refresh_revision(force=force_rebuild)
+        # Сеть — только когда ревизии ещё нет или нажат Refresh. Иначе её
+        # обновляет фоновый поток: запрос страницы не ждёт BI (ACL-1399).
+        if force_rebuild or bi_stats.known_revision() is None:
+            bi_stats.refresh_revision(force=True)
+        bi_stats.ensure_revision_watcher()
     expected_key = _current_key(excel_path)
     cm_key = _cm_key(my_cm)
 
@@ -178,7 +181,10 @@ def _build_locked(expected_key, cm_key: str, *, progress=None):
     _CACHE["df"] = df
     _CACHE["warnings"] = warnings
     _CACHE["excel_key"] = expected_key
-    _CACHE["excel_df"] = df
+    # ACL-103: книга, прочитанная вместо упавшего BI, не переиспользуется —
+    # следующий Refresh снова пробует BI, а не держит фолбэк до новой загрузки.
+    bi_fallback = bi_stats.bi_enabled() and df.attrs.get("stats_source") != "bi"
+    _CACHE["excel_df"] = None if bi_fallback else df
     _CACHE["reports"] = reports
     from datetime import datetime
     _CACHE["built_at"] = datetime.now().isoformat(timespec="seconds")
