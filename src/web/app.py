@@ -3047,6 +3047,7 @@ def api_accounts_overview() -> JSONResponse:
             "country": country_by_alias.get(normalize_account_alias(label), ""),
             "stock": row.get("stock") or "",
             "status": row.get("account_status") or "",
+            "label_key": profile_name_key((label or "").split(" ")[0]),
             "ad_account_id": ad_id,
             "profile_id": profile_id,
             "profile_open": profile_id in open_ids,
@@ -3079,6 +3080,7 @@ def api_accounts_overview() -> JSONResponse:
             "country": country_by_alias.get(normalize_account_alias(label), ""),
             "stock": "",
             "status": "",
+            "label_key": profile_name_key((label or "").split(" ")[0]),
             "ad_account_id": ad_id,
             "profile_id": profile_id,
             "profile_open": profile_id in open_ids,
@@ -4552,6 +4554,12 @@ async def goals_read(cm: str = "") -> JSONResponse:
     from starlette.concurrency import run_in_threadpool
 
     who = (cm or "").strip() or (os.environ.get("MY_CM_NAME") or "").strip()
+    me = (os.environ.get("MY_CM_NAME") or "").strip()
+    if who.casefold() != me.casefold() and not goals_store.is_team_lead():
+        return JSONResponse(
+            {"ok": False, "error": f"These are {who}'s goals. Only a team lead sees somebody else's."},
+            status_code=403,
+        )
     seed = await run_in_threadpool(_goal_countries_now, who)
     return JSONResponse({
         "ok": True,
@@ -4559,6 +4567,20 @@ async def goals_read(cm: str = "") -> JSONResponse:
         "goals": goals_store.for_cm(who, seed),
         "team_lead": goals_store.is_team_lead(),
     })
+
+
+@app.get("/goals/overview")
+async def goals_overview() -> JSONResponse:
+    """Every manager's saved goals, read-only. Team lead only (ACL_TEAM_LEAD).
+
+    Same agreement as editing: the flag keeps the UI honest, it is not a lock.
+    """
+    from src.web import goals as goals_store
+
+    if not goals_store.is_team_lead():
+        return JSONResponse(
+            {"ok": False, "error": "Only a team lead sees everyone's goals."}, status_code=403)
+    return JSONResponse({"ok": True, "managers": goals_store.overview()})
 
 
 @app.post("/goals")
@@ -5819,6 +5841,14 @@ async def multilogin_search(request: Request) -> JSONResponse:
             clean = clean[:160].rstrip() + "…"
         return JSONResponse({"ok": False, "error": f"Multilogin refused the profile list: {clean}"})
 
+    # ACL-1202: the account key (the same rule the overview uses for its
+    # suggestion) rides along, so a picker can recognise "this is the one"
+    # in a search answer without a second copy of the rule in the page.
+    from src.fb_ads_rpa.mlx_profiles import profile_name_key
+
+    for _p in profiles:
+        if isinstance(_p, dict):
+            _p.setdefault("key", profile_name_key(_p.get("name") or ""))
     return JSONResponse({"ok": True, "profiles": profiles, "folders": folders})
 
 

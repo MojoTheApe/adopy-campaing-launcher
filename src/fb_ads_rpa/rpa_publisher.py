@@ -352,6 +352,13 @@ class RpaPublisher:
                 # ACL-1320: причина в профиле (вход, сеть, открыт руками) —
                 # её текст и есть сообщение; обходных путей нет.
                 raise
+            down = profile_trouble.launcher_unreachable(exc)
+            if down:
+                # ACL-1401: приложение Multilogin не запущено — лаунчер отказал
+                # в соединении. DirectCDP и простой браузер тут не помогут (и
+                # второй запрещён), повтор запуска тоже: остановка аккаунта с
+                # понятной причиной вместо голого исключения задания.
+                raise profile_trouble.ProfileStop(profile_trouble.MLX_NOT_RUNNING, down) from exc
             if attach_only:
                 # The reason above is the one from the Multilogin automation
                 # API, and it is the whole message worth reading. A profile
