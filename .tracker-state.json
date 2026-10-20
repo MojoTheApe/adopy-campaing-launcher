@@ -50626,7 +50626,7 @@
             "session": "run_s1020_774"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-S1020774",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -50643,7 +50643,7 @@
           "pr": 834,
           "report": "ACL-1774: up to 5 primary texts as Dynamic Creative (is_dynamic_creative on the ad set, asset_feed_spec without rules, one ad per ad set), Stories/Reels vertical file with one text via two labelled files and two rules. Both write-policy layers and pre-flight rules carry the limits; read-back compares texts as a multiset and the dynamic flag both ways.\n\nLive spike (Doc120, 2026-10-20, owner-authorized, one attempt, PAUSED only): Meta accepted the Dynamic Creative route; 45 of 46 read-back checks match. The earlier 2026-10-14 refusal (100/1885878) was for 3 bodies plus placement rules. One unrelated mismatch: ad set languages expected [1002], got [7, 23] (separate task). Ads Manager eye check not done (separate Live check).\n\nReview: Opus read-only, no blockers; major findings fixed. Open minor items: text dedup by body only (enrich_draft), field numbering after an empty slot, creative name independent of texts 2-5. Branch contains ACL-1767 history (PR #830 in review); merged with work/main 259ae7f1. Tests: affected files only (1774, 1819, 1761, 1767, 1775, second primary text, creative pairing)."
         },
-        "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
+        "review_report": "# Return: PR #834 [ACL-1774] \u2014 not approved\n\nReviewer: Reviewer-R1774V (session reviewer-r1774v-20261020, lane aa0790053ef841a88dab48f0faaeeba5)\nImplementer: Worker-S1020774\nHead: 22020ffe05e5d4d8681ec090f665620627d32dab\nBase: work/main 259ae7f1283a0a0acab40354b6b97d55162c91b5 (verified via ls-remote)\n\n## Blocker 1 \u2014 the PR ships unreviewed ACL-1767 code (stacking)\n\n`git log work/main..HEAD` includes these ACL-1767 commits. None of them is in main, and\n`git cherry work/main HEAD` marks each one `+`, so main has no equivalent patch either:\n\n- e40efbe1 [ACL-1767] API path: gender, languages, devices/OS version, start time, CTA list, multi-advertiser off\n- 2d28e0fd [ACL-1767] Builder: audience, devices, start time and CTA controls; drafts v2 to v3\n- ecd525f2 [ACL-1767] Review fixes: ...\n- 7a78e2c6 Merge work/main into codex/acl-1767-audience-cta-devices (merged into this branch by 9eb23799)\n\nThese are the commits of PR #830 (ACL-1767, OPEN, not Approved): e40efbe1, 2d28e0fd, ecd525f2, 7a78e2c6, 8ef0046d.\nThe current #830 head 8ef0046d is not an ancestor of the PR head, but the four commits above are.\nThe diff against main also carries all of tests/test_acl1767_audience_fields.py (+691 lines).\nIt also adds `tzdata==2026.3` to requirements.txt, and that line comes from 7a78e2c6 (ACL-1767).\nApproving #834 would therefore ship the unreviewed ACL-1767 code.\nThe heads of #832 (ebac53f8) and #833 (b581aaad, ACL-1768) are not ancestors of the PR head.\n\nFix: either rebase ACL-1774 onto work/main with only its own commits, or wait until ACL-1767 is approved and merged, then merge main again.\n\n## Blocker 2 \u2014 CI red on the head\n\nRun 39431874460: linux tests (3.11/3.13, shards 2 and 3) fail. The failing tests:\n- tests/test_acl1769_two_column_layout.py::test_the_api_backend_second_text_is_supported_and_the_rpa_gates_texts_3_to_5 \u2014 DID NOT RAISE\n- tests/test_acl1775_instant_forms.py::test_website_plan_posts_and_readback_are_identical_to_the_pre_forms_creator \u2014 plan/readback_checks differ from the pre-forms creator\n- tests/test_builder_review_browser.py::test_duplicate_copies_actual_slot_and_ad_fields_and_keeps_the_next_slot \u2014 KeyError: 'camp_1_ad_count'\n- tests/test_distribution_boundary.py::test_requirements_carry_nothing_only_the_rest_of_the_repo_needs \u2014 this is the tzdata line that came in with ACL-1767\n\"ACL verification\" is also red; it is the tracker/evidence gate, reported separately.\n\n## Content review\n\nI did not do a full content review, because Blocker 1 alone decides the verdict.\nPlease re-request review after the branch has been cleaned up.\nNo live checks claimed.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578001+00:00",
@@ -103105,6 +103105,24 @@
             "approved_at": "2026-10-20T17:17:35+00:00"
           }
         }
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-20T17:19:13+00:00",
+        "review": {
+          "id": "aa0790053ef841a88dab48f0faaeeba5",
+          "pr": 834,
+          "issues": [
+            774
+          ],
+          "actor": "Reviewer-R1774V",
+          "session": "reviewer-r1774v-20261020",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-20T15:24:14+00:00",
+          "state": "returning",
+          "report": "# Return: PR #834 [ACL-1774] \u2014 not approved\n\nReviewer: Reviewer-R1774V (session reviewer-r1774v-20261020, lane aa0790053ef841a88dab48f0faaeeba5)\nImplementer: Worker-S1020774\nHead: 22020ffe05e5d4d8681ec090f665620627d32dab\nBase: work/main 259ae7f1283a0a0acab40354b6b97d55162c91b5 (verified via ls-remote)\n\n## Blocker 1 \u2014 the PR ships unreviewed ACL-1767 code (stacking)\n\n`git log work/main..HEAD` includes these ACL-1767 commits. None of them is in main, and\n`git cherry work/main HEAD` marks each one `+`, so main has no equivalent patch either:\n\n- e40efbe1 [ACL-1767] API path: gender, languages, devices/OS version, start time, CTA list, multi-advertiser off\n- 2d28e0fd [ACL-1767] Builder: audience, devices, start time and CTA controls; drafts v2 to v3\n- ecd525f2 [ACL-1767] Review fixes: ...\n- 7a78e2c6 Merge work/main into codex/acl-1767-audience-cta-devices (merged into this branch by 9eb23799)\n\nThese are the commits of PR #830 (ACL-1767, OPEN, not Approved): e40efbe1, 2d28e0fd, ecd525f2, 7a78e2c6, 8ef0046d.\nThe current #830 head 8ef0046d is not an ancestor of the PR head, but the four commits above are.\nThe diff against main also carries all of tests/test_acl1767_audience_fields.py (+691 lines).\nIt also adds `tzdata==2026.3` to requirements.txt, and that line comes from 7a78e2c6 (ACL-1767).\nApproving #834 would therefore ship the unreviewed ACL-1767 code.\nThe heads of #832 (ebac53f8) and #833 (b581aaad, ACL-1768) are not ancestors of the PR head.\n\nFix: either rebase ACL-1774 onto work/main with only its own commits, or wait until ACL-1767 is approved and merged, then merge main again.\n\n## Blocker 2 \u2014 CI red on the head\n\nRun 39431874460: linux tests (3.11/3.13, shards 2 and 3) fail. The failing tests:\n- tests/test_acl1769_two_column_layout.py::test_the_api_backend_second_text_is_supported_and_the_rpa_gates_texts_3_to_5 \u2014 DID NOT RAISE\n- tests/test_acl1775_instant_forms.py::test_website_plan_posts_and_readback_are_identical_to_the_pre_forms_creator \u2014 plan/readback_checks differ from the pre-forms creator\n- tests/test_builder_review_browser.py::test_duplicate_copies_actual_slot_and_ad_fields_and_keeps_the_next_slot \u2014 KeyError: 'camp_1_ad_count'\n- tests/test_distribution_boundary.py::test_requirements_carry_nothing_only_the_rest_of_the_repo_needs \u2014 this is the tzdata line that came in with ACL-1767\n\"ACL verification\" is also red; it is the tracker/evidence gate, reported separately.\n\n## Content review\n\nI did not do a full content review, because Blocker 1 alone decides the verdict.\nPlease re-request review after the branch has been cleaned up.\nNo live checks claimed.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -112490,20 +112508,6 @@
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T15:20:58+00:00",
         "state": "reviewing"
-      },
-      "834": {
-        "id": "aa0790053ef841a88dab48f0faaeeba5",
-        "pr": 834,
-        "issues": [
-          774
-        ],
-        "actor": "Reviewer-R1774V",
-        "session": "reviewer-r1774v-20261020",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-20T15:24:14+00:00",
-        "state": "returning",
-        "report": "# Return: PR #834 [ACL-1774] \u2014 not approved\n\nReviewer: Reviewer-R1774V (session reviewer-r1774v-20261020, lane aa0790053ef841a88dab48f0faaeeba5)\nImplementer: Worker-S1020774\nHead: 22020ffe05e5d4d8681ec090f665620627d32dab\nBase: work/main 259ae7f1283a0a0acab40354b6b97d55162c91b5 (verified via ls-remote)\n\n## Blocker 1 \u2014 the PR ships unreviewed ACL-1767 code (stacking)\n\n`git log work/main..HEAD` includes these ACL-1767 commits. None of them is in main, and\n`git cherry work/main HEAD` marks each one `+`, so main has no equivalent patch either:\n\n- e40efbe1 [ACL-1767] API path: gender, languages, devices/OS version, start time, CTA list, multi-advertiser off\n- 2d28e0fd [ACL-1767] Builder: audience, devices, start time and CTA controls; drafts v2 to v3\n- ecd525f2 [ACL-1767] Review fixes: ...\n- 7a78e2c6 Merge work/main into codex/acl-1767-audience-cta-devices (merged into this branch by 9eb23799)\n\nThese are the commits of PR #830 (ACL-1767, OPEN, not Approved): e40efbe1, 2d28e0fd, ecd525f2, 7a78e2c6, 8ef0046d.\nThe current #830 head 8ef0046d is not an ancestor of the PR head, but the four commits above are.\nThe diff against main also carries all of tests/test_acl1767_audience_fields.py (+691 lines).\nIt also adds `tzdata==2026.3` to requirements.txt, and that line comes from 7a78e2c6 (ACL-1767).\nApproving #834 would therefore ship the unreviewed ACL-1767 code.\nThe heads of #832 (ebac53f8) and #833 (b581aaad, ACL-1768) are not ancestors of the PR head.\n\nFix: either rebase ACL-1774 onto work/main with only its own commits, or wait until ACL-1767 is approved and merged, then merge main again.\n\n## Blocker 2 \u2014 CI red on the head\n\nRun 39431874460: linux tests (3.11/3.13, shards 2 and 3) fail. The failing tests:\n- tests/test_acl1769_two_column_layout.py::test_the_api_backend_second_text_is_supported_and_the_rpa_gates_texts_3_to_5 \u2014 DID NOT RAISE\n- tests/test_acl1775_instant_forms.py::test_website_plan_posts_and_readback_are_identical_to_the_pre_forms_creator \u2014 plan/readback_checks differ from the pre-forms creator\n- tests/test_builder_review_browser.py::test_duplicate_copies_actual_slot_and_ad_fields_and_keeps_the_next_slot \u2014 KeyError: 'camp_1_ad_count'\n- tests/test_distribution_boundary.py::test_requirements_carry_nothing_only_the_rest_of_the_repo_needs \u2014 this is the tzdata line that came in with ACL-1767\n\"ACL verification\" is also red; it is the tracker/evidence gate, reported separately.\n\n## Content review\n\nI did not do a full content review, because Blocker 1 alone decides the verdict.\nPlease re-request review after the branch has been cleaned up.\nNo live checks claimed.",
-        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
