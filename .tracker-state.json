@@ -45203,9 +45203,11 @@
         "worktree": "C:\\acl-1841-wt",
         "id": "47d7d49d108844dcb260cb11594dcead",
         "issue": 841,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T11:35:40+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 848,
+        "report": "Review fix (ACL-1841, 2026-10-20): the blocking finding is addressed through option 2 - the remaining #841 criteria (toolbar grouping when the ACL-1800 campaign toolbar wraps; country footer/form and builder handle not covering table actions) are explicitly out of this slice and deferred to a follow-up Issue that the coordinator must create/accept; the PR must not close #841. CHANGELOG now states covered vs deferred, the stale \"toolbar absent\" sentence is removed and the whitespace churn is gone. Code and tests unchanged (24 passed at the previous head). Needs: coordinator acceptance of the partial slice + follow-up Issue."
       }
     },
     "tasks": {
