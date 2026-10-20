@@ -5366,6 +5366,27 @@
         "issue_scopes": {
           "836": "50752e44ec4b4103a48807f7bea9a0fa562f1b01651d742295d2cd0055e94151"
         }
+      },
+      "833": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-Q2001D",
+        "review_session": "q2001d-20261020",
+        "execution_lane": "3259dd747cd94624b37651935b453a9a",
+        "implementer": "Worker-B1019768",
+        "head_sha": "b581aaad9d82a11ea27add83905645a65de1d97f",
+        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "tree_sha": "f5fb2c7f1bfd6937694ee3f233e843b19f07a938",
+        "report": "ACL-1768 several ad sets per campaign (contains #830 ACL-1767 and #832 ACL-1771, both Approved). Scope matches the Issue: sets with own index, language and pixel, cap of 10 sets, same-name sets refused, call budget computed from the plan (floor 150, ceiling 250, up-front refusal above 250, no half-created campaigns), RPA backend refuses more than one set with a message instead of dropping, drafts v3 to v4 migration tested. Safety: PAUSED-only unchanged, no deletes, no polling, write_policy untouched by this PR beyond the stacked parts, the budget is a ceiling on reads and writes. Earlier findings fixed across heads: the two test_upload_without_workbook tests, the two 1768 browser tests, the tzdata boundary test, and the last one (rpa_publisher ad_sets AttributeError in test_rpa_job_start_is_measured) by getattr(d, 'ad_sets', None) or [] at head b581aaad. Tests run locally at this head: 154 passed (rpa_job_start_is_measured, upload_without_workbook, acl1768_ad_sets, distribution_boundary, acl1771_targeting_resolver). CI all green (after one tracker-link rerun); head contains current work/main. Not claimed: live Meta runs; ordering vs #979 and #1025 handled by refresh of the later PR.",
+        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          768
+        ],
+        "recorded_at": "2026-10-20T10:55:19+00:00",
+        "issue_scopes": {
+          "768": "088a388fb4b12b4ce68f0f1f012234005058896d5a35d5087c9c8a1fb9fbc968"
+        }
       }
     },
     "stage": {
