@@ -44846,22 +44846,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "13": {
-        "actor": "Worker-B1020C",
-        "session": "25925e36-bi1020c",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-103-bi-mysql-source",
-        "worktree": "C:\\acl-bi-source",
-        "id": "25501b7c896c4f529b9e45ffc251505d",
-        "issue": 13,
-        "state": "handoff",
-        "started_at": "2026-10-20T07:12:31+00:00",
-        "from_status": "status:todo",
-        "pr": 1031,
-        "report": "ACL-103 implemented in PR #1031 (work/acl-103-bi-mysql-source).\nDashboard reads BI MySQL `BI_Export`.`UF.Export` mapped to the Stats workbook schema, with fallback to the workbook.\nVerified live against BI 13-19.10 (FTDs/Net match workbook exactly for team CMs), new tests + report/cache tests 62 passed, pre-handoff Opus review fixed (1 HIGH, 4 MEDIUM)."
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -51192,22 +51177,25 @@
             "session": "25925e36-bi1020c"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-B1020C",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-B1020A",
-          "session": "25925e36-bi1020",
+          "actor": "Worker-B1020C",
+          "session": "25925e36-bi1020c",
           "coordinator": "Coordinator-M1011A",
-          "branch": "work/acl-1013-bi-mysql-source",
+          "branch": "work/acl-103-bi-mysql-source",
           "worktree": "C:\\acl-bi-source",
-          "id": "92091ffc2a58485188f99186cb5426bc",
+          "id": "25501b7c896c4f529b9e45ffc251505d",
           "issue": 13,
-          "state": "stopping",
-          "started_at": "2026-10-20T06:37:45+00:00",
-          "from_status": "status:backlog",
-          "report": "ACL-103 implemented in PR #1030 (work/acl-1013-bi-mysql-source).\nDashboard reads BI MySQL `BI_Export`.`UF.Export` mapped to the Stats workbook schema, with fallback to the workbook.\nVerified live against BI 13-19.10 (FTDs/Net match workbook exactly for team CMs), new tests + report/cache tests 62 passed, pre-handoff Opus review fixed (1 HIGH, 4 MEDIUM)."
-        }
+          "state": "handoff",
+          "started_at": "2026-10-20T07:12:31+00:00",
+          "from_status": "status:todo",
+          "pr": 1031,
+          "report": "ACL-103 implemented in PR #1031 (work/acl-103-bi-mysql-source).\nDashboard reads BI MySQL `BI_Export`.`UF.Export` mapped to the Stats workbook schema, with fallback to the workbook.\nVerified live against BI 13-19.10 (FTDs/Net match workbook exactly for team CMs), new tests + report/cache tests 62 passed, pre-handoff Opus review fixed (1 HIGH, 4 MEDIUM)."
+        },
+        "pr": 1031,
+        "queued_at": "2026-10-20T07:21:39+00:00"
       },
       "896": {
         "implementers": [
@@ -58585,7 +58573,8 @@
       990,
       840,
       992,
-      739
+      739,
+      13
     ],
     "review": null,
     "history": [
@@ -97015,6 +97004,13 @@
         "pr": 1025,
         "lane": "76936c3ee7694dd4ab267dc9a8645455",
         "actor": "Reviewer-R1897Z"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T07:21:39+00:00",
+        "issue": 13,
+        "pr": 1031,
+        "actor": "Worker-B1020C"
       }
     ],
     "policy": {
