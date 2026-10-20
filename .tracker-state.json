@@ -51881,7 +51881,7 @@
             "session": "rf920-20261020"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-RF920",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -102397,6 +102397,68 @@
         "pr": 921,
         "lane": "05bf5691cf434b36b574c3a79c291c79",
         "actor": "Reviewer-RR1020"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-20T14:41:18+00:00",
+        "issue": 920,
+        "pr": 921,
+        "review": {
+          "id": "05bf5691cf434b36b574c3a79c291c79",
+          "pr": 921,
+          "issues": [
+            920
+          ],
+          "actor": "Reviewer-RR1020",
+          "session": "rr1020-20261020",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-20T14:33:14+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 920,
+            "pr": 921,
+            "branch": "work/acl-1920-search-refused",
+            "head_sha": "81a4e74bffc548cc5e11fa0b37a58795b3d7ff24",
+            "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+            "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "d35d2e8a4ecc9f4c69c7a1111ac8996a5de43708265b77d75b0831dee9e0a42a",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-RR1020",
+              "review_session": "rr1020-20261020",
+              "execution_lane": "05bf5691cf434b36b574c3a79c291c79",
+              "implementer": "Worker-RF920",
+              "head_sha": "81a4e74bffc548cc5e11fa0b37a58795b3d7ff24",
+              "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+              "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+              "tree_sha": "1e18f7e2a0222f8db07bd7bb0a23bcb9addf11fc",
+              "issues": [
+                920
+              ],
+              "report": "Verdict: approved (fresh re-review after main moved to 259ae7f1). Delta from previous approved head 7134984c is only the merge of main 259ae7f1: it touches only files main changed since the merge base; no other author changes. Stacked on 832: 832 head ebac53f8 to this head differs only by the 1920 files (CHANGELOG, creator.py, preflight_rules.py, targeting_resolver.py, tests/test_acl1920_search_refused.py). Scope read against ACL-1920: optional lookups (adinterestvalid, behaviors, work, education) skipped on permission codes 10/200/294 with English warnings naming the refused lookup; adinterest fallback; refusal of adinterest/geo/locale still fails with search_type in text; terms only matchable via refused bucket end unknown, never guessed; refused types cached for the job (no retries); refused read still counted in budget; read-only. Source CI on exact head green (descriptor, tracker-link, ACL verification, Installer verification, linux/windows tests). Coordinator trial merge: compatible, 192 tests passed.",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "recorded_at": "2026-10-20T14:35:25+00:00",
+              "issue_scopes": {
+                "920": "d35d2e8a4ecc9f4c69c7a1111ac8996a5de43708265b77d75b0831dee9e0a42a"
+              }
+            },
+            "lane": {
+              "id": "05bf5691cf434b36b574c3a79c291c79",
+              "pr": 921,
+              "issues": [
+                920
+              ],
+              "actor": "Reviewer-RR1020",
+              "session": "rr1020-20261020",
+              "coordinator": "Coordinator-M1011A",
+              "started_at": "2026-10-20T14:33:14+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-20T14:36:53+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -106446,6 +106508,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-20T14:31:03+00:00"
+      },
+      "920": {
+        "issue": 920,
+        "pr": 921,
+        "branch": "work/acl-1920-search-refused",
+        "head_sha": "81a4e74bffc548cc5e11fa0b37a58795b3d7ff24",
+        "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+        "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "d35d2e8a4ecc9f4c69c7a1111ac8996a5de43708265b77d75b0831dee9e0a42a",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-RR1020",
+          "review_session": "rr1020-20261020",
+          "execution_lane": "05bf5691cf434b36b574c3a79c291c79",
+          "implementer": "Worker-RF920",
+          "head_sha": "81a4e74bffc548cc5e11fa0b37a58795b3d7ff24",
+          "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+          "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+          "tree_sha": "1e18f7e2a0222f8db07bd7bb0a23bcb9addf11fc",
+          "issues": [
+            920
+          ],
+          "report": "Verdict: approved (fresh re-review after main moved to 259ae7f1). Delta from previous approved head 7134984c is only the merge of main 259ae7f1: it touches only files main changed since the merge base; no other author changes. Stacked on 832: 832 head ebac53f8 to this head differs only by the 1920 files (CHANGELOG, creator.py, preflight_rules.py, targeting_resolver.py, tests/test_acl1920_search_refused.py). Scope read against ACL-1920: optional lookups (adinterestvalid, behaviors, work, education) skipped on permission codes 10/200/294 with English warnings naming the refused lookup; adinterest fallback; refusal of adinterest/geo/locale still fails with search_type in text; terms only matchable via refused bucket end unknown, never guessed; refused types cached for the job (no retries); refused read still counted in budget; read-only. Source CI on exact head green (descriptor, tracker-link, ACL verification, Installer verification, linux/windows tests). Coordinator trial merge: compatible, 192 tests passed.",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "recorded_at": "2026-10-20T14:35:25+00:00",
+          "issue_scopes": {
+            "920": "d35d2e8a4ecc9f4c69c7a1111ac8996a5de43708265b77d75b0831dee9e0a42a"
+          }
+        },
+        "lane": {
+          "id": "05bf5691cf434b36b574c3a79c291c79",
+          "pr": 921,
+          "issues": [
+            920
+          ],
+          "actor": "Reviewer-RR1020",
+          "session": "rr1020-20261020",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-20T14:33:14+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-20T14:36:53+00:00"
       }
     },
     "batches": {
@@ -111484,62 +111590,6 @@
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T14:21:00+00:00",
         "state": "reviewing"
-      },
-      "921": {
-        "id": "05bf5691cf434b36b574c3a79c291c79",
-        "pr": 921,
-        "issues": [
-          920
-        ],
-        "actor": "Reviewer-RR1020",
-        "session": "rr1020-20261020",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-20T14:33:14+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 920,
-          "pr": 921,
-          "branch": "work/acl-1920-search-refused",
-          "head_sha": "81a4e74bffc548cc5e11fa0b37a58795b3d7ff24",
-          "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-          "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "d35d2e8a4ecc9f4c69c7a1111ac8996a5de43708265b77d75b0831dee9e0a42a",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-RR1020",
-            "review_session": "rr1020-20261020",
-            "execution_lane": "05bf5691cf434b36b574c3a79c291c79",
-            "implementer": "Worker-RF920",
-            "head_sha": "81a4e74bffc548cc5e11fa0b37a58795b3d7ff24",
-            "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-            "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-            "tree_sha": "1e18f7e2a0222f8db07bd7bb0a23bcb9addf11fc",
-            "issues": [
-              920
-            ],
-            "report": "Verdict: approved (fresh re-review after main moved to 259ae7f1). Delta from previous approved head 7134984c is only the merge of main 259ae7f1: it touches only files main changed since the merge base; no other author changes. Stacked on 832: 832 head ebac53f8 to this head differs only by the 1920 files (CHANGELOG, creator.py, preflight_rules.py, targeting_resolver.py, tests/test_acl1920_search_refused.py). Scope read against ACL-1920: optional lookups (adinterestvalid, behaviors, work, education) skipped on permission codes 10/200/294 with English warnings naming the refused lookup; adinterest fallback; refusal of adinterest/geo/locale still fails with search_type in text; terms only matchable via refused bucket end unknown, never guessed; refused types cached for the job (no retries); refused read still counted in budget; read-only. Source CI on exact head green (descriptor, tracker-link, ACL verification, Installer verification, linux/windows tests). Coordinator trial merge: compatible, 192 tests passed.",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "recorded_at": "2026-10-20T14:35:25+00:00",
-            "issue_scopes": {
-              "920": "d35d2e8a4ecc9f4c69c7a1111ac8996a5de43708265b77d75b0831dee9e0a42a"
-            }
-          },
-          "lane": {
-            "id": "05bf5691cf434b36b574c3a79c291c79",
-            "pr": 921,
-            "issues": [
-              920
-            ],
-            "actor": "Reviewer-RR1020",
-            "session": "rr1020-20261020",
-            "coordinator": "Coordinator-M1011A",
-            "started_at": "2026-10-20T14:33:14+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-20T14:36:53+00:00"
-        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
