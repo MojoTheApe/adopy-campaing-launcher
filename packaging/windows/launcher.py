@@ -27,12 +27,20 @@ def _bundle_root() -> Path:
 
 
 def _local_acl_dir() -> Path:
-    explicit = os.environ.get("ACL_CONFIG_DIR", "").strip()
-    if explicit:
-        return Path(explicit).expanduser().resolve()
-    local_app_data = os.environ.get("LOCALAPPDATA", "").strip()
-    base = Path(local_app_data) if local_app_data else Path.home() / ".local" / "share"
-    return base / "ACL"
+    """The one settings folder (ACL-1680): the real LOCALAPPDATA/ACL folder, never
+    the virtual copy an MSIX-packaged parent such as Claude Desktop hands out."""
+    _ensure_repo_importable()
+    from config.paths import get_local_config_dir
+
+    folder = Path(get_local_config_dir()).expanduser()
+    # An explicit ACL_CONFIG_DIR is canonicalised; the default is used as-is.
+    return folder.resolve() if os.environ.get("ACL_CONFIG_DIR", "").strip() else folder
+
+
+def _ensure_repo_importable() -> None:
+    root = str(Path(__file__).resolve().parents[2])
+    if root not in sys.path and not getattr(sys, "frozen", False):
+        sys.path.insert(0, root)
 
 
 def _manifest_path() -> Path:
@@ -346,8 +354,19 @@ def _open_local_directory(name: str) -> int:
     return 0
 
 
+def _prepare_config_dir() -> None:
+    """Merge a package copy of the settings into the real folder; never blocks launch."""
+    try:
+        from config.config_unify import prepare_config_dir
+
+        prepare_config_dir()
+    except Exception:
+        pass
+
+
 def main() -> int:
-    os.environ["ACL_CONFIG_DIR"] = str(_local_acl_dir().resolve())
+    os.environ["ACL_CONFIG_DIR"] = str(_local_acl_dir())
+    _prepare_config_dir()
     args = sys.argv[1:]
     if "--acl-version" in args:
         return _print_version()
