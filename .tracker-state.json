@@ -44855,9 +44855,11 @@
         "worktree": "C:\\acl-2028",
         "id": "d39e620929ae44ff87ea9933bbbc1a4f",
         "issue": 1028,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T05:51:46+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 1029,
+        "report": "## Handoff ACL-2028 \u2192 independent source review\n\nPR #1029, head ee7388ed, base work/main c6150160. Tests only: new `tests/test_acl1886_plan_check_snapshot.py`.\n\nCommits the durable proof for ACL-1886 criterion 5: actual `publish_api.check_plan` over in-memory FakeMeta with the anonymized error10 fixture on `/search` and `/campaigns`. Asserts exact public error text with `operation=\u2026`, success/publishable false, zero writes, read-only client, sockets patched to fail, no synthetic account id in the result.\n\nLocal checks (affected only): 3 modules, 56 passed; secret scanner clean. Full suite left to hosted CI.\n\nReviewer focus: assertions are exact snapshots of current main behavior (audit status for failed lookups is `unknown`, not `error`); no production change; determinism (no clock/network/real profiles)."
       }
     },
     "tasks": {
