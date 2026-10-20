@@ -19,7 +19,7 @@ and do not run ACL's historical prepared-bootstrap preflight. Read
 The completed cutovers and their original recovery procedures remain historical
 evidence; current work follows the active policies below.
 
-- [Selected Master 1.5.4 standard](https://github.com/MojoTheApe/master-repo/blob/10da6de5b496a21e10188f2df63bef1f0254afbf/standard.md).
+- [Selected Master 1.6.0 standard](https://github.com/MojoTheApe/master-repo/blob/6cbc2bbfd5df76fc2f1ad6f285d33a45dd5ff504/standard.md).
 - [Repository workflow](docs/repository/WORKFLOW.md), [delivery](docs/repository/DELIVERY.md),
   [selected Tracker guide](docs/repository/TRACKER.md), [verification](docs/repository/VERIFICATION.md)
   and [file ownership](docs/repository/LAYOUT.md).
@@ -33,6 +33,13 @@ guarded ACL adapter above. Report at real tool boundaries and once a minute whil
 running. Missing confirmation becomes unknown after five minutes; it never frees
 ownership. Existing agents without a producer stay unknown until their actual
 owners report. Do not run a detached reporter or confirm another agent's activity.
+
+Deliver process updates separately from the product for every profile. Canonical
+shared-support upgrades require the exact [process-support proof](docs/repository/PROCESS_SUPPORT.md),
+whole-scope independent review and [ACL product-isolation evidence](docs/repository/PROCESS_SUPPORT_ACL.md).
+Keep ordinary source/frozen-batch admission and all applicable checks. Proven
+isolated process completion does not publish an ACL installer; actual product
+changes and explicit publication requests retain their existing delivery controls.
 
 Preserve employee data, existing installers and draft-only advertising controls.
 Implementation requires a real Issue and a durable Worker claim. After the

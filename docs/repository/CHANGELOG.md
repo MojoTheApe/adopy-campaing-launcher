@@ -1,5 +1,32 @@
 # Repository process history
 
+## ACL-2026 — Adopt the global process/product boundary — 2026-10-20
+
+The latest owner instruction separates process delivery from product delivery for
+every repository and installation profile. After the genuine Coordinator returned
+the original Approved source, the same actual author resumed the original task,
+branch and worktree. The complete original Issue body and prior approval remain
+in history; the dated owner amendment governs this revised process-only outcome.
+Select published Master1.6.0 `6cbc2bbfd5df76fc2f1ad6f285d33a45dd5ff504`
+and Tracker3.8.0 `9c3ad4deec6b3596d5ef48400430b126155012dd` through
+the maintained three-way upgrade, retaining its genuine pristine target.
+
+Resolve Action/DELIVERY/VERIFICATION overlaps explicitly while retaining ACL-local
+controls. Restore the descriptor's explanatory exception to actual main: every
+non-pin field, config choice, product/build input and existing request remains
+unchanged. Record the real [product boundary](PROCESS_SUPPORT_ACL.md), including
+release-governance reachability, for fresh independent review. Shared sources are
+[TT-177](https://github.com/MojoTheApe/task-tracker/issues/177) and
+[MR-68](https://github.com/MojoTheApe/master-repo/issues/68).
+
+Ordinary source approval, frozen batch, independent combined review and applicable
+checks remain required. Exact canonical proof plus whole-scope independent review
+can establish process completion after actual admitted main integration. No
+consumer product-release request or Windows publication is created; the earlier
+automatically rejected publication is not resumed. Actual product changes and
+existing explicit publication obligations retain package verification/delivery.
+The earlier activity-source entry below records its original delivery assumption.
+
 ## ACL-2026 — Adopt shared executor activity — 2026-10-20
 
 Select published Master1.5.4 `10da6de5b496a21e10188f2df63bef1f0254afbf`

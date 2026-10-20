@@ -1,6 +1,6 @@
 # Authorized delivery continuation
 
-Follow the [shared continuation contract](https://github.com/MojoTheApe/master-repo/blob/10da6de5b496a21e10188f2df63bef1f0254afbf/docs/delivery-continuation.md)
+Follow the [shared continuation contract](https://github.com/MojoTheApe/master-repo/blob/6cbc2bbfd5df76fc2f1ad6f285d33a45dd5ff504/docs/delivery-continuation.md)
 at this project's exact standard pin and [runtime procedure](../runtime/DELIVERY.md).
 Under this adopted flow, owner approval to integrate/merge selected tasks into
 main covers review/checks,

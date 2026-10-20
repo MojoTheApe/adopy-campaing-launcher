@@ -80,8 +80,8 @@ The task's category stays separate: a task can remain in Review while its review
 waits, stops or has unconfirmed activity. Updating the shared client does not
 restart existing agents or prove that they are running.
 
-Open **Task history** to see which task moved, its previous and next status,
-when and the GitHub actor that changed it. Review includes Approved, so a move
+Open **Task history** to see status labels added or removed, the task,
+when and the GitHub actor that changed them. Review includes Approved, so a move
 from Review to Approved stays inside that category. The history window is bounded;
 an incomplete or unavailable history is marked and earlier records remain linked
 from each GitHub task. A shared GitHub account does not identify an individual agent.
@@ -106,6 +106,12 @@ For instructions, the result is the published document on the main branch. For a
 ACL application change, a merged source change alone is insufficient: look for the
 verified stable release and installation/update evidence in the task. Completion
 does not claim that every employee's machine has already updated.
+
+Process updates are delivered separately from the application. A proven isolated
+update to shared agent or task tooling keeps independent review and the required
+checks, then records its real result on main. **Process updated** means that work
+is complete; it does not claim a new ACL installer. Product changes and an explicit
+request to publish the product still need their actual verified delivery.
 
 If work is blocked, the agent should give you one concrete request, such as
 restoring access to the Windows computer, and continue any independent work.

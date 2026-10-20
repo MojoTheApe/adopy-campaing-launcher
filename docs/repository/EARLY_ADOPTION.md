@@ -3,14 +3,19 @@
 ## Current instruction pin
 
 [ACL-2026](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1026)
-selects published Master 1.5.4
-`10da6de5b496a21e10188f2df63bef1f0254afbf` for common instructions. Tracker 3.7.3
-`5d0a915c9fdb8dea4e3aded38beaa8dd1a024ecc` retains the support introduced by ACL-1987
-and adds the shared [executor activity contract](EXECUTOR_ACTIVITY.md). Existing
+selects published Master 1.6.0
+`6cbc2bbfd5df76fc2f1ad6f285d33a45dd5ff504` for common instructions. Tracker 3.8.0
+`9c3ad4deec6b3596d5ef48400430b126155012dd` retains the support introduced by ACL-1987
+and the shared [executor activity contract](EXECUTOR_ACTIVITY.md), and adds
+canonical [process-support completion](PROCESS_SUPPORT.md). Existing
 activated choices, local checks and package completion remain unchanged.
 The prior ACL-2011 instruction-pin adoption remains in the dated process history.
-This source update still requires its ordinary independent source review, batch,
-main checks and verified package receipt. A source branch is not delivered.
+This source update still requires ordinary independent source review, frozen
+batch, combined review and main checks. The latest owner amendment separates
+its proven isolated process outcome from consumer package delivery; retain exact
+canonical proof and independent whole-scope/product-isolation review. Product
+changes, explicit publication scope and optional-policy selections keep their
+actual package requirements. A source branch alone is not process completion.
 Use the actual current-main pinned ACL adapter for current ownership and delivery;
 the old operative866 instructions below describe ACL-1987's original source path.
 

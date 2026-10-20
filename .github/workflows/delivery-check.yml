@@ -17,6 +17,6 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - uses: MojoTheApe/master-repo@10da6de5b496a21e10188f2df63bef1f0254afbf
+      - uses: MojoTheApe/master-repo@6cbc2bbfd5df76fc2f1ad6f285d33a45dd5ff504
         with:
           allow-draft: 'true'

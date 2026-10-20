@@ -2,7 +2,7 @@
   "exceptions": [
     {
       "scope": "Published workflow support source",
-      "reason": "The selected Master1.5.4 / Tracker3.7.3 pair is published. This compatible support upgrade preserves existing ACL policies, retains the separate one-policy selection-package delivery bridge and adds shared executor activity reporting without a policy migration. It does not verify Task05/06 policy selections, owned activation, reader/every-writer/recovery readiness, board/behavior or comparable ordinary outcomes; adoption remains draft until those actual gates are settled. Existing package and delivery controls are preserved.",
+      "reason": "The selected Master1.5.3 / Tracker3.7.1 pair is published. This compatible support upgrade preserves existing ACL policies and supplies the separate one-policy selection-package delivery bridge. It does not verify Task05/06 policy selections, owned activation, reader/every-writer/recovery readiness, board/behavior or comparable ordinary outcomes; adoption remains draft until those actual gates are settled. Existing package and delivery controls are preserved.",
       "reference": "docs/repository/EARLY_ADOPTION.md"
     },
     {
@@ -66,8 +66,8 @@
   },
   "standard": {
     "repository": "https://github.com/MojoTheApe/master-repo",
-    "revision": "10da6de5b496a21e10188f2df63bef1f0254afbf",
-    "version": "1.5.4"
+    "revision": "6cbc2bbfd5df76fc2f1ad6f285d33a45dd5ff504",
+    "version": "1.6.0"
   },
   "checks": [
     "python scripts/acl_scan_secrets.py",
@@ -81,7 +81,7 @@
     "repository": "MojoTheApe/task-tracker",
     "verification": "Existing acl board verified server-side on 2026-09-21 after Task Tracker PR #64 deployment 0dadc889e18b027c8ca98b888407d492848f2f19: 160 identities, seven columns, 74 bounded historical completions, all six fresh snapshots, preserved authentication and restricted HTTP access. Browser verification excluded by owner. See docs/repository/ADOPTION.md and ACL-1248.",
     "registration": "verified",
-    "revision": "5d0a915c9fdb8dea4e3aded38beaa8dd1a024ecc",
+    "revision": "9c3ad4deec6b3596d5ef48400430b126155012dd",
     "workspace_id": "acl"
   },
   "completion": "verified-stable-package",

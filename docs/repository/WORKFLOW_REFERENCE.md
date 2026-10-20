@@ -21,6 +21,7 @@ Full exact local contracts:
 - [CI_RETRY.md](CI_RETRY.md)
 - [DIRECT_WORKFLOW.md](DIRECT_WORKFLOW.md)
 - [EXECUTOR_ACTIVITY.md](EXECUTOR_ACTIVITY.md)
+- [PROCESS_SUPPORT.md](PROCESS_SUPPORT.md)
 
 ---
 

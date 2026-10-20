@@ -123,6 +123,22 @@ Only the reserved combined batch PR enters `main`. There is no Stage column, Sta
 `verify-stage` requirement in this selected route. Preserve every actual review,
 composition and CI gate; never manufacture Stage proof. Approved and frozen batch admission remain required.
 
+## Deliver the process separately from the product
+
+This rule applies regardless of installation/deployment profile. Instructions and
+proven isolated task/workflow tooling have their own checks and delivery; a consumer
+installer, application deploy or n8n publication is not inherited from the profile
+for a process-only outcome. Product/build/install/update changes retain applicable
+checks and actual product delivery. Split mixed scope; a label or path is not proof.
+
+For canonical published support upgrades, use the read-only `process-support
+PR_NUMBER` command and its genuine independent full-scope assessment. Unknown content
+or scope is not a waiver. Keep ordinary source/batch/Stage/main admission and checks;
+only the real admitted main outcome can establish process completion. Do not request
+consumer product delivery for a proven process-only outcome. Preserve explicit
+publication scope and any existing requested delivery. Schema1 instruction admission
+is unchanged. Read [canonical process support](PROCESS_SUPPORT.md).
+
 ## Selected instruction-only exception
 
 Only the pinned complete-diff classifier can prove the eligible one-task

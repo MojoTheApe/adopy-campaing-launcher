@@ -132,6 +132,15 @@ the existing checks or delivery condition.
 
 ## Stage, main and completion
 
+The global [process/product boundary](DELIVERY.md#process-and-product-delivery)
+applies to every profile. A published canonical shared-support upgrade retains
+ordinary source approval, frozen-batch composition, combined review and required
+checks. Only the exact [native proof](PROCESS_SUPPORT.md) and genuine independent
+whole-scope/product-isolation review can establish process delivery without a
+consumer product-release request. This is not the instruction-only shortcut.
+The package publication clauses below apply to product outcomes and explicit
+product requests; preserve existing requests and unfinished product acceptance.
+
 The sequence below applies to ordinary/application work. Proven adopted
 instruction-only tasks hold their independent source review through direct main
 admission and complete with the normal verified process receipt, as described in
@@ -140,7 +149,7 @@ require an application installer/delivery receipt.
 
 Approved ordinary source branches -> reserved `codex/batch-ID` integration branch ->
 main, after independent combined review and full applicable CI. Ordinary one-task
-sources stay approval-only. Standing owner policy includes package delivery when
+sources stay approval-only. For product outcomes, standing owner policy includes package delivery when
 integration/main merge is approved; the agent automatically records the genuine request through
 `batch begin --deliver` unless the owner explicitly requests source-only/skip-release.
 Main CI then continues publication,
@@ -151,7 +160,7 @@ retries, initial old-policy source admission and re-enabling Stage. Keep origina
 source branches and the permanent stage branch/history.
 
 Merged means all of a ticket's implemented code scope is actually included in main.
-For ordinary/application tasks, package completion additionally requires an immutable published installer and the
+For product/application tasks, package completion additionally requires an immutable published installer and the
 agreed installation/update verification. Record delivery against the exact merged
 content. Do not wait for every employee to update; do not claim all have updated.
 A partial task stays active even after a partial PR. A Blocked ticket cannot pass

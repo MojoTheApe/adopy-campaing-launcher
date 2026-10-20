@@ -207,7 +207,8 @@ def completion_assessment(issue, config, receipt, *, activated=None):
                    and accepted.get('issue_sha256') == accepted_scope_digest(issue))
     required = policy(config)['completion'] != 'reviewed-merge'
     current = projected.get('policy') == fingerprint(config)
-    expected = (projected.get('scope') or projected.get('reconciled_scope')) if active else projected.get('reconciled_scope')
+    expected = ((projected.get('scope') or projected.get('reconciled_scope'))
+                if active or projected.get('process_support') else projected.get('reconciled_scope'))
     reason = 'pending'
     if selected and not active:
         reason, current = 'unverified', False
@@ -640,7 +641,7 @@ def merge_base(request, root, pr):
 
 def summary(receipt):
     """Minimal completion projection, excluding reports, environment and history."""
-    if set(receipt) <= {'policy', 'state', 'admitted', 'verified', 'non_code', 'process', 'reconciled_scope', 'scope', 'scope_provenance'}:
+    if set(receipt) <= {'policy', 'state', 'admitted', 'verified', 'non_code', 'process', 'process_support', 'reconciled_scope', 'scope', 'scope_provenance'}:
         result = dict(receipt)
         if isinstance(result.get('scope_provenance'), dict):
             result['scope_provenance'] = hashlib.sha256(json.dumps(result['scope_provenance'], sort_keys=True).encode()).hexdigest()
@@ -660,6 +661,33 @@ def summary(receipt):
                  and len(sources) == 1 and sources[0].get('tree_sha') == proof.get('tree_sha')
                  and type(sources[0].get('pr')) is int and sources[0]['pr'] > 0
                  and isinstance(sources[0].get('merge_sha'), str) and SHA.fullmatch(sources[0]['merge_sha']))
+        if isinstance(proof, dict) and proof.get('route') == 'process-support':
+            try:
+                from . import process_support as support
+            except ImportError:
+                import tracker_process_support as support
+            valid = (type(proof.get('schema_version')) is int and proof['schema_version'] == 1
+                     and proof.get('kind') == 'canonical-process-support' and proof.get('policy') == receipt.get('policy')
+                     and all(isinstance(proof.get(k), str) and SHA.fullmatch(proof[k]) for k in ('tree_sha', 'main_sha'))
+                     and all(isinstance(proof.get(k), str) and re.fullmatch(r'[a-f0-9]{64}', proof[k])
+                             for k in ('proof_sha256', 'review_sha256'))
+                     and isinstance(proof.get('admission'), dict) and proof['admission'].get('route') in ('main','stage','promotion','batch','direct')
+                     and proof['admission'].get('policy') == receipt.get('policy')
+                     and proof['admission'].get('tree_sha') == proof.get('tree_sha')
+                     and isinstance(proof.get('issue_scopes'), dict) and len(proof['issue_scopes']) == 1
+                     and list(proof['issue_scopes'].values()) == [receipt.get('scope')]
+                     and len(sources) == 1 and sources[0].get('tree_sha') == proof.get('tree_sha')
+                     and type(sources[0].get('pr')) is int and sources[0]['pr'] > 0
+                     and isinstance(sources[0].get('merge_sha'), str) and SHA.fullmatch(sources[0]['merge_sha']))
+            canonical = proof.get('support_proof')
+            valid = (valid and isinstance(canonical, dict) and canonical.get('kind') == 'canonical-process-support'
+                     and canonical.get('schema_version') == 1 and canonical.get('tree_sha') == proof.get('tree_sha')
+                     and canonical.get('proof_sha256') == proof.get('proof_sha256')
+                     and hashlib.sha256(json.dumps({k: v for k, v in canonical.items() if k != 'proof_sha256'},
+                         sort_keys=True, allow_nan=False).encode()).hexdigest() == proof.get('proof_sha256')
+                     and support.valid_assessment(proof.get('assessment'), support.assessment(canonical, proof['issue_scopes'])))
+            if valid:
+                result['process_support'] = True
         result['verified'] = result['verified'] and bool(valid)
         if valid:
             result['process'] = True
