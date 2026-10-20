@@ -45164,6 +45164,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T10:44:50+00:00",
         "from_status": "status:todo"
+      },
+      "175": {
+        "actor": "Worker-L2175b",
+        "session": "run_l2_175b",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1175-install-guide",
+        "worktree": "C:\\acl-1175-guide",
+        "id": "2fcfbe8af4c14f2397a0dcc67d8a50dd",
+        "issue": 175,
+        "state": "implementing",
+        "started_at": "2026-10-20T11:25:20+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -53486,10 +53498,14 @@
           {
             "actor": "Worker-L2175",
             "session": "run_l2_175"
+          },
+          {
+            "actor": "Worker-L2175b",
+            "session": "run_l2_175b"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-L2175",
+        "state": "implementing",
+        "worker": "Worker-L2175b",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-L2175",
@@ -56329,6 +56345,10 @@
       "Reviewer-R1805W": {
         "session": "reviewer-r1805w-20261020",
         "role": "Reviewer"
+      },
+      "Worker-L2175b": {
+        "session": "run_l2_175b",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -99569,6 +99589,13 @@
         "pr": 1019,
         "lane": "6bc8d4798e48437caad3f86fa026e792",
         "actor": "Reviewer-R1805W"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T11:25:20+00:00",
+        "issue": 175,
+        "claim": "2fcfbe8af4c14f2397a0dcc67d8a50dd",
+        "actor": "Worker-L2175b"
       }
     ],
     "policy": {
