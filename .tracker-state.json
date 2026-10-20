@@ -46005,6 +46005,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T12:56:11+00:00",
         "from_status": "status:todo"
+      },
+      "920": {
+        "actor": "Worker-RF920",
+        "session": "rf920-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1920-search-refused",
+        "worktree": "C:\\acl-rf-920",
+        "id": "9244977fbf9b4bc3ae87f3de91c54969",
+        "issue": 920,
+        "state": "implementing",
+        "started_at": "2026-10-20T13:59:13+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -51834,10 +51846,14 @@
           {
             "actor": "Worker-RH2020W",
             "session": "rh2020w-20261020"
+          },
+          {
+            "actor": "Worker-RF920",
+            "session": "rf920-20261020"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-RH2020W",
+        "state": "implementing",
+        "worker": "Worker-RF920",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-RH2020W",
@@ -51861,14 +51877,7 @@
           "at": "2026-10-17T16:30:39.578036+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-R1920Z",
         "return_operation": {
-          "id": "05d71a154ff148be887ca54587df41c5",
-          "actor": "Coordinator-M1011A",
-          "session": "coord-m1011a-20261015",
-          "report": "Main moved to 259ae7f1 (batch #1034: ACL-602, 1202, 1680, 1401, 341). Pure refresh: merge current main (merge commit), re-run affected tests, re-handoff, fresh independent review. Independent trial merge already shows it merges cleanly and its tests pass on the merged tree."
-        },
-        "return": {
           "id": "05d71a154ff148be887ca54587df41c5",
           "actor": "Coordinator-M1011A",
           "session": "coord-m1011a-20261015",
@@ -57496,6 +57505,10 @@
       },
       "Worker-RF771": {
         "session": "rf771-20261020",
+        "role": "Worker"
+      },
+      "Worker-RF920": {
+        "session": "rf920-20261020",
         "role": "Worker"
       }
     },
@@ -102003,6 +102016,13 @@
         "issue": 771,
         "pr": 832,
         "actor": "Worker-RF771"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T13:59:13+00:00",
+        "issue": 920,
+        "claim": "9244977fbf9b4bc3ae87f3de91c54969",
+        "actor": "Worker-RF920"
       }
     ],
     "policy": {
