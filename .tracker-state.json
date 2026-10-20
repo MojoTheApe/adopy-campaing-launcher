@@ -45005,6 +45005,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T08:59:08+00:00",
         "from_status": "status:todo"
+      },
+      "184": {
+        "actor": "Worker-L2184",
+        "session": "run_l2_184",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1184-hand-open-message",
+        "worktree": "C:\\acl-1184",
+        "id": "539f693d21ba4660934d0da93ad7c306",
+        "issue": 184,
+        "state": "implementing",
+        "started_at": "2026-10-20T09:01:22+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -53230,10 +53242,14 @@
           {
             "actor": "Worker-R1019184",
             "session": "run_r1019_184"
+          },
+          {
+            "actor": "Worker-L2184",
+            "session": "run_l2_184"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-R1019184",
+        "state": "implementing",
+        "worker": "Worker-L2184",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-R1019184",
@@ -53251,7 +53267,6 @@
         },
         "pr": 937,
         "queued_at": "2026-10-19T19:47:23+00:00",
-        "reviewer": "Reviewer-R1184Y",
         "review_report": "# PR #937 (ACL-1184) \u2014 changes requested\n\nReviewer: Reviewer-R1184Y (session reviewer-r1184y-20261019)\nHead: 257a2161aacc6d6a15ebc21a4a42989b57927b7e, base work/main c61501607ce11744e45add8b0d3b314368c216c5, tree a5b6559ce1f7d02b97fdb898a870e42581e3bc1a\n\n## Blocking\n\n### B1. Real Multilogin profile id committed in a test \u2014 secret scan fails, required CI is red\n\n- `tests/test_acl1184_hand_open_message.py:35`\n  `PID = \"cabcf42f-3699-4d78-9886-231fd44b3498\"`\n- This is the live profile id quoted in Issue #184 (\"open profile cabcf42f-... checked live on 15.09\"). Project rule: no account identifiers in code; the working repo is read by outside developers and shipped to every buyer's machine.\n- `scripts/acl_scan_secrets.py` flags it (\"Multilogin profile id\"). Result on head 257a2161 (run 39321516158):\n  - `Classify and check project tooling` \u2014 fail\n  - `windows tests (3.13)` \u2014 fail (same scanner step, before any tests ran)\n  - `Process instructions` \u2014 fail (`SCOPE: failure` gate, follows from the classify job)\n- Fix: replace with an obviously synthetic id that the scanner does not match (check how other tests spell fake profile ids, e.g. a non-UUID token such as `\"profile-1184\"` or an all-zero/patterned UUID if the scanner allows it). `UDD` is derived from `PID`, so only line 35 changes. Re-run `python scripts/acl_scan_secrets.py` locally before pushing.\n- Note: the id stays in git history of the PR branch commits; if the policy requires it, squash on merge so the identifier does not land in main history.\n\n## Code review (no other blocking findings)\n\n- One check: `MultiloginDirectCDPProvider.profile_is_running` (browser.py ~1867) now tries both folder spellings via new `src/fb_ads_rpa/profile_dir.py`, and falls back to the profile id (never an empty needle) when the folder is unknown. Dashboard (`account_spend._running_by_hand`) and `MultiloginAttachOnlyProvider.open` (browser.py:2502) both call it. Criterion 1 met.\n- Both `allow_restart=False` refusals (open() and the MLX lock refusal in `_start_via_mlx_api`) now raise `ProfileStop(OPEN_BY_HAND, ...)`; dashboard maps it to `hand_message()` / `open_by_hand` in `start_read`, `_start_closed` and `open_profile_for_automation`, original logged via `_hand_refusal`. Criteria 2 and 3 met.\n- ACL-1606 reopen retry still recognises the lock refusal (`_start_still_held` checks `detail == MLX_LOCK_NO_RESTART`), telemetry keeps the raw MLX text via `__cause__`. `reopen_by_hand` requires `allow_restart=True`, so the new stop cannot trigger a reopen/kill of a hand-opened window. No plain-browser fallback, no polling, no kill added.\n- Folder-not-found: `_attach_only` and `open_profile_for_automation` now run the check by profile id before starting; order of \"folder not found\" vs \"not open\" messages preserved.\n\n## Non-blocking nits\n\n- `scripts/probe_screen_values.py:310` still calls `_profile_process_running` directly (not via the one check); fine for a diagnostic script, could switch to `profile_is_running`.\n- In open(), a running robot profile with `allow_restart=False` now also stops as `open_by_hand` (`where=\"no_restart; robot profile\"`), so the operator is told to close the window in MLX Desktop. Acceptable (nothing restarted), just noting the wording covers this case too.\n\n## Tests and CI\n\n- Local (C:\\fb_agents\\.venv, 21 affected test files): 470 passed, 1 failed. The failure, `tests/test_acl1812_warm_sessions.py::test_row_open_profile_answers_200_with_open_by_hand_over_http`, is environmental: `TypeError: Request.form() got an unexpected keyword argument 'max_part_size'` in `src/web/request_limits.py:84` (old Starlette in the local venv; the file is not touched by this PR).\n- CI run 39321516158 on 257a2161: linux tests shards 1/2/3 pass, descriptor pass, tracker-link pass; `Classify and check project tooling`, `windows tests (3.13)` and `Process instructions` fail, all because of B1 (secret scan)."
       },
       "175": {
@@ -55922,6 +55937,10 @@
       },
       "Worker-L1854": {
         "session": "run_l1_854",
+        "role": "Worker"
+      },
+      "Worker-L2184": {
+        "session": "run_l2_184",
         "role": "Worker"
       }
     },
@@ -97822,6 +97841,13 @@
         "issue": 854,
         "claim": "b8169b241e534348a6481cd456a225cb",
         "actor": "Worker-L1854"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T09:01:22+00:00",
+        "issue": 184,
+        "claim": "539f693d21ba4660934d0da93ad7c306",
+        "actor": "Worker-L2184"
       }
     ],
     "policy": {
