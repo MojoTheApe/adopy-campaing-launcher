@@ -316,6 +316,11 @@ PER_AD_POLICY: dict[str, tuple[str, str]] = {
 # of the long `reason()` paragraph. A test fails if a step of POLICY or
 # PER_AD_POLICY has no entry here, so add both in the same commit.
 GUIDE: dict[str, tuple[str, str, str]] = {
+    "page_identity": (
+        "Facebook Page could not be set in Identity",
+        "The Page chosen in the builder could not be selected and verified, so the draft was not published.",
+        "Check the Identity section in Ads Manager, refresh Pages in the builder and publish again.",
+    ),
     "account_blocked": (
         "Ad account restricted by Meta",
         "Meta asks for verification or has disabled this ad account, so nothing more was built.",

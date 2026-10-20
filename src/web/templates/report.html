@@ -7462,7 +7462,7 @@ window.cbTree = (function () {
     ["^(browser_window|drafts_pending|tab_woken|create|objective_|campaign_|daily_budget|leads$|continue$|onboarding_modal$|simple_create$|simple_objective$|simple_adset_section$|next_to_adset$)", "campaign"],
     ["^(adset_|conversion_|website_|further_limit|pick_further_limit|advantage_plus|age_suggestion|audience_|before_audience|languages|locations_open|targeting|placements|account_placement|devices_ios|simple_card$|listbox_left_open$|next_to_ad(_stuck_on_adset)?$|simple_ad_section$)", "adset"],
     ["^(ad_level_summary$|destination_sweep|simple_create_draft$)", "final"],
-    ["^(ad\\d*_|creative_|text_variations_off$|text_generation_off$|simple_create_more_ads$|simple_reentry$|loading_modal_reload$|destination_website_selected$|destination_instant_form_off$)", "ad"]
+    ["^(ad\\d*_|creative_|text_variations_off$|text_generation_off$|simple_create_more_ads$|simple_reentry$|loading_modal_reload$|destination_website_selected$|destination_instant_form_off$|page_identity$)", "ad"]
   ],
   "steps": {
     "ad_copy": [1.0, 6],
@@ -13218,8 +13218,9 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       var sel = row.querySelector('.cb-form-select');
       var hid = row.querySelector('input[name$="_form_id"]');
       if (!sel || !hid) return;
-      var pageInput = row.closest('.cb-slot').querySelector('input[name$="_page_id"]');
-      var resolvedPage = window.cbResolvedPage ? window.cbResolvedPage(row.closest('.cb-slot')) : (pageInput ? pageInput.value : '');
+      var slotEl = row && row.closest ? row.closest('.cb-slot') : null;
+      var pageInput = slotEl ? slotEl.querySelector('input[name$="_page_id"]') : null;
+      var resolvedPage = window.cbResolvedPage ? window.cbResolvedPage(slotEl) : (pageInput ? pageInput.value : '');
       var entry = window.cbForms[formAccount(row) + '|' + resolvedPage] || null;
       var opts = L.formOptions(entry && entry.forms, hid.value);
       var sig = JSON.stringify([opts, hid.value]);
@@ -13306,8 +13307,9 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     var account = row ? formAccount(row) : '';
     var note = row ? row.querySelector('[data-form-note]') : null;
     if (!account || btn.disabled) return;
-    var pageInput = row.closest('.cb-slot').querySelector('input[name$="_page_id"]');
-    var selectedPage = window.cbResolvedPage ? window.cbResolvedPage(row.closest('.cb-slot')) : (pageInput ? pageInput.value : '');
+    var slotEl = row && row.closest ? row.closest('.cb-slot') : null;
+    var pageInput = slotEl ? slotEl.querySelector('input[name$="_page_id"]') : null;
+    var selectedPage = window.cbResolvedPage ? window.cbResolvedPage(slotEl) : (pageInput ? pageInput.value : '');
     if (!selectedPage) { if (note) note.textContent = 'Refresh Facebook Pages before loading forms.'; return; }
     btn.disabled = true;
     if (note) note.textContent = 'Reading the forms of the Page from Meta…';
