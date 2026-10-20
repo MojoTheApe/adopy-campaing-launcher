@@ -58,4 +58,4 @@ def test_the_answer_does_not_give_away_the_configuration_path(monkeypatch, tmp_p
     raw = _health().text
 
     assert "SomeoneElse" not in raw
-    assert str(tmp_path) not in raw.replace("\\\\", "\\")
+    assert str(tmp_path) not in raw.replace("\\\\", "\\")  # linux-ok: undoes JSON escaping of a Windows path; a no-op on Linux
