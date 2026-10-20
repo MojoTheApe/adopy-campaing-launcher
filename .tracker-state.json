@@ -45206,6 +45206,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T11:50:46+00:00",
         "from_status": "status:todo"
+      },
+      "1037": {
+        "actor": "Worker-c8f54e83",
+        "session": "c8f54e83",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-2037-changelog-fragments",
+        "worktree": "C:\\acl-changelog-fragments",
+        "id": "fb617ab8681d4b529cbe186bde2c8b0c",
+        "issue": 1037,
+        "state": "implementing",
+        "started_at": "2026-10-20T11:52:01+00:00",
+        "from_status": "status:idea"
       }
     },
     "tasks": {
@@ -53730,6 +53742,17 @@
         },
         "pr": 1033,
         "queued_at": "2026-10-20T10:06:03+00:00"
+      },
+      "1037": {
+        "implementers": [
+          {
+            "actor": "Worker-c8f54e83",
+            "session": "c8f54e83"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-c8f54e83",
+        "coordinator": "Coordinator-M1011A"
       }
     },
     "actors": {
@@ -56407,6 +56430,10 @@
       },
       "Worker-T1020305": {
         "session": "t1020-305",
+        "role": "Worker"
+      },
+      "Worker-c8f54e83": {
+        "session": "c8f54e83",
         "role": "Worker"
       }
     },
@@ -99844,6 +99871,13 @@
         "issue": 305,
         "claim": "29592c5679c240efa92d658b00e322d3",
         "actor": "Worker-T1020305"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T11:52:01+00:00",
+        "issue": 1037,
+        "claim": "fb617ab8681d4b529cbe186bde2c8b0c",
+        "actor": "Worker-c8f54e83"
       }
     ],
     "policy": {
