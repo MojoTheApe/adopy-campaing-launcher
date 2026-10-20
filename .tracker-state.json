@@ -45173,9 +45173,11 @@
         "worktree": "C:\\acl-1175-guide",
         "id": "2fcfbe8af4c14f2397a0dcc67d8a50dd",
         "issue": 175,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T11:25:20+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 930,
+        "report": "Owner decision 2026-10-20: guide page ships without the release-pipeline part (split into issue #1035, patch saved). Branch up to date with main; test_setup_guide 11 passed; Stats workbook refusal rows already pushed (342a0686). Reviewer blocking item 1 answered on the PR as split out. No live checks."
       }
     },
     "tasks": {
