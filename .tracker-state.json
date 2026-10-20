@@ -44858,6 +44858,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T06:37:45+00:00",
         "from_status": "status:backlog"
+      },
+      "920": {
+        "actor": "Worker-RH2020W",
+        "session": "rh2020w-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1920-search-refused",
+        "worktree": "C:\\rh20-920",
+        "id": "53d357ad8b0b4ab0b0205999e95218a3",
+        "issue": 920,
+        "state": "implementing",
+        "started_at": "2026-10-20T06:56:29+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -50599,10 +50611,14 @@
           {
             "actor": "Worker-R1019920",
             "session": "run_r1019_920"
+          },
+          {
+            "actor": "Worker-RH2020W",
+            "session": "rh2020w-20261020"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-R1019920",
+        "state": "implementing",
+        "worker": "Worker-RH2020W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-R1019920",
@@ -50625,8 +50641,7 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578036+00:00",
           "remote_process_stopped_verified": false
-        },
-        "reviewer": "Reviewer-C1920"
+        }
       },
       "168": {
         "implementers": [],
@@ -96829,6 +96844,13 @@
         "at": "2026-10-20T06:55:22+00:00",
         "issue": 805,
         "pr": 1019,
+        "actor": "Worker-RH2020W"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T06:56:29+00:00",
+        "issue": 920,
+        "claim": "53d357ad8b0b4ab0b0205999e95218a3",
         "actor": "Worker-RH2020W"
       }
     ],
