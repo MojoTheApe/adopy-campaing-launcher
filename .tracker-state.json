@@ -46077,9 +46077,11 @@
         "worktree": "C:\\acl-1309-v2",
         "id": "a759abd02bc246a685c2ee720602265b",
         "issue": 309,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T14:56:13+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 929,
+        "report": "Reviewer finding fixed: update acceptance finds a pre-1309 dashboard too (legacy 9090 payload without config); new test_update_cycle_health (4 cases). Merged current main (config/paths.py: both independent blocks kept). Local: 62+55+15 passed. Windows installer to be confirmed by CI."
       }
     },
     "tasks": {
