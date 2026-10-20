@@ -103529,6 +103529,35 @@
             "approved_at": "2026-10-20T19:35:10+00:00"
           }
         }
+      },
+      {
+        "event": "intake-takeover",
+        "at": "2026-10-20T20:20:09+00:00",
+        "previous": {
+          "id": "09bba1d54ca5471b8c49e15a45a08056",
+          "actor": "Coordinator-I1020A",
+          "session": "9fea0133-b18f-4277-a1b8-225a9a665b61",
+          "state": "running",
+          "issues": [
+            1038,
+            1037,
+            836,
+            184,
+            771
+          ],
+          "remaining": [
+            1038,
+            1037,
+            836,
+            184,
+            771
+          ],
+          "batches": [],
+          "started_at": "2026-10-20T17:27:03+00:00",
+          "ineligible": {}
+        },
+        "actor": "Coordinator-ACT174",
+        "reason": "Owner explicitly orders stopping/revoking the safest unstarted reservation despite unknown prior process liveness. Exact readback: no integration, no batches, all five Approved and remaining. This CAS transfer fences old reservation authority; it does not assert prior remote process termination. Preserve every task/approval and all Worker/Reviewer claims. Durable decision: acl-2026-owner-directed-reservation-release.md."
       }
     ],
     "policy": {
@@ -113016,8 +113045,8 @@
     "integration": null,
     "intake": {
       "id": "09bba1d54ca5471b8c49e15a45a08056",
-      "actor": "Coordinator-I1020A",
-      "session": "9fea0133-b18f-4277-a1b8-225a9a665b61",
+      "actor": "Coordinator-ACT174",
+      "session": "f489c98f-9d9f-42a7-aafc-5dfb361caba8",
       "state": "running",
       "issues": [
         1038,
@@ -113035,7 +113064,15 @@
       ],
       "batches": [],
       "started_at": "2026-10-20T17:27:03+00:00",
-      "ineligible": {}
+      "ineligible": {},
+      "history": [
+        {
+          "coordinator": "Coordinator-I1020A",
+          "session": "9fea0133-b18f-4277-a1b8-225a9a665b61",
+          "reason": "Owner explicitly orders stopping/revoking the safest unstarted reservation despite unknown prior process liveness. Exact readback: no integration, no batches, all five Approved and remaining. This CAS transfer fences old reservation authority; it does not assert prior remote process termination. Preserve every task/approval and all Worker/Reviewer claims. Durable decision: acl-2026-owner-directed-reservation-release.md.",
+          "at": "2026-10-20T20:20:09+00:00"
+        }
+      ]
     },
     "source_reviews": {
       "820": {
