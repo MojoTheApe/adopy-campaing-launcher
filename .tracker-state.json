@@ -44876,9 +44876,11 @@
         "worktree": "C:\\acl-1891-v2",
         "id": "a5343bb740414c45aae8b1a7290faf33",
         "issue": 891,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T06:21:25+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 909,
+        "report": "Tracker issues: ACL-1891\n\nVideos over 200 MB are uploaded to Meta in chunks (resumable upload on `/act_X/advideos`: start, transfer, finish) from the profile page helper. Everything stays PAUSED; nothing is deleted or activated.\n\n**Rebuilt 2026-10-20 on current main** (history rewritten with owner approval, see the comment below). The branch is no longer stacked on `codex/acl-1907-locale-groups`; it now holds only the ACL-1891 change (9 files).\n\n- Server reads only chunk-sized slices from disk (`LargeFile`); hash for the title tag is streamed; the helper holds one chunk (max 8 MB).\n- Resume from Meta's reported offset; unknown chunk result re-sends the same offset; unknown `finish` is reconciled by title readback; a re-run reuses the finished video.\n- Chunk calls are counted by a size-based call budget (the earlier `estimate_create_calls` change depended on unmerged work); plans that do not fit the call ceiling are refused up front.\n- Closed write policy extended in both layers (`write_policy.py`, page helper) with exactly the three upload phases, strictly validated; Python/Node parity tests.\n- `media_limits`: video limit 1536 MB (Meta's own maximum is 4 GB), English message.\n\nTests on the rebuilt branch: `tests/test_acl1891_video_chunks.py` and the neighbouring write-policy / create / media suites, all green (touched files only; the full suite runs in CI). Pre-handoff read-only review: findings fixed in `0e481dfc`.\n\nNeeds a live check on Doc120 (PAUSED only): see PROJECT.md ACL-1891.\n\n\ud83e\udd16 Generated with [Claude Code](https://claude.com/claude-code)"
       }
     },
     "tasks": {
