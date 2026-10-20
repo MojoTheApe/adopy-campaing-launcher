@@ -45014,9 +45014,11 @@
         "worktree": "C:\\acl-1309-v2",
         "id": "ffcabb75ba6049579d575ca99021fe25",
         "issue": 309,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T09:13:12+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 929,
+        "report": "Review blocker fixed: added '# linux-ok' marker to the flagged line (test_acl_test_platform + test_the_dashboard_says_whose_it_is: 102 passed). Branch up to date with main."
       }
     },
     "tasks": {
