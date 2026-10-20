@@ -45665,20 +45665,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T12:56:11+00:00",
         "from_status": "status:todo"
-      },
-      "138": {
-        "actor": "Worker-P1138C",
-        "session": "p1138c-20261020",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1138-proxy-gate",
-        "worktree": "C:\\acl-1138-remerge",
-        "id": "c5d1648443e14ffdb4111088fd46e008",
-        "issue": 138,
-        "state": "handoff",
-        "started_at": "2026-10-20T13:42:41+00:00",
-        "from_status": "status:todo",
-        "pr": 947,
-        "report": "Merged origin/main (259ae7f1, batch #1034) into work/acl-1138-proxy-gate; pushed 7b5a9e68.\nConflicts: docs/system/PROJECT.md (kept both: ACL-1138 paragraph + main's fb_api entry); src/fb_ads_rpa/profile_trouble.py (kept both NO_PROXY and MLX_NOT_RUNNING constants and messages); src/web/templates/report.html (main's telemetry rule line plus proxy_gate_ in the profile stage rule).\nTests (affected only): test_acl1138_profile_proxy_gate, test_publish_stops_when_multilogin_is_not_running, test_reads_open_a_closed_profile, test_attach_short_path, test_a_covered_profile_window_is_woken, test_review_ui_regressions (111 passed); test_report_loading_stages, test_stage_badge, test_telemetry_says_why, test_run_telemetry (79 passed)."
       }
     },
     "tasks": {
@@ -52047,25 +52033,25 @@
             "session": "p1138c-20261020"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-P1138C",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-P1138B",
-          "session": "acl1138_resume_1019",
+          "actor": "Worker-P1138C",
+          "session": "p1138c-20261020",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1138-proxy-gate",
-          "worktree": "C:\\acl-1138-proxy",
-          "id": "b9f0aa8ad08f43a0b461ac55d5227ed0",
+          "worktree": "C:\\acl-1138-remerge",
+          "id": "c5d1648443e14ffdb4111088fd46e008",
           "issue": 138,
           "state": "handoff",
-          "started_at": "2026-10-19T12:09:33+00:00",
+          "started_at": "2026-10-20T13:42:41+00:00",
           "from_status": "status:todo",
           "pr": 947,
-          "report": "Fix for the returned review: 727e3d87 adds proxy_gate_ to the profile-stage rule in the cb-build-model table (src/web/templates/report.html), fixing CI guard tests/test_build_progress_model.py (the only real CI failure on 8bb27185; tracker-link failed only because it ran before the claim). Local: test_build_progress_model + gate tests 54 passed. Base still current main 435bc154. Needs fresh approval of the new head."
+          "report": "Merged origin/main (259ae7f1, batch #1034) into work/acl-1138-proxy-gate; pushed 7b5a9e68.\nConflicts: docs/system/PROJECT.md (kept both: ACL-1138 paragraph + main's fb_api entry); src/fb_ads_rpa/profile_trouble.py (kept both NO_PROXY and MLX_NOT_RUNNING constants and messages); src/web/templates/report.html (main's telemetry rule line plus proxy_gate_ in the profile stage rule).\nTests (affected only): test_acl1138_profile_proxy_gate, test_publish_stops_when_multilogin_is_not_running, test_reads_open_a_closed_profile, test_attach_short_path, test_a_covered_profile_window_is_woken, test_review_ui_regressions (111 passed); test_report_loading_stages, test_stage_badge, test_telemetry_says_why, test_run_telemetry (79 passed)."
         },
         "pr": 947,
-        "queued_at": "2026-10-19T12:15:21+00:00",
+        "queued_at": "2026-10-20T13:47:34+00:00",
         "review_report": "PR #947 (ACL-1138) no longer merges into current main 259ae7f1 (after batch #1034): conflicts in docs/system/PROJECT.md, src/fb_ads_rpa/profile_trouble.py, src/web/templates/report.html. Return to the author for a merge of current main, conflict resolution, checks, handoff and fresh independent approval. Owner wants it in the next batch for the buyer release.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -59994,7 +59980,8 @@
       1040,
       880,
       1046,
-      774
+      774,
+      138
     ],
     "review": null,
     "history": [
@@ -101499,6 +101486,13 @@
         "pr": 848,
         "lane": "50e4d9ffa6a44293be630e5578921855",
         "actor": "Reviewer-R1841V"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T13:47:34+00:00",
+        "issue": 138,
+        "pr": 947,
+        "actor": "Worker-P1138C"
       }
     ],
     "policy": {
