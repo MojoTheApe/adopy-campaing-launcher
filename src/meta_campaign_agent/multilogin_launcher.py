@@ -11,7 +11,7 @@ from src.meta_campaign_agent.multilogin_config import MultiloginInstanceConfig
 
 log = logging.getLogger(__name__)
 
-# ACL-1960: сколько раз спрашивать основной адрес остановки и пауза между.
+# ACL-2040: сколько раз спрашивать основной адрес остановки и пауза между.
 _STOP_PRIMARY_TRIES = 3
 _STOP_RETRY_PAUSE_S = 2.0
 
@@ -226,7 +226,7 @@ class MultiloginLauncher:
         ]
 
         last_err: str = ""
-        # ACL-1960: обрыв или 5xx на основном адресе — не «маршрута нет».
+        # ACL-2040: обрыв или 5xx на основном адресе — не «маршрута нет».
         # 16.10 23:10 (Doc120) один такой сбой отправил перебор к старым
         # адресам, все ответили 404, окно осталось открытым, а в ошибке стоял
         # 404 последнего — настоящая причина терялась. Основной адрес теперь
@@ -241,6 +241,12 @@ class MultiloginLauncher:
                     time.sleep(_STOP_RETRY_PAUSE_S)
                 try:
                     r = requests.get(url, headers=self._headers(), params=params, timeout=self.timeout)
+                except requests.Timeout as exc:
+                    # Зависший лаунчер: повтор ждал бы ещё полный таймаут,
+                    # пока держится замок профиля. Не повторяем.
+                    last_err = str(exc)
+                    r = None
+                    break
                 except Exception as exc:
                     last_err = str(exc)
                     r = None

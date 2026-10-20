@@ -238,7 +238,7 @@ def test_a_read_can_restart_gracefully_without_kill_permission(attach_provider):
     assert attach_provider["kills"] == []
 
 
-# ── ACL-1960: один сбой основного адреса не оставляет окно открытым ───────
+# ── ACL-2040: один сбой основного адреса не оставляет окно открытым ───────
 
 @pytest.fixture
 def flaky(monkeypatch):
@@ -287,3 +287,20 @@ def test_a_server_error_on_the_main_address_is_retried(flaky, monkeypatch):
                         lambda url, **kw: (flaky["asked"].append(url.split("45001", 1)[-1]), replies.pop(0))[1])
     flaky["launcher"].stop_profile(PROFILE, folder_id=FOLDER)
     assert flaky["asked"] == [STOP, STOP]
+
+
+def test_a_timeout_on_the_main_address_is_not_asked_again(flaky, monkeypatch):
+    import src.meta_campaign_agent.multilogin_launcher as mod
+
+    def fake_get(url, **kw):
+        path = url.split("45001", 1)[-1]
+        flaky["asked"].append(path)
+        if path == STOP:
+            raise mod.requests.Timeout("Read timed out")
+        return _routing_miss()
+
+    monkeypatch.setattr(mod.requests, "get", fake_get)
+    with pytest.raises(MultiloginLauncherError) as err:
+        flaky["launcher"].stop_profile(PROFILE, folder_id=FOLDER)
+    assert flaky["asked"].count(STOP) == 1
+    assert "Read timed out" in str(err.value)
