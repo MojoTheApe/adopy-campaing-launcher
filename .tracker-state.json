@@ -45002,9 +45002,11 @@
         "worktree": "C:\\acl-1768",
         "id": "349f0d90f930409ba385c2f42aaf3f70",
         "issue": 768,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T08:51:01+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 833,
+        "report": "# ACL-1768 handoff (after changes_requested)\n\n- Merged updated #830 head (with the tzdata test fix), #832 (ACL-1771) and current main; creator.py conflict with the targeting resolver resolved (TermResolver + locale_names kept). Stacked on #830/#832.\n- Fixed review findings: tests/test_upload_without_workbook.py (two tests follow the ad-set field builder), tests/test_acl1768_ad_sets_browser.py (reload-v3 test and audit test).\n- Local: test_acl1768_ad_sets_browser 9 passed (the two formerly failing ones included), test_upload_without_workbook 24, test_acl1768_ad_sets 64, test_acl1771_targeting_resolver 50, test_acl1761_api_create 121, test_acl1819_preflight 110, test_acl1767_audience_fields 92, test_distribution_boundary 6. Full suite left to CI."
       }
     },
     "tasks": {
