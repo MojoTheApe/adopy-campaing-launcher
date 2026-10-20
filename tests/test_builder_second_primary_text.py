@@ -259,7 +259,7 @@ def _mode(p, mode):
     if mode == "narrow":
         p.set_viewport_size({"width": 420, "height": 900})
     elif mode == "expanded":
-        p.locator("#cbd-expand").click()
+        p.locator("#cbd-preset-wide").click()
 
 
 def _cards(p):
