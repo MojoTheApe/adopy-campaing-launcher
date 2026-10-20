@@ -45164,20 +45164,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T10:44:50+00:00",
         "from_status": "status:todo"
-      },
-      "309": {
-        "actor": "Worker-L2309b",
-        "session": "run_l2_309b",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1309-own-dashboard",
-        "worktree": "C:\\acl-1309-v2",
-        "id": "ab8eb677481b47c7a8ac8b75c6d66bd0",
-        "issue": 309,
-        "state": "handoff",
-        "started_at": "2026-10-20T11:14:01+00:00",
-        "from_status": "status:todo",
-        "pr": 929,
-        "report": "Windows installer red: test_update_cycle.py polled a hard-coded 9090 while the launcher keeps a per-person port and skips registry-claimed ones (test_installer.ps1 earlier in the same job likely claims 9090). health() now uses local_dashboard.find_own with the test's config; the timeout error prints ports/registry for diagnosis. Local 92 tests passed; Windows job to be confirmed by CI. Cause not proven from logs."
       }
     },
     "tasks": {
@@ -51353,25 +51339,25 @@
             "session": "run_l2_309b"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-L2309b",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-L2309",
-          "session": "run_l2_309",
+          "actor": "Worker-L2309b",
+          "session": "run_l2_309b",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1309-own-dashboard",
           "worktree": "C:\\acl-1309-v2",
-          "id": "ffcabb75ba6049579d575ca99021fe25",
+          "id": "ab8eb677481b47c7a8ac8b75c6d66bd0",
           "issue": 309,
           "state": "handoff",
-          "started_at": "2026-10-20T09:13:12+00:00",
+          "started_at": "2026-10-20T11:14:01+00:00",
           "from_status": "status:todo",
           "pr": 929,
-          "report": "Review blocker fixed: added '# linux-ok' marker to the flagged line (test_acl_test_platform + test_the_dashboard_says_whose_it_is: 102 passed). Branch up to date with main."
+          "report": "Windows installer red: test_update_cycle.py polled a hard-coded 9090 while the launcher keeps a per-person port and skips registry-claimed ones (test_installer.ps1 earlier in the same job likely claims 9090). health() now uses local_dashboard.find_own with the test's config; the timeout error prints ports/registry for diagnosis. Local 92 tests passed; Windows job to be confirmed by CI. Cause not proven from logs."
         },
         "pr": 929,
-        "queued_at": "2026-10-20T09:17:11+00:00",
+        "queued_at": "2026-10-20T11:18:02+00:00",
         "review_report": "# Return: ACL-1309 / PR #929 (head 00c93a85)\n\nPrevious blocker (platform-guard test) is fixed: tests/test_the_dashboard_says_whose_it_is.py:61 now carries the `# linux-ok` marker; delta since 6727bce9 is that one line. Local run of tests/test_acl_test_platform.py + tests/test_the_dashboard_says_whose_it_is.py: 102 passed. CI: Classify and check project tooling, Process instructions, windows tests (3.13), all 6 linux shards pass.\n\n## Blocking finding\nCI workflow \"Windows installer\" (run 39399425140) fails on this head: job \"Build, install, repair, and uninstall\" -> step \"Test real package update, restart, and recovery\" -> packaging/windows/test_update_cycle.py:\n`RuntimeError: The actual installed version 0.0.0-ci.1463 did not become healthy` (raised at the very first start of the freshly installed package, `start(old_exe, ...)` -> wait_version). Dependent check \"Installer verification\" is red too. Other PRs the same day pass this workflow; earlier heads of this branch (26110bbb) were also red there.\n\nLikely cause (not proven; CI artifact has no server log): test_update_cycle.py hardcodes http://127.0.0.1:9090/health (lines 43, 118). The launcher now picks its port via local_dashboard.choose_port (port_in_use binds 0.0.0.0/:: with SO_EXCLUSIVEADDRUSE, per-person remembered port, %ProgramData%\\ACL\\ports registry). The launcher exits 0 (find_own found its own dashboard), so the server is up, but if it is on a port other than 9090 (spurious \"in use\" on the runner, e.g. TIME_WAIT under exclusive bind, or a stale registry claim) the acceptance test never sees it. Either port_in_use/choose_port is wrong on the real Windows runner, or test_update_cycle.py (and any other 9090 assumption in the real-package acceptance scripts) must learn the new per-person port (e.g. read server.json / dashboard_port.json or use local_dashboard.find_own). Needs a CI-visible diagnosis (print the chosen port / launcher log in the report) and a green Windows installer run.\n\ntracker-link also red (separate, process-level).\nNo live checks claimed.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -59203,7 +59189,8 @@
       18,
       71,
       739,
-      805
+      805,
+      309
     ],
     "review": {
       "id": "1ea28d1b292c4ef3baeda760fa52b87b",
@@ -99553,6 +99540,13 @@
             "approved_at": "2026-10-20T11:12:43+00:00"
           }
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T11:18:02+00:00",
+        "issue": 309,
+        "pr": 929,
+        "actor": "Worker-L2309b"
       }
     ],
     "policy": {
