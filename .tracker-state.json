@@ -45216,20 +45216,6 @@
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
       },
-      "1037": {
-        "actor": "Worker-c8f54e83",
-        "session": "c8f54e83",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-2037-changelog-fragments",
-        "worktree": "C:\\acl-changelog-fragments",
-        "id": "fb617ab8681d4b529cbe186bde2c8b0c",
-        "issue": 1037,
-        "state": "handoff",
-        "started_at": "2026-10-20T11:52:01+00:00",
-        "from_status": "status:idea",
-        "pr": 1041,
-        "report": "Per-task CHANGELOG fragments (docs/system/changelog.d/ACL-NNNN.md) plus scripts/fold_changelog.py; docs updated. Tests: tests/test_fold_changelog_2037.py (14 passed), tests/test_acl_ci_scope.py passed. Read-only Opus review done, findings applied. Not folded by batch integration yet (open question for owner)."
-      },
       "838": {
         "actor": "Worker-T1020838",
         "session": "t1020-838",
@@ -53783,9 +53769,25 @@
             "session": "c8f54e83"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-c8f54e83",
-        "coordinator": "Coordinator-M1011A"
+        "coordinator": "Coordinator-M1011A",
+        "handoff": {
+          "actor": "Worker-c8f54e83",
+          "session": "c8f54e83",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "work/acl-2037-changelog-fragments",
+          "worktree": "C:\\acl-changelog-fragments",
+          "id": "fb617ab8681d4b529cbe186bde2c8b0c",
+          "issue": 1037,
+          "state": "handoff",
+          "started_at": "2026-10-20T11:52:01+00:00",
+          "from_status": "status:idea",
+          "pr": 1041,
+          "report": "Per-task CHANGELOG fragments (docs/system/changelog.d/ACL-NNNN.md) plus scripts/fold_changelog.py; docs updated. Tests: tests/test_fold_changelog_2037.py (14 passed), tests/test_acl_ci_scope.py passed. Read-only Opus review done, findings applied. Not folded by batch integration yet (open question for owner)."
+        },
+        "pr": 1041,
+        "queued_at": "2026-10-20T12:20:42+00:00"
       },
       "1038": {
         "implementers": [
@@ -59359,7 +59361,8 @@
       845,
       841,
       854,
-      305
+      305,
+      1037
     ],
     "review": {
       "id": "1ea28d1b292c4ef3baeda760fa52b87b",
@@ -100014,6 +100017,13 @@
         "issue": 1038,
         "claim": "8d9f96c7f4de42edac97f2096d7d3cd6",
         "actor": "Worker-L31038"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T12:20:42+00:00",
+        "issue": 1037,
+        "pr": 1041,
+        "actor": "Worker-c8f54e83"
       }
     ],
     "policy": {
