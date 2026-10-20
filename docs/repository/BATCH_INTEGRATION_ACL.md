@@ -135,6 +135,16 @@ merge and full task-scope review, use `merged ID ID --pr MAIN_PR` dry run then
 integration claim only after completion. `batch close-sources --batch-id BATCH_ID`
 closes superseded source PRs only with actual inclusion evidence, preserving branches.
 Reconcile stage/main and revalidate the next intake members against current main.
+
+CHANGELOG fragments (ACL-2037, owner decision 2026-10-20): task PRs add
+`docs/system/changelog.d/ACL-NNNN.md` and do not touch `docs/system/CHANGELOG.md`.
+Fold them once per batch, AFTER the batch has landed in main: from current main run
+`python scripts/fold_changelog.py` and open one small docs-only PR with the result (one
+commit, title `[ACL-NNNN] Fold CHANGELOG fragments for batch BATCH_ID`). Do not fold on
+the batch branch: composition admission accepts only the baseline, approved source tips
+and merge commits, so an extra fold commit would be rejected. The fold PR only deletes
+fragments and edits the top of the CHANGELOG, so it conflicts with source PRs not at all
+and with other fold PRs only if two are open together; keep one open at a time.
 After admitted instruction-only main merges, the engine's read-only
 `stage_base_compatible` verifies actual process receipts and a bounded current
 first-parent/scope/policy/tree chain before permitting the next batch. This proof
