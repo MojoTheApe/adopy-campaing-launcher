@@ -142,7 +142,7 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
     "vertical_ok": (_with(ads=_ad(0, vertical_file="1000_story.png")), "vertical_needs_main", "ok", []),
     "vertical_without_main": (_with(ads=_ad(1, file="", vertical_file="1001_story.png")),
                               "vertical_needs_main", "error", [2]),
-    # Живой 2026-10-14: несколько текстов - отказ (с вертикальным файлом и без него).
+    # Живой 2026-10-14: несколько текстов вместе с вертикальным файлом - отказ Meta; без него - отдельный набор.
     "texts_vertical_ok": (_with(ads=_ad(0, vertical_file="1000_story.png")), "texts_vertical", "ok", []),
     "texts_vertical_combo": (_with(ads=_ad(0, vertical_file="1000_story.png", bodies=["a", "b"])),
                              "texts_vertical", "error", [1]),
@@ -151,6 +151,8 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
     "texts_dynamic_ok": (_with(ads=_ad(0, bodies=["a", "a "])), "texts_dynamic", "ok", []),
     "texts_dynamic_two": (_with(ads=_ad(0, bodies=["a", "b"])), "texts_dynamic", "error", [1]),
     "texts_dynamic_descriptions": (_with(ads=_ad(1, descriptions=["a", "b"])), "texts_dynamic", "error", [2]),
+    # Решение владельца 2026-10-20: несколько текстов - Dynamic Creative, объявление одно в наборе.
+    "texts_dynamic_alone_ok": (_with(ads=_ad(0, bodies=["a", "b", "c", "d", "e"])[:1]), "texts_dynamic", "ok", []),
     "texts_dynamic_not_with_vertical": (_with(ads=_ad(0, vertical_file="v.png", bodies=["a", "b"])),
                                         "texts_dynamic", "ok", []),
     "primary_ok": (_with(), "primary_text", "ok", []),

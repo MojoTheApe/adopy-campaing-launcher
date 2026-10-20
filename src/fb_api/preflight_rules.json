@@ -331,9 +331,9 @@
         "level": "ad",
         "sel": ".cb-adtitle-search"
       },
-      "hint": "Several texts need Dynamic Creative, which isn't supported yet: use one text per ad (or one text with the Stories / Reels file)",
+      "hint": "An ad with several texts runs as Dynamic Creative, and Meta allows only one ad in such an ad set: move the other ads of this ad set to a separate ad set",
       "id": "texts_dynamic",
-      "label": "Several texts per ad",
+      "label": "Several texts need their own ad set",
       "severity": "error",
       "side": "client",
       "unit": "ad"

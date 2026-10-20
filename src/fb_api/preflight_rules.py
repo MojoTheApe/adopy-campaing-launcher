@@ -138,8 +138,8 @@ RULES: list[dict[str, Any]] = [
        sel=".cb-adtitle-search", level="ad", unit="ad"),
     _r("texts_vertical", "Several texts and a Stories / Reels file", ERROR, "client",
        _wp.MSG_TEXTS_VERTICAL, sel=".cb-vertical-search", level="ad", unit="ad"),
-    _r("texts_dynamic", "Several texts per ad", ERROR, "client",
-       _wp.MSG_TEXTS_DYNAMIC + ": use one text per ad (or one text with the Stories / Reels file)",
+    _r("texts_dynamic", "Several texts need their own ad set", ERROR, "client",
+       _wp.MSG_TEXTS_DYNAMIC_SET,
        sel=".cb-adtitle-search", level="ad", unit="ad"),
     _r("primary_text", "Primary text", ERROR, "client", "choose a primary text in each ad",
        sel=".cb-adtitle-search", level="ad", unit="ad"),
@@ -291,7 +291,8 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
         elif rid == "texts_vertical":
             out.append(_per_ad(rid, inp, lambda a: _multi_text(a) and bool(_s(a.get("vertical_file")))))
         elif rid == "texts_dynamic":
-            out.append(_per_ad(rid, inp, lambda a: _multi_text(a) and not _s(a.get("vertical_file"))))
+            out.append(_per_ad(rid, inp, lambda a: _multi_text(a) and not _s(a.get("vertical_file"))
+                                      and len(inp.get("ads") or []) > 1))
         elif rid == "primary_text":
             out.append(_per_ad(rid, inp, lambda a: not _s(a.get("body"))))
         elif rid == "headline":

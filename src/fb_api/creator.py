@@ -208,6 +208,11 @@ class AdPlan:
     vertical_kind: str = ""
 
     @property
+    def multi_text(self) -> bool:
+        """Несколько текстов любого вида: объявление идёт как Dynamic Creative (ACL-1774)."""
+        return len(self.bodies) > 1 or len(self.titles) > 1 or len(self.descriptions) > 1
+
+    @property
     def uses_feed(self) -> bool:
         """Нужна лента ассетов (`asset_feed_spec`): несколько текстов или вертикальный файл.
 
@@ -238,6 +243,11 @@ class AdSetPlan:
     @property
     def instant(self) -> bool:
         return self.destination == DEST_FORM
+
+    @property
+    def dynamic(self) -> bool:
+        """Набор с объявлением из нескольких текстов - Dynamic Creative (ACL-1774)."""
+        return any(a.multi_text for a in self.ads)
 
 
 @dataclass
@@ -357,11 +367,10 @@ def _plan_texts_and_vertical(plan_ad: AdPlan, src: Any, plan_set: AdSetPlan, pro
                          ("descriptions", plan_ad.descriptions)):
         if len(items) > MAX_TEXTS:
             problems.append(f"Ad {i}: up to {MAX_TEXTS} {label} per ad (got {len(items)})")
-    if any(len(x) > 1 for x in (plan_ad.bodies, plan_ad.titles, plan_ad.descriptions)):
+    if plan_ad.multi_text and str(getattr(src, "vertical_path", "") or "").strip():
         # Живой прогон 2026-10-14: Meta отказала в ленте «несколько текстов + правила площадок»;
-        # без правил это Dynamic Creative, а он не поддержан. Отказ до любой записи.
-        vert = bool(str(getattr(src, "vertical_path", "") or "").strip())
-        problems.append(f"Ad {i}: " + (_wpol.MSG_TEXTS_VERTICAL if vert else _wpol.MSG_TEXTS_DYNAMIC))
+        # несколько текстов - это Dynamic Creative (без правил), вертикальный файл - только с одним текстом.
+        problems.append(f"Ad {i}: " + _wpol.MSG_TEXTS_VERTICAL)
     if plan_ad.bodies and not plan_ad.body:
         problems.append(f"Ad {i}: choose Primary text 1 first, the other texts come after it")
     vertical = str(getattr(src, "vertical_path", "") or "").strip()
@@ -512,6 +521,8 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
             elif plan_set.instant and not plan_set.ads[-1].form_id:
                 problems.append(f"Ad {i}: no Instant Form selected (pick one of the Page's forms "
                                 "or a template)")
+        if plan_set.dynamic and len(plan_set.ads) > 1:
+            problems.append(f"Ad set {plan_set.name!r}: " + _wpol.MSG_TEXTS_DYNAMIC_SET)
         ad_sets.append(plan_set)
     # Ревью M2: одинаковые имена схлопнули бы объявления (поиск, сверка, повтор).
     set_names = [x.name for x in ad_sets]
@@ -1271,6 +1282,9 @@ class CampaignCreator:
         if ad_set.start_time:
             # ACL-1767: ключа нет, пока старт не задан - прежние планы не меняются.
             params["start_time"] = self.start_iso(ad_set)
+        if ad_set.dynamic:
+            # ACL-1774: несколько текстов - Dynamic Creative на уровне набора; ключа нет у прежних планов.
+            params[_wpol.DYNAMIC_KEY] = True
         return params
 
     def _start_dt(self, ad_set: AdSetPlan) -> datetime:
@@ -1422,6 +1436,8 @@ class CampaignCreator:
             check("destination_type", DESTINATION, row.get("destination_type"))
             check("pixel", plan.pixel_id, str(po.get("pixel_id") or ""))
             check("conversion_event", CUSTOM_EVENT, po.get("custom_event_type"))
+        if ad_set.dynamic:
+            check("dynamic_creative", True, row.get("is_dynamic_creative") is True)
         check("schedule", "starts on activation, no end date",
               "starts on activation, no end date" if not row.get("end_time") else
               f"ends {row.get('end_time')}")
@@ -2187,11 +2203,11 @@ class CampaignCreator:
 
 CAMPAIGN_FIELDS = "name,objective,status,daily_budget,bid_strategy,adlabels{name}"
 ADSET_FIELDS = ("name,status,campaign_id,optimization_goal,billing_event,destination_type,"
-                "promoted_object,targeting,start_time,end_time,adlabels{name}")
+                "promoted_object,targeting,start_time,end_time,is_dynamic_creative,adlabels{name}")
 _PLACEMENT_FIELDS = ("publisher_platforms", "facebook_positions", "instagram_positions", "devices")
 #: Не показываем как «отличие от билдера»: имя и метку доказал поиск, остальное — сверка после записи.
 _SKIP_DIFF = {"name", "tag", "campaign_id", "schedule"}
-_FIELD_TITLES = {"geo": "countries", "age_min": "minimum age", "age_max": "maximum age",
+_FIELD_TITLES = {"dynamic_creative": "Dynamic Creative", "geo": "countries", "age_min": "minimum age", "age_max": "maximum age",
                  "languages": "languages", "detailed_targeting": "detailed targeting",
                  "os": "operating system", "pixel": "pixel", "conversion_event": "conversion event",
                  "optimization_goal": "optimization goal", "billing_event": "billing event",

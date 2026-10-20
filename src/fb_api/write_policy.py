@@ -34,7 +34,7 @@ EDGE_KEYS: dict[str, frozenset[str]] = {
                             "daily_budget", "bid_strategy", "adlabels"}),
     "adsets": frozenset({"name", "campaign_id", "status", "optimization_goal", "billing_event",
                          "destination_type", "promoted_object", "targeting", "start_time",
-                         "adlabels"}),
+                         "adlabels", "is_dynamic_creative"}),
     "adcreatives": frozenset({"name", "object_story_spec", "degrees_of_freedom_spec", "adlabels",
                               "contextual_multi_ads", "asset_feed_spec"}),
     "ads": frozenset({"name", "adset_id", "creative", "status", "adlabels"}),
@@ -95,14 +95,17 @@ CTA_TYPES = frozenset(CTA_WEBSITE) | frozenset(CTA_FORM)
 ASSET_FEED_KEY = "asset_feed_spec"
 ASSET_FEED_MAX_TEXTS = 5
 #: Живой прогон 2026-10-14 (Doc120): Meta отказала (100/1885878) на ленте с 3 bodies и двумя правилами
-#: площадок - правило применяет по ОДНОМУ ассету каждого типа. Несколько текстов - это Dynamic Creative
-#: (по справочнику у такой ленты не должно быть правил кастомизации), а `is_dynamic_creative` у групп
-#: запрещён. Поэтому в ленту идёт ровно по одному тексту каждого вида.
-ASSET_FEED_TEXTS_PER_FEED = 1
+#: площадок - правило применяет по ОДНОМУ ассету каждого типа. Решение владельца 2026-10-20: до 5 текстов
+#: идут как Dynamic Creative (`is_dynamic_creative: true` на наборе, лента БЕЗ правил, один файл), а
+#: вертикальный файл с правилами площадок - только с одним текстом каждого вида.
+ASSET_FEED_TEXTS_WITH_RULES = 1
+#: Ключ набора, включающий Dynamic Creative: только значение True.
+DYNAMIC_KEY = "is_dynamic_creative"
 #: Тексты отказов (один источник для плана, предпроверки и страницы).
 MSG_TEXTS_VERTICAL = ("Several primary texts and a Stories/Reels file can't be combined: Meta applies one "
                       "text per placement group. Use several texts without the vertical file, or one text with it.")
-MSG_TEXTS_DYNAMIC = "Several texts need Dynamic Creative, which isn't supported yet"
+MSG_TEXTS_DYNAMIC_SET = ("An ad with several texts runs as Dynamic Creative, and Meta allows only one ad in such an "
+                         "ad set: move the other ads of this ad set to a separate ad set")
 ASSET_FEED_TEXT_MAX = {"bodies": 1024, "titles": 255, "descriptions": 255}
 ASSET_FEED_MAX_MEDIA = 2
 ASSET_FEED_FORMATS = ("SINGLE_IMAGE", "SINGLE_VIDEO")
@@ -146,7 +149,8 @@ def policy_for_page(act: str, page: str = "") -> dict:
         "opt_out_keys": sorted(OPT_OUT_KEYS),
         "dof_features": sorted(DOF_FEATURES),
         "multi_ads_key": MULTI_ADS_KEY,
-        "asset_feed": {"key": ASSET_FEED_KEY, "max_texts": ASSET_FEED_TEXTS_PER_FEED,
+        "asset_feed": {"key": ASSET_FEED_KEY, "max_texts": ASSET_FEED_MAX_TEXTS, "max_texts_with_rules": ASSET_FEED_TEXTS_WITH_RULES,
+                       "dynamic_key": DYNAMIC_KEY,
                        "text_max": dict(ASSET_FEED_TEXT_MAX), "max_media": ASSET_FEED_MAX_MEDIA,
                        "formats": list(ASSET_FEED_FORMATS), "label_re": ASSET_LABEL_RE.pattern,
                        "hash_re": IMAGE_HASH_RE.pattern, "video_id_re": VIDEO_ID_RE.pattern,
@@ -219,8 +223,8 @@ def _check_multi_ads(value: Any) -> None:
         raise WriteRefused("write refused: contextual_multi_ads may only be exactly OPT_OUT")
 
 
-def _is_text_list(items: Any, kind: str, *, required: bool) -> bool:
-    if not isinstance(items, list) or len(items) > ASSET_FEED_TEXTS_PER_FEED or (required and not items):
+def _is_text_list(items: Any, kind: str, *, required: bool, limit_count: int = ASSET_FEED_MAX_TEXTS) -> bool:
+    if not isinstance(items, list) or len(items) > limit_count or (required and not items):
         return False
     limit = ASSET_FEED_TEXT_MAX[kind]
     return all(isinstance(x, dict) and set(x) == {"text"} and isinstance(x["text"], str)
@@ -259,12 +263,6 @@ def _check_asset_feed(spec: Any, creative: dict) -> None:
     story = creative.get("object_story_spec")
     if not (isinstance(story, dict) and set(story) == {"page_id"} and isinstance(story["page_id"], str)):
         refuse("needs object_story_spec with page_id only")
-    if not _is_text_list(spec.get("bodies"), "bodies", required=True):
-        refuse("bodies must be exactly one non-empty text")
-    if not _is_text_list(spec.get("titles"), "titles", required=True):
-        refuse("titles must be exactly one non-empty text")
-    if "descriptions" in spec and not _is_text_list(spec["descriptions"], "descriptions", required=True):
-        refuse("descriptions must be exactly one non-empty text")
     has_images, has_videos = bool(spec.get("images")), bool(spec.get("videos"))
     if has_images == has_videos or ("images" in spec and "videos" in spec):
         refuse("needs either images or videos")
@@ -272,6 +270,14 @@ def _check_asset_feed(spec: Any, creative: dict) -> None:
     media = spec[kind]
     if not (isinstance(media, list) and 1 <= len(media) <= ASSET_FEED_MAX_MEDIA):
         refuse(f"{kind} must hold 1-{ASSET_FEED_MAX_MEDIA} files")
+    cap = ASSET_FEED_TEXTS_WITH_RULES if len(media) > 1 else ASSET_FEED_MAX_TEXTS
+    if not _is_text_list(spec.get("bodies"), "bodies", required=True, limit_count=cap):
+        refuse(f"bodies must hold 1-{cap} non-empty texts")
+    if not _is_text_list(spec.get("titles"), "titles", required=True, limit_count=cap):
+        refuse(f"titles must hold 1-{cap} non-empty texts")
+    if "descriptions" in spec and not _is_text_list(spec["descriptions"], "descriptions", required=True,
+                                                    limit_count=cap):
+        refuse(f"descriptions must hold 1-{cap} non-empty texts")
     names: list[str] = []
     for item in media:
         if not isinstance(item, dict):
@@ -448,6 +454,8 @@ def check(act: str, method: str, path: str, params: dict | None,
         _check_cta(checked.get("object_story_spec"), on_ad)
     if edge == "adsets" and "targeting" in checked:
         _check_targeting(checked["targeting"])
+    if DYNAMIC_KEY in checked and checked[DYNAMIC_KEY] is not True:
+        raise WriteRefused(f"write refused: {DYNAMIC_KEY} may only be true")
     if edge == "ads" and "creative" in checked:
         # Объявление ссылается на готовый креатив — и только (ревью R5-M1:
         # встроенный креатив провёз бы свой degrees_of_freedom_spec).

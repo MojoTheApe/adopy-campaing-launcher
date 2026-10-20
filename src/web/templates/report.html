@@ -5986,7 +5986,8 @@ window.cbPreflight = (function () {
       }));
       else if (id === 'texts_vertical' || id === 'texts_dynamic') out.push(perAd(id, inp, function (a) {
         var multi = ['bodies', 'headlines', 'descriptions'].some(function (k) { return distinct(a[k]).length > 1; });
-        return multi && (id === 'texts_vertical') === !!s(a.vertical_file);
+        return multi && (id === 'texts_vertical') === !!s(a.vertical_file)
+          && (id === 'texts_vertical' || (inp.ads || []).length > 1);
       }));
       else if (id === 'primary_text') out.push(perAd(id, inp, function (a) { return !s(a.body); }));
       else if (id === 'headline') out.push(perAd(id, inp, function (a) { return !s(a.headline); }));

@@ -61,16 +61,51 @@ def test_one_text_and_one_file_keep_the_old_creative(tmp_path):
     assert "asset_feed_spec" not in cre and "link_data" in cre["object_story_spec"]
 
 
-def test_several_texts_are_refused_before_any_write_dynamic_creative_is_not_supported(tmp_path):
+def test_several_texts_go_as_dynamic_creative_on_their_own_ad_set(tmp_path):
+    """Решение владельца 2026-10-20: до 5 текстов - Dynamic Creative: флаг на наборе, лента без правил."""
     for texts in (1, 2, 4):
         meta = FakeMeta()
-        with pytest.raises(cr.PlanError, match="Several texts need Dynamic Creative, which isn't supported yet"):
-            cr.plan_from_draft(_ad_with(tmp_path, vertical=None, texts=texts))
-        try:
-            _run(meta, _ad_with(tmp_path, vertical=None, texts=texts))
-        except cr.PlanError:
-            pass
-        assert meta.posts == []
+        out, _ = _run(meta, _ad_with(tmp_path, vertical=None, texts=texts))
+        assert out.error == "" and out.readback["ok"], out.mismatches
+        ad_set = next(o for o in meta.objects.values() if o["_kind"] == "adset")
+        assert ad_set["is_dynamic_creative"] is True and ad_set["status"] == "PAUSED"
+        fs = _creative(meta)["asset_feed_spec"]
+        assert len(fs["bodies"]) == texts + 1 and len(fs["titles"]) == texts + 1
+        assert "asset_customization_rules" not in fs and len(fs["images"]) == 1
+        assert "adlabels" not in fs["images"][0], "один файл - без меток и правил"
+        assert all(p["status"] == "PAUSED" for path, p in meta.posts if path.endswith(("/campaigns", "/adsets", "/ads")))
+
+
+def test_a_single_text_ad_set_is_not_dynamic(tmp_path):
+    meta = FakeMeta()
+    _run(meta, _ad_with(tmp_path, vertical=None))
+    ad_set = next(o for o in meta.objects.values() if o["_kind"] == "adset")
+    assert "is_dynamic_creative" not in ad_set
+
+
+def test_a_dynamic_ad_must_be_alone_in_its_ad_set(tmp_path):
+    d = _draft(tmp_path, ads=2)
+    d.ad_sets[0].ads[0].text_variants = [{"name": "T2", "body": "Body two", "headline": "Head two",
+                                          "description": "Desc two"}]
+    with pytest.raises(cr.PlanError, match="only one ad in such an ad set"):
+        cr.plan_from_draft(d)
+    meta = FakeMeta()
+    try:
+        _run(meta, d)
+    except cr.PlanError:
+        pass
+    assert meta.posts == []
+
+
+def test_dynamic_flag_is_true_only_and_only_on_ad_sets():
+    adset = {"name": "s", "campaign_id": "1", "status": "PAUSED", "is_dynamic_creative": True}
+    assert wp.check(ACT, "POST", f"/{ACT}/adsets", adset) == "adsets"
+    for bad in (False, "true", 1, None):
+        with pytest.raises(wp.WriteRefused):
+            wp.check(ACT, "POST", f"/{ACT}/adsets", dict(adset, is_dynamic_creative=bad))
+    for edge in ("campaigns", "ads", "adcreatives"):
+        with pytest.raises(wp.WriteRefused):
+            wp.check(ACT, "POST", f"/{ACT}/{edge}", {"is_dynamic_creative": True, "name": "x", "status": "PAUSED"})
 
 
 def test_repeats_and_blanks_collapse_to_one_text_and_pass(tmp_path):
@@ -309,11 +344,11 @@ def _mut(spec, fn):
 
 POLICY_CASES = [
     ("texts_ok", _cre(_feed()), True),
-    # Несколько текстов в ленте - отказ (живой 2026-10-14; без правил это Dynamic Creative).
-    ("two_bodies", _cre(_feed(bodies=[{"text": "b1"}, {"text": "b2"}])), False),
-    ("five_texts", _cre(_feed(bodies=[{"text": f"b{i}"} for i in range(5)])), False),
-    ("two_titles", _cre(_feed(titles=[{"text": "t1"}, {"text": "t2"}])), False),
-    ("two_descriptions", _cre(_feed(descriptions=[{"text": "d1"}, {"text": "d2"}])), False),
+    # Несколько текстов - Dynamic Creative: до 5, но только при одном файле (с правилами Meta отказала, 2026-10-14).
+    ("two_bodies", _cre(_feed(bodies=[{"text": "b1"}, {"text": "b2"}])), True),
+    ("five_texts", _cre(_feed(bodies=[{"text": f"b{i}"} for i in range(5)])), True),
+    ("two_titles", _cre(_feed(titles=[{"text": "t1"}, {"text": "t2"}])), True),
+    ("two_descriptions", _cre(_feed(descriptions=[{"text": "d1"}, {"text": "d2"}])), True),
     ("pair_two_bodies", _cre(_pair(bodies=[{"text": "b1"}, {"text": "b2"}])), False),
     ("six_bodies", _cre(_feed(bodies=[{"text": f"b{i}"} for i in range(6)])), False),
     ("six_titles", _cre(_feed(titles=[{"text": f"t{i}"} for i in range(6)])), False),
@@ -385,14 +420,15 @@ def test_nothing_else_was_loosened():
         "name", "object_story_spec", "degrees_of_freedom_spec", "adlabels", "contextual_multi_ads", "asset_feed_spec"})
     assert wp.EDGE_KEYS["ads"] == frozenset({"name", "adset_id", "creative", "status", "adlabels"})
     assert wp.EDGE_KEYS["adimages"] == frozenset() and wp.EDGE_KEYS["advideos"] == frozenset({"name", "title"})
-    assert "is_dynamic_creative" not in wp.EDGE_KEYS["adsets"]
-    assert wp.ASSET_FEED_MAX_TEXTS == 5 and wp.ASSET_FEED_TEXTS_PER_FEED == 1 and wp.ASSET_FEED_MAX_MEDIA == 2
+    assert "is_dynamic_creative" in wp.EDGE_KEYS["adsets"] and not any(
+        "is_dynamic_creative" in v for k, v in wp.EDGE_KEYS.items() if k != "adsets")
+    assert wp.ASSET_FEED_MAX_TEXTS == 5 and wp.ASSET_FEED_TEXTS_WITH_RULES == 1 and wp.ASSET_FEED_MAX_MEDIA == 2
 
 
 def test_the_policy_export_carries_the_asset_feed_rules():
     p = wp.policy_for_page(ACT)
     af = p["asset_feed"]
-    assert af["key"] == "asset_feed_spec" and af["max_texts"] == 1 and af["max_media"] == 2
+    assert af["key"] == "asset_feed_spec" and af["max_texts"] == 5 and af["max_texts_with_rules"] == 1 and af["max_media"] == 2
     assert af["text_max"] == {"bodies": 1024, "titles": 255, "descriptions": 255}
     assert "asset_feed_spec" in p["edges"]["adcreatives"] and "asset_feed_spec" in p["json_keys"]
     assert set(af["facebook_positions"]) >= {"feed", "story", "facebook_reels"}

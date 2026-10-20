@@ -242,9 +242,9 @@ _HELPER_JS = r"""
     const x = a.slice().sort(), y = b.slice().sort();
     return x.every((v, i) => v === y[i]);
   }
-  function textListOk(items, kind, required) {
+  function textListOk(items, kind, required, cap) {
     const AF = WRITE.asset_feed;
-    if (!Array.isArray(items) || items.length > AF.max_texts || (required && !items.length)) return false;
+    if (!Array.isArray(items) || items.length > cap || (required && !items.length)) return false;
     return items.every((x) => isObj(x) && Object.keys(x).length === 1 && typeof x.text === 'string'
       && x.text.trim() !== '' && x.text.length <= AF.text_max[kind]);
   }
@@ -264,14 +264,15 @@ _HELPER_JS = r"""
     for (const k of Object.keys(spec)) if (allowed.indexOf(k) < 0) return false;
     const story = creative.object_story_spec;
     if (!(isObj(story) && Object.keys(story).length === 1 && typeof story.page_id === 'string')) return false;
-    if (!textListOk(spec.bodies, 'bodies', true) || !textListOk(spec.titles, 'titles', true)) return false;
-    if ('descriptions' in spec && !textListOk(spec.descriptions, 'descriptions', true)) return false;
     const hasImages = Array.isArray(spec.images) && spec.images.length > 0;
     const hasVideos = Array.isArray(spec.videos) && spec.videos.length > 0;
     if (hasImages === hasVideos || ('images' in spec && 'videos' in spec)) return false;
     const kind = hasImages ? 'images' : 'videos';
     const media = spec[kind];
     if (!(Array.isArray(media) && media.length >= 1 && media.length <= AF.max_media)) return false;
+    const cap = media.length > 1 ? AF.max_texts_with_rules : AF.max_texts;
+    if (!textListOk(spec.bodies, 'bodies', true, cap) || !textListOk(spec.titles, 'titles', true, cap)) return false;
+    if ('descriptions' in spec && !textListOk(spec.descriptions, 'descriptions', true, cap)) return false;
     let names = [];
     for (const item of media) {
       if (!isObj(item)) return false;
@@ -503,6 +504,7 @@ _HELPER_JS = r"""
     if (WRITE.asset_feed.key in checked && !assetFeedOk(checked[WRITE.asset_feed.key], checked)) return refused('asset_feed');
     if (edge === 'adcreatives' && !ctaOk(checked.object_story_spec, spec.on_ad === true)) return refused('cta');
     if (edge === 'adsets' && 'targeting' in checked && !targetingOk(checked.targeting)) return refused('targeting');
+    if (WRITE.asset_feed.dynamic_key in checked && checked[WRITE.asset_feed.dynamic_key] !== true) return refused('dynamic');
     // Объявление — только ссылка на готовый креатив.
     if (edge === 'ads' && 'creative' in checked) {
       const c = checked.creative;
