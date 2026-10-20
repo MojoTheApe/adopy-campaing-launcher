@@ -5655,6 +5655,27 @@
           "401": "3351b093cb2255ee6b77516b3761e09397e28c493d1eb8f788ec3947b8eabc8c",
           "47": "be9479208e9a0731a6c08e48e1baa5ada1999d8e5201c15b07423025fe9b60df"
         }
+      },
+      "1043": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R2038V",
+        "review_session": "reviewer-r2038v-20261020",
+        "execution_lane": "c9ea988a0bbe4e10b0e9568d2ea9b570",
+        "implementer": "Worker-L31038",
+        "head_sha": "43ccb34a59cdecdecc41db96d7dab6a5500971cf",
+        "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+        "tree_sha": "9a19e70e7e93965a7263e4c9d6386594929cad0d",
+        "issues": [
+          1038
+        ],
+        "report": "PR #1043 (head aaac72d4, single commit, not stacked: git log work/main..HEAD shows only the ACL-2038 commit) lets a manager connect the shared team library from the dashboard. team_library.py now defaults ACL_LIBRARY_REPO/ACL_LIBRARY_BRANCH to MojoTheApe/acl-lib and main while machine settings still win; a token alone is a complete setup and a repository without a token is now local/not connected (configured() == token present), with test_team_library.py updated accordingly. New GitHubBackend.check() does one authenticated GET /repos/{repo} over HTTPS to api.github.com and refuses a token without push permission with a plain English reason. New team_library_connect.py validates the token shape before any request (so urllib can never echo it), checks it, stores it only via paths.update_machine_env (machine-local %LOCALAPPDATA%\\ACL\\.env), then runs the add-missing seed; every error is either a LibraryError whose text is built without the token (and redacted again) or a fixed text, never str(exc), and responses carry only repo, counts and messages. A wrong/revoked token fails before anything is saved; if the token reads but every seed write fails it is rolled back so the machine is not left with an unusable token; a partial seed keeps the connection, says so, and retries from the original local snapshot (_pending). Disconnect writes an empty ACL_LIBRARY_TOKEN and pops it from the environment, leaving local targets/ad texts untouched. The seed logic moved unchanged into src/analysis_agent/team_library_seed.py (plan() never overwrites or deletes: existing names, Recently deleted names and duplicate values are skipped; transact skips the PUT when nothing changes, so a second connect adds 0 without a commit), and scripts/seed_team_library.py is a thin wrapper. New endpoints GET /api/team-library, POST /api/team-library/connect and /disconnect sit behind the existing local_dashboard_boundary middleware (loopback Host required, cross-site Origin/Referer/Sec-Fetch-Site POSTs blocked with 403, covered by test_cross_site_post_is_refused); Sentry runs with send_default_pii=False and the connect handler catches all exceptions, so the body is never part of an event. report.html adds a masked password field dialog (cleared after send, never re-displayed), and a Connect team library / Disconnect button next to the Targeting and Ad titles status lines driven by library.connected; all user-facing text is English. Tests: tests/test_acl2038_connect_team_library.py uses only a synthetic token and covers defaults, machine settings winning, malformed/wrong/read-only tokens, no leakage in errors/logs/responses, add-missing idempotence, no overwrite/delete, failed and retried seeds, disconnect, UI markers and cross-site refusal. Locally, the affected files (test_acl2038_connect_team_library.py, test_team_library.py and related registry tests) gave 111 passed; the 10 endpoint tests errored only with the known old-venv TestClient TypeError (Client.__init__ got an unexpected keyword argument 'app'), which is environment, not the PR. CI on the head is fully green (linux tests 1-3, windows tests, ACL verification, process instructions, descriptor, installer classification/verification, tracker-link; build/install jobs skipped by classification). Non-blocking nits: the CHANGELOG line still says a repository without a token is an incomplete setup, contradicting the new behaviour; a fine-grained read-only token whose user has push rights is kept when there is nothing to seed (later saves would then fail with a clear error); tlDecorate is duplicated in two IIFEs. Re-verified on the new head 43ccb34a (a merge of main 259ae7f1, batch #1034, into the PR): git diff work/main...HEAD is identical to the approved aaac72d4 delta apart from shifted hunk offsets in app.py and report.html, the same affected tests gave the same 111 passed with only the same 10 environment TestClient errors, and CI on the new head is fully green (linux tests 1-3, windows tests, ACL verification, tracker-link and the rest; build/install skipped by classification). No live checks claimed.",
+        "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "recorded_at": "2026-10-20T14:05:32+00:00",
+        "issue_scopes": {
+          "1038": "dd964ccbe2063ee01da8e08483b1ed11da2bda840c4d7041457703a130701317"
+        }
       }
     },
     "stage": {
