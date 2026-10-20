@@ -45071,20 +45071,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T10:14:47+00:00",
         "from_status": "status:todo"
-      },
-      "770": {
-        "actor": "Worker-B1019770",
-        "session": "run_b1019_770",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1770-page-pixel-levels",
-        "worktree": "C:\\acl-1770",
-        "id": "3f446639a5684d478f46dfb9d163db53",
-        "issue": 770,
-        "state": "handoff",
-        "started_at": "2026-10-20T10:28:34+00:00",
-        "from_status": "status:todo",
-        "pr": 979,
-        "report": "# ACL-1770 handoff (round 3)\n\n- Merged the #833 fix (rpa_publisher.py tolerates drafts without ad_sets). tests/test_rpa_job_start_is_measured.py + tests/test_acl1770_page_pixel_levels.py pass locally. Only remaining conflict is non-blocking #1025 resolve_page. Full suite left to CI."
       }
     },
     "tasks": {
@@ -52778,7 +52764,7 @@
             "session": "run_b1019_770"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-B1019770",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -52787,16 +52773,16 @@
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1770-page-pixel-levels",
           "worktree": "C:\\acl-1770",
-          "id": "24dbb6ef41da402eab6d0aa47aebefb7",
+          "id": "3f446639a5684d478f46dfb9d163db53",
           "issue": 770,
           "state": "handoff",
-          "started_at": "2026-10-20T09:06:32+00:00",
+          "started_at": "2026-10-20T10:28:34+00:00",
           "from_status": "status:todo",
           "pr": 979,
-          "report": "# ACL-1770 handoff (after changes_requested)\n\n- Merged codex/acl-1768-multiple-ad-sets (contains #830/#832) and current main into the branch; 5-file overlap with #833 resolved. The pixel is now the #833 ad-set field (camp_N_adset_K_pixel; set 0 also camp_N_pixel); Pixel selector sits in the ad-set section builder and is shown per ad set; Page/Link stay on the ad. Ad rows hide Link for Instant Form sets per row.\n- Updated tests/test_acl1770_page_pixel_levels.py for the new place of the pixel field.\n- Local: test_acl1770_page_pixel_levels 22, test_acl1768_ad_sets 64, test_upload_without_workbook 24, test_acl1769_two_column_layout 12, test_acl1761_api_create 121, test_acl1771_targeting_resolver 50, test_acl1819_preflight 110. Full suite left to CI.\n- Order: #830 -> #832 -> #833 -> #979. Remaining conflict is only with #1025 (src/fb_api/creator.py resolve_page); the later of #1025/#979 refreshes onto main."
+          "report": "# ACL-1770 handoff (round 3)\n\n- Merged the #833 fix (rpa_publisher.py tolerates drafts without ad_sets). tests/test_rpa_job_start_is_measured.py + tests/test_acl1770_page_pixel_levels.py pass locally. Only remaining conflict is non-blocking #1025 resolve_page. Full suite left to CI."
         },
         "pr": 979,
-        "queued_at": "2026-10-20T09:11:18+00:00",
+        "queued_at": "2026-10-20T10:31:44+00:00",
         "review_report": "# ACL-1770 / PR #979 - returned (Reviewer-R1770Z, session reviewer-r1770z-20261020)\n\nHead 9439652ec82e211e998266c5ca23cceb6b973d26, base work/main c61501607ce11744e45add8b0d3b314368c216c5 (unchanged).\n\n## Blocking findings\n\n1. **Per-ad Page and link are silently dropped by the Upload FB export (`/build-upload`).**\n   - `src/web/app.py:2366-2373` now puts `page_id` / `link` into the ad slot when the buyer picks a Page or types a link on the ad.\n   - `src/web/app.py:5908-5915` (`build_upload`) refuses only `adset_name` / `pixel_id`; it does not look at `page_id` or `link`. The slots then go to `assemble_from_form_slots` (`src/campaign_bridge/assembly.py`), which never reads a per-slot link or Page; the xlsx gets the account-level link (`src/upload_agent/build_upload_excel.py:478`, `account_info[\"link\"]`) and the map Page.\n   - Result: with the API backend on (the controls are enabled), a buyer who sets a per-ad link or Page and clicks \"Build Upload FB\" downloads a file with a different link/Page and no warning. This breaks the \"never drop a user's value silently\" rule, which explicitly covers this export path.\n   - Fix: extend the refusal at `app.py:5908` to `s.get(\"adset_name\") or s.get(\"pixel_id\") or s.get(\"page_id\") or s.get(\"link\")`, with English text such as \"Upload FB cannot hold a Page or link chosen for an ad, or a custom ad set name or pixel; use Publish with the API backend.\" Add a test next to `test_the_robot_backend_refuses_the_new_choices_out_loud` that POSTs `/build-upload` with `camp_0_ad_1_link` / `camp_0_ad_1_page` and asserts the error is rendered and no xlsx is returned.\n\n2. **The PR is stacked, contrary to the \"not stacked\" premise of this review.**\n   `git log work/main..HEAD` contains the code of three other open, unmerged PRs: #830 (ACL-1767, head 8ef0046d), #832 (ACL-1771, head 7991b674) and #833 (ACL-1768, head 20af245d) - all three heads are ancestors of 9439652e. The PR body's second-round section says so (\"Approve bottom-up: #830 -> #832 -> #833 -> #979\"). `git diff work/main...HEAD` is 33 files / +5600, of which only 8 files / +817 (`git diff 20af245d HEAD`) are ACL-1770. Approving #979 alone would land ACL-1767/1768/1771 without their own reviews. Either land #830 -> #832 -> #833 first and refresh #979 onto main, or have this PR approved explicitly as the top of that stack after those three are approved.\n\n## Reviewed and fine (ACL-1770 delta over #833)\n\n- Per-ad `page_id`/`link` in `AdDraft`, `slots_to_campaign_drafts`, `AdPlan`; `CampaignPlan.page_of/link_of/pixel_of` used consistently in creative spec, ad-set `promoted_object`, and both readbacks (page, link, cta_link, pixel). No new Graph write keys, so no write-policy change is needed; PAUSED unchanged.\n- `resolve_page`: ad Page checked against `/promote_pages`, error names the ad; campaign Page only required when some ad lacks one or a set is Instant Form; Instant Form ad with a different Page refused. `resolve_pixel`: set pixel checked strictly (also with an empty list), names the set.\n- Empty link: refusal names the ad; no link anywhere keeps the old message.\n- RPA backend: `_instant_form_refusal` refuses `page_id`/`link`/`pixel_id` out loud (409); UI disables with \"API backend only\".\n- `/api/page-pixels`: read on click only, read-only client (`allow_writes` false, budget 4, writes asserted empty), inside the profile session via `account_spend_api._session`, API backend only.\n- `/api/account-defaults` / `save_choice`: numeric ids only, writes only into an empty map cell, refuses a different existing value (409), atomic write, keeps other columns. Saved value used next time (test).\n- Merge with main kept ACL-1776 form templates (`lead_form_template` in slots/draft/plan intact).\n\n## Non-blocking nits\n\n- \"Only when the account has several to choose from\" is enforced only in the page JS (`report.html`, `!have && list.length > 1`); `save_choice` would also write a single-option choice. Harmless, but the server could mirror it.\n- `resolve_page` `elif not needed: pass` could be folded into the condition.\n\n## Tests\n\n`tests/test_acl1770_page_pixel_levels.py tests/test_acl1761_api_create.py tests/test_acl1761_parity.py tests/test_acl1775_instant_forms.py tests/test_acl1769_two_column_layout.py tests/test_upload_without_workbook.py`: 309 passed (local venv). No live checks claimed.\n\n## CI at review time\n\ntracker-link: fail; linux tests (3.11/3.13 x3): pending; windows tests, installer, tooling, descriptor, process instructions: pass.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -59069,7 +59055,8 @@
       19,
       18,
       71,
-      768
+      768,
+      770
     ],
     "review": null,
     "history": [
@@ -98723,6 +98710,13 @@
           "report": "# Return \u2014 PR #1031 [ACL-103] (head 5edc2553f5ea2191166df22f7f62490907419952, base main c61501607ce11744e45add8b0d3b314368c216c5)\n\nReviewer: Reviewer-R103Z (session reviewer-r103z-20261020). Implementer: Worker-B1020C.\nVerdict: **changes requested**. CI on the head is fully green (including tracker-link); the blockers are code and scope findings.\n\n## Blocking\n\n### B1. The BI host and DB user leak into the server log, the dashboard page and the error page\n`src/analysis_agent/morning_service.py:150-152` puts `str(e)` of the BI exception into:\n- the `BIUnavailable` message, which is shown on `error.html` (`_render_report` -> \"No data file\"),\n- the page warning `note`, which is added to `report` warnings and rendered in `report.html`,\n- `print(..., file=sys.stderr)`, which ends up in the persisted server logs (`serve-live.log` / `server.stderr.log`, which `robot_health` reads).\n\nPyMySQL error text includes connection details. For example `connections.py:737` produces `Can't connect to MySQL server on '<BI_MYSQL_HOST>' (...)`, and MySQL error 1045 produces `Access denied for user '<BI_MYSQL_USER>'@'<client ip>' (using password: YES)`. The project rule is that DB host, user and password come only from the machine `.env` and are never logged. So every BI outage (unreachable host, rotated password) writes the host and/or the login into logs and onto the page.\n**Fix:** keep the raw message out of all three places. Use the exception class plus, for `pymysql.err.Error`, the numeric code only (`e.args[0]`), for example `BI unavailable (OperationalError 2003) \u2014 showing the Stats workbook instead.` Alternatively, redact `cfg[\"host\"]` and `cfg[\"user\"]` from the text before using it. Add a test: make `fetch_raw` raise an error whose message contains the configured host and user, then assert that neither string appears in `stats_note`, in the `BIUnavailable` message, or in captured stderr.\n\n### B2. Acceptance criteria of Issue #13 are not met (or not stated as out of scope) \u2014 coordinator decision needed\nIssue #13 is still open, but its last two comments archive it as stale (\"the BI/Adverity extract premise is gone \u2026 tracked in acl-109 (#17)\"). The PR revives it with a new route (MySQL `BI_Export`.`UF.Export`) and does not cover these criteria in the Issue:\n- \"Keep currency/timezone\": the BI query carries neither field, and the PR does not say which currency or day boundary BI uses relative to the workbook.\n- \"show source-vs-account figures separately\" (acl-103d): not addressed.\n- \"Document the workbook-to-source field and granularity mapping\" (acl-103f): only the `COLUMN_MAP` dict in code. Nothing documents granularity (BI row = account \u00d7 adset \u00d7 ad \u00d7 country \u00d7 day?) or the dropped / inherited CM rows.\n\n**Fix (either):** (a) update Issue #13 (un-archive, with the new BI/MySQL scope and the remaining criteria explicitly moved to follow-ups such as acl-109/#17), and add a short mapping/granularity + currency/timezone note to the PR or the docs; or (b) implement the missing criteria. Without one of these, the PR should not be accepted as closing ACL-103.\n\n## Non-blocking (recommended)\n- N1. `bi_stats.py:190-194` holds `_REV_LOCK` for the whole network `fetch_revision()`. Worst case is ~15 s connect + 120 s read. `ensure_revision_watcher()` (`bi_stats.py:212`) takes the same lock, and `get_cached_report` calls it on every request. So while the watcher waits on a hanging BI, every report request waits too, which goes against the ACL-1399 intent. Use a separate lock for the watcher, or check `thread.is_alive()` without the revision lock.\n- N2. `read_timeout=120` limits each socket read, not the whole full-table `SELECT` (no date bound). A slow but live server can stretch a cold build well past 2 minutes. Consider a total deadline (for example `SET SESSION MAX_EXECUTION_TIME`), or a date floor once the table grows.\n- N3. The revision `MAX(DATE_INSERTED)|COUNT(*)` misses in-place corrections (an UPDATE that changes neither value). Worth confirming with BI how reloads are done.\n- N4. `config/bi_cm_map.json` is derived from a 6-day overlap and is still \"to be confirmed by BI\". If BI adds a new team CM code, those rows silently disappear by default. Consider one warning listing unmapped CM codes that carry our accounts' spend.\n- N5. When BI is the source, the setup wizard / acl_doctor still require the workbook (already listed in the PR as out of scope). Fine as a follow-up.\n\n## Verified OK\n- No credentials in the repo: `.env.example` has empty `BI_MYSQL_*` keys only. `bi_enabled()` requires host, user and password from the environment. `tests/conftest.py` blanks `BI_MYSQL_PASSWORD`, so report tests never reach a real DB. The tests use `bi.invalid` and mock `fetch_raw` / `fetch_revision`.\n- Read-only access: the session is `SET SESSION TRANSACTION READ ONLY` and only SELECTs run. No user input reaches SQL. Table/DB identifiers come from env and are backtick-quoted with escaping (`_table_ref`, tested).\n- Fallback: a BI error falls back to the workbook, and the warning is shown on the report page. With no workbook, `BIUnavailable(FileNotFoundError)` leads to the normal error page. A fallback df is not reused, so the next Refresh retries BI. Page requests never touch the network (peek uses only the known revision). Refresh forces a revision check.\n- Period reports work with `source_excel = \"BI (MySQL)\"`: `enriched_df` is passed, and the relaxed `FileNotFoundError` guard lets it through.\n- Dependency: `PyMySQL==1.2.3` is in `requirements.txt`. The import is lazy and the distribution-boundary test passes.\n- User-facing strings are in English. Python changes need a `serve.py` restart (not done).\n- Stacking: none. `git log work/main..HEAD` = a3b3632f, 5edc2553 only. The merge-base equals work/main c6150160.\n\n## Tests run (local, C:\\fb_agents\\.venv, worktree C:\\acl-rev-1031)\n`tests/test_acl103_bi_stats.py tests/test_distribution_boundary.py tests/test_dashboard_stays_responsive_while_report_builds.py tests/test_report_loading_stages.py tests/test_review_period_regressions.py tests/test_stats_workbook_header.py tests/test_header.py tests/test_workbook_review.py`: **77 passed** in 3m49s. No live checks claimed.\n\n## CI\n`gh pr checks 1031`: all 16 checks pass on 5edc2553 (linux 3.11/3.13 \u00d73, windows 3.13, installer, descriptor, tracker-link, ACL verification, \u2026).",
           "keep_lane": false
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T10:31:44+00:00",
+        "issue": 770,
+        "pr": 979,
+        "actor": "Worker-B1019770"
       }
     ],
     "policy": {
