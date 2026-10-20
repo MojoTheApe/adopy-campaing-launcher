@@ -50478,7 +50478,7 @@
             "session": "rf771-20261020"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-RF771",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -102328,6 +102328,68 @@
         "pr": 832,
         "lane": "3faaae4dee8b490087328dafea957a2a",
         "actor": "Reviewer-RR1020"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-20T14:32:03+00:00",
+        "issue": 771,
+        "pr": 832,
+        "review": {
+          "id": "3faaae4dee8b490087328dafea957a2a",
+          "pr": 832,
+          "issues": [
+            771
+          ],
+          "actor": "Reviewer-RR1020",
+          "session": "rr1020-20261020",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-20T14:24:37+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 771,
+            "pr": 832,
+            "branch": "codex/acl-1771-targeting-resolver",
+            "head_sha": "ebac53f87fb797877a37e99381359232d0ae8138",
+            "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+            "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "96c601e64b37c94852034b1c7a0286a0e3c015efc300eb9b4ae244ce97aee2cf",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-RR1020",
+              "review_session": "rr1020-20261020",
+              "execution_lane": "3faaae4dee8b490087328dafea957a2a",
+              "implementer": "Worker-RF771",
+              "head_sha": "ebac53f87fb797877a37e99381359232d0ae8138",
+              "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+              "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+              "tree_sha": "deb93c10bc36031f7369f6f51d9c82113e88f68e",
+              "issues": [
+                771
+              ],
+              "report": "Verdict: approved (fresh re-review after main moved to 259ae7f1). Delta from previous approved head 7991b674 is only the merge of main 259ae7f1: the merge changes only files that main changed since the merge base; no other author changes. Overlaps with the author diff (src/web/app.py, src/web/templates/report.html) merged textually without conflict. Full scope read against ACL-1771: targeting resolver (exact name, adinterest search fallback, behaviors/work/education classes, per-job cache, call budget), TargetingUnresolved with 'picked X for Y?' candidates and Confirm in Check plan, local ConfirmedStore, API-backend-gated endpoints, preflight rules interests_resolve/interests_confirmed; read-only, nothing substituted without confirmation. Source CI on exact head green: descriptor, tracker-link, ACL verification, Installer verification, linux and windows tests. Independent trial merge by coordinator: compatible, 169 tests passed.",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "recorded_at": "2026-10-20T14:28:09+00:00",
+              "issue_scopes": {
+                "771": "96c601e64b37c94852034b1c7a0286a0e3c015efc300eb9b4ae244ce97aee2cf"
+              }
+            },
+            "lane": {
+              "id": "3faaae4dee8b490087328dafea957a2a",
+              "pr": 832,
+              "issues": [
+                771
+              ],
+              "actor": "Reviewer-RR1020",
+              "session": "rr1020-20261020",
+              "coordinator": "Coordinator-M1011A",
+              "started_at": "2026-10-20T14:24:37+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-20T14:31:03+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -106333,6 +106395,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-20T14:21:27+00:00"
+      },
+      "771": {
+        "issue": 771,
+        "pr": 832,
+        "branch": "codex/acl-1771-targeting-resolver",
+        "head_sha": "ebac53f87fb797877a37e99381359232d0ae8138",
+        "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+        "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "96c601e64b37c94852034b1c7a0286a0e3c015efc300eb9b4ae244ce97aee2cf",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-RR1020",
+          "review_session": "rr1020-20261020",
+          "execution_lane": "3faaae4dee8b490087328dafea957a2a",
+          "implementer": "Worker-RF771",
+          "head_sha": "ebac53f87fb797877a37e99381359232d0ae8138",
+          "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+          "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
+          "tree_sha": "deb93c10bc36031f7369f6f51d9c82113e88f68e",
+          "issues": [
+            771
+          ],
+          "report": "Verdict: approved (fresh re-review after main moved to 259ae7f1). Delta from previous approved head 7991b674 is only the merge of main 259ae7f1: the merge changes only files that main changed since the merge base; no other author changes. Overlaps with the author diff (src/web/app.py, src/web/templates/report.html) merged textually without conflict. Full scope read against ACL-1771: targeting resolver (exact name, adinterest search fallback, behaviors/work/education classes, per-job cache, call budget), TargetingUnresolved with 'picked X for Y?' candidates and Confirm in Check plan, local ConfirmedStore, API-backend-gated endpoints, preflight rules interests_resolve/interests_confirmed; read-only, nothing substituted without confirmation. Source CI on exact head green: descriptor, tracker-link, ACL verification, Installer verification, linux and windows tests. Independent trial merge by coordinator: compatible, 169 tests passed.",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "recorded_at": "2026-10-20T14:28:09+00:00",
+          "issue_scopes": {
+            "771": "96c601e64b37c94852034b1c7a0286a0e3c015efc300eb9b4ae244ce97aee2cf"
+          }
+        },
+        "lane": {
+          "id": "3faaae4dee8b490087328dafea957a2a",
+          "pr": 832,
+          "issues": [
+            771
+          ],
+          "actor": "Reviewer-RR1020",
+          "session": "rr1020-20261020",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-20T14:24:37+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-20T14:31:03+00:00"
       }
     },
     "batches": {
@@ -111371,62 +111477,6 @@
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T14:21:00+00:00",
         "state": "reviewing"
-      },
-      "832": {
-        "id": "3faaae4dee8b490087328dafea957a2a",
-        "pr": 832,
-        "issues": [
-          771
-        ],
-        "actor": "Reviewer-RR1020",
-        "session": "rr1020-20261020",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-20T14:24:37+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 771,
-          "pr": 832,
-          "branch": "codex/acl-1771-targeting-resolver",
-          "head_sha": "ebac53f87fb797877a37e99381359232d0ae8138",
-          "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-          "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "96c601e64b37c94852034b1c7a0286a0e3c015efc300eb9b4ae244ce97aee2cf",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-RR1020",
-            "review_session": "rr1020-20261020",
-            "execution_lane": "3faaae4dee8b490087328dafea957a2a",
-            "implementer": "Worker-RF771",
-            "head_sha": "ebac53f87fb797877a37e99381359232d0ae8138",
-            "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-            "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-            "tree_sha": "deb93c10bc36031f7369f6f51d9c82113e88f68e",
-            "issues": [
-              771
-            ],
-            "report": "Verdict: approved (fresh re-review after main moved to 259ae7f1). Delta from previous approved head 7991b674 is only the merge of main 259ae7f1: the merge changes only files that main changed since the merge base; no other author changes. Overlaps with the author diff (src/web/app.py, src/web/templates/report.html) merged textually without conflict. Full scope read against ACL-1771: targeting resolver (exact name, adinterest search fallback, behaviors/work/education classes, per-job cache, call budget), TargetingUnresolved with 'picked X for Y?' candidates and Confirm in Check plan, local ConfirmedStore, API-backend-gated endpoints, preflight rules interests_resolve/interests_confirmed; read-only, nothing substituted without confirmation. Source CI on exact head green: descriptor, tracker-link, ACL verification, Installer verification, linux and windows tests. Independent trial merge by coordinator: compatible, 169 tests passed.",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "recorded_at": "2026-10-20T14:28:09+00:00",
-            "issue_scopes": {
-              "771": "96c601e64b37c94852034b1c7a0286a0e3c015efc300eb9b4ae244ce97aee2cf"
-            }
-          },
-          "lane": {
-            "id": "3faaae4dee8b490087328dafea957a2a",
-            "pr": 832,
-            "issues": [
-              771
-            ],
-            "actor": "Reviewer-RR1020",
-            "session": "rr1020-20261020",
-            "coordinator": "Coordinator-M1011A",
-            "started_at": "2026-10-20T14:24:37+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-20T14:31:03+00:00"
-        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
