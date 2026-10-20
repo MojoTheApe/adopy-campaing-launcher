@@ -45227,6 +45227,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T11:52:01+00:00",
         "from_status": "status:idea"
+      },
+      "838": {
+        "actor": "Worker-T1020838",
+        "session": "t1020-838",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "codex/acl-1838-country-active-line",
+        "worktree": "C:\\acl-1838-w",
+        "id": "34a1f79b60f64615acff75608efa1c9e",
+        "issue": 838,
+        "state": "implementing",
+        "started_at": "2026-10-20T12:07:42+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -49854,11 +49866,15 @@
           {
             "actor": "Worker-CN6B92",
             "session": "worker_countryline_cn6b92_20261013"
+          },
+          {
+            "actor": "Worker-T1020838",
+            "session": "t1020-838"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-CN6B92",
-        "coordinator": "Coordinator-CV1013",
+        "state": "implementing",
+        "worker": "Worker-T1020838",
+        "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-CN6B92",
           "session": "worker_countryline_cn6b92_20261013",
@@ -49876,14 +49892,7 @@
         "pr": 842,
         "queued_at": "2026-10-13T08:18:58+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
-        "reviewer": "Reviewer-RL8C42",
         "return_operation": {
-          "id": "91201340047f423fa6a6747b1c5dc404",
-          "actor": "Coordinator-FLOW513",
-          "session": "flow_five_reviews_coordinator_01a134f0_20261013",
-          "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
-        },
-        "return": {
           "id": "91201340047f423fa6a6747b1c5dc404",
           "actor": "Coordinator-FLOW513",
           "session": "flow_five_reviews_coordinator_01a134f0_20261013",
@@ -56444,6 +56453,10 @@
       },
       "Worker-c8f54e83": {
         "session": "c8f54e83",
+        "role": "Worker"
+      },
+      "Worker-T1020838": {
+        "session": "t1020-838",
         "role": "Worker"
       }
     },
@@ -99958,6 +99971,13 @@
         "issue": 305,
         "pr": 965,
         "actor": "Worker-T1020305"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T12:07:42+00:00",
+        "issue": 838,
+        "claim": "34a1f79b60f64615acff75608efa1c9e",
+        "actor": "Worker-T1020838"
       }
     ],
     "policy": {
