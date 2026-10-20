@@ -53741,7 +53741,7 @@
             "session": "run_l4_53"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-L453",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -53759,7 +53759,8 @@
           "report": "## Summary\nTelemetry summary gains a repeated-failure section (report only per owner decision 2026-10-20): step+reason signatures, machines out of fleet, confidence, evidence.\n\n## Verification\ntests/test_failure_signatures.py + tests/test_acl1806_obsidian_path.py: 16 passed. Opus read-only review done; findings fixed (truncated diag, no-reason cap, fleet-share confidence)."
         },
         "pr": 1032,
-        "queued_at": "2026-10-20T09:45:38+00:00"
+        "queued_at": "2026-10-20T09:45:38+00:00",
+        "reviewer": "Reviewer-R402W"
       },
       "230": {
         "implementers": [
@@ -56576,6 +56577,10 @@
       "Worker-BCHIP": {
         "session": "bchip_20261020",
         "role": "Worker"
+      },
+      "Reviewer-R402W": {
+        "session": "reviewer-r402w-20261020",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -59441,7 +59446,6 @@
       }
     },
     "review_queue": [
-      53,
       18,
       309,
       175,
@@ -100210,6 +100214,13 @@
             "approved_at": "2026-10-20T12:31:53+00:00"
           }
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-20T12:35:18+00:00",
+        "pr": 1032,
+        "lane": "55fd2c64f2c941acacf6817710a5c07f",
+        "actor": "Reviewer-R402W"
       }
     ],
     "policy": {
@@ -109134,6 +109145,18 @@
         "session": "reviewer-r106w-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T11:42:13+00:00",
+        "state": "reviewing"
+      },
+      "1032": {
+        "id": "55fd2c64f2c941acacf6817710a5c07f",
+        "pr": 1032,
+        "issues": [
+          53
+        ],
+        "actor": "Reviewer-R402W",
+        "session": "reviewer-r402w-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-20T12:35:18+00:00",
         "state": "reviewing"
       }
     },
