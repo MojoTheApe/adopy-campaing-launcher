@@ -103594,6 +103594,25 @@
           ],
           "report": "# ACL-2026: owner-directed cancellation of an unstarted reservation\n\nThe owner explicitly instructed this Coordinator to choose and free the safest one occupied slot/reservation and complete ACL-2026, while stating that they do not know whether other agents are still working. This supersedes the previous request to preserve every foreign reservation pending the owner's factual stop confirmation.\n\nSelected boundary: the unstarted intake held by Coordinator-I1020A, containing Issues1038,1037,836,184,771. Fresh native readback shows all five still Approved, all five still remaining, zero batches, no active integration, no pending member-return operations. Three actual implementation claims and the unrelated Reviewer820 remain untouched. No product delivery request is being cancelled.\n\nThis is an explicit owner-directed stop/revocation of that queue reservation. We do not claim that its previous process was already stopped, infer a stop from age/activity, or claim access to its host. The supported transfer uses its exact current private intake claim and our genuine Coordinator identity, fences the prior actor/session from future mutations of that reservation, and retains the immutable member set and ownership history. The required --stopped switch is used for the owner's newly ordered revocation, not as evidence of previously verified remote process termination.\n\nAfter the exact transfer, the new real owner cancels only the unstarted remaining intake through the supported command. All five Issues, source PRs, Approved statuses, original approvals, task histories and implementers remain intact; no source is discarded, returned or merged. Native readback must confirm preservation before any new intake. If the intake or active integration changed, stop rather than widening this action.\n\nThen freeze only ACL-2026, independently review its actual composed candidate and complete normal process delivery. No new installer request/publication or live Pause activation is authorized by freeing this reservation."
         }
+      },
+      {
+        "event": "intake-frozen",
+        "at": "2026-10-20T20:21:36+00:00",
+        "intake": {
+          "id": "c1e21f5e160346f4a0437abfe65bb821",
+          "actor": "Coordinator-ACT174",
+          "session": "f489c98f-9d9f-42a7-aafc-5dfb361caba8",
+          "state": "running",
+          "issues": [
+            1026
+          ],
+          "remaining": [
+            1026
+          ],
+          "batches": [],
+          "started_at": "2026-10-20T20:21:36+00:00",
+          "ineligible": {}
+        }
       }
     ],
     "policy": {
@@ -113080,36 +113099,19 @@
     },
     "integration": null,
     "intake": {
-      "id": "09bba1d54ca5471b8c49e15a45a08056",
+      "id": "c1e21f5e160346f4a0437abfe65bb821",
       "actor": "Coordinator-ACT174",
       "session": "f489c98f-9d9f-42a7-aafc-5dfb361caba8",
-      "state": "cancelled",
+      "state": "running",
       "issues": [
-        1038,
-        1037,
-        836,
-        184,
-        771
+        1026
       ],
       "remaining": [
-        1038,
-        1037,
-        836,
-        184,
-        771
+        1026
       ],
       "batches": [],
-      "started_at": "2026-10-20T17:27:03+00:00",
-      "ineligible": {},
-      "history": [
-        {
-          "coordinator": "Coordinator-I1020A",
-          "session": "9fea0133-b18f-4277-a1b8-225a9a665b61",
-          "reason": "Owner explicitly orders stopping/revoking the safest unstarted reservation despite unknown prior process liveness. Exact readback: no integration, no batches, all five Approved and remaining. This CAS transfer fences old reservation authority; it does not assert prior remote process termination. Preserve every task/approval and all Worker/Reviewer claims. Durable decision: acl-2026-owner-directed-reservation-release.md.",
-          "at": "2026-10-20T20:20:09+00:00"
-        }
-      ],
-      "report": "# ACL-2026: owner-directed cancellation of an unstarted reservation\n\nThe owner explicitly instructed this Coordinator to choose and free the safest one occupied slot/reservation and complete ACL-2026, while stating that they do not know whether other agents are still working. This supersedes the previous request to preserve every foreign reservation pending the owner's factual stop confirmation.\n\nSelected boundary: the unstarted intake held by Coordinator-I1020A, containing Issues1038,1037,836,184,771. Fresh native readback shows all five still Approved, all five still remaining, zero batches, no active integration, no pending member-return operations. Three actual implementation claims and the unrelated Reviewer820 remain untouched. No product delivery request is being cancelled.\n\nThis is an explicit owner-directed stop/revocation of that queue reservation. We do not claim that its previous process was already stopped, infer a stop from age/activity, or claim access to its host. The supported transfer uses its exact current private intake claim and our genuine Coordinator identity, fences the prior actor/session from future mutations of that reservation, and retains the immutable member set and ownership history. The required --stopped switch is used for the owner's newly ordered revocation, not as evidence of previously verified remote process termination.\n\nAfter the exact transfer, the new real owner cancels only the unstarted remaining intake through the supported command. All five Issues, source PRs, Approved statuses, original approvals, task histories and implementers remain intact; no source is discarded, returned or merged. Native readback must confirm preservation before any new intake. If the intake or active integration changed, stop rather than widening this action.\n\nThen freeze only ACL-2026, independently review its actual composed candidate and complete normal process delivery. No new installer request/publication or live Pause activation is authorized by freeing this reservation."
+      "started_at": "2026-10-20T20:21:36+00:00",
+      "ineligible": {}
     },
     "source_reviews": {
       "820": {
