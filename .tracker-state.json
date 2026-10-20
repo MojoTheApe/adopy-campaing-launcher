@@ -45216,20 +45216,6 @@
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
       },
-      "305": {
-        "actor": "Worker-T1020305",
-        "session": "t1020-305",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1305-setup-name-check",
-        "worktree": "C:\\acl-1305",
-        "id": "29592c5679c240efa92d658b00e322d3",
-        "issue": 305,
-        "state": "handoff",
-        "started_at": "2026-10-20T11:50:46+00:00",
-        "from_status": "status:todo",
-        "pr": 965,
-        "report": "ACL-1305 resumed (Worker-T1020305). Block was stale: parked only on a one-line test expectation in packaging/windows/tests/test_setup_wizard.py ('No accounts' -> 'is not in the CM column'), now changed. Merged current work/main, docs/SETUP-NEW-PC.md troubleshooting row updated per read-only Opus review (no other findings). Tests: test_setup_checks_name_against_workbook + test_setup_wizard 13 passed; earlier CI failure test_bench_destination_instant_form press_guard passes locally (3 passed). Branch contains current work/main."
-      },
       "1037": {
         "actor": "Worker-c8f54e83",
         "session": "c8f54e83",
@@ -52570,24 +52556,25 @@
             "session": "t1020-305"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-T1020305",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-E19305",
-          "session": "w305-c0a1de70",
-          "coordinator": "Coordinator-E1019A",
+          "actor": "Worker-T1020305",
+          "session": "t1020-305",
+          "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1305-setup-name-check",
-          "worktree": "C:\\wk19-305",
-          "id": "2c76bc2be6d345c28cd79fb37a134b58",
+          "worktree": "C:\\acl-1305",
+          "id": "29592c5679c240efa92d658b00e322d3",
           "issue": 305,
-          "state": "stopping",
-          "started_at": "2026-10-19T10:06:40+00:00",
+          "state": "handoff",
+          "started_at": "2026-10-20T11:50:46+00:00",
           "from_status": "status:todo",
-          "report": "Parked 2026-10-19: PR #965 merged with main (head a448e2f7) but packaging/windows/tests/test_setup_wizard.py::test_manual_setup_discovers_only_this_managers_accounts line 95 expects 'No accounts' while the new CM-column check now says 'is not in the CM column'; one-line expectation change needs owner approval. Everything else passes."
+          "pr": 965,
+          "report": "ACL-1305 resumed (Worker-T1020305). Block was stale: parked only on a one-line test expectation in packaging/windows/tests/test_setup_wizard.py ('No accounts' -> 'is not in the CM column'), now changed. Merged current work/main, docs/SETUP-NEW-PC.md troubleshooting row updated per read-only Opus review (no other findings). Tests: test_setup_checks_name_against_workbook + test_setup_wizard 13 passed; earlier CI failure test_bench_destination_instant_form press_guard passes locally (3 passed). Branch contains current work/main."
         },
         "pr": 965,
-        "queued_at": "2026-10-17T07:20:10+00:00",
+        "queued_at": "2026-10-20T12:03:53+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -59329,7 +59316,8 @@
       175,
       845,
       841,
-      854
+      854,
+      305
     ],
     "review": {
       "id": "1ea28d1b292c4ef3baeda760fa52b87b",
@@ -99963,6 +99951,13 @@
             "approved_at": "2026-10-20T11:57:17+00:00"
           }
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T12:03:53+00:00",
+        "issue": 305,
+        "pr": 965,
+        "actor": "Worker-T1020305"
       }
     ],
     "policy": {
