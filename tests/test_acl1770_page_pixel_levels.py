@@ -318,4 +318,7 @@ def test_the_levels_are_where_the_spec_puts_them():
     slot = slot[: slot.index("// ── Tracking link save")]
     # Страница и ссылка - в строке объявления, пиксель - в карточке набора.
     assert "pfx + 'page\"" in row and "pfx + 'link\"" in row and "_pixel" not in row
-    assert "idx + '_pixel\"" in slot and "_page" not in slot
+    # ACL-1768: поля набора строит buildAdsetSectionHTML (поле называется pfx + 'pixel').
+    sec = page[page.index("function buildAdsetSectionHTML"):]
+    sec = sec[: sec.index("Placements")]
+    assert "pfx + 'pixel\"" in sec and "_page" not in slot and "_page" not in sec
