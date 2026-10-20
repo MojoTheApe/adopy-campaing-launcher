@@ -22,6 +22,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
 
+from src.analysis_agent import bi_stats
 from src.analysis_agent.morning_service import (
     _resolve_excel_path,
     load_morning_report,
@@ -46,10 +47,18 @@ _CACHE: Dict[str, Any] = {
 }
 
 
-def _current_key(excel_path: str) -> Optional[Tuple[str, float]]:
+def _excel_key(excel_path: str) -> Optional[Tuple[str, float]]:
     if not os.path.isfile(excel_path):
         return None
     return (excel_path, os.path.getmtime(excel_path))
+
+
+def _current_key(excel_path: str):
+    # ACL-103: при BI ключ — последняя известная ревизия BI (без сети) плюс
+    # книга-фолбэк; ревизию обновляет get_cached_report из рабочего потока.
+    if bi_stats.bi_enabled():
+        return bi_stats.source_key(_excel_key(excel_path))
+    return _excel_key(excel_path)
 
 
 # ACL-1399: сборку ведёт один поток за раз. Пока отчёт собирался прямо в
@@ -113,6 +122,9 @@ def get_cached_report(
     handlers go through a worker thread (see src/web/app.py, ACL-1399).
     """
     excel_path = _resolve_excel_path(None)
+    if bi_stats.bi_enabled():
+        # Сеть — здесь, в рабочем потоке; Refresh спрашивает BI без ожидания TTL.
+        bi_stats.refresh_revision(force=force_rebuild)
     expected_key = _current_key(excel_path)
     cm_key = _cm_key(my_cm)
 

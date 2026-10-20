@@ -34,6 +34,7 @@ from src.creative_variant import apply_backfill as apply_variant_backfill
 from src.analysis_agent.gsheet_accounts import fetch_account_rows
 from src.analysis_agent.morning_report import build_morning_report
 from src.analysis_agent.stats_workbook import read_stats_workbook
+from src.analysis_agent import bi_stats
 from src.analysis_agent.news_context import NewsFetcher, build_news_context
 
 
@@ -124,13 +125,33 @@ def _load_enriched_df(
     """
     if progress is not None:
         progress("reading")
-    df_raw = read_stats_workbook(excel_path)
+    df_raw, source, note = _read_stats_rows(excel_path)
     if progress is not None:
         progress("processing")
     df = compute_metrics(df_raw)
     # ACL-1593: вариант для объявлений, построенных до имени с вариантом.
     df = apply_variant_backfill(enrich_structure(df))
+    df.attrs["stats_source"] = source
+    df.attrs["stats_note"] = note
     return df
+
+
+def _read_stats_rows(excel_path: str) -> Tuple[pd.DataFrame, str, Optional[str]]:
+    """(строки в схеме книги, источник, предупреждение).
+
+    ACL-103: BI первым, если настроен; при его ошибке — книга, с
+    предупреждением на странице. Без книги ошибка BI поднимается как есть.
+    """
+    if bi_stats.bi_enabled():
+        try:
+            return bi_stats.read_bi_stats(), "bi", None
+        except Exception as e:  # noqa: BLE001 — фолбэк на книгу ниже
+            if not os.path.isfile(excel_path):
+                raise RuntimeError(f"BI unavailable and no Stats workbook: {type(e).__name__}: {e}") from e
+            note = f"BI unavailable ({type(e).__name__}: {e}) — showing the Stats workbook instead."
+            print(f"[morning_service] {note}", file=sys.stderr)
+            return read_stats_workbook(excel_path), "excel", note
+    return read_stats_workbook(excel_path), "excel", None
 
 
 def load_morning_report(
@@ -170,7 +191,7 @@ def load_morning_report(
     warnings: List[str] = []
 
     resolved_excel = _resolve_excel_path(excel_path)
-    if not os.path.isfile(resolved_excel):
+    if enriched_df is None and not bi_stats.bi_enabled() and not os.path.isfile(resolved_excel):
         raise FileNotFoundError(
             f"Excel file not found: {resolved_excel}. "
             f"Set FB_STATS_EXCEL or pass excel_path."
@@ -292,6 +313,12 @@ def load_morning_report(
                     warnings.append(warning)
     # Provide the source Excel path on the report for the renderer header.
     report["source_excel"] = resolved_excel
+    report["stats_source"] = enriched_df.attrs.get("stats_source", "excel")
+    if report["stats_source"] == "bi":
+        report["source_excel"] = "BI (MySQL)"
+    note = enriched_df.attrs.get("stats_note")
+    if note:
+        warnings.append(note)
     # для пересборки за период: см. account_rows_cached выше
     report["_account_rows"] = account_rows
     return report, enriched_df, warnings
