@@ -46089,9 +46089,11 @@
         "worktree": "C:\\acl-1880-clean",
         "id": "530e9116e0534cafa0f9aaa5b0773acb",
         "issue": 880,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T17:11:59+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 1044,
+        "report": "Returned by independent review (CI failures + stale main). Fixed in 654a5d48: GUIDE entry and cb-build-model mapping for page_identity, getattr for page_provided/page_id in rpa_publisher, duplicate test expectation (page_id intentionally not copied), null-guard for row.closest(.cb-slot) in report.html. Merged current main 259ae7f1. Source CI on head 89dc6c56: all Linux/Windows test shards, ACL verification and Installer verification green."
       }
     },
     "tasks": {
