@@ -30,15 +30,15 @@ NO_REASON = "(причина не указана)"
 
 _UUID = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I)
 _HEX = re.compile(r"\b[0-9a-f]{12,}\b", re.I)
-_NUM = re.compile(r"\d+(?:[.,]\d+)?replace("|", "\|")
-_SPACE = re.compile(r"\s+replace("|", "\|")
+_NUM = re.compile(r"\d+(?:[.,]\d+)?")
+_SPACE = re.compile(r"\s+")
 
 
 def _diag(row: dict[str, Any]) -> dict[str, Any]:
-    d = row.get("diagreplace("|", "\|")
+    d = row.get("diag")
     if isinstance(d, dict):
         return d
-    if isinstance(d, str) and d.strip().startswith("{replace("|", "\|"):
+    if isinstance(d, str) and d.strip().startswith("{"):
         try:
             parsed = json.loads(d)
         except ValueError:  # в таблице diag обрезан до 900 знаков — может не разобраться
@@ -49,11 +49,11 @@ def _diag(row: dict[str, Any]) -> dict[str, Any]:
 
 def raw_reason(row: dict[str, Any]) -> str:
     """Чем шаг объяснил отказ: note, затем diag.why / error / how."""
-    note = str(row.get("notereplace("|", "\|") or "").strip()
+    note = str(row.get("note") or "").strip()
     if note:
         return note
     diag = _diag(row)
-    for key in ("why", "error", "howreplace("|", "\|"):
+    for key in ("why", "error", "how"):
         value = diag.get(key)
         if value:
             return str(value)
@@ -62,7 +62,7 @@ def raw_reason(row: dict[str, Any]) -> str:
 
 def normalise_reason(text: str) -> str:
     """Очистить от секретов и свести к виду, одинаковому у разных машин."""
-    out = scrub(text or "replace("|", "\|")
+    out = scrub(text or "")
     out = _UUID.sub("<id>", out)
     out = _HEX.sub("<id>", out)
     out = _NUM.sub("#", out)
@@ -73,7 +73,7 @@ def normalise_reason(text: str) -> str:
 
 
 def confidence(machines: int, incidents: int) -> str:
-    """high — 3+ машин; medium — 2; low — одна машина (локальная поломка не доказана как общая)."""
+    """high — 3+ машин; medium — 2; low — одна машина (общий отказ не доказан)."""
     if machines >= 3 and incidents >= 3:
         return "high"
     if machines >= 2:
@@ -82,7 +82,7 @@ def confidence(machines: int, incidents: int) -> str:
 
 
 def _day(ts: str) -> str:
-    return (ts or "replace("|", "\|")[:10]
+    return (ts or "")[:10]
 
 
 def find_repeated(
@@ -98,35 +98,35 @@ def find_repeated(
     «3 из 40» — разные новости, а без знаменателя их не отличить.
     """
     cutoff = ((today or date.today()) - timedelta(days=days)).isoformat()
-    window = [r for r in rows if _day(str(r.get("ts", "replace("|", "\|"))) >= cutoff and r.get("step")]
-    fleet = {str(r.get("machinereplace("|", "\|")) for r in window if r.get("machine")}
+    window = [r for r in rows if _day(str(r.get("ts", ""))) >= cutoff and r.get("step")]
+    fleet = {str(r.get("machine")) for r in window if r.get("machine")}
 
     groups: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for r in window:
-        if str(r.get("okreplace("|", "\|")) in ("0", "False", "false"):
+        if str(r.get("ok")) in ("0", "False", "false"):
             groups[(str(r["step"]), normalise_reason(raw_reason(r)))].append(r)
 
     signatures = []
     for (step, reason), items in groups.items():
         if len(items) < min_incidents:
             continue
-        machines = sorted({str(i.get("machinereplace("|", "\|")) for i in items if i.get("machine")})
-        items.sort(key=lambda i: str(i.get("ts", "replace("|", "\|")))
+        machines = sorted({str(i.get("machine")) for i in items if i.get("machine")})
+        items.sort(key=lambda i: str(i.get("ts", "")))
         signatures.append({
             "step": step,
             "reason": reason,
             "incidents": len(items),
-            "runs": len({i.get("run_idreplace("|", "\|") for i in items if i.get("run_id")}),
+            "runs": len({i.get("run_id") for i in items if i.get("run_id")}),
             "machines": machines,
-            "versions": sorted({str(i.get("flow_version_at_uploadreplace("|", "\|")) for i in items
-                                if i.get("flow_version_at_uploadreplace("|", "\|")}),
-            "first": _day(str(items[0].get("ts", "replace("|", "\|"))),
-            "last": _day(str(items[-1].get("ts", "replace("|", "\|"))),
+            "versions": sorted({str(i.get("flow_version_at_upload")) for i in items
+                                if i.get("flow_version_at_upload")}),
+            "first": _day(str(items[0].get("ts", ""))),
+            "last": _day(str(items[-1].get("ts", ""))),
             "confidence": confidence(len(machines), len(items)),
             "evidence": [
-                {"ts": str(i.get("ts", "replace("|", "\|")), "machine": str(i.get("machine", "")),
-                 "run_id": str(i.get("run_id", "replace("|", "\|")),
-                 "version": str(i.get("flow_version_at_upload", "replace("|", "\|"))}
+                {"ts": str(i.get("ts", "")), "machine": str(i.get("machine", "")),
+                 "run_id": str(i.get("run_id", "")),
+                 "version": str(i.get("flow_version_at_upload", ""))}
                 for i in items[-MAX_EVIDENCE:]
             ],
         })
@@ -152,7 +152,7 @@ def render_markdown(result: dict[str, Any]) -> list[str]:
     lines += ["| Уверенность | Шаг | Причина | Машин | Отказов | Прогонов | Версии | Период |",
               "|---|---|---|---|---|---|---|---|"]
     for s in sigs:
-        reason = s["reason"].replace("|", "\|")\|")
+        reason = s["reason"].replace("|", "\\|")
         lines.append(
             f"| {s['confidence']} | `{s['step']}` | {reason} | {len(s['machines'])} из {len(fleet)} "
             f"| {s['incidents']} | {s['runs']} | {', '.join(s['versions']) or '—'} "
@@ -161,6 +161,6 @@ def render_markdown(result: dict[str, Any]) -> list[str]:
     lines += ["", "Последние примеры (для поиска в журналах):", ""]
     for s in sigs[:10]:
         ev = "; ".join(f"{e['ts'][:16]} {e['machine']} run {e['run_id'] or '—'}" for e in s["evidence"])
-        lines.append(f"- `{s['step']}`: {ev}replace("|", "\|")
-    lines.append("replace("|", "\|")
+        lines.append(f"- `{s['step']}`: {ev}")
+    lines.append("")
     return lines
