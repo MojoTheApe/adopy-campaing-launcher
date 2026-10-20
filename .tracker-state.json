@@ -5492,6 +5492,27 @@
         "issue_scopes": {
           "805": "68400c28065eb3be0172a00af8f0f5b4178ab74241f9b4fcddab541a835fb61f"
         }
+      },
+      "939": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-R141W",
+        "review_session": "reviewer-r141w-20261020",
+        "execution_lane": "bd57b5cf3b8149a08badde89a8e4cd72",
+        "implementer": "Worker-L271",
+        "head_sha": "24cdb95365a7b140cb1da492316a39096666a4a3",
+        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "tree_sha": "7986c91cecdb97a1524a141c0cb2218a48897d3f",
+        "issues": [
+          71
+        ],
+        "report": "PR #939 adds one in-page <dialog> component (src/web/templates/_acl_dialog.js, included in report.html) exposing aclAlert/aclConfirm/aclPrompt (Promise-based, queued, one at a time, identical pending dialog is deduplicated and resolves as cancel) plus aclInlineError(anchor,text) for red inline errors with role=alert next to the failed control. All native alert/confirm/prompt calls in report.html and warm_sessions.js are migrated (grep of src/web finds none left; acm_commands.js only has a local function named confirm). Destructive safety: confirm resolves false and prompt null on Escape (cancel event is prevented and routed to dismissed value) and on Cancel; native modal dialog has no backdrop-click close; danger dialogs focus Cancel first; callers act only on an explicit true (retire, remove from builder, stop goal, remove accounts, close/start profiles, update ACM, remove for team), and several re-check state after the async wait (busy, findCampaign, btn.isConnected, pending). Keyboard: showModal focus trap, Enter in prompt confirms, focus restored to the opener, aria-labelledby/describedby, labelled prompt field. Text is set only via textContent/createTextNode (no innerHTML), so account names cannot inject HTML; titles and texts are English; styling uses design tokens (--accent, --danger, --focus-ring, --space-*). Failures tied to a control (refresh, update, save, search, open profile, publish-all) are shown inline per acceptance criteria; others use titled dialogs. Tests: harnesses and browser tests updated, tests/acl_dialog_capture.py added. Locally I ran test_acl1812_warm_sessions, test_one_connect_button, test_hiding_accounts_this_machine_ignores, test_the_builder_tree, test_available_accounts_browser, test_hidden_accounts_browser, test_acl1799_workbench_browser, test_drawer_review_browser, test_builder_publish_selected_browser: 124 passed, 1 failed (test_row_open_profile_answers_200_with_open_by_hand_over_http, HTTP 500 via ASGI form handling, an old-Starlette environment issue unrelated to dialogs; it passes in CI). CI on head 24cdb953 is fully green (linux 1/2/3, windows, installer, tracker-link). Stacking: git log work/main..HEAD shows only the PR's own two commits plus two merges of work/main, no other unmerged tasks. Non-blocking nits: the dedup key means a legitimate repeated identical alert is swallowed while the first is open; aclInlineError falls back to a modal alert if the anchor was re-rendered. No live checks claimed.",
+        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "recorded_at": "2026-10-20T12:31:13+00:00",
+        "issue_scopes": {
+          "71": "a361d78e4b0bd79fc95e0e15abd9c5f29a31e263c48fff4759c60780f240224a"
+        }
       }
     },
     "stage": {
