@@ -1,5 +1,20 @@
 # System history
 
+## ACL-2038 — Connect the team library from the dashboard — 2026-10-20
+
+Without `ACL_LIBRARY_REPO` / `ACL_LIBRARY_BRANCH` in the machine settings the team library
+now defaults to `MojoTheApe/acl-lib` on `main`; a token alone is a complete setup (a
+repository without a token is still an incomplete one). Targeting and Ad titles show
+"Connect team library" while no token is set. The dialog takes one masked token field,
+checks it with one read of the library repository (it must be allowed to write), stores it
+in the machine settings and adds this machine's missing targets and ad texts to the team
+library (add-missing only: nothing is overwritten or deleted), showing the counts. A wrong
+token gets a plain reason and nothing is saved. "Disconnect" removes the token from the
+machine settings and keeps the local data. The token is never logged, sent to telemetry or
+Sentry, returned by the server, or put in an address or error text. The seed logic moved
+to `src/analysis_agent/team_library_seed.py`; `scripts/seed_team_library.py` still works.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1038).
+
 ## ACL-1381 — Consistent Builder ad-text wording — 2026-10-18
 
 Complete the older text-label request while preserving ACL-1769's later numbered

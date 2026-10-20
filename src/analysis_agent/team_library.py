@@ -41,6 +41,11 @@ from typing import Callable, Protocol
 
 API = "https://api.github.com"
 
+#: ACL-2038: репозиторий и ветка по умолчанию. Обновление несёт всё, кроме токена;
+#: настройки машины (`ACL_LIBRARY_REPO` / `ACL_LIBRARY_BRANCH`) главнее.
+DEFAULT_REPO = "MojoTheApe/acl-lib"
+DEFAULT_BRANCH = "main"
+
 #: kind → файл в репозитории и ключ записей внутри него.
 FILES = {"targets": ("targets.json", "targets"), "ad_texts": ("ad_texts.json", "texts")}
 
@@ -132,6 +137,19 @@ class GitHubBackend:
             hint = str(msg or f"HTTP {status}").replace(self.token, "[redacted]") if self.token else f"HTTP {status}"
         return LibraryError(f"Could not {what} the team library: {hint}.")
 
+    def check(self) -> None:
+        """Одно чтение репозитория библиотеки: токен рабочий и может писать (ACL-2038)."""
+        status, raw = self._call("GET", f"{API}/repos/{self.repo}")
+        if status != 200:
+            raise self._fail(status, raw, "read")
+        try:
+            can_write = bool(json.loads(raw).get("permissions", {}).get("push"))
+        except (ValueError, AttributeError):
+            can_write = False
+        if not can_write:
+            raise LibraryError("The token can read the team library but cannot change it. "
+                               "Ask for a token with Contents: Read and write on this repository.")
+
     def get(self, path: str) -> Remote:
         status, raw = self._call("GET", f"{API}/repos/{self.repo}/contents/{path}?ref={quote(self.branch, safe='')}")
         if status == 404:
@@ -198,18 +216,19 @@ def backend() -> Backend | None:
     token = (os.environ.get("ACL_LIBRARY_TOKEN") or "").strip()
     if not repo and not token:
         return None
-    if not repo or not token:
-        raise LibraryError("The team library configuration is incomplete: both ACL_LIBRARY_REPO "
-                           "and ACL_LIBRARY_TOKEN are required. Local-only saving is disabled.")
-    return GitHubBackend(repo, token, (os.environ.get("ACL_LIBRARY_BRANCH") or "main").strip())
+    if not token:
+        # Репозиторий без токена — «не подключено» (ACL-2038): выход — кнопка Connect,
+        # а не правка .env руками. Правки остаются местными, как до подключения.
+        return None
+    # Без репозитория в настройках машины берётся общий (ACL-2038): токен — то,
+    # что нельзя положить в сборку.
+    return GitHubBackend(repo or DEFAULT_REPO, token,
+                         (os.environ.get("ACL_LIBRARY_BRANCH") or DEFAULT_BRANCH).strip())
 
 
 def configured() -> bool:
-    # Partial configuration is an attempted team connection, never permission
-    # to silently write changes only to this machine.
-    return _backend_override is not None or bool(
-        (os.environ.get("ACL_LIBRARY_REPO") or "").strip()
-        or (os.environ.get("ACL_LIBRARY_TOKEN") or "").strip())
+    # ACL-2038: подключение — это токен; репозиторий по умолчанию есть всегда.
+    return _backend_override is not None or bool((os.environ.get("ACL_LIBRARY_TOKEN") or "").strip())
 
 
 # ── чтение и запись ───────────────────────────────────────────────────────

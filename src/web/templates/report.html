@@ -17354,12 +17354,84 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
   if ((location.hash || '').indexOf('accounts') !== -1) document.addEventListener('DOMContentLoaded', load);
 })();
 
+// ── ACL-2038: подключение общей библиотеки одним полем для токена ───────
+// Токен живёт только в поле ввода: после отправки поле очищается, сервер его не
+// возвращает, в текст страницы, адрес и консоль он не попадает.
+window.aclTeamLibrary = (function () {
+  function post(url, body) {
+    return fetch(url, { method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
+      .then(function (r) { return r.json().catch(function () { return { ok: false, error: 'Unexpected answer.' }; }); });
+  }
+  function dialog() {
+    var old = document.getElementById('tl-connect'); if (old) old.remove();
+    var box = document.createElement('div');
+    box.id = 'tl-connect'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-label', 'Connect team library');
+    box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:9999';
+    box.innerHTML = '<div style="background:var(--bg-elev,#fff);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:1.1rem 1.2rem;width:min(30rem,92vw)">'
+      + '<h3 style="margin:0 0 .5rem">Connect team library</h3>'
+      + '<p style="margin:0 0 .7rem;color:var(--muted);font-size:var(--adopy-text-sm)">Paste the library token you were given. It is checked once, saved only on this computer, and never shown again.</p>'
+      + '<input id="tl-token" type="password" autocomplete="new-password" spellcheck="false" style="width:100%" aria-label="Library token">'
+      + '<p id="tl-msg" role="status" style="min-height:1.4em;margin:.6rem 0"></p>'
+      + '<div style="display:flex;gap:.5rem;justify-content:flex-end">'
+      + '<button type="button" id="tl-cancel" class="amap-btn">Cancel</button>'
+      + '<button type="button" id="tl-go" class="amap-btn primary">Connect</button></div></div>';
+    document.body.appendChild(box);
+    var input = box.querySelector('#tl-token'), msg = box.querySelector('#tl-msg'), go = box.querySelector('#tl-go');
+    var cancel = box.querySelector('#tl-cancel');
+    input.focus();
+    function close() { input.value = ''; box.remove(); }
+    cancel.onclick = close;
+    go.onclick = function () {
+      if (go.dataset.done) { close(); window.location.reload(); return; }
+      var token = input.value; input.value = '';
+      go.disabled = true; msg.style.color = 'var(--muted)'; msg.textContent = 'Checking the token…';
+      post('/api/team-library/connect', { token: token }).then(function (j) {
+        token = '';
+        go.disabled = false;
+        if (j && j.ok) {
+          msg.style.color = 'var(--good)';
+          msg.textContent = (j.message || 'Connected.') + (j.seed_error ? ' ' + j.seed_error : '');
+          input.style.display = 'none'; cancel.style.display = 'none';
+          go.textContent = 'Done'; go.dataset.done = '1';
+        } else {
+          msg.style.color = 'var(--danger)'; msg.textContent = (j && j.error) || 'Could not connect.';
+        }
+      }).catch(function () { go.disabled = false; msg.style.color = 'var(--danger)'; msg.textContent = 'Could not reach the dashboard.'; });
+    };
+    input.addEventListener('keydown', function (e) { if (e.key === 'Enter') go.click(); if (e.key === 'Escape') close(); });
+  }
+  // Кнопка рядом со строкой состояния: Connect, пока токена нет, и Disconnect, когда он есть.
+  function decorate(statusEl, lib) {
+    if (!statusEl) return;
+    var old = statusEl.querySelector('.tl-action'); if (old) old.remove();
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'amap-btn tl-action'; b.style.marginLeft = '.6rem';
+    if (!(lib || {}).connected) {
+      b.textContent = 'Connect team library'; b.onclick = dialog;
+    } else {
+      b.textContent = 'Disconnect';
+      b.title = 'Remove the token from this computer. Your local targets and ad texts stay.';
+      b.onclick = function () {
+        if (!confirm('Disconnect the team library on this computer? Your local targets and ad texts stay.')) return;
+        post('/api/team-library/disconnect').then(function (j) {
+          if (j && j.ok) window.location.reload();
+          else alert((j && j.error) || 'Could not disconnect.');
+        });
+      };
+    }
+    statusEl.appendChild(b);
+  }
+  return { open: dialog, decorate: decorate };
+})();
+
 // ── Таргеты: общая библиотека ────────────────────────────────────────────
 // Targeting library UI. Keep selected records as data, never in CSS selectors.
 (function () {
   var profiles = [], editing = '', pending = false;
   function el(id) { return document.getElementById(id); }
   function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function tlDecorate(statusEl, lib) { if (typeof window !== 'undefined' && window.aclTeamLibrary) window.aclTeamLibrary.decorate(statusEl, lib); }
   function say(text, error) { el('tg-msg').textContent = text || ''; el('tg-msg').style.color = error ? 'var(--danger)' : 'var(--muted)'; }
   function busy(value) {
     pending = value;
@@ -17380,6 +17452,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     var state = libraryState(data.library);
     el('tg-status').textContent = state[0];
     el('tg-status').style.color = state[1] ? 'var(--danger)' : 'var(--muted)';
+    tlDecorate(el('tg-status'), data.library);
     var html = '';
     var duplicates = data.duplicates || {};
     if ((duplicates.names || []).length) html += '<p style="color:var(--danger)">Same name twice: ' + esc(duplicates.names.join(', ')) + '</p>';
@@ -17542,6 +17615,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     if (seen[was]) el('at-lang-filter').value = was;
   }
 
+  function tlDecorate(statusEl, lib) { if (typeof window !== 'undefined' && window.aclTeamLibrary) window.aclTeamLibrary.decorate(statusEl, lib); }
   // Где сейчас библиотека — та же строка состояния, что у таргетов.
   function libraryState(lib) {
     lib = lib || {};
@@ -17586,6 +17660,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
       var state = libraryState(d.library);
       el('at-status').textContent = state[0];
       el('at-status').style.color = state[1] ? 'var(--danger)' : 'var(--muted)';
+      tlDecorate(el('at-status'), d.library);
       var duplicates = d.duplicates || {};
       var warning = '';
       if ((duplicates.names || []).length) warning += 'Same title twice: ' + duplicates.names.join(', ') + '. ';
