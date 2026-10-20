@@ -5618,6 +5618,43 @@
         "issue_scopes": {
           "854": "7d3b0db0943e8e6f6e2f40c00b7896f815e417861a67a79e54407fcf65d2da2c"
         }
+      },
+      "1034": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-X20BAT",
+        "implementer": "Coordinator-E1019A",
+        "head_sha": "b8f34a4bf134def078ed49eef6a58492de0c7872",
+        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "tree_sha": "25162d0003eaffb3110e202e6f3a28713153c9e9",
+        "execution_lane": "1ea28d1b292c4ef3baeda760fa52b87b",
+        "review_session": "rxbat2-1c30cbbe",
+        "batch_id": "5cc83b63094747b7942c0f90ab608793",
+        "source_heads": [
+          "5fcb857ccfe6c2b7407837d39c661eee6c9ed273",
+          "294f4120d70f31d603fb55d1acb0e6788c892c2c",
+          "04c179278bb9d0e0cdf1c8456bf0b04b6583b08a",
+          "60382abba4f6ca04f14b6f038335f12f28312852",
+          "adf74b65b877c17b6f442ab0a00ffb39458a3f56"
+        ],
+        "report": "# Batch 5cc83b63094747b7942c0f90ab608793 / PR #1034 \u2014 independent integration review (Reviewer-X20BAT)\n\nReviewer session `rxbat2-1c30cbbe`, separate from the Coordinator (Coordinator-E1019A,\ncoord-c0a1de70) and from every member Worker. Batch head `b8f34a4bf134def078ed49eef6a58492de0c7872`,\ntree `25162d00`, base main `c6150160`; delivery requested.\n\n## Composition\n\nFirst-parent chain from main c6150160: five two-parent merges in manifest order; each\nsecond parent is exactly the frozen approved tip:\n982/ACL-602 5fcb857c -> 0d5ead32; 976/ACL-1202 294f4120 -> 3211f678;\n966/ACL-1680 04c17927 -> 457b3940; 960/ACL-1401 60382abb -> 0f734c85;\n980/ACL-341 adf74b65 -> b8f34a4b. Every merge tree equals `git merge-tree --write-tree`\nof its parents (no manual edits). All five sources are based on main c6150160.\n\n## Interactions\n\n- 982 x 976 both edit src/web/app.py in different routes (goals overview GET; JSON\n  label_key/key fields); merged cleanly; neither parses forms; no request.form()\n  outside read_form.\n- 976 x 960 both edit report.html: 960 only adds `multilogin_not_running$` to the\n  hold-pattern regex; 976 adds picker functions. Function-name census main vs batch:\n  only new unique names (aclPicker*, pickerInstance, repaintRow, rowFind); no duplicates.\n- 966 (one config dir, MSIX unvirtualisation) x 982 (goals.json under\n  get_local_config_dir): signature unchanged, goals follow the real folder; the unify\n  step copies shadow folders with rglob, so goals.json migrates too.\n- 966 changes serve.py/launcher/installer README: installer build/verify jobs ran and pass.\n- 960 RPA failure policy + sentry triage map; 980 test-only (recipe player sequences).\n- scripts/acl_scan_secrets.py on the batch tree: clean; scripts/acl_smoke.py: OK.\n\n## Checks run by me on b8f34a4b (current pins fastapi 0.141.1 / starlette 1.7.0)\n\n- node acl_1202_overview_search_harness.cjs and builder_drawer_harness.cjs: ok.\n- pytest test_goals, test_acl_1202_overview_profile_search, test_acl1680_one_config_dir,\n  test_publish_stops_when_multilogin_is_not_running, test_recipe_player_sequences,\n  test_web_form_endpoints, test_one_button_reads_what_is_needed, test_request_limits,\n  test_acl1871_side_tab_browser, test_failure_policy, test_machine_paths,\n  test_sentry_triage, test_a_robot_profile_with_short_paths_is_owned:\n  **193 passed, 2 xfailed**.\n- Required CI on b8f34a4b (`gh pr checks 1034`): 16/16 pass \u2014 linux 3.11 x3 and\n  3.13 x3, windows 3.13, ACL verification, project tooling, process instructions,\n  descriptor, tracker-link, installer classify / verify build inputs /\n  build-install-repair-uninstall / installer verification.\n\nBlocking findings: none. Non-blocking: the owner should smoke the installed build after\ndelivery (one settings folder when launched from Claude Desktop vs the shortcut; team-lead\ngoals overview). Verdict: approved.\n",
+        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          70,
+          202,
+          680,
+          401,
+          47
+        ],
+        "recorded_at": "2026-10-20T13:12:26+00:00",
+        "issue_scopes": {
+          "70": "e203742e52229f146fe31b5b1af11599dfae6b44fe0f9749da06c140e57f6e99",
+          "202": "874916528a5e419af368f88079d8af38988995625b9d8492c34a8c8ce7d6c3f7",
+          "680": "503e07e2c8a0717c8914ace1daad97c1516a28140c4528063b28e8ab786dbafb",
+          "401": "3351b093cb2255ee6b77516b3761e09397e28c493d1eb8f788ec3947b8eabc8c",
+          "47": "be9479208e9a0731a6c08e48e1baa5ada1999d8e5201c15b07423025fe9b60df"
+        }
       }
     },
     "stage": {
