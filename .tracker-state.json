@@ -54800,7 +54800,7 @@
             "session": "c8f54e83"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-c8f54e83",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -54818,7 +54818,8 @@
           "report": "Docs-only: documents the post-batch CHANGELOG fragment fold in BATCH_INTEGRATION_ACL.md (fold after landing in main, not on the batch branch: composition admission rejects extra commits). No tests."
         },
         "pr": 1047,
-        "queued_at": "2026-10-20T13:04:45+00:00"
+        "queued_at": "2026-10-20T13:04:45+00:00",
+        "reviewer": "Reviewer-R2046V"
       }
     },
     "actors": {
@@ -57624,6 +57625,10 @@
       },
       "Reviewer-R1309U": {
         "session": "reviewer-r1309u-20261020",
+        "role": "Reviewer"
+      },
+      "Reviewer-R2046V": {
+        "session": "reviewer-r2046v-20261020",
         "role": "Reviewer"
       }
     },
@@ -60507,7 +60512,6 @@
       }
     },
     "review_queue": [
-      1046,
       774
     ],
     "review": null,
@@ -102978,6 +102982,13 @@
           },
           "report": "Withdrawing duplicate intake 5d3c52259f7b47419544ec1a3e3214fc (only ACL-1771 eligible). The owner-requested integration of the Approved queue is already being prepared by Coordinator-M1011A, which is refreshing approvals onto main 259ae7f1. No batch was begun; nothing was assembled or merged."
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-20T15:23:14+00:00",
+        "pr": 1047,
+        "lane": "b1283a38f75b45f19674c4bc763cec5c",
+        "actor": "Reviewer-R2046V"
       }
     ],
     "policy": {
@@ -112318,6 +112329,18 @@
         "session": "reviewer-r1309u-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T15:20:58+00:00",
+        "state": "reviewing"
+      },
+      "1047": {
+        "id": "b1283a38f75b45f19674c4bc763cec5c",
+        "pr": 1047,
+        "issues": [
+          1046
+        ],
+        "actor": "Reviewer-R2046V",
+        "session": "reviewer-r2046v-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-20T15:23:14+00:00",
         "state": "reviewing"
       }
     },
