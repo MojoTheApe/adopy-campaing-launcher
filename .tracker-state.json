@@ -52039,7 +52039,7 @@
             "session": "acl1138_resume_1019"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-P1138B",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -52058,7 +52058,7 @@
         },
         "pr": 947,
         "queued_at": "2026-10-19T12:15:21+00:00",
-        "review_report": "Returned for a one-line fix: CI guard tests/test_build_progress_model.py::test_every_step_the_robot_names_maps_to_a_stage fails on the new telemetry step proxy_gate_unchecked (needs a cb-build-model rule in src/web/templates/report.html). Review of the rest stands as reported; a fresh approval of the new head is required.",
+        "review_report": "PR #947 (ACL-1138) no longer merges into current main 259ae7f1 (after batch #1034): conflicts in docs/system/PROJECT.md, src/fb_ads_rpa/profile_trouble.py, src/web/templates/report.html. Return to the author for a merge of current main, conflict resolution, checks, handoff and fresh independent approval. Owner wants it in the next batch for the buyer release.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578050+00:00",
@@ -101439,6 +101439,18 @@
         "pr": 930,
         "lane": "48f78482b7904b6483890bc023325828",
         "actor": "Reviewer-R1175V"
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-20T13:40:02+00:00",
+        "issue": 138,
+        "operation": {
+          "id": "576b5e0a0e2f45aab25f9db00d76cdbc",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "report": "PR #947 (ACL-1138) no longer merges into current main 259ae7f1 (after batch #1034): conflicts in docs/system/PROJECT.md, src/fb_ads_rpa/profile_trouble.py, src/web/templates/report.html. Return to the author for a merge of current main, conflict resolution, checks, handoff and fresh independent approval. Owner wants it in the next batch for the buyer release."
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -103464,50 +103476,6 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-19T10:43:23+00:00"
-      },
-      "138": {
-        "issue": 138,
-        "pr": 947,
-        "branch": "work/acl-1138-proxy-gate",
-        "head_sha": "727e3d87897029858258969bcd491c3095877036",
-        "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
-        "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "scope": "dda7a0c1e14a09401c053051c5b626d8f01198c7b16ec8fff13e387c006d31b6",
-        "review": {
-          "verdict": "approved",
-          "reviewer": "Reviewer-R1138",
-          "implementer": "Worker-P1138B",
-          "head_sha": "727e3d87897029858258969bcd491c3095877036",
-          "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
-          "tree_sha": "09376e311a24c6072e98ef2a46354bbe093905cb",
-          "execution_lane": "0ba906ea1b9d49e78736c18614d980d8",
-          "review_session": "acl1138_review_1019",
-          "kind": "independent-review",
-          "report": "Independent read-only review of the whole change against current main: every route that opens or attaches to a Multilogin profile goes through the proxy gate before connect/launch/navigation; merge of main adds no behaviour; English actionable message; 98 targeted tests passed. LOW only: legacy unused MultiloginSession.__enter__ path ungated (follow-up). Re-review after CI fix 727e3d87 (proxy_gate_ mapped to the profile stage in cb-build-model): one-line change, no new findings; test_build_progress_model + gate tests 54 passed.",
-          "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "issues": [
-            138
-          ],
-          "recorded_at": "2026-10-19T12:54:11+00:00",
-          "issue_scopes": {
-            "138": "dda7a0c1e14a09401c053051c5b626d8f01198c7b16ec8fff13e387c006d31b6"
-          }
-        },
-        "lane": {
-          "id": "0ba906ea1b9d49e78736c18614d980d8",
-          "pr": 947,
-          "issues": [
-            138
-          ],
-          "actor": "Reviewer-R1138",
-          "session": "acl1138_review_1019",
-          "coordinator": "Coordinator-M1011A",
-          "started_at": "2026-10-19T12:18:23+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-19T12:59:03+00:00"
       },
       "959": {
         "issue": 959,
