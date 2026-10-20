@@ -44993,7 +44993,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "854": {
+        "actor": "Worker-L1854",
+        "session": "run_l1_854",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "codex/acl-1854-current-draft-status",
+        "worktree": "C:\\acl-1854-wt",
+        "id": "b8169b241e534348a6481cd456a225cb",
+        "issue": 854,
+        "state": "implementing",
+        "started_at": "2026-10-20T08:59:08+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -50071,10 +50084,14 @@
           {
             "actor": "Worker-R1019854",
             "session": "run_r1019_854"
+          },
+          {
+            "actor": "Worker-L1854",
+            "session": "run_l1_854"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-R1019854",
+        "state": "implementing",
+        "worker": "Worker-L1854",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-R1019854",
@@ -50103,8 +50120,7 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578020+00:00",
           "remote_process_stopped_verified": false
-        },
-        "reviewer": "Reviewer-Q2001C"
+        }
       },
       "868": {
         "implementers": [
@@ -55903,6 +55919,10 @@
       "Reviewer-ACT177G": {
         "session": "review_389daa0fe6cff6b3e53c56eee4bdd46509f80512",
         "role": "Reviewer"
+      },
+      "Worker-L1854": {
+        "session": "run_l1_854",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -97795,6 +97815,13 @@
         "pr": 1027,
         "lane": "ebca21aee3644ffeb6a9c583b4971b7b",
         "actor": "Reviewer-ACT177G"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T08:59:08+00:00",
+        "issue": 854,
+        "claim": "b8169b241e534348a6481cd456a225cb",
+        "actor": "Worker-L1854"
       }
     ],
     "policy": {
