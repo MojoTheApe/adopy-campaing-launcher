@@ -44222,6 +44222,115 @@
           "report": "Post-main acceptance for batch 5cc83b63 / PR 1034 by the retained independent integration Reviewer-X20BAT. Main merge 259ae7f1 has parents c6150160 and batch head b8f34a4b; tree 25162d00 equals the reviewed batch tree. Issues #70, #202, #680 and #47 have no unchecked criteria. The three unchecked lines of #401 were verified against merged code and tests run by me (new test fails 12/12 on pre-fix main c6150160, passes on 259ae7f1: 39 passed with triage/failure-policy suites) and PR 1034 CI 16/16. No criterion needed a live check."
         },
         "recorded_at": "2026-10-20T13:23:36+00:00"
+      },
+      "3f30b816457f42ad82eb85e2f9afa52a": {
+        "evidence": {
+          "kind": "post-main-acceptance",
+          "report": "Genuine retained independent post-main acceptance of the complete ACL-2026 / Issue 1026 original criteria and both owner amendments. Actual PR 1049 is merged at ea41acbf960f53cdd0486c50dda491ec3981dfcf after the single successful native final admission. Independent Git object verification confirms the real parents and exact approved c371 tree; immutable source, full-scope source/combined reviews, current main checks and the existing exact-tree reuse evidence are verified. All 13 literal unchecked lines are covered below in original order without changing the frozen Issue body. No product/application work remains incomplete under this amended isolated process adoption; no installer publication was requested. Conditional live Pause activation is explicitly blocked and unapplied, as allowed by the accepted task wording, with actual owner/readiness blockers recorded truthfully. The completion receipt/labels are still the Coordinator's normal guarded journal step after this acceptance; this document does not claim them already written, waive their checks, or convert partial business work into completion.",
+          "batch_id": "3f30b816457f42ad82eb85e2f9afa52a",
+          "pr": 1049,
+          "merge_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+          "head_sha": "ba84910e09d981910d3425cb66b3631c29289f74",
+          "tree_sha": "c3712538e6a3515563b9f5310f976e1642c73b3b",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            1026
+          ],
+          "source_heads": [
+            "5e02ed6051644bc7aa8d3c2db860f8c2b1e30a60"
+          ],
+          "issue_scopes": {
+            "1026": "25ced1fdca52e7da6f52457508f7cdfd7354f55344e2454d39112e8a126b02d4"
+          },
+          "reviewer": "Reviewer-ACT177G",
+          "review_session": "review_389daa0fe6cff6b3e53c56eee4bdd46509f80512",
+          "execution_lane": "f9455fae63f14816a8f99386635c86bc",
+          "coordinator": "Coordinator-ACT174",
+          "coordinator_session": "f489c98f-9d9f-42a7-aafc-5dfb361caba8",
+          "criteria": {
+            "1026": [
+              {
+                "line": 20,
+                "criterion": "- [ ] ACL pins accepted compatible shared revisions and generated/portable artifacts match their actual upstream manifests.",
+                "result": "passed",
+                "evidence": "Actual admitted main ea41acbf960f53cdd0486c50dda491ec3981dfcf has exact reviewed tree c3712538e6a3515563b9f5310f976e1642c73b3b, real parents [259ae7f, ba84910e] and includes the frozen source 5e02ed6. Published Master 1.7.2 at 4f148cbbbc2c9c65a7fdebba9b37551f91566e04 and Tracker 3.9.2 at 3d32586d72e4621f70d56d35f1e199a19fa13b00 are pinned. Independent actual published-Master rendering verified all 92 pristine files, 28 separated helper/forwarder entries and manifest 8c1b3e0e0465d91653f1cfe6e0031647c098e86a0d81f20e6451616093af03eb. Canonical full-diff proof 5bcfe7299fc9eb092df1890c71db06748a5ede456e8d392ce7ce0bb8ea9dcae7 covers all 32 entries, bound to whole Issue scope 25ced1fdca52e7da6f52457508f7cdfd7354f55344e2454d39112e8a126b02d4 by both genuine source and combined reviews. "
+              },
+              {
+                "line": 21,
+                "criterion": "- [ ] ACL's guarded adapter reaches shared activity operations without bypassing adoption checks; any required integration change has focused behavioral coverage.",
+                "result": "passed",
+                "evidence": "The guarded ACL adapter is unchanged; it loads the exact selected Tracker 3d32586 without bypassing adoption checks. Actual author, Coordinator and this genuine independent Reviewer reached shared activity operations with their own current bindings. My post-main own running report succeeded through scripts/acl_task_tracker.py; native source and combined commands also succeeded. The existing 83 affected tests passed; no ACL-specific heartbeat/producer or detached reporter was introduced."
+              },
+              {
+                "line": 22,
+                "criterion": "- [ ] Selected guide and local instructions describe confirmed activity, waiting and unknown activity truthfully, preserving workflow categories and existing ownership/review/delivery controls.",
+                "result": "passed",
+                "evidence": "All changed guidance is present in the actual admitted c371 tree and was independently reviewed. It distinguishes category, authority and actual activity; running/waiting expiry freezes the clock, recorded stops remain facts, silence never releases authority, and old gaps stay unknown. Current task/GitHub/Batches records replace the removed Details-header instruction. Existing workflow, review, ownership and delivery controls remain explicit."
+              },
+              {
+                "line": 23,
+                "criterion": "- [ ] Existing ACL policy choices, IDs, historical evidence and unrelated product/runtime files remain unchanged.",
+                "result": "passed",
+                "evidence": "Actual admitted main ea41acbf960f53cdd0486c50dda491ec3981dfcf has exact reviewed tree c3712538e6a3515563b9f5310f976e1642c73b3b, real parents [259ae7f, ba84910e] and includes the frozen source 5e02ed6. Independent source/combined proofs preserve every non-pin descriptor/config/layout field, package target/checks, execution3 5/5/5 limits, process1, Stage disabled/permanent history, absent optional policies, 71 aliases/+1000 IDs, all 307 product/build blobs and 37 project controls. Native safe readbacks preserve the three unrelated Workers, Reviewer820, source approvals and history. The separately owner-directed unstarted reservation revocation preserved all five old tasks/approvals and is not hidden as prior process termination."
+              },
+              {
+                "line": 24,
+                "criterion": "- [ ] Separate non-implementing source review, applicable checks and genuine existing frozen-batch admission/delivery are completed or their concrete remaining blocker is recorded accurately.",
+                "result": "passed",
+                "evidence": "Separate genuine non-implementing source and combined reviews were natively recorded for exact heads/scope, not relabeled self-review. All required checks passed. The authorized singleton frozen batch contains only Issue1026/sourcePR1027; one Root native check-merge1049 verified admission, followed by actual merge ea41acbf. Combined CI 39491525543 passed all six Linux shards, Windows and ACL verification; installer 39491525545 passed real build/install/repair/uninstall and verification. Actual main CI 39496195672, installer 39496195770 and descriptor 39496196101 succeeded. Existing unchanged classifiers explicitly reused those full green combined runs for the identical c371 tree; skipped runtime/build jobs are not claimed as fresh passes. The delivered process outcome is the exact normally admitted main change with recorded complete immutable proof and independent process-only assessment. This retained acceptance supplies the original unchecked-criteria prerequisite for the Coordinator's normal merged receipt/label journal. It does not claim those final metadata writes have already occurred or bypass their revalidation. "
+              },
+              {
+                "line": 25,
+                "criterion": "- [ ] Actual source adoption and reader/writer/publication verification are recorded separately; source pins alone are never reported as live activation.",
+                "result": "passed",
+                "evidence": "Actual admitted main ea41acbf960f53cdd0486c50dda491ec3981dfcf has exact reviewed tree c3712538e6a3515563b9f5310f976e1642c73b3b, real parents [259ae7f, ba84910e] and includes the frozen source 5e02ed6. The shared reader is genuinely published/deployed at Tracker 3d32586d72e4621f70d56d35f1e199a19fa13b00; production evidence independently identifies that revision and fresh ACL snapshots (including 20:28:08 UTC). The exact newly selected guarded local writer at the same revision executed this genuine Reviewer's bound activity reports successfully after the actual merge. Retained other writers remain explicitly unknown. Upstream publication, ACL source adoption and actual writer observations are separately recorded. No ACL product publication was requested or inferred from the source pins. Live outer-8 activation remains unapplied. Actual every-writer readiness is not verified; three unrelated implementation owners, source Reviewer820 and retained older writers prevent a genuine idle maintenance window. These exact blockers are explicitly recorded in the task and delivery proof; no old writer or unrelated owner is silently modified and no stop/restart is inferred from silence. "
+              },
+              {
+                "line": 47,
+                "criterion": "- [ ] The final candidate uses the exact published canonical pair and passes native read-only process-support preflight; scope-bound independent review verifies the full process-only outcome and real product isolation.",
+                "result": "passed",
+                "evidence": "Canonical full-diff proof 5bcfe7299fc9eb092df1890c71db06748a5ede456e8d392ce7ce0bb8ea9dcae7 covers all 32 entries, bound to whole Issue scope 25ced1fdca52e7da6f52457508f7cdfd7354f55344e2454d39112e8a126b02d4 by both genuine source and combined reviews. The supported read-only preflight for the actual combined content returned content=proven/applied=false. Genuine exact-scope combined review with typed product_isolation=isolated was natively applied at 20:52:15 UTC. Product isolation inspected 307 blobs, 37 controls, 233 Python roots/234-module closure, fixed/dynamic imports, build/install/update/data/release inputs and reachable governance. Unchanged release-manifest parsing passed five actual candidate cases. Actual admitted main ea41acbf960f53cdd0486c50dda491ec3981dfcf has exact reviewed tree c3712538e6a3515563b9f5310f976e1642c73b3b, real parents [259ae7f, ba84910e] and includes the frozen source 5e02ed6. "
+              },
+              {
+                "line": 48,
+                "criterion": "- [ ] Ordinary source/batch/combined/main review and required checks remain enforced, with supported process delivery and completion evidence after actual main integration.",
+                "result": "passed",
+                "evidence": "Combined CI 39491525543 passed all six Linux shards, Windows and ACL verification; installer 39491525545 passed real build/install/repair/uninstall and verification. Actual main CI 39496195672, installer 39496195770 and descriptor 39496196101 succeeded. Existing unchanged classifiers explicitly reused those full green combined runs for the identical c371 tree; skipped runtime/build jobs are not claimed as fresh passes. Normal source approval, frozen composition, independent combined review and the one final native admission remain enforced. Actual admitted main ea41acbf960f53cdd0486c50dda491ec3981dfcf has exact reviewed tree c3712538e6a3515563b9f5310f976e1642c73b3b, real parents [259ae7f, ba84910e] and includes the frozen source 5e02ed6. Canonical full-diff proof 5bcfe7299fc9eb092df1890c71db06748a5ede456e8d392ce7ce0bb8ea9dcae7 covers all 32 entries, bound to whole Issue scope 25ced1fdca52e7da6f52457508f7cdfd7354f55344e2454d39112e8a126b02d4 by both genuine source and combined reviews. The delivered process outcome is the exact normally admitted main change with recorded complete immutable proof and independent process-only assessment. This retained acceptance supplies the original unchecked-criteria prerequisite for the Coordinator's normal merged receipt/label journal. It does not claim those final metadata writes have already occurred or bypass their revalidation. "
+              },
+              {
+                "line": 49,
+                "criterion": "- [ ] No consumer installer, application deployment, product-release request or reinterpretation of an existing product receipt is used to complete this isolated process task.",
+                "result": "passed",
+                "evidence": "The actual frozen batch has no product delivery_request. No installer/application deployment was used as process completion evidence and no prior product receipt is reinterpreted. Actual main workflow Complete authorized delivery 39496541784 resolved eligible=false: No completed batch authorized delivery for this main revision. Its publish, published-package verification and package-receipt jobs were skipped. The earlier unrelated stable package remains a separate product outcome; this isolated process task requests none."
+              },
+              {
+                "line": 65,
+                "criterion": "- [ ] Exact published1.7.2/3.9.2 complete generated closure/provenance is adopted through the maintained upgrade; actual ACL local choices and current-main product inputs are preserved.",
+                "result": "passed",
+                "evidence": "Actual admitted main ea41acbf960f53cdd0486c50dda491ec3981dfcf has exact reviewed tree c3712538e6a3515563b9f5310f976e1642c73b3b, real parents [259ae7f, ba84910e] and includes the frozen source 5e02ed6. The maintained three-way upgrade and independently regenerated actual published-Master baseline verified the complete 1.7.2/3.9.2 generated closure and exact provenance. Only two SHA-only local overlaps were intentionally reconciled; ACL local choices, current-main unrelated product changes, 307 product/build blobs and all non-pin controls remain preserved. Canonical full-diff proof 5bcfe7299fc9eb092df1890c71db06748a5ede456e8d392ce7ce0bb8ea9dcae7 covers all 32 entries, bound to whole Issue scope 25ced1fdca52e7da6f52457508f7cdfd7354f55344e2454d39112e8a126b02d4 by both genuine source and combined reviews. "
+              },
+              {
+                "line": 66,
+                "criterion": "- [ ] ACL owner/operator guidance accurately describes the accumulated lifecycle, correction, activity and process-only delivery behavior, including genuine capacity/manual boundaries and conditional live Pause activation.",
+                "result": "passed",
+                "evidence": "The actual main owner/operator guidance accurately covers honest activity/history, process/product separation, conditional Pause/Resume, Ready for integration in Delivery, Needs fixes/Fixing and a fresh independent Review after corrections. It retains five categories, native keys and real capacities/manual ownership; free capacity does not launch or restart an agent. Supported phase-changing legacy stops are not renamed phase-preserving Pause. The obsolete Details paragraph is fixed."
+              },
+              {
+                "line": 67,
+                "criterion": "- [ ] Current whole-scope independent source/combined review, applicable native checks, frozen-batch/main integration and supported exact process-only delivery are verified without an unchanged installer.",
+                "result": "passed",
+                "evidence": "Combined CI 39491525543 passed all six Linux shards, Windows and ACL verification; installer 39491525545 passed real build/install/repair/uninstall and verification. Actual main CI 39496195672, installer 39496195770 and descriptor 39496196101 succeeded. Existing unchanged classifiers explicitly reused those full green combined runs for the identical c371 tree; skipped runtime/build jobs are not claimed as fresh passes. Actual admitted main ea41acbf960f53cdd0486c50dda491ec3981dfcf has exact reviewed tree c3712538e6a3515563b9f5310f976e1642c73b3b, real parents [259ae7f, ba84910e] and includes the frozen source 5e02ed6. The complete original Issue and both amendments are independently reviewed at exact current scope; source approval and frozen ordinary batch/main admission are real. Canonical full-diff proof 5bcfe7299fc9eb092df1890c71db06748a5ede456e8d392ce7ce0bb8ea9dcae7 covers all 32 entries, bound to whole Issue scope 25ced1fdca52e7da6f52457508f7cdfd7354f55344e2454d39112e8a126b02d4 by both genuine source and combined reviews. The delivered process outcome is the exact normally admitted main change with recorded complete immutable proof and independent process-only assessment. This retained acceptance supplies the original unchecked-criteria prerequisite for the Coordinator's normal merged receipt/label journal. It does not claim those final metadata writes have already occurred or bypass their revalidation. No unchanged installer publication is required or used for the independently proven isolated process outcome."
+              },
+              {
+                "line": 68,
+                "criterion": "- [ ] Actual reader/writer and live Pause readiness/activation boundaries are recorded truthfully; no old writer or unrelated owner is silently modified, and any blocked activation remains explicitly pending.",
+                "result": "passed",
+                "evidence": "The shared reader is genuinely published/deployed at Tracker 3d32586d72e4621f70d56d35f1e199a19fa13b00; production evidence independently identifies that revision and fresh ACL snapshots (including 20:28:08 UTC). The exact newly selected guarded local writer at the same revision executed this genuine Reviewer's bound activity reports successfully after the actual merge. Retained other writers remain explicitly unknown. Live outer-8 activation remains unapplied. Actual every-writer readiness is not verified; three unrelated implementation owners, source Reviewer820 and retained older writers prevent a genuine idle maintenance window. These exact blockers are explicitly recorded in the task and delivery proof; no old writer or unrelated owner is silently modified and no stop/restart is inferred from silence. The original criteria and task body are preserved. Conditional readiness being blocked is recorded explicitly as the accepted amendment requires; it is not reported as live Pause activation. No outer-8 migration, maintenance reservation, campaign runtime action, automatic scheduler or global skill installation was performed."
+              }
+            ]
+          }
+        },
+        "recorded_at": "2026-10-20T21:06:17+00:00"
       }
     },
     "policy_migrations": [
@@ -103783,6 +103892,12 @@
           "state": "reviewing",
           "started_at": "2026-10-20T20:25:34+00:00"
         }
+      },
+      {
+        "event": "post-main-acceptance-recorded",
+        "at": "2026-10-20T21:06:17+00:00",
+        "batch_id": "3f30b816457f42ad82eb85e2f9afa52a",
+        "pr": 1049
       }
     ],
     "policy": {
