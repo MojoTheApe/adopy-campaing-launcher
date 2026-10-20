@@ -49214,7 +49214,7 @@
             "session": "run_r1019_822"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-R1019822",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -49238,7 +49238,8 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.577992+00:00",
           "remote_process_stopped_verified": false
-        }
+        },
+        "reviewer": "Reviewer-Q2001D"
       },
       "824": {
         "implementers": [
@@ -59041,7 +59042,6 @@
       }
     },
     "review_queue": [
-      822,
       836,
       53,
       853,
@@ -98637,6 +98637,13 @@
           "report": "# Return: ACL-1309 / PR #929 (head 00c93a85)\n\nPrevious blocker (platform-guard test) is fixed: tests/test_the_dashboard_says_whose_it_is.py:61 now carries the `# linux-ok` marker; delta since 6727bce9 is that one line. Local run of tests/test_acl_test_platform.py + tests/test_the_dashboard_says_whose_it_is.py: 102 passed. CI: Classify and check project tooling, Process instructions, windows tests (3.13), all 6 linux shards pass.\n\n## Blocking finding\nCI workflow \"Windows installer\" (run 39399425140) fails on this head: job \"Build, install, repair, and uninstall\" -> step \"Test real package update, restart, and recovery\" -> packaging/windows/test_update_cycle.py:\n`RuntimeError: The actual installed version 0.0.0-ci.1463 did not become healthy` (raised at the very first start of the freshly installed package, `start(old_exe, ...)` -> wait_version). Dependent check \"Installer verification\" is red too. Other PRs the same day pass this workflow; earlier heads of this branch (26110bbb) were also red there.\n\nLikely cause (not proven; CI artifact has no server log): test_update_cycle.py hardcodes http://127.0.0.1:9090/health (lines 43, 118). The launcher now picks its port via local_dashboard.choose_port (port_in_use binds 0.0.0.0/:: with SO_EXCLUSIVEADDRUSE, per-person remembered port, %ProgramData%\\ACL\\ports registry). The launcher exits 0 (find_own found its own dashboard), so the server is up, but if it is on a port other than 9090 (spurious \"in use\" on the runner, e.g. TIME_WAIT under exclusive bind, or a stale registry claim) the acceptance test never sees it. Either port_in_use/choose_port is wrong on the real Windows runner, or test_update_cycle.py (and any other 9090 assumption in the real-package acceptance scripts) must learn the new per-person port (e.g. read server.json / dashboard_port.json or use local_dashboard.find_own). Needs a CI-visible diagnosis (print the chosen port / launcher log in the report) and a green Windows installer run.\n\ntracker-link also red (separate, process-level).\nNo live checks claimed.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-20T10:21:17+00:00",
+        "pr": 823,
+        "lane": "1c7ff098520340b0b7bd3da9bfddfaee",
+        "actor": "Reviewer-Q2001D"
       }
     ],
     "policy": {
@@ -106917,6 +106924,18 @@
         "session": "reviewer-r103z-20261020",
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T10:17:05+00:00",
+        "state": "reviewing"
+      },
+      "823": {
+        "id": "1c7ff098520340b0b7bd3da9bfddfaee",
+        "pr": 823,
+        "issues": [
+          822
+        ],
+        "actor": "Reviewer-Q2001D",
+        "session": "q2001d-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-20T10:21:17+00:00",
         "state": "reviewing"
       }
     },
