@@ -45164,20 +45164,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T10:44:50+00:00",
         "from_status": "status:todo"
-      },
-      "175": {
-        "actor": "Worker-L2175b",
-        "session": "run_l2_175b",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-1175-install-guide",
-        "worktree": "C:\\acl-1175-guide",
-        "id": "2fcfbe8af4c14f2397a0dcc67d8a50dd",
-        "issue": 175,
-        "state": "handoff",
-        "started_at": "2026-10-20T11:25:20+00:00",
-        "from_status": "status:todo",
-        "pr": 930,
-        "report": "Owner decision 2026-10-20: guide page ships without the release-pipeline part (split into issue #1035, patch saved). Branch up to date with main; test_setup_guide 11 passed; Stats workbook refusal rows already pushed (342a0686). Reviewer blocking item 1 answered on the PR as split out. No live checks."
       }
     },
     "tasks": {
@@ -53506,24 +53492,25 @@
             "session": "run_l2_175b"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-L2175b",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-L2175",
-          "session": "run_l2_175",
+          "actor": "Worker-L2175b",
+          "session": "run_l2_175b",
           "coordinator": "Coordinator-M1011A",
           "branch": "work/acl-1175-install-guide",
           "worktree": "C:\\acl-1175-guide",
-          "id": "d50aa785752143f5bfd5636a26b20264",
+          "id": "2fcfbe8af4c14f2397a0dcc67d8a50dd",
           "issue": 175,
-          "state": "stopping",
-          "started_at": "2026-10-20T09:30:12+00:00",
+          "state": "handoff",
+          "started_at": "2026-10-20T11:25:20+00:00",
           "from_status": "status:todo",
-          "report": "Parked: the release-pipeline change (publish setup-guide.html as a release asset) needs owner approval to commit; it is uncommitted in C:/acl-1175-guide, 118 related tests pass. PR #930 is unchanged."
+          "pr": 930,
+          "report": "Owner decision 2026-10-20: guide page ships without the release-pipeline part (split into issue #1035, patch saved). Branch up to date with main; test_setup_guide 11 passed; Stats workbook refusal rows already pushed (342a0686). Reviewer blocking item 1 answered on the PR as split out. No live checks."
         },
         "pr": 930,
-        "queued_at": "2026-10-19T20:04:44+00:00",
+        "queued_at": "2026-10-20T11:27:52+00:00",
         "review_report": "# Return: PR #930 (ACL-1175), head 28a2ffab, reviewer Reviewer-R1175Y\n\n## Blocking\n\n1. Acceptance criterion 1 is not met: the page is reachable only AFTER the installer has run.\n   - docs/SETUP-NEW-PC.md:15-17 (Step 0) says the installer comes \"from Evgeni\"; the guide exists only inside the bundle (_internal/setup-guide.html, installer.iss Icons/Run). Before the .exe is installed, the manager has no page at all.\n   - Issue #175 asks for \"a link, not a file on hand\" available before repo access. The PR body claim \"can be read without repo access\" is true only post-install.\n   - The first thing that can go wrong (SmartScreen \"Windows protected your PC\", docs Step 1 and table row \"Installer\") happens before the guide is on disk, so the person reads that advice in a file they do not yet have.\n   - Fix: publish the rendered setup-guide.html as an asset of the same GitHub Release as the installer (release.yml, next to .sha256 and release.json), or at another stable URL; make Step 0 / the top of the page say \"open this link first\" and name that link in the text the manager is given with the installer. Add a test or release.yml check that the asset is published. Keep the in-installer copy.\n\n## Non-blocking nits\n- Criterion 3: the issue asks that \"no advanced release\" and the terminal window loop be named. The .exe flow made the loop obsolete, but the table has no row for the dashboard Update button refusals. Either add a row or note in the PR why they no longer apply.\n- Criterion 4 (live pass with Yotam) is correctly stated as not done; the issue must stay open after merge (PR says \"Tracker issues\", not \"Closes\" - good).\n- Install ACL.bat is still in main; RELEASE_TRUST.md note is fine.\n\n## Verified OK\nSteps match wizard (6 STEPS, title \"Adopy Campaign Manager Setup\", 4 system checks, 500 MB, port wording, Multilogin moved to dashboard, Accounts messages match report.html). No secrets/ids/internal URLs in the diff. tests/test_setup_guide.py: 11 passed locally.\nCI at review time: Process instructions, Classify, Verify build inputs, descriptor, tracker-link, windows tests (3.13) pass; linux tests and \"Build, install, repair, and uninstall\" were still pending."
       },
       "897": {
@@ -59220,7 +59207,8 @@
       19,
       18,
       71,
-      309
+      309,
+      175
     ],
     "review": {
       "id": "1ea28d1b292c4ef3baeda760fa52b87b",
@@ -99597,6 +99585,13 @@
         "at": "2026-10-20T11:25:20+00:00",
         "issue": 175,
         "claim": "2fcfbe8af4c14f2397a0dcc67d8a50dd",
+        "actor": "Worker-L2175b"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T11:27:52+00:00",
+        "issue": 175,
+        "pr": 930,
         "actor": "Worker-L2175b"
       }
     ],
