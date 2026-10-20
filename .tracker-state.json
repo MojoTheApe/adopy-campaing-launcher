@@ -44930,7 +44930,20 @@
     }
   },
   "execution": {
-    "claims": {},
+    "claims": {
+      "1026": {
+        "actor": "Worker-ACT174A",
+        "session": "act174a-78a5f7133f0f4cfbad8ecebf63811c02",
+        "coordinator": "Coordinator-ACT174",
+        "branch": "codex/acl-2026-shared-executor-activity",
+        "worktree": "/Users/dmitry.o/Documents/ChatGPT/Task Tracker/acl-activity-adoption",
+        "id": "036f679b85744c4f968e768dfa099e53",
+        "issue": 1026,
+        "state": "implementing",
+        "started_at": "2026-10-20T08:19:19+00:00",
+        "from_status": "status:todo"
+      }
+    },
     "tasks": {
       "382": {
         "implementers": [
@@ -53229,9 +53242,13 @@
           {
             "actor": "Worker-ACT174A",
             "session": "act174a-78a5f7133f0f4cfbad8ecebf63811c02"
+          },
+          {
+            "actor": "Worker-ACT174A",
+            "session": "act174a-78a5f7133f0f4cfbad8ecebf63811c02"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-ACT174A",
         "coordinator": "Coordinator-ACT174",
         "handoff": {
@@ -53250,14 +53267,7 @@
         },
         "pr": 1027,
         "queued_at": "2026-10-19T23:20:35+00:00",
-        "reviewer": "Reviewer-ACT174R",
         "return_operation": {
-          "id": "d7268464064f4a908b0416f776e72342",
-          "actor": "Coordinator-ACT174",
-          "session": "f489c98f-9d9f-42a7-aafc-5dfb361caba8",
-          "report": "The owner explicitly requires process updates to be delivered separately from the product for every repository/install profile and instructed implementation on2026-10-20. Common implementation is now independently reviewed, checked and published as Tracker3.8.0 / Master1.6.0, with the compatible reader deployed.\n\nReturn only ACL-2026 / Issue1026 / PR1027 for its genuine original author to update the source and scope under this newly supported global rule. Do not reuse the old ca9a650 approval for changed content or requirements. Preserve original task, evidence, prior approval/history, genuine author and all unrelated owners. No intake/integration batch exists for this source.\n\nThe revised source must use the exact published canonical pair, retain the complete original scope plus a clear latest owner amendment, restore the descriptor non-pin exception explanation to actual main, preserve all product/configuration/installation/release controls, and undergo fresh independent whole-scope/product-isolation source and combined review through the ordinary frozen batch route. This is not schema1 instruction admission.\n\nNo consumer product-delivery request or ACL/Windows publication is authorized or created by this return. The earlier rejected publication is not resumed. Process completion requires the genuine new canonical proof after ordinary admitted main integration; unsupported/mixed/unknown content remains unfinished. Foreign review reservations are preserved."
-        },
-        "return": {
           "id": "d7268464064f4a908b0416f776e72342",
           "actor": "Coordinator-ACT174",
           "session": "f489c98f-9d9f-42a7-aafc-5dfb361caba8",
@@ -97491,6 +97501,13 @@
             "approved_at": "2026-10-20T08:02:13+00:00"
           }
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T08:19:19+00:00",
+        "issue": 1026,
+        "claim": "036f679b85744c4f968e768dfa099e53",
+        "actor": "Worker-ACT174A"
       }
     ],
     "policy": {
