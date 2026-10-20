@@ -45224,9 +45224,11 @@
         "worktree": "C:\\acl-1305",
         "id": "29592c5679c240efa92d658b00e322d3",
         "issue": 305,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-20T11:50:46+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 965,
+        "report": "ACL-1305 resumed (Worker-T1020305). Block was stale: parked only on a one-line test expectation in packaging/windows/tests/test_setup_wizard.py ('No accounts' -> 'is not in the CM column'), now changed. Merged current work/main, docs/SETUP-NEW-PC.md troubleshooting row updated per read-only Opus review (no other findings). Tests: test_setup_checks_name_against_workbook + test_setup_wizard 13 passed; earlier CI failure test_bench_destination_instant_form press_guard passes locally (3 passed). Branch contains current work/main."
       },
       "1037": {
         "actor": "Worker-c8f54e83",
