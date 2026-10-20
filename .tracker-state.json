@@ -49364,7 +49364,7 @@
             "session": "run_b1019_771"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-B1019771",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -97535,6 +97535,68 @@
         "issue": 1026,
         "pr": 1027,
         "actor": "Worker-ACT174A"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-20T08:36:37+00:00",
+        "issue": 771,
+        "pr": 832,
+        "review": {
+          "id": "ef97389083b5420699df3f66bf1473eb",
+          "pr": 832,
+          "issues": [
+            771
+          ],
+          "actor": "Reviewer-R1771Z",
+          "session": "reviewer-r1771z-20261020",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-20T07:58:50+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 771,
+            "pr": 832,
+            "branch": "codex/acl-1771-targeting-resolver",
+            "head_sha": "7991b674deb3f3dc61780270366084a9d969a32b",
+            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "96c601e64b37c94852034b1c7a0286a0e3c015efc300eb9b4ae244ce97aee2cf",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-R1771Z",
+              "review_session": "reviewer-r1771z-20261020",
+              "execution_lane": "ef97389083b5420699df3f66bf1473eb",
+              "implementer": "Worker-B1019771",
+              "head_sha": "7991b674deb3f3dc61780270366084a9d969a32b",
+              "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "tree_sha": "6e8e7e823b9085100a68e343542c27d0fc3a7c63",
+              "issues": [
+                771
+              ],
+              "report": "PR #832 replaces the exact-name-only interest lookup in creator.TargetingResolver with a new read-only src/fb_api/targeting_resolver.py (TermResolver + ConfirmedStore) and wires it into Check plan, pre-flight and the builder UI. Resolution order per term: confirmed local cache (targeting_confirmed.json in get_local_config_dir(), never in git; cached interest ids re-validated in the same batched adinterestvalid call), exact adinterestvalid, paged /search type=adinterest, the behaviors list (adTargetingCategory, up to 3 pages, read once per job), adworkposition/adworkemployer and, only when near candidates exist, adeducationschool/adeducationmajor; if the whole string fails it is split on ' or ' / '/' / ';' / ',' and parts are resolved separately. Criteria: (1) search fallback, case normalisation, paged behaviors, work positions/employers/education are all implemented; norm() ignores case, repeated spaces and '- _ /' but keeps symbols and diacritics. (2) No silent substitution: only an exact normalised name is auto-taken; near matches (score >= 0.78) become state 'pending' with 'picked X for Y?' plus candidates, weaker ones are listed as candidates, and even a fully exact split is offered as a candidate needing one confirmation because OR is different targeting. creator.interests raises TargetingUnresolved (a PlanError) for anything not exact/confirmed, so both Check plan and real publish are blocked; pre-flight reports interests_resolve (error with term and candidates, or UNKNOWN when the read budget ran out) and the new interests_confirmed rule (error with a Confirm action). /targeting-resolver/confirm only accepts a candidate the server showed in the last Check plan for that term and takes id/name/picks from the server-side candidate, not the request; cache/confirm/clear are gated behind ACL_FB_BACKEND=api and the local-address middleware. (3) Per-job cache of term results and of identical queries. Rules: only GET /search through the client handed in by the existing in-profile read session (no new client, no POST); read budget counted per page (8 per term, 16 per job, 2-call client reserve, PLAN_PREFLIGHT_MAX_CALLS 12 -> 30), exhaustion yields 'unknown', never a guess; GraphStop/GraphError propagate to UNKNOWN verdicts; no polling; no secrets or real ids in code/tests; user-facing text in English. Stacking: the ACL-1819 commits in work/main..HEAD (f225506f, 2c0b2dfa) are already contained in main (the only diff in tests/test_acl1819_preflight.py is the new rule id), so the PR is not stacked on unmerged work. Tests: locally ran tests/test_acl1771_targeting_resolver.py (50 tests) plus test_acl1819_preflight, test_acl1761_api_create/plan_check/country_resolve/parity and test_acl1775_builder_forms: 330 passed, 1 failed once with a Windows PermissionError in os.replace inside ConfirmedStore._write (transient file lock on a heavily loaded laptop); three re-runs of the 1771 file passed 50/50. CI on head 7991b674: all required checks green (linux tests 1-3, windows tests, ACL verification, process instructions, tooling, descriptor, installer verification, tracker-link); build/verify-build jobs skipped. Non-blocking nits: the PR body states caps 12/60 but the code uses 8/16 reads; when the job budget runs out the 'press Check plan again' message is misleading because a plain re-run repeats the same reads in the same order and only progresses once earlier terms are confirmed or fixed; ConfirmedStore._write has no retry on Windows PermissionError and /targeting-resolver/confirm catches only ValueError, so a transient lock would surface as HTTP 500; combining interest_list and interest_fbid_list in one adinterestvalid call should be confirmed in the live run (if Meta ignores the id list, confirmed interest picks would be flagged stale every run - safe, blocking, but annoying); the split regex also splits on ',' and ';' while the module docstring mentions only ' or ' and '/'; when a split has bad parts the UI shows only the parts, not a strong suggestion for the whole term. No live checks claimed.",
+              "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "recorded_at": "2026-10-20T08:27:54+00:00",
+              "issue_scopes": {
+                "771": "96c601e64b37c94852034b1c7a0286a0e3c015efc300eb9b4ae244ce97aee2cf"
+              }
+            },
+            "lane": {
+              "id": "ef97389083b5420699df3f66bf1473eb",
+              "pr": 832,
+              "issues": [
+                771
+              ],
+              "actor": "Reviewer-R1771Z",
+              "session": "reviewer-r1771z-20261020",
+              "coordinator": "Coordinator-M1011A",
+              "started_at": "2026-10-20T07:58:50+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-20T08:32:48+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -100836,6 +100898,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-20T08:02:13+00:00"
+      },
+      "771": {
+        "issue": 771,
+        "pr": 832,
+        "branch": "codex/acl-1771-targeting-resolver",
+        "head_sha": "7991b674deb3f3dc61780270366084a9d969a32b",
+        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "96c601e64b37c94852034b1c7a0286a0e3c015efc300eb9b4ae244ce97aee2cf",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-R1771Z",
+          "review_session": "reviewer-r1771z-20261020",
+          "execution_lane": "ef97389083b5420699df3f66bf1473eb",
+          "implementer": "Worker-B1019771",
+          "head_sha": "7991b674deb3f3dc61780270366084a9d969a32b",
+          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "tree_sha": "6e8e7e823b9085100a68e343542c27d0fc3a7c63",
+          "issues": [
+            771
+          ],
+          "report": "PR #832 replaces the exact-name-only interest lookup in creator.TargetingResolver with a new read-only src/fb_api/targeting_resolver.py (TermResolver + ConfirmedStore) and wires it into Check plan, pre-flight and the builder UI. Resolution order per term: confirmed local cache (targeting_confirmed.json in get_local_config_dir(), never in git; cached interest ids re-validated in the same batched adinterestvalid call), exact adinterestvalid, paged /search type=adinterest, the behaviors list (adTargetingCategory, up to 3 pages, read once per job), adworkposition/adworkemployer and, only when near candidates exist, adeducationschool/adeducationmajor; if the whole string fails it is split on ' or ' / '/' / ';' / ',' and parts are resolved separately. Criteria: (1) search fallback, case normalisation, paged behaviors, work positions/employers/education are all implemented; norm() ignores case, repeated spaces and '- _ /' but keeps symbols and diacritics. (2) No silent substitution: only an exact normalised name is auto-taken; near matches (score >= 0.78) become state 'pending' with 'picked X for Y?' plus candidates, weaker ones are listed as candidates, and even a fully exact split is offered as a candidate needing one confirmation because OR is different targeting. creator.interests raises TargetingUnresolved (a PlanError) for anything not exact/confirmed, so both Check plan and real publish are blocked; pre-flight reports interests_resolve (error with term and candidates, or UNKNOWN when the read budget ran out) and the new interests_confirmed rule (error with a Confirm action). /targeting-resolver/confirm only accepts a candidate the server showed in the last Check plan for that term and takes id/name/picks from the server-side candidate, not the request; cache/confirm/clear are gated behind ACL_FB_BACKEND=api and the local-address middleware. (3) Per-job cache of term results and of identical queries. Rules: only GET /search through the client handed in by the existing in-profile read session (no new client, no POST); read budget counted per page (8 per term, 16 per job, 2-call client reserve, PLAN_PREFLIGHT_MAX_CALLS 12 -> 30), exhaustion yields 'unknown', never a guess; GraphStop/GraphError propagate to UNKNOWN verdicts; no polling; no secrets or real ids in code/tests; user-facing text in English. Stacking: the ACL-1819 commits in work/main..HEAD (f225506f, 2c0b2dfa) are already contained in main (the only diff in tests/test_acl1819_preflight.py is the new rule id), so the PR is not stacked on unmerged work. Tests: locally ran tests/test_acl1771_targeting_resolver.py (50 tests) plus test_acl1819_preflight, test_acl1761_api_create/plan_check/country_resolve/parity and test_acl1775_builder_forms: 330 passed, 1 failed once with a Windows PermissionError in os.replace inside ConfirmedStore._write (transient file lock on a heavily loaded laptop); three re-runs of the 1771 file passed 50/50. CI on head 7991b674: all required checks green (linux tests 1-3, windows tests, ACL verification, process instructions, tooling, descriptor, installer verification, tracker-link); build/verify-build jobs skipped. Non-blocking nits: the PR body states caps 12/60 but the code uses 8/16 reads; when the job budget runs out the 'press Check plan again' message is misleading because a plain re-run repeats the same reads in the same order and only progresses once earlier terms are confirmed or fixed; ConfirmedStore._write has no retry on Windows PermissionError and /targeting-resolver/confirm catches only ValueError, so a transient lock would surface as HTTP 500; combining interest_list and interest_fbid_list in one adinterestvalid call should be confirmed in the live run (if Meta ignores the id list, confirmed interest picks would be flagged stale every run - safe, blocking, but annoying); the split regex also splits on ',' and ';' while the module docstring mentions only ' or ' and '/'; when a split has bad parts the UI shows only the parts, not a strong suggestion for the whole term. No live checks claimed.",
+          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "recorded_at": "2026-10-20T08:27:54+00:00",
+          "issue_scopes": {
+            "771": "96c601e64b37c94852034b1c7a0286a0e3c015efc300eb9b4ae244ce97aee2cf"
+          }
+        },
+        "lane": {
+          "id": "ef97389083b5420699df3f66bf1473eb",
+          "pr": 832,
+          "issues": [
+            771
+          ],
+          "actor": "Reviewer-R1771Z",
+          "session": "reviewer-r1771z-20261020",
+          "coordinator": "Coordinator-M1011A",
+          "started_at": "2026-10-20T07:58:50+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-20T08:32:48+00:00"
       }
     },
     "batches": {
@@ -105567,62 +105673,6 @@
         "coordinator": "Coordinator-M1011A",
         "started_at": "2026-10-20T07:05:44+00:00",
         "state": "reviewing"
-      },
-      "832": {
-        "id": "ef97389083b5420699df3f66bf1473eb",
-        "pr": 832,
-        "issues": [
-          771
-        ],
-        "actor": "Reviewer-R1771Z",
-        "session": "reviewer-r1771z-20261020",
-        "coordinator": "Coordinator-M1011A",
-        "started_at": "2026-10-20T07:58:50+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 771,
-          "pr": 832,
-          "branch": "codex/acl-1771-targeting-resolver",
-          "head_sha": "7991b674deb3f3dc61780270366084a9d969a32b",
-          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "96c601e64b37c94852034b1c7a0286a0e3c015efc300eb9b4ae244ce97aee2cf",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-R1771Z",
-            "review_session": "reviewer-r1771z-20261020",
-            "execution_lane": "ef97389083b5420699df3f66bf1473eb",
-            "implementer": "Worker-B1019771",
-            "head_sha": "7991b674deb3f3dc61780270366084a9d969a32b",
-            "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-            "tree_sha": "6e8e7e823b9085100a68e343542c27d0fc3a7c63",
-            "issues": [
-              771
-            ],
-            "report": "PR #832 replaces the exact-name-only interest lookup in creator.TargetingResolver with a new read-only src/fb_api/targeting_resolver.py (TermResolver + ConfirmedStore) and wires it into Check plan, pre-flight and the builder UI. Resolution order per term: confirmed local cache (targeting_confirmed.json in get_local_config_dir(), never in git; cached interest ids re-validated in the same batched adinterestvalid call), exact adinterestvalid, paged /search type=adinterest, the behaviors list (adTargetingCategory, up to 3 pages, read once per job), adworkposition/adworkemployer and, only when near candidates exist, adeducationschool/adeducationmajor; if the whole string fails it is split on ' or ' / '/' / ';' / ',' and parts are resolved separately. Criteria: (1) search fallback, case normalisation, paged behaviors, work positions/employers/education are all implemented; norm() ignores case, repeated spaces and '- _ /' but keeps symbols and diacritics. (2) No silent substitution: only an exact normalised name is auto-taken; near matches (score >= 0.78) become state 'pending' with 'picked X for Y?' plus candidates, weaker ones are listed as candidates, and even a fully exact split is offered as a candidate needing one confirmation because OR is different targeting. creator.interests raises TargetingUnresolved (a PlanError) for anything not exact/confirmed, so both Check plan and real publish are blocked; pre-flight reports interests_resolve (error with term and candidates, or UNKNOWN when the read budget ran out) and the new interests_confirmed rule (error with a Confirm action). /targeting-resolver/confirm only accepts a candidate the server showed in the last Check plan for that term and takes id/name/picks from the server-side candidate, not the request; cache/confirm/clear are gated behind ACL_FB_BACKEND=api and the local-address middleware. (3) Per-job cache of term results and of identical queries. Rules: only GET /search through the client handed in by the existing in-profile read session (no new client, no POST); read budget counted per page (8 per term, 16 per job, 2-call client reserve, PLAN_PREFLIGHT_MAX_CALLS 12 -> 30), exhaustion yields 'unknown', never a guess; GraphStop/GraphError propagate to UNKNOWN verdicts; no polling; no secrets or real ids in code/tests; user-facing text in English. Stacking: the ACL-1819 commits in work/main..HEAD (f225506f, 2c0b2dfa) are already contained in main (the only diff in tests/test_acl1819_preflight.py is the new rule id), so the PR is not stacked on unmerged work. Tests: locally ran tests/test_acl1771_targeting_resolver.py (50 tests) plus test_acl1819_preflight, test_acl1761_api_create/plan_check/country_resolve/parity and test_acl1775_builder_forms: 330 passed, 1 failed once with a Windows PermissionError in os.replace inside ConfirmedStore._write (transient file lock on a heavily loaded laptop); three re-runs of the 1771 file passed 50/50. CI on head 7991b674: all required checks green (linux tests 1-3, windows tests, ACL verification, process instructions, tooling, descriptor, installer verification, tracker-link); build/verify-build jobs skipped. Non-blocking nits: the PR body states caps 12/60 but the code uses 8/16 reads; when the job budget runs out the 'press Check plan again' message is misleading because a plain re-run repeats the same reads in the same order and only progresses once earlier terms are confirmed or fixed; ConfirmedStore._write has no retry on Windows PermissionError and /targeting-resolver/confirm catches only ValueError, so a transient lock would surface as HTTP 500; combining interest_list and interest_fbid_list in one adinterestvalid call should be confirmed in the live run (if Meta ignores the id list, confirmed interest picks would be flagged stale every run - safe, blocking, but annoying); the split regex also splits on ',' and ';' while the module docstring mentions only ' or ' and '/'; when a split has bad parts the UI shows only the parts, not a strong suggestion for the whole term. No live checks claimed.",
-            "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "recorded_at": "2026-10-20T08:27:54+00:00",
-            "issue_scopes": {
-              "771": "96c601e64b37c94852034b1c7a0286a0e3c015efc300eb9b4ae244ce97aee2cf"
-            }
-          },
-          "lane": {
-            "id": "ef97389083b5420699df3f66bf1473eb",
-            "pr": 832,
-            "issues": [
-              771
-            ],
-            "actor": "Reviewer-R1771Z",
-            "session": "reviewer-r1771z-20261020",
-            "coordinator": "Coordinator-M1011A",
-            "started_at": "2026-10-20T07:58:50+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-20T08:32:48+00:00"
-        }
       },
       "846": {
         "id": "bbcea4d98c114acfb962d09dde96db1b",
