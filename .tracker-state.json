@@ -44867,22 +44867,7 @@
     }
   },
   "execution": {
-    "claims": {
-      "891": {
-        "actor": "Worker-M1020891",
-        "session": "run_m1020_891",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1891-video-chunks",
-        "worktree": "C:\\acl-1891-v2",
-        "id": "a5343bb740414c45aae8b1a7290faf33",
-        "issue": 891,
-        "state": "handoff",
-        "started_at": "2026-10-20T06:21:25+00:00",
-        "from_status": "status:todo",
-        "pr": 909,
-        "report": "Tracker issues: ACL-1891\n\nVideos over 200 MB are uploaded to Meta in chunks (resumable upload on `/act_X/advideos`: start, transfer, finish) from the profile page helper. Everything stays PAUSED; nothing is deleted or activated.\n\n**Rebuilt 2026-10-20 on current main** (history rewritten with owner approval, see the comment below). The branch is no longer stacked on `codex/acl-1907-locale-groups`; it now holds only the ACL-1891 change (9 files).\n\n- Server reads only chunk-sized slices from disk (`LargeFile`); hash for the title tag is streamed; the helper holds one chunk (max 8 MB).\n- Resume from Meta's reported offset; unknown chunk result re-sends the same offset; unknown `finish` is reconciled by title readback; a re-run reuses the finished video.\n- Chunk calls are counted by a size-based call budget (the earlier `estimate_create_calls` change depended on unmerged work); plans that do not fit the call ceiling are refused up front.\n- Closed write policy extended in both layers (`write_policy.py`, page helper) with exactly the three upload phases, strictly validated; Python/Node parity tests.\n- `media_limits`: video limit 1536 MB (Meta's own maximum is 4 GB), English message.\n\nTests on the rebuilt branch: `tests/test_acl1891_video_chunks.py` and the neighbouring write-policy / create / media suites, all green (touched files only; the full suite runs in CI). Pre-handoff read-only review: findings fixed in `0e481dfc`.\n\nNeeds a live check on Doc120 (PAUSED only): see PROJECT.md ACL-1891.\n\n\ud83e\udd16 Generated with [Claude Code](https://claude.com/claude-code)"
-      }
-    },
+    "claims": {},
     "tasks": {
       "382": {
         "implementers": [
@@ -50583,25 +50568,25 @@
             "session": "run_m1020_891"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-M1020891",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
-          "actor": "Worker-S1891A",
-          "session": "ws1891a-20261014",
-          "coordinator": "Coordinator-C0930A",
+          "actor": "Worker-M1020891",
+          "session": "run_m1020_891",
+          "coordinator": "Coordinator-M1011A",
           "branch": "codex/acl-1891-video-chunks",
-          "worktree": "C:\\wk-1891",
-          "id": "54670b196fa843fc821a0312b2b1508f",
+          "worktree": "C:\\acl-1891-v2",
+          "id": "a5343bb740414c45aae8b1a7290faf33",
           "issue": 891,
           "state": "handoff",
-          "started_at": "2026-10-14T13:25:34+00:00",
-          "from_status": "status:backlog",
+          "started_at": "2026-10-20T06:21:25+00:00",
+          "from_status": "status:todo",
           "pr": 909,
-          "report": "# ACL-1891 handoff (PR #909, head 433838ef, stacked on ACL-1907 / PR #908)\n\nWorker-S1891A / ws1891a-20261014, coordinator Coordinator-C0930A, branch codex/acl-1891-video-chunks.\n\n## What\n- Videos up to 200 MB keep the one-request upload; larger ones use Meta's resumable upload on /act_X/advideos (upload_phase start, transfer, finish). VIDEO_MAX_BYTES = 1536 MB (= write_policy.UPLOAD_FILE_MAX), chunks at most 8 MB.\n- creator.LargeFile reads chunk-sized slices from disk (never the whole file); the title-tag hash is streamed in 1 MB blocks; the page-helper staging bridge holds one chunk at a time.\n- Resume by Meta's offsets; backwards/non-digit/out-of-range offsets stop before finish; an offset named in error_data resumes; an unknown chunk is re-sent at the same offset (max 2), then the run stops as unknown; an unknown finish is reconciled by reading the library by title tag; a re-run reuses the finished video.\n- estimate_create_calls adds ceil(size/8 MB)+3 per large video; plans over the 250 ceiling are refused up front.\n- Write policy in both layers: exactly the three phases, closed key sets, numeric session/offset/file_size, file only on transfer as video_file_chunk (1 B..8 MB); cancel, end_offset and everything else refused.\n- media_limits pre-flight hint now says video 1536 MB (Python, JSON).\n\n## Checks\n- tests/test_acl1891_video_chunks.py plus 1761, 1768, 1774, 1819, 1896, 1907, 1756, 1776 (-k \"not browser\"): 774 passed, 0 failed. Node parity 19 cases.\n- Mutations caught: wrong phase allowed, oversized chunk allowed, offset check skipped, page-helper relaxation.\n\n## Remaining / live checks (Doc120, PAUSED)\nstart returns video_id and range; Meta's real chunk size; multipart chunk in one page request; offset error_data shape; finish title; 250 MB and 1 GB processing and readback; profile memory; Meta's max size. Docs: docs/system/PROJECT.md (ACL-1891), docs/system/CHANGELOG.md."
+          "report": "Tracker issues: ACL-1891\n\nVideos over 200 MB are uploaded to Meta in chunks (resumable upload on `/act_X/advideos`: start, transfer, finish) from the profile page helper. Everything stays PAUSED; nothing is deleted or activated.\n\n**Rebuilt 2026-10-20 on current main** (history rewritten with owner approval, see the comment below). The branch is no longer stacked on `codex/acl-1907-locale-groups`; it now holds only the ACL-1891 change (9 files).\n\n- Server reads only chunk-sized slices from disk (`LargeFile`); hash for the title tag is streamed; the helper holds one chunk (max 8 MB).\n- Resume from Meta's reported offset; unknown chunk result re-sends the same offset; unknown `finish` is reconciled by title readback; a re-run reuses the finished video.\n- Chunk calls are counted by a size-based call budget (the earlier `estimate_create_calls` change depended on unmerged work); plans that do not fit the call ceiling are refused up front.\n- Closed write policy extended in both layers (`write_policy.py`, page helper) with exactly the three upload phases, strictly validated; Python/Node parity tests.\n- `media_limits`: video limit 1536 MB (Meta's own maximum is 4 GB), English message.\n\nTests on the rebuilt branch: `tests/test_acl1891_video_chunks.py` and the neighbouring write-policy / create / media suites, all green (touched files only; the full suite runs in CI). Pre-handoff read-only review: findings fixed in `0e481dfc`.\n\nNeeds a live check on Doc120 (PAUSED only): see PROJECT.md ACL-1891.\n\n\ud83e\udd16 Generated with [Claude Code](https://claude.com/claude-code)"
         },
         "pr": 909,
-        "queued_at": "2026-10-14T14:05:21+00:00",
+        "queued_at": "2026-10-20T06:27:27+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -58508,7 +58493,8 @@
       896,
       768,
       770,
-      771
+      771,
+      891
     ],
     "review": null,
     "history": [
@@ -96630,6 +96616,13 @@
           "report": "# Returned to the author: merge conflict with main, content not reviewed\n\nPR 921 cannot be brought up to current main c61501607ce11744e45add8b0d3b314368c216c5: `gh pr update-branch` reports a merge conflict (checked 2026-10-19/20). A source review must bind the current main baseline, so this task cannot be reviewed or approved as is.\n\nThe content of this PR was NOT reviewed in this pass; this return carries no code findings.\n\nNext step for the author: merge current main into the original branch, resolve the conflict, run the affected tests, push, and hand off again for a full independent review.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-20T06:27:27+00:00",
+        "issue": 891,
+        "pr": 909,
+        "actor": "Worker-M1020891"
       }
     ],
     "policy": {
