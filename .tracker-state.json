@@ -53105,7 +53105,7 @@
             "session": "local_e4968c7b"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W2028",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -53123,7 +53123,8 @@
           "report": "## Handoff ACL-2028 \u2192 independent source review\n\nPR #1029, head ee7388ed, base work/main c6150160. Tests only: new `tests/test_acl1886_plan_check_snapshot.py`.\n\nCommits the durable proof for ACL-1886 criterion 5: actual `publish_api.check_plan` over in-memory FakeMeta with the anonymized error10 fixture on `/search` and `/campaigns`. Asserts exact public error text with `operation=\u2026`, success/publishable false, zero writes, read-only client, sockets patched to fail, no synthetic account id in the result.\n\nLocal checks (affected only): 3 modules, 56 passed; secret scanner clean. Full suite left to hosted CI.\n\nReviewer focus: assertions are exact snapshots of current main behavior (audit status for failed lookups is `unknown`, not `error`); no production change; determinism (no clock/network/real profiles)."
         },
         "pr": 1029,
-        "queued_at": "2026-10-20T05:56:04+00:00"
+        "queued_at": "2026-10-20T05:56:04+00:00",
+        "reviewer": "Reviewer-R2028"
       }
     },
     "actors": {
@@ -55570,6 +55571,10 @@
       "Worker-W2028": {
         "session": "local_e4968c7b",
         "role": "Worker"
+      },
+      "Reviewer-R2028": {
+        "session": "rv-2028-a",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -58450,8 +58455,7 @@
       896,
       768,
       770,
-      771,
-      1028
+      771
     ],
     "review": null,
     "history": [
@@ -96447,6 +96451,13 @@
         "issue": 1028,
         "pr": 1029,
         "actor": "Worker-W2028"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-20T05:58:50+00:00",
+        "pr": 1029,
+        "lane": "c3fbe173f8dd474ab1c06073ae02764e",
+        "actor": "Reviewer-R2028"
       }
     ],
     "policy": {
@@ -104290,6 +104301,18 @@
         "session": "r1816v-20261019",
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-19T13:01:50+00:00",
+        "state": "reviewing"
+      },
+      "1029": {
+        "id": "c3fbe173f8dd474ab1c06073ae02764e",
+        "pr": 1029,
+        "issues": [
+          1028
+        ],
+        "actor": "Reviewer-R2028",
+        "session": "rv-2028-a",
+        "coordinator": "Coordinator-M1011A",
+        "started_at": "2026-10-20T05:58:50+00:00",
         "state": "reviewing"
       }
     },
