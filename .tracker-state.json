@@ -45665,6 +45665,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T12:56:11+00:00",
         "from_status": "status:todo"
+      },
+      "138": {
+        "actor": "Worker-P1138C",
+        "session": "p1138c-20261020",
+        "coordinator": "Coordinator-M1011A",
+        "branch": "work/acl-1138-proxy-gate",
+        "worktree": "C:\\acl-1138-remerge",
+        "id": "c5d1648443e14ffdb4111088fd46e008",
+        "issue": 138,
+        "state": "implementing",
+        "started_at": "2026-10-20T13:42:41+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -52026,10 +52038,14 @@
           {
             "actor": "Worker-P1138B",
             "session": "acl1138_resume_1019"
+          },
+          {
+            "actor": "Worker-P1138C",
+            "session": "p1138c-20261020"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-P1138B",
+        "state": "implementing",
+        "worker": "Worker-P1138C",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
           "actor": "Worker-P1138B",
@@ -52053,14 +52069,7 @@
           "at": "2026-10-17T16:30:39.578050+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-R1138",
         "return_operation": {
-          "id": "576b5e0a0e2f45aab25f9db00d76cdbc",
-          "actor": "Coordinator-M1011A",
-          "session": "coord-m1011a-20261015",
-          "report": "PR #947 (ACL-1138) no longer merges into current main 259ae7f1 (after batch #1034): conflicts in docs/system/PROJECT.md, src/fb_ads_rpa/profile_trouble.py, src/web/templates/report.html. Return to the author for a merge of current main, conflict resolution, checks, handoff and fresh independent approval. Owner wants it in the next batch for the buyer release."
-        },
-        "return": {
           "id": "576b5e0a0e2f45aab25f9db00d76cdbc",
           "actor": "Coordinator-M1011A",
           "session": "coord-m1011a-20261015",
@@ -57086,6 +57095,10 @@
       "Reviewer-R1175V": {
         "session": "reviewer-r1175v-20261020",
         "role": "Reviewer"
+      },
+      "Worker-P1138C": {
+        "session": "p1138c-20261020",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -101466,6 +101479,13 @@
           "report": "# ACL-1175 / PR #930 re-review (head df1feabf) - RETURNED\n\nBlocking: criterion 1 of Issue #175 still not met. Delta 28a2ffab..df1feabf contains only the merge of main (no change in docs, setup_guide.py, or .github). No workflow change: nothing publishes setup-guide.html as a Release asset next to .sha256 / release.json, Step 0 and the page top have no stable pre-install link, and no check verifies asset publication. The guide is still readable only from _internal/setup-guide.html inside the installed bundle.\n\nRequired: publish the rendered setup-guide.html in release.yml (same Release), point Step 0 / page top to a stable link, add a check that the asset is published, keep the bundled copy.\nNon-blocking (unchanged): criterion 3 rows for dashboard Update-button failures; live pass (criterion 4).",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-20T13:42:41+00:00",
+        "issue": 138,
+        "claim": "c5d1648443e14ffdb4111088fd46e008",
+        "actor": "Worker-P1138C"
       }
     ],
     "policy": {
