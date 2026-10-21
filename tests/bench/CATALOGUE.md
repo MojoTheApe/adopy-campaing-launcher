@@ -6,7 +6,7 @@ Every Meta layout the robot has met live, per robot step, with its fixture, test
 
 Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).
 
-**23 robot steps × 121 layouts, 66 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
+**24 robot steps × 122 layouts, 67 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
 
 ## Summary
 
@@ -35,6 +35,7 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | banners and blocks (any step) | 2 | 2 | 0 | 0 |
 | foreign windows (any step, ACL-1573) | 9 | 9 | 0 | 0 |
 | ai rescue summary (any step, ACL-1613) | 2 | 2 | 0 | 0 |
+| Graph read permission diagnostics (ACL-1886) | 1 | 1 | 0 | 0 |
 
 ## objective
 
@@ -317,6 +318,14 @@ Robot: ai_rescue.build_summary: text-only page summary the model sees (dialogs f
 | --- | --- | --- | --- | --- | --- |
 | Create-campaign dialog 'Meta AI-guided setup' / 'Manual campaign setup' (radio pair, Create new campaign) | fb358fda8aab/00_stall_objective_wait | `ai_guided_setup_dialog_2026_10_05.html` · dialog | `tests/test_ai_rescue.py` | dialog listed first with its title; both radios with checked state; summary has no ids, URLs or e-mails | pass |
 | Collapsed Audience card (same capture as ACL-1611) | 6ebd77ccaf6a/02_further_limit_reach_click | `audience_card_collapsed_drawer_2026_10_05.html` · card_run_a, card_run_b | `tests/test_ai_rescue.py` | card button listed as not-pressed; a model pick of it is expanded by exactly one click | pass |
+
+## Graph read permission diagnostics (ACL-1886)
+
+Robot: GraphClient.get/get_all error context
+
+| Layout | Seen live | Fixture · fragment | Test | Expected | Status |
+| --- | --- | --- | --- | --- | --- |
+| Plan check Graph10 Permission Denied without failed-operation context; response fields reconstructed from owner screenshots | anonymized Plan check error 2026-10-13 | `fb_api_permission_denied_2026_10_13.json` | `tests/test_acl1886_graph_error_context.py` | GET and allowlisted operation/search subtype visible, request data absent; denial remains denied with unchanged requests and stops; live permission cause unknown | pass |
 
 ## Seen but not cut
 
