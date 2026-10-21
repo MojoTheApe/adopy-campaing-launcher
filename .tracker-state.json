@@ -46921,6 +46921,18 @@
         "state": "implementing",
         "started_at": "2026-10-21T10:15:15+00:00",
         "from_status": "status:todo"
+      },
+      "668": {
+        "actor": "Worker-A1021668",
+        "session": "run_a1021_668w",
+        "coordinator": "Coordinator-A1021A",
+        "branch": "work/acl-1668-missing-creative",
+        "worktree": "C:\\acl-rv-668",
+        "id": "d4ddd64c9f2c4c779b592b9192818b37",
+        "issue": 668,
+        "state": "implementing",
+        "started_at": "2026-10-21T11:33:07+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -54501,9 +54513,13 @@
           {
             "actor": "Worker-A1021668",
             "session": "run_a1021_668w"
+          },
+          {
+            "actor": "Worker-A1021668",
+            "session": "run_a1021_668w"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-A1021668",
         "coordinator": "Coordinator-A1021A",
         "handoff": {
@@ -54528,8 +54544,8 @@
           "at": "2026-10-17T16:30:39.578098+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-A1021668",
-        "rework": true
+        "rework": true,
+        "rework_claim": "d4ddd64c9f2c4c779b592b9192818b37"
       },
       "358": {
         "implementers": [
@@ -105678,6 +105694,13 @@
         "issue": 558,
         "pr": 963,
         "actor": "Worker-A1021558"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-21T11:33:07+00:00",
+        "issue": 668,
+        "claim": "d4ddd64c9f2c4c779b592b9192818b37",
+        "actor": "Worker-A1021668"
       }
     ],
     "policy": {
