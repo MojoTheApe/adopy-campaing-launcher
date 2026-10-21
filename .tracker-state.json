@@ -56133,7 +56133,7 @@
             "session": "run_k1021a1_2065"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-K1021A1",
         "coordinator": "Coordinator-K1021A",
         "handoff": {
@@ -56151,7 +56151,8 @@
           "report": "# ACL-2065 handoff\n\nPR #1068, branch work/acl-2065-perf-morning-report, head a871d559 on main ea41acbf.\nScope: src/analysis_agent/country_workbench.py, morning_report.py, analyze_fb_stats.py; new tests/test_morning_report_cold_build_speed.py; docs/system/CHANGELOG.md.\nProfile and result are in the Issue Handoff: cold build ~12 min -> ~100 s on the year workbook, default-period report JSON 0 differences.\nChecks: 25 affected test files (all importing the three modules), 261 passed locally; full suite in CI.\nRemaining: independent source review, CI, Approved, batch integration, package delivery. Owner live check after delivery: restart the dashboard and see the loading screen end in ~2 minutes."
         },
         "pr": 1068,
-        "queued_at": "2026-10-21T13:17:37+00:00"
+        "queued_at": "2026-10-21T13:17:37+00:00",
+        "reviewer": "Reviewer-K1021R2065"
       },
       "1066": {
         "implementers": [
@@ -59164,6 +59165,10 @@
       "Worker-K1021A3": {
         "session": "run_k1021a3_2063",
         "role": "Worker"
+      },
+      "Reviewer-K1021R2065": {
+        "session": "rev_k1021r_2065",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -62062,7 +62067,6 @@
       1053,
       1054,
       710,
-      1065,
       1066
     ],
     "review": {
@@ -107085,6 +107089,13 @@
         "issue": 1063,
         "claim": "91a0c06d72414058a3cc0c9b10c9f47e",
         "actor": "Worker-K1021A3"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-21T13:21:23+00:00",
+        "pr": 1068,
+        "lane": "1fefebd3b4d34ec495d25b8476d66b15",
+        "actor": "Reviewer-K1021R2065"
       }
     ],
     "policy": {
@@ -116847,6 +116858,18 @@
         "session": "rev_p1021_2052",
         "coordinator": "Coordinator-P1021A",
         "started_at": "2026-10-21T09:47:33+00:00",
+        "state": "reviewing"
+      },
+      "1068": {
+        "id": "1fefebd3b4d34ec495d25b8476d66b15",
+        "pr": 1068,
+        "issues": [
+          1065
+        ],
+        "actor": "Reviewer-K1021R2065",
+        "session": "rev_k1021r_2065",
+        "coordinator": "Coordinator-K1021A",
+        "started_at": "2026-10-21T13:21:23+00:00",
         "state": "reviewing"
       }
     },
