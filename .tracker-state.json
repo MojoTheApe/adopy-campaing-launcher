@@ -58868,6 +58868,10 @@
       "Reviewer-A1021403": {
         "session": "run_a1021_403r",
         "role": "Reviewer"
+      },
+      "Coordinator-I1021A": {
+        "session": "run_i1021a_1021",
+        "role": "Coordinator"
       }
     },
     "completed": {
@@ -106139,6 +106143,33 @@
             "approved_at": "2026-10-21T12:17:47+00:00"
           }
         }
+      },
+      {
+        "event": "intake-frozen",
+        "at": "2026-10-21T12:29:04+00:00",
+        "intake": {
+          "id": "843ae93d19994cddaf23af35412da7ff",
+          "actor": "Coordinator-I1021A",
+          "session": "run_i1021a_1021",
+          "state": "running",
+          "issues": [
+            784,
+            880,
+            377,
+            380,
+            626
+          ],
+          "remaining": [
+            784,
+            880,
+            377,
+            380,
+            626
+          ],
+          "batches": [],
+          "started_at": "2026-10-21T12:29:04+00:00",
+          "ineligible": {}
+        }
       }
     ],
     "policy": {
@@ -116093,25 +116124,27 @@
     },
     "integration": null,
     "intake": {
-      "id": "72da769c382d4fd4a41ba4e069c60cf6",
-      "actor": "Coordinator-C1021B",
-      "session": "claude-4f43ad3b",
-      "state": "cancelled",
+      "id": "843ae93d19994cddaf23af35412da7ff",
+      "actor": "Coordinator-I1021A",
+      "session": "run_i1021a_1021",
+      "state": "running",
       "issues": [
-        784
+        784,
+        880,
+        377,
+        380,
+        626
       ],
       "remaining": [
-        784
+        784,
+        880,
+        377,
+        380,
+        626
       ],
       "batches": [],
-      "started_at": "2026-10-21T11:22:57+00:00",
-      "ineligible": {
-        "891": "#891: source approval is stale for its PR, main or policy",
-        "992": "#992: source approval is stale for its PR, main or policy",
-        "854": "#854: source approval is stale for its PR, main or policy",
-        "855": "#855: source approval is stale for its PR, main or policy"
-      },
-      "report": "Intake cancelled by Coordinator-C1021B: created for a 5-task batch (891 992 784 854 855); 4 of 5 sources are stale against current main. Re-intake against all Approved to select an eligible batch."
+      "started_at": "2026-10-21T12:29:04+00:00",
+      "ineligible": {}
     },
     "source_reviews": {
       "820": {
