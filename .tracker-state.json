@@ -46930,9 +46930,11 @@
         "worktree": "C:\\acl-rv-358",
         "id": "195cd9bac8714acbbc9b68cba96db23e",
         "issue": 358,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T11:03:17+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 974,
+        "report": "# ACL-1358 handoff (resume of review tail, Worker-A1021358)\n\nMerged current main (ea41acbf) into work/acl-1358-protected-tokens with a no-ff merge commit; new head 2f39d83c. No task code changed.\n\nConflicts: only docs/system/CHANGELOG.md (both sides added entries at the top); kept both entries. config/paths.py and scripts/acl_migrate_config.py auto-merged.\n\nTests (affected only): tests/test_token_vault.py, test_machine_paths, test_google_machine_config, test_gsheet_account_status, test_run_telemetry, test_telemetry_default_on, test_telemetry_says_why, test_tests_do_not_write_live_telemetry, test_mlx_profiles, packaging/windows/tests test_diagnostics, test_machine_config, test_launcher: 126 passed. acl_scan_secrets.py: clean. Full suite not run locally; CI is the acceptance signal.\n\nUnchanged from the prior report: Google telemetry scope decision still open (acceptance item 3), live check on the owner machine needed (migrates the real .env on next dashboard start), PR #873 primitive consolidation still a follow-up."
       }
     },
     "tasks": {
