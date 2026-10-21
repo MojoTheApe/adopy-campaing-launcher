@@ -6003,6 +6003,27 @@
         "issue_scopes": {
           "558": "59cee4a7bc79b8f2e03b6a1489e01dc79d07358171007b65077d58fef3df549c"
         }
+      },
+      "975": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-A1021668",
+        "implementer": "Worker-A1021668",
+        "head_sha": "5e7baa80e620f70e51a38cc6c85386d398ba4ebd",
+        "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+        "tree_sha": "cf63abe00bf19a358f9104204e3b4bcae1ff2163",
+        "execution_lane": "660fc5d221644f569004957afbef6ff6",
+        "review_session": "run_a1021_668r",
+        "report": "Verdict: approved (v2 re-review of head 5e7baa80 against main ea41acbf, which HEAD contains).\nScope vs main: src/fb_ads_rpa/enrich_draft.py, src/web/templates/report.html, docs/system/CHANGELOG.md, tests/test_acl1668_missing_creative_publish.py, tests/test_builder_review_browser.py, plus offline fixtures in tests/test_drawer_review_browser.py, test_builder_multi_publish_browser.py, test_builder_second_primary_text.py, test_campaign_build_dot_browser.py. The earlier main merge 0429dc28 is clean (git show --cc empty).\nSpec 1: after the live list refresh, a row whose chosen (hidden) creative is gone is marked 'File missing - pick again' in var(--bad), with the name kept. Nothing is asserted until the list has loaded. Matching uses filename/rel_path, as the picker stores them.\nSpec 2: cbPublish and cbPublishAll (the only publish entry points) list the affected rows (escaped) in the confirm and refuse to send. The refusal now runs before cbPreflightDecision in both. The enrichment raises the clear 'Creative file missing: ... pick the file again' message on CreativeNotFoundError.\nSpec 3: tests cover delete, refresh, row marked, Publish and Publish all refused with the row named, and re-pick clears the mark. A unit test covers the enrichment message.\nFixes since v1 return: (1) the offline fixtures now list the files they write into the hidden field (OFFLINE_FILES), which fixes the 58 CI regressions without weakening product behaviour; (2) CHANGELOG entry added; (3) refusal before the preflight decision in cbPublish.\nNo leaked identifiers. New UI strings are in English. PR body has a single Tracker issues line and no closing keywords.\nNon-blocking: the confirm says 'Nothing was sent:' while the build button is still offered. If the very first creatives answer is an error with an empty list, chosen rows are marked missing; publish would fail anyway.\nLive check: none needed (UI/enrichment only, no ad account touched).",
+        "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          668
+        ],
+        "recorded_at": "2026-10-21T12:02:03+00:00",
+        "issue_scopes": {
+          "668": "e4458477ee00cccf7a8de572a32d19aec1662698b82c4c5d5b0f98d23e0dbb5c"
+        }
       }
     },
     "stage": {
