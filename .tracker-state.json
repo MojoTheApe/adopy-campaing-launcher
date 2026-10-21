@@ -56691,7 +56691,7 @@
             "session": "acl_verify_tag_e51b7063"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-Q1021A",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -56710,7 +56710,8 @@
         },
         "pr": 1072,
         "queued_at": "2026-10-21T18:41:54+00:00",
-        "review_report": "Stale vs main c01583ea (ACL-2073 test fix); author merges main into work/acl-2071-verify-published-tag and hands off again. No findings in the change itself (prior approved review of a3c51338 stands for the unchanged files)."
+        "review_report": "Stale vs main c01583ea (ACL-2073 test fix); author merges main into work/acl-2071-verify-published-tag and hands off again. No findings in the change itself (prior approved review of a3c51338 stands for the unchanged files).",
+        "reviewer": "Reviewer-T1021071"
       },
       "1073": {
         "implementers": [
@@ -62734,8 +62735,7 @@
       1053,
       1054,
       710,
-      1069,
-      1071
+      1069
     ],
     "review": null,
     "history": [
@@ -109555,6 +109555,13 @@
         "issue": 1071,
         "pr": 1072,
         "actor": "Worker-Q1021A"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-21T18:42:58+00:00",
+        "pr": 1072,
+        "lane": "61c9cca084d24b15af1bc10d21b29901",
+        "actor": "Reviewer-T1021071"
       }
     ],
     "policy": {
@@ -119884,6 +119891,18 @@
         "session": "rev_p1021_2052",
         "coordinator": "Coordinator-P1021A",
         "started_at": "2026-10-21T09:47:33+00:00",
+        "state": "reviewing"
+      },
+      "1072": {
+        "id": "61c9cca084d24b15af1bc10d21b29901",
+        "pr": 1072,
+        "issues": [
+          1071
+        ],
+        "actor": "Reviewer-T1021071",
+        "session": "run_t1021_2071",
+        "coordinator": "Coordinator-I1021A",
+        "started_at": "2026-10-21T18:42:58+00:00",
         "state": "reviewing"
       }
     },
