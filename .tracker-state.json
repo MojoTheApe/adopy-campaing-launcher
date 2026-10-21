@@ -51795,7 +51795,7 @@
             "session": "run_w1021_1840"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-W1021840",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -107597,6 +107597,68 @@
           "report": "Lane recovered after owner-confirmed dead reviewer session. No verdict given. Review is stale against current main 0ea237b0; the author must refresh onto main and request a fresh independent review.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-21T14:52:13+00:00",
+        "issue": 840,
+        "pr": 846,
+        "review": {
+          "id": "fff1d5e736494527b9b4ceadcf74c4a8",
+          "pr": 846,
+          "issues": [
+            840
+          ],
+          "actor": "Reviewer-S1021840",
+          "session": "run_s1021_1840",
+          "coordinator": "Coordinator-I1021A",
+          "started_at": "2026-10-21T14:45:49+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 840,
+            "pr": 846,
+            "branch": "codex/acl-1840-country-footer-inset",
+            "head_sha": "01730a5cca32c3969d847b72fce461bf2a2a1dc2",
+            "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+            "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "ef493a159bfb31c8be24551b9a4f3d90b60904a49576c51b0b94efdfdf6c5d40",
+            "review": {
+              "kind": "independent-review",
+              "reviewer": "Reviewer-S1021840",
+              "implementer": "Worker-W1021840",
+              "verdict": "approved",
+              "head_sha": "01730a5cca32c3969d847b72fce461bf2a2a1dc2",
+              "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+              "tree_sha": "9b0796a16535152f042976676ec815cda8ae4cc8",
+              "review_session": "run_s1021_1840",
+              "execution_lane": "fff1d5e736494527b9b4ceadcf74c4a8",
+              "report": "Re-review of refreshed head 01730a5c (merge of main 0ea237b0 into df22816f). git show --cc shows a single hand-resolved hunk, docs/system/CHANGELOG.md, with both the ACL-1840 and ACL-1626 entries intact; report.html merged cleanly. Diff vs main is 4 files, 153 insertions: CHANGELOG, scoped .amap-country > .hc-after CSS in report.html, sanitized fixture, layout test. Scope meets Issue #840 criteria on current main: inset shared by footer, journal summary and body; focus outline stays inside the card; spacing from account rows and workbook notice; empty/populated/filtered at 1280/1024/320 in light and dark; no global summary styling. CI on this exact head passed: all jobs green (linux 1-3, windows, process instructions, ACL verification, installer verification). Note: CHANGELOG diff also carries ~19 cosmetic blank lines before unrelated headings, inherited from the previously approved df22816f; harmless.",
+              "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                840
+              ],
+              "recorded_at": "2026-10-21T14:48:11+00:00",
+              "issue_scopes": {
+                "840": "ef493a159bfb31c8be24551b9a4f3d90b60904a49576c51b0b94efdfdf6c5d40"
+              }
+            },
+            "lane": {
+              "id": "fff1d5e736494527b9b4ceadcf74c4a8",
+              "pr": 846,
+              "issues": [
+                840
+              ],
+              "actor": "Reviewer-S1021840",
+              "session": "run_s1021_1840",
+              "coordinator": "Coordinator-I1021A",
+              "started_at": "2026-10-21T14:45:49+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-21T14:51:16+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -112033,6 +112095,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-21T14:31:51+00:00"
+      },
+      "840": {
+        "issue": 840,
+        "pr": 846,
+        "branch": "codex/acl-1840-country-footer-inset",
+        "head_sha": "01730a5cca32c3969d847b72fce461bf2a2a1dc2",
+        "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+        "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "ef493a159bfb31c8be24551b9a4f3d90b60904a49576c51b0b94efdfdf6c5d40",
+        "review": {
+          "kind": "independent-review",
+          "reviewer": "Reviewer-S1021840",
+          "implementer": "Worker-W1021840",
+          "verdict": "approved",
+          "head_sha": "01730a5cca32c3969d847b72fce461bf2a2a1dc2",
+          "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+          "tree_sha": "9b0796a16535152f042976676ec815cda8ae4cc8",
+          "review_session": "run_s1021_1840",
+          "execution_lane": "fff1d5e736494527b9b4ceadcf74c4a8",
+          "report": "Re-review of refreshed head 01730a5c (merge of main 0ea237b0 into df22816f). git show --cc shows a single hand-resolved hunk, docs/system/CHANGELOG.md, with both the ACL-1840 and ACL-1626 entries intact; report.html merged cleanly. Diff vs main is 4 files, 153 insertions: CHANGELOG, scoped .amap-country > .hc-after CSS in report.html, sanitized fixture, layout test. Scope meets Issue #840 criteria on current main: inset shared by footer, journal summary and body; focus outline stays inside the card; spacing from account rows and workbook notice; empty/populated/filtered at 1280/1024/320 in light and dark; no global summary styling. CI on this exact head passed: all jobs green (linux 1-3, windows, process instructions, ACL verification, installer verification). Note: CHANGELOG diff also carries ~19 cosmetic blank lines before unrelated headings, inherited from the previously approved df22816f; harmless.",
+          "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            840
+          ],
+          "recorded_at": "2026-10-21T14:48:11+00:00",
+          "issue_scopes": {
+            "840": "ef493a159bfb31c8be24551b9a4f3d90b60904a49576c51b0b94efdfdf6c5d40"
+          }
+        },
+        "lane": {
+          "id": "fff1d5e736494527b9b4ceadcf74c4a8",
+          "pr": 846,
+          "issues": [
+            840
+          ],
+          "actor": "Reviewer-S1021840",
+          "session": "run_s1021_1840",
+          "coordinator": "Coordinator-I1021A",
+          "started_at": "2026-10-21T14:45:49+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-21T14:51:16+00:00"
       }
     },
     "batches": {
@@ -117392,62 +117498,6 @@
         "coordinator": "Coordinator-P1021A",
         "started_at": "2026-10-21T09:47:33+00:00",
         "state": "reviewing"
-      },
-      "846": {
-        "id": "fff1d5e736494527b9b4ceadcf74c4a8",
-        "pr": 846,
-        "issues": [
-          840
-        ],
-        "actor": "Reviewer-S1021840",
-        "session": "run_s1021_1840",
-        "coordinator": "Coordinator-I1021A",
-        "started_at": "2026-10-21T14:45:49+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 840,
-          "pr": 846,
-          "branch": "codex/acl-1840-country-footer-inset",
-          "head_sha": "01730a5cca32c3969d847b72fce461bf2a2a1dc2",
-          "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
-          "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "ef493a159bfb31c8be24551b9a4f3d90b60904a49576c51b0b94efdfdf6c5d40",
-          "review": {
-            "kind": "independent-review",
-            "reviewer": "Reviewer-S1021840",
-            "implementer": "Worker-W1021840",
-            "verdict": "approved",
-            "head_sha": "01730a5cca32c3969d847b72fce461bf2a2a1dc2",
-            "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
-            "tree_sha": "9b0796a16535152f042976676ec815cda8ae4cc8",
-            "review_session": "run_s1021_1840",
-            "execution_lane": "fff1d5e736494527b9b4ceadcf74c4a8",
-            "report": "Re-review of refreshed head 01730a5c (merge of main 0ea237b0 into df22816f). git show --cc shows a single hand-resolved hunk, docs/system/CHANGELOG.md, with both the ACL-1840 and ACL-1626 entries intact; report.html merged cleanly. Diff vs main is 4 files, 153 insertions: CHANGELOG, scoped .amap-country > .hc-after CSS in report.html, sanitized fixture, layout test. Scope meets Issue #840 criteria on current main: inset shared by footer, journal summary and body; focus outline stays inside the card; spacing from account rows and workbook notice; empty/populated/filtered at 1280/1024/320 in light and dark; no global summary styling. CI on this exact head passed: all jobs green (linux 1-3, windows, process instructions, ACL verification, installer verification). Note: CHANGELOG diff also carries ~19 cosmetic blank lines before unrelated headings, inherited from the previously approved df22816f; harmless.",
-            "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              840
-            ],
-            "recorded_at": "2026-10-21T14:48:11+00:00",
-            "issue_scopes": {
-              "840": "ef493a159bfb31c8be24551b9a4f3d90b60904a49576c51b0b94efdfdf6c5d40"
-            }
-          },
-          "lane": {
-            "id": "fff1d5e736494527b9b4ceadcf74c4a8",
-            "pr": 846,
-            "issues": [
-              840
-            ],
-            "actor": "Reviewer-S1021840",
-            "session": "run_s1021_1840",
-            "coordinator": "Coordinator-I1021A",
-            "started_at": "2026-10-21T14:45:49+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-21T14:51:16+00:00"
-        }
       },
       "955": {
         "id": "0fb5911df437452abe7f7093a3284166",
