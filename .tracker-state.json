@@ -117152,7 +117152,51 @@
         "session": "run_s1021_1838",
         "coordinator": "Coordinator-I1021A",
         "started_at": "2026-10-21T14:07:13+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 838,
+          "pr": 842,
+          "branch": "codex/acl-1838-country-active-line",
+          "head_sha": "fba8ae7d2d06df449fcc71286c258dca1b948c89",
+          "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+          "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "cf3992329999eade635234966dc6a7d8224ec279020d8cb4239227bab85df07b",
+          "review": {
+            "kind": "independent-review",
+            "reviewer": "Reviewer-S1021838",
+            "implementer": "Worker-W1021838",
+            "verdict": "approved",
+            "head_sha": "fba8ae7d2d06df449fcc71286c258dca1b948c89",
+            "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+            "tree_sha": "c49f6692f303c8b506d49a28594efaf35b210457",
+            "execution_lane": "daaedd8d469146078adb8b1937fe6e4e",
+            "review_session": "run_s1021_1838",
+            "report": "Refresh of PR842 = clean merge of main 0ea237b0 into bc9ba5c8; git show --cc of fba8ae7d has zero combined-diff lines (no hand-resolved hunks). Diff vs main is exactly docs/system/CHANGELOG.md, docs/system/PROJECT.md, src/web/templates/report.html (19+/3-); the report.html hunks (position:relative on .sidebar-country-btn; .live::before dot replaced by absolute 2px accent line, pointer-events:none) are identical to the previously approved change. Meets Issue #838 criteria on current main: 2px line only for .live (existing s.active predicate untouched), no marker for inactive, no pointer target/hover, selection/FTD logic untouched, accent token used (theme-safe), expanded highlight separate. Docs updated. CI on head all green. Not re-run: browser scenarios (rely on worker evidence).",
+            "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              838
+            ],
+            "recorded_at": "2026-10-21T14:11:33+00:00",
+            "issue_scopes": {
+              "838": "cf3992329999eade635234966dc6a7d8224ec279020d8cb4239227bab85df07b"
+            }
+          },
+          "lane": {
+            "id": "daaedd8d469146078adb8b1937fe6e4e",
+            "pr": 842,
+            "issues": [
+              838
+            ],
+            "actor": "Reviewer-S1021838",
+            "session": "run_s1021_1838",
+            "coordinator": "Coordinator-I1021A",
+            "started_at": "2026-10-21T14:07:13+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-21T14:12:17+00:00"
+        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
