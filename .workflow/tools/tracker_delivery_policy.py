@@ -207,7 +207,8 @@ def completion_assessment(issue, config, receipt, *, activated=None):
                    and accepted.get('issue_sha256') == accepted_scope_digest(issue))
     required = policy(config)['completion'] != 'reviewed-merge'
     current = projected.get('policy') == fingerprint(config)
-    expected = (projected.get('scope') or projected.get('reconciled_scope')) if active else projected.get('reconciled_scope')
+    expected = ((projected.get('scope') or projected.get('reconciled_scope'))
+                if active or projected.get('process_support') else projected.get('reconciled_scope'))
     reason = 'pending'
     if selected and not active:
         reason, current = 'unverified', False
@@ -415,10 +416,20 @@ def file_bytes(request, root, row):
 def read_full_state(request, repo):
     root = 'repos/' + repo
     row = request(root + '/contents/.tracker-state.json?ref=tracker-state')
-    state = json.loads(file_bytes(request, root, row),object_pairs_hook=direct_module().unique_object)
+    state = pause_module().decode(json.loads(file_bytes(request, root, row),object_pairs_hook=direct_module().unique_object))
+    if 'task_pause' in state and state['task_pause']['repository'].lower() != repo.lower():
+        raise ValueError('Task pause belongs to a different repository')
     if state_schema(state) not in (1, 2):
         raise ValueError('Invalid tracker state')
     return state
+
+
+def pause_module():
+    try:
+        from . import pause_policy
+    except ImportError:
+        import tracker_pause_policy as pause_policy
+    return pause_policy
 
 
 def retry_module():
@@ -435,6 +446,9 @@ def state_schema(state):
     Older engines reject outer schema 3. No old writer can read a held fence and
     obtain a fresh SHA for a write that silently ignores maintenance.
     """
+    if state.get('schema_version') == 8:
+        return state_schema(pause_module().decode(state))
+    pause_module().validate(state)
     version = state.get('schema_version')
     held = state.get('maintenance')
     if type(version) is not int or version not in (1, 2, 3, 4, 5, 6, 7):
@@ -640,7 +654,7 @@ def merge_base(request, root, pr):
 
 def summary(receipt):
     """Minimal completion projection, excluding reports, environment and history."""
-    if set(receipt) <= {'policy', 'state', 'admitted', 'verified', 'non_code', 'process', 'reconciled_scope', 'scope', 'scope_provenance'}:
+    if set(receipt) <= {'policy', 'state', 'admitted', 'verified', 'non_code', 'process', 'process_support', 'reconciled_scope', 'scope', 'scope_provenance'}:
         result = dict(receipt)
         if isinstance(result.get('scope_provenance'), dict):
             result['scope_provenance'] = hashlib.sha256(json.dumps(result['scope_provenance'], sort_keys=True).encode()).hexdigest()
@@ -660,6 +674,33 @@ def summary(receipt):
                  and len(sources) == 1 and sources[0].get('tree_sha') == proof.get('tree_sha')
                  and type(sources[0].get('pr')) is int and sources[0]['pr'] > 0
                  and isinstance(sources[0].get('merge_sha'), str) and SHA.fullmatch(sources[0]['merge_sha']))
+        if isinstance(proof, dict) and proof.get('route') == 'process-support':
+            try:
+                from . import process_support as support
+            except ImportError:
+                import tracker_process_support as support
+            valid = (type(proof.get('schema_version')) is int and proof['schema_version'] == 1
+                     and proof.get('kind') == 'canonical-process-support' and proof.get('policy') == receipt.get('policy')
+                     and all(isinstance(proof.get(k), str) and SHA.fullmatch(proof[k]) for k in ('tree_sha', 'main_sha'))
+                     and all(isinstance(proof.get(k), str) and re.fullmatch(r'[a-f0-9]{64}', proof[k])
+                             for k in ('proof_sha256', 'review_sha256'))
+                     and isinstance(proof.get('admission'), dict) and proof['admission'].get('route') in ('main','stage','promotion','batch','direct')
+                     and proof['admission'].get('policy') == receipt.get('policy')
+                     and proof['admission'].get('tree_sha') == proof.get('tree_sha')
+                     and isinstance(proof.get('issue_scopes'), dict) and len(proof['issue_scopes']) == 1
+                     and list(proof['issue_scopes'].values()) == [receipt.get('scope')]
+                     and len(sources) == 1 and sources[0].get('tree_sha') == proof.get('tree_sha')
+                     and type(sources[0].get('pr')) is int and sources[0]['pr'] > 0
+                     and isinstance(sources[0].get('merge_sha'), str) and SHA.fullmatch(sources[0]['merge_sha']))
+            canonical = proof.get('support_proof')
+            valid = (valid and isinstance(canonical, dict) and canonical.get('kind') == 'canonical-process-support'
+                     and canonical.get('schema_version') == 1 and canonical.get('tree_sha') == proof.get('tree_sha')
+                     and canonical.get('proof_sha256') == proof.get('proof_sha256')
+                     and hashlib.sha256(json.dumps({k: v for k, v in canonical.items() if k != 'proof_sha256'},
+                         sort_keys=True, allow_nan=False).encode()).hexdigest() == proof.get('proof_sha256')
+                     and support.valid_assessment(proof.get('assessment'), support.assessment(canonical, proof['issue_scopes'])))
+            if valid:
+                result['process_support'] = True
         result['verified'] = result['verified'] and bool(valid)
         if valid:
             result['process'] = True
@@ -710,16 +751,30 @@ def review_matches(receipt, config, pr, content, numbers):
     return pr.get('merged') or receipt.get('base_sha') == pr['base']['sha']
 
 
+def require_settled_corrections(state, number):
+    """A real unfinished legacy return cannot receive new approval or admission."""
+    rows = state.get('rework')
+    row = rows.get(str(number), {}) if isinstance(rows, dict) else {}
+    if (isinstance(row, dict) and row.get('state') == 'returning'
+            and isinstance(row.get('id'), str) and re.fullmatch(r'[a-f0-9]{32}', row['id'])):
+        raise ValueError('Finish the original pending correction return with its same report and identity first')
+
+
 def admit(request, config, pr, numbers):
     value = policy(config)
     process = process_module() if 'process_instructions' in config else None
+    shared = read_full_state(request, config['project']['repository'])
+    for number in numbers:
+        require_settled_corrections(shared, number)
+        pause_module().require_unpaused(shared, number)
+    if pause_module().integration_held(shared):
+        raise ValueError('Paused frozen integration must resume/recover before admitting a conflicting main change')
     if not value and not process:
         return None
     if pr.get('draft') or (pr.get('state') == 'closed' and not pr.get('merged')):
         raise ValueError('A draft or abandoned PR cannot be admitted')
     root = 'repos/' + config['project']['repository']
     content = pr_tree(request, root, pr)
-    shared = read_full_state(request, config['project']['repository'])
     execution = execution_state(shared, config)
     if config.get('execution_policy', {}).get('schema_version') == 4:
         direction = route(config, pr, request)
@@ -781,6 +836,14 @@ def admit(request, config, pr, numbers):
                 if (tree(request, root, receipt['base_sha']) != tree(request, root, main_ref['object']['sha'])
                         and not (process and process.stage_base_compatible(request, config, receipt['base_sha'], main_ref['object']['sha'], shared))):
                     raise ValueError('Stage must start from current main or an exactly receipted instruction-only gap')
+    if execution is None and pause_module().legacy_review_bindings(shared,numbers,receipt.get('pr') if direction=='promotion' else pr['number']):
+        reviewed = state.get('reviews',{}).get(str(receipt.get('pr')), {}) if direction=='promotion' else receipt
+        # A Stage receipt proves the tested tree, not a replacement Reviewer's approval.
+        pause_module().require_legacy_review(shared,numbers,reviewed,receipt.get('pr') if direction=='promotion' else pr['number'])
+        source = request(root+'/pulls/'+str(receipt['pr'])) if direction=='promotion' else pr
+        if (not review_matches(reviewed,config,source,content,numbers)
+                or any(not scope_matches(request(root+f'/issues/{n}'),reviewed.get('issue_scopes',{}).get(str(n)),config) for n in numbers)):
+            raise ValueError('Fresh bound legacy review must match the actual source/tree and current task scope')
     page = 1
     while True:
         commits = request(root + f'/pulls/{pr["number"]}/commits?per_page=100&page={page}')
