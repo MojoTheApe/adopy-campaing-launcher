@@ -56191,7 +56191,7 @@
             "session": "run_k1021a1_2065"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-K1021A1",
         "coordinator": "Coordinator-K1021A",
         "handoff": {
@@ -56210,7 +56210,9 @@
         },
         "pr": 1068,
         "queued_at": "2026-10-21T13:17:37+00:00",
-        "reviewer": "Reviewer-K1021R2065"
+        "reviewer": "Reviewer-K1021R2065",
+        "review_report": "# ACL-2065 / PR #1068 \u2014 review returned for a baseline refresh only\n\nReviewer-K1021R2065 (session rev_k1021r_2065), lane 1fefebd3b4d34ec495d25b8476d66b15.\n\n## Why returned\n- `record-review` refuses: \"Source review must use the current main baseline\". The PR head a871d559 is based on main ea41acbf; main is now 0ea237b0 (batch PR #1064).\n- `git merge-tree` of the head with current main conflicts in `docs/system/CHANGELOG.md` (both sides prepend an entry at the top). No other overlapping files; code files are not touched by the new main.\n\n## Required author action\n- Merge current `main` into `work/acl-2065-perf-morning-report`, resolve the CHANGELOG conflict by keeping both entries, re-run the affected tests, hand off again.\n\n## Code review result (no code findings)\nThe code itself was reviewed in full and found correct; nothing else needs changing:\n- Workbench `_aggregate`/`_group`/`_creative_rows` reproduce the old per-group rows exactly (group order, dropna, stable ranking, buyer counts, first row per version, dict key order). Pack/CKey are always strings, so the NaN-key cases do not arise.\n- `_map_unique`, the Titles dict, `to_dict(\"records\")`, the per-country pre-filter in `build_morning_report` (every section builder filters by country itself and none mutates df) and `_combo_row_keys` are equivalent to the old code.\n- Reviewer check with fractional (cent) spends over 800 random comparisons: identical apart from last-ULP float differences (relative <= 4e-16) in spend/CPL/CPA from a different summation order in groupby sum. Non-blocking, invisible after rounding.\n- Affected tests: 149 passed locally (14 files).\n- Out-of-scope files (morning_service.py, cache.py, bi_stats.py, bi_archive.py) untouched; no secrets or ids.\n\nAfter the refresh, a re-review only needs to confirm the merge (CHANGELOG resolution) on top of this result.",
+        "rework": true
       },
       "1066": {
         "implementers": [
@@ -107165,6 +107167,24 @@
         "pr": 1067,
         "lane": "379a09548821493e9da1c9b1003da87c",
         "actor": "Reviewer-K1021R2066"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-21T13:35:52+00:00",
+        "review": {
+          "id": "1fefebd3b4d34ec495d25b8476d66b15",
+          "pr": 1068,
+          "issues": [
+            1065
+          ],
+          "actor": "Reviewer-K1021R2065",
+          "session": "rev_k1021r_2065",
+          "coordinator": "Coordinator-K1021A",
+          "started_at": "2026-10-21T13:21:23+00:00",
+          "state": "returning",
+          "report": "# ACL-2065 / PR #1068 \u2014 review returned for a baseline refresh only\n\nReviewer-K1021R2065 (session rev_k1021r_2065), lane 1fefebd3b4d34ec495d25b8476d66b15.\n\n## Why returned\n- `record-review` refuses: \"Source review must use the current main baseline\". The PR head a871d559 is based on main ea41acbf; main is now 0ea237b0 (batch PR #1064).\n- `git merge-tree` of the head with current main conflicts in `docs/system/CHANGELOG.md` (both sides prepend an entry at the top). No other overlapping files; code files are not touched by the new main.\n\n## Required author action\n- Merge current `main` into `work/acl-2065-perf-morning-report`, resolve the CHANGELOG conflict by keeping both entries, re-run the affected tests, hand off again.\n\n## Code review result (no code findings)\nThe code itself was reviewed in full and found correct; nothing else needs changing:\n- Workbench `_aggregate`/`_group`/`_creative_rows` reproduce the old per-group rows exactly (group order, dropna, stable ranking, buyer counts, first row per version, dict key order). Pack/CKey are always strings, so the NaN-key cases do not arise.\n- `_map_unique`, the Titles dict, `to_dict(\"records\")`, the per-country pre-filter in `build_morning_report` (every section builder filters by country itself and none mutates df) and `_combo_row_keys` are equivalent to the old code.\n- Reviewer check with fractional (cent) spends over 800 random comparisons: identical apart from last-ULP float differences (relative <= 4e-16) in spend/CPL/CPA from a different summation order in groupby sum. Non-blocking, invisible after rounding.\n- Affected tests: 149 passed locally (14 files).\n- Out-of-scope files (morning_service.py, cache.py, bi_stats.py, bi_archive.py) untouched; no secrets or ids.\n\nAfter the refresh, a re-review only needs to confirm the merge (CHANGELOG resolution) on top of this result.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -116928,20 +116948,6 @@
         "coordinator": "Coordinator-P1021A",
         "started_at": "2026-10-21T09:47:33+00:00",
         "state": "reviewing"
-      },
-      "1068": {
-        "id": "1fefebd3b4d34ec495d25b8476d66b15",
-        "pr": 1068,
-        "issues": [
-          1065
-        ],
-        "actor": "Reviewer-K1021R2065",
-        "session": "rev_k1021r_2065",
-        "coordinator": "Coordinator-K1021A",
-        "started_at": "2026-10-21T13:21:23+00:00",
-        "state": "returning",
-        "report": "# ACL-2065 / PR #1068 \u2014 review returned for a baseline refresh only\n\nReviewer-K1021R2065 (session rev_k1021r_2065), lane 1fefebd3b4d34ec495d25b8476d66b15.\n\n## Why returned\n- `record-review` refuses: \"Source review must use the current main baseline\". The PR head a871d559 is based on main ea41acbf; main is now 0ea237b0 (batch PR #1064).\n- `git merge-tree` of the head with current main conflicts in `docs/system/CHANGELOG.md` (both sides prepend an entry at the top). No other overlapping files; code files are not touched by the new main.\n\n## Required author action\n- Merge current `main` into `work/acl-2065-perf-morning-report`, resolve the CHANGELOG conflict by keeping both entries, re-run the affected tests, hand off again.\n\n## Code review result (no code findings)\nThe code itself was reviewed in full and found correct; nothing else needs changing:\n- Workbench `_aggregate`/`_group`/`_creative_rows` reproduce the old per-group rows exactly (group order, dropna, stable ranking, buyer counts, first row per version, dict key order). Pack/CKey are always strings, so the NaN-key cases do not arise.\n- `_map_unique`, the Titles dict, `to_dict(\"records\")`, the per-country pre-filter in `build_morning_report` (every section builder filters by country itself and none mutates df) and `_combo_row_keys` are equivalent to the old code.\n- Reviewer check with fractional (cent) spends over 800 random comparisons: identical apart from last-ULP float differences (relative <= 4e-16) in spend/CPL/CPA from a different summation order in groupby sum. Non-blocking, invisible after rounding.\n- Affected tests: 149 passed locally (14 files).\n- Out-of-scope files (morning_service.py, cache.py, bi_stats.py, bi_archive.py) untouched; no secrets or ids.\n\nAfter the refresh, a re-review only needs to confirm the merge (CHANGELOG resolution) on top of this result.",
-        "keep_lane": false
       },
       "1067": {
         "id": "379a09548821493e9da1c9b1003da87c",
