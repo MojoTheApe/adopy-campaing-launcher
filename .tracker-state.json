@@ -46982,18 +46982,6 @@
         "started_at": "2026-10-20T12:30:12+00:00",
         "from_status": "status:idea"
       },
-      "710": {
-        "actor": "Worker-T1020710",
-        "session": "t1020-710",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "codex/acl-1710-ci-chromium",
-        "worktree": "C:\\acl-1710-w",
-        "id": "35658b6738f64fa0afbf5ce3bae3c0e6",
-        "issue": 710,
-        "state": "implementing",
-        "started_at": "2026-10-20T12:56:11+00:00",
-        "from_status": "status:todo"
-      },
       "1050": {
         "actor": "Worker-P1021B2050",
         "session": "run_p1021b_2050",
@@ -47004,6 +46992,18 @@
         "issue": 1050,
         "state": "implementing",
         "started_at": "2026-10-21T12:37:42+00:00",
+        "from_status": "status:todo"
+      },
+      "710": {
+        "actor": "Worker-W1021710",
+        "session": "run_w1021_710",
+        "coordinator": "Coordinator-I1021A",
+        "branch": "codex/acl-1710-ci-chromium",
+        "worktree": "C:\\acl-int-w710",
+        "id": "a155a25beb2f46ed88a09edeb81da12b",
+        "issue": 710,
+        "state": "implementing",
+        "started_at": "2026-10-21T12:38:29+00:00",
         "from_status": "status:todo"
       }
     },
@@ -49837,11 +49837,15 @@
           {
             "actor": "Worker-T1020710",
             "session": "t1020-710"
+          },
+          {
+            "actor": "Worker-W1021710",
+            "session": "run_w1021_710"
           }
         ],
         "state": "implementing",
-        "worker": "Worker-T1020710",
-        "coordinator": "Coordinator-M1011A",
+        "worker": "Worker-W1021710",
+        "coordinator": "Coordinator-I1021A",
         "handoff": {
           "actor": "Worker-WX1012A",
           "session": "work_wx1012a_20261012",
@@ -58898,6 +58902,10 @@
       },
       "Worker-P1021B2050": {
         "session": "run_p1021b_2050",
+        "role": "Worker"
+      },
+      "Worker-W1021710": {
+        "session": "run_w1021_710",
         "role": "Worker"
       }
     },
@@ -106480,6 +106488,25 @@
         "issue": 1050,
         "claim": "7ebb22f43a4f49208156669333462411",
         "actor": "Worker-P1021B2050"
+      },
+      {
+        "event": "takeover",
+        "at": "2026-10-21T12:38:29+00:00",
+        "issue": 710,
+        "previous": {
+          "actor": "Worker-T1020710",
+          "session": "t1020-710",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "codex/acl-1710-ci-chromium",
+          "worktree": "C:\\acl-1710-w",
+          "id": "35658b6738f64fa0afbf5ce3bae3c0e6",
+          "issue": 710,
+          "state": "implementing",
+          "started_at": "2026-10-20T12:56:11+00:00",
+          "from_status": "status:todo"
+        },
+        "claim": "a155a25beb2f46ed88a09edeb81da12b",
+        "reason": "Owner instruction 2026-10-21: previous Worker-T1020710 idle since 2026-10-20, stopped; task reassigned to Worker-W1021710"
       }
     ],
     "policy": {
