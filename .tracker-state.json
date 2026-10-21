@@ -51703,7 +51703,7 @@
             "session": "t1020-838"
           }
         ],
-        "state": "approved",
+        "state": "returning_approval",
         "worker": "Worker-T1020838",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -51724,17 +51724,23 @@
         "queued_at": "2026-10-20T12:27:40+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "return_operation": {
-          "id": "91201340047f423fa6a6747b1c5dc404",
-          "actor": "Coordinator-FLOW513",
-          "session": "flow_five_reviews_coordinator_01a134f0_20261013",
-          "report": "The owner temporarily paused ACL integration for the five-review Flow change. ACL-1875 has now advanced actual main; this source approval names the former baseline. Preserve the original Worker, branch, source PR, scope and review history; return for original-author current-main reconciliation and fresh independent review. No source code defect or completion is asserted. Activation is still guarded until all ownership is idle."
+          "id": "f24439a4b4cc447189633cacb9c41a56",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
         },
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578004+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-R1838V"
+        "reviewer": "Reviewer-R1838V",
+        "return": {
+          "id": "f24439a4b4cc447189633cacb9c41a56",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
+        }
       },
       "839": {
         "implementers": [
