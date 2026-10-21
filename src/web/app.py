@@ -3998,10 +3998,22 @@ async def account_spend_turn_off(request: Request) -> JSONResponse:
     account = (form.get("account") or "").strip()
     level = (form.get("level") or "").strip()
     object_id = (form.get("object_id") or "").strip()
-    if not account or not object_id:
+    # Сырое имя — для пути по имени: Python `strip()` снимает и `\x1c-\x1f`,
+    # `\x85`, которых страница пробелами не считает, — и имя «с хвостом»
+    # совпало бы с соседней кампанией (ревью B1). Чистит его `turn_off` той же
+    # нормализацией, что у страницы.
+    raw_name = str(form.get("name") or "")
+    name = raw_name.strip()
+    # Без id — только явно «по имени» и только кампания (ACL-1379): пропавший
+    # id не должен молча превращаться в поиск по имени.
+    match = (form.get("match") or "").strip()
+    by_name = not object_id and match == "name"
+    if not account or not (object_id or by_name):
         return JSONResponse({"ok": False, "error": "account and object_id are required"}, status_code=400)
     if level not in ("campaign", "ad"):
         return JSONResponse({"ok": False, "error": "level must be campaign or ad"}, status_code=400)
+    if by_name and (level != "campaign" or not name):
+        return JSONResponse({"ok": False, "error": "only a campaign can be turned off by its exact name"}, status_code=400)
     try:
         date_from, date_to = _spend_period(str(form.get("date_from") or ""), str(form.get("date_to") or ""), str(form.get("span") or ""))
     except ValueError as exc:
@@ -4012,22 +4024,46 @@ async def account_spend_turn_off(request: Request) -> JSONResponse:
     # падает, ни разу не тронув страницу. Чтение по той же причине живёт в
     # своём потоке (`start_read`); я про это забыл, и первое же живое нажатие
     # 12.09 упёрлось ровно в это.
+    from datetime import datetime, timezone
     from starlette.concurrency import run_in_threadpool
+    from src.web import publish_jobs
 
+    requester = (os.environ.get("MY_CM_NAME") or "").strip()
+    # Робот строит кампании в этом профиле — отказ сразу, а не очередь за
+    # замком профиля на всю публикацию (ACL-1379). Под замком `turn_off`
+    # спросит ещё раз: задание могло встать в очередь после этой проверки, а
+    # `since` помнит и то, что успело пройти, пока мы ждали.
+    since = datetime.now(timezone.utc).isoformat()
+    try:
+        busy = publish_jobs.profile_in_use(account_spend._profile_key(account))
+    except Exception:
+        busy = True
+    if busy:
+        result = account_spend.refuse_turn_off(
+            account, level, object_id, name=name, error=account_spend.PROFILE_BUSY_ERROR,
+            requester=requester, matched_by="name" if by_name else "",
+        )
+        return JSONResponse({"ok": False, "busy": True, "error": result.error,
+                             "result": result.to_dict()}, status_code=409)
     try:
         result = await run_in_threadpool(
             account_spend.turn_off,
             account, level, object_id,
             parent_id=(form.get("parent_id") or "").strip(),
-            expected_name=(form.get("name") or "").strip(),
+            expected_name=raw_name if by_name else name,
             date_from=date_from, date_to=date_to,
             # Кто нажал. Берём ту же подпись, которой дешборд всюду называет
             # хозяина машины; пустая — честнее выдуманной.
-            requester=(os.environ.get("MY_CM_NAME") or "").strip(),
+            requester=requester,
+            match="name" if by_name else "",
+            profile_busy=lambda key: publish_jobs.profile_in_use(key, since=since),
         )
     except Exception:
         return JSONResponse({"ok": False, "error": "Could not reach the account. Check the launcher window."}, status_code=503)
-    return JSONResponse({"ok": True, "result": result.to_dict()})
+    body = {"ok": True, "result": result.to_dict()}
+    if result.error == account_spend.PROFILE_BUSY_ERROR:
+        body["busy"] = True
+    return JSONResponse(body)
 
 
 @app.get("/account-spend/turn-off-history")

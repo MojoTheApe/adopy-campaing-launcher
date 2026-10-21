@@ -29,7 +29,7 @@ REPORT = TPL / "report.html"
 def _script() -> str:
     """Обе функции показа — из шаблона, а не по памяти."""
     src = REPORT.read_text(encoding="utf-8")
-    start = src.index("function amapTreeLine(o, adCount) {")
+    start = src.index("function amapTreeLine(o, adCount, nameCounts) {")
     tail = "  amapTurnOffDisarm();\n});"
     end = src.index(tail, start) + len(tail)
     block = src[start:end]
@@ -956,11 +956,13 @@ def test_a_nameless_table_puts_ads_under_their_campaign(page):
       kids: Array.from(document.querySelectorAll('.amap-tree-kids'))
         .map(k => k.querySelectorAll('.amap-tree-line').length),
       heads: Array.from(document.querySelectorAll('.amap-tree-head')).map(h => h.textContent),
-      buttons: document.querySelectorAll('button.amap-tree-sw').length,
+      buttons: Array.from(document.querySelectorAll('button.amap-tree-sw'))
+        .map(b => b.dataset.level + ':' + (b.dataset.match || '')),
     })""")
     assert got["kids"] == [2, 1]
     assert not any("whose campaign is not in this answer" in h for h in got["heads"])
-    assert got["buttons"] == 0, "без id выключать нечем — кнопки быть не должно"
+    # ACL-1379: кампании без id выключаются по точному имени; объявления — нет.
+    assert got["buttons"] == ["campaign:name", "campaign:name"]
 
 
 # ── числа книги под колонками аккаунта (ACL-1256) ─────────────────────────
@@ -1702,3 +1704,60 @@ def test_the_failure_line_stands_with_the_numbers_not_under_the_log(page):
     assert order["note"] >= 0
     if order["log"] >= 0:
         assert order["note"] < order["log"], "оговорка встала под журналом"
+
+
+# ── выключение по имени на аккаунте без id (ACL-1379) ─────────────────────
+
+NAMELESS = dict(ADSET, id="", id_from="none", name="GT_Example_Video_35")
+
+
+def test_a_nameless_campaign_is_a_button_and_sends_its_name(page):
+    """Таблица без id: кампания выключается по точному имени — и это видно в запросе."""
+    _paint(page, [NAMELESS, dict(NAMELESS, name="Other campaign")])
+    assert _sw(page)["tag"] == "BUTTON"
+    assert "exact name" in _sw(page)["title"]
+    _stub_server(page, {"ok": True, "result": {"state": "off", "how": "found by exact name"}})
+    _armed(page); _armed(page)
+    page.wait_for_function("() => window.__sent.length === 1")
+    body = page.evaluate("() => window.__sent[0].body")
+    assert "match=name" in body and "object_id=&" in body
+    assert "name=GT_Example_Video_35" in body and "level=campaign" in body
+    page.wait_for_function("() => document.querySelector('.amap-tree-sw').tagName === 'SPAN'")
+    said = page.evaluate("() => document.querySelector('.amap-tree-said').textContent")
+    assert said.startswith("Turned off.")
+
+
+def test_two_nameless_campaigns_with_one_name_are_not_buttons(page):
+    _paint(page, [NAMELESS, dict(NAMELESS, spend="$1.00")])
+    for i in (0, 1):
+        got = _sw(page, i)
+        assert got["tag"] == "SPAN" and "same name" in got["title"]
+
+
+def test_a_nameless_ad_is_still_not_a_button(page):
+    _paint(page, [dict(AD, id="", parent_id="1234")])
+    got = _sw(page)
+    assert got["tag"] == "SPAN" and "ads on an account without ids" in got["title"]
+
+
+def test_a_refusal_by_name_is_shown_in_words(page):
+    _paint(page, [NAMELESS])
+    _stub_server(page, {"ok": True, "result": {
+        "state": "failed", "error": "2 campaigns in the table have this exact name; nothing was touched"}})
+    _armed(page); _armed(page)
+    page.wait_for_function("() => document.querySelector('.amap-tree-said')")
+    said = page.evaluate("() => document.querySelector('.amap-tree-said').textContent")
+    assert "2 campaigns in the table have this exact name" in said
+    assert _sw(page)["text"] == "Check"
+
+
+def test_a_busy_profile_keeps_the_button_and_says_why(page):
+    _paint(page, [NAMELESS])
+    _stub_server(page, {"ok": False, "busy": True,
+                        "error": "The robot is building campaigns in this profile — wait for it to finish."})
+    _armed(page); _armed(page)
+    page.wait_for_function("() => document.querySelector('.amap-tree-said')")
+    got = _sw(page)
+    assert got["tag"] == "BUTTON" and got["text"] == "On", "ничего не тронуто — кнопка остаётся"
+    said = page.evaluate("() => document.querySelector('.amap-tree-said').textContent")
+    assert "building campaigns" in said
