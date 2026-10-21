@@ -88,7 +88,7 @@ REQUIRED_JOBS = {
 
 
 def _git(root, *args):
-    return subprocess.check_output(["git", *args], cwd=root, text=True).strip()
+    return subprocess.check_output(["git", *args], cwd=root, text=True, encoding="utf-8", errors="replace").strip()
 
 
 def tree_of(root, rev):
@@ -349,7 +349,7 @@ def github_api(token, base_url="https://api.github.com", timeout=20):
 
 def gh_api(path):
     """Тот же запрос через gh (release.yml даёт GH_TOKEN)."""
-    return json.loads(subprocess.check_output(["gh", "api", path], text=True))
+    return json.loads(subprocess.check_output(["gh", "api", path], text=True, encoding="utf-8", errors="replace"))
 
 
 def summary_line(run_url, tree):

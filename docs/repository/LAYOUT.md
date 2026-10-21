@@ -33,4 +33,6 @@ move map. Old paths may remain short forwarding files; do not maintain two copie
 of the rules. Existing `scripts/task_tracker.py` and related helper paths are
 compatibility entry points only; implementations live in `.workflow/tools/`.
 
-This layout changes no task status, delivery policy or deployment connection.
+This layout alone changes no task status, delivery policy or deployment connection.
+The separately adopted `process_instructions` option selects an instruction-only
+integration route; follow the pinned workflow and actual diff classification.

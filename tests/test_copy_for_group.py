@@ -329,3 +329,36 @@ def test_the_status_shot_is_taken_before_scrolling_to_the_totals(local, monkeypa
     out = sp.read_via_rpa("FacebookExample - Owner", "2026-10-01", "2026-10-01")
     assert out.status == "restricted" and out.status_shot
     assert order and order[0] == "shot", order
+
+
+# ── ACL-1652 (owner, 07.10): the button and its hint are hidden for now ────────
+
+def _status_cell(show=None):
+    from src.web.app import templates
+
+    country = {"country": "Kuwait", "key": "KW", "virtual": False,
+               "rows": [{"account": "FacebookDoc20 - x", "has_data": False, "ready": True, "in_workbook": True, "to_do": "",
+                         "status": {"status": "disabled", "status_text": "Account disabled", "at": "10:00",
+                                    "at_short": "10:00", "shot_id": "s1", "shot_at": "10:00", "stale": False}}]}
+    kw = {} if show is None else {"SHOW_COPY_FOR_GROUP": show}
+    html = templates.env.get_template("_account_map_country.html").render(
+        mc=country, mlx={}, amap={"countries": [country], "available": [], "all_accounts": [], "live": {}, "splits": {},
+                                  "fallback": {}, "dates": [], "date_from": "", "date_to": "", "span": "", "notes": {}}, **kw)
+    cell = html[html.index('<td class="amap-status">'):]
+    return cell[: cell.index("</td>")]
+
+
+def test_copy_for_group_is_hidden_by_default():
+    from src.web import app
+
+    assert app.SHOW_COPY_FOR_GROUP is False
+    cell = _status_cell()
+    assert "amap-copy-group" not in cell and "Copy for group" not in cell
+    assert "amap-st-hint" not in cell and "provider" not in cell
+    assert 'class="amap-st bad"' in cell, "статус остаётся"
+
+
+def test_the_flag_brings_the_button_and_its_hint_back():
+    cell = _status_cell(show=True)
+    assert 'class="amap-btn amap-copy-group"' in cell and 'data-shot="s1"' in cell
+    assert "Copy for group — paste it into the provider's group" in cell

@@ -181,6 +181,54 @@ def test_visible_loading_may_use_the_rest_of_the_budget(env):
     assert wait[3] > md.CAMPAIGN_OPEN_ROUND_S
 
 
+def test_ai_manual_chooser_is_one_create_press_and_opened(env):
+    """ACL-1726: выбор AI/Manual — нажатие взялось, второго Create нет."""
+    env.sc.took = "ai_manual_chooser"
+    env.sc.wait_out = {"outcome": "ai_manual_chooser", "frozen": 0}
+    env.sc.dialog_at = ("old", env.start)
+    assert env.run() == ""
+    assert len([e for e in env.ev if e[0] == "press"]) == 1
+    took = [r for r in env.rows if r["step"] == "create_took"]
+    assert took and took[-1]["ok"] is True and took[-1]["note"] == "ai_manual_chooser"
+    row = _budget_row(env.rows)
+    assert row["ok"] is True and row["diag"]["last"] == "ai_manual_chooser"
+
+
+def test_a_frozen_tab_with_the_chooser_is_not_opened(env):
+    env.sc.took = "ai_manual_chooser"
+    env.sc.frozen = {"old"}
+    env.sc.wait_out = {"outcome": "unresponsive", "frozen": 2}
+    assert env.run() == "profile_unresponsive"
+    assert _budget_row(env.rows)["ok"] is False
+
+
+def test_wait_does_not_ask_a_frozen_tab_about_the_chooser(monkeypatch):
+    """ACL-1641/1320: на зависшей вкладке выбор не проверяется."""
+    asked = []
+    monkeypatch.setattr(md, "_tab_gone", lambda p: False)
+    monkeypatch.setattr(md, "_tab_frozen", lambda p: True)
+    monkeypatch.setattr(md, "_ai_manual_chooser_visible",
+                        lambda p: asked.append(1) or True)
+    monkeypatch.setattr(md, "_StallWatch",
+                        lambda *a, **k: SimpleNamespace(check=lambda **kw: False))
+    monkeypatch.setattr(md, "_stall_evidence", lambda *a, **k: None)
+    monkeypatch.setattr(md._telemetry, "record", lambda *a, **k: None)
+    monkeypatch.setattr(md, "_pace", lambda *a, **k: None)
+
+    class _Loc:
+        first = None
+
+        def wait_for(self, **kw):
+            raise TimeoutError
+
+    loc = _Loc()
+    loc.first = loc
+    page = SimpleNamespace(get_by_role=lambda *a, **k: loc, url=LIST_URL)
+    out = {}
+    assert md._wait_objective_dialog(page, first_s=5, poll_s=0.01, out=out) is False
+    assert out["outcome"] == "unresponsive" and not asked
+
+
 def test_the_budget_is_two_minutes():
     assert md.CAMPAIGN_OPEN_BUDGET_S == 120.0 and md.CAMPAIGN_OPEN_ROUND_S <= 45.0
     assert md.CAMPAIGN_OPEN_FRESH_TAB_ROUND == 3

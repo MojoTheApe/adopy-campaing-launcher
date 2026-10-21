@@ -51,7 +51,7 @@ try {
     if (-not (Test-Path $ConsoleExecutable -PathType Leaf)) {
         throw "Expected diagnostic executable was not produced: $ConsoleExecutable"
     }
-    Write-Host "ACL Windows bundle created: $Executable"
+    Write-Host "Adopy Campaign Manager Windows bundle created: $Executable"
 }
 finally {
     Remove-Item Env:ACL_BUILD_MANIFEST -ErrorAction SilentlyContinue

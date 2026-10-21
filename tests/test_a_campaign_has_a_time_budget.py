@@ -292,7 +292,7 @@ def test_the_step_limit_fires_on_a_frozen_tab_after_a_failed_create(clock, stuck
         for _ in range(1000):
             md.recover_stuck_page(stuck, "ad2_create", editor=True)
             try:
-                md._adopt_shell_or_recreate(stuck, "adset")
+                md._adopt_shell_or_recreate(stuck, "adset", frozenset())
             except Exception:
                 pass                     # вызывающий пишет `fail_adN_create` и идёт дальше
     assert stop.value.reason == "step_budget_exceeded"
@@ -309,6 +309,7 @@ def test_bounded_reads_hear_the_step_limit_on_their_own(clock, stuck):
         for _ in range(1000):
             md._chrome_error_page(stuck)
             md._tree_new_ad_shells(stuck)
+            md._tree_shell_ids(stuck)
             md._open_tree_ad(stuck, "New Leads Ad")
     assert stop.value.reason == "step_budget_exceeded"
     assert 0 <= _over(clock, start) <= 30
@@ -339,24 +340,27 @@ def test_recover_stuck_page_checks_the_step_limit_on_entry(clock, stuck, monkeyp
 
 def test_a_failed_tree_read_does_not_create_a_second_ad(monkeypatch):
     """Ревью PR #664 (B3): дерево не прочиталось — повторное создание могло
-    добавить второе объявление рядом с заготовкой."""
+    добавить второе объявление рядом с заготовкой. ACL-1675: заготовка
+    опознаётся по id строки."""
     created = []
-    monkeypatch.setattr(md, "_open_tree_ad", lambda page, name: False)
-    monkeypatch.setattr(md, "_tree_new_ad_shells", lambda page: -1)
+    opened = []
+    monkeypatch.setattr(md, "_open_shell_by_id", lambda page, rid: opened.append(rid) or False)
+    monkeypatch.setattr(md, "_tree_shell_ids", lambda page: None)
     monkeypatch.setattr(md, "create_additional_ad", lambda page, name: created.append(1) or True)
     with pytest.raises(RuntimeError):
-        md._adopt_shell_or_recreate(object(), "adset")
+        md._adopt_shell_or_recreate(object(), "adset", frozenset())
     assert created == []
-    monkeypatch.setattr(md, "_tree_new_ad_shells", lambda page: 0)   # дерево читается, заготовки нет
-    assert md._adopt_shell_or_recreate(object(), "adset") is True
+    monkeypatch.setattr(md, "_tree_shell_ids", lambda page: frozenset())   # дерево читается, заготовки нет
+    assert md._adopt_shell_or_recreate(object(), "adset", frozenset()) is True
     assert created == [1]
-    # Ревью PR #664 (B3'): заготовка видна, но открыть её не вышло — не создавать.
+    # Ревью PR #664 (B3'): новая заготовка видна, но открыть её не вышло — не создавать.
     created.clear()
-    monkeypatch.setattr(md, "_tree_new_ad_shells", lambda page: 1)
-    assert md._adopt_shell_or_recreate(object(), "adset") is False
-    assert created == []
-    # Заготовка была ещё до отказа (shells_before=1), новой нет — повтор безопасен.
-    assert md._adopt_shell_or_recreate(object(), "adset", shells_before=1) is True
+    new_row = md._SHELL_ROW_PREFIX + "7"
+    monkeypatch.setattr(md, "_tree_shell_ids", lambda page: frozenset({new_row}))
+    assert md._adopt_shell_or_recreate(object(), "adset", frozenset()) is False
+    assert created == [] and opened == [new_row]
+    # Заготовка была ещё до отказа (в снимке), новой нет — повтор безопасен.
+    assert md._adopt_shell_or_recreate(object(), "adset", frozenset({new_row})) is True
     assert created == [1]
 
 

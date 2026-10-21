@@ -14,11 +14,11 @@ except ImportError:  # запуск как python scripts/acl_publish_release.py
 
 
 def _git(*args: str) -> str:
-    return subprocess.check_output(["git", *args], text=True).strip()
+    return subprocess.check_output(["git", *args], text=True, encoding="utf-8", errors="replace").strip()
 
 
 def _gh(*args: str) -> str:
-    return subprocess.check_output(["gh", *args], text=True).strip()
+    return subprocess.check_output(["gh", *args], text=True, encoding="utf-8", errors="replace").strip()
 
 
 def _api(path: str) -> dict:
@@ -99,7 +99,7 @@ def publish(tag: str, repo: str, directory: Path) -> None:
         assets.append(signature)
     # Upload first to a draft. /releases/latest cannot expose a half upload.
     _gh("release", "create", tag, *(str(p) for p in assets), "--repo", repo, "--draft",
-        "--title", f"Adopy Campaign Launcher {manifest['version']}",
+        "--title", f"Adopy Campaign Manager {manifest['version']}",
         "--notes-file", str(directory / "release-notes.md"))
     _gh("release", "edit", tag, "--repo", repo, "--draft=false", "--latest")
 

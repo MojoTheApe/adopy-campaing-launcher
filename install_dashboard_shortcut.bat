@@ -3,7 +3,7 @@ title Install Morning Dashboard Shortcut
 cd /d "%~dp0"
 
 echo.
-echo  Adopy Campaigns Launcher — Install Desktop Shortcut
+echo  Adopy Campaign Manager — Install Desktop Shortcut
 echo  =============================================
 echo.
 

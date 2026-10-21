@@ -91,14 +91,21 @@ def assert_shortcuts(executable):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--old-version", required=True)
-    parser.add_argument("--version", required=True)
+    parser.add_argument("--old-version")
+    parser.add_argument("--version")
+    parser.add_argument("--published-request", type=Path,
+                        help="Use actual published previous/current packages from the configured update channel")
     args = parser.parse_args()
     if (sys.platform != "win32" or os.environ.get("GITHUB_ACTIONS") != "true"
             or os.environ.get("RUNNER_ENVIRONMENT") != "github-hosted"):
         parser.error("This acceptance harness requires an empty GitHub-hosted Windows runner")
+    published = None
+    if args.published_request:
+        from published_update import download_packages
+        published = download_packages(json.loads(args.published_request.read_text(encoding="utf-8")), ARTIFACTS)
+        args.old_version, args.version = published["previous"]["version"], published["current"]["version"]
     for version in (args.old_version, args.version):
-        if not re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z._-]{0,63}", version):
+        if not isinstance(version, str) or not re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z._-]{0,63}", version):
             parser.error("Invalid test version")
     if args.old_version == args.version:
         parser.error("Two distinct actual package versions are required")
@@ -143,6 +150,9 @@ def main():
               "run_id": os.environ.get("GITHUB_RUN_ID"), "checks": [],
               "test_packages": {v: {"sha256": digest(p), "size": p.stat().st_size} for v, p in installers.items()},
               "scope": "Same-candidate test versions; real Windows helper/installer/launcher. No published release, download-channel or live Multilogin pilot proof."}
+    if published:
+        report.update(published=published,
+                      scope="Actual published packages downloaded through the configured GitHub update channel; real Windows install/update/restart/recovery. No employee rollout or live business pilot proof.")
     cleanup_safe = True
 
     def preserved_data():

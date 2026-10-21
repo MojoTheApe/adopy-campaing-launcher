@@ -29,9 +29,7 @@ from typing import Iterable
 BOARD_ENV = "ACL_BOARD_PATH"
 OUT_ENV = "ACL_BOARD_HTML"
 
-DEFAULT_BOARD = (
-    Path.home() / "Desktop" / "Obsidian" / "Kuwait Forms" / "дешборд" / "ACL — Task Board.md"
-)
+BOARD_NAME = "ACL — Task Board.md"
 
 #: статусы в порядке от сделанного к незачатому — порядок задаёт вид доски
 #: «Влито» и «роздано» — разные вещи, и между ними бывает много дней.
@@ -183,7 +181,18 @@ class Board:
 
 def board_path() -> Path:
     raw = os.environ.get(BOARD_ENV)
-    return Path(raw) if raw else DEFAULT_BOARD
+    if raw:
+        return Path(raw)
+    root = str(Path(__file__).resolve().parent.parent)
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    from config import paths
+
+    vault = paths.get_obsidian_dashboard_dir()
+    if vault is None:
+        print(f"[доска] {paths.OBSIDIAN_MISSING_WARNING}", file=sys.stderr)
+        vault = Path.home() / "Desktop" / "Obsidian" / "дешборд"
+    return vault / BOARD_NAME
 
 
 def _strip_markers(text: str) -> tuple[str, str, str, list[str]]:

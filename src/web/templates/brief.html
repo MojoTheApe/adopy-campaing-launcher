@@ -2,19 +2,33 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <link rel="icon" href="/favicon.ico?v=acl" sizes="32x32">
+  <link rel="icon" href="/favicon.ico?v=acm" sizes="32x32">
   <title>Creative Brief — {{ creative_name }}</title>
+  <script>
+    // Та же тема, что у дешборда: выбор человека в localStorage, иначе ОС.
+    (function () {
+      var t = null;
+      try { t = localStorage.getItem('acl.theme'); } catch (e) {}
+      if (t !== 'light' && t !== 'dark') {
+        t = (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+      }
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+  <style id="adopy-tokens">{% autoescape false %}{% include "adopy-tokens.css" %}{% endautoescape %}</style>
   <style>
+    /* ACL-1797: цвета из токенов Adopy; страница следует теме дешборда. */
     :root {
-      --bg: #0e1116; --bg-elev: #161b22; --bg-hover: #1f2630;
-      --border: #2a3140; --text: #d8dde3; --muted: #8b949e;
-      --accent: #58a6ff; --good: #3fb950; --bad: #f85149; --warn: #f0883e;
+      --bg: var(--adopy-bg); --bg-elev: var(--adopy-surface); --bg-hover: var(--adopy-surface-hover);
+      --border: var(--adopy-border); --text: var(--adopy-text); --muted: var(--adopy-text-muted);
+      --accent: var(--adopy-link); --good: var(--adopy-success); --bad: var(--adopy-danger);
+      --warn: var(--adopy-warning);
     }
     * { box-sizing: border-box; }
     body {
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-family: var(--adopy-font-sans);
       background: var(--bg); color: var(--text);
-      margin: 0; padding: 1.5rem 2rem; font-size: 13px; line-height: 1.6;
+      margin: 0; padding: 1.5rem 2rem; font-size: var(--adopy-text-table); line-height: var(--adopy-leading-body);
     }
     a { color: var(--accent); text-decoration: none; }
     a:hover { text-decoration: underline; }
@@ -36,7 +50,7 @@
     .upload-card h2 { font-size: 1rem; color: var(--warn); margin: 0 0 0.5rem; }
     .upload-card p { color: var(--muted); margin: 0 0 1.5rem; font-size: 0.88rem; }
     .upload-card .creative-name-badge {
-      display: inline-block; background: #1a2030; border: 1px solid var(--border);
+      display: inline-block; background: var(--adopy-surface-subtle); border: 1px solid var(--border);
       border-radius: 4px; padding: 0.25rem 0.75rem;
       font-size: 0.85rem; color: var(--text); margin-bottom: 1.5rem;
     }
@@ -53,7 +67,7 @@
     .drop-zone .icon { font-size: 2rem; display: block; margin-bottom: 0.5rem; }
     .drop-zone .file-chosen { color: var(--good); margin-top: 0.5rem; font-size: 0.82rem; }
     .btn-upload {
-      background: var(--accent); color: var(--bg); border: none;
+      background: var(--adopy-primary); color: var(--adopy-on-primary); border: none;
       border-radius: 5px; padding: 0.55rem 1.5rem; font-size: 0.88rem;
       cursor: pointer; font-family: inherit; width: 100%;
     }
@@ -76,16 +90,17 @@
     }
 
     .kv-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
-    .kv-table td { padding: 0.2rem 0.5rem; border-bottom: 1px solid #1c2333; }
+    .kv-table td { padding: 0.2rem 0.5rem; border-bottom: 1px solid var(--border); }
     .kv-table td:first-child { color: var(--muted); width: 9rem; }
 
     /* Prompt box */
     .prompt-box {
-      position: relative; background: #0a0d12;
+      position: relative; background: var(--adopy-surface-subtle);
       border: 1px solid var(--accent); border-radius: 6px;
       padding: 1.25rem 1rem 1rem; margin: 0.5rem 0 1rem;
     }
     .prompt-box pre {
+      font-family: var(--adopy-font-mono);
       margin: 0; white-space: pre-wrap; word-break: break-word;
       font-size: 0.82rem; color: var(--text); line-height: 1.6;
     }
@@ -105,13 +120,13 @@
       font-size: 0.72rem; text-transform: uppercase; padding: 0.25rem 0.5rem;
       background: var(--bg); border-bottom: 1px solid var(--border);
     }
-    table.stats-table td { padding: 0.25rem 0.5rem; border-bottom: 1px solid #1a2030; }
+    table.stats-table td { padding: 0.25rem 0.5rem; border-bottom: 1px solid var(--border); }
     .num { text-align: right; font-variant-numeric: tabular-nums; }
     .good { color: var(--good); }
 
     .error-box {
-      background: rgba(248,81,73,0.1); border: 1px solid var(--bad);
-      border-radius: 6px; padding: 0.75rem 1rem; color: #f88; margin: 1rem 0;
+      background: var(--adopy-danger-bg); border: 1px solid var(--bad);
+      border-radius: 6px; padding: 0.75rem 1rem; color: var(--bad); margin: 1rem 0;
     }
 
     .spinner { display: none; color: var(--muted); margin-top: 0.5rem; font-size: 0.82rem; }

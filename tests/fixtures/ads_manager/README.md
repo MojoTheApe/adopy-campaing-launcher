@@ -9,6 +9,16 @@ These are sanitized fragments captured by the original author on **2026-09-09**,
 | ad_destination_2026_09_09.html | Destination section visible | Website URL lookup |
 | conversion_event_2026_09_09.html | Dataset selected, event still empty | Dataset alone must not mean event selection succeeded |
 
+## ACL-1886 permission error evidence (2026-10-13)
+
+`fb_api_permission_denied_2026_10_13.json` reconstructs only the shared visible
+fields from two owner-reported Plan check errors: Graph10, OAuthException,
+Permission Denied, HTTP400 and the fixed Ads Manager Graph host/cookie mode.
+The screenshot does not establish which operation failed or why access was
+denied. No account labels, identifiers, token, cookie, request URL or raw capture
+are included. Tests inject this response at the real GraphClient boundary for
+synthetic request paths; they verify diagnostics, not actual Meta permissions.
+
 ## ACL-1313 fragments (live run 2026-09-24)
 
 Cut from `output/rpa_pages/<run>/<step>/page.html` (and one telemetry record) of the 24.09 evening run. Class attributes and inline SVG paths were stripped, campaign/ad names, object ids, creative copy, media URLs and the account id in `cachekey` were replaced with synthetic values; structure, `data-surface`/`data-block`/`id` attributes and visible labels are kept. UI language: English. Meta build identifier: not recorded. Browser: Multilogin Chrome, version not recorded.
@@ -18,6 +28,7 @@ Cut from `output/rpa_pages/<run>/<step>/page.html` (and one telemetry record) of
 | ad_copy_draft_split_2026_09_24.html | 7364047ef03c/04_ad_copy — Primary text field after the failed retry: one `[data-block]`, the Draft.js leaf with the whole text plus 7 orphan paragraphs Chrome cut from a multi-line `insert_text` | No Draft.js runtime; typing behaviour is emulated in the test |
 | library_tile_2026_09_24.html | telemetry `ad_creative_reuse` 20:19:29 (da86e97cbf8b), `diag.tile_shape.html` — one media-library tile | Single tile, no grid virtualisation; image removed |
 | editor_tree_adset_2026_09_24.html | d3e690189a6e/04_create_additional_ad — left tree grid: campaign, ad set (with action-menu button), ad | Hover-only menu; the "Create ad" menu is injected by the test |
+| editor_tree_new_shell_between_2026_10_07.html | 4e4969867d28/12_ad4_create (capture truncated at 3.98 MB, tree whole) - left tree grid with a fresh "New Leads Ad" row in the middle of four ad rows (ACL-1675). Ad names replaced by `Sample Ad N`, object ids by synthetic ones; `data-objecttype` is not kept by the cutter, rows are told apart by `aria-label` and `id` | No CSS and no Meta runtime; leftover shells above/below are made by the test renaming rows |
 | route_placeholder_2026_09_24.html | 7364047ef03c/05_create_additional_ad — `AdsPERouteLoadPlaceholder` spinner instead of the editor | Spinner only |
 | breadcrumb_only_2026_09_24.html | 7d2ce3ab1161/05_create_additional_ad — `nav-header-*` breadcrumb and header action-items selector, no tree rows | Header only |
 | audience_advantage_on_2026_09_24.html | b30c3b2b6be9/00_advantage_plus_before — Audience and Placements section-header badges, both "Advantage+ on" | Badges only, no audience controls |

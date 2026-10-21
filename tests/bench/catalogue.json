@@ -136,6 +136,7 @@
       "robot": "Next to the ad level; create_additional_ad via the tree's ad set menu",
       "layouts": [
         {"layout": "Left tree: campaign, ad set (action menu), ad", "seen": ["d3e690189a6e/04_create_additional_ad", "0afc79a410c6/04_create_additional_ad"], "fixture": "editor_tree_adset_2026_09_24.html", "fragment": null, "test": "tests/test_additional_ad_waits_for_tree.py", "expected": "ad set menu opens, ad created", "status": "pass"},
+        {"layout": "Left tree with a fresh \"New Leads Ad\" row in the middle (ACL-1675): ad rows are told apart by row id, not by place", "seen": ["4e4969867d28/12_ad4_create"], "fixture": "editor_tree_new_shell_between_2026_10_07.html", "fragment": null, "test": "tests/test_a_failed_ad_leaves_no_duplicate_shell.py", "expected": "only a row id that was not in the pre-create snapshot is adopted", "status": "pass"},
         {"layout": "AdsPERouteLoadPlaceholder spinner instead of the editor", "seen": ["7364047ef03c/05_create_additional_ad"], "fixture": "route_placeholder_2026_09_24.html", "fragment": null, "test": "tests/test_route_placeholder_is_loading.py", "expected": "not ready; spinner wins over a stale tree", "status": "pass"},
         {"layout": "Breadcrumb header only, no tree rows", "seen": ["7d2ce3ab1161/05_create_additional_ad"], "fixture": "breadcrumb_only_2026_09_24.html", "fragment": null, "test": "tests/test_additional_ad_waits_for_tree.py", "expected": "not ready, no blind click", "status": "pass"}
       ]
@@ -258,6 +259,23 @@
       "layouts": [
         {"layout": "Create-campaign dialog 'Meta AI-guided setup' / 'Manual campaign setup' (radio pair, Create new campaign)", "seen": ["fb358fda8aab/00_stall_objective_wait"], "fixture": "ai_guided_setup_dialog_2026_10_05.html", "fragment": "dialog", "test": "tests/test_ai_rescue.py", "expected": "dialog listed first with its title; both radios with checked state; summary has no ids, URLs or e-mails", "status": "pass"},
         {"layout": "Collapsed Audience card (same capture as ACL-1611)", "seen": ["6ebd77ccaf6a/02_further_limit_reach_click"], "fixture": "audience_card_collapsed_drawer_2026_10_05.html", "fragment": "card_run_a, card_run_b", "test": "tests/test_ai_rescue.py", "expected": "card button listed as not-pressed; a model pick of it is expanded by exactly one click", "status": "pass"}
+      ]
+    },
+    {
+      "step": "Graph read permission diagnostics (ACL-1886)",
+      "robot": "GraphClient.get/get_all error context",
+      "layouts": [
+        {
+          "layout": "Plan check Graph10 Permission Denied without failed-operation context; response fields reconstructed from owner screenshots",
+          "seen": [
+            "anonymized Plan check error 2026-10-13"
+          ],
+          "fixture": "fb_api_permission_denied_2026_10_13.json",
+          "fragment": null,
+          "test": "tests/test_acl1886_graph_error_context.py",
+          "expected": "GET and allowlisted operation/search subtype visible, request data absent; denial remains denied with unchanged requests and stops; live permission cause unknown",
+          "status": "pass"
+        }
       ]
     }
   ],

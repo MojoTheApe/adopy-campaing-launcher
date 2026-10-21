@@ -28,12 +28,20 @@ def _bundle_root() -> Path:
 
 
 def _local_acl_dir() -> Path:
-    explicit = os.environ.get("ACL_CONFIG_DIR", "").strip()
-    if explicit:
-        return Path(explicit).expanduser().resolve()
-    local_app_data = os.environ.get("LOCALAPPDATA", "").strip()
-    base = Path(local_app_data) if local_app_data else Path.home() / ".local" / "share"
-    return base / "ACL"
+    """The one settings folder (ACL-1680): the real LOCALAPPDATA/ACL folder, never
+    the virtual copy an MSIX-packaged parent such as Claude Desktop hands out."""
+    _ensure_repo_importable()
+    from config.paths import get_local_config_dir
+
+    folder = Path(get_local_config_dir()).expanduser()
+    # An explicit ACL_CONFIG_DIR is canonicalised; the default is used as-is.
+    return folder.resolve() if os.environ.get("ACL_CONFIG_DIR", "").strip() else folder
+
+
+def _ensure_repo_importable() -> None:
+    root = str(Path(__file__).resolve().parents[2])
+    if root not in sys.path and not getattr(sys, "frozen", False):
+        sys.path.insert(0, root)
 
 
 def _manifest_path() -> Path:
@@ -49,7 +57,7 @@ def _version_text() -> str:
     payload = _version_payload()
     return "\n".join(
         (
-            f"Adopy Campaign Launcher {payload.get('version', 'unknown')}",
+            f"Adopy Campaign Manager {payload.get('version', 'unknown')}",
             f"runtime source: {payload.get('core_baseline_sha', 'unknown')}",
             f"installer source: {payload.get('installer_source_sha', 'unknown')}",
         )
@@ -77,14 +85,14 @@ def _print_version() -> int:
         message = _version_text()
     except Exception as exc:
         _show_message(
-            "Adopy Campaign Launcher version error",
+            "Adopy Campaign Manager version error",
             f"Version metadata is unavailable.\n\n{type(exc).__name__}: {exc}",
             error=True,
         )
         return 1
 
     if sys.stdout is None:
-        _show_message("Adopy Campaign Launcher version", message)
+        _show_message("Adopy Campaign Manager version", message)
     else:
         print(message)
     return 0
@@ -269,7 +277,7 @@ def _launch_normal(*, open_browser: bool = True) -> int:
         return 0
     if _port_is_in_use(port):
         _show_message(
-            "Adopy Campaign Launcher cannot start",
+            "Adopy Campaign Manager cannot start",
             f"Port {port} is already used by another application. The launcher did not stop it. "
             "Close that application or contact support, then try again.",
             error=True,
@@ -300,7 +308,7 @@ def _launch_normal(*, open_browser: bool = True) -> int:
         time.sleep(0.5)
 
     _show_message(
-        "Adopy Campaign Launcher did not start",
+        "Adopy Campaign Manager did not start",
         "The local dashboard could not start. No campaign action was performed.\n\n"
         f"Diagnostics: {_logs_dir()}",
         error=True,
@@ -338,7 +346,7 @@ def _stop_server() -> int:
         # module availability affect launcher import.
         if type(exc).__name__ == "NoSuchProcess":
             return 0
-        _show_message("Adopy Campaign Launcher stop failed", f"Could not stop the launcher safely.\n\n{exc}", error=True)
+        _show_message("Adopy Campaign Manager stop failed", f"Could not stop the launcher safely.\n\n{exc}", error=True)
         return 1
 
 
@@ -348,12 +356,23 @@ def _open_local_directory(name: str) -> int:
     if hasattr(os, "startfile"):
         os.startfile(path)  # type: ignore[attr-defined]
         return 0
-    _show_message("Adopy Campaign Launcher folder", str(path))
+    _show_message("Adopy Campaign Manager folder", str(path))
     return 0
 
 
+def _prepare_config_dir() -> None:
+    """Merge a package copy of the settings into the real folder; never blocks launch."""
+    try:
+        from config.config_unify import prepare_config_dir
+
+        prepare_config_dir()
+    except Exception:
+        pass
+
+
 def main() -> int:
-    os.environ["ACL_CONFIG_DIR"] = str(_local_acl_dir().resolve())
+    os.environ["ACL_CONFIG_DIR"] = str(_local_acl_dir())
+    _prepare_config_dir()
     args = sys.argv[1:]
     if "--acl-version" in args:
         return _print_version()
@@ -367,16 +386,16 @@ def main() -> int:
         from setup_wizard import setup_is_complete  # noqa: F401
 
         if sys.stdout is not None:
-            print("Adopy Campaign Launcher Setup import check OK.")
+            print("Adopy Campaign Manager Setup import check OK.")
         return 0
     if "--export-diagnostics" in args or "--diagnostics-smoke-check" in args:
         from diagnostics import export_diagnostics
 
         output = export_diagnostics(_local_acl_dir(), _manifest_path())
         if "--diagnostics-smoke-check" in args and sys.stdout is not None:
-            print(f"Adopy Campaign Launcher diagnostic export OK: {output}")
+            print(f"Adopy Campaign Manager diagnostic export OK: {output}")
         else:
-            _show_message("Adopy Campaign Launcher diagnostics", f"Sanitized diagnostic bundle created:\n\n{output}")
+            _show_message("Adopy Campaign Manager diagnostics", f"Sanitized diagnostic bundle created:\n\n{output}")
         return 0
     if "--apply-update" in args:
         from updater import main as update_main

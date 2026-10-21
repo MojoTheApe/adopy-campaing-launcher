@@ -1,4 +1,4 @@
-# ACL Windows installer workstream
+# Adopy Campaign Manager (ACL) Windows installer workstream
 
 The installer is now integrated with production `main`. A bundle includes the
 current reviewed source commit, identified in its embedded manifest, dashboard
@@ -38,6 +38,20 @@ The Inno Setup build creates a non-admin per-user installer under
 `packaging/windows/.artifacts/installer/`. It installs versioned program files
 under `%LOCALAPPDATA%\Programs\ACL`, creates Start Menu and (by default) desktop
 shortcuts, and keeps all user configuration under `%LOCALAPPDATA%\ACL`.
+
+### One settings folder for every launch path (ACL-1680)
+
+A process started from an MSIX-packaged app (for example a shell run from
+Claude Desktop) sees a virtualised `%LOCALAPPDATA%`
+(`...\AppData\Local\Packages\<Package>\LocalCache\Local`). ACL always
+resolves the real `AppData\Local\ACL` (`config.paths.get_local_config_dir`),
+pins it as `ACL_CONFIG_DIR` and logs it at start (`[acl] settings folder: ...`).
+If a package copy exists, its files are merged into the real folder: missing
+files are copied, newer files win, `.env` is merged key by key, and every
+replaced or skipped copy is saved under `ACLackups\config-unify-<time>`.
+The package copy itself is never deleted. If its `.env` still differs, a
+warning is printed; edit settings only in the real folder. On a buyer machine
+started from the installer shortcut nothing is virtualised and this is a no-op.
 
 CI builds the actual combined runtime, exercises packaged identity and local
 targeting, starts the backend twice, and tests installation, repair and removal

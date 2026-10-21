@@ -80,6 +80,13 @@ POLICY: dict[str, tuple[str, str]] = {
         "not close the window, or reopening is switched off on this computer; nothing was "
         "killed and no draft was created - " + _profile.MESSAGES[_profile.OPEN_BY_HAND],
     ),
+    # ACL-1401: лаунчер Multilogin отказал в соединении при запуске профиля.
+    _profile.MLX_NOT_RUNNING: (
+        BLOCKING,
+        "the Multilogin app was not running on this computer (its local launcher refused "
+        "the connection), so the profile could not be opened and no draft was created - "
+        + _profile.MESSAGES[_profile.MLX_NOT_RUNNING],
+    ),
     _profile.RESTART_FAILED: (
         BLOCKING,
         "the profile's browser stopped answering and the robot's restart of the "
@@ -141,6 +148,12 @@ POLICY: dict[str, tuple[str, str]] = {
         "the draft is incomplete and was not retried - check it in Ads Manager and finish or "
         "delete it",
     ),
+    "tab_hung": (
+        BLOCKING,
+        "the profile's browser tab stopped answering inside one step for minutes, so the "
+        "robot closed that tab (the profile stays open) and stopped the campaign; the draft is "
+        "incomplete and was not retried - check it in Ads Manager and finish or delete it",
+    ),
     "step_budget_exceeded": (
         BLOCKING,
         "one step of this campaign took longer than the robot's time limit, so the campaign "
@@ -181,6 +194,12 @@ POLICY: dict[str, tuple[str, str]] = {
         BLOCKING,
         "the ad set name changed while Conversion location was being set; the draft was "
         "stopped so a changed name is not published - check the ad set name in Ads Manager",
+    ),
+    "next_to_ad_stuck_on_adset": (
+        BLOCKING,
+        "the editor stayed on the ad set after Next was pressed several times, so the ad was not "
+        "built; the draft was not retried (a retry would leave another partial draft) - open it in "
+        "Ads Manager and finish or delete it",
     ),
     "conversion_event": (
         BLOCKING,
@@ -310,7 +329,7 @@ GUIDE: dict[str, tuple[str, str, str]] = {
     _profile.LOGGED_OUT: (
         "Facebook logged out in this profile",
         "Facebook showed its login page, so no draft was created.",
-        "Log in to Facebook in this Multilogin profile, close it, then publish again.",
+        "Log in to Facebook in the profile window that was brought to the front, then publish again.",
     ),
     _profile.NETWORK: (
         "Profile cannot reach Facebook",
@@ -322,6 +341,11 @@ GUIDE: dict[str, tuple[str, str, str]] = {
         "The hand-opened window could not be reopened with automation (Multilogin did not "
         "close it, or reopening is switched off on this computer), so no draft was created.",
         "Close the profile window so Multilogin saves the session, then publish again.",
+    ),
+    _profile.MLX_NOT_RUNNING: (
+        "Multilogin is not running",
+        "The Multilogin app on this computer did not answer, so no profile was opened and no draft was created.",
+        "Start the Multilogin app, then publish again.",
     ),
     _profile.RESTART_FAILED: (
         "Profile restart failed",
@@ -364,6 +388,11 @@ GUIDE: dict[str, tuple[str, str, str]] = {
         "The build hit the robot's time limit, so the draft is incomplete.",
         "Open the draft in Ads Manager and finish or delete it.",
     ),
+    "tab_hung": (
+        "Browser tab hung during a step",
+        "The robot closed the frozen tab and stopped, so the draft is incomplete.",
+        "Open the draft in Ads Manager and finish or delete it.",
+    ),
     "step_budget_exceeded": (
         "One step took too long",
         "A step hit the robot's time limit, so the draft is incomplete.",
@@ -400,6 +429,11 @@ GUIDE: dict[str, tuple[str, str, str]] = {
         "Ad set name changed",
         "The name changed while Conversion location was being set, so the build was stopped.",
         "Check the ad set name in Ads Manager, then publish again.",
+    ),
+    "next_to_ad_stuck_on_adset": (
+        "Editor stayed on the ad set",
+        "Next was pressed several times but the ad was not opened, so the draft has no ad.",
+        "Open the draft in Ads Manager and finish or delete it.",
     ),
     "conversion_event": (
         "Conversion event — not verified",

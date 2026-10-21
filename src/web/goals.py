@@ -105,6 +105,18 @@ def _write(data: dict) -> None:
         temp.unlink(missing_ok=True)
 
 
+def _num_of(raw, key: str):
+    if raw in (None, ""):
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        raise ValueError(f"assets {key} must be a number, got {raw!r}")
+    if value < 0:
+        raise ValueError(f"assets {key} cannot be negative")
+    return value
+
+
 def _clean(goal: dict) -> dict:
     country = (str(goal.get("country") or "")).strip()
     if not country:
@@ -122,7 +134,7 @@ def _clean(goal: dict) -> dict:
             raise ValueError(f"{key} cannot be negative")
         return value
 
-    return {
+    out = {
         "country": country,
         "code": (str(goal.get("code") or "")).strip().upper()[:4],
         "market": (str(goal.get("market") or "")).strip() or "Other",
@@ -131,6 +143,20 @@ def _clean(goal: dict) -> dict:
         "cr": _num("cr", float),
         "leads_per_day": _num("leads_per_day", int),
     }
+    # Необязательные цели по Ad Asset (Rules): {"<asset>": {"cpa": .., "cr": ..}}
+    assets = goal.get("assets")
+    if isinstance(assets, dict) and assets:
+        clean: dict = {}
+        for name, val in assets.items():
+            name = str(name or "").strip()
+            if not name or not isinstance(val, dict):
+                continue
+            entry = {k: _num_of(val.get(k), k) for k in ("cpa", "cr")}
+            if any(v is not None for v in entry.values()):
+                clean[name] = entry
+        if clean:
+            out["assets"] = clean
+    return out
 
 
 def for_cm(cm: str, countries=None) -> list[dict]:
@@ -192,3 +218,22 @@ def delete(cm: str, country: str, countries=None) -> list[dict]:
 
 def known_managers() -> list[str]:
     return sorted(_read(), key=str.casefold)
+
+
+def overview() -> list[dict]:
+    """Read-only list of every manager's stored goals, for the team lead.
+
+    Only people who have saved goals appear: a manager who never edited has just
+    a derived starting list, and showing those would pass off a guess as a target.
+    The caller must check `is_team_lead()` first; this function only reads.
+    """
+    out: list[dict] = []
+    for cm in known_managers():
+        goals = [dict(g) for g in (_read().get(cm) or []) if isinstance(g, dict)]
+        out.append({
+            "cm": cm,
+            "goals": goals,
+            "countries": len(goals),
+            "ftd_total": sum(int(g.get("ftd") or 0) for g in goals),
+        })
+    return out

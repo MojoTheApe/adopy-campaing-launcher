@@ -10,7 +10,23 @@
       <div class="amap-toolbar">
         <button type="button" class="amap-btn amap-read-all" onclick="amapReadAll(this)"
                 title="Read every connected account in {{ mc.country }} for the period on screen — one at a time">Read all spend in {{ mc.country }}</button>
+        {%- if campaign_table_api is defined and campaign_table_api() %}
+        {#- Опись кампаний той же страны: аккаунты читаются по очереди, одним нажатием.
+            Раскрытие блока страны ничего не читает у Meta — только эта кнопка и
+            «Read campaigns» в строке аккаунта внутри таблицы (ACL-1800). -#}
+        <button type="button" class="amap-btn amap-read-campaigns" onclick="amapReadCampaigns(this)"
+                title="Read campaigns, ad sets and ads of every connected account in {{ mc.country }} for the period on screen — one at a time">Read campaigns in {{ mc.country }}</button>
+        {%- endif %}
       </div>
+      {#- ACL-1800: дерево аккаунтов. Тулбар и вкладки страны стоят над списком аккаунтов; строка аккаунта — родитель,
+          под ней раскрывается таблица её кампаний (создаётся JS при первом показе блока, `amapCampaignMount`).
+          Вкладки ведут в разделы этой же страны, если они есть на странице. Раскрытие ничего не читает у Meta. -#}
+      {%- if campaign_table_api is defined and campaign_table_api() %}
+      <section class="hc hc-scoped amap-campaigns" data-country="{{ mc.country | e }}" aria-label="Campaigns in {{ mc.country | e }}">
+        <nav class="hc-tabs" data-hc-tabs aria-label="{{ mc.country | e }} workspace sections"></nav>
+        <div class="hc-mount" data-hc-mount></div>
+      </section>
+      {%- endif %}
       <table class="amap-grid" data-country-name="{{ mc.country | e }}">
         {#- Колонок и долей поровну, в сумме ровно 100%. Когда-то доль было на
             одну меньше: ширины сложились без последней, и колонка с кнопками
@@ -26,8 +42,8 @@
               Ни одна числовая колонка не сузилась — «$1,044.82» в колонке
               Spend должен помещаться целиком (ревью 22.09). -#}
           <col style="width:28%"><col style="width:8%"><col style="width:9%">
-          <col style="width:5%"><col style="width:5%"><col style="width:5%">
-          <col style="width:5%"><col style="width:5%"><col style="width:8%">
+          <col style="width:5%"><col style="width:6%"><col style="width:5%">
+          <col style="width:5%"><col style="width:5%"><col style="width:7%">
           <col style="width:9%"><col style="width:13%">
         </colgroup>
         {#- Два спенда стоят рядом и подписаны источником: один из книги
@@ -42,7 +58,7 @@
           <th class="num" title="Spend from the stats workbook for the chosen period">Spend</th>
           <th class="num" title="Spend read from the ad account itself, by the Read spend button">Account spend</th>
           <th class="num">Leads</th>
-          <th class="num">FTD</th>
+          <th class="num">FTDs</th>
           <th class="num">CPL</th>
           <th class="num">CPA</th>
           <th class="num">CR</th>
@@ -81,7 +97,7 @@
               {# Числа подставлены по совпадению хвоста имён — говорим, по
                  какому именно. Молчаливое совпадение выглядит так же, как
                  собственные данные аккаунта, и проверить его было бы нечем. #}
-              {% if r.workbook_alias %}<span class="amap-alias" title="Numbers come from {{ r.workbook_alias }} in the workbook — matched on the trailing {{ r.workbook_alias[-3:] }}">= {{ r.workbook_alias }}</span>{% endif %}
+              {% if r.workbook_alias %}<span class="amap-alias" title="Numbers come from {{ r.workbook_alias }} in the workbook — {% if r.workbook_alias_exact %}same account by naming rule{% else %}matched on the trailing {{ r.workbook_alias[-3:] }}{% endif %}">= {{ r.workbook_alias }}</span>{% endif %}
               {# «Строк нет» и «строки есть, но под другой страной» — разные
                  вещи, а прочерк у них один. Во втором случае чинить надо
                  привязку, а не искать данные. #}
@@ -136,11 +152,15 @@ screenshot: {{ sr.shot }}{% endif %}">{{ sr.error | truncate(40, True, '…') }}
               {%- if sp and sp.state == 'failed' and sp.error_code == 'open_by_hand' %}<small class="amap-split-bad hand" title="{{ sp.error }}. The spend reading is unaffected; read again to retry the countries.">{{ sp.error }}</small>
               {%- elif sp and sp.state == 'failed' %}<small class="amap-split-bad" title="The country split failed: {{ sp.error }}{% if sp.entered %} · {{ sp.entered }}{% endif %}. The spend reading is unaffected; read again to retry the countries.">countries failed</small>{% endif -%}
             </td>
-            <td class="num">{% if r.has_data %}{{ r.leads }}{% else %}<span class="nodata">—</span>{% endif %}</td>
-            <td class="num">{% if r.has_data %}{{ r.deposits }}{% else %}<span class="nodata">—</span>{% endif %}</td>
-            <td class="num">{% if r.has_data and r.cpl %}{{ r.cpl | fmt_usd }}{% else %}<span class="nodata">—</span>{% endif %}</td>
-            <td class="num">{% if r.has_data and r.cpa %}{{ r.cpa | fmt_usd }}{% else %}<span class="nodata">—</span>{% endif %}</td>
-            <td class="num">{% if r.has_data and r.cr %}{{ '%.1f' % r.cr }}%{% else %}<span class="nodata">—</span>{% endif %}</td>
+            {#- ACL-1652: значения из того же `metric_values`, что во всех таблицах:
+                делитель ноль — прочерк, CR 0.0% при лидах — число. Нет данных
+                у аккаунта вовсе — приглушённый прочерк, как раньше. -#}
+            {%- set mv = metric_values(r.spend, r.leads, r.deposits) if r.has_data else none -%}
+            <td class="num">{% if r.has_data and mv[1] != '—' %}{{ mv[1] }}{% else %}<span class="nodata">—</span>{% endif %}</td>
+            <td class="num">{% if r.has_data and mv[2] != '—' %}{{ mv[2] }}{% else %}<span class="nodata">—</span>{% endif %}</td>
+            <td class="num">{% if r.has_data and mv[3] != '—' %}{{ mv[3] }}{% else %}<span class="nodata">—</span>{% endif %}</td>
+            <td class="num">{% if r.has_data and mv[4] != '—' %}{{ mv[4] }}{% else %}<span class="nodata">—</span>{% endif %}</td>
+            <td class="num">{% if r.has_data and mv[5] != '—' %}{{ mv[5] }}{% else %}<span class="nodata">—</span>{% endif %}</td>
             {#- Пусто и «clear» — разное. Пусто значит «никто не смотрел»,
                 clear — «смотрели, предупреждений не было». Второе не то же
                 самое, что «активен»: страница молчит и когда всё хорошо, и
@@ -174,7 +194,10 @@ screenshot: {{ sr.shot }}{% endif %}">{{ sr.error | truncate(40, True, '…') }}
                   Имя — до « - », как его называют вслух. Снимка нет — кнопка
                   есть, но выключена и говорит почему. -#}
               {%- set st_word = {'disabled': 'Account Disabled', 'restricted': 'Account Restricted', 'blocked': 'Account Blocked', 'review': 'Account Under Review'}.get(st.status) -%}
-              {%- if st_word -%}
+              {#- Owner, 07.10: Copy for group is hidden for now. Flip SHOW_COPY_FOR_GROUP
+                  (src/web/app.py, a Jinja global) to bring the button and its hint back;
+                  the screenshot, the status code and the JS stay. -#}
+              {%- if st_word and SHOW_COPY_FOR_GROUP -%}
               {%- set group_head = r.account.split(' - ')[0] ~ ' — ' ~ st_word ~ ((' · ' ~ st.at) if st.at else '') -%}
               <div class="amap-st-report">
               {%- if st.shot_id %}<button type="button" class="amap-btn amap-copy-group" data-shot="{{ st.shot_id }}" data-head="{{ group_head }}" title="Copies one image: {{ group_head }}, above the screenshot taken {{ st.shot_at }}" onclick="amapCopyGroup(this)">Copy for group</button>
@@ -189,11 +212,7 @@ screenshot: {{ sr.shot }}{% endif %}">{{ sr.error | truncate(40, True, '…') }}
                 работают без повторной подписки. Поля ready и to_do
                 остаются в данных: их читают другие места. -#}
             {%- set note = (amap.notes or {}).get(r.account | trim, '') -%}
-            <td class="amap-acct-note{{ ' empty' if not note }}" tabindex="0" role="button" data-account="{{ r.account | trim | e }}" data-note="{{ note | e }}" title="{{ note | e if note else 'Add a note' }}">
-              {%- if note -%}<span class="amap-note-text">{{ note | truncate(60, True, '…') | e }}</span>
-              {%- else -%}<span class="amap-note-add">add note</span>
-              {%- endif -%}
-            </td>
+            <td class="amap-acct-note{{ ' empty' if not note }}" tabindex="0" role="button" data-note-kind="account" data-account="{{ r.account | trim | e }}" data-note="{{ note | e }}" title="{{ note | e }}" aria-label="Note for {{ r.account | trim | e }}"><span class="amap-note-box">{{- note.split('\n')[0] | truncate(60, True, '…') | e if note -}}</span></td>
             <td class="amap-actions">
               {%- if amap.span == 'all' or not amap.date_from -%}
                 <button type="button" class="amap-btn amap-read" disabled title="Select dates to read account spend; Maximum is not supported">Select dates</button>
@@ -235,6 +254,9 @@ screenshot: {{ sr.shot }}{% endif %}">{{ sr.error | truncate(40, True, '…') }}
         {% endfor %}
         </tbody>
       </table>
+      {%- if campaign_table_api is defined and campaign_table_api() %}
+      <section class="hc hc-after" data-hc-after></section>
+      {%- endif %}
       {% set blank = mc.rows | rejectattr('has_data') | list | length %}
       {% if blank %}
       <div class="amap-empty">{{ blank }} of {{ mc.rows | length }} accounts have no rows in the workbook for this date.</div>

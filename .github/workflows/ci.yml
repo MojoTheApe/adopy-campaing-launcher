@@ -64,8 +64,12 @@ jobs:
           fetch-depth: 0
       # windows/linux=false also when this exact tree already passed these jobs in earlier
       # runs (PR -> stage -> main, ACL-1565/1649); release tags and manual runs always run
-      # in full. python: ["3.13"] for a PR or push to stage that does not touch
-      # dependency/bootstrap inputs, ["3.11", "3.13"] on the way to main (ACL-1581/1649).
+      # in full. Explicit v2: one-task approval sources retain affected checks;
+      # a combined batch, actual stage and promotion/main require both Linux
+      # versions, Windows and installer (ACL-1747). ACL-1750 permits only an
+      # already-opted-in instruction-only source into main to skip runtime jobs.
+      # Process instructions still requires secret/tooling/link checks; admission
+      # separately verifies its current independent review. Unknown routes run full.
       - id: scope
         run: python3 scripts/acl_ci_scope.py --workflow ci.yml
         env:
@@ -73,12 +77,29 @@ jobs:
       - name: Scan all tracked inputs
         run: python3 scripts/acl_scan_secrets.py
       - name: Install lightweight test dependencies
-        run: python3 -m pip install 'pytest>=8,<10' 'PyYAML>=6,<7'
+        run: python3 -m pip install 'pytest>=8,<10' 'PyYAML>=6,<7' cryptography==50.0.1
       - name: Verify project tooling and tracker metadata
         run: |
           python3 -m json.tool tracker/config.json > /dev/null
           python3 -m json.tool tracker/engine.json > /dev/null
-          python3 -m pytest --noconftest tests/test_acl_ci_scope.py tests/test_acl_ci_reuse.py tests/test_acl_ci_workflows.py tests/test_acl_ci_chain.py tests/test_acl_ci_minutes.py tests/test_acl_tracker.py tests/test_tracker_v2.py tests/test_master_adoption.py tests/test_acl_test_platform.py tests/test_ci_layout.py -q
+          python3 -m pytest --noconftest tests/test_acl_ci_scope.py tests/test_acl_batch_ci_scope.py tests/test_acl_complete_delivery.py tests/test_acl_process_instructions.py tests/test_acl_batch.py tests/test_acl_ci_reuse.py tests/test_acl_ci_workflows.py tests/test_acl_ci_chain.py tests/test_acl_ci_minutes.py tests/test_acl_tracker.py tests/test_tracker_v2.py tests/test_master_adoption.py tests/test_acl_test_platform.py tests/test_ci_layout.py -q
+
+  process-instructions:
+    name: Process instructions
+    needs: scope
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check process policy and repository instruction links
+        run: python3 scripts/acl_process_instructions.py
+      - name: Require the tooling and secret checks
+        env:
+          SCOPE: ${{ needs.scope.result }}
+        run: test "$SCOPE" = success
 
   # ACL-1582: the job names are spelled out (`name:`) because the reuse proof
   # (scripts/acl_ci_reuse.py REQUIRED_JOBS) and the release gate
@@ -101,9 +122,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # ACL-1581/1649: a PR into stage and a push to stage test Python 3.13 only,
-        # unless they touch dependency or bootstrap inputs (scripts/acl_ci_scope.py).
-        # 3.11 runs only on the way to main: PRs into main, pushes to main/master,
+        # ACL-1747 v2: individual approval sources retain affected checks; a
+        # combined batch and actual stage require 3.11/3.13. Exact-tree proof
+        # can reuse already passed jobs; source trees cannot prove a batch.
+        # Promotion/main, pushes to main/master,
         # release tags and manual runs. The release gate (scripts/acl_publish_release.py)
         # still requires every Linux job of REQUIRED_JOBS, from this run or from
         # earlier runs of the same tree. The fallback list is the full matrix, for a
@@ -149,7 +171,7 @@ jobs:
           key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
 
       - name: Install Chromium for isolated DOM tests
-        timeout-minutes: 10
+        timeout-minutes: 16
         env:
           CI_RETRY_CLEANUP: |
             sudo pkill -9 -x apt-get || true
@@ -169,9 +191,9 @@ jobs:
           done
           if [ "${{ steps.pw-cache.outputs.cache-hit }}" = "true" ]; then
             # браузер уже скачан из кэша: нужны только системные библиотеки
-            bash scripts/ci_retry.sh 3 150 15 -- python -m playwright install-deps chromium
+            bash scripts/ci_retry.sh 3 300 15 -- python -m playwright install-deps chromium
           else
-            bash scripts/ci_retry.sh 3 150 15 -- python -m playwright install --with-deps chromium
+            bash scripts/ci_retry.sh 3 300 15 -- python -m playwright install --with-deps chromium
           fi
 
       # `loadfile` keeps each test file on one worker: 80+ files launch their
@@ -263,12 +285,13 @@ jobs:
   admission:
     name: ACL verification
     if: ${{ always() }}
-    needs: [scope, test-linux, test-windows]
+    needs: [scope, process-instructions, test-linux, test-windows]
     runs-on: ubuntu-latest
     steps:
       - name: Require every applicable check
         env:
           SCOPE: ${{ needs.scope.result }}
+          PROCESS_INSTRUCTIONS: ${{ needs.process-instructions.result }}
           WINDOWS: ${{ needs.scope.outputs.windows }}
           LINUX: ${{ needs.scope.outputs.linux }}
           REUSED: ${{ needs.scope.outputs.reused_from }}
@@ -276,6 +299,7 @@ jobs:
           WINDOWS_TESTS: ${{ needs.test-windows.result }}
         run: |
           test "$SCOPE" = success
+          test "$PROCESS_INSTRUCTIONS" = success
           if test -n "$REUSED"; then echo "Reused passed jobs of run $REUSED (same tree)"; fi
           # ACL-1649: Linux и Windows решаются отдельно; пропущенное задание допустимо
           # только если scope явно сказал false (docs-only или уже пройдено на этом дереве).
