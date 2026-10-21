@@ -1,5 +1,16 @@
 # System history
 
+## ACL-2052 — Meta rules registry: value rules, account controls, placement soft opt-out — 2026-10-21
+
+Record Meta's new placement controls in the rules registry and add their four
+documentation pages to the docs watcher: value rules (DECREASE capped at 90, only
+LOWEST_COST_WITHOUT_CAP / COST_CAP), account controls placement exclusions,
+legacy bid_adjustments retirement, placement_soft_opt_out (up to 5%), and the
+live fact that non-Advantage+ Leads campaigns via API still accept classic
+publisher_platforms. Entries are limited/test/deprecated and scoped so existing
+builder checks are unchanged. No builder behavior change.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1052).
+
 ## ACL-1381 — Consistent Builder ad-text wording — 2026-10-18
 
 Complete the older text-label request while preserving ACL-1769's later numbered

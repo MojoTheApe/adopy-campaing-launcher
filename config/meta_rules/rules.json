@@ -674,5 +674,128 @@
     "source_url": "https://developers.facebook.com/docs/marketing-api/bidding/overview/billing-events#opt_bids",
     "checked_date": "2026-10-11",
     "note": "Billing event listed in the Optimization goal and billing events table but absent from the ad set enum list."
+  },
+  {
+    "id": "value_rules.bid_strategy",
+    "kind": "bid_strategy_enum",
+    "applies_to": {
+      "feature": "value_rules"
+    },
+    "allowed": [
+      "LOWEST_COST_WITHOUT_CAP",
+      "COST_CAP"
+    ],
+    "status": "limited",
+    "source_url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/bidding/value-rules.md",
+    "checked_date": "2026-10-21",
+    "note": "Value rules (POST /act_<id>/value_rule_set) work only with LOWEST_COST_WITHOUT_CAP and COST_CAP ad sets. Registry-only fact, scoped by applies_to.feature so existing job checks are unaffected."
+  },
+  {
+    "id": "value_rules.attach",
+    "kind": "required_field",
+    "applies_to": {
+      "feature": "value_rules"
+    },
+    "required": [
+      "value_rule_set_id",
+      "value_rules_applied"
+    ],
+    "status": "limited",
+    "source_url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/bidding/value-rules.md",
+    "checked_date": "2026-10-21",
+    "note": "Attach a value rule set to an ad set with value_rule_set_id and value_rules_applied=true. Rules use adjust_sign INCREASE/DECREASE, adjust_value and criteria PLACEMENT CONTAINS [...]. Read-back returns criterias with lowercase values (e.g. audience_network)."
+  },
+  {
+    "id": "value_rules.decrease_cap",
+    "kind": "required_field",
+    "applies_to": {
+      "feature": "value_rules"
+    },
+    "required": [
+      "adjust_sign",
+      "adjust_value"
+    ],
+    "status": "limited",
+    "source_url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/bidding/value-rules.md",
+    "checked_date": "2026-10-21",
+    "note": "adjust_sign DECREASE is capped at 90 (confirmed on a new-layout test account: a UI rule was stored as 90). INCREASE and DECREASE are both allowed."
+  },
+  {
+    "id": "account_controls.placement_exclusions",
+    "kind": "placements_by_objective",
+    "applies_to": {
+      "feature": "account_controls"
+    },
+    "allowed": [
+      "audience_network_classic",
+      "audience_network_rewarded_video",
+      "audience_network_instream_video",
+      "facebook_marketplace",
+      "facebook_rhc"
+    ],
+    "status": "limited",
+    "source_url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/reference/ad-account/account_controls",
+    "checked_date": "2026-10-21",
+    "note": "POST /act_<id>/account_controls with placement_controls.placement_exclusions; only these values are accepted. On new-layout Advantage+ campaigns this is the only way to fully exclude Audience Network. No DELETE endpoint."
+  },
+  {
+    "id": "account_controls.post",
+    "kind": "required_field",
+    "applies_to": {
+      "feature": "account_controls"
+    },
+    "required": [
+      "audience_controls"
+    ],
+    "status": "limited",
+    "source_url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/reference/ad-account/account_controls",
+    "checked_date": "2026-10-21",
+    "note": "audience_controls is required in the account_controls POST; the endpoint has no DELETE, so a change cannot be undone through the API."
+  },
+  {
+    "id": "bid_adjustments.retired",
+    "kind": "required_field",
+    "applies_to": {
+      "feature": "bid_adjustments"
+    },
+    "required": [
+      "bid_adjustments"
+    ],
+    "status": "deprecated",
+    "source_url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/bidding-and-optimization/bid-multiplier",
+    "checked_date": "2026-10-21",
+    "note": "Legacy bid_adjustments (bid multiplier) is being retired and cannot be combined with value rules. Do not use for new ad sets."
+  },
+  {
+    "id": "placement_soft_opt_out.spend",
+    "kind": "required_field",
+    "applies_to": {
+      "feature": "placement_soft_opt_out",
+      "objective": [
+        "OUTCOME_SALES",
+        "OUTCOME_LEADS"
+      ]
+    },
+    "required": [
+      "placement_soft_opt_out"
+    ],
+    "status": "limited",
+    "source_url": "https://developers.facebook.com/blog/post/2025/10/08/introducing-limited-spend-on-excluded-placements-in-marketing-api/",
+    "checked_date": "2026-10-21",
+    "note": "placement_soft_opt_out lets up to 5% of spend go to excluded placements; Sales and Leads objectives only."
+  },
+  {
+    "id": "placements.classic_non_advantage_leads",
+    "kind": "placements_by_objective",
+    "applies_to": {
+      "feature": "classic_placements_non_advantage_leads"
+    },
+    "allowed": [
+      "publisher_platforms"
+    ],
+    "status": "test",
+    "source_url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/reference/ad-account/account_controls",
+    "checked_date": "2026-10-21",
+    "note": "Live check 2026-10-20/21 on a new-layout test account: the new layout applies to Advantage+ leads campaigns (advantage_state=ADVANTAGE_PLUS_LEADS); non-Advantage+ Leads campaigns created via API still accept classic publisher_platforms."
   }
 ]
