@@ -47796,6 +47796,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
+      },
+      "838": {
+        "actor": "Worker-W1021838",
+        "session": "run_w1021_1838",
+        "coordinator": "Coordinator-I1021A",
+        "branch": "codex/acl-1838-country-active-line",
+        "worktree": "C:\\acl-int-w1838",
+        "id": "74e6a44ca1a540f5b32fd469de6d4227",
+        "issue": 838,
+        "state": "implementing",
+        "started_at": "2026-10-21T22:16:11+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -52476,9 +52488,13 @@
           {
             "actor": "Worker-W1021838",
             "session": "run_w1021_1838"
+          },
+          {
+            "actor": "Worker-W1021838",
+            "session": "run_w1021_1838"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-W1021838",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -52509,14 +52525,8 @@
           "at": "2026-10-17T16:30:39.578004+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-S1021838",
-        "return": {
-          "id": "8b488913f24f47a9af4f673a92361b0b",
-          "actor": "Coordinator-I1021A",
-          "session": "run_i1021a_1021",
-          "report": "Approval is stale against current main 64e73a1e (after ACL-2073 #1075 and ACL-2071 #1076 merged). Author: merge current main into the original branch without changing content (resolve only CHANGELOG append conflicts by keeping both entries), re-run checks, hand off, and get a fresh independent source approval for batch 2b (--deliver)."
-        },
-        "rework": true
+        "rework": true,
+        "rework_claim": "74e6a44ca1a540f5b32fd469de6d4227"
       },
       "839": {
         "implementers": [
@@ -110174,6 +110184,13 @@
           "report": "Approval is stale against current main 64e73a1e (after ACL-2073 #1075 and ACL-2071 #1076 merged). Author: merge current main into the original branch without changing content (resolve only CHANGELOG append conflicts by keeping both entries), re-run checks, hand off, and get a fresh independent source approval for batch 2b (--deliver)."
         },
         "batch_id": null
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-21T22:16:11+00:00",
+        "issue": 838,
+        "claim": "74e6a44ca1a540f5b32fd469de6d4227",
+        "actor": "Worker-W1021838"
       }
     ],
     "policy": {
