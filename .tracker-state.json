@@ -47820,6 +47820,18 @@
         "state": "implementing",
         "started_at": "2026-10-21T22:17:20+00:00",
         "from_status": "status:todo"
+      },
+      "1050": {
+        "actor": "Worker-P1021F2050",
+        "session": "run_p1021f_2050",
+        "coordinator": "Coordinator-P1021B",
+        "branch": "work/acl-2050-placement-readback",
+        "worktree": "C:\\acl-pl-2050",
+        "id": "dcc509e2fca14fe8ae2412801a92b0c7",
+        "issue": 1050,
+        "state": "implementing",
+        "started_at": "2026-10-21T22:17:51+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -56852,10 +56864,14 @@
           {
             "actor": "Worker-P1021D2050",
             "session": "run_p1021d_2050"
+          },
+          {
+            "actor": "Worker-P1021F2050",
+            "session": "run_p1021f_2050"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-P1021D2050",
+        "state": "implementing",
+        "worker": "Worker-P1021F2050",
         "coordinator": "Coordinator-P1021B",
         "handoff": {
           "actor": "Worker-P1021D2050",
@@ -56880,14 +56896,8 @@
           "session": "run_p1021b_1021",
           "report": "ACL-2050 approval is stale vs main 64e73a1e. Author merges current main into work/acl-2050-placement-readback (no force), reruns affected tests, hands off; fresh independent review and approval required. No content change requested."
         },
-        "reviewer": "Reviewer-P1021E2050",
-        "return": {
-          "id": "e8e33b6985674245be5990a8c959ebbc",
-          "actor": "Coordinator-P1021B",
-          "session": "run_p1021b_1021",
-          "report": "ACL-2050 approval is stale vs main 64e73a1e. Author merges current main into work/acl-2050-placement-readback (no force), reruns affected tests, hands off; fresh independent review and approval required. No content change requested."
-        },
-        "rework": true
+        "rework": true,
+        "rework_claim": "dcc509e2fca14fe8ae2412801a92b0c7"
       },
       "1052": {
         "implementers": [
@@ -60222,6 +60232,10 @@
       "Reviewer-J1021B76": {
         "session": "run_j1021_b76",
         "role": "Reviewer"
+      },
+      "Worker-P1021F2050": {
+        "session": "run_p1021f_2050",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -110227,6 +110241,13 @@
         "issue": 840,
         "claim": "8ad5a2a58312405e9965218183ced0f2",
         "actor": "Worker-W1021840"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-21T22:17:51+00:00",
+        "issue": 1050,
+        "claim": "dcc509e2fca14fe8ae2412801a92b0c7",
+        "actor": "Worker-P1021F2050"
       }
     ],
     "policy": {
