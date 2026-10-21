@@ -6065,27 +6065,6 @@
           "626": "78daec77f59b269c69b2b0d3072e9dff71bc3675802a71e8a3e2f16b22df80f4"
         }
       },
-      "1072": {
-        "kind": "independent-review",
-        "verdict": "approved",
-        "reviewer": "Reviewer-T1021071",
-        "review_session": "run_t1021_2071",
-        "execution_lane": "06ee0ec7688a4f40b756193647f1238b",
-        "implementer": "Worker-Q1021A",
-        "head_sha": "a3c5133820ffc74318b1ba571d6f003e05a049a2",
-        "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
-        "tree_sha": "508774d509ec3d535176c6910436356a60835078",
-        "report": "Independent source review of ACL-2071 / PR #1072 (head a3c51338, base main 0ea237b0, tree 508774d5) by Reviewer-T1021071 (run_t1021_2071), a separate run outside the Coordinator-I1021A session and not the implementer Worker-Q1021A; lane taken over from stopped Reviewer-S1021071. Scope: 5 files (new .github/workflows/verify-published-tag.yml, POST_MAIN_DELIVERY.md section, CHANGELOG entry, two test edits). complete-delivery.yml, release.yml, scripts/, packaging/, delivery.json and tracker/ are byte-identical to main. Step identity: verify job name, runner, timeout, env and all 8 steps equal complete-delivery.yml verify, except the evidence step id and its GITHUB_OUTPUT line and the job outputs block (only consumed by the record job, absent here); needs is resolve only (no publish). Permissions: top-level contents: read, no job overrides; no tracker_delivery_receipt, release.yml, workflow_run or --apply; no tracker writes, so delivery authorization is unchanged. Inputs are passed via env (no expression injection) and regex-validated. Resolve guard: uses release_updates.channel()/fetch_latest (signature verification, tag binding for signed manifests, same ACL_RELEASE_SIGNATURES enforcement as the harness); refuses draft/prerelease, release tag_name or manifest tag != input, and manifest previous_tag != input; tree from git rev-parse of the manifest commit in a full main checkout (fails closed if absent). Simulated the resolve script with a mocked channel: good input writes request {eligible, source, tag, merge_sha, tree_sha, issues: [], target}; wrong previous_tag, non-latest tag, prerelease and malformed tag all exit before any Windows step. Request carries every field read by published_update.validate_current (tag, merge_sha, issues) and acl_delivery_evidence (merge_sha, tree_sha, tag, target = tracker delivery_policy.delivery_target 'ACL stable Windows installer and update channel'); the harness additionally rechecks latest/commit/version and the signed previous_release baseline. Evidence is the unchanged acl_delivery_evidence output (kind delivery-verification, target, merge_shas [manifest commit], checks, report) which satisfies tracker delivery.check_result/record_delivery. Tests at head: pytest --noconftest test_acl_complete_delivery, test_acl_ci_workflows, test_acl_ci_scope, test_ci_layout -> 267 passed, 1 skipped; new test asserts step identity, required inputs, shared concurrency and read-only permissions. Non-blocking notes: (1) record-delivery only covers tasks whose recorded source merge_sha equals the release manifest commit (true when the release is cut from the batch merge, e.g. 1064); docs wording 'tasks that release actually contains' is slightly broader. (2) Sharing the acl-stable-delivery group with cancel-in-progress false means a newly queued manual run can replace an already pending (not running) complete-delivery run in that group; dispatch only when no delivery is pending. (3) Hosted proof only after first dispatch, as the issue states. Required CI on this head is red only in linux shard 3 on tests/test_media_attachment_identity.py::test_the_picked_tile_and_the_ad_show_the_same_thumbnail[False], unrelated to this diff; batch approve must wait for green required CI.",
-        "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "issues": [
-          1071
-        ],
-        "recorded_at": "2026-10-21T16:52:12+00:00",
-        "issue_scopes": {
-          "1071": "c1c17f3e3ebe9dd15b00fd45eee146f5f5122550cbce8457dd84974144556657"
-        }
-      },
       "1074": {
         "kind": "independent-review",
         "verdict": "approved",
@@ -119880,7 +119859,9 @@
         "session": "run_t1021_2071",
         "coordinator": "Coordinator-I1021A",
         "started_at": "2026-10-21T16:40:54+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "Stale vs main c01583ea (ACL-2073 test fix); author merges main into work/acl-2071-verify-published-tag and hands off again. No findings in the change itself (prior approved review of a3c51338 stands for the unchanged files).",
+        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
