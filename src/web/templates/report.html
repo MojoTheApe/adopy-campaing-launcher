@@ -2282,6 +2282,12 @@
     .amap-tree-num.spend { color: inherit; }
     /* Числа книги — те же, что в строке аккаунта, и тем же цветом. */
     .amap-tree-num.attr { color: inherit; }
+    /* ACL-1377: «not in workbook» — тихая пометка у уровня строки, тем же
+       приглушённым цветом, что и сам уровень: это пояснение, не тревога. */
+    .amap-tree-nowb {
+      color: var(--muted); font-size: inherit; font-weight: 400;
+      text-transform: none; letter-spacing: 0; white-space: nowrap;
+    }
     /* Колонка Setup у строки аккаунта говорит «готов ли аккаунт», а у строк
        дерева в ней стоит результат Meta. Под одним заголовком — две разные
        вещи (ACL-1275), поэтому результат подписан источником. */
@@ -9386,11 +9392,13 @@ function amapFillAttribution(box, objects, data) {
   lines.forEach(function (line, i) {
     var o = line._amapObject;
     if (!o) return;
-    var got = null, why = '', shared = 0;
+    var got = null, why = '', shared = 0, nowb = false;
     /* Ответ может прийти второй раз (перечитали период) — прежняя пометка
        снимается, новая ставится по новому ответу. */
     var oldMark = line.querySelector('.amap-tree-shared');
     if (oldMark) oldMark.remove();
+    var oldNowb = line.querySelector('.amap-tree-nowb');
+    if (oldNowb) oldNowb.remove();
     if (!data || !data.ok) {
       why = (data && data.error) || 'Workbook numbers are not available';
     } else if (o.level === 'ad') {
@@ -9407,7 +9415,16 @@ function amapFillAttribution(box, objects, data) {
       var cn = amapTreeName(o.name);
       if (keys.campCount[cn] > 1) why = 'Two campaigns share this name — the workbook cannot tell them apart';
       else got = amapOwn(data.campaigns, cn);
-      if (!got && !why) why = 'No rows for this campaign in the stats workbook for these dates';
+      if (!got && !why) {
+        why = 'No rows for this campaign in the stats workbook for these dates';
+        /* ACL-1377: у Meta числа есть, а в книге строк нет (прогревочные
+           MaxWarmup на Doc19). Прочерки тогда — не поломка, и это сказано
+           тихой пометкой у уровня строки. */
+        /* «$0.00» и «0» — не числа Meta: такой черновик ничем не отличается
+           от пустого, и пометка ему не нужна. */
+        nowb = /[1-9]/.test(String(o.spend || '') + String(o.results || ''))
+             && Object.keys(data.campaigns || {}).length > 0;  // книга пуста за период — пометка вводит в заблуждение
+      }
     }
     line.querySelectorAll('.amap-tree-num.attr').forEach(function (cell) {
       var v = got ? got[cell.dataset.attr] : null;
@@ -9430,6 +9447,17 @@ function amapFillAttribution(box, objects, data) {
         mark.textContent = 'shared by ' + shared + ' ads';
         mark.title = AMAP_SHARED_TIP;
         kind.appendChild(mark);
+      }
+    }
+    if (nowb) {
+      var nkind = line.querySelector('.amap-tree-kind');
+      if (nkind) {
+        var tag = document.createElement('small');
+        tag.className = 'amap-tree-nowb';
+        tag.textContent = ' · not in workbook';
+        tag.title = 'Meta shows this campaign, but the stats workbook has no rows for it '
+                  + 'for these dates (for example a warm-up campaign). The dashes are not an error.';
+        nkind.appendChild(tag);
       }
     }
   });
