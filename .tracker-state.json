@@ -46847,20 +46847,6 @@
         "started_at": "2026-10-20T12:56:11+00:00",
         "from_status": "status:todo"
       },
-      "1052": {
-        "actor": "Worker-P10212052",
-        "session": "run_p1021_2052",
-        "coordinator": "Coordinator-P1021A",
-        "branch": "work/acl-2052-meta-rules-value-rules",
-        "worktree": "C:\\acl-pl-2052",
-        "id": "3a3d09d4fde44c21b5dbce08c7640720",
-        "issue": 1052,
-        "state": "handoff",
-        "started_at": "2026-10-21T09:40:17+00:00",
-        "from_status": "status:todo",
-        "pr": 1057,
-        "report": "ACL-2052 review fixes: PR #1057, head 808573c6. New documentation-only `fact` kind in meta_rules loader (needs note; check_job skips it; tested). bid_adjustments.retired, placements.classic_non_advantage_leads (source fixed, live check in note), account_controls.placement_exclusions (values field) and value_rules.decrease_cap (limits DECREASE max 90) moved to it. Blog source categorised as announcements. CHANGELOG updated. Tests: 35 passed (acl2052 + acl1781 + meta_docs_watch_1782). check_job-unchanged test kept."
-      },
       "668": {
         "actor": "Worker-A1021668",
         "session": "run_a1021_668w",
@@ -55702,7 +55688,7 @@
             "session": "run_p1021_2052"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-P10212052",
         "coordinator": "Coordinator-P1021A",
         "handoff": {
@@ -55711,19 +55697,17 @@
           "coordinator": "Coordinator-P1021A",
           "branch": "work/acl-2052-meta-rules-value-rules",
           "worktree": "C:\\acl-pl-2052",
-          "id": "6c4335af4817455e988b5372a27bd126",
+          "id": "3a3d09d4fde44c21b5dbce08c7640720",
           "issue": 1052,
           "state": "handoff",
-          "started_at": "2026-10-21T07:56:12+00:00",
-          "from_status": "status:idea",
+          "started_at": "2026-10-21T09:40:17+00:00",
+          "from_status": "status:todo",
           "pr": 1057,
-          "report": "ACL-2052: PR #1057, head 60670a16. Four doc pages added to watcher sources; 8 registry entries (limited/test/deprecated) for value rules, account controls, bid_adjustments retirement, placement_soft_opt_out and the classic-placements live fact, all scoped by applies_to.feature (check_job unchanged, test-proved). CHANGELOG updated. Tests: 34 passed (acl2052 + acl1781 + meta_docs_watch_1782). No builder change."
+          "report": "ACL-2052 review fixes: PR #1057, head 808573c6. New documentation-only `fact` kind in meta_rules loader (needs note; check_job skips it; tested). bid_adjustments.retired, placements.classic_non_advantage_leads (source fixed, live check in note), account_controls.placement_exclusions (values field) and value_rules.decrease_cap (limits DECREASE max 90) moved to it. Blog source categorised as announcements. CHANGELOG updated. Tests: 35 passed (acl2052 + acl1781 + meta_docs_watch_1782). check_job-unchanged test kept."
         },
         "pr": 1057,
-        "queued_at": "2026-10-21T08:12:53+00:00",
-        "review_report": "## Source review ACL-2052 (Reviewer-P10212052) - changes requested\n\nReviewed head `60670a168fd6dfa1d224d1f2ab37d5072bdc53a8` against base main. Tests: `tests/test_acl2052_meta_rules_placement.py tests/test_acl1781_meta_rules.py tests/test_meta_docs_watch_1782.py` - 34 passed.\n\n**OK:** four pages added to `sources.json` (watcher reads them generically; `.md` plain text falls back to whole-document text); all spec facts are present with source_url and checked_date 2026-10-21, none `ga`; CHANGELOG entry follows convention; no account names/ids. `check_job` is unchanged today: `_matches` reads `feature` from the job, no job carries it, so every new entry is dormant. Verified in `src/campaign_bridge/meta_rules.py`.\n\n**Blocking: the machine-readable shape contradicts the facts.** These entries are only safe while no job has a `feature` attribute. A future builder/agent that sets it, or an agent reading the registry, gets wrong rules:\n\n1. `bid_adjustments.retired` - `kind: required_field`, `required: [\"bid_adjustments\"]`. `required_field` ignores status. It means \"this field must be present\", the opposite of the fact (\"retired, do not use, cannot combine with value rules\"). Once matched, `check_job` would *demand* bid_adjustments.\n2. `placements.classic_non_advantage_leads` - `placements_by_objective` with `allowed: [\"publisher_platforms\"]`. `publisher_platforms` is a field name, not a placement value, so any real placement would be flagged. Its `source_url` is the account_controls reference, but the fact comes from a live check that page does not state.\n3. `account_controls.placement_exclusions` - `placements_by_objective` checks the ad set's `placements` field. Account-level exclusions are not ad set placements. If it matched, `facebook`/`instagram` etc. would be rejected as \"not an accepted Meta value\".\n4. `value_rules.decrease_cap` - the 90 cap (the main fact) exists only in `note`. The structured part only says adjust_sign/adjust_value are required. The id promises a cap the data does not encode.\n\n**Requested fix (your choice of form):** add a documentation-only kind to the loader (e.g. `fact`/`constraint`, validated as needing `note`, skipped by `check_job`, with a test proving that). Then put 1-4, and any other entries the builder cannot check yet, under it. Or encode them in shapes whose semantics are true (e.g. a numeric limit kind for the 90 cap). Fix the source for (2): record it as a live check on the account_controls/value-rules context in `note`, or point it at a page that states it. Keep the \"check_job unchanged\" test. Minor, optional: the 2025 blog post may fit `announcements` better than `guide`.",
-        "rework": true,
-        "rework_claim": "3a3d09d4fde44c21b5dbce08c7640720"
+        "queued_at": "2026-10-21T09:44:35+00:00",
+        "review_report": "## Source review ACL-2052 (Reviewer-P10212052) - changes requested\n\nReviewed head `60670a168fd6dfa1d224d1f2ab37d5072bdc53a8` against base main. Tests: `tests/test_acl2052_meta_rules_placement.py tests/test_acl1781_meta_rules.py tests/test_meta_docs_watch_1782.py` - 34 passed.\n\n**OK:** four pages added to `sources.json` (watcher reads them generically; `.md` plain text falls back to whole-document text); all spec facts are present with source_url and checked_date 2026-10-21, none `ga`; CHANGELOG entry follows convention; no account names/ids. `check_job` is unchanged today: `_matches` reads `feature` from the job, no job carries it, so every new entry is dormant. Verified in `src/campaign_bridge/meta_rules.py`.\n\n**Blocking: the machine-readable shape contradicts the facts.** These entries are only safe while no job has a `feature` attribute. A future builder/agent that sets it, or an agent reading the registry, gets wrong rules:\n\n1. `bid_adjustments.retired` - `kind: required_field`, `required: [\"bid_adjustments\"]`. `required_field` ignores status. It means \"this field must be present\", the opposite of the fact (\"retired, do not use, cannot combine with value rules\"). Once matched, `check_job` would *demand* bid_adjustments.\n2. `placements.classic_non_advantage_leads` - `placements_by_objective` with `allowed: [\"publisher_platforms\"]`. `publisher_platforms` is a field name, not a placement value, so any real placement would be flagged. Its `source_url` is the account_controls reference, but the fact comes from a live check that page does not state.\n3. `account_controls.placement_exclusions` - `placements_by_objective` checks the ad set's `placements` field. Account-level exclusions are not ad set placements. If it matched, `facebook`/`instagram` etc. would be rejected as \"not an accepted Meta value\".\n4. `value_rules.decrease_cap` - the 90 cap (the main fact) exists only in `note`. The structured part only says adjust_sign/adjust_value are required. The id promises a cap the data does not encode.\n\n**Requested fix (your choice of form):** add a documentation-only kind to the loader (e.g. `fact`/`constraint`, validated as needing `note`, skipped by `check_job`, with a test proving that). Then put 1-4, and any other entries the builder cannot check yet, under it. Or encode them in shapes whose semantics are true (e.g. a numeric limit kind for the 90 cap). Fix the source for (2): record it as a live check on the account_controls/value-rules context in `note`, or point it at a page that states it. Keep the \"check_job unchanged\" test. Minor, optional: the 2025 blog post may fit `announcements` better than `guide`."
       },
       "1053": {
         "implementers": [
@@ -61521,7 +61505,8 @@
     },
     "review_queue": [
       1050,
-      1053
+      1053,
+      1052
     ],
     "review": null,
     "history": [
@@ -105094,6 +105079,13 @@
         "pr": 962,
         "lane": "49b2a919f8b94969b554c96a6e377ae5",
         "actor": "Reviewer-A1021380"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-21T09:44:35+00:00",
+        "issue": 1052,
+        "pr": 1057,
+        "actor": "Worker-P10212052"
       }
     ],
     "policy": {
