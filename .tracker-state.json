@@ -46805,20 +46805,6 @@
         "started_at": "2026-10-20T12:56:11+00:00",
         "from_status": "status:todo"
       },
-      "880": {
-        "actor": "Worker-A1021880",
-        "session": "run_a1021_880w",
-        "coordinator": "Coordinator-A1021A",
-        "branch": "work/acl-1880-page-selection",
-        "worktree": "C:\\acl-rv-880",
-        "id": "53fecedc684041968ad7a155607da0e5",
-        "issue": 880,
-        "state": "handoff",
-        "started_at": "2026-10-21T08:16:18+00:00",
-        "from_status": "status:todo",
-        "pr": 1044,
-        "report": "Merged current main (ea41acbf) into the PR branch with a clean --no-ff merge, head 8c0e175e. No conflicts and no content change: the merge commit's tree equals `git merge-tree --write-tree` of ec2a527d and main, and `git show --cc` shows no hunks. Main brought in tooling/docs only.\nThe merge commit was prepared locally before the claim and pushed (fast-forward, no force) only after it.\nTests (affected only, 131 passed): test_acl1819_preflight, test_acl1880_manual_page, test_acl1880_page_selection, test_acl1880_pages_browser, test_duplicate_campaign_copies_everything, test_queue_wait_reads, test_web_build_upload. Secret scan clean.\nFull suite not run locally; CI is the acceptance signal. No owner live check needed."
-      },
       "1053": {
         "actor": "Worker-F1021W1",
         "session": "033ad857-forms-2053",
@@ -52282,22 +52268,22 @@
             "session": "run_a1021_880w"
           }
         ],
-        "state": "implementing",
+        "state": "reviewing",
         "worker": "Worker-A1021880",
         "coordinator": "Coordinator-A1021A",
         "handoff": {
-          "actor": "Worker-1880E",
-          "session": "w1880e-20261020",
-          "coordinator": "Coordinator-M1011A",
+          "actor": "Worker-A1021880",
+          "session": "run_a1021_880w",
+          "coordinator": "Coordinator-A1021A",
           "branch": "work/acl-1880-page-selection",
-          "worktree": "C:\\acl-1880-clean",
-          "id": "a19c4bc78bb74d62ad689e3d15a5686f",
+          "worktree": "C:\\acl-rv-880",
+          "id": "53fecedc684041968ad7a155607da0e5",
           "issue": 880,
           "state": "handoff",
-          "started_at": "2026-10-20T17:41:53+00:00",
+          "started_at": "2026-10-21T08:16:18+00:00",
           "from_status": "status:todo",
           "pr": 1044,
-          "report": "Returned by independent review: /build-upload silently dropped an explicitly chosen Page. Fixed in ec2a527d: /build-upload refuses when any slot has an explicit page_id (same as Instant Forms on this path), visible English error; Automatic still builds. Two new tests in tests/test_web_build_upload.py. Branch already contains current main. Affected tests: 302 passed. Source CI on ec2a527d green (linux 1-3, windows, installer, ACL verification)."
+          "report": "Merged current main (ea41acbf) into the PR branch with a clean --no-ff merge, head 8c0e175e. No conflicts and no content change: the merge commit's tree equals `git merge-tree --write-tree` of ec2a527d and main, and `git show --cc` shows no hunks. Main brought in tooling/docs only.\nThe merge commit was prepared locally before the claim and pushed (fast-forward, no force) only after it.\nTests (affected only, 131 passed): test_acl1819_preflight, test_acl1880_manual_page, test_acl1880_page_selection, test_acl1880_pages_browser, test_duplicate_campaign_copies_everything, test_queue_wait_reads, test_web_build_upload. Secret scan clean.\nFull suite not run locally; CI is the acceptance signal. No owner live check needed."
         },
         "review_report": "# Return: PR #1044 (ACL-1880), review round 4 by Reviewer-A1021880\n\n**Content approved at ec2a527db4d173b50314f778c001fe75c4cecbba. Merge current main only (ea41acbf960f53cdd0486c50dda491ec3981dfcf), no content change.**\n\nThe head was based on main 259ae7f1 and does not contain current main ea41acbf (7 commits ahead, ACL-2026 tooling/docs only). `git merge-tree` of the head and current main merges cleanly with no conflicts. After the merge I will review the merge delta (`git show --cc`) and the full diff again, then record the review.\n\n## Previous blocking finding: resolved\nReviewer-R1880W found that `/build-upload` silently dropped an explicit Page. ec2a527d fixes it. `build_upload` now refuses with a visible English `upload_errors` message when any slot has a non-empty `page_id`. This mirrors the existing Instant Forms refusal on that path. Automatic (empty) still exports. `tests/test_web_build_upload.py` covers both cases.\n\n## Checked (full scope vs main)\n- Explicit Page is campaign-local. `page_provided` skips the account-map fallback, and no map write happens (tested). Duplicates reset the Page (`SKIP_FIELDS`). When a slot moves to another account, its Page is cleared.\n- Automatic means the first available Page. On the API path it is resolved in `resolve_page`. Preflight returns ok for multiple Pages and a warning for the manual shell on a confirmed empty list. Instant Forms and an explicitly unavailable Page are still blocked, with actionable English messages.\n- Loading, failed, empty and not_loaded are separate states. Refresh bypasses the cache. A stale response is dropped by a request-identity check. Failures are never cached (12 h TTL). The builder render reads the cache only.\n- RPA: an explicit Page is re-read with force, checked against the account act, and verified on the first ad and every extra ad. `page_identity` is BLOCKING, non-retryable, in the flow-stop list and in GUIDE. Non-recorded engines are refused. Automatic leaves Identity untouched.\n- Manual shell: the campaign and ad sets are created PAUSED with no ads. The result has `manual_required` set and `publishable=false`. A retry completes the same campaign.\n- Merge commits 44060638, 88387d25 and 89dc6c56 have no hand-resolved hunks. No unrelated files are included. `test_queue_wait_reads.py` (cache part) is the carry-over that the Issue requested.\n- No leaked ids, tokens, emails or local paths in the diff or PR body. The PR body has exactly one `Tracker issues: ACL-1880` line and no closing keywords. User-facing strings are in English.\n- Tests: 150 affected tests (1880 suites, 1819 preflight, build_upload, duplicate, failure_policy, 1775 forms): 149 passed, 1 failed. The failure is `test_account_pages_endpoint_cached_flag`, a Starlette/httpx `TestClient(app=)` TypeError from the old local venv. The previous round saw the same failure, and the test passed in CI.\n\n## Non-blocking notes\n- The `docs/system/PROJECT.md` ACL-1880 section is updated. The second block has a level-1 heading (`# ACL-1880: manual completion\u2026`) inside a level-3 section with no blank line before it. This is cosmetic. There is no `docs/system/CHANGELOG.md` entry.\n- The builder note still says \"Automatic: <first Page>\" on the RPA backend, where Ads Manager's own default Identity may differ (raised in round 3 and still open).\n- ec2a527d has author `trial <t@t>`. This is not a leak, only a placeholder identity.\n- PR #1025 (ACL-1897) is still OPEN. Whichever PR lands second must resolve the creator.py/preflight-test overlap.\n\n## Live check\nThe alternate-Page Identity picker in live Ads Manager is not verified. The owner needs to check it live; this does not block the offline acceptance.",
         "administrative_pause": {
@@ -52306,9 +52292,8 @@
           "remote_process_stopped_verified": false
         },
         "pr": 1044,
-        "queued_at": "2026-10-20T18:07:16+00:00",
-        "rework": true,
-        "rework_claim": "53fecedc684041968ad7a155607da0e5"
+        "queued_at": "2026-10-21T08:25:54+00:00",
+        "reviewer": "Reviewer-A1021880"
       },
       "886": {
         "implementers": [
@@ -104740,6 +104725,21 @@
         "issue": 1053,
         "claim": "b2df83de8be4412eb19e18d805f4e5b3",
         "actor": "Worker-F1021W1"
+      },
+      {
+        "event": "review-resumed",
+        "at": "2026-10-21T08:26:08+00:00",
+        "pr": 1044,
+        "issues": [
+          880
+        ]
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-21T08:26:31+00:00",
+        "issue": 880,
+        "pr": 1044,
+        "actor": "Worker-A1021880"
       }
     ],
     "policy": {
@@ -114359,20 +114359,6 @@
         "started_at": "2026-10-19T13:01:50+00:00",
         "state": "reviewing"
       },
-      "1044": {
-        "id": "5b2e2778e470457cb04021aaf9a357ac",
-        "pr": 1044,
-        "issues": [
-          880
-        ],
-        "actor": "Reviewer-A1021880",
-        "session": "run_a1021_880r",
-        "coordinator": "Coordinator-A1021A",
-        "started_at": "2026-10-21T07:10:39+00:00",
-        "state": "fixing",
-        "report": "# Return: PR #1044 (ACL-1880), review round 4 by Reviewer-A1021880\n\n**Content approved at ec2a527db4d173b50314f778c001fe75c4cecbba. Merge current main only (ea41acbf960f53cdd0486c50dda491ec3981dfcf), no content change.**\n\nThe head was based on main 259ae7f1 and does not contain current main ea41acbf (7 commits ahead, ACL-2026 tooling/docs only). `git merge-tree` of the head and current main merges cleanly with no conflicts. After the merge I will review the merge delta (`git show --cc`) and the full diff again, then record the review.\n\n## Previous blocking finding: resolved\nReviewer-R1880W found that `/build-upload` silently dropped an explicit Page. ec2a527d fixes it. `build_upload` now refuses with a visible English `upload_errors` message when any slot has a non-empty `page_id`. This mirrors the existing Instant Forms refusal on that path. Automatic (empty) still exports. `tests/test_web_build_upload.py` covers both cases.\n\n## Checked (full scope vs main)\n- Explicit Page is campaign-local. `page_provided` skips the account-map fallback, and no map write happens (tested). Duplicates reset the Page (`SKIP_FIELDS`). When a slot moves to another account, its Page is cleared.\n- Automatic means the first available Page. On the API path it is resolved in `resolve_page`. Preflight returns ok for multiple Pages and a warning for the manual shell on a confirmed empty list. Instant Forms and an explicitly unavailable Page are still blocked, with actionable English messages.\n- Loading, failed, empty and not_loaded are separate states. Refresh bypasses the cache. A stale response is dropped by a request-identity check. Failures are never cached (12 h TTL). The builder render reads the cache only.\n- RPA: an explicit Page is re-read with force, checked against the account act, and verified on the first ad and every extra ad. `page_identity` is BLOCKING, non-retryable, in the flow-stop list and in GUIDE. Non-recorded engines are refused. Automatic leaves Identity untouched.\n- Manual shell: the campaign and ad sets are created PAUSED with no ads. The result has `manual_required` set and `publishable=false`. A retry completes the same campaign.\n- Merge commits 44060638, 88387d25 and 89dc6c56 have no hand-resolved hunks. No unrelated files are included. `test_queue_wait_reads.py` (cache part) is the carry-over that the Issue requested.\n- No leaked ids, tokens, emails or local paths in the diff or PR body. The PR body has exactly one `Tracker issues: ACL-1880` line and no closing keywords. User-facing strings are in English.\n- Tests: 150 affected tests (1880 suites, 1819 preflight, build_upload, duplicate, failure_policy, 1775 forms): 149 passed, 1 failed. The failure is `test_account_pages_endpoint_cached_flag`, a Starlette/httpx `TestClient(app=)` TypeError from the old local venv. The previous round saw the same failure, and the test passed in CI.\n\n## Non-blocking notes\n- The `docs/system/PROJECT.md` ACL-1880 section is updated. The second block has a level-1 heading (`# ACL-1880: manual completion\u2026`) inside a level-3 section with no blank line before it. This is cosmetic. There is no `docs/system/CHANGELOG.md` entry.\n- The builder note still says \"Automatic: <first Page>\" on the RPA backend, where Ads Manager's own default Identity may differ (raised in round 3 and still open).\n- ec2a527d has author `trial <t@t>`. This is not a leak, only a placeholder identity.\n- PR #1025 (ACL-1897) is still OPEN. Whichever PR lands second must resolve the creator.py/preflight-test overlap.\n\n## Live check\nThe alternate-Page Identity picker in live Ads Manager is not verified. The owner needs to check it live; this does not block the offline acceptance.",
-        "keep_lane": true
-      },
       "961": {
         "id": "0da8125a7c8b406f882b5209d6fe91db",
         "pr": 961,
@@ -114385,6 +114371,20 @@
         "started_at": "2026-10-21T07:54:35+00:00",
         "state": "fixing",
         "report": "ACL-1784 / PR #961 independent source review \u2014 RETURNED for a fix (Reviewer-A1021784, head a525a67a, contains main ea41acbf).\n\nScope checked: full diff vs work/main (CHANGELOG, src/web/publish_api.py, src/web/publish_jobs.py, new tests/test_acl1784_api_review_window.py), the Issue spec/acceptance, PR body (one `Tracker issues: ACL-1784` line, no closing keywords), merge commit a525a67a (`git show --cc`: only CHANGELOG adjacent entries, resolved correctly, no code touched). No leaked ids/tokens/paths; notices are English; RPA path unchanged (`review_window` never set there). Local tests: test_acl1784_api_review_window, test_acl1603_stable_slots, test_acl1761_*, test_acl1614_cancel_hung_job, test_acl1812_warm_sessions \u2014 404 passed.\n\nBLOCKING finding B1 \u2014 the slot is released while a profile the job started is still running, and the panel says the opposite.\n\nIn `_run_api`, `settled = clean or not wrote` drives both `review_window = not settled` (which makes `_run_job_inner` call `_slots.release` instead of `_slots.keep`) and the notice. But `ApiPublisher.finish_job` can still return \"\" (profile left open) for a job-started profile even when `clean=True`:\n- `self.cancelled()` \u2014 user pressed Stop before the first write (cancel_job intentionally leaves the Multilogin window open, ACL-1614);\n- `_keep_profiles_open()` \u2014 owner switch ACL_KEEP_PROFILES_OPEN;\n- `self.dry_run` \u2014 finish_job forces clean=False (dry_run=1 jobs are reachable from the publish endpoint);\n- `_stop_profile` raised (stop failure).\nIn all of these, wrote=False \u2192 settled=True \u2192 review_window=False \u2192 the slot is freed, yet the Mimic window the job started keeps running. That is exactly the hazard ACL-1603 guards against (queue launching extra Mimics over open windows; with cap 1 a second profile starts while the first is still open). The panel then shows API_NO_WRITE_NOTICE \"the profile is not kept open for review\", which is false. The Stop-before-first-write case also misses the Issue spec (\"stops before the first write\" \u2192 close our tab, release the slot, stop the profile if the job started it): the profile is neither stopped nor counted.\n\nRequired fix (either is acceptable, keep it small):\n(a) Release the slot only when the profile is actually not left open by the job: `outcome == \"closed\"` OR the job did not start the profile (user-opened \u2014 spec says release in that case). If a job-started profile stays open for any other reason (cancel, keep-open switch, dry run, stop failure), keep the slot as before and do not show the \"not kept open\" notice (show an accurate one or none). And/or\n(b) For a no-write stop, let finish_job stop the job-started profile despite `cancelled()` (spec), and still fall back to (a) when stopping did not happen.\nExpose what you need from ApiPublisher read-only (e.g. a `started_profile` property from `self._opened.started_now`) rather than reaching into privates.\n\nTests to add (fakes; the current FakePublisher.finish_job does not model cancel/keep-open/dry-run/stop-failure, so it cannot catch this): Stop before the first write on a job-started profile; ACL_KEEP_PROFILES_OPEN=1 with a clean no-write or clean job on a job-started profile; finish_job returning \"\" for a job-started profile \u2014 each must either close the profile or keep the slot, and the notice must match the real state. Prefer driving the real `ApiPublisher.finish_job` with a faked `_opened`/`_stop_profile` for at least one case.\n\nNon-blocking notes:\n- `wrote` falls back to True on an exception \u2014 good (conservative).\n- GraphError rejections count as writes (`GraphClient.writes` increments before POST), so a Meta-refused write keeps the window \u2014 conservative, acceptable.\n- CI on a525a67a: all test/installer/descriptor checks green; `tracker-link` failed because it ran before handoff (\"move it to Review before a ready PR\") \u2014 rerun it on the next head.\n- Owner live check (panel notice on the test dashboard) can follow separately as the Issue allows.\n\nLane kept (--keep-lane); I will review the fix delta.",
+        "keep_lane": true
+      },
+      "1044": {
+        "id": "5b2e2778e470457cb04021aaf9a357ac",
+        "pr": 1044,
+        "issues": [
+          880
+        ],
+        "actor": "Reviewer-A1021880",
+        "session": "run_a1021_880r",
+        "coordinator": "Coordinator-A1021A",
+        "started_at": "2026-10-21T08:26:08+00:00",
+        "state": "reviewing",
+        "report": "# Return: PR #1044 (ACL-1880), review round 4 by Reviewer-A1021880\n\n**Content approved at ec2a527db4d173b50314f778c001fe75c4cecbba. Merge current main only (ea41acbf960f53cdd0486c50dda491ec3981dfcf), no content change.**\n\nThe head was based on main 259ae7f1 and does not contain current main ea41acbf (7 commits ahead, ACL-2026 tooling/docs only). `git merge-tree` of the head and current main merges cleanly with no conflicts. After the merge I will review the merge delta (`git show --cc`) and the full diff again, then record the review.\n\n## Previous blocking finding: resolved\nReviewer-R1880W found that `/build-upload` silently dropped an explicit Page. ec2a527d fixes it. `build_upload` now refuses with a visible English `upload_errors` message when any slot has a non-empty `page_id`. This mirrors the existing Instant Forms refusal on that path. Automatic (empty) still exports. `tests/test_web_build_upload.py` covers both cases.\n\n## Checked (full scope vs main)\n- Explicit Page is campaign-local. `page_provided` skips the account-map fallback, and no map write happens (tested). Duplicates reset the Page (`SKIP_FIELDS`). When a slot moves to another account, its Page is cleared.\n- Automatic means the first available Page. On the API path it is resolved in `resolve_page`. Preflight returns ok for multiple Pages and a warning for the manual shell on a confirmed empty list. Instant Forms and an explicitly unavailable Page are still blocked, with actionable English messages.\n- Loading, failed, empty and not_loaded are separate states. Refresh bypasses the cache. A stale response is dropped by a request-identity check. Failures are never cached (12 h TTL). The builder render reads the cache only.\n- RPA: an explicit Page is re-read with force, checked against the account act, and verified on the first ad and every extra ad. `page_identity` is BLOCKING, non-retryable, in the flow-stop list and in GUIDE. Non-recorded engines are refused. Automatic leaves Identity untouched.\n- Manual shell: the campaign and ad sets are created PAUSED with no ads. The result has `manual_required` set and `publishable=false`. A retry completes the same campaign.\n- Merge commits 44060638, 88387d25 and 89dc6c56 have no hand-resolved hunks. No unrelated files are included. `test_queue_wait_reads.py` (cache part) is the carry-over that the Issue requested.\n- No leaked ids, tokens, emails or local paths in the diff or PR body. The PR body has exactly one `Tracker issues: ACL-1880` line and no closing keywords. User-facing strings are in English.\n- Tests: 150 affected tests (1880 suites, 1819 preflight, build_upload, duplicate, failure_policy, 1775 forms): 149 passed, 1 failed. The failure is `test_account_pages_endpoint_cached_flag`, a Starlette/httpx `TestClient(app=)` TypeError from the old local venv. The previous round saw the same failure, and the test passed in CI.\n\n## Non-blocking notes\n- The `docs/system/PROJECT.md` ACL-1880 section is updated. The second block has a level-1 heading (`# ACL-1880: manual completion\u2026`) inside a level-3 section with no blank line before it. This is cosmetic. There is no `docs/system/CHANGELOG.md` entry.\n- The builder note still says \"Automatic: <first Page>\" on the RPA backend, where Ads Manager's own default Identity may differ (raised in round 3 and still open).\n- ec2a527d has author `trial <t@t>`. This is not a leak, only a placeholder identity.\n- PR #1025 (ACL-1897) is still OPEN. Whichever PR lands second must resolve the creator.py/preflight-test overlap.\n\n## Live check\nThe alternate-Page Identity picker in live Ads Manager is not verified. The owner needs to check it live; this does not block the offline acceptance.",
         "keep_lane": true
       }
     },
