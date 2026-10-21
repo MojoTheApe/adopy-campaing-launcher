@@ -46889,20 +46889,6 @@
         "started_at": "2026-10-20T12:56:11+00:00",
         "from_status": "status:todo"
       },
-      "1054": {
-        "actor": "Worker-F1021W2",
-        "session": "033ad857-forms-2054",
-        "coordinator": "Coordinator-F1021A",
-        "branch": "work/acl-2054-forms-library",
-        "worktree": "C:\\acl-2054",
-        "id": "63418628ae3846d68cdb9b9b5f9cf33e",
-        "issue": 1054,
-        "state": "handoff",
-        "started_at": "2026-10-21T09:54:32+00:00",
-        "from_status": "status:idea",
-        "pr": 1061,
-        "report": "Implemented ACL-2054 phase 1 in PR #1061 (branch work/acl-2054-forms-library, head 055d69fb). Import from a Page split out to ACL-2062 (issue updated). Pre-handoff review: changes requested, all fixed; delta re-review approved. Affected tests pass locally; full suite in CI."
-      },
       "142": {
         "actor": "Worker-A1021142",
         "session": "run_a1021_142w",
@@ -55809,9 +55795,25 @@
             "session": "033ad857-forms-2054"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-F1021W2",
-        "coordinator": "Coordinator-F1021A"
+        "coordinator": "Coordinator-F1021A",
+        "handoff": {
+          "actor": "Worker-F1021W2",
+          "session": "033ad857-forms-2054",
+          "coordinator": "Coordinator-F1021A",
+          "branch": "work/acl-2054-forms-library",
+          "worktree": "C:\\acl-2054",
+          "id": "63418628ae3846d68cdb9b9b5f9cf33e",
+          "issue": 1054,
+          "state": "handoff",
+          "started_at": "2026-10-21T09:54:32+00:00",
+          "from_status": "status:idea",
+          "pr": 1061,
+          "report": "Implemented ACL-2054 phase 1 in PR #1061 (branch work/acl-2054-forms-library, head 055d69fb). Import from a Page split out to ACL-2062 (issue updated). Pre-handoff review: changes requested, all fixed; delta re-review approved. Affected tests pass locally; full suite in CI."
+        },
+        "pr": 1061,
+        "queued_at": "2026-10-21T10:52:52+00:00"
       }
     },
     "actors": {
@@ -61610,7 +61612,8 @@
     },
     "review_queue": [
       1050,
-      1053
+      1053,
+      1054
     ],
     "review": null,
     "history": [
@@ -105427,6 +105430,13 @@
             "approved_at": "2026-10-21T10:49:53+00:00"
           }
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-21T10:52:52+00:00",
+        "issue": 1054,
+        "pr": 1061,
+        "actor": "Worker-F1021W2"
       }
     ],
     "policy": {
