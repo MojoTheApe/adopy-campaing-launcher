@@ -47001,9 +47001,11 @@
         "worktree": "C:\\acl-int-w710",
         "id": "a155a25beb2f46ed88a09edeb81da12b",
         "issue": 710,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T12:38:29+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 711,
+        "report": "ACL-1710 handoff (Worker-W1021710), PR #711, head d7ffe456.\nChanges: .github/workflows/ci.yml (bounded Chromium install via scripts/ci_retry.sh: Linux 3x300 s, step 16 min; Windows 3x180 s, step 12 min; Playwright download cached by version; apt mirror switched off Azure; apt lock cleanup between attempts; job ceilings Linux 32 / Windows 30), scripts/ci_retry.sh, tests/test_ci_layout.py, tests/test_ci_retry.py, docs/repository/WORKFLOW.md (conflicts with main resolved, numbers made consistent).\nDeviation from Issue: Linux job ceiling 32 instead of ~25, because shard 1 normally runs 20-22 min and the longest green was 29.2 min; 25 would fail normal runs.\nNot done: throwaway-branch `sleep 400` hang run (too expensive); hang proven locally by tests/test_ci_retry.py. 30+ min job check via acl_ci_minutes.py is a post-merge follow-up.\nCI on d7ffe456: all green (linux 3.11/3.13 shards 15-23 min, windows 4m39s, installer, process instructions); Chromium install step 31 s Linux (cold cache), 25 s Windows; only tracker-link failed, because the issue was not yet in Review (expected until this handoff).\nFocused local tests: test_ci_layout + test_ci_retry: 12 passed, 1 skipped."
       },
       "1039": {
         "actor": "Worker-W1021039",
