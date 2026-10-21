@@ -47914,6 +47914,18 @@
         "state": "implementing",
         "started_at": "2026-10-21T23:15:13+00:00",
         "from_status": "status:idea"
+      },
+      "1079": {
+        "actor": "Worker-V7Q2R8",
+        "session": "root_acl2079_20261022",
+        "coordinator": "Coordinator-R6M9H2",
+        "branch": "codex/acl-2079-isolated-process-support",
+        "worktree": "/Users/dmitry.o/Documents/ChatGPT/ACL/tmp/acl-2079-isolated-process-support",
+        "id": "40f800beeb254a04afac77e6f3c0a393",
+        "issue": 1079,
+        "state": "implementing",
+        "started_at": "2026-10-21T23:17:14+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -57245,6 +57257,17 @@
         "state": "implementing",
         "worker": "Worker-F1022B",
         "coordinator": "Coordinator-I1021A"
+      },
+      "1079": {
+        "implementers": [
+          {
+            "actor": "Worker-V7Q2R8",
+            "session": "root_acl2079_20261022"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-V7Q2R8",
+        "coordinator": "Coordinator-R6M9H2"
       }
     },
     "actors": {
@@ -60338,6 +60361,10 @@
       },
       "Worker-F1022B": {
         "session": "run_f1022b",
+        "role": "Worker"
+      },
+      "Worker-V7Q2R8": {
+        "session": "root_acl2079_20261022",
         "role": "Worker"
       }
     },
@@ -110932,6 +110959,13 @@
         "issue": 1078,
         "claim": "01814458fc0b4ed0aa0f93e9ee981aa3",
         "actor": "Worker-F1022B"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-21T23:17:14+00:00",
+        "issue": 1079,
+        "claim": "40f800beeb254a04afac77e6f3c0a393",
+        "actor": "Worker-V7Q2R8"
       }
     ],
     "policy": {
