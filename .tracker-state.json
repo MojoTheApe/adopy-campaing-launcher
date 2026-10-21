@@ -120733,7 +120733,51 @@
         "session": "run_p1021g_2050",
         "coordinator": "Coordinator-P1021B",
         "started_at": "2026-10-21T22:23:39+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 1050,
+          "pr": 1058,
+          "branch": "work/acl-2050-placement-readback",
+          "head_sha": "988c551a496077c1432347dcf689df641addf3ef",
+          "base_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+          "main_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "1aefcfe1e72c2e3155f61da7fe6643fc80f2d6236181d8c5c8fe6d40b4da616b",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-P1021G2050",
+            "review_session": "run_p1021g_2050",
+            "execution_lane": "40fc0e8198054814ade5b9afbf22c1b1",
+            "implementer": "Worker-P1021F2050",
+            "head_sha": "988c551a496077c1432347dcf689df641addf3ef",
+            "base_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+            "tree_sha": "19cb33353b30082c1213fdcf9aa3adadf166485a",
+            "report": "Verdict: approved (independent re-review of head 988c551a against main 64e73a1e; merge-base == main).\nScope vs main: only src/fb_api/creator.py, tests/test_acl2050_placement_readback.py, docs/system/CHANGELOG.md.\nDelta since previously approved e87cdde5: merge commit 988c551a has no hand-resolved hunks (git show --cc empty); git diff e87cdde5 988c551a --stat is identical to main's 0ea237b0..64e73a1e (verify-published-tag workflow, repository CHANGELOG/POST_MAIN_DELIVERY docs, tests/conftest.py crop/media refusal reset fixture, CI workflow/complete-delivery tests). Nothing under src/fb_api changed on main.\nSemantic interactions: the new autouse conftest fixture only resets src.fb_ads_rpa crop_step/meta_dom state if already imported; it does not touch creator.py read-back. ACL-2050 logic unchanged: campaign advantage_state_info read via CAMPAIGN_FIELDS; advantage_placement_state != DISABLED blocks when returned; missing state -> English warning + diagnostics.placement_state_verified=false; order-insensitive placements_summary (via _same, in _SKIP_DIFF) only when a placement field really differs; audience flag and value rules are warnings/diagnostics only. Read-only: no new write keys.\nSpec (Issue #1050): acceptance criteria covered (blocking English mismatch on placement state/positions; tests for kept/ENABLED/missing/differ).\nTests: test_acl2050_placement_readback, test_acl1761_api_create, _existing_check, _parity, test_acl1902_name_suffix, test_acl1776_create_forms, test_acl1819_preflight, test_acl1880_manual_page: 414 passed. No full suite.\nNon-blocking (unchanged): advantage_placement_state has no _FIELD_TITLES entry; live check by owner that the new fields read without a Graph error on a real account.",
+            "main_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              1050
+            ],
+            "recorded_at": "2026-10-21T22:32:28+00:00",
+            "issue_scopes": {
+              "1050": "1aefcfe1e72c2e3155f61da7fe6643fc80f2d6236181d8c5c8fe6d40b4da616b"
+            }
+          },
+          "lane": {
+            "id": "40fc0e8198054814ade5b9afbf22c1b1",
+            "pr": 1058,
+            "issues": [
+              1050
+            ],
+            "actor": "Reviewer-P1021G2050",
+            "session": "run_p1021g_2050",
+            "coordinator": "Coordinator-P1021B",
+            "started_at": "2026-10-21T22:23:39+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-21T22:33:29+00:00"
+        }
       },
       "842": {
         "id": "3b5e15115d5f4243a2762e127d39d604",
