@@ -5919,6 +5919,27 @@
         "issue_scopes": {
           "380": "5721bfda1929700ea1d2c0d43cc9cf38e82898dada60cc93441f845a1dd5146d"
         }
+      },
+      "1057": {
+        "kind": "independent-review",
+        "implementer": "Worker-P10212052",
+        "reviewer": "Reviewer-P10212052",
+        "review_session": "rev_p1021_2052",
+        "execution_lane": "3a3312e381c743e79fe418f51f66dded",
+        "head_sha": "808573c6f418b9ee9f3a843db47d01f9d2b36a69",
+        "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+        "tree_sha": "47edbfb1ab79de435584a1f799638885ef992d46",
+        "verdict": "approved",
+        "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1057#issuecomment-6313012155",
+        "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          1052
+        ],
+        "recorded_at": "2026-10-21T09:58:41+00:00",
+        "issue_scopes": {
+          "1052": "9ec0c2a8ad90f824b35527de9cf47751b33907bd2c0104ad4cf93e9d60afe4ed"
+        }
       }
     },
     "stage": {
