@@ -47030,20 +47030,6 @@
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
       },
-      "1050": {
-        "actor": "Worker-P1021D2050",
-        "session": "run_p1021d_2050",
-        "coordinator": "Coordinator-P1021B",
-        "branch": "work/acl-2050-placement-readback",
-        "worktree": "C:\\acl-pl-2050",
-        "id": "838556f648e94a21a3de7e40aa5deafc",
-        "issue": 1050,
-        "state": "handoff",
-        "started_at": "2026-10-21T13:42:10+00:00",
-        "from_status": "status:todo",
-        "pr": 1058,
-        "report": "# ACL-2050 handoff 2 (merge main, no content change)\n\nMerged main 0ea237b0e4ce into work/acl-2050-placement-readback. New head: e87cdde5 (pushed to work, no force). Previous head b3fb0f6d.\n\nConflicts: docs/system/CHANGELOG.md only (both added an entry at the top). Resolved by keeping both: main's ACL-1626 entry and our ACL-2050 entry, markers removed. creator.py auto-merged cleanly.\n\nTests (py -m pytest, no full suite): test_acl2050_placement_readback, test_acl1761_*, test_acl1902_name_suffix, test_acl1776_create_forms, test_acl1819_preflight (main touched creator.py/preflight_rules): 467 passed.\n\nPR scope vs main (git diff work/main...HEAD --stat): only docs/system/CHANGELOG.md, src/fb_api/creator.py, tests/test_acl2050_placement_readback.py.\n\nRemaining owner live check: confirm advantage_state_info is read without Graph #100 on a real account; plan green on manual placements, red with clear text on Advantage+."
-      },
       "840": {
         "actor": "Worker-W1021840",
         "session": "run_w1021_1840",
@@ -56073,34 +56059,32 @@
             "session": "run_p1021d_2050"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-P1021D2050",
         "coordinator": "Coordinator-P1021B",
         "handoff": {
-          "actor": "Worker-P1021B2050",
-          "session": "run_p1021b_2050",
+          "actor": "Worker-P1021D2050",
+          "session": "run_p1021d_2050",
           "coordinator": "Coordinator-P1021B",
           "branch": "work/acl-2050-placement-readback",
           "worktree": "C:\\acl-pl-2050",
-          "id": "7ebb22f43a4f49208156669333462411",
+          "id": "838556f648e94a21a3de7e40aa5deafc",
           "issue": 1050,
           "state": "handoff",
-          "started_at": "2026-10-21T12:37:42+00:00",
+          "started_at": "2026-10-21T13:42:10+00:00",
           "from_status": "status:todo",
           "pr": 1058,
-          "report": "# ACL-2050 handoff (review fix)\n\nHead: b3fb0f6d (branch work/acl-2050-placement-readback, pushed to work; main unchanged ea41acbf).\n\nChanges\n- src/fb_api/creator.py `_adset_checks`: `placements_summary` is now added only when publisher_platforms, facebook_positions, instagram_positions or device_platforms differ via the order-insensitive `_same` (same rule as the per-field checks). Genuinely different sets and automatic (Advantage+, empty lists) still stop.\n- Read-back now adds a visible English warning when `advantage_placement_state` is not returned (\"placement mode was not verified (check in Ads Manager)\"). Not blocking.\n- tests/test_acl2050_placement_readback.py: +3 tests (reordered lists pass and publishable; different set still stops with per-field and summary mismatch; warning on missing/present advantage_state_info).\n- docs/system/CHANGELOG.md: ACL-2050 entry extended.\n\nTests (run with `py -m pytest`, the `python` on PATH lacks pytest)\n- test_acl2050_placement_readback.py: 9 passed.\n- test_acl1761_api_create*, existing_check, parity, test_acl1902*, test_acl1776_create_forms*: 317 passed (incl. the 9 above), no failures. No full suite.\n\nRemaining live check for owner\n- Confirm advantage_state_info is read without Graph #100 error on a real account.\n- Check plan green on manual placements; red with a clear text on Advantage+."
+          "report": "# ACL-2050 handoff 2 (merge main, no content change)\n\nMerged main 0ea237b0e4ce into work/acl-2050-placement-readback. New head: e87cdde5 (pushed to work, no force). Previous head b3fb0f6d.\n\nConflicts: docs/system/CHANGELOG.md only (both added an entry at the top). Resolved by keeping both: main's ACL-1626 entry and our ACL-2050 entry, markers removed. creator.py auto-merged cleanly.\n\nTests (py -m pytest, no full suite): test_acl2050_placement_readback, test_acl1761_*, test_acl1902_name_suffix, test_acl1776_create_forms, test_acl1819_preflight (main touched creator.py/preflight_rules): 467 passed.\n\nPR scope vs main (git diff work/main...HEAD --stat): only docs/system/CHANGELOG.md, src/fb_api/creator.py, tests/test_acl2050_placement_readback.py.\n\nRemaining owner live check: confirm advantage_state_info is read without Graph #100 on a real account; plan green on manual placements, red with clear text on Advantage+."
         },
         "pr": 1058,
-        "queued_at": "2026-10-21T12:41:17+00:00",
+        "queued_at": "2026-10-21T13:54:02+00:00",
         "review_report": "ACL-2050 approval is stale vs main 0ea237b0 (batch #1064 merged). Author merges current main into work/acl-2050-placement-readback (no force), reruns affected tests, hands off; fresh independent review and approval required. No content change requested.",
         "return_operation": {
           "id": "3c12c5a9de1241c68f50205413778980",
           "actor": "Coordinator-P1021B",
           "session": "run_p1021b_1021",
           "report": "ACL-2050 approval is stale vs main 0ea237b0 (batch #1064 merged). Author merges current main into work/acl-2050-placement-readback (no force), reruns affected tests, hands off; fresh independent review and approval required. No content change requested."
-        },
-        "rework": true,
-        "rework_claim": "838556f648e94a21a3de7e40aa5deafc"
+        }
       },
       "1052": {
         "implementers": [
@@ -62177,7 +62161,8 @@
       1054,
       710,
       838,
-      839
+      839,
+      1050
     ],
     "review": {
       "id": "3cbfef49299841b6912867db49cc431f",
@@ -107324,6 +107309,13 @@
         "issue": 1063,
         "actor": "Worker-K1021A3",
         "report": "# ACL-2063 paused by owner 2026-10-21: Delivery queue first\n\nWork saved on branch work/acl-2063-scheduled-account-reads (pushed to MojoTheApe, no PR), head 0454a2f6, base main ea41acbf, worktree C:\\acl-auto-read.\nDone: design + plan (docs/superpowers/...), Task 1 structure-only read (f34c3466, 893d5402, reviewed, fixes applied), Task 2 refresh queue (170d5b22, 0454a2f6).\nOpen Task 2 re-review findings (must be fixed before Task 3):\n1. Critical: a successful forced read of another account clears a checkpoint halt raised by a different profile; checkpoint halts must lift only for the halting account (store kind+account in the halt).\n2. start() after a timed-out stop() leaves no worker (_stop stays True).\n3. Halt is in-memory per process; checkpoint stop must persist (write stop into attempt) and be honoured after restart / by the other dashboard process.\n4. attention/schedule re-read accounts whose last attempt failed recently; skip if the failed attempt is younger than FRESH_S.\n5. Freshness checked only at enqueue; re-check at pop.\nMinor: cooldown from text must be max(text, COOLDOWN_S); partial with logged_out/page_unresponsive \u2192 account; forced request for the running account is dropped; schedule entries need a window tag; row stays \"updating\" on BaseException.\nRemaining: Tasks 3-8 of the plan, merge current main, PR, review. No live runs were done."
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-21T13:54:02+00:00",
+        "issue": 1050,
+        "pr": 1058,
+        "actor": "Worker-P1021D2050"
       }
     ],
     "policy": {
