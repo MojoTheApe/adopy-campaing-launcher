@@ -45015,6 +45015,111 @@
           }
         },
         "recorded_at": "2026-10-20T21:06:17+00:00"
+      },
+      "36ca88230aef44c598ea961df39585c3": {
+        "evidence": {
+          "kind": "post-main-acceptance",
+          "report": "Post-main acceptance of batch 36ca8823 (PR #1064, merge 0ea237b0) by the retained integration Reviewer. Unchecked acceptance lines exist only on #377 (L14-L17) and #380 (L13-L18); #784, #880, #626 have none. Each line is attested from code and tests in main 0ea237b0, the source PRs and the combined review. #380 L15 is attested on the owner's explicit acceptance as-is: startup and workbook-change warm-up are not implemented and are deferred to a follow-up task. #380 L17 cites the before/after cold/warm measurements (ea41acbf vs 0ea237b0) posted on PR #962.",
+          "batch_id": "36ca88230aef44c598ea961df39585c3",
+          "pr": 1064,
+          "merge_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+          "head_sha": "bc7f71b68f9e99b7398285dea066aaabe48c92cf",
+          "tree_sha": "d5f90296e2e0d16431ef87ff18d1d3e457b6ba01",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            784,
+            880,
+            377,
+            380,
+            626
+          ],
+          "source_heads": [
+            "f125642bbad9a67cc7d53f4b140f26894ad108af",
+            "8c0e175e274a05af4b923557cbc5dfc839a2e3c7",
+            "33e09b6791038d25560d7a42548cc7dd46e7311d",
+            "44bdbf2913fdb2cf1b3ba0f69a9a9edf2e4d109c",
+            "2b1c52297ef8d0b778285de2f8833037fb5b15d1"
+          ],
+          "issue_scopes": {
+            "784": "5b56fa44c5d2cc279506d3496eb5ed078f5e6d463f7cd1a06f6355db6f6b7bf7",
+            "880": "f0747b53c6bf2831d875beca14abdb0741cc792bba462990e368ca1165fcf392",
+            "377": "ba1d91de10f6ab2391b19b6d8e3faeff12e10c23d3500ddb0530bf15a1ad84d1",
+            "380": "5721bfda1929700ea1d2c0d43cc9cf38e82898dada60cc93441f845a1dd5146d",
+            "626": "78daec77f59b269c69b2b0d3072e9dff71bc3675802a71e8a3e2f16b22df80f4"
+          },
+          "reviewer": "Reviewer-B1021A",
+          "review_session": "run_b1021a_1021",
+          "execution_lane": "3cbfef49299841b6912867db49cc431f",
+          "coordinator": "Coordinator-I1021A",
+          "coordinator_session": "run_i1021a_1021",
+          "criteria": {
+            "377": [
+              {
+                "line": 14,
+                "criterion": "- [ ] Facebook_6540_61579599532457 matches workbook \"Facebook6540\"; its lead of 28.09 appears in the account row and the campaign tree (tests).",
+                "result": "passed",
+                "evidence": "Main 0ea237b0 (via #935 tip 33e09b67): src/web/app.py _alias_without_id_suffix adds the compact letters-and-digits key. tests/test_dashboard_review.py::test_label_matches_the_workbook_alias_written_without_underscores maps Facebook_6540_61579599532457 to Facebook6540; ::test_account_map_row_shows_numbers_for_the_compact_workbook_alias shows the account-map row with workbook numbers (has_data, leads, spend). The campaign tree route /account-attribution (app.py ~4493) resolves the alias through the same tested workbook_alias_for. Fixtures are synthetic, not the live 28.09 lead."
+              },
+              {
+                "line": 15,
+                "criterion": "- [ ] No collision: 6540 vs 6545 and other near names stay separate; ambiguous keys match nothing (tests).",
+                "result": "passed",
+                "evidence": "tests/test_dashboard_review.py: test_near_names_do_not_collide_without_underscores (6540 vs 6545/65400), test_only_near_alias_in_workbook_gives_no_match_for_other_account, test_two_compact_candidates_give_no_match (ambiguous key -> no match), test_compact_match_is_scoped_to_the_country, test_compact_key_ignores_rule_keys; in main 0ea237b0."
+              },
+              {
+                "line": 16,
+                "criterion": "- [ ] Existing matches (FacebookDoc19 - Eros Andersson \u2192 FacebookDoc19, tail matches) unchanged (tests).",
+                "result": "passed",
+                "evidence": "tests/test_dashboard_review.py::test_existing_matches_are_unchanged_by_the_compact_key (FacebookDoc19 - Eros Andersson, Facebook_5265_<id> -> Facebook_5265) and ::test_alias_with_underscore_wins_over_the_compact_one; compact key is only a fallback after the exact key, tail matching unchanged; in main 0ea237b0."
+              },
+              {
+                "line": 17,
+                "criterion": "- [ ] \"not in workbook\" hint on campaign rows with Meta data only.",
+                "result": "passed",
+                "evidence": "report.html (#935) adds the '. not in workbook' hint on tree lines with Meta numbers and no workbook rows; browser tests tests/test_the_account_tree_on_screen.py::test_a_meta_only_campaign_says_it_is_not_in_the_workbook and ::test_the_not_in_workbook_hint_goes_when_the_workbook_finds_the_campaign; in main 0ea237b0."
+              }
+            ],
+            "380": [
+              {
+                "line": 13,
+                "criterion": "- [ ] `_load_raw` cached by file mtime (or rules passed once per enrich); report output unchanged (test).",
+                "result": "passed",
+                "evidence": "config/analysis_rules.py in main 0ea237b0 caches the parsed rules keyed by (st_mtime_ns, st_size) with a periodic recheck. tests/test_reading_rules_are_read_once_per_build.py: test_thousands_of_rows_open_the_file_once (6000 rows, one open, segment outputs PRO/OTHER unchanged), test_a_hand_edit_is_picked_up_without_a_restart, test_a_missing_or_broken_file_still_falls_back, test_callers_cannot_poison_the_cache. Output check is at normalize_text_segment level, not a full-report fixture comparison."
+              },
+              {
+                "line": 14,
+                "criterion": "- [ ] index and /details do not block the event loop (sync def or to_thread); a concurrent request answers while a slow build runs (test).",
+                "result": "passed",
+                "evidence": "Main 0ea237b0: GET / returns the loading page and starts a background build when cold (_start_warm), otherwise renders via _in_report_pool (worker pool); /details is @_off_loop. tests/test_dashboard_stays_responsive_while_report_builds.py::test_control_endpoints_answer_while_a_cold_report_builds and ::test_the_page_says_loading_then_the_report_is_served."
+              },
+              {
+                "line": 15,
+                "criterion": "- [ ] Background warm-up at start and on workbook mtime change; default period report built together.",
+                "result": "passed",
+                "evidence": "Accepted by the owner as-is, relayed by Coordinator-I1021A from the main tracker session on 2026-10-21: \"\u0412\u043b\u0430\u0434\u0435\u043b\u0435\u0446: ACL-1380 \u043f\u0440\u0438\u043d\u0438\u043c\u0430\u044e \u043a\u0430\u043a \u0435\u0441\u0442\u044c \u2014 \u0434\u0430\u0448\u0431\u043e\u0440\u0434 \u043d\u0435 \u0437\u0430\u0432\u0438\u0441\u0430\u0435\u0442, \u0441\u0431\u043e\u0440\u043a\u0430 \u043f\u043e \u043f\u0435\u0440\u0432\u043e\u043c\u0443 \u0437\u0430\u043f\u0440\u043e\u0441\u0443. \u041f\u0440\u043e\u0433\u0440\u0435\u0432 \u043f\u0440\u0438 \u0441\u0442\u0430\u0440\u0442\u0435 \u0438 \u043f\u043e \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044e \u043a\u043d\u0438\u0433\u0438 \u2014 \u043e\u0442\u0434\u0435\u043b\u044c\u043d\u043e\u0439 \u0437\u0430\u0434\u0430\u0447\u0435\u0439 \u043f\u043e\u0437\u0436\u0435.\" Plainly: startup report warm-up and warm-up on workbook mtime change are NOT implemented in main 0ea237b0 (the startup hook _warm_on_startup warms only control paths; cache.py rebuilds lazily on the next request after a workbook change); they are deferred to a follow-up task. What exists: on-demand background build of the report together with the requested period (_warm_page), so the server keeps answering."
+              },
+              {
+                "line": 16,
+                "criterion": "- [ ] targeting_registry.pull() off the render path.",
+                "result": "passed",
+                "evidence": "PR #962 (tip 44bdbf29) in main 0ea237b0: _load_sheet_targets no longer calls targeting_registry.pull(force=True); it reads the local copy and starts one throttled background refresh (_refresh_sheet_targets_in_background). Tests in tests/test_render_path_has_no_network_and_loop_survives.py."
+              },
+              {
+                "line": 17,
+                "criterion": "- [ ] Measured cold/warm times before and after, recorded in the PR.",
+                "result": "passed",
+                "evidence": "Recorded on PR #962: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/962#issuecomment-6318827580 (2026-10-21T14:43:38Z). Before = ea41acbf, after = 0ea237b0, same local workbook/data, separate serve.py processes with isolated config, 3 interleaved runs each. Cold (first GET / to full report, median of 3): 501 s before (576/489/501) vs 498 s after (517/477/498) - within noise. Warm GET / (median of 6): 2.2 s before (1.97-3.36) vs 1.8 s after (1.63-1.90). Process start to /health 200: 15.0 s vs 13.5 s; loading page 0.04 s vs 0.05 s. Caveat: the machine was not idle (~70% CPU from other work), so absolute numbers are inflated and noisy. The PR description's earlier figures (cold 23 s, targets 392 -> 18 ms) were from a different, quieter setup and did not reproduce here. Credentials were blanked; no profile or Meta call. This attests that before/after measurements are recorded, not that the Issue's ~20 s cold target is met."
+              },
+              {
+                "line": 18,
+                "criterion": "- [ ] Cause of the 29.09 asyncio loop errors named (or a test showing the new structure avoids it).",
+                "result": "passed",
+                "evidence": "PR #962 names the cause: clearing the asyncio running-loop mark on the thread that runs the server loop (browser._reset_asyncio_running_loop via BrowserConnection.close) makes later task steps fail with 'loop ... is not the running loop', the 14.09/22.09/29.09 signature. publish_jobs._clear_inherited_asyncio_loop now refuses on the loop's own thread; a live-uvicorn test keeps /health answering after a cancel whose publisher resets the mark (tests/test_render_path_has_no_network_and_loop_survives.py); in main 0ea237b0."
+              }
+            ]
+          }
+        },
+        "recorded_at": "2026-10-21T15:07:19+00:00"
       }
     },
     "policy_migrations": [
@@ -107802,6 +107907,12 @@
             "approved_at": "2026-10-21T14:57:36+00:00"
           }
         }
+      },
+      {
+        "event": "post-main-acceptance-recorded",
+        "at": "2026-10-21T15:07:19+00:00",
+        "batch_id": "36ca88230aef44c598ea961df39585c3",
+        "pr": 1064
       }
     ],
     "policy": {
