@@ -53725,7 +53725,7 @@
             "session": "w144d-20261019"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-W144D",
         "coordinator": "Coordinator-C1016A",
         "handoff": {
@@ -53744,7 +53744,7 @@
         },
         "pr": 951,
         "queued_at": "2026-10-19T12:48:23+00:00",
-        "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
+        "review_report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578062+00:00",
@@ -53762,7 +53762,8 @@
           "actor": "Coordinator-C1016A",
           "session": "c7e3da-20261016",
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
-        }
+        },
+        "rework": true
       },
       "19": {
         "implementers": [
@@ -106825,6 +106826,18 @@
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
         },
         "batch_id": null
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-21T13:10:23+00:00",
+        "issue": 73,
+        "operation": {
+          "id": "0ca1820a06ff42fc9b02f8c67c673763",
+          "actor": "Coordinator-C1016A",
+          "session": "c7e3da-20261016",
+          "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -109070,50 +109083,6 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-19T15:11:33+00:00"
-      },
-      "73": {
-        "issue": 73,
-        "pr": 951,
-        "branch": "codex/acl-144-direct-profile-dir",
-        "head_sha": "6faf9a763620c15fa1023565661de5c9cc4dd1e2",
-        "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-        "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "scope": "3a25372ae9c718cc8f08a1c2cf0a72178f1d6ee782f7356fba460f6033aa2db0",
-        "review": {
-          "kind": "independent-review",
-          "verdict": "approved",
-          "reviewer": "Reviewer-R144X",
-          "review_session": "reviewer-r144x-20261019",
-          "execution_lane": "1d64a1d747614ee6aa08f2f8522971af",
-          "implementer": "Worker-W144D",
-          "head_sha": "6faf9a763620c15fa1023565661de5c9cc4dd1e2",
-          "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-          "tree_sha": "81d8cdc5bdb412096afb898396b2624f819a1c95",
-          "issues": [
-            73
-          ],
-          "report": "Reviewed head 6faf9a76 (merge of current main 1c6ab78e into the PR branch; base verified as work/main 1c6ab78e). The PR replaces the recursive rglob over ~/mlx/profiles in fb_ads_rpa/browser.py::_find_mlx_profile_dir with direct addressing of profiles/{workspace}/{folder_id}/{profile_id}, also accepting profiles/{workspace}/{profile_id}, looking at directory names at most two levels under a workspace; the optional folder_id argument is tried first across workspaces, exact directory-name match only, and the dashboard's account_spend._mlx_profile_dir now delegates to this single implementation instead of keeping a copy. Criteria: (1) known profiles resolve through their expected path with no recursive scan - the new tests monkeypatch Path.rglob, Path.glob and os.walk to raise and assert zero calls, including a profile with deep Chrome content; (2) missing root, missing profile, a layout deeper than the known one, and unsafe ids (empty, '.', '..', separators) all return None, which every existing caller already treats as folder-not-found, and there is deliberately no fallback, so no account session can be opened outside Multilogin and another profile's folder can never be picked (tests cover p-1 vs p-10/p-1-copy, a file with the profile's name, and same-name profile in another workspace); (3) correct selection and the speed-up are demonstrated by counting tree-walk calls on tmp_path fixtures rather than timing, which is acceptable and non-flaky. Call sites are unchanged; fb_api.profile.find_profile_dir still scans and is explicitly out of scope. User-facing text: none added; CHANGELOG entry is in English. Tests run locally on the head: tests/test_a_profile_folder_is_found_by_address.py, test_account_spend.py, test_workbook_review.py, test_a_campaign_opens_within_two_minutes.py - 116 passed, 1 failed (test_account_spend.py::test_the_new_table_without_row_ids_is_read_by_name), a local Playwright chromium set_content timeout (199 s) in an environment-dependent browser test that does not touch profile lookup; it passes in CI. CI on the head 6faf9a76: all checks pass (ACL verification, classify, installer verification, linux tests 1/2/3, windows tests, process instructions, descriptor, tracker-link; build jobs skipped as expected). Non-blocking nits: callers in the RPA layer still pass only profile_id, so folder_id priority benefits only the dashboard; the docstring comments are in Russian per repo convention. No live checks claimed.",
-          "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "recorded_at": "2026-10-19T19:15:41+00:00",
-          "issue_scopes": {
-            "73": "3a25372ae9c718cc8f08a1c2cf0a72178f1d6ee782f7356fba460f6033aa2db0"
-          }
-        },
-        "lane": {
-          "id": "1d64a1d747614ee6aa08f2f8522971af",
-          "pr": 951,
-          "issues": [
-            73
-          ],
-          "actor": "Reviewer-R144X",
-          "session": "reviewer-r144x-20261019",
-          "coordinator": "Coordinator-C1016A",
-          "started_at": "2026-10-19T17:55:26+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-19T19:17:35+00:00"
       },
       "29": {
         "issue": 29,
