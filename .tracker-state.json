@@ -47050,9 +47050,11 @@
         "worktree": "C:\\acl-int-w1838",
         "id": "e9c852bfb5fe4070836d65a3b5cbe6e6",
         "issue": 838,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T13:39:13+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 842,
+        "report": "ACL-1838 refresh: merged origin/main (0ea237b0e4ce) into codex/acl-1838-country-active-line, clean merge, no conflicts, no content change.\nOld head bc9ba5c808673dd775511c85e90ffe30c7b9beb1; new head fba8ae7d2d06df449fcc71286c258dca1b948c89. PR base is main.\nDiff vs main: only docs/system/CHANGELOG.md, docs/system/PROJECT.md, src/web/templates/report.html.\nTests: PR has no test files of its own; no existing test references the changed selector, so none run locally.\nCI on new head: all checks pass (linux 1/2/3, windows, tracker-link, verification)."
       },
       "839": {
         "actor": "Worker-W1021839",
