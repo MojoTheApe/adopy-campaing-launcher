@@ -44,13 +44,16 @@ log = logging.getLogger(__name__)
 BACKEND_ENV = "ACL_FB_BACKEND"
 CREATE_MAX_CALLS_ENV = "ACL_FB_API_CREATE_MAX_CALLS"
 MIN_INTERVAL_ENV = "ACL_FB_API_MIN_INTERVAL_S"
-#: Потолок вызовов Graph на одну кампанию: предпроверка, поиск, медиа,
-#: ожидание видео, запись, проверка меток, сверка — с запасом на 4 объявления
-#: с видео (4 × (20 опросов + ~10) + ~20). Instant Form (ACL-1775) добавляет
-#: до 4 чтений форм Страницы (до 2 в предпроверке и до 2 при сверке: список и
-#: условия), поэтому запас на них +10. Свой потолок кончает только эту
+#: Потолок вызовов Graph на одну кампанию (ACL-1768): сам бюджет считается по плану
+#: (`creator.estimate_create_calls`: основа + за набор + за объявление + опросы видео +
+#: чтения форм Instant Form) и зажимается этим потолком. Он же верхняя граница для
+#: `ACL_FB_API_CREATE_MAX_CALLS`. Кампания, которой нужно больше, отклоняется заранее
+#: ("split it"), а не останавливается на полпути. Свой потолок кончает только эту
 #: кампанию, следующие идут со своим (ревью, minor 5).
-DEFAULT_CREATE_MAX_CALLS = 150
+DEFAULT_CREATE_MAX_CALLS = 250
+#: Бюджет вызовов на кампанию не опускается ниже прежнего фиксированного (ревью 833, раунд 2).
+CREATE_BUDGET_FLOOR = 150
+CREATE_CALLS_FLOOR = 20
 #: Потолок на предпроверку кабинета (один раз на задание).
 PREFLIGHT_MAX_CALLS = 12
 READY_TIMEOUT_S = 90.0
@@ -72,6 +75,25 @@ def _env_number(name: str, default: float, lo: float, hi: float) -> float:
     except ValueError:
         value = default
     return max(lo, min(hi, value))
+
+
+def create_call_budget(plan: Any) -> tuple[int, str]:
+    """(бюджет вызовов на кампанию, отказ). Бюджет - по плану, не больше потолка из окружения.
+
+    Если плану нужно больше потолка, отказ вслух сразу (и в Check plan, и в запуске), а не
+    остановка на полпути.
+    """
+    from src.fb_api.creator import estimate_create_calls
+
+    ceiling = int(_env_number(CREATE_MAX_CALLS_ENV, DEFAULT_CREATE_MAX_CALLS, CREATE_CALLS_FLOOR,
+                              DEFAULT_CREATE_MAX_CALLS))
+    need = estimate_create_calls(plan)
+    if need > DEFAULT_CREATE_MAX_CALLS:
+        return ceiling, (f"This campaign needs about {need} Meta calls, more than one run allows "
+                         "— split it. Nothing was created.")
+    # Не ниже прежних 150: малые планы не теряют запас на медленное видео. Нижний потолок в окружении -
+    # решение оператора: бюджет зажимается им (остановка на полпути, как всегда).
+    return min(max(need, CREATE_BUDGET_FLOOR), ceiling), ""
 
 
 def _now_iso() -> str:
@@ -191,6 +213,8 @@ def dry_run_result(outcome: Outcome) -> dict[str, Any]:
         "readback": {}, "plan": outcome.plan, "created": {}, "reused": {}, "ts": _now_iso(),
         # ACL-1819: вердикты серверных правил pre-flight audit (пусто, если аудит не шёл).
         "audit": list(outcome.audit),
+        # ACL-1771: термины таргетинга (найдены / ждут подтверждения) и кэш подтверждённых.
+        "targeting": list(outcome.targeting),
     }
 
 
@@ -219,6 +243,8 @@ def result_dict(outcome: Outcome, *, error: str = "") -> dict[str, Any]:
         "run_id": None,
         "campaign_id": outcome.campaign_id or None,
         "adset_id": outcome.adset_ids[0] if outcome.adset_ids else None,
+        # ACL-1768: все наборы кампании (adset_id - первый, как всегда).
+        "adset_ids": list(outcome.adset_ids),
         "creative_id": None,
         "ad_id": outcome.ad_ids[0] if outcome.ad_ids else None,
         "ad_ids": list(outcome.ad_ids),
@@ -402,6 +428,9 @@ class ApiPublisher:
             return result_dict(Outcome(campaign_name=name),
                                error="The draft's ad account differs from the verified one. Nothing was created.")
         assert self._client is not None and self._facts is not None and self._resolver is not None
+        budget, too_big = create_call_budget(plan)
+        if too_big:
+            return result_dict(Outcome(campaign_name=name), error=too_big)
         if not self.dry_run and any(ad.form_template for s_ in plan.ad_sets for ad in s_.ads):
             # ACL-1776: Страница плана закрепляется на сессию до первой записи формы.
             try:
@@ -414,7 +443,7 @@ class ApiPublisher:
                 return result_dict(Outcome(campaign_name=name), error=(
                     "Ads Manager did not give the session back after pinning the Page "
                     f"({pinned.get('kind') or 'no token'}). Nothing was created; run again."))
-        self._client.reset_budget(int(_env_number(CREATE_MAX_CALLS_ENV, DEFAULT_CREATE_MAX_CALLS, 20, 250)))
+        self._client.reset_budget(budget)
 
         def step(text: str) -> None:
             self.progress(f"{name}: {text}")
@@ -522,7 +551,8 @@ class ApiPublisher:
 # записи (помощник с WRITE=null, `GraphClient(allow_writes=False)`).
 
 #: Потолок вызовов на предпроверку кабинета внутри «Check plan».
-PLAN_PREFLIGHT_MAX_CALLS = 12
+# ACL-1771: поиск детального таргетинга ходит за списками Meta (в резолвере свои потолки в чтениях: 8 на термин, 16 на задание).
+PLAN_PREFLIGHT_MAX_CALLS = 30
 
 
 def _plan_in_read_session(account_label: str, drafts: list[Any]) -> list[dict[str, Any]]:

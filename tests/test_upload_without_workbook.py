@@ -226,7 +226,7 @@ def test_the_builder_form_carries_a_language_field():
 def test_the_form_field_reaches_the_slot():
     """Поле, которое не доезжает до черновика, — это контрол-обманка."""
     source = (ROOT / "src" / "web" / "app.py").read_text(encoding="utf-8")
-    assert '"language": language' in source, "язык не кладётся в слот"
+    assert '"language": language' in source or '"language": sf["language"]' in source, "язык не кладётся в слот"
     build = (ROOT / "src" / "fb_ads_rpa" / "build_draft.py").read_text(encoding="utf-8")
     assert 'first.get("language")' in build, "черновик не читает язык из слота"
 
@@ -260,7 +260,11 @@ def test_the_campaign_card_has_exactly_one_builder():
 
     js = page[page.index("function buildBlankSlotHTML"):]
     js = js[: js.index("cb-slot-grid")]
+    # ACL-1768: поля набора (targeting, os, age, language) строит buildAdsetSectionHTML, её зовёт этот же строитель.
+    sec = page[page.index("function buildAdsetSectionHTML"):]
+    js += sec[: sec.index("Placements")]
     fields = set(re.findall(r"name=\"camp_' \+ idx \+ '_([a-z_]+)\"", js))
+    fields |= set(re.findall(r"name=\"' \+ pfx \+ '([a-z_]+)\"", js))
     fields |= set(re.findall(r"mkSel\(idx, '([a-z_]+)'", js))
     assert {"language", "targeting", "age", "budget", "asset"} <= fields, (
         f"единственный строитель растерял поля: есть только {sorted(fields)}"

@@ -24,14 +24,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
+from datetime import datetime, timezone
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from src.fb_api import form_create as _fc
 from src.fb_api import form_templates as _ft
 from src.fb_api import forms as _forms
+from src.fb_api import write_policy as _wpol
+from src.fb_api import targeting_resolver as _tr
 from src.fb_api.graph import GraphClient, GraphError, GraphStop, WritesBlocked, WriteUnknown, normalize_act
 
 PAUSED = "PAUSED"
@@ -42,6 +47,17 @@ DESTINATION = "WEBSITE"
 BID_STRATEGY = "LOWEST_COST_WITHOUT_CAP"
 CUSTOM_EVENT = "LEAD"
 CTA_TYPE = "LEARN_MORE"
+#: ACL-1767: допустимые кнопки (единый список - в политике записи) и значения новых полей.
+CTA_WEBSITE = _wpol.CTA_WEBSITE
+CTA_FORM = _wpol.CTA_FORM
+GENDER_IDS = {"men": 1, "women": 2}
+GENDER_LABELS = {"men": "Men", "women": "Women"}
+DEVICE_CHOICES = ("mobile", "desktop")
+OS_CHOICES = ("all", "ios", "android")
+_OS_MIN_RE = re.compile(r"^[0-9]{1,2}(\.[0-9]{1,2})?$")
+_START_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}$")
+#: Multi-advertiser ads (ACL-1767): всегда явно выключены.
+MULTI_ADS_OPT_OUT = {"enroll_status": "OPT_OUT"}
 
 #: Instant Form (ACL-1775): место показа — сама форма, цель — лиды, объект — Страница.
 DEST_WEBSITE = "website"
@@ -95,6 +111,29 @@ VIDEO_MAX_BYTES = 200 * 1024 * 1024
 VIDEO_WAIT_S = 300.0
 VIDEO_POLL_S = 15.0
 VIDEO_MAX_POLLS = 20
+
+#: ACL-1768: потолок вызовов Graph на одну кампанию растёт с планом. Замерено на FakeMeta
+#: (картинки, с предпроверкой): 14 + 5 за набор + 4 за объявление (10 наборов x 3 = 184).
+#: Берём с запасом; видео добавляет опросы обработки, Instant Form - чтения форм Страницы.
+CALLS_BASE = 20
+CALLS_PER_AD_SET = 7
+CALLS_PER_AD = 5
+CALLS_PER_VIDEO_POLLS = 8       # опросов обработки на одно видео: медленная обработка (6-8 опросов) не должна упираться в бюджет;
+                                # больше 250 вызовов на план - отказ заранее («разбейте»), а не остановка на полпути
+CALLS_INSTANT_FORM = 10
+
+
+def estimate_create_calls(plan: "CampaignPlan") -> int:
+    """Сколько вызовов Graph нужно на кампанию целиком (первый запуск, с запасом)."""
+    total = CALLS_BASE + CALLS_PER_AD_SET * len(plan.ad_sets)
+    for ad_set in plan.ad_sets:
+        total += CALLS_PER_AD * len(ad_set.ads)
+        total += CALLS_PER_VIDEO_POLLS * sum(1 for a in ad_set.ads if a.kind == "video")
+    if any(x.instant for x in plan.ad_sets):
+        total += CALLS_INSTANT_FORM
+    return total
+
+
 #: Пауза перед сверкой неизвестной записи: запрос мог ещё лететь (ревью, minor 3).
 RECONCILE_WAIT_S = 5.0
 #: Сверка после неизвестной загрузки ФАЙЛА (ACL-1899): видео могло долететь позже.
@@ -125,6 +164,8 @@ LIVE_STATES = ["ACTIVE", "PAUSED", "PENDING_REVIEW", "DISAPPROVED", "PREAPPROVED
                "PENDING_BILLING_INFO", "CAMPAIGN_PAUSED", "ADSET_PAUSED", "IN_PROCESS",
                "WITH_ISSUES"]
 
+
+from src.fb_ads_rpa.draft import MAX_AD_SETS, MAX_AD_SETS_ERROR  # noqa: E402
 
 #: Id-пустышка формы для проверки политики и показа плана (формы ещё нет; 5-25 цифр).
 FORM_ID_PLACEHOLDER = "0000000"
@@ -168,6 +209,12 @@ class AdPlan:
     description: str
     #: Id существующей формы Страницы (только у Instant Form; иначе пусто).
     form_id: str = ""
+    #: ACL-1770: Страница и ссылка объявления. Пусто = как у кампании (`CampaignPlan`).
+    page_id: str = ""
+    link: str = ""
+    page_source: str = ""
+    #: Тип кнопки (ACL-1767); по умолчанию LEARN_MORE, как всегда.
+    cta: str = CTA_TYPE
     #: Шаблон формы (ACL-1776): форму создаёт робот при публикации; `form_id` заполняется тогда же.
     form_template: dict | None = None
 
@@ -182,6 +229,17 @@ class AdSetPlan:
     ads: list[AdPlan] = field(default_factory=list)
     #: "website" (как всегда) или "instant_form" (ACL-1775).
     destination: str = DEST_WEBSITE
+    #: ACL-1767. Пусто = как раньше (все полы / все устройства / старт при включении).
+    gender: str = ""                 # "men" | "women"
+    languages: list[str] = field(default_factory=list)   # дополнительные языки к языку кампании
+    device: str = ""                 # "mobile" | "desktop"
+    os_min: str = ""                 # минимальная версия iOS/Android: "14" или "14.0"
+    start_time: str = ""             # "YYYY-MM-DDTHH:MM" по часовому поясу кабинета
+    #: ACL-1768: номер набора и поля уровня набора; пусто = как у кампании.
+    index: int = 1                   # 1-based порядковый номер набора в кампании
+    language: str = ""               # язык набора вместо языка кампании
+    pixel_id: str = ""               # пиксель набора вместо пикселя кампании
+    pixel_source: str = ""
 
     @property
     def instant(self) -> bool:
@@ -210,6 +268,17 @@ class CampaignPlan:
     def label(self) -> str:
         return f"acl-{self.tag}"
 
+    # ACL-1770: Страница и ссылка принадлежат объявлению, пиксель - набору.
+    # Значение уровня главнее; пусто - берётся значение кампании.
+    def page_of(self, ad: "AdPlan") -> str:
+        return ad.page_id or self.page_id
+
+    def link_of(self, ad: "AdPlan") -> str:
+        return ad.link or self.link
+
+    def pixel_of(self, ad_set: "AdSetPlan") -> str:
+        return ad_set.pixel_id or self.pixel_id
+
 
 def _interest_groups(raw: str) -> list[list[str]]:
     """«a, b [AND] c» → [["a","b"],["c"]] — то же деление, что у RPA."""
@@ -230,6 +299,65 @@ def _kind_of(path: str, declared: str) -> str:
     if ext in IMAGE_EXT:
         return "image"
     return "video" if "video" in (declared or "").lower() else "image"
+
+
+def _plan_cta(ad: Any, plan_set: AdSetPlan, index: int, problems: list[str]) -> str:
+    cta = str(getattr(ad, "cta", "") or "").strip().upper() or CTA_TYPE
+    allowed = CTA_FORM if plan_set.instant else CTA_WEBSITE
+    if cta not in allowed:
+        problems.append(f"Ad {index}: the button {cta!r} is not available for "
+                        f"{'an Instant Form' if plan_set.instant else 'a website'} Leads ad")
+    return cta
+
+
+def _plan_audience(plan_set: AdSetPlan, src: Any, problems: list[str]) -> None:
+    """Пол, языки, устройства, версия ОС и старт набора (ACL-1767). Незнакомое - отказ вслух."""
+    name = plan_set.name
+    gender = str(getattr(src, "gender", "") or "").strip().lower()
+    if gender and gender not in GENDER_IDS:
+        problems.append(f"Ad set {name!r}: unknown gender {gender!r} (use All, Men or Women)")
+    else:
+        plan_set.gender = gender
+    device = str(getattr(src, "device", "") or "").strip().lower()
+    if device and device not in DEVICE_CHOICES:
+        problems.append(f"Ad set {name!r}: unknown devices value {device!r} (use All, Mobile only or Desktop only)")
+    else:
+        plan_set.device = device
+    if plan_set.os.casefold() not in OS_CHOICES:
+        problems.append(f"Ad set {name!r}: unknown operating system {plan_set.os!r} (use All, iOS or Android)")
+    mobile_os = plan_set.os.casefold() in ("ios", "android")
+    if mobile_os and device == "desktop":
+        problems.append(f"Ad set {name!r}: {plan_set.os} is a mobile system and cannot be combined with desktop only")
+    elif device == "desktop":
+        # ACL-1767 review B2: создатель всегда шлёт Instagram, Stories и Reels (только мобильные),
+        # поэтому «только десктоп» Meta отвергнет уже после создания кампании. Настоящее решение -
+        # ручные плейсменты (ACL-1772); до тех пор отказ здесь, до любой записи.
+        problems.append(f"Ad set {name!r}: Desktop only isn't possible with automatic placements "
+                        "(Instagram, Stories and Reels need mobile). Pick All devices or Mobile, "
+                        "or wait for manual placements.")
+    os_min = str(getattr(src, "os_min", "") or "").strip()
+    if os_min:
+        if not mobile_os:
+            problems.append(f"Ad set {name!r}: a minimum OS version needs the operating system iOS or Android")
+        elif not _OS_MIN_RE.match(os_min):
+            problems.append(f"Ad set {name!r}: minimum OS version {os_min!r} is not a number like 14 or 14.0")
+        else:
+            plan_set.os_min = os_min
+    seen: set[str] = set()
+    for lang in getattr(src, "languages", None) or []:
+        lang = str(lang).strip()
+        if lang and lang.casefold() not in seen:
+            seen.add(lang.casefold())
+            plan_set.languages.append(lang)
+    start = str(getattr(src, "start_time", "") or "").strip()
+    if start:
+        try:
+            if not _START_RE.match(start):
+                raise ValueError(start)
+            datetime.strptime(start, "%Y-%m-%dT%H:%M")
+            plan_set.start_time = start
+        except ValueError:
+            problems.append(f"Ad set {name!r}: start time {start!r} is not a date and time")
 
 
 def _source(draft: Any, what: str) -> str:
@@ -260,31 +388,54 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
     link = str(getattr(draft, "link", "") or "").strip()
     ad_sets_src = list(getattr(draft, "ad_sets", None) or [])
     # Ссылка нужна только сайтовым наборам: у Instant Form своей ссылки нет (ACL-1775).
-    if not link and (not ad_sets_src or any(str(getattr(s, "destination", "") or DEST_WEBSITE) != DEST_FORM
-                                            for s in ad_sets_src)):
-        problems.append("Tracking link is empty; the API backend needs it for the ads")
+    # ACL-1770: ссылка у объявления своя, если задана; пустая - сообщение называет объявление.
+    if not ad_sets_src:
+        if not link:
+            problems.append("Tracking link is empty; the API backend needs it for the ads")
+    elif not link:
+        website_ads = [(i, a) for s in ad_sets_src
+                       if str(getattr(s, "destination", "") or DEST_WEBSITE) != DEST_FORM
+                       for i, a in enumerate(s.ads, start=1)]
+        bare = [(i, a) for i, a in website_ads if not str(getattr(a, "link", "") or "").strip()]
+        if website_ads and len(bare) == len(website_ads):
+            problems.append("Tracking link is empty; the API backend needs it for the ads")
+        else:
+            for i, a in bare:
+                problems.append(f"Tracking link is empty for ad {i} ({a.ad_name() or 'unnamed'}); "
+                                "type it in the ad or in the campaign")
     if not ad_sets_src:
         problems.append("No ad sets in the campaign")
+    if len(ad_sets_src) > MAX_AD_SETS:
+        problems.append(MAX_AD_SETS_ERROR)      # ACL-1768: потолок наборов
     budget = getattr(ad_sets_src[0], "daily_budget", None) if ad_sets_src else None
     if not budget or float(budget) <= 0:
         problems.append("Daily budget missing")
     ad_sets: list[AdSetPlan] = []
-    for s in ad_sets_src:
+    ad_no = 0     # ACL-1768: номер объявления сквозной по кампании (как «Ad N» в билдере)
+    for set_no, s in enumerate(ad_sets_src, start=1):
         plan_set = AdSetPlan(
+            index=set_no,
+            language=str(getattr(s, "language", "") or "").strip(),
+            pixel_id=str(getattr(s, "pixel_id", "") or "").strip(),
             name=str(s.name or draft.name).strip(),
             age_min=int(getattr(s, "age_min", 18) or 18),
             age_max=int(getattr(s, "age_max", 65) or 65),
             os=str(getattr(s, "os", "All") or "All").strip(),
             interest_groups=_interest_groups(str(getattr(s, "targeting_label", "") or "")),
         )
+        plan_set.pixel_id = str(getattr(s, "pixel_id", "") or "").strip()
+        plan_set.pixel_source = "ad set" if plan_set.pixel_id else ""
         dest = str(getattr(s, "destination", "") or DEST_WEBSITE).strip().lower()
         if dest not in (DEST_WEBSITE, DEST_FORM):
             problems.append(f"Unknown conversion location {dest!r} in ad set {plan_set.name!r}")
         else:
             plan_set.destination = dest
+        _plan_audience(plan_set, s, problems)
         if not s.ads:
             problems.append(f"No ads in ad set {plan_set.name!r}")
-        for i, ad in enumerate(s.ads, start=1):
+        for ad in s.ads:
+            ad_no += 1
+            i = ad_no
             if str(getattr(ad, "ad_body2", "") or "").strip():
                 problems.append(f"Ad {i}: Primary text 2 is not supported by the API backend yet "
                                 "(remove it or publish with RPA)")
@@ -295,7 +446,11 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
                 index=i, name=ad.ad_name(), kind=_kind_of(path, getattr(ad, "creative_type", "")),
                 path=path, title=str(ad.ad_title or "").strip(), body=str(ad.ad_body or "").strip(),
                 description=str(ad.ad_link_description or "").strip(),
-                form_id=(str(getattr(ad, "lead_form_id", "") or "").strip() if plan_set.instant else "")))
+                form_id=(str(getattr(ad, "lead_form_id", "") or "").strip() if plan_set.instant else ""),
+                page_id=str(getattr(ad, "page_id", "") or "").strip(),
+                link=str(getattr(ad, "link", "") or "").strip(),
+                page_source="ad" if str(getattr(ad, "page_id", "") or "").strip() else "",
+                cta=_plan_cta(ad, plan_set, i, problems)))
             template_id = (str(getattr(ad, "lead_form_template", "") or "").strip() if plan_set.instant else "")
             if template_id and plan_set.ads[-1].form_id:
                 problems.append(f"Ad {i}: choose either an existing form or a template, not both")
@@ -315,8 +470,9 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
                                 "or a template)")
         ad_sets.append(plan_set)
     # Ревью M2: одинаковые имена схлопнули бы объявления (поиск, сверка, повтор).
-    set_names = [x.name for x in ad_sets]
-    for dup in sorted({n for n in set_names if set_names.count(n) > 1}):
+    # ACL-1768: сравнение без учёта регистра и пробелов по краям - Meta ищет наборы по имени.
+    set_names = [x.name.casefold() for x in ad_sets]
+    for dup in sorted({x.name for x in ad_sets if set_names.count(x.name.casefold()) > 1}):
         problems.append(f"Two ad sets are named {dup!r}; ad set names in a campaign must differ")
     for x in ad_sets:
         names = [a.name for a in x.ads]
@@ -352,6 +508,11 @@ class AccountFacts:
     currency: str
     pages: list[str]
     pixels: list[str]
+    #: Смещение кабинета от UTC СЕЙЧАС (только для сведения: на дату старта оно может быть другим).
+    utc_offset_hours: float | None = None
+    #: IANA-имя часового пояса кабинета (`timezone_name`, тот же ответ, что и смещение).
+    #: Время старта переводится по нему, а не по текущему смещению (ACL-1767: переход на летнее время).
+    timezone_name: str = ""
 
 
 def preflight_account(client: GraphClient, act: str) -> AccountFacts:
@@ -373,20 +534,41 @@ def preflight_account(client: GraphClient, act: str) -> AccountFacts:
         raise PlanError("Graph API answered for a different ad account. Nothing was created.")
     pages = client.get_all(f"/{act}/promote_pages", {"fields": "id,name", "limit": 100}, max_pages=2)
     pixels = client.get_all(f"/{act}/adspixels", {"fields": "id,name", "limit": 50}, max_pages=1)
+    try:
+        raw_off = acc.get("timezone_offset_hours_utc")
+        offset = float(raw_off) if raw_off is not None else None
+    except (TypeError, ValueError):
+        offset = None
     return AccountFacts(act=act, currency=str(acc.get("currency") or "").upper(),
                         pages=[str(p.get("id")) for p in pages if p.get("id")],
-                        pixels=[str(p.get("id")) for p in pixels if p.get("id")])
+                        pixels=[str(p.get("id")) for p in pixels if p.get("id")],
+                        utc_offset_hours=offset, timezone_name=str(acc.get("timezone_name") or "").strip())
 
 
 def resolve_page(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
-    """Страница плана: на кабинете и одна определённая. Заметки; ошибки — `PlanError`."""
+    """Страница плана: на кабинете и одна определённая. Заметки; ошибки — `PlanError`.
+
+    ACL-1770: Страница принадлежит объявлению. Своя Страница объявления проверяется по кабинету
+    и называет объявление; без неё действует Страница кампании (карта, затем единственная).
+    """
     notes = []
+    ads = [(s, a) for s in plan.ad_sets for a in s.ads]
+    for ad_set, ad in ads:
+        if ad.page_id and ad.page_id not in facts.pages:
+            raise PlanError(f"The page of ad {ad.index} ({ad.name}) is not among the pages "
+                            f"this ad account can advertise from ({len(facts.pages)} found). "
+                            "Nothing was created.")
+    # Кампании нужна своя Страница, если есть объявление без своей или набор-форма
+    # (форма принадлежит Странице набора).
+    needed = any(not a.page_id for _, a in ads) or any(s.instant for s in plan.ad_sets) or not ads
     if plan.page_id:
         # Принадлежность проверяется и при пустом списке: пустой список — не «можно всё».
         if plan.page_id not in facts.pages:
             src = plan.page_source or "draft"
             raise PlanError(f"The page from the {src} ({plan.page_id}) is not among the pages "
                             f"this ad account can advertise from ({len(facts.pages)} found).")
+    elif not needed:
+        pass
     elif len(facts.pages) == 1:
         plan.page_id = facts.pages[0]
         plan.page_source = "account default"
@@ -394,13 +576,27 @@ def resolve_page(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
     else:
         raise PlanError(f"page_id is empty in the account map and the ad account has "
                         f"{len(facts.pages)} pages; set page_id")
+    for ad_set, ad in ads:
+        if ad_set.instant and ad.page_id and ad.page_id != plan.page_id:
+            raise PlanError(f"Ad {ad.index} ({ad.name}) uses an Instant Form, which belongs to the "
+                            "Page of its ad set; use the campaign Page for it. Nothing was created.")
     return notes
 
 
 def resolve_pixel(plan: CampaignPlan, facts: AccountFacts) -> None:
-    """Пиксель плана (только сайтовые наборы). Ошибки — `PlanError`."""
-    if plan.ad_sets and all(s.instant for s in plan.ad_sets):
-        # Instant Form: цель — форма Страницы, пиксель не нужен (ACL-1775).
+    """Пиксель плана (только сайтовые наборы). Ошибки — `PlanError`.
+
+    ACL-1770: пиксель принадлежит набору; свой проверяется по кабинету и называет набор.
+    """
+    website = [s for s in plan.ad_sets if not s.instant]
+    for ad_set in website:
+        if ad_set.pixel_id and ad_set.pixel_id not in facts.pixels:
+            raise PlanError(f"The pixel of ad set {ad_set.name!r} ({ad_set.pixel_id}) is not on this "
+                            f"ad account ({len(facts.pixels)} found). Fix the pixel instead of "
+                            "letting another one be picked. Nothing was created.")
+    if plan.ad_sets and (not website or all(s.pixel_id for s in website)):
+        # Instant Form: цель — форма Страницы, пиксель не нужен (ACL-1775); либо у каждого
+        # сайтового набора пиксель свой (ACL-1770).
         pass
     elif plan.pixel_id:
         # То же для пикселя. Читается первая страница (50): больше — безопасный отказ.
@@ -408,6 +604,8 @@ def resolve_pixel(plan: CampaignPlan, facts: AccountFacts) -> None:
             src = plan.pixel_source or "draft"
             raise PlanError(f"The pixel from the {src} ({plan.pixel_id}) is not on this ad account "
                             f"({len(facts.pixels)} found). Fix the pixel instead of letting another one be picked.")
+    elif all(s.pixel_id for s in plan.ad_sets if not s.instant):
+        return
     elif len(facts.pixels) == 1:
         plan.pixel_id = facts.pixels[0]
         plan.pixel_source = "account default"
@@ -431,15 +629,49 @@ def _country_names_for(code: str) -> list[str]:
     return [n.title() for n, c in COUNTRY_CODES.items() if c == code][:2]
 
 
+class TargetingUnresolved(PlanError):
+    """Термин библиотеки не найден точно или ждёт подтверждения человека (ACL-1771).
+
+    `items` — непонятые термины/части: {term, state: pending|unresolved, candidates,
+    suggested?, reason}. Текст начинается так же, как раньше («Detailed targeting not found…»).
+    """
+
+    def __init__(self, items: list[dict]):
+        self.items = items
+        unknown = [i for i in items if i.get("state") == "unknown"]
+        lost = [i for i in items if i.get("state") not in ("pending", "unknown")]
+        asks = [i for i in items if i.get("state") == "pending"]
+
+        def cands(i: dict) -> str:
+            rows = i.get("candidates") or []
+            return ("; candidates: " + ", ".join(f"{c['name']} [{c['type']}]" for c in rows[:5])
+                    if rows else "; no candidates")
+
+        msg: list[str] = []
+        if lost:
+            msg.append("Detailed targeting not found by Meta: "
+                       + " | ".join(f"{i['term']}{cands(i)}" + (f" ({i['reason']})" if i.get("reason") else "")
+                                    for i in lost))
+        if asks:
+            msg.append("Detailed targeting needs your confirmation: "
+                       + " | ".join(f"picked '{i['suggested']['name']}' [{i['suggested']['type']}] for '{i['term']}'?"
+                                    for i in asks) + " Confirm a candidate in Check plan.")
+        if unknown:
+            msg.append(_tr.UNKNOWN_MESSAGE)
+        super().__init__(". ".join(msg))
+
+
 class TargetingResolver:
     """Гео, языки, интересы → id Meta. Кэш на задание; только чтения."""
 
-    def __init__(self, client: GraphClient):
+    def __init__(self, client: GraphClient, store: _tr.ConfirmedStore | None = None):
         self.client = client
         self._geo: dict[str, str] = {}
         self._locale: dict[str, int] = {}
-        self._interest: dict[str, dict] = {}
-        self._behaviors: list[dict] | None = None
+        #: Имя, под которым Meta нашла язык («Spanish (All)»): показываем в Check plan.
+        self.locale_names: dict[str, str] = {}
+        #: Детальный таргетинг (ACL-1771): свой поиск, кэш подтверждённых и бюджет вызовов.
+        self.terms = _tr.TermResolver(client, store)
 
     def country(self, value: str) -> str:
         key = (value or "").strip()
@@ -486,40 +718,40 @@ class TargetingResolver:
         if not pick:
             raise PlanError(f"Audience language {lang!r} was not found by Meta targeting search")
         self._locale[lang] = int(pick["key"])
+        self.locale_names[lang] = str(pick.get("name") or lang)
         return self._locale[lang]
 
     def interests(self, groups: list[list[str]]) -> list[dict]:
-        """Группы имён → `flexible_spec` (interests/behaviors с id)."""
-        names = [n for g in groups for n in g if n.casefold() not in self._interest]
-        if names:
-            rows = self.client.get_all("/search", {"type": "adinterestvalid", "interest_list": names},
-                                       max_pages=1)
-            for r in rows:
-                if r.get("valid") is not False and r.get("id"):
-                    self._interest[str(r.get("name") or "").casefold()] = {
-                        "bucket": "interests", "id": str(r["id"]), "name": str(r.get("name") or "")}
-        missing = [n for g in groups for n in g if n.casefold() not in self._interest]
-        if missing:
-            if self._behaviors is None:
-                self._behaviors = self.client.get_all(
-                    "/search", {"type": "adTargetingCategory", "class": "behaviors", "limit": 1000},
-                    max_pages=1)
-            for b in self._behaviors:
-                nm = str(b.get("name") or "").casefold()
-                if nm and b.get("id") and nm not in self._interest:
-                    self._interest[nm] = {"bucket": "behaviors", "id": str(b["id"]),
-                                          "name": str(b.get("name") or "")}
-            missing = [n for g in groups for n in g if n.casefold() not in self._interest]
-        if missing:
-            raise PlanError("Detailed targeting not found by Meta: " + ", ".join(missing))
+        """Группы имён → `flexible_spec` (interests/behaviors/work_*/education_* с id).
+
+        Точное имя берётся само; всё остальное — `TargetingUnresolved` с кандидатами и
+        с «picked X for Y?» (ACL-1771): ничего не подставляется молча.
+        """
+        terms = [n for g in groups for n in g]
+        self.terms.prefetch(terms)
+        results = {n: self.terms.resolve(n) for n in terms}
+        bad: list[dict] = []
+        for r in results.values():
+            if r["state"] in ("exact", "confirmed", "split"):
+                continue
+            bad += r.get("bad_parts") or [r]
+        if bad:
+            raise TargetingUnresolved(bad)
         spec = []
         for g in groups:
             entry: dict[str, list] = {}
             for n in g:
-                hit = self._interest[n.casefold()]
-                entry.setdefault(hit["bucket"], []).append({"id": hit["id"], "name": hit["name"]})
+                for hit in results[n]["picks"]:
+                    bucket = entry.setdefault(hit["type"], [])
+                    item = {"id": hit["id"], "name": hit["name"]}
+                    if item not in bucket:
+                        bucket.append(item)
             spec.append(entry)
         return spec
+
+    def targeting_report(self) -> list[dict]:
+        """Что нашлось/ждёт подтверждения по всем терминам задания (для Check plan)."""
+        return self.terms.report()
 
 
 def targeting_for(plan: CampaignPlan, ad_set: AdSetPlan, resolver: TargetingResolver) -> dict:
@@ -530,9 +762,17 @@ def targeting_for(plan: CampaignPlan, ad_set: AdSetPlan, resolver: TargetingReso
         # Возраст и интересы — как в билдере; Meta не расширяет аудиторию сама.
         "targeting_automation": {"advantage_audience": 0},
     }
-    loc = resolver.locale(plan.language)
-    if loc is not None:
-        t["locales"] = [loc]
+    loc = resolver.locale(ad_set.language or plan.language)
+    locales = [loc] if loc is not None else []
+    for extra in ad_set.languages:
+        # Язык кампании остаётся первым; дополнительные - только точные совпадения /search.
+        got = resolver.locale(extra)
+        if got is not None and got not in locales:
+            locales.append(got)
+    if locales:
+        t["locales"] = locales
+    if ad_set.gender:
+        t["genders"] = [GENDER_IDS[ad_set.gender]]
     if ad_set.interest_groups:
         t["flexible_spec"] = resolver.interests(ad_set.interest_groups)
     # Площадки — вручную, как у робота (не Advantage+ placements).
@@ -542,11 +782,20 @@ def targeting_for(plan: CampaignPlan, ad_set: AdSetPlan, resolver: TargetingReso
     os_val = ad_set.os.casefold()
     if os_val in ("ios", "android"):
         # Как в билдере (решение по Android — за владельцем, пока как было).
-        t["user_os"] = ["iOS" if os_val == "ios" else "Android"]
+        t["user_os"] = [user_os_value(os_val, ad_set.os_min)]
         t["device_platforms"] = ["mobile"]
     else:
-        t["device_platforms"] = ["mobile", "desktop"]
+        t["device_platforms"] = [ad_set.device] if ad_set.device else ["mobile", "desktop"]
     return t
+
+
+def user_os_value(os_val: str, os_min: str = "") -> str:
+    """«iOS» / «Android», с версией - «iOS_ver_14.0_and_above» (Graph «Targeting», user_os)."""
+    name = "iOS" if os_val.casefold() == "ios" else "Android"
+    if not os_min:
+        return name
+    ver = os_min if "." in os_min else os_min + ".0"
+    return f"{name}_ver_{ver}_and_above"
 
 
 def placements_text(t: dict) -> str:
@@ -609,6 +858,8 @@ class Outcome:
     plan: dict = field(default_factory=dict)
     #: Pre-flight audit (ACL-1819): вердикты серверных правил; пусто, если аудит не шёл.
     audit: list = field(default_factory=list)
+    #: ACL-1771: как найдены термины таргетинга и что ждёт подтверждения (для Check plan).
+    targeting: list = field(default_factory=list)
 
     @property
     def mismatches(self) -> list[dict]:
@@ -642,6 +893,7 @@ class CampaignCreator:
                  video_max_polls: int = VIDEO_MAX_POLLS,
                  reconcile_wait_s: float | None = None,
                  progress: Callable[[str], None] = lambda _s: None,
+                 now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
                  live_progress: Callable[[str], None] = lambda _s: None):
         self.client = client
         self.facts = facts
@@ -662,6 +914,7 @@ class CampaignCreator:
         self._form_steps: dict[str, _fc.FormStep] = {}
         self._form_warnings: list[str] = []
         self.progress = progress
+        self.now = now
         #: Живой процент загрузки файла (ACL-1899): только на панель задания, без шагов и телеметрии.
         self.live_progress = live_progress
 
@@ -1018,35 +1271,69 @@ class CampaignCreator:
     def adset_params(self, plan: CampaignPlan, ad_set: AdSetPlan, campaign_id: str, targeting: dict) -> dict:
         if ad_set.instant:
             # Instant Form (ACL-1775): показ в самой форме, цель — лиды, объект — Страница, без пикселя.
-            return {"name": ad_set.name, "campaign_id": campaign_id, "status": PAUSED,
-                    "optimization_goal": OPTIMIZATION_GOAL_FORM, "billing_event": BILLING_EVENT,
-                    "destination_type": DESTINATION_ON_AD,
-                    "promoted_object": {"page_id": plan.page_id},
-                    "targeting": targeting, "adlabels": [{"name": plan.label}]}
-        return {"name": ad_set.name, "campaign_id": campaign_id, "status": PAUSED,
-                "optimization_goal": OPTIMIZATION_GOAL, "billing_event": BILLING_EVENT,
-                "destination_type": DESTINATION,
-                "promoted_object": {"pixel_id": plan.pixel_id, "custom_event_type": CUSTOM_EVENT},
-                "targeting": targeting, "adlabels": [{"name": plan.label}]}
+            params = {"name": ad_set.name, "campaign_id": campaign_id, "status": PAUSED,
+                      "optimization_goal": OPTIMIZATION_GOAL_FORM, "billing_event": BILLING_EVENT,
+                      "destination_type": DESTINATION_ON_AD,
+                      "promoted_object": {"page_id": plan.page_id},
+                      "targeting": targeting, "adlabels": [{"name": plan.label}]}
+        else:
+            params = {"name": ad_set.name, "campaign_id": campaign_id, "status": PAUSED,
+                      "optimization_goal": OPTIMIZATION_GOAL, "billing_event": BILLING_EVENT,
+                      "destination_type": DESTINATION,
+                      "promoted_object": {"pixel_id": plan.pixel_of(ad_set),
+                                          "custom_event_type": CUSTOM_EVENT},
+                      "targeting": targeting, "adlabels": [{"name": plan.label}]}
+        if ad_set.start_time:
+            # ACL-1767: ключа нет, пока старт не задан - прежние планы не меняются.
+            params["start_time"] = self.start_iso(ad_set)
+        return params
+
+    def _start_dt(self, ad_set: AdSetPlan) -> datetime:
+        """Время старта набора как момент: введено по часовому поясу кабинета."""
+        name = self.facts.timezone_name
+        zone = None
+        if name:
+            try:
+                zone = ZoneInfo(name)
+            except (ZoneInfoNotFoundError, ValueError, OSError):
+                zone = None
+        if zone is None:
+            # Не угадываем по текущему смещению: на дату старта оно может быть другим (летнее время).
+            raise PlanError(f"Ad set {ad_set.name!r}: the time zone of the ad account "
+                            f"({name or 'not returned by Meta'}) is not known here, so the start time "
+                            "cannot be set. Clear the start time or try again.")
+        return datetime.strptime(ad_set.start_time, "%Y-%m-%dT%H:%M").replace(tzinfo=zone)
+
+    def start_iso(self, ad_set: AdSetPlan) -> str:
+        """«2026-10-20T10:00:00+0200» - с явным смещением кабинета (Graph: ISO 8601)."""
+        return self._start_dt(ad_set).strftime("%Y-%m-%dT%H:%M:%S%z")
+
+    def creative_params(self, plan: CampaignPlan, ad: AdPlan, ad_set: AdSetPlan, media: dict, name: str) -> dict:
+        """Запись креатива: одно описание на запись, предпроверку политикой и сверку (ACL-1767)."""
+        return {"name": name, "object_story_spec": self._story(plan, ad, ad_set, media),
+                "degrees_of_freedom_spec": creative_features(),
+                # Multi-advertiser ads - явно ВЫКЛЮЧЕНЫ (решение владельца 2026-10-10).
+                "contextual_multi_ads": dict(MULTI_ADS_OPT_OUT),
+                "adlabels": [{"name": plan.label}]}
 
     @staticmethod
     def story_spec(plan: CampaignPlan, ad: AdPlan, media: dict, *, instant: bool = False) -> dict:
         if instant:
             # ACL-1775: CTA несёт id существующей формы; своей ссылки у объявления нет.
-            cta = {"type": CTA_TYPE, "value": {"lead_gen_form_id": ad.form_id}}
+            cta = {"type": ad.cta, "value": {"lead_gen_form_id": ad.form_id}}
         else:
-            cta = {"type": CTA_TYPE, "value": {"link": plan.link}}
+            cta = {"type": ad.cta, "value": {"link": plan.link_of(ad)}}
         if ad.kind == "video":
             data = {"video_id": media["video_id"], "image_url": media["thumb"], "title": ad.title,
                     "message": ad.body, "call_to_action": cta}
             if ad.description:
                 data["link_description"] = ad.description
-            return {"page_id": plan.page_id, "video_data": data}
-        data = {"link": INSTANT_FORM_LINK if instant else plan.link, "message": ad.body,
+            return {"page_id": plan.page_of(ad), "video_data": data}
+        data = {"link": INSTANT_FORM_LINK if instant else plan.link_of(ad), "message": ad.body,
                 "name": ad.title, "image_hash": media["image_hash"], "call_to_action": cta}
         if ad.description:
             data["description"] = ad.description
-        return {"page_id": plan.page_id, "link_data": data}
+        return {"page_id": plan.page_of(ad), "link_data": data}
 
     def _story(self, plan: CampaignPlan, ad: AdPlan, ad_set: AdSetPlan, media: dict) -> dict:
         """Спецификация креатива; `instant` передаётся только Instant Form (сайт - как раньше)."""
@@ -1098,7 +1385,7 @@ class CampaignCreator:
             check("optimization_goal", OPTIMIZATION_GOAL, row.get("optimization_goal"))
             check("billing_event", BILLING_EVENT, row.get("billing_event"))
             check("destination_type", DESTINATION, row.get("destination_type"))
-            check("pixel", plan.pixel_id, str(po.get("pixel_id") or ""))
+            check("pixel", plan.pixel_of(ad_set), str(po.get("pixel_id") or ""))
             check("conversion_event", CUSTOM_EVENT, po.get("custom_event_type"))
         check("schedule", "starts on activation, no end date",
               "starts on activation, no end date" if not row.get("end_time") else
@@ -1114,6 +1401,10 @@ class CampaignCreator:
               None if want_locales and "locales" not in t else t.get("locales") or [])
         check("detailed_targeting", _flex_ids(targeting.get("flexible_spec")), _flex_ids(t.get("flexible_spec")))
         check("os", targeting.get("user_os") or [], t.get("user_os") or [])
+        if targeting.get("genders") or t.get("genders"):
+            check("gender", targeting.get("genders") or [], t.get("genders") or [])
+        if ad_set.start_time:
+            check("start_time", _utc(self.start_iso(ad_set)), _utc(row.get("start_time")))
         # Площадки вручную, как у робота (паритет RPA): платформы, места, устройства.
         check("publisher_platforms", targeting.get("publisher_platforms") or [],
               t.get("publisher_platforms") or [])
@@ -1348,16 +1639,17 @@ class CampaignCreator:
                     except _wp.WriteRefused as exc:
                         raise PlanError(f"form {tpl['name']!r}: {exc}") from exc
         for ad_set, targeting in zip(plan.ad_sets, targetings):
+            if ad_set.start_time and self._start_dt(ad_set) <= self.now():
+                raise PlanError(f"Ad set {ad_set.name!r}: the start time {ad_set.start_time} "
+                                "(ad account time zone) is not in the future")
             ok("adsets", self.adset_params(plan, ad_set, "0", targeting), f"ad set {ad_set.name!r}")
             for ad in ad_set.ads:
                 ad = self._planned(ad, FORM_ID_PLACEHOLDER)
                 media = ({"video_id": "0", "thumb": "https://example.invalid/t.jpg"} if ad.kind == "video"
                          else {"image_hash": "0"})
-                ok("adcreatives", {"name": f"{ad.name} #{ad.index} [{plan.label}]",
-                                   "object_story_spec": self._story(plan, ad, ad_set, media),
-                                   "degrees_of_freedom_spec": creative_features(),
-                                   "adlabels": [{"name": plan.label}]}, f"ad {ad.index} creative",
-                   on_ad=ad_set.instant)
+                ok("adcreatives", self.creative_params(plan, ad, ad_set, media,
+                                                       f"{ad.name} #{ad.index} [{plan.label}]"),
+                   f"ad {ad.index} creative", on_ad=ad_set.instant)
                 ok("ads", {"name": ad.name, "adset_id": "0", "creative": {"creative_id": "0"},
                            "status": PAUSED, "adlabels": [{"name": plan.label}]}, f"ad {ad.index}")
 
@@ -1415,9 +1707,19 @@ class CampaignCreator:
             out.error, out.stop_kind = f"Graph API stopped: {exc}", exc.kind
         except GraphError as exc:
             out.error, out.stop_kind = f"Meta refused: {exc}", "graph_error"
+        out.targeting = self._targeting_report()
         self._audit(plan, out, existing=differences, checked=differences is not None, files=files,
                     renamed=renamed, name_error=name_error)
         return out
+
+    def _targeting_report(self) -> list:
+        fn = getattr(self.resolver, "targeting_report", None)
+        try:
+            items = list(fn()) if fn else []
+            _tr.register_candidates(items)      # подтвердить можно только показанных кандидатов
+            return items
+        except Exception:  # noqa: BLE001 — отчёт вспомогательный
+            return []
 
     def _audit(self, plan: CampaignPlan, out: Outcome, *, existing: list | None, checked: bool,
                files: dict | None, renamed: str = "", name_error: str = "") -> None:
@@ -1439,6 +1741,20 @@ class CampaignCreator:
             logging.getLogger(__name__).exception("pre-flight audit failed for %r", plan.name)
             out.audit = []
 
+    def _audience_summary(self, row: dict, plan: CampaignPlan, ad_set: AdSetPlan, t: dict) -> None:
+        """Новые поля набора в «Check plan»; пустые не добавляют ключей (ACL-1767)."""
+        if ad_set.gender:
+            row["gender"] = GENDER_LABELS[ad_set.gender]
+        if ad_set.languages:
+            names = self.resolver.locale_names
+            row["languages_picked"] = [names.get(x, x) for x in [ad_set.language or plan.language, *ad_set.languages] if x]
+        if ad_set.device:
+            row["devices"] = f"{ad_set.device} only"
+        if ad_set.os_min:
+            row["os_min"] = (t.get("user_os") or [""])[0]
+        if ad_set.start_time:
+            row["start_time"] = self.start_iso(ad_set)
+
     def plan_summary(self, plan: CampaignPlan, targetings: list[dict], files: dict[str, bytes], *,
                      existing: bool = False, existing_differences: list[dict] | None = None,
                      requested_name: str = "") -> dict:
@@ -1450,20 +1766,28 @@ class CampaignCreator:
             sets.append({
                 "name": ad_set.name, "status": PAUSED,
                 "countries": list((t.get("geo_locations") or {}).get("countries") or []),
-                "language": plan.language, "locales": list(t.get("locales") or []),
+                "language": ad_set.language or plan.language, "locales": list(t.get("locales") or []),
                 "age": f"{ad_set.age_min}-{ad_set.age_max}",
                 "interests": interests,
                 "os": ad_set.os or "All",
                 "placements": placements_text(t),
                 "creative_enhancements": "off: " + ", ".join(CREATIVE_FEATURES_OPT_OUT),
                 "optimization": f"{OPTIMIZATION_GOAL} · {CUSTOM_EVENT} on the website pixel",
+                **({"pixel_id": ad_set.pixel_id, "pixel_source": ad_set.pixel_source} if ad_set.pixel_id else {}),
                 "ads": [{
                     "index": ad.index, "name": ad.name, "status": PAUSED, "format": ad.kind,
                     "file": Path(ad.path).name, "bytes": len(files.get(ad.path, b"")),
                     "headline": ad.title, "primary_text": ad.body, "description": ad.description,
-                    "link": plan.link, "cta": CTA_TYPE,
+                    "link": plan.link_of(ad), "cta": ad.cta,
+                    # ACL-1770: ключи только у объявления со своей Страницей - прежний план не меняется.
+                    **({"page_id": ad.page_id, "page_source": ad.page_source} if ad.page_id else {}),
                 } for ad in ad_set.ads],
+                # Multi-advertiser ads всегда выключены (ACL-1767).
+                "multi_advertiser": "off",
             })
+            if len(plan.ad_sets) > 1:
+                sets[-1]["index"] = ad_set.index        # ACL-1768: у одного набора ключа нет, как раньше
+            self._audience_summary(sets[-1], plan, ad_set, t)
             if ad_set.instant:
                 # ACL-1775: вместо сайта - форма Страницы (имя и id); ключей сайта у такого набора нет.
                 known = self._page_forms.by_id() if self._page_forms else {}
@@ -1573,10 +1897,7 @@ class CampaignCreator:
                     self._ensure_form(out, plan, ad)
                     creative_id = self._write(
                         out, f"ad {ad.index}: creative", f"/{plan.act}/adcreatives",
-                        {"name": creative_name,
-                         "object_story_spec": self._story(plan, ad, ad_set, media),
-                         "degrees_of_freedom_spec": creative_features(),
-                         "adlabels": [{"name": plan.label}]},
+                        self.creative_params(plan, ad, ad_set, media, creative_name),
                         lambda: self._find_creative(plan, creative_name, fresh=True),
                         on_ad=ad_set.instant)
                     out.created.setdefault("creatives", []).append(creative_id)
@@ -1638,7 +1959,8 @@ class CampaignCreator:
 
             ads = self.client.get_all(f"/{adset_id}/ads", {
                 "fields": "id,name,status,adset_id,adlabels{name},"
-                          "creative{id,adlabels{name},object_story_spec,degrees_of_freedom_spec}",
+                          "creative{id,adlabels{name},object_story_spec,degrees_of_freedom_spec,"
+                          "contextual_multi_ads}",
                 "effective_status": LIVE_STATES, "limit": 100}, max_pages=2)
             by_name: dict[str, list[dict]] = {}
             for a in ads:
@@ -1668,8 +1990,10 @@ class CampaignCreator:
                 for feature in CREATIVE_FEATURES_OPT_OUT:
                     check(aobj, f"enhancement {feature}", OPT_OUT,
                           (feats.get(feature) or {}).get("enroll_status"))
+                check(aobj, "multi_advertiser", OPT_OUT,
+                      (creative.get("contextual_multi_ads") or {}).get("enroll_status"))
                 spec = creative.get("object_story_spec") or {}
-                check(aobj, "page", plan.page_id, str(spec.get("page_id") or ""))
+                check(aobj, "page", plan.page_of(ad), str(spec.get("page_id") or ""))
                 data = files.get(ad.path, b"")
                 if ad.kind == "video":
                     vd = spec.get("video_data") or {}
@@ -1681,11 +2005,11 @@ class CampaignCreator:
                     if data and vid:
                         title = self.client.get(f"/{vid}", {"fields": "title"}).get("title")
                         check(aobj, "video_file", video_title(plan.tag, data), title)
-                    check(aobj, "call_to_action", CTA_TYPE, cta.get("type"))
+                    check(aobj, "call_to_action", ad.cta, cta.get("type"))
                     if ad_set.instant:
                         self._form_checks(check, aobj, ad, cta, page_forms)
                     else:
-                        check(aobj, "link", plan.link, (cta.get("value") or {}).get("link"))
+                        check(aobj, "link", plan.link_of(ad), (cta.get("value") or {}).get("link"))
                     check(aobj, "headline", ad.title, vd.get("title") or "")
                     check(aobj, "primary_text", ad.body, vd.get("message") or "")
                     check(aobj, "description", ad.description, vd.get("link_description") or "")
@@ -1701,12 +2025,12 @@ class CampaignCreator:
                     # библиотеке (старая загрузка RPA или руками) не проверяем.
                     if data and h and h != _md5(data):
                         image_ads.append((aobj, ad, h))
-                    check(aobj, "call_to_action", CTA_TYPE, cta.get("type"))
+                    check(aobj, "call_to_action", ad.cta, cta.get("type"))
                     if ad_set.instant:
                         self._form_checks(check, aobj, ad, cta, page_forms)
                     else:
-                        check(aobj, "cta_link", plan.link, (cta.get("value") or {}).get("link"))
-                        check(aobj, "link", plan.link, ld.get("link"))
+                        check(aobj, "cta_link", plan.link_of(ad), (cta.get("value") or {}).get("link"))
+                        check(aobj, "link", plan.link_of(ad), ld.get("link"))
                     check(aobj, "headline", ad.title, ld.get("name") or "")
                     check(aobj, "primary_text", ad.body, ld.get("message") or "")
                     check(aobj, "description", ad.description, ld.get("description") or "")
@@ -1732,8 +2056,17 @@ _FIELD_TITLES = {"geo": "countries", "age_min": "minimum age", "age_max": "maxim
                  "os": "operating system", "pixel": "pixel", "conversion_event": "conversion event",
                  "optimization_goal": "optimization goal", "billing_event": "billing event",
                  "destination_type": "destination", "daily_budget": "daily budget",
-                 "promoted_page": "Page of the ad set",
+                 "promoted_page": "Page of the ad set", "gender": "gender", "start_time": "start time",
                  "bid_strategy": "bid strategy"}
+
+
+def _utc(value: Any) -> str:
+    """Момент времени в UTC (для сверки старта: Meta отдаёт другое смещение/формат)."""
+    try:
+        dt = datetime.strptime(str(value), "%Y-%m-%dT%H:%M:%S%z")
+    except ValueError:
+        return str(value or "")
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _show(value: Any) -> str:

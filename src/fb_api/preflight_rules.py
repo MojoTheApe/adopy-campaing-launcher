@@ -35,13 +35,19 @@ MAX_HEADLINE = 40
 MAX_PRIMARY_VISIBLE = 125
 AGE_MIN, AGE_MAX = 18, 65
 
-#: Допустимые CTA по цели кампании. Билдер сегодня шлёт только LEARN_MORE; список — те CTA
-#: для лидов, которые принимает Meta для ссылочного/лид-креатива.
+#: Допустимые CTA по цели кампании и месту конверсии (ACL-1767). Единый список - в
+#: `write_policy` (CTA_WEBSITE / CTA_FORM): тот же набор разрешает и политика записи.
+#: Ключ `<цель>_instant_form` - список для лид-формы.
+from src.fb_api import write_policy as _wp  # noqa: E402
+
 ALLOWED_CTA = {
-    "leads": ("LEARN_MORE", "SIGN_UP", "APPLY_NOW", "GET_QUOTE", "SUBSCRIBE", "CONTACT_US",
-              "DOWNLOAD", "GET_OFFER"),
+    "leads": _wp.CTA_WEBSITE,
+    "leads_instant_form": _wp.CTA_FORM,
 }
 DEFAULT_OBJECTIVE = "leads"
+#: Версия iOS/Android: «14» или «14.0»; старт набора: «YYYY-MM-DDTHH:MM» (ACL-1767).
+_OS_MIN_RE = r"^[0-9]{1,2}(\.[0-9]{1,2})?$"
+_START_RE = r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}$"
 
 #: Минимальный дневной бюджет Meta по валюте кабинета, в единицах валюты (не в центах).
 #: Meta не публикует полной таблицы по валютам (Marketing API: «bid and budget are at the
@@ -102,7 +108,10 @@ RULES: list[dict[str, Any]] = [
        "Meta found no exact match for the language: pick it from the list or clear the field",
        sel='[name$="_language"]', level="adset"),
     _r("interests_resolve", "Detailed targeting found in Meta", ERROR, "server",
-       "Meta found no exact match for some interests: pick rows from the list",
+       "Meta found no exact match for some terms: pick one of the candidates or fix the term in the library",
+       sel=".cb-targeting-search", level="adset"),
+    _r("interests_confirmed", "Detailed targeting picks confirmed", ERROR, "server",
+       "Meta has only a near match for some terms: Confirm the pick in Check plan (it is remembered)",
        sel=".cb-targeting-search", level="adset"),
     _r("link_https", "Link https://", ERROR, "client", "enter the website URL, starting with https://",
        sel='input[name="tracking_link"]', level="campaign", applies="website"),
@@ -138,9 +147,19 @@ RULES: list[dict[str, Any]] = [
        sel='[name$="_budget"]', level="campaign"),
     _r("age_range", "Age 18-65", ERROR, "client", "age must be between 18 and 65, and min not above max",
        sel='[name$="_age"]', level="adset"),
+    _r("devices_consistent", "Devices and OS version fit together", ERROR, "client",
+       "iOS and Android are mobile only (not desktop only), and a minimum version needs iOS or Android "
+       "and looks like 14 or 14.0", sel='[name$="_os"]', level="adset"),
+    _r("start_time_valid", "Start time", ERROR, "client",
+       "enter the start as date and time, not earlier than today (ad account time zone)",
+       sel='[name$="_start_time"]', level="adset"),
     _r("ad_names_unique", "Ad names are unique", ERROR, "client",
        "give the ads different creatives or texts: their names must differ inside a campaign",
        sel=".cb-adtitle-search", level="ad", unit="ad"),
+    _r("adset_names_unique", "Ad set names are unique", ERROR, "client",
+       "give every ad set of the campaign its own name", sel=".cb-adset-name", level="adset"),
+    _r("adset_has_ads", "Every ad set has an ad", ERROR, "client",
+       "add an ad to the ad set or remove the ad set", sel="", level="ad"),
     _r("existing_diffs", "Campaign name is free, or gets a _2, _3 suffix", ERROR, "server",
        "if a different campaign already has this name, the robot publishes as NAME_2, NAME_3 ... "
        "(up to _20); an error only when all 20 names are taken: rename the campaign"),
@@ -157,7 +176,8 @@ def export_rules() -> dict[str, Any]:
         "rules": RULES,
         "consts": {"max_headline": MAX_HEADLINE, "max_primary_visible": MAX_PRIMARY_VISIBLE,
                    "age_min": AGE_MIN, "age_max": AGE_MAX, "allowed_cta": {k: list(v) for k, v in ALLOWED_CTA.items()},
-                   "default_objective": DEFAULT_OBJECTIVE, "link_re": _LINK_RE, "track_re": _TRACK_RE},
+                   "default_objective": DEFAULT_OBJECTIVE, "link_re": _LINK_RE, "track_re": _TRACK_RE,
+                   "os_min_re": _OS_MIN_RE, "start_re": _START_RE},
     }
 
 
@@ -171,17 +191,24 @@ def load_json() -> dict[str, Any]:
 
 # ───────────────────────── клиентские правила ─────────────────────────
 #
-# Вход аудита (одна кампания; сегодня у неё один набор объявлений):
+# Вход аудита (одна кампания; ACL-1768: наборы - `ad_sets`, плоский вход = один набор):
 #   {"destination": "website"|"instant_form", "objective": "leads", "link": str, "country": str,
 #    "budget": number|None, "age_min": int, "age_max": int,
-#    "ads": [{"name": str, "file": str, "form_id": str, "template": {"privacy_url": str, "contact_fields": [str]}|None, "body": str, "headline": str, "cta": str}]}
+#    "ads": [{"name": str, "file": str, "form_id": str, "template": {"privacy_url": str, "contact_fields": [str]}|None, "body": str, "headline": str, "cta": str}],
+#    ACL-1767 (необязательные): "os": "All"|"iOS"|"Android", "device": ""|"mobile"|"desktop",
+#    "os_min": str, "start_time": "YYYY-MM-DDTHH:MM", "now": "YYYY-MM-DDTHH:MM" (часы страницы)}
 
 def _s(v: Any) -> str:
     return str(v if v is not None else "").strip()
 
 
-def _v(rule: str, status: str, detail: str = "", ads: list[int] | None = None) -> dict[str, Any]:
-    return {"rule": rule, "status": status, "detail": detail, "ads": list(ads or [])}
+def _v(rule: str, status: str, detail: str = "", ads: list[int] | None = None,
+       sets: list[int] | None = None) -> dict[str, Any]:
+    out = {"rule": rule, "status": status, "detail": detail, "ads": list(ads or [])}
+    if sets:
+        # ACL-1768: у кампании с несколькими наборами - какие наборы (1-based); иначе ключа нет.
+        out["sets"] = list(sets)
+    return out
 
 
 def applies(rule: dict[str, Any], destination: str) -> bool:
@@ -189,30 +216,81 @@ def applies(rule: dict[str, Any], destination: str) -> bool:
     return a == "always" or a == destination
 
 
-def _per_ad(rule: str, inp: dict, bad, status: str = ERROR) -> dict[str, Any]:
-    ads = [i + 1 for i, ad in enumerate(inp.get("ads") or []) if bad(ad)]
+def audit_sets(inp: dict[str, Any]) -> list[dict[str, Any]]:
+    """Наборы входа аудита. Старый плоский вход (без `ad_sets`) - один набор (ACL-1768)."""
+    given = inp.get("ad_sets")
+    if isinstance(given, list) and given:
+        return given
+    flat = {k: inp.get(k) for k in ("name", "destination", "age_min", "age_max", "os", "device", "os_min",
+                                     "start_time", "ads")}
+    return [flat]
+
+
+def _dest_of(a_set: dict[str, Any]) -> str:
+    return "instant_form" if _s(a_set.get("destination")) == "instant_form" else "website"
+
+
+def campaign_dests(inp: dict[str, Any]) -> set[str]:
+    """Какие места конверсии есть среди наборов: по ним правила показываются или нет."""
+    return {_dest_of(x) for x in audit_sets(inp)}
+
+
+def _numbered(inp: dict[str, Any]) -> list[tuple[int, int, dict[str, Any], dict[str, Any]]]:
+    """(номер набора 1-based, сквозной номер объявления 1-based, набор, объявление)."""
+    out = []
+    n = 0
+    for si, st in enumerate(audit_sets(inp), start=1):
+        for ad in st.get("ads") or []:
+            n += 1
+            out.append((si, n, st, ad))
+    return out
+
+
+def _per_ad(rule: str, inp: dict, bad, status: str = ERROR, only_dest: str = "") -> dict[str, Any]:
+    ads = [n for _si, n, st, ad in _numbered(inp)
+           if (not only_dest or _dest_of(st) == only_dest) and bad(ad, st)]
     return _v(rule, status if ads else OK, ("Ad " + ", ".join(map(str, ads))) if ads else "", ads)
 
 
+def _per_set(rule: str, inp: dict, check) -> dict[str, Any]:
+    """Правило уровня набора: `check(набор)` -> код ошибки или пустая строка."""
+    bad: list[tuple[int, str]] = []
+    for si, st in enumerate(audit_sets(inp), start=1):
+        code = check(st)
+        if code:
+            bad.append((si, code))
+    if not bad:
+        return _v(rule, OK)
+    if len(audit_sets(inp)) == 1:
+        return _v(rule, ERROR, bad[0][1])
+    return _v(rule, ERROR, "Ad set " + ", ".join(str(i) for i, _ in bad), sets=[i for i, _ in bad])
+
+
 def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
-    """Клиентские вердикты в порядке таблицы. Зеркало `cbPreflight.evaluate` в report.html."""
-    dest = "instant_form" if _s(inp.get("destination")) == "instant_form" else "website"
-    ads = inp.get("ads") or []
+    """Клиентские вердикты в порядке таблицы. Зеркало `cbPreflight.evaluate` в report.html.
+
+    ACL-1768: правила уровня набора считаются на КАЖДЫЙ набор (`inp["ad_sets"]`); плоский
+    вход прежней формы - один набор, вердикты те же.
+    """
+    sets = audit_sets(inp)
+    dests = campaign_dests(inp)
     out: list[dict[str, Any]] = []
     link = _s(inp.get("link"))
     link_ok = bool(re.match(_LINK_RE, link, re.I))
     for rule in RULES:
-        if rule["side"] != "client" or not applies(rule, dest):
+        if rule["side"] != "client" or not (rule["applies"] == "always" or rule["applies"] in dests):
             continue
         rid = rule["id"]
         if rid == "form_chosen":
-            out.append(_per_ad(rid, inp, lambda a: not _s(a.get("form_id")) and not a.get("template")))
+            out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("form_id")) and not a.get("template"), only_dest="instant_form"))
         elif rid == "form_template_privacy":
-            out.append(_per_ad(rid, inp, lambda a: bool(a.get("template"))
-                               and not re.match(_LINK_RE, _s((a.get("template") or {}).get("privacy_url")), re.I)))
+            out.append(_per_ad(rid, inp, lambda a, st: bool(a.get("template"))
+                               and not re.match(_LINK_RE, _s((a.get("template") or {}).get("privacy_url")), re.I),
+                               only_dest="instant_form"))
         elif rid == "form_template_contacts":
-            out.append(_per_ad(rid, inp, lambda a: bool(a.get("template"))
-                               and not (a.get("template") or {}).get("contact_fields")))
+            out.append(_per_ad(rid, inp, lambda a, st: bool(a.get("template"))
+                               and not (a.get("template") or {}).get("contact_fields"),
+                               only_dest="instant_form"))
         elif rid == "country_set":
             out.append(_v(rid, OK if _s(inp.get("country")) else ERROR))
         elif rid == "link_https":
@@ -228,18 +306,22 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
             else:
                 out.append(_v(rid, OK if re.search(_TRACK_RE, link) else WARNING))
         elif rid == "media_chosen":
-            out.append(_per_ad(rid, inp, lambda a: not _s(a.get("file"))))
+            out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("file"))))
         elif rid == "primary_text":
-            out.append(_per_ad(rid, inp, lambda a: not _s(a.get("body"))))
+            out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("body"))))
         elif rid == "headline":
-            out.append(_per_ad(rid, inp, lambda a: not _s(a.get("headline"))))
+            out.append(_per_ad(rid, inp, lambda a, st: not _s(a.get("headline"))))
         elif rid == "headline_len":
-            out.append(_per_ad(rid, inp, lambda a: len(_s(a.get("headline"))) > MAX_HEADLINE, WARNING))
+            out.append(_per_ad(rid, inp, lambda a, st: len(_s(a.get("headline"))) > MAX_HEADLINE, WARNING))
         elif rid == "primary_len":
-            out.append(_per_ad(rid, inp, lambda a: len(_s(a.get("body"))) > MAX_PRIMARY_VISIBLE, WARNING))
+            out.append(_per_ad(rid, inp, lambda a, st: len(_s(a.get("body"))) > MAX_PRIMARY_VISIBLE, WARNING))
         elif rid == "cta_allowed":
-            allowed = ALLOWED_CTA.get(_s(inp.get("objective")).lower() or DEFAULT_OBJECTIVE, ())
-            out.append(_per_ad(rid, inp, lambda a: (_s(a.get("cta")) or "LEARN_MORE") not in allowed))
+            objective = _s(inp.get("objective")).lower() or DEFAULT_OBJECTIVE
+
+            def cta_bad(a, st, objective=objective):
+                key = objective + ("_instant_form" if _dest_of(st) == "instant_form" else "")
+                return (_s(a.get("cta")) or "LEARN_MORE") not in ALLOWED_CTA.get(key, ())
+            out.append(_per_ad(rid, inp, cta_bad))
         elif rid == "budget_set":
             b = inp.get("budget")
             try:
@@ -248,18 +330,57 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
                 good = False
             out.append(_v(rid, OK if good else ERROR))
         elif rid == "age_range":
-            lo, hi = inp.get("age_min"), inp.get("age_max")
-            try:
-                lo, hi = int(lo), int(hi)
-                good = AGE_MIN <= lo <= AGE_MAX and AGE_MIN <= hi <= AGE_MAX and lo <= hi
-            except (TypeError, ValueError):
-                good = False
-            out.append(_v(rid, OK if good else ERROR))
+            def age_bad(st):
+                try:
+                    lo, hi = int(st.get("age_min")), int(st.get("age_max"))
+                    return "" if AGE_MIN <= lo <= AGE_MAX and AGE_MIN <= hi <= AGE_MAX and lo <= hi else "range"
+                except (TypeError, ValueError):
+                    return "range"
+            out.append(_per_set(rid, inp, age_bad))
+        elif rid == "devices_consistent":
+            def dev_bad(st):
+                os_ = _s(st.get("os")).lower() or "all"
+                dev, ver = _s(st.get("device")).lower(), _s(st.get("os_min"))
+                mobile = os_ in ("ios", "android")
+                if mobile and dev == "desktop":
+                    return "mobile_os_desktop"
+                if ver and not mobile:
+                    return "version_needs_os"
+                if ver and not re.fullmatch(_OS_MIN_RE, ver):
+                    return "bad_version"
+                return ""
+            out.append(_per_set(rid, inp, dev_bad))
+        elif rid == "start_time_valid":
+            now = _s(inp.get("now"))
+
+            def start_bad(st, now=now):
+                stt = _s(st.get("start_time"))
+                if not stt:
+                    return ""
+                if not re.fullmatch(_START_RE, stt):
+                    return "format"
+                if re.fullmatch(_START_RE, now) and stt[:10] < now[:10]:
+                    return "past"
+                return ""
+            out.append(_per_set(rid, inp, start_bad))
         elif rid == "ad_names_unique":
-            names = [_s(a.get("name")) for a in ads]
-            dup = {n for n in names if n and names.count(n) > 1}
-            bad = [i + 1 for i, n in enumerate(names) if n in dup]
+            # Имена объявлений различаются внутри набора (так создатель ищет и сверяет их).
+            bad: list[int] = []
+            for si, st in enumerate(sets, start=1):
+                nums = [(n, _s(ad.get("name"))) for s1, n, _s2, ad in _numbered(inp) if s1 == si]
+                names = [nm for _n, nm in nums]
+                dup = {nm for nm in names if nm and names.count(nm) > 1}
+                bad += [n for n, nm in nums if nm in dup]
             out.append(_v(rid, ERROR if bad else OK, ("Ad " + ", ".join(map(str, bad))) if bad else "", bad))
+        elif rid == "adset_names_unique":
+            names = [_s(st.get("name")).casefold() for st in sets]
+            bad_sets = [i + 1 for i, nm in enumerate(names) if nm and names.count(nm) > 1]
+            out.append(_v(rid, ERROR if bad_sets else OK,
+                          ("Ad set " + ", ".join(map(str, bad_sets))) if bad_sets else "", sets=bad_sets))
+        elif rid == "adset_has_ads":
+            empty = [i + 1 for i, st in enumerate(sets) if not (st.get("ads") or [])]
+            out.append(_v(rid, ERROR if empty else OK, ("Ad set " + ", ".join(map(str, empty))) if empty else "",
+                          sets=empty))
     return out
 
 
@@ -345,6 +466,14 @@ def min_budget_for(currency: str) -> float | None:
     return MIN_DAILY_BUDGET.get((currency or "").strip().upper())
 
 
+def _item_text(item: dict) -> str:
+    """Термин без находки: имя и кандидаты (или честное «кандидатов нет»)."""
+    rows = item.get("candidates") or []
+    cands = ("candidates: " + ", ".join(f"{c['name']} [{c['type']}]" for c in rows[:5])
+             if rows else "no candidates")
+    return f"'{item['term']}' not found ({cands})" + (f" - {item['reason']}" if item.get("reason") else "")
+
+
 def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = None,
                     existing_checked: bool = False, files: dict[str, bytes] | None = None,
                     renamed: str = "", name_error: str = "") -> list[dict[str, Any]]:
@@ -414,14 +543,65 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
 
     resolver = creator.resolver
     guarded("country_resolves", lambda: (resolver.country(plan.country), put("country_resolves", OK)))
-    guarded("language_resolves", lambda: (resolver.locale(plan.language), put("language_resolves", OK)))
+
+    def languages() -> None:
+        resolver.locale(plan.language)
+        for s in plan.ad_sets:          # ACL-1767: дополнительные языки - тоже только точные совпадения
+            if s.language:              # ACL-1768: свой язык набора
+                resolver.locale(s.language)
+            for extra in s.languages:
+                resolver.locale(extra)
+        put("language_resolves", OK)
+    guarded("language_resolves", languages)
 
     def interests() -> None:
         for s in plan.ad_sets:
             if s.interest_groups:
                 resolver.interests(s.interest_groups)
         put("interests_resolve", OK)
-    guarded("interests_resolve", interests)
+        put("interests_confirmed", OK)
+
+    def interests_guard() -> None:
+        # ACL-1771: непонятый термин — ошибка с кандидатами; близкое совпадение — ошибка с Confirm.
+        try:
+            interests()
+        except cr.TargetingUnresolved as exc:
+            lost = [i for i in exc.items if i.get("state") not in ("pending", "unknown")]
+            asks = [i for i in exc.items if i.get("state") == "pending"]
+            if any(i.get("state") == "unknown" for i in exc.items):
+                # Бюджет чтений вышел: не угадываем. Блокирует план (plan_error), человек жмёт Check plan снова.
+                put("interests_resolve", UNKNOWN, cr._tr.UNKNOWN_MESSAGE)
+            elif lost:
+                put("interests_resolve", ERROR,
+                    "Detailed targeting not found by Meta: " + "; ".join(_item_text(i) for i in lost))
+                out["interests_resolve"]["items"] = lost
+            else:
+                put("interests_resolve", OK)
+            if asks:
+                put("interests_confirmed", ERROR,
+                    "; ".join(f"picked '{i['suggested']['name']}' [{i['suggested']['type']}] for '{i['term']}'?"
+                              for i in asks))
+                out["interests_confirmed"]["items"] = asks
+                out["interests_confirmed"]["action"] = "confirm"
+            else:
+                put("interests_confirmed", OK)
+
+    if state["stopped"]:
+        for rid in ("interests_resolve", "interests_confirmed"):
+            put(rid, UNKNOWN, "Not checked: " + state["stopped"])
+    else:
+        try:
+            interests_guard()
+        except cr.PlanError as exc:
+            put("interests_resolve", ERROR, str(exc))
+            put("interests_confirmed", OK)
+        except GraphStop as exc:
+            state["stopped"] = str(exc) or "Graph API stopped"
+            for rid in ("interests_resolve", "interests_confirmed"):
+                put(rid, UNKNOWN, "Not checked: " + state["stopped"])
+        except GraphError as exc:
+            for rid in ("interests_resolve", "interests_confirmed"):
+                put(rid, UNKNOWN, f"Meta did not answer: {exc}")
 
     # Файлы: читаем с диска как создатель (или берём уже прочитанные).
     readable: list[int] = []

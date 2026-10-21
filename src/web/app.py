@@ -2228,23 +2228,63 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
     ddmm = _date.today().strftime("%d.%m")
     country_val = _country_code(country)
 
+    def _set_fields(idx: int, k: int) -> dict:
+        """Поля уровня набора. Набор 0 живёт под прежними именами `camp_N_*`, остальные -
+        под `camp_N_adset_K_*` (ACL-1768); значения читаются одинаково."""
+        pfx = f"camp_{idx}_" if k == 0 else f"camp_{idx}_adset_{k}_"
+        # ACL-1775: место конверсии набора; нет поля (RPA, старая страница) - сайт.
+        destination = (form.get(pfx + "destination") or "website").strip().lower()
+        # ACL-1767 (только API-бэкенд): поля набора. Пусто = ключа в слоте нет, и
+        # прежние черновики не меняются ни байтом. Незнакомое значение уходит как есть,
+        # а план откажет вслух, молча в умолчание оно не превращается.
+        gender_val = (form.get(pfx + "gender") or "").strip().lower()
+        if gender_val == "all":
+            gender_val = ""
+        device_val = (form.get(pfx + "device") or "").strip().lower()
+        if device_val == "all":
+            device_val = ""
+        return {
+            "targeting": (form.get(pfx + "targeting") or "").strip(),
+            "os": (form.get(pfx + "os") or "All").strip(),
+            "age": (form.get(pfx + "age") or "35").strip(),
+            # Пусто — это ответ, а не пропуск: язык сняли намеренно, и правило по
+            # стране подставится при обогащении только если поле не трогали.
+            "language": (form.get(pfx + "language") or "").strip(),
+            "language_provided": (pfx + "language") in form,
+            "destination": destination,
+            "gender": gender_val,
+            "device": device_val,
+            "os_min": (form.get(pfx + "os_min") or "").strip(),
+            "start_time": (form.get(pfx + "start_time") or "").strip(),
+            "languages": [x.strip() for x in (form.get(pfx + "languages") or "").split(",") if x.strip()],
+            "adset_name": (form.get(f"camp_{idx}_adset_{k}_name") or "").strip(),
+            "pixel": (form.get(f"camp_{idx}_adset_{k}_pixel") or form.get(pfx + "pixel") or "").strip(),
+        }
+
+    camp_spans: list[tuple[str, int, int, list[str]]] = []
     for idx in range(camp_count):
-        targeting = (form.get(f"camp_{idx}_targeting") or "").strip()
-        os_val    = (form.get(f"camp_{idx}_os") or "All").strip()
-        age_val   = (form.get(f"camp_{idx}_age") or "35").strip()
-        # Пусто — это ответ, а не пропуск: язык сняли намеренно, и правило по
-        # стране подставится при обогащении только если поле не трогали.
-        language  = (form.get(f"camp_{idx}_language") or "").strip()
         asset_val = _abbrev_asset((form.get(f"camp_{idx}_asset") or "").strip())
         budget    = (form.get(f"camp_{idx}_budget") or "").strip()
         name      = (form.get(f"camp_{idx}_name") or "").strip()
-        # ACL-1775: место конверсии набора; нет поля (RPA, старая страница) - сайт.
-        destination = (form.get(f"camp_{idx}_destination") or "website").strip().lower()
+        first_set = _set_fields(idx, 0)
+        targeting, os_val, age_val = first_set["targeting"], first_set["os"], first_set["age"]
 
         try:
             ad_count = int(form.get(f"camp_{idx}_ad_count") or 1)
         except (TypeError, ValueError):
             ad_count = 1
+        # ACL-1768: сколько наборов; нет поля (старая страница, RPA) - один.
+        try:
+            adset_count = max(1, int(form.get(f"camp_{idx}_adset_count") or 1))
+        except (TypeError, ValueError):
+            adset_count = 1
+        # Ошибки формы этой кампании: уходят в слот и становятся ошибками черновика (отказ вслух).
+        form_errors: list[str] = []
+        from src.fb_ads_rpa.draft import MAX_AD_SETS, MAX_AD_SETS_ERROR
+        if adset_count > MAX_AD_SETS:
+            form_errors.append(MAX_AD_SETS_ERROR)
+            adset_count = MAX_AD_SETS
+        first_slot = len(slots)
 
         # Build auto-name from campaign-level fields if not set
         if not name:
@@ -2254,54 +2294,110 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
         if not name:
             continue
 
+        # Объявление -> набор: `camp_N_ad_M_adset`; нет поля - набор 0.
+        ads_by_set: dict[int, list[int]] = {k: [] for k in range(adset_count)}
         for a_idx in range(ad_count):
-            creative_type = (form.get(f"camp_{idx}_ad_{a_idx}_creative_type") or "Image").strip()
-            creative_file = (form.get(f"camp_{idx}_ad_{a_idx}_creative_file") or "").strip()
-            copy          = (form.get(f"camp_{idx}_ad_{a_idx}_copy") or "").strip()
-            # ACL-1344: необязательный второй вариант основного текста —
-            # название записи библиотеки текстов, как у `copy`.
-            copy2         = (form.get(f"camp_{idx}_ad_{a_idx}_copy2") or "").strip()
+            # Нет ключа - набор 0 (старые формы); есть, но не целое в [0, число наборов) - отказ,
+            # объявление не угадывается в набор 0 и новый набор не придумывается.
+            key = f"camp_{idx}_ad_{a_idx}_adset"
+            if key not in form:
+                k = 0
+            else:
+                from src.fb_ads_rpa.build_draft import bad_adset_message, parse_adset_index
+                raw_k = form.get(key)
+                k = parse_adset_index(raw_k, adset_count)
+                if k is None:
+                    form_errors.append(bad_adset_message(a_idx + 1, raw_k))
+                    continue
+            ads_by_set.setdefault(k, []).append(a_idx)
 
-            # Legacy single-ad fallback (forms submitted before multi-ad upgrade)
-            if not creative_file and a_idx == 0:
-                creative_file = (form.get(f"camp_{idx}_creative_file") or "").strip()
-            if not copy and a_idx == 0:
-                copy = (form.get(f"camp_{idx}_copy") or "").strip()
-
-            slot = {
+        for k in sorted(ads_by_set):
+            sf = first_set if k == 0 else _set_fields(idx, k)
+            destination = sf["destination"]
+            # Набор без объявлений не пропадает молча: слот без объявления, план откажет вслух.
+            ad_idxs = ads_by_set[k] or [None]
+            for a_idx in ad_idxs:
+                slot = {
                     "name": name,
-                    "creative_type": creative_type,
-                    "creative_id": (form.get(f"camp_{idx}_creative_id") or "").strip(),
-                    "creative_file": creative_file,
-                    "copy": copy,
-                    "targeting": targeting,
-                    "os": os_val,
-                    "age": age_val,
+                    "targeting": sf["targeting"],
+                    "os": sf["os"],
+                    "age": sf["age"],
                     "budget": budget,
                     "asset": asset_val,
                     "tracking_link": tracking_link,
                     "tracking_link_provided": "tracking_link" in form,
-                    "language": language,
-                    "language_provided": f"camp_{idx}_language" in form,
+                    "language": sf["language"],
+                    "language_provided": sf["language_provided"],
                 }
-            # Ключ — только у объявлений со вторым текстом: остальные слоты
-            # (и записанные из них задания) остаются прежними.
-            if copy2:
-                slot["copy2"] = copy2
-            # ACL-1775: Instant Form. Ключи есть только у слотов с формой; значения
-            # другого назначения (сайта) не уходят вовсе, а у сайтовых слотов
-            # лишних ключей нет - прежние черновики не меняются ни байтом.
-            if destination != "website":
-                # Незнакомое назначение не превращается в сайт молча: уходит как есть,
-                # и план откажет вслух ("Unknown conversion location").
-                slot["destination"] = destination
-            if destination == "instant_form":
-                slot["lead_form_id"] = (form.get(f"camp_{idx}_ad_{a_idx}_form_id") or "").strip()
-                # ACL-1776: шаблон формы (создаёт робот при публикации); ключ есть только при выборе шаблона.
-                template = (form.get(f"camp_{idx}_ad_{a_idx}_form_template") or "").strip()
-                if template:
-                    slot["lead_form_template"] = template
-            slots.append(slot)
+                if a_idx is None:
+                    slot.update({"creative_type": "Image", "creative_id": "", "creative_file": "",
+                                 "copy": "", "no_ad": True})
+                else:
+                    creative_type = (form.get(f"camp_{idx}_ad_{a_idx}_creative_type") or "Image").strip()
+                    creative_file = (form.get(f"camp_{idx}_ad_{a_idx}_creative_file") or "").strip()
+                    copy          = (form.get(f"camp_{idx}_ad_{a_idx}_copy") or "").strip()
+                    # ACL-1344: необязательный второй вариант основного текста —
+                    # название записи библиотеки текстов, как у `copy`.
+                    copy2         = (form.get(f"camp_{idx}_ad_{a_idx}_copy2") or "").strip()
+                    # Legacy single-ad fallback (forms submitted before multi-ad upgrade)
+                    if not creative_file and a_idx == 0:
+                        creative_file = (form.get(f"camp_{idx}_creative_file") or "").strip()
+                    if not copy and a_idx == 0:
+                        copy = (form.get(f"camp_{idx}_copy") or "").strip()
+                    slot.update({
+                        "creative_type": creative_type,
+                        "creative_id": (form.get(f"camp_{idx}_creative_id") or "").strip(),
+                        "creative_file": creative_file,
+                        "copy": copy,
+                    })
+                    # Ключ — только у объявлений со вторым текстом: остальные слоты
+                    # (и записанные из них задания) остаются прежними.
+                    if copy2:
+                        slot["copy2"] = copy2
+                    cta_val = (form.get(f"camp_{idx}_ad_{a_idx}_cta") or "").strip().upper()
+                    if cta_val and cta_val != "LEARN_MORE":
+                        slot["cta"] = cta_val
+                    if destination == "instant_form":
+                        slot["lead_form_id"] = (form.get(f"camp_{idx}_ad_{a_idx}_form_id") or "").strip()
+                        # ACL-1776: шаблон формы (создаёт робот при публикации); ключ есть только при выборе шаблона.
+                        template = (form.get(f"camp_{idx}_ad_{a_idx}_form_template") or "").strip()
+                        if template:
+                            slot["lead_form_template"] = template
+                    # ACL-1770: Страница и ссылка объявления. Ключи только у слотов, где человек что-то
+                    # выбрал или вписал: прежние слоты не меняются ни байтом.
+                    ad_page = (form.get(f"camp_{idx}_ad_{a_idx}_page") or "").strip()
+                    ad_link = (form.get(f"camp_{idx}_ad_{a_idx}_link") or "").strip()
+                    if ad_page:
+                        slot["page_id"] = ad_page
+                    if ad_link:
+                        slot["link"] = ad_link
+                # ACL-1768: ключи набора только у кампаний с несколькими наборами - слоты
+                # одного набора остаются прежними ни байтом.
+                if adset_count > 1 or len(ads_by_set) > 1:
+                    slot["adset_index"] = k
+                    slot["adset_count"] = adset_count
+                if sf["adset_name"]:
+                    slot["adset_name"] = sf["adset_name"]
+                if sf["pixel"]:
+                    slot["pixel_id"] = sf["pixel"]
+                # ACL-1775: Instant Form. Ключи есть только у слотов с формой; значения
+                # другого назначения (сайта) не уходят вовсе.
+                if destination != "website":
+                    # Незнакомое назначение не превращается в сайт молча: уходит как есть,
+                    # и план откажет вслух ("Unknown conversion location").
+                    slot["destination"] = destination
+                for key in ("gender", "languages", "device", "os_min", "start_time"):
+                    if sf[key]:
+                        slot[key] = sf[key]
+                slots.append(slot)
+        camp_spans.append((name, first_slot, len(slots), form_errors))
+    # ACL-1768: две карточки с одним именем склеили бы наборы друг друга - отказ вслух.
+    for name, start, end, errs in camp_spans:
+        if sum(1 for n, *_ in camp_spans if n == name) > 1 and start < end:
+            errs.append(f"Two campaigns are named {name}. Give each campaign a distinct name.")
+    for name, start, end, errs in camp_spans:
+        if errs and start < end:
+            slots[start]["form_errors"] = list(dict.fromkeys(errs))
     # Return the ISO code, not the raw form value ("Costa Rica"). Confirmed
     # live 2026-07-30: the full name leaked into draft.country, where both
     # the GCC/LatAm language rule and the Excel Countries lookup expect
@@ -5242,6 +5338,10 @@ INSTANT_FORM_RPA_ERROR = ("Instant Forms are available only with the Graph API b
                           "(ACL_FB_BACKEND=api). Switch the ad set back to Website or use the API backend.")
 
 
+LEVEL_RPA_ERROR = ("A Page or link chosen for an ad, or a pixel chosen for an ad set, needs the Graph API "
+                   "backend (API backend only). Clear them to publish with the robot.")
+
+
 def _instant_form_refusal(slots: list[dict]) -> JSONResponse | None:
     """ACL-1775: слот с Instant Form при RPA-бэкенде - отказ вслух, а не молча сайтом."""
     from src.web import publish_api
@@ -5250,6 +5350,61 @@ def _instant_form_refusal(slots: list[dict]) -> JSONResponse | None:
         return None
     if any(s.get("destination", "website") != "website" for s in slots):
         return JSONResponse({"error": INSTANT_FORM_RPA_ERROR}, status_code=409)
+    # ACL-1770: Страница/ссылка объявления и пиксель набора - только API; RPA не роняет их молча.
+    if any(s.get(k) for s in slots for k in ("page_id", "link", "pixel_id")):
+        return JSONResponse({"error": LEVEL_RPA_ERROR}, status_code=409)
+    return None
+
+
+MULTI_ADSET_RPA_ERROR = ("Several ad sets need the API backend (ACL_FB_BACKEND=api). "
+                         "The RPA backend builds one ad set per campaign; remove the extra ad sets "
+                         "or use the API backend.")
+
+
+def _several_adsets(slots: list[dict]) -> list[str]:
+    """Имена кампаний, у которых больше одного набора (ACL-1768)."""
+    seen: dict[str, set] = {}
+    for slot in slots:
+        k = slot.get("adset_index") or 0
+        seen.setdefault(str(slot.get("name") or ""), set()).add(k if isinstance(k, int) else str(k))
+    return [n for n, idx in seen.items() if len(idx) > 1]
+
+
+def _multi_adset_refusal(slots: list[dict]) -> JSONResponse | None:
+    """ACL-1768: больше одного набора при RPA-бэкенде - отказ вслух, лишний набор не отбрасывается молча."""
+    from src.web import publish_api
+
+    if publish_api.api_enabled():
+        return None
+    names = _several_adsets(slots)
+    if names:
+        return JSONResponse({"error": MULTI_ADSET_RPA_ERROR, "campaigns": names}, status_code=409)
+    return None
+
+
+#: Поля билдера, которые умеет только API-бэкенд (ACL-1767).
+API_ONLY_SLOT_KEYS = {"adset_name": "Ad set name", "pixel_id": "Pixel of the ad set",
+                      "gender": "Gender", "languages": "Several languages", "device": "Devices",
+                      "os_min": "Minimum OS version", "start_time": "Start time", "cta": "CTA other than Learn more"}
+
+
+def _api_only_fields_refusal(slots: list[dict]) -> JSONResponse | None:
+    """ACL-1767: заполненное поле только для API при бэкенде RPA - отказ вслух, не молча."""
+    from src.web import publish_api
+
+    if publish_api.api_enabled():
+        return None
+    names: list[str] = []
+    for slot in slots:
+        for key, title in API_ONLY_SLOT_KEYS.items():
+            if slot.get(key) and title not in names:
+                names.append(title)
+        if str(slot.get("os") or "").strip().lower() == "android" and "Android only" not in names:
+            names.append("Android only")
+    if names:
+        return JSONResponse({"error": "These fields work only with the Graph API backend "
+                             "(ACL_FB_BACKEND=api): " + ", ".join(names) + ". Clear them or use the API backend."},
+                            status_code=409)
     return None
 
 
@@ -5269,6 +5424,39 @@ async def api_page_forms(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": "Instant Forms need the Graph API backend (ACL_FB_BACKEND=api)."},
                             status_code=409)
     return JSONResponse(await asyncio.to_thread(page_forms.read_forms, account))
+
+
+@app.post("/api/page-pixels")
+async def api_page_pixels(request: Request) -> JSONResponse:
+    """ACL-1770: Страницы и пиксели кабинета для выбора в билдере. Только по нажатию человека."""
+    from src.web import page_pixel_options, publish_api
+
+    form = await request.form()
+    account = (form.get("account_label") or form.get("account") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    if not publish_api.api_enabled():
+        return JSONResponse({"ok": False, "error": "Choosing a Page or pixel needs the Graph API backend "
+                                                   "(API backend only)."}, status_code=409)
+    return JSONResponse(await asyncio.to_thread(page_pixel_options.read_options, account))
+
+
+@app.post("/api/account-defaults")
+async def api_account_defaults(request: Request) -> JSONResponse:
+    """ACL-1770: выбранные Страницу/пиксель записать в карту этой машины (только в пустую графу)."""
+    from src.web import page_pixel_options
+
+    form = await request.form()
+    account = (form.get("account_label") or form.get("account") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    try:
+        saved = await asyncio.to_thread(
+            page_pixel_options.save_choice, account,
+            page_id=str(form.get("page_id") or ""), pixel_id=str(form.get("pixel_id") or ""))
+    except page_pixel_options.SaveRefused as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=exc.status)
+    return JSONResponse({"ok": True, "saved": saved})
 
 
 @app.get("/api/form-templates")
@@ -5317,7 +5505,8 @@ async def preview_publish(request: Request) -> JSONResponse:
     """Dry-run: convert form slots → PublishJob plan, return JSON (no Meta API calls)."""
     form = await read_form(request, BUILDER_FORM)
     country, account_label, slots = _parse_build_upload_form(form)
-    refused = _instant_form_refusal(slots)
+    refused = (_multi_adset_refusal(slots) or _instant_form_refusal(slots)
+               or _api_only_fields_refusal(slots))
     if refused is not None:
         return refused
     if not country:
@@ -5355,7 +5544,8 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
     """
     form = await read_form(request, BUILDER_FORM)
     country, account_label, slots = _parse_build_upload_form(form)
-    refused = _instant_form_refusal(slots)
+    refused = (_multi_adset_refusal(slots) or _instant_form_refusal(slots)
+               or _api_only_fields_refusal(slots))
     if refused is not None:
         return refused
     via_ml = (form.get("via_multilogin") or "1").strip() not in ("0", "false", "no")
@@ -5434,6 +5624,18 @@ async def publish_plan(request: Request) -> JSONResponse:
     return JSONResponse(result)
 
 
+# ACL-1771: подтверждённые соответствия «термин библиотеки -> id Meta» (локальный кэш резолвера).
+# Только файл на этой машине: в Meta ничего не уходит. Тот же вход, что у /publish-plan:
+# локальный адрес (общий middleware) и бэкенд API; подтвердить можно только кандидата,
+# показанного в последнем Check plan для этого термина.
+async def _targeting_body(request: Request) -> dict:
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001
+        body = {}
+    return body if isinstance(body, dict) else {}
+
+
 # ACL-1800: команды над существующими кампаниями (статус/бюджет/ставка) — только
 # при ACL_FB_BACKEND=api, только по клику человека и с подтверждением превью.
 @app.post("/campaign-commands/preview")
@@ -5489,6 +5691,67 @@ async def _campaign_commands_body(request: Request) -> dict:
     except Exception:
         body = {}
     return body if isinstance(body, dict) else {}
+
+
+def _targeting_gate() -> JSONResponse | None:
+    from src.web import publish_api
+
+    if not publish_api.api_enabled():
+        return JSONResponse({"error": "Targeting confirmation needs the Graph API backend (ACL_FB_BACKEND=api)."},
+                            status_code=409)
+    return None
+
+
+@app.get("/targeting-resolver/cache")
+async def targeting_resolver_cache() -> JSONResponse:
+    from src.fb_api.targeting_resolver import ConfirmedStore
+
+    blocked = _targeting_gate()
+    if blocked:
+        return blocked
+    return JSONResponse({"entries": ConfirmedStore().entries()})
+
+
+@app.post("/targeting-resolver/confirm")
+async def targeting_resolver_confirm(request: Request) -> JSONResponse:
+    """Человек подтвердил кандидата Check plan: запомнить (тип, термин) -> id + имя."""
+    from src.fb_api import targeting_resolver as tr
+
+    blocked = _targeting_gate()
+    if blocked:
+        return blocked
+    body = await _targeting_body(request)
+    term, cid, ctype = str(body.get("term") or ""), str(body.get("id") or ""), str(body.get("type") or "")
+    cand = tr.candidate_for(term, cid, ctype)
+    if cand is None:
+        return JSONResponse({"error": "That pick was not among the candidates of the last Check plan "
+                                      "for this term. Run Check plan and choose from its list."},
+                            status_code=400)
+    try:
+        # Имя и состав берутся у кандидата, который показал сервер, а не из запроса.
+        row = tr.ConfirmedStore().put(term, id=cand["id"], type=cand["type"], name=cand["name"],
+                                      picks=cand.get("picks"))
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    return JSONResponse({"ok": True, "entry": row})
+
+
+@app.post("/targeting-resolver/clear")
+async def targeting_resolver_clear(request: Request) -> JSONResponse:
+    """Забыть один подтверждённый термин (`term`) или все (`all: true`)."""
+    from src.fb_api.targeting_resolver import ConfirmedStore
+
+    blocked = _targeting_gate()
+    if blocked:
+        return blocked
+    body = await _targeting_body(request)
+    store = ConfirmedStore()
+    if body.get("all") is True:
+        return JSONResponse({"ok": True, "removed": store.clear()})
+    term = str(body.get("term") or "")
+    if not term.strip():
+        return JSONResponse({"error": "Give a term, or all=true."}, status_code=400)
+    return JSONResponse({"ok": True, "removed": 1 if store.remove(term) else 0})
 
 
 # ACL-1812: тёплые сессии. Состояние строк — только реестр и процессы на машине
@@ -5657,6 +5920,22 @@ async def build_upload(request: Request) -> Response:
     """Build Upload FB xlsx from campaign builder slots for one account."""
     form = await read_form(request, BUILDER_FORM)
     country, account_label, slots = _parse_build_upload_form(form)
+    if _several_adsets(slots):
+        # ACL-1768: таблица Upload FB знает один набор на кампанию - не отбрасывать лишние молча.
+        return await _in_report_pool(
+            _render_report, request,
+            upload_errors={(form.get("country") or "").strip() or country:
+                           {account_label: [MULTI_ADSET_RPA_ERROR.split(" (")[0] + ": Upload FB cannot hold them."]}},
+        )
+    custom = [s for s in slots if s.get("adset_name") or s.get("pixel_id")]
+    if custom:
+        # ACL-1768: имя набора и пиксель набора таблица Upload FB не несёт - не отбрасывать молча.
+        return await _in_report_pool(
+            _render_report, request,
+            upload_errors={(form.get("country") or "").strip() or country:
+                           {account_label: ["Upload FB cannot hold a custom ad set name or pixel; "
+                                            "use Publish with the API backend."]}},
+        )
     if any(s.get("destination") == "instant_form" for s in slots):
         # ACL-1775: таблица Upload FB формы не умеет - не собирать сайтовую молча.
         return await _in_report_pool(
