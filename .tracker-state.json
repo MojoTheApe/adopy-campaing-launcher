@@ -47042,20 +47042,6 @@
         "started_at": "2026-10-21T13:19:31+00:00",
         "from_status": "status:idea"
       },
-      "838": {
-        "actor": "Worker-W1021838",
-        "session": "run_w1021_1838",
-        "coordinator": "Coordinator-I1021A",
-        "branch": "codex/acl-1838-country-active-line",
-        "worktree": "C:\\acl-int-w1838",
-        "id": "e9c852bfb5fe4070836d65a3b5cbe6e6",
-        "issue": 838,
-        "state": "handoff",
-        "started_at": "2026-10-21T13:39:13+00:00",
-        "from_status": "status:todo",
-        "pr": 842,
-        "report": "ACL-1838 refresh: merged origin/main (0ea237b0e4ce) into codex/acl-1838-country-active-line, clean merge, no conflicts, no content change.\nOld head bc9ba5c808673dd775511c85e90ffe30c7b9beb1; new head fba8ae7d2d06df449fcc71286c258dca1b948c89. PR base is main.\nDiff vs main: only docs/system/CHANGELOG.md, docs/system/PROJECT.md, src/web/templates/report.html.\nTests: PR has no test files of its own; no existing test references the changed selector, so none run locally.\nCI on new head: all checks pass (linux 1/2/3, windows, tracker-link, verification)."
-      },
       "839": {
         "actor": "Worker-W1021839",
         "session": "run_w1021_1839",
@@ -51760,25 +51746,25 @@
             "session": "run_w1021_1838"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1021838",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
-          "actor": "Worker-T1020838",
-          "session": "t1020-838",
-          "coordinator": "Coordinator-M1011A",
+          "actor": "Worker-W1021838",
+          "session": "run_w1021_1838",
+          "coordinator": "Coordinator-I1021A",
           "branch": "codex/acl-1838-country-active-line",
-          "worktree": "C:\\acl-1838-w",
-          "id": "34a1f79b60f64615acff75608efa1c9e",
+          "worktree": "C:\\acl-int-w1838",
+          "id": "e9c852bfb5fe4070836d65a3b5cbe6e6",
           "issue": 838,
           "state": "handoff",
-          "started_at": "2026-10-20T12:07:42+00:00",
+          "started_at": "2026-10-21T13:39:13+00:00",
           "from_status": "status:todo",
           "pr": 842,
-          "report": "ACL-1838 resumed (Worker-T1020838). Block was stale (owner pause for the five-review Flow activation is over). Merged current work/main into codex/acl-1838-country-active-line; only conflict docs/system/PROJECT.md, both entries kept (read-only Opus review: lossless, no findings). Diff vs main unchanged: 3 files (report.html 2px accent line, PROJECT.md, CHANGELOG.md). Tests: tests/test_manage_behavior.py + tests/test_the_builder_tree.py 15 passed. The design prototype in C:\\acl-design\\inbox does not define an activity marker, so the owner's option 3 in the Issue governs. PR #866 (batch into stage) is the old route and should be closed in favour of #842 into main. Branch contains current work/main."
+          "report": "ACL-1838 refresh: merged origin/main (0ea237b0e4ce) into codex/acl-1838-country-active-line, clean merge, no conflicts, no content change.\nOld head bc9ba5c808673dd775511c85e90ffe30c7b9beb1; new head fba8ae7d2d06df449fcc71286c258dca1b948c89. PR base is main.\nDiff vs main: only docs/system/CHANGELOG.md, docs/system/PROJECT.md, src/web/templates/report.html.\nTests: PR has no test files of its own; no existing test references the changed selector, so none run locally.\nCI on new head: all checks pass (linux 1/2/3, windows, tracker-link, verification)."
         },
         "pr": 842,
-        "queued_at": "2026-10-20T12:27:40+00:00",
+        "queued_at": "2026-10-21T13:44:29+00:00",
         "review_report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21",
         "return_operation": {
           "id": "f24439a4b4cc447189633cacb9c41a56",
@@ -51790,9 +51776,7 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578004+00:00",
           "remote_process_stopped_verified": false
-        },
-        "rework": true,
-        "rework_claim": "e9c852bfb5fe4070836d65a3b5cbe6e6"
+        }
       },
       "839": {
         "implementers": [
@@ -62174,7 +62158,8 @@
     "review_queue": [
       1053,
       1054,
-      710
+      710,
+      838
     ],
     "review": {
       "id": "3cbfef49299841b6912867db49cc431f",
@@ -107286,6 +107271,13 @@
         "issue": 1050,
         "claim": "838556f648e94a21a3de7e40aa5deafc",
         "actor": "Worker-P1021D2050"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-21T13:44:29+00:00",
+        "issue": 838,
+        "pr": 842,
+        "actor": "Worker-W1021838"
       }
     ],
     "policy": {
