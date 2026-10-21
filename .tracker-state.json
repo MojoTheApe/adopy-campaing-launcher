@@ -54406,7 +54406,7 @@
             "session": "run_a1021_626w"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-A1021626",
         "coordinator": "Coordinator-A1021A",
         "handoff": {
@@ -105572,6 +105572,72 @@
             "855": "#855: source approval is stale for its PR, main or policy"
           }
         }
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-21T11:26:35+00:00",
+        "issue": 626,
+        "pr": 967,
+        "review": {
+          "id": "6e6f0aa4453643d8a27046aa779e60f2",
+          "pr": 967,
+          "issues": [
+            626
+          ],
+          "actor": "Reviewer-A1021626",
+          "session": "run_a1021_626r",
+          "coordinator": "Coordinator-A1021A",
+          "started_at": "2026-10-21T11:02:29+00:00",
+          "state": "approving",
+          "report": "ACL-1626 (PR 967) review return at d460cfba - one blocking finding (CI red), content otherwise approved.\n\nBLOCKING: required CI \"linux tests (3.13, 1)\" fails on this head (run 39581343441, job 119160086116): 3 failed, 3034 passed.\n  FAILED tests/test_acl1620_account_notes.py::test_a_damaged_file_is_reported_in_the_save_response_and_logged\n  FAILED tests/test_acl1620_account_notes.py::test_two_corruptions_in_the_same_millisecond_keep_both_copies\n  FAILED tests/test_acl1620_account_notes.py::test_the_backup_name_has_millisecond_resolution\n  - RuntimeError: asyncio.run() cannot be called from a running event loop\nCause: the new tests were appended at the end of the module, after the module-scoped `browser` fixture (line ~222). Once that fixture has started sync Playwright, an event loop is running in the main thread for the rest of the module, so `_post()` (asyncio.run at line 47) fails. They pass only when run in isolation (that is why the handoff saw \"3 passed\" separately). This is deterministic, not an environment issue; it also reproduces locally.\nFix (either): move the four new tests above the `browser` fixture, next to the other non-browser tests (e.g. after test_a_wrong_root_is_preserved_too); or make `_post` run the handler in a worker thread as the fixture's route handler already does (lines ~248-251). Moving the tests is the smaller change. Then run the whole file in one process (non-browser tests must pass even when browser tests fail/skip locally) and get CI green.\n\nEverything else checked and fine (no other change needed): spec 1 (log warning + set_aside/warning in the save response + role=alert banner with the exact Issue wording), spec 2 (ms-resolution name + collision counter under the machine-file lock), scope limited to the 4 files, PR body has exactly one Tracker issues line, no leaks, English UI text, merge of main ea41acbf clean.\nNon-blocking (optional in the same fix): add a short docs/system/CHANGELOG.md entry for the new response fields and banner; the banner itself is only checked by a source-string test.\nSpec 3 (owner live check: write/edit/clear a note, restart the dashboard, note survives) remains for the owner separately; not a reason for this return.",
+          "keep_lane": true,
+          "approval": {
+            "issue": 626,
+            "pr": 967,
+            "branch": "work/acl-1626-notes-set-aside",
+            "head_sha": "2b1c52297ef8d0b778285de2f8833037fb5b15d1",
+            "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+            "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "78daec77f59b269c69b2b0d3072e9dff71bc3675802a71e8a3e2f16b22df80f4",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-A1021626",
+              "implementer": "Worker-A1021626",
+              "head_sha": "2b1c52297ef8d0b778285de2f8833037fb5b15d1",
+              "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "tree_sha": "182a3f5484b54663d2d1282c31341885b09be888",
+              "execution_lane": "6e6f0aa4453643d8a27046aa779e60f2",
+              "review_session": "run_a1021_626r",
+              "report": "Independent source re-review of ACL-1626 (PR 967) at 2b1c5229 (contains main ea41acbf; earlier merge d460cfba clean).\nDelta since the return (d460cfba..2b1c5229): tests/test_acl1620_account_notes.py _post() now runs the handler via asyncio.run in a worker thread (same pattern as the browser fixture's route handler), fixing the deterministic CI failure ('asyncio.run() cannot be called from a running event loop' after the module-scoped Playwright fixture). caplog and monkeypatch on notes.datetime remain effective across the thread (root logger handler / module global). docs/system/CHANGELOG.md gains an accurate ACL-1626 entry. No product-code change in the delta.\nFull scope vs main re-checked: src/web/account_notes.py, src/web/app.py, src/web/templates/report.html, tests/test_acl1620_account_notes.py, docs/system/CHANGELOG.md. Spec 1 met (WARNING log with backup path; save response carries set_aside and warning 'Notes file was damaged; a copy was kept at <path>'; role=alert banner on the account map). Spec 2 met (ms-resolution backup name plus collision counter under the machine-file lock). PR body has exactly one 'Tracker issues: ACL-1626' line, no closing keywords. No leaked ids/tokens/personal paths; user-facing text English.\nTests: whole test file run in one process locally; the new non-browser tests pass after the browser fixture; Playwright browser tests fail locally for environment reasons only (acl.test navigation timeout); CI is authoritative.\nNon-blocking: banner covered only by a template source-string test; if a save fails with OSError after the file was set aside, the user is not told about the copy (log only).\nSpec 3 (owner live check: write/edit/clear a note, restart the dashboard, note survives) is owner-only and not performed; it exercises the unchanged ACL-1620 persistence path and follows separately. Needs owner live check and a serve.py restart for the Python change.\nVerdict: approved.",
+              "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                626
+              ],
+              "recorded_at": "2026-10-21T11:07:47+00:00",
+              "issue_scopes": {
+                "626": "78daec77f59b269c69b2b0d3072e9dff71bc3675802a71e8a3e2f16b22df80f4"
+              }
+            },
+            "lane": {
+              "id": "6e6f0aa4453643d8a27046aa779e60f2",
+              "pr": 967,
+              "issues": [
+                626
+              ],
+              "actor": "Reviewer-A1021626",
+              "session": "run_a1021_626r",
+              "coordinator": "Coordinator-A1021A",
+              "started_at": "2026-10-21T11:02:29+00:00",
+              "state": "reviewing",
+              "report": "ACL-1626 (PR 967) review return at d460cfba - one blocking finding (CI red), content otherwise approved.\n\nBLOCKING: required CI \"linux tests (3.13, 1)\" fails on this head (run 39581343441, job 119160086116): 3 failed, 3034 passed.\n  FAILED tests/test_acl1620_account_notes.py::test_a_damaged_file_is_reported_in_the_save_response_and_logged\n  FAILED tests/test_acl1620_account_notes.py::test_two_corruptions_in_the_same_millisecond_keep_both_copies\n  FAILED tests/test_acl1620_account_notes.py::test_the_backup_name_has_millisecond_resolution\n  - RuntimeError: asyncio.run() cannot be called from a running event loop\nCause: the new tests were appended at the end of the module, after the module-scoped `browser` fixture (line ~222). Once that fixture has started sync Playwright, an event loop is running in the main thread for the rest of the module, so `_post()` (asyncio.run at line 47) fails. They pass only when run in isolation (that is why the handoff saw \"3 passed\" separately). This is deterministic, not an environment issue; it also reproduces locally.\nFix (either): move the four new tests above the `browser` fixture, next to the other non-browser tests (e.g. after test_a_wrong_root_is_preserved_too); or make `_post` run the handler in a worker thread as the fixture's route handler already does (lines ~248-251). Moving the tests is the smaller change. Then run the whole file in one process (non-browser tests must pass even when browser tests fail/skip locally) and get CI green.\n\nEverything else checked and fine (no other change needed): spec 1 (log warning + set_aside/warning in the save response + role=alert banner with the exact Issue wording), spec 2 (ms-resolution name + collision counter under the machine-file lock), scope limited to the 4 files, PR body has exactly one Tracker issues line, no leaks, English UI text, merge of main ea41acbf clean.\nNon-blocking (optional in the same fix): add a short docs/system/CHANGELOG.md entry for the new response fields and banner; the banner itself is only checked by a source-string test.\nSpec 3 (owner live check: write/edit/clear a note, restart the dashboard, note survives) remains for the owner separately; not a reason for this return.",
+              "keep_lane": true
+            },
+            "approved_at": "2026-10-21T11:25:09+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -110222,6 +110288,52 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-21T10:49:53+00:00"
+      },
+      "626": {
+        "issue": 626,
+        "pr": 967,
+        "branch": "work/acl-1626-notes-set-aside",
+        "head_sha": "2b1c52297ef8d0b778285de2f8833037fb5b15d1",
+        "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+        "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "78daec77f59b269c69b2b0d3072e9dff71bc3675802a71e8a3e2f16b22df80f4",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-A1021626",
+          "implementer": "Worker-A1021626",
+          "head_sha": "2b1c52297ef8d0b778285de2f8833037fb5b15d1",
+          "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+          "tree_sha": "182a3f5484b54663d2d1282c31341885b09be888",
+          "execution_lane": "6e6f0aa4453643d8a27046aa779e60f2",
+          "review_session": "run_a1021_626r",
+          "report": "Independent source re-review of ACL-1626 (PR 967) at 2b1c5229 (contains main ea41acbf; earlier merge d460cfba clean).\nDelta since the return (d460cfba..2b1c5229): tests/test_acl1620_account_notes.py _post() now runs the handler via asyncio.run in a worker thread (same pattern as the browser fixture's route handler), fixing the deterministic CI failure ('asyncio.run() cannot be called from a running event loop' after the module-scoped Playwright fixture). caplog and monkeypatch on notes.datetime remain effective across the thread (root logger handler / module global). docs/system/CHANGELOG.md gains an accurate ACL-1626 entry. No product-code change in the delta.\nFull scope vs main re-checked: src/web/account_notes.py, src/web/app.py, src/web/templates/report.html, tests/test_acl1620_account_notes.py, docs/system/CHANGELOG.md. Spec 1 met (WARNING log with backup path; save response carries set_aside and warning 'Notes file was damaged; a copy was kept at <path>'; role=alert banner on the account map). Spec 2 met (ms-resolution backup name plus collision counter under the machine-file lock). PR body has exactly one 'Tracker issues: ACL-1626' line, no closing keywords. No leaked ids/tokens/personal paths; user-facing text English.\nTests: whole test file run in one process locally; the new non-browser tests pass after the browser fixture; Playwright browser tests fail locally for environment reasons only (acl.test navigation timeout); CI is authoritative.\nNon-blocking: banner covered only by a template source-string test; if a save fails with OSError after the file was set aside, the user is not told about the copy (log only).\nSpec 3 (owner live check: write/edit/clear a note, restart the dashboard, note survives) is owner-only and not performed; it exercises the unchanged ACL-1620 persistence path and follows separately. Needs owner live check and a serve.py restart for the Python change.\nVerdict: approved.",
+          "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            626
+          ],
+          "recorded_at": "2026-10-21T11:07:47+00:00",
+          "issue_scopes": {
+            "626": "78daec77f59b269c69b2b0d3072e9dff71bc3675802a71e8a3e2f16b22df80f4"
+          }
+        },
+        "lane": {
+          "id": "6e6f0aa4453643d8a27046aa779e60f2",
+          "pr": 967,
+          "issues": [
+            626
+          ],
+          "actor": "Reviewer-A1021626",
+          "session": "run_a1021_626r",
+          "coordinator": "Coordinator-A1021A",
+          "started_at": "2026-10-21T11:02:29+00:00",
+          "state": "reviewing",
+          "report": "ACL-1626 (PR 967) review return at d460cfba - one blocking finding (CI red), content otherwise approved.\n\nBLOCKING: required CI \"linux tests (3.13, 1)\" fails on this head (run 39581343441, job 119160086116): 3 failed, 3034 passed.\n  FAILED tests/test_acl1620_account_notes.py::test_a_damaged_file_is_reported_in_the_save_response_and_logged\n  FAILED tests/test_acl1620_account_notes.py::test_two_corruptions_in_the_same_millisecond_keep_both_copies\n  FAILED tests/test_acl1620_account_notes.py::test_the_backup_name_has_millisecond_resolution\n  - RuntimeError: asyncio.run() cannot be called from a running event loop\nCause: the new tests were appended at the end of the module, after the module-scoped `browser` fixture (line ~222). Once that fixture has started sync Playwright, an event loop is running in the main thread for the rest of the module, so `_post()` (asyncio.run at line 47) fails. They pass only when run in isolation (that is why the handoff saw \"3 passed\" separately). This is deterministic, not an environment issue; it also reproduces locally.\nFix (either): move the four new tests above the `browser` fixture, next to the other non-browser tests (e.g. after test_a_wrong_root_is_preserved_too); or make `_post` run the handler in a worker thread as the fixture's route handler already does (lines ~248-251). Moving the tests is the smaller change. Then run the whole file in one process (non-browser tests must pass even when browser tests fail/skip locally) and get CI green.\n\nEverything else checked and fine (no other change needed): spec 1 (log warning + set_aside/warning in the save response + role=alert banner with the exact Issue wording), spec 2 (ms-resolution name + collision counter under the machine-file lock), scope limited to the 4 files, PR body has exactly one Tracker issues line, no leaks, English UI text, merge of main ea41acbf clean.\nNon-blocking (optional in the same fix): add a short docs/system/CHANGELOG.md entry for the new response fields and banner; the banner itself is only checked by a source-string test.\nSpec 3 (owner live check: write/edit/clear a note, restart the dashboard, note survives) remains for the owner separately; not a reason for this return.",
+          "keep_lane": true
+        },
+        "approved_at": "2026-10-21T11:25:09+00:00"
       }
     },
     "batches": {
@@ -115357,66 +115469,6 @@
         "state": "fixing",
         "report": "# ACL-1668 source review: returned for fixes (head 0429dc28)\n\nReviewer-A1021668. I reviewed the full scope against main ea41acbf. HEAD contains main, and the merge 0429dc28 is clean (`git show --cc` is empty). The diff touches only 4 files: enrich_draft.py, report.html and two tests. I found no leaked identifiers. The new UI strings are in English.\n\n## The feature itself is correct\n- Spec 1: after the list refresh, the row is marked \"File missing - pick again\" in `var(--bad)` and the name stays in the field. It counts only once the list has actually loaded, and it compares the hidden value with filename/rel_path the same way the picker stores it.\n- Spec 2: cbPublish and cbPublishAll (the only two publish entry points) list the affected rows in the confirm and refuse to send. The enrichment message is clear.\n- Spec 3: tests were added. tests/test_acl1668_missing_creative_publish.py, tests/test_builder_review_browser.py and tests/test_second_primary_text_reaches_the_robot.py pass locally (29 passed).\n\n## BLOCKING: the change breaks 58 existing browser tests (CI linux shards 1/2/3 are red)\nMany existing browser fixtures put a creative straight into the hidden field (for example `s.querySelector('[name$=\"_ad_0_creative_file\"]').value='offline-0.png'`). Their offline `/api/creatives` route answers `{\"files\": []}`. Now that a loaded empty list counts as \"file missing\", every such row is marked missing. cbPublish and cbPublishAll then refuse with \"Not sent: a chosen creative file is missing\", so the queue never starts.\n\nFailing in CI run 39579487653:\n- tests/test_campaign_build_percent_browser.py (15)\n- tests/test_builder_multi_publish_browser.py (11)\n- tests/test_campaign_build_dot_browser.py (10)\n- tests/test_builder_publish_selected_browser.py (9)\n- tests/test_drawer_review_browser.py (6 + 1 error, \"CB_QUEUE is not defined\")\n- tests/test_acl1604_preflight_browser.py (3; one assertion shows the literal alert 'Not sent: a chosen creative file is missing \u2014 pick it again.')\n- tests/test_builder_foot_stays_put_browser.py (3)\n- tests/test_builder_second_primary_text.py (1)\n\nI reproduced test_drawer_review_browser.py locally: on 0429dc28, 6 failed and 1 error; on main ea41acbf, 13 passed.\n\nFix: update these fixtures so their `/api/creatives` route returns the files they select. Easiest is a `files` entry `{filename, rel_path, folder:'', type:'Image', size_bytes:1}` for every name the test sets, e.g. `offline-N.png`. Alternatively, choose files through the picker. Keep the product behaviour, and do not weaken cbCreativeMissing for tests. Then run all eight files above, plus tests/test_builder_review_browser.py and tests/test_acl1668_missing_creative_publish.py.\n\n## Should fix in the same round\n- docs/system/CHANGELOG.md has no ACL-1668 entry. docs/system/PROJECT.md says a system change records what/why and the task/PR link there. Add a short entry at the top.\n- In cbPublish's confirm callback, `cbPreflightDecision(...)` runs before the missing-file refusal, so a refused publish still records a preflight decision. cbPublishAll does it the other way round: it refuses first. Move the missing-file check to the top of the callback in cbPublish to match.\n\n## Non-blocking notes\n- The confirm block is titled \"Nothing was sent:\" while the dialog still offers the build button. Wording such as \"These ads will not be sent until you pick the file again:\" would read better. Optional.\n- If the very first /api/creatives answer is an error (folder unavailable) with an empty list, every chosen row is marked \"File missing\". Publishing would fail anyway, so this is acceptable.\n\nNo owner live check is needed: the change is UI/enrichment only and does not act on any ad account.",
         "keep_lane": true
-      },
-      "967": {
-        "id": "6e6f0aa4453643d8a27046aa779e60f2",
-        "pr": 967,
-        "issues": [
-          626
-        ],
-        "actor": "Reviewer-A1021626",
-        "session": "run_a1021_626r",
-        "coordinator": "Coordinator-A1021A",
-        "started_at": "2026-10-21T11:02:29+00:00",
-        "state": "approving",
-        "report": "ACL-1626 (PR 967) review return at d460cfba - one blocking finding (CI red), content otherwise approved.\n\nBLOCKING: required CI \"linux tests (3.13, 1)\" fails on this head (run 39581343441, job 119160086116): 3 failed, 3034 passed.\n  FAILED tests/test_acl1620_account_notes.py::test_a_damaged_file_is_reported_in_the_save_response_and_logged\n  FAILED tests/test_acl1620_account_notes.py::test_two_corruptions_in_the_same_millisecond_keep_both_copies\n  FAILED tests/test_acl1620_account_notes.py::test_the_backup_name_has_millisecond_resolution\n  - RuntimeError: asyncio.run() cannot be called from a running event loop\nCause: the new tests were appended at the end of the module, after the module-scoped `browser` fixture (line ~222). Once that fixture has started sync Playwright, an event loop is running in the main thread for the rest of the module, so `_post()` (asyncio.run at line 47) fails. They pass only when run in isolation (that is why the handoff saw \"3 passed\" separately). This is deterministic, not an environment issue; it also reproduces locally.\nFix (either): move the four new tests above the `browser` fixture, next to the other non-browser tests (e.g. after test_a_wrong_root_is_preserved_too); or make `_post` run the handler in a worker thread as the fixture's route handler already does (lines ~248-251). Moving the tests is the smaller change. Then run the whole file in one process (non-browser tests must pass even when browser tests fail/skip locally) and get CI green.\n\nEverything else checked and fine (no other change needed): spec 1 (log warning + set_aside/warning in the save response + role=alert banner with the exact Issue wording), spec 2 (ms-resolution name + collision counter under the machine-file lock), scope limited to the 4 files, PR body has exactly one Tracker issues line, no leaks, English UI text, merge of main ea41acbf clean.\nNon-blocking (optional in the same fix): add a short docs/system/CHANGELOG.md entry for the new response fields and banner; the banner itself is only checked by a source-string test.\nSpec 3 (owner live check: write/edit/clear a note, restart the dashboard, note survives) remains for the owner separately; not a reason for this return.",
-        "keep_lane": true,
-        "approval": {
-          "issue": 626,
-          "pr": 967,
-          "branch": "work/acl-1626-notes-set-aside",
-          "head_sha": "2b1c52297ef8d0b778285de2f8833037fb5b15d1",
-          "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-          "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "78daec77f59b269c69b2b0d3072e9dff71bc3675802a71e8a3e2f16b22df80f4",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-A1021626",
-            "implementer": "Worker-A1021626",
-            "head_sha": "2b1c52297ef8d0b778285de2f8833037fb5b15d1",
-            "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-            "tree_sha": "182a3f5484b54663d2d1282c31341885b09be888",
-            "execution_lane": "6e6f0aa4453643d8a27046aa779e60f2",
-            "review_session": "run_a1021_626r",
-            "report": "Independent source re-review of ACL-1626 (PR 967) at 2b1c5229 (contains main ea41acbf; earlier merge d460cfba clean).\nDelta since the return (d460cfba..2b1c5229): tests/test_acl1620_account_notes.py _post() now runs the handler via asyncio.run in a worker thread (same pattern as the browser fixture's route handler), fixing the deterministic CI failure ('asyncio.run() cannot be called from a running event loop' after the module-scoped Playwright fixture). caplog and monkeypatch on notes.datetime remain effective across the thread (root logger handler / module global). docs/system/CHANGELOG.md gains an accurate ACL-1626 entry. No product-code change in the delta.\nFull scope vs main re-checked: src/web/account_notes.py, src/web/app.py, src/web/templates/report.html, tests/test_acl1620_account_notes.py, docs/system/CHANGELOG.md. Spec 1 met (WARNING log with backup path; save response carries set_aside and warning 'Notes file was damaged; a copy was kept at <path>'; role=alert banner on the account map). Spec 2 met (ms-resolution backup name plus collision counter under the machine-file lock). PR body has exactly one 'Tracker issues: ACL-1626' line, no closing keywords. No leaked ids/tokens/personal paths; user-facing text English.\nTests: whole test file run in one process locally; the new non-browser tests pass after the browser fixture; Playwright browser tests fail locally for environment reasons only (acl.test navigation timeout); CI is authoritative.\nNon-blocking: banner covered only by a template source-string test; if a save fails with OSError after the file was set aside, the user is not told about the copy (log only).\nSpec 3 (owner live check: write/edit/clear a note, restart the dashboard, note survives) is owner-only and not performed; it exercises the unchanged ACL-1620 persistence path and follows separately. Needs owner live check and a serve.py restart for the Python change.\nVerdict: approved.",
-            "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              626
-            ],
-            "recorded_at": "2026-10-21T11:07:47+00:00",
-            "issue_scopes": {
-              "626": "78daec77f59b269c69b2b0d3072e9dff71bc3675802a71e8a3e2f16b22df80f4"
-            }
-          },
-          "lane": {
-            "id": "6e6f0aa4453643d8a27046aa779e60f2",
-            "pr": 967,
-            "issues": [
-              626
-            ],
-            "actor": "Reviewer-A1021626",
-            "session": "run_a1021_626r",
-            "coordinator": "Coordinator-A1021A",
-            "started_at": "2026-10-21T11:02:29+00:00",
-            "state": "reviewing",
-            "report": "ACL-1626 (PR 967) review return at d460cfba - one blocking finding (CI red), content otherwise approved.\n\nBLOCKING: required CI \"linux tests (3.13, 1)\" fails on this head (run 39581343441, job 119160086116): 3 failed, 3034 passed.\n  FAILED tests/test_acl1620_account_notes.py::test_a_damaged_file_is_reported_in_the_save_response_and_logged\n  FAILED tests/test_acl1620_account_notes.py::test_two_corruptions_in_the_same_millisecond_keep_both_copies\n  FAILED tests/test_acl1620_account_notes.py::test_the_backup_name_has_millisecond_resolution\n  - RuntimeError: asyncio.run() cannot be called from a running event loop\nCause: the new tests were appended at the end of the module, after the module-scoped `browser` fixture (line ~222). Once that fixture has started sync Playwright, an event loop is running in the main thread for the rest of the module, so `_post()` (asyncio.run at line 47) fails. They pass only when run in isolation (that is why the handoff saw \"3 passed\" separately). This is deterministic, not an environment issue; it also reproduces locally.\nFix (either): move the four new tests above the `browser` fixture, next to the other non-browser tests (e.g. after test_a_wrong_root_is_preserved_too); or make `_post` run the handler in a worker thread as the fixture's route handler already does (lines ~248-251). Moving the tests is the smaller change. Then run the whole file in one process (non-browser tests must pass even when browser tests fail/skip locally) and get CI green.\n\nEverything else checked and fine (no other change needed): spec 1 (log warning + set_aside/warning in the save response + role=alert banner with the exact Issue wording), spec 2 (ms-resolution name + collision counter under the machine-file lock), scope limited to the 4 files, PR body has exactly one Tracker issues line, no leaks, English UI text, merge of main ea41acbf clean.\nNon-blocking (optional in the same fix): add a short docs/system/CHANGELOG.md entry for the new response fields and banner; the banner itself is only checked by a source-string test.\nSpec 3 (owner live check: write/edit/clear a note, restart the dashboard, note survives) remains for the owner separately; not a reason for this return.",
-            "keep_lane": true
-          },
-          "approved_at": "2026-10-21T11:25:09+00:00"
-        }
       },
       "974": {
         "id": "edb2d80250c842668526b6a94e793b8d",
