@@ -6131,6 +6131,31 @@
         "issue_scopes": {
           "1071": "c1c17f3e3ebe9dd15b00fd45eee146f5f5122550cbce8457dd84974144556657"
         }
+      },
+      "1076": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-J1021B76",
+        "review_session": "run_j1021_b76",
+        "execution_lane": "85d6b6ac4dc844c49bb56e0b4196ce08",
+        "implementer": "Coordinator-I1021A",
+        "batch_id": "1105e34df46449f9801ef245f30c4bfb",
+        "source_heads": [
+          "b89655ebfade925201f3b06dc446070bbba9f621"
+        ],
+        "head_sha": "5cdfcee698abcf528413bb1dbed39386e32af673",
+        "base_sha": "c01583ea07d77b884616d9bf896bf71315f5e8a2",
+        "tree_sha": "9814c3d28219d0914e2b1b7cab65fbe41c65481f",
+        "report": "Independent batch review of PR 1076 (single member ACL-2071, source PR 1072). Composition: main c01583ea plus exactly one merge commit 5cdfcee6 whose second parent is the frozen tip b89655eb; no extra commits; remerge-diff empty; candidate tree 9814c3d2 equals the source tip tree. diff main..head is byte-identical to the source diff (5 files: new .github/workflows/verify-published-tag.yml, CHANGELOG, POST_MAIN_DELIVERY, two tests). The new workflow is workflow_dispatch only with required tag and previous_tag, permissions contents: read, shares the acl-stable-delivery concurrency group; its resolve job validates tag format, reads the latest release through src.web.release_updates channel/fetch_latest (signature path), refuses a tag that is not the latest stable release or a manifest previous_tag different from the input, and builds the request from the signed manifest with issues []. The verify job is programmatically identical to complete-delivery.yml verify (name, runs-on, timeout, env and all 8 steps) except needs/outputs and the dropped GITHUB_OUTPUT line of the receipt step. No tracker writes, no publish, no release.yml call. complete-delivery.yml, release.yml, scripts/, src/, packaging/, tracker/ and delivery.json are unchanged. PR body has Tracker issues: ACL-2071 and Tracker batch: 1105e34df46449f9801ef245f30c4bfb and no delivery request (correct for a process change); check-pr verified. Local affected tests: 267 passed, 1 skipped (test_acl_ci_workflows, test_acl_ci_scope, test_ci_layout, test_acl_complete_delivery). Complete combined CI on 5cdfcee6 green: 16/16 checks (linux 3.11/3.13 x3 shards, windows 3.13, descriptor, tracker-link, ACL verification, Installer verification, Build/install/repair/uninstall, build inputs, classifiers, process instructions). Non-blocking note: GitHub concurrency keeps one pending run per group, so a manual dispatch queued behind a running delivery could replace a pending automatic delivery run (recoverable by the documented workflow_dispatch continuation); operators should dispatch only when no delivery is pending. Hosted proof of the new workflow comes only from its first dispatch after merge.",
+        "main_sha": "c01583ea07d77b884616d9bf896bf71315f5e8a2",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          1071
+        ],
+        "recorded_at": "2026-10-21T19:35:59+00:00",
+        "issue_scopes": {
+          "1071": "c1c17f3e3ebe9dd15b00fd45eee146f5f5122550cbce8457dd84974144556657"
+        }
       }
     },
     "stage": {
