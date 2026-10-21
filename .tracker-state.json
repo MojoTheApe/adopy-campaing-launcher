@@ -47872,9 +47872,11 @@
         "worktree": "C:\\acl-pl-2050",
         "id": "dcc509e2fca14fe8ae2412801a92b0c7",
         "issue": 1050,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T22:17:51+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 1058,
+        "report": "# ACL-2050 handoff 3 (re-merge of main)\n\n- Merged main 64e73a1e151b6611517cd9643dfb911ef54d6832 into work/acl-2050-placement-readback via merge commit. No content change.\n- New head: 988c551a496077c1432347dcf689df641addf3ef (previous e87cdde5). Pushed without force.\n- Conflicts: none. Main changed only CI workflow, docs/repository, tests/conftest.py and a few tests; nothing in src/fb_api.\n- Tests (affected only): test_acl2050_placement_readback, test_acl1761_api_create, test_acl1761_existing_check, test_acl1761_parity, test_acl1902_name_suffix, test_acl1776_create_forms, test_acl1819_preflight, test_acl1880_manual_page: 414 passed.\n- PR scope vs main (git diff work/main...HEAD --stat): src/fb_api/creator.py, tests/test_acl2050_placement_readback.py, docs/system/CHANGELOG.md only.\n- Remaining: owner live check of placement readback."
       }
     },
     "tasks": {
