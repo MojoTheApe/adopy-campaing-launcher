@@ -47902,20 +47902,6 @@
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
       },
-      "165": {
-        "actor": "Worker-W1021165",
-        "session": "run_w1021_1165",
-        "coordinator": "Coordinator-I1021A",
-        "branch": "codex/acl-1165-attach-attempt-log",
-        "worktree": "C:\\acl-int-w1165",
-        "id": "a345280aa3d14093b2a8ba49863b2d4b",
-        "issue": 165,
-        "state": "handoff",
-        "started_at": "2026-10-21T22:24:43+00:00",
-        "from_status": "status:todo",
-        "pr": 953,
-        "report": "ACL-1165 / PR #953: second baseline refresh, no content change.\n- Merged origin/main (64e73a1e) into codex/acl-1165-attach-attempt-log: old head 40697868, new head 255d715f. Clean merge, no conflicts.\n- Diff vs origin/main: only CHANGELOG.md, src/fb_ads_rpa/browser.py, tests/test_the_first_attach_attempt_is_not_logged_as_a_verdict.py.\n- Tests: the PR's test file, 3 passed.\n- CI on new head: all green except tracker-link (task state, not yet in Review); rerun after handoff."
-      },
       "19": {
         "actor": "Worker-W1021106",
         "session": "run_w1021_106",
@@ -54822,7 +54808,7 @@
             "session": "run_w1021_1165"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1021165",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -54831,16 +54817,16 @@
           "coordinator": "Coordinator-I1021A",
           "branch": "codex/acl-1165-attach-attempt-log",
           "worktree": "C:\\acl-int-w1165",
-          "id": "15a71cb9e78d4965b19b7d67ebe39dda",
+          "id": "a345280aa3d14093b2a8ba49863b2d4b",
           "issue": 165,
           "state": "handoff",
-          "started_at": "2026-10-21T13:48:39+00:00",
+          "started_at": "2026-10-21T22:24:43+00:00",
           "from_status": "status:todo",
           "pr": 953,
-          "report": "ACL-1165 / PR #953: refresh of approval baseline only, no content change.\n- Merged origin/main (0ea237b0) into codex/acl-1165-attach-attempt-log: old head 8418a7b2, new head 40697868.\n- One conflict, docs/system/CHANGELOG.md (append vs append); kept both entries. No code conflicts.\n- Diff vs origin/main: only CHANGELOG.md, src/fb_ads_rpa/browser.py, tests/test_the_first_attach_attempt_is_not_logged_as_a_verdict.py.\n- Tests: py -m pytest tests/test_the_first_attach_attempt_is_not_logged_as_a_verdict.py -> 3 passed.\n- CI on new head: all green (linux x3, windows, ACL verification, tooling, installer) except tracker-link, which failed only because the task was not yet in Review; to be rerun after handoff."
+          "report": "ACL-1165 / PR #953: second baseline refresh, no content change.\n- Merged origin/main (64e73a1e) into codex/acl-1165-attach-attempt-log: old head 40697868, new head 255d715f. Clean merge, no conflicts.\n- Diff vs origin/main: only CHANGELOG.md, src/fb_ads_rpa/browser.py, tests/test_the_first_attach_attempt_is_not_logged_as_a_verdict.py.\n- Tests: the PR's test file, 3 passed.\n- CI on new head: all green except tracker-link (task state, not yet in Review); rerun after handoff."
         },
         "pr": 953,
-        "queued_at": "2026-10-21T14:30:15+00:00",
+        "queued_at": "2026-10-21T22:36:21+00:00",
         "review_report": "Approval is stale against current main 64e73a1e (after ACL-2073 #1075 and ACL-2071 #1076 merged). Author: merge current main into the original branch without changing content (resolve only CHANGELOG append conflicts by keeping both entries), re-run checks, hand off, and get a fresh independent source approval for batch 2b (--deliver).",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -54852,9 +54838,7 @@
           "actor": "Coordinator-I1021A",
           "session": "run_i1021a_1021",
           "report": "Approval is stale against current main 64e73a1e (after ACL-2073 #1075 and ACL-2071 #1076 merged). Author: merge current main into the original branch without changing content (resolve only CHANGELOG append conflicts by keeping both entries), re-run checks, hand off, and get a fresh independent source approval for batch 2b (--deliver)."
-        },
-        "rework": true,
-        "rework_claim": "a345280aa3d14093b2a8ba49863b2d4b"
+        }
       },
       "72": {
         "implementers": [
@@ -63274,7 +63258,8 @@
       1054,
       710,
       1069,
-      840
+      840,
+      165
     ],
     "review": null,
     "history": [
@@ -110613,6 +110598,13 @@
             "approved_at": "2026-10-21T22:35:01+00:00"
           }
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-21T22:36:21+00:00",
+        "issue": 165,
+        "pr": 953,
+        "actor": "Worker-W1021165"
       }
     ],
     "policy": {
