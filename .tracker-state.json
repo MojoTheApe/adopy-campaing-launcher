@@ -47062,9 +47062,11 @@
         "worktree": "C:\\acl-2069",
         "id": "b058d180bbf84817929def22fba5ff0f",
         "issue": 1069,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T14:06:02+00:00",
-        "from_status": "status:backlog"
+        "from_status": "status:backlog",
+        "pr": 1070,
+        "report": "ACL-2069 handoff. Branch work/acl-2069-engine-pin @ 99ca92df2456799399d64e5f9b7e9553996726e1, PR #1070 into main. All engine pin references now point to 9e9a75fc927df0b3368ea54758190bc85cfef043 (Tracker3.9.3, TT-187 merged). The 42 exported helper files are byte-identical to 3d32586d, recorded hashes match, and templates/instructions are unchanged. JSON is valid. Affected tooling tests: 359 passed, 2 skipped, 1 failure (Windows symlink test that fails identically on main). Hosted CI and independent review remain. Nothing else changed."
       }
     },
     "tasks": {
