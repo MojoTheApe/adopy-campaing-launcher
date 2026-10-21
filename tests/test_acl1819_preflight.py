@@ -162,6 +162,23 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
     "form_partly_missing": (_with(destination="instant_form", ads=_ad(0, form_id="7")), "form_chosen", "error", [2]),
     "form_all_ok": (_with(destination="instant_form",
                           ads=[{**a, "form_id": "7"} for a in _ok_input()["ads"]]), "form_chosen", "ok", []),
+    "tpl_counts_as_a_chosen_form": (_with(destination="instant_form", ads=[
+        {**a, "form_id": "", "template": {"privacy_url": "https://x.example.com/p", "contact_fields": ["email"]}}
+        for a in _ok_input()["ads"]]), "form_chosen", "ok", []),
+    "tpl_privacy_ok": (_with(destination="instant_form", ads=[
+        {**a, "template": {"privacy_url": "https://x.example.com/p", "contact_fields": ["email"]}}
+        for a in _ok_input()["ads"]]), "form_template_privacy", "ok", []),
+    "tpl_privacy_http": (_with(destination="instant_form", ads=_ad(
+        0, template={"privacy_url": "http://x.example.com/p", "contact_fields": ["email"]})),
+        "form_template_privacy", "error", [1]),
+    "tpl_privacy_missing": (_with(destination="instant_form", ads=_ad(
+        1, template={"privacy_url": "", "contact_fields": ["email"]})), "form_template_privacy", "error", [2]),
+    "tpl_contacts_ok": (_with(destination="instant_form", ads=[
+        {**a, "template": {"privacy_url": "https://x.example.com/p", "contact_fields": ["phone"]}}
+        for a in _ok_input()["ads"]]), "form_template_contacts", "ok", []),
+    "tpl_contacts_none": (_with(destination="instant_form", ads=_ad(
+        0, template={"privacy_url": "https://x.example.com/p", "contact_fields": []})),
+        "form_template_contacts", "error", [1]),
     "instant_has_no_link_rules": (_with(destination="instant_form", link="",
                                         ads=[{**a, "form_id": "7"} for a in _ok_input()["ads"]]),
                                   "link_https", None, []),
@@ -314,10 +331,11 @@ def test_page_not_on_the_account(tmp_path):
     assert _by(out)["pixel_ok"]["status"] == "ok", "остальные проверки независимы"
 
 
-def test_page_not_chosen_and_ambiguous(tmp_path):
+def test_page_automatic_uses_first_available_and_warns_for_manual_shell(tmp_path):
     d = _draft(tmp_path, ads=1)
     d.page_id = ""
-    assert _by(_audit(AuditMeta(pages=("111", "222")), d))["page_ok"]["status"] == "error"
+    assert _by(_audit(AuditMeta(pages=("111", "222")), d))["page_ok"]["status"] == "ok"
+    assert _by(_audit(AuditMeta(pages=()), d))["page_ok"]["status"] == "warning"
     assert _by(_audit(AuditMeta(pages=("111",)), d))["page_ok"]["status"] == "ok"   # единственная страница
 
 
@@ -410,7 +428,7 @@ def test_the_budget_minimum_by_currency_is_documented_and_unknown_when_unlisted(
     assert not pf.blocks([got]), "неизвестный минимум не блокирует"
 
 
-def test_an_existing_campaign_with_other_settings_is_an_error(tmp_path):
+def test_an_existing_campaign_with_other_settings_is_a_rename_warning(tmp_path):
     from tests.test_acl1761_api_create import _run
 
     meta = AuditMeta()
@@ -424,7 +442,9 @@ def test_an_existing_campaign_with_other_settings_is_an_error(tmp_path):
     d2 = _draft(tmp_path, ads=1)
     d2.ad_sets[0].daily_budget = 35.0
     got = _by(_audit(meta, d2))["existing_diffs"]
-    assert got["status"] == "error" and "campaign" in got["detail"]
+    # ACL-1902: другая кампания с этим именем - не ошибка, а предупреждение: робот возьмёт NAME_2.
+    assert got["status"] == "warning" and "Will be published as" in got["detail"]
+    assert "daily budget" in got["detail"] and not pf.blocks([got])
 
 
 def test_existing_check_is_unknown_when_an_earlier_check_failed(tmp_path):
