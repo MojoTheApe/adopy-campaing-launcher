@@ -46930,9 +46930,11 @@
         "worktree": "C:\\acl-rv-403",
         "id": "86dd71671c6146f2ba2472080cc1f92a",
         "issue": 403,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T11:36:39+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 973,
+        "report": "# ACL-1403 re-handoff report\n\nMerged current main (ea41acbf) into PR #973 branch; merge commit c0e31a58. PR head now contains main.\n\nConflicts (2, both \"keep both sides\"): src/fb_ads_rpa/retry_policy.py (BLOCKING_REVIEW_STEPS: kept main's multilogin_not_running from ACL-1401 plus this task's profile_cdp_refused) and config/sentry_triage_map.json (kept both triage rows). acl_sentry.py, failure_policy.py and profile_trouble.py auto-merged; main's additions there (ACL-1401 launcher-unreachable classification) are disjoint from this task's, checked by reading the diff. browser.py/rpa_publisher.py need no manual change.\n\nTests: 37 test files matching retry/profile/sentry/failure_policy/cdp/multilogin names (includes the task's own test, failure_policy, sentry_triage, job_exception, profile suites): 632 passed. acl_scan_secrets: clean.\nFull suite not run locally; CI is the acceptance signal. No live checks; the root cause (stale port vs race vs crash) remains unestablished as in the prior report - needs the comp38339 serve log, no owner live check required for this merge."
       }
     },
     "tasks": {
