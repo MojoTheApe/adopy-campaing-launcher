@@ -46921,6 +46921,18 @@
         "state": "implementing",
         "started_at": "2026-10-21T11:33:07+00:00",
         "from_status": "status:todo"
+      },
+      "558": {
+        "actor": "Worker-A1021558",
+        "session": "run_a1021_558w",
+        "coordinator": "Coordinator-A1021A",
+        "branch": "work/acl-1558-scrubber-shapes",
+        "worktree": "C:\\acl-rv-558",
+        "id": "68ffc5082a644728a1bb615b596c4661",
+        "issue": 558,
+        "state": "implementing",
+        "started_at": "2026-10-21T11:49:47+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -54133,9 +54145,13 @@
           {
             "actor": "Worker-A1021558",
             "session": "run_a1021_558w"
+          },
+          {
+            "actor": "Worker-A1021558",
+            "session": "run_a1021_558w"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-A1021558",
         "coordinator": "Coordinator-A1021A",
         "handoff": {
@@ -54160,8 +54176,8 @@
           "at": "2026-10-17T16:30:39.578089+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-A1021558",
-        "rework": true
+        "rework": true,
+        "rework_claim": "68ffc5082a644728a1bb615b596c4661"
       },
       "380": {
         "implementers": [
@@ -105761,6 +105777,13 @@
         "issue": 403,
         "pr": 973,
         "actor": "Worker-A1021403"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-21T11:49:47+00:00",
+        "issue": 558,
+        "claim": "68ffc5082a644728a1bb615b596c4661",
+        "actor": "Worker-A1021558"
       }
     ],
     "policy": {
