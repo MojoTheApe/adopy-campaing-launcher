@@ -47925,6 +47925,18 @@
         "state": "implementing",
         "started_at": "2026-10-21T22:24:43+00:00",
         "from_status": "status:todo"
+      },
+      "19": {
+        "actor": "Worker-W1021106",
+        "session": "run_w1021_106",
+        "coordinator": "Coordinator-I1021A",
+        "branch": "codex/acl-106-empty-period-owner",
+        "worktree": "C:\\acl-int-w106",
+        "id": "77b2b4182aa84a27bd7c91f51540d51a",
+        "issue": 19,
+        "state": "implementing",
+        "started_at": "2026-10-21T22:28:56+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -54724,9 +54736,13 @@
           {
             "actor": "Worker-W1021106",
             "session": "run_w1021_106"
+          },
+          {
+            "actor": "Worker-W1021106",
+            "session": "run_w1021_106"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-W1021106",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -54757,14 +54773,8 @@
           "session": "run_i1021a_1021",
           "report": "Approval is stale against current main 64e73a1e (after ACL-2073 #1075 and ACL-2071 #1076 merged). Author: merge current main into the original branch without changing content (resolve only CHANGELOG append conflicts by keeping both entries), re-run checks, hand off, and get a fresh independent source approval for batch 2b (--deliver)."
         },
-        "reviewer": "Reviewer-S1021106",
-        "return": {
-          "id": "273af9b6299941b5b32d02e8df4cfbdc",
-          "actor": "Coordinator-I1021A",
-          "session": "run_i1021a_1021",
-          "report": "Approval is stale against current main 64e73a1e (after ACL-2073 #1075 and ACL-2071 #1076 merged). Author: merge current main into the original branch without changing content (resolve only CHANGELOG append conflicts by keeping both entries), re-run checks, hand off, and get a fresh independent source approval for batch 2b (--deliver)."
-        },
-        "rework": true
+        "rework": true,
+        "rework_claim": "77b2b4182aa84a27bd7c91f51540d51a"
       },
       "29": {
         "implementers": [
@@ -110465,6 +110475,13 @@
         "event": "included-sources-closed",
         "at": "2026-10-21T22:27:02+00:00",
         "batch_id": "1105e34df46449f9801ef245f30c4bfb"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-21T22:28:56+00:00",
+        "issue": 19,
+        "claim": "77b2b4182aa84a27bd7c91f51540d51a",
+        "actor": "Worker-W1021106"
       }
     ],
     "policy": {
