@@ -46930,9 +46930,11 @@
         "worktree": "C:\\acl-rv-558",
         "id": "aa8e8a3f91134445b1712a26aa0540b4",
         "issue": 558,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T11:16:56+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 963,
+        "report": "ACL-1558 handoff (resume of review tail, owner instruction 2026-10-21).\nPR 963, branch work/acl-1558-scrubber-shapes, head d120b75c. Merged work/main ea41acbf (--no-ff) into the existing PR branch.\nConflicts: only docs/system/CHANGELOG.md; kept both sides (ACL-1558 entry plus main's ACL-1381 and ACL-1971 entries). No code conflicts.\nOne extra change: the scrubber test used the synthetic key act_123456789012345, which scripts/acl_scan_secrets.py flagged as an ad account id; replaced with the allowlisted placeholder act_1234567890123456 (no behavior change).\nTests run: 415 passed (scrubber, telemetry, sentry, run summary tests incl. test_acl1558_scrubber_shapes and the no-hang test); after the test edit, the 1558 and no-hang tests re-run: 75 passed. acl_scan_secrets.py: clean.\nFull suite not run locally; CI is the acceptance signal. No owner live check needed (scrubber code only)."
       }
     },
     "tasks": {
