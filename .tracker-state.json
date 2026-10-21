@@ -110695,6 +110695,179 @@
           "started_at": "2026-10-21T22:44:20+00:00",
           "ineligible": {}
         }
+      },
+      {
+        "event": "batch-frozen",
+        "at": "2026-10-21T22:45:13+00:00",
+        "batch": {
+          "id": "21ad574948cf4aa7bff078d191c31d9f",
+          "actor": "Coordinator-I1021A",
+          "session": "run_i1021a_1021",
+          "state": "assembling",
+          "issues": [
+            1050,
+            838,
+            165
+          ],
+          "members": [
+            {
+              "issue": 1050,
+              "pr": 1058,
+              "branch": "work/acl-2050-placement-readback",
+              "head_sha": "988c551a496077c1432347dcf689df641addf3ef",
+              "base_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+              "main_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "1aefcfe1e72c2e3155f61da7fe6643fc80f2d6236181d8c5c8fe6d40b4da616b",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-P1021G2050",
+                "review_session": "run_p1021g_2050",
+                "execution_lane": "40fc0e8198054814ade5b9afbf22c1b1",
+                "implementer": "Worker-P1021F2050",
+                "head_sha": "988c551a496077c1432347dcf689df641addf3ef",
+                "base_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+                "tree_sha": "19cb33353b30082c1213fdcf9aa3adadf166485a",
+                "report": "Verdict: approved (independent re-review of head 988c551a against main 64e73a1e; merge-base == main).\nScope vs main: only src/fb_api/creator.py, tests/test_acl2050_placement_readback.py, docs/system/CHANGELOG.md.\nDelta since previously approved e87cdde5: merge commit 988c551a has no hand-resolved hunks (git show --cc empty); git diff e87cdde5 988c551a --stat is identical to main's 0ea237b0..64e73a1e (verify-published-tag workflow, repository CHANGELOG/POST_MAIN_DELIVERY docs, tests/conftest.py crop/media refusal reset fixture, CI workflow/complete-delivery tests). Nothing under src/fb_api changed on main.\nSemantic interactions: the new autouse conftest fixture only resets src.fb_ads_rpa crop_step/meta_dom state if already imported; it does not touch creator.py read-back. ACL-2050 logic unchanged: campaign advantage_state_info read via CAMPAIGN_FIELDS; advantage_placement_state != DISABLED blocks when returned; missing state -> English warning + diagnostics.placement_state_verified=false; order-insensitive placements_summary (via _same, in _SKIP_DIFF) only when a placement field really differs; audience flag and value rules are warnings/diagnostics only. Read-only: no new write keys.\nSpec (Issue #1050): acceptance criteria covered (blocking English mismatch on placement state/positions; tests for kept/ENABLED/missing/differ).\nTests: test_acl2050_placement_readback, test_acl1761_api_create, _existing_check, _parity, test_acl1902_name_suffix, test_acl1776_create_forms, test_acl1819_preflight, test_acl1880_manual_page: 414 passed. No full suite.\nNon-blocking (unchanged): advantage_placement_state has no _FIELD_TITLES entry; live check by owner that the new fields read without a Graph error on a real account.",
+                "main_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  1050
+                ],
+                "recorded_at": "2026-10-21T22:32:28+00:00",
+                "issue_scopes": {
+                  "1050": "1aefcfe1e72c2e3155f61da7fe6643fc80f2d6236181d8c5c8fe6d40b4da616b"
+                }
+              },
+              "lane": {
+                "id": "40fc0e8198054814ade5b9afbf22c1b1",
+                "pr": 1058,
+                "issues": [
+                  1050
+                ],
+                "actor": "Reviewer-P1021G2050",
+                "session": "run_p1021g_2050",
+                "coordinator": "Coordinator-P1021B",
+                "started_at": "2026-10-21T22:23:39+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-21T22:33:29+00:00"
+            },
+            {
+              "issue": 838,
+              "pr": 842,
+              "branch": "codex/acl-1838-country-active-line",
+              "head_sha": "8a4fd24e11793bfade0be980e449fa4ffa1aab8c",
+              "base_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+              "main_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "cf3992329999eade635234966dc6a7d8224ec279020d8cb4239227bab85df07b",
+              "review": {
+                "kind": "independent-review",
+                "implementer": "Worker-W1021838",
+                "reviewer": "Reviewer-K1021838",
+                "head_sha": "8a4fd24e11793bfade0be980e449fa4ffa1aab8c",
+                "base_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+                "tree_sha": "6bc2dfb3f2ca304468e01f8cc99860ddecda3261",
+                "execution_lane": "3b5e15115d5f4243a2762e127d39d604",
+                "review_session": "run_k1021_838",
+                "verdict": "approved",
+                "report": "Refresh review ACL-1838 PR842. Head 8a4fd24e is a clean merge of main 64e73a1e into previously approved fba8ae7d; git diff 64e73a1e..8a4fd24e touches only docs/system/CHANGELOG.md, docs/system/PROJECT.md, src/web/templates/report.html (+19/-3) = task scope. CSS: live country dot (::before inline-block) replaced by absolutely positioned static 2px accent line (left 4px, top/bottom 9px, pointer-events none, button position:relative); inactive rows have no marker; activity predicate/expanded highlight/actions unchanged; padding 0.75rem leaves no text overlap. English docs/UI text, no leaked ids. Affected tests tests/test_country_refresh_review.py 18 passed. Required CI on 8a4fd24e all green (linux 1-3, windows, installer, tracker-link, descriptor, process instructions, ACL verification). No findings.",
+                "main_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  838
+                ],
+                "recorded_at": "2026-10-21T22:34:36+00:00",
+                "issue_scopes": {
+                  "838": "cf3992329999eade635234966dc6a7d8224ec279020d8cb4239227bab85df07b"
+                }
+              },
+              "lane": {
+                "id": "3b5e15115d5f4243a2762e127d39d604",
+                "pr": 842,
+                "issues": [
+                  838
+                ],
+                "actor": "Reviewer-K1021838",
+                "session": "run_k1021_838",
+                "coordinator": "Coordinator-I1021A",
+                "started_at": "2026-10-21T22:32:59+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-21T22:35:01+00:00"
+            },
+            {
+              "issue": 165,
+              "pr": 953,
+              "branch": "codex/acl-1165-attach-attempt-log",
+              "head_sha": "255d715f9600550820dbabf2541a3cc120a4a848",
+              "base_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+              "main_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "234afaf33da792fa11b47c0538a8af5bcf7f638df359ca829680721c26712410",
+              "review": {
+                "kind": "independent-review",
+                "implementer": "Worker-W1021165",
+                "reviewer": "Reviewer-K1021165",
+                "head_sha": "255d715f9600550820dbabf2541a3cc120a4a848",
+                "base_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+                "tree_sha": "44c17710dc312d109a2dcb82d2b28eed08a52007",
+                "verdict": "approved",
+                "execution_lane": "4911434001dd47aeb94e8f8eeb761ba2",
+                "review_session": "run_k1021_165",
+                "report": "ACL-1165 PR953 refresh review. Merge 255d715f is clean (parents 40697868 + main 64e73a1e). Diff vs main = CHANGELOG entry, browser.py log-only change, one new test. Strict/lenient attach misses now INFO without 'unavailable'; single WARNING 'attachment unavailable' only in open() right before the unchanged relaunch refusal (only when running). Attach logic, timing, refusal text and FB_RPA_ALLOW_UNPROXIED_RELAUNCH gate untouched; no ids leaked (placeholder profile ids only). Tests meaningful (3 new + relaunch gate: 16 passed). Required CI green on 255d715f incl. linux 1-3, windows, tracker-link.",
+                "main_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  165
+                ],
+                "recorded_at": "2026-10-21T22:41:35+00:00",
+                "issue_scopes": {
+                  "165": "234afaf33da792fa11b47c0538a8af5bcf7f638df359ca829680721c26712410"
+                }
+              },
+              "lane": {
+                "id": "4911434001dd47aeb94e8f8eeb761ba2",
+                "pr": 953,
+                "issues": [
+                  165
+                ],
+                "actor": "Reviewer-K1021165",
+                "session": "run_k1021_165",
+                "coordinator": "Coordinator-I1021A",
+                "started_at": "2026-10-21T22:40:29+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-21T22:42:38+00:00"
+            }
+          ],
+          "main_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+          "branch": "codex/batch-21ad574948cf4aa7bff078d191c31d9f",
+          "intake": "de9b5c030e6e4717832324cb2b5aa3e6",
+          "started_at": "2026-10-21T22:45:13+00:00",
+          "pr": null,
+          "entered_stage": false,
+          "history": [],
+          "delivery_request": {
+            "schema_version": 1,
+            "state": "requested",
+            "batch_id": "21ad574948cf4aa7bff078d191c31d9f",
+            "issues": [
+              1050,
+              838,
+              165
+            ],
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "target": "ACL stable Windows installer and update channel",
+            "workflow": ".github/workflows/complete-delivery.yml",
+            "job": "Verify published Windows package",
+            "actor": "Coordinator-I1021A",
+            "session": "run_i1021a_1021",
+            "requested_at": "2026-10-21T22:45:13+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -121034,7 +121207,175 @@
         "sources_closed": true
       }
     },
-    "integration": null,
+    "integration": {
+      "id": "21ad574948cf4aa7bff078d191c31d9f",
+      "actor": "Coordinator-I1021A",
+      "session": "run_i1021a_1021",
+      "state": "assembling",
+      "issues": [
+        1050,
+        838,
+        165
+      ],
+      "members": [
+        {
+          "issue": 1050,
+          "pr": 1058,
+          "branch": "work/acl-2050-placement-readback",
+          "head_sha": "988c551a496077c1432347dcf689df641addf3ef",
+          "base_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+          "main_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "1aefcfe1e72c2e3155f61da7fe6643fc80f2d6236181d8c5c8fe6d40b4da616b",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-P1021G2050",
+            "review_session": "run_p1021g_2050",
+            "execution_lane": "40fc0e8198054814ade5b9afbf22c1b1",
+            "implementer": "Worker-P1021F2050",
+            "head_sha": "988c551a496077c1432347dcf689df641addf3ef",
+            "base_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+            "tree_sha": "19cb33353b30082c1213fdcf9aa3adadf166485a",
+            "report": "Verdict: approved (independent re-review of head 988c551a against main 64e73a1e; merge-base == main).\nScope vs main: only src/fb_api/creator.py, tests/test_acl2050_placement_readback.py, docs/system/CHANGELOG.md.\nDelta since previously approved e87cdde5: merge commit 988c551a has no hand-resolved hunks (git show --cc empty); git diff e87cdde5 988c551a --stat is identical to main's 0ea237b0..64e73a1e (verify-published-tag workflow, repository CHANGELOG/POST_MAIN_DELIVERY docs, tests/conftest.py crop/media refusal reset fixture, CI workflow/complete-delivery tests). Nothing under src/fb_api changed on main.\nSemantic interactions: the new autouse conftest fixture only resets src.fb_ads_rpa crop_step/meta_dom state if already imported; it does not touch creator.py read-back. ACL-2050 logic unchanged: campaign advantage_state_info read via CAMPAIGN_FIELDS; advantage_placement_state != DISABLED blocks when returned; missing state -> English warning + diagnostics.placement_state_verified=false; order-insensitive placements_summary (via _same, in _SKIP_DIFF) only when a placement field really differs; audience flag and value rules are warnings/diagnostics only. Read-only: no new write keys.\nSpec (Issue #1050): acceptance criteria covered (blocking English mismatch on placement state/positions; tests for kept/ENABLED/missing/differ).\nTests: test_acl2050_placement_readback, test_acl1761_api_create, _existing_check, _parity, test_acl1902_name_suffix, test_acl1776_create_forms, test_acl1819_preflight, test_acl1880_manual_page: 414 passed. No full suite.\nNon-blocking (unchanged): advantage_placement_state has no _FIELD_TITLES entry; live check by owner that the new fields read without a Graph error on a real account.",
+            "main_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              1050
+            ],
+            "recorded_at": "2026-10-21T22:32:28+00:00",
+            "issue_scopes": {
+              "1050": "1aefcfe1e72c2e3155f61da7fe6643fc80f2d6236181d8c5c8fe6d40b4da616b"
+            }
+          },
+          "lane": {
+            "id": "40fc0e8198054814ade5b9afbf22c1b1",
+            "pr": 1058,
+            "issues": [
+              1050
+            ],
+            "actor": "Reviewer-P1021G2050",
+            "session": "run_p1021g_2050",
+            "coordinator": "Coordinator-P1021B",
+            "started_at": "2026-10-21T22:23:39+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-21T22:33:29+00:00"
+        },
+        {
+          "issue": 838,
+          "pr": 842,
+          "branch": "codex/acl-1838-country-active-line",
+          "head_sha": "8a4fd24e11793bfade0be980e449fa4ffa1aab8c",
+          "base_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+          "main_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "cf3992329999eade635234966dc6a7d8224ec279020d8cb4239227bab85df07b",
+          "review": {
+            "kind": "independent-review",
+            "implementer": "Worker-W1021838",
+            "reviewer": "Reviewer-K1021838",
+            "head_sha": "8a4fd24e11793bfade0be980e449fa4ffa1aab8c",
+            "base_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+            "tree_sha": "6bc2dfb3f2ca304468e01f8cc99860ddecda3261",
+            "execution_lane": "3b5e15115d5f4243a2762e127d39d604",
+            "review_session": "run_k1021_838",
+            "verdict": "approved",
+            "report": "Refresh review ACL-1838 PR842. Head 8a4fd24e is a clean merge of main 64e73a1e into previously approved fba8ae7d; git diff 64e73a1e..8a4fd24e touches only docs/system/CHANGELOG.md, docs/system/PROJECT.md, src/web/templates/report.html (+19/-3) = task scope. CSS: live country dot (::before inline-block) replaced by absolutely positioned static 2px accent line (left 4px, top/bottom 9px, pointer-events none, button position:relative); inactive rows have no marker; activity predicate/expanded highlight/actions unchanged; padding 0.75rem leaves no text overlap. English docs/UI text, no leaked ids. Affected tests tests/test_country_refresh_review.py 18 passed. Required CI on 8a4fd24e all green (linux 1-3, windows, installer, tracker-link, descriptor, process instructions, ACL verification). No findings.",
+            "main_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              838
+            ],
+            "recorded_at": "2026-10-21T22:34:36+00:00",
+            "issue_scopes": {
+              "838": "cf3992329999eade635234966dc6a7d8224ec279020d8cb4239227bab85df07b"
+            }
+          },
+          "lane": {
+            "id": "3b5e15115d5f4243a2762e127d39d604",
+            "pr": 842,
+            "issues": [
+              838
+            ],
+            "actor": "Reviewer-K1021838",
+            "session": "run_k1021_838",
+            "coordinator": "Coordinator-I1021A",
+            "started_at": "2026-10-21T22:32:59+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-21T22:35:01+00:00"
+        },
+        {
+          "issue": 165,
+          "pr": 953,
+          "branch": "codex/acl-1165-attach-attempt-log",
+          "head_sha": "255d715f9600550820dbabf2541a3cc120a4a848",
+          "base_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+          "main_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "234afaf33da792fa11b47c0538a8af5bcf7f638df359ca829680721c26712410",
+          "review": {
+            "kind": "independent-review",
+            "implementer": "Worker-W1021165",
+            "reviewer": "Reviewer-K1021165",
+            "head_sha": "255d715f9600550820dbabf2541a3cc120a4a848",
+            "base_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+            "tree_sha": "44c17710dc312d109a2dcb82d2b28eed08a52007",
+            "verdict": "approved",
+            "execution_lane": "4911434001dd47aeb94e8f8eeb761ba2",
+            "review_session": "run_k1021_165",
+            "report": "ACL-1165 PR953 refresh review. Merge 255d715f is clean (parents 40697868 + main 64e73a1e). Diff vs main = CHANGELOG entry, browser.py log-only change, one new test. Strict/lenient attach misses now INFO without 'unavailable'; single WARNING 'attachment unavailable' only in open() right before the unchanged relaunch refusal (only when running). Attach logic, timing, refusal text and FB_RPA_ALLOW_UNPROXIED_RELAUNCH gate untouched; no ids leaked (placeholder profile ids only). Tests meaningful (3 new + relaunch gate: 16 passed). Required CI green on 255d715f incl. linux 1-3, windows, tracker-link.",
+            "main_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              165
+            ],
+            "recorded_at": "2026-10-21T22:41:35+00:00",
+            "issue_scopes": {
+              "165": "234afaf33da792fa11b47c0538a8af5bcf7f638df359ca829680721c26712410"
+            }
+          },
+          "lane": {
+            "id": "4911434001dd47aeb94e8f8eeb761ba2",
+            "pr": 953,
+            "issues": [
+              165
+            ],
+            "actor": "Reviewer-K1021165",
+            "session": "run_k1021_165",
+            "coordinator": "Coordinator-I1021A",
+            "started_at": "2026-10-21T22:40:29+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-21T22:42:38+00:00"
+        }
+      ],
+      "main_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+      "branch": "codex/batch-21ad574948cf4aa7bff078d191c31d9f",
+      "intake": "de9b5c030e6e4717832324cb2b5aa3e6",
+      "started_at": "2026-10-21T22:45:13+00:00",
+      "pr": null,
+      "entered_stage": false,
+      "history": [],
+      "delivery_request": {
+        "schema_version": 1,
+        "state": "requested",
+        "batch_id": "21ad574948cf4aa7bff078d191c31d9f",
+        "issues": [
+          1050,
+          838,
+          165
+        ],
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "target": "ACL stable Windows installer and update channel",
+        "workflow": ".github/workflows/complete-delivery.yml",
+        "job": "Verify published Windows package",
+        "actor": "Coordinator-I1021A",
+        "session": "run_i1021a_1021",
+        "requested_at": "2026-10-21T22:45:13+00:00"
+      }
+    },
     "intake": {
       "id": "de9b5c030e6e4717832324cb2b5aa3e6",
       "actor": "Coordinator-I1021A",
