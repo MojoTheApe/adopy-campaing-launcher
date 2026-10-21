@@ -46846,20 +46846,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T12:56:11+00:00",
         "from_status": "status:todo"
-      },
-      "668": {
-        "actor": "Worker-A1021668",
-        "session": "run_a1021_668w",
-        "coordinator": "Coordinator-A1021A",
-        "branch": "work/acl-1668-missing-creative",
-        "worktree": "C:\\acl-rv-668",
-        "id": "024751fca33b4f4bb63cdc5b30c8618c",
-        "issue": 668,
-        "state": "handoff",
-        "started_at": "2026-10-21T09:41:09+00:00",
-        "from_status": "status:todo",
-        "pr": 975,
-        "report": "# ACL-1668 handoff (review tail resume)\n\n- Merged current main (ea41acbf) into work/acl-1668-missing-creative with a no-ff merge; new head 0429dc28. Previous head 266059ca.\n- Conflicts: none (clean merge, 126 commits behind before).\n- Tests run: tests/test_acl1668_missing_creative_publish.py, tests/test_builder_review_browser.py, tests/test_second_primary_text_reaches_the_robot.py -> 29 passed. acl_scan_secrets.py: clean.\n- Full suite not run locally; CI is the acceptance signal.\n- No owner live check needed; no source changes beyond the merge."
       }
     },
     "tasks": {
@@ -54429,25 +54415,25 @@
             "session": "run_a1021_668w"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-A1021668",
         "coordinator": "Coordinator-A1021A",
         "handoff": {
-          "actor": "Worker-W1668A",
-          "session": "w1668a-s1",
-          "coordinator": "Coordinator-T1004Q",
+          "actor": "Worker-A1021668",
+          "session": "run_a1021_668w",
+          "coordinator": "Coordinator-A1021A",
           "branch": "work/acl-1668-missing-creative",
-          "worktree": "C:\\acl-1668",
-          "id": "a34782a0721f49feb3cfe9c7963ac83c",
+          "worktree": "C:\\acl-rv-668",
+          "id": "024751fca33b4f4bb63cdc5b30c8618c",
           "issue": 668,
           "state": "handoff",
-          "started_at": "2026-10-17T11:34:35+00:00",
+          "started_at": "2026-10-21T09:41:09+00:00",
           "from_status": "status:todo",
           "pr": 975,
-          "report": "# ACL-1668 handoff report\n\nPR #975. Chosen creative missing from the refreshed list is marked \"File missing \u2014 pick again\" (theme error colour, name kept). Publish and Publish all list the rows in the confirm and refuse to send. Enrichment error now reads \"Creative file missing: ... pick the file again\".\n\nChecks run: tests/test_builder_review_browser.py (13 passed incl. 2 new), tests/test_acl1668_missing_creative_publish.py and tests/test_second_primary_text_reaches_the_robot.py (16 passed).\nNot run: full suite (CI). Not checked: live dashboard."
+          "report": "# ACL-1668 handoff (review tail resume)\n\n- Merged current main (ea41acbf) into work/acl-1668-missing-creative with a no-ff merge; new head 0429dc28. Previous head 266059ca.\n- Conflicts: none (clean merge, 126 commits behind before).\n- Tests run: tests/test_acl1668_missing_creative_publish.py, tests/test_builder_review_browser.py, tests/test_second_primary_text_reaches_the_robot.py -> 29 passed. acl_scan_secrets.py: clean.\n- Full suite not run locally; CI is the acceptance signal.\n- No owner live check needed; no source changes beyond the merge."
         },
         "pr": 975,
-        "queued_at": "2026-10-17T11:54:03+00:00",
+        "queued_at": "2026-10-21T09:49:09+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -61508,7 +61494,8 @@
     },
     "review_queue": [
       1050,
-      1053
+      1053,
+      668
     ],
     "review": null,
     "history": [
@@ -105095,6 +105082,13 @@
         "pr": 1057,
         "lane": "3a3312e381c743e79fe418f51f66dded",
         "actor": "Reviewer-P10212052"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-21T09:49:09+00:00",
+        "issue": 668,
+        "pr": 975,
+        "actor": "Worker-A1021668"
       }
     ],
     "policy": {
