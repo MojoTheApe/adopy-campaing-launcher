@@ -58773,6 +58773,10 @@
       "Reviewer-A1021358": {
         "session": "run_a1021_358r",
         "role": "Reviewer"
+      },
+      "Coordinator-C1021B": {
+        "session": "claude-4f43ad3b",
+        "role": "Coordinator"
       }
     },
     "completed": {
@@ -105544,6 +105548,30 @@
         "pr": 974,
         "lane": "edb2d80250c842668526b6a94e793b8d",
         "actor": "Reviewer-A1021358"
+      },
+      {
+        "event": "intake-frozen",
+        "at": "2026-10-21T11:22:57+00:00",
+        "intake": {
+          "id": "72da769c382d4fd4a41ba4e069c60cf6",
+          "actor": "Coordinator-C1021B",
+          "session": "claude-4f43ad3b",
+          "state": "running",
+          "issues": [
+            784
+          ],
+          "remaining": [
+            784
+          ],
+          "batches": [],
+          "started_at": "2026-10-21T11:22:57+00:00",
+          "ineligible": {
+            "891": "#891: source approval is stale for its PR, main or policy",
+            "992": "#992: source approval is stale for its PR, main or policy",
+            "854": "#854: source approval is stale for its PR, main or policy",
+            "855": "#855: source approval is stale for its PR, main or policy"
+          }
+        }
       }
     ],
     "policy": {
@@ -115272,19 +115300,24 @@
     },
     "integration": null,
     "intake": {
-      "id": "c1e21f5e160346f4a0437abfe65bb821",
-      "actor": "Coordinator-ACT174",
-      "session": "f489c98f-9d9f-42a7-aafc-5dfb361caba8",
-      "state": "finished",
+      "id": "72da769c382d4fd4a41ba4e069c60cf6",
+      "actor": "Coordinator-C1021B",
+      "session": "claude-4f43ad3b",
+      "state": "running",
       "issues": [
-        1026
+        784
       ],
-      "remaining": [],
-      "batches": [
-        "3f30b816457f42ad82eb85e2f9afa52a"
+      "remaining": [
+        784
       ],
-      "started_at": "2026-10-20T20:21:36+00:00",
-      "ineligible": {}
+      "batches": [],
+      "started_at": "2026-10-21T11:22:57+00:00",
+      "ineligible": {
+        "891": "#891: source approval is stale for its PR, main or policy",
+        "992": "#992: source approval is stale for its PR, main or policy",
+        "854": "#854: source approval is stale for its PR, main or policy",
+        "855": "#855: source approval is stale for its PR, main or policy"
+      }
     },
     "source_reviews": {
       "820": {
