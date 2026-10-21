@@ -46900,6 +46900,18 @@
         "state": "implementing",
         "started_at": "2026-10-21T10:15:15+00:00",
         "from_status": "status:todo"
+      },
+      "358": {
+        "actor": "Worker-A1021358",
+        "session": "run_a1021_358w",
+        "coordinator": "Coordinator-A1021A",
+        "branch": "work/acl-1358-protected-tokens",
+        "worktree": "C:\\acl-rv-358",
+        "id": "195cd9bac8714acbbc9b68cba96db23e",
+        "issue": 358,
+        "state": "implementing",
+        "started_at": "2026-10-21T11:03:17+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -54511,11 +54523,15 @@
           {
             "actor": "Worker-W1358A",
             "session": "w1358a-20261017"
+          },
+          {
+            "actor": "Worker-A1021358",
+            "session": "run_a1021_358w"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-W1358A",
-        "coordinator": "Coordinator-T1004Q",
+        "state": "implementing",
+        "worker": "Worker-A1021358",
+        "coordinator": "Coordinator-A1021A",
         "handoff": {
           "actor": "Worker-W1358A",
           "session": "w1358a-20261017",
@@ -58719,6 +58735,10 @@
       "Reviewer-S1021377": {
         "session": "run_s1021_377",
         "role": "Reviewer"
+      },
+      "Worker-A1021358": {
+        "session": "run_a1021_358w",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -105462,6 +105482,13 @@
         "issue": 626,
         "pr": 967,
         "actor": "Worker-A1021626"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-21T11:03:17+00:00",
+        "issue": 358,
+        "claim": "195cd9bac8714acbbc9b68cba96db23e",
+        "actor": "Worker-A1021358"
       }
     ],
     "policy": {
