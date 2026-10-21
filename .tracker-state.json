@@ -46858,6 +46858,18 @@
         "state": "implementing",
         "started_at": "2026-10-21T09:52:53+00:00",
         "from_status": "status:todo"
+      },
+      "1054": {
+        "actor": "Worker-F1021W2",
+        "session": "033ad857-forms-2054",
+        "coordinator": "Coordinator-F1021A",
+        "branch": "work/acl-2054-forms-library",
+        "worktree": "C:\\acl-2054",
+        "id": "63418628ae3846d68cdb9b9b5f9cf33e",
+        "issue": 1054,
+        "state": "implementing",
+        "started_at": "2026-10-21T09:54:32+00:00",
+        "from_status": "status:idea"
       }
     },
     "tasks": {
@@ -55741,6 +55753,17 @@
         },
         "pr": 1060,
         "queued_at": "2026-10-21T09:38:42+00:00"
+      },
+      "1054": {
+        "implementers": [
+          {
+            "actor": "Worker-F1021W2",
+            "session": "033ad857-forms-2054"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-F1021W2",
+        "coordinator": "Coordinator-F1021A"
       }
     },
     "actors": {
@@ -58622,6 +58645,10 @@
       },
       "Worker-A1021626": {
         "session": "run_a1021_626w",
+        "role": "Worker"
+      },
+      "Worker-F1021W2": {
+        "session": "033ad857-forms-2054",
         "role": "Worker"
       }
     },
@@ -105127,6 +105154,13 @@
         "issue": 626,
         "claim": "d62a4efbc422440a8c0b0936ce55e004",
         "actor": "Worker-A1021626"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-21T09:54:32+00:00",
+        "issue": 1054,
+        "claim": "63418628ae3846d68cdb9b9b5f9cf33e",
+        "actor": "Worker-F1021W2"
       }
     ],
     "policy": {
