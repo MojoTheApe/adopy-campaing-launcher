@@ -41562,6 +41562,43 @@
             }
           ]
         }
+      },
+      "1071": {
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "sources": [
+          {
+            "pr": 1076,
+            "merge_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+            "tree_sha": "9814c3d28219d0914e2b1b7cab65fbe41c65481f"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-10-21T22:22:28+00:00",
+        "scope": "c1c17f3e3ebe9dd15b00fd45eee146f5f5122550cbce8457dd84974144556657",
+        "scope_provenance": {
+          "schema_version": 1,
+          "repository": "MojoTheApe/adopy-campaing-launcher",
+          "issue": 1071,
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "target": "ACL stable Windows installer and update channel",
+          "sources": [
+            {
+              "pr": 1076,
+              "merge_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+              "tree_sha": "9814c3d28219d0914e2b1b7cab65fbe41c65481f"
+            }
+          ],
+          "accepted_by": [
+            {
+              "kind": "batch-member",
+              "batch_id": "1105e34df46449f9801ef245f30c4bfb",
+              "pr": 1076,
+              "head_sha": "b89655ebfade925201f3b06dc446070bbba9f621",
+              "base_sha": "c01583ea07d77b884616d9bf896bf71315f5e8a2",
+              "tree_sha": "9814c3d28219d0914e2b1b7cab65fbe41c65481f"
+            }
+          ]
+        }
       }
     },
     "promotions": {
@@ -47835,6 +47872,19 @@
         ],
         "source_sha": "c01583ea07d77b884616d9bf896bf71315f5e8a2",
         "recorded_at": "2026-10-21T18:34:34+00:00"
+      },
+      "1076": {
+        "tree_sha": "9814c3d28219d0914e2b1b7cab65fbe41c65481f",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "route": "batch",
+        "main_sha": "c01583ea07d77b884616d9bf896bf71315f5e8a2",
+        "batch_id": "1105e34df46449f9801ef245f30c4bfb",
+        "pr": 1076,
+        "issues": [
+          1071
+        ],
+        "source_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+        "recorded_at": "2026-10-21T22:22:32+00:00"
       }
     }
   },
