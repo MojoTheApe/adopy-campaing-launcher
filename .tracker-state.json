@@ -47440,20 +47440,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
-      },
-      "1071": {
-        "actor": "Worker-Q1021A",
-        "session": "acl_verify_tag_e51b7063",
-        "coordinator": "Coordinator-I1021A",
-        "branch": "work/acl-2071-verify-published-tag",
-        "worktree": "C:\\acl-2071",
-        "id": "5e1c746491d54127b3913ca2229972ed",
-        "issue": 1071,
-        "state": "handoff",
-        "started_at": "2026-10-21T18:39:30+00:00",
-        "from_status": "status:todo",
-        "pr": 1072,
-        "report": "ACL-2071 refresh handoff. Merged main c01583ea into work/acl-2071-verify-published-tag (no conflicts, no code changes); new head b89655ebfade925201f3b06dc446070bbba9f621. The diff vs main is unchanged (5 files: verify-published-tag.yml, 2 tests, 2 docs). Affected tests: 267 passed, 1 skipped (complete_delivery, ci_workflows, ci_scope, ci_layout)."
       }
     },
     "tasks": {
@@ -56705,7 +56691,7 @@
             "session": "acl_verify_tag_e51b7063"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-Q1021A",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -56714,19 +56700,17 @@
           "coordinator": "Coordinator-I1021A",
           "branch": "work/acl-2071-verify-published-tag",
           "worktree": "C:\\acl-2071",
-          "id": "0817e899cdde427aaf4ae1b807202dbf",
+          "id": "5e1c746491d54127b3913ca2229972ed",
           "issue": 1071,
           "state": "handoff",
-          "started_at": "2026-10-21T15:58:21+00:00",
+          "started_at": "2026-10-21T18:39:30+00:00",
           "from_status": "status:todo",
           "pr": 1072,
-          "report": "ACL-2071 handoff. Branch work/acl-2071-verify-published-tag @ a3c51338, PR #1072 into main. New manual workflow verify-published-tag.yml (inputs tag + previous_tag) reuses the unchanged 'Verify published Windows package' steps through the updater trust path; complete-delivery.yml, release.yml and delivery authorization are unchanged; no tracker writes. Affected tests pass (80 and 267). The workflow is dispatch-only, so hosted proof comes from the first dispatch after integration (1064 vs 1034)."
+          "report": "ACL-2071 refresh handoff. Merged main c01583ea into work/acl-2071-verify-published-tag (no conflicts, no code changes); new head b89655ebfade925201f3b06dc446070bbba9f621. The diff vs main is unchanged (5 files: verify-published-tag.yml, 2 tests, 2 docs). Affected tests: 267 passed, 1 skipped (complete_delivery, ci_workflows, ci_scope, ci_layout)."
         },
         "pr": 1072,
-        "queued_at": "2026-10-21T16:01:49+00:00",
-        "review_report": "Stale vs main c01583ea (ACL-2073 test fix); author merges main into work/acl-2071-verify-published-tag and hands off again. No findings in the change itself (prior approved review of a3c51338 stands for the unchanged files).",
-        "rework": true,
-        "rework_claim": "5e1c746491d54127b3913ca2229972ed"
+        "queued_at": "2026-10-21T18:41:54+00:00",
+        "review_report": "Stale vs main c01583ea (ACL-2073 test fix); author merges main into work/acl-2071-verify-published-tag and hands off again. No findings in the change itself (prior approved review of a3c51338 stands for the unchanged files)."
       },
       "1073": {
         "implementers": [
@@ -62750,7 +62734,8 @@
       1053,
       1054,
       710,
-      1069
+      1069,
+      1071
     ],
     "review": null,
     "history": [
@@ -109562,6 +109547,13 @@
         "at": "2026-10-21T18:39:30+00:00",
         "issue": 1071,
         "claim": "5e1c746491d54127b3913ca2229972ed",
+        "actor": "Worker-Q1021A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-21T18:41:54+00:00",
+        "issue": 1071,
+        "pr": 1072,
         "actor": "Worker-Q1021A"
       }
     ],
