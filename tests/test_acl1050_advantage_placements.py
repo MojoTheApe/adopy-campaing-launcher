@@ -94,3 +94,27 @@ def test_an_earlier_advantage_plus_campaign_is_not_reused(tmp_path):
     assert out2.error == "" and out2.published_as == "MX Leads 1_2"
     assert any("Advantage+ campaign (builder: DISABLED, Meta: ADVANTAGE_PLUS_LEADS)" in w
                and "Advantage+ placements (builder: DISABLED, Meta: ENABLED)" in w for w in out2.warnings)
+
+
+def test_resume_of_our_campaign_without_ad_sets_keeps_its_name(tmp_path):
+    # Ревью: прерванный запуск оставил кампанию без групп; состояние площадок у такой
+    # кампании не проверено вживую и не должно уводить на новое имя.
+    meta = FakeMeta()
+    meta.fail_next["adsets"] = "unsent"
+    out, _ = _run(meta, _draft(tmp_path, ads=1))
+    assert out.stop_kind == "unknown"
+    camp = next(o for o in meta.objects.values() if o["_kind"] == "campaign")
+    assert not [o for o in meta.objects.values() if o["_kind"] == "adset"]
+    camp["advantage_state_info"] = {**OFF, "advantage_placement_state": "ENABLED"}
+    out2, _ = _run(meta, _draft(tmp_path, ads=1))
+    assert out2.error == "", out2.error
+    assert [o["name"] for o in meta.objects.values() if o["_kind"] == "campaign"] == ["MX Leads 1"]
+
+
+def test_a_partial_advantage_state_skips_the_missing_key(tmp_path):
+    meta = FakeMeta()
+    meta.mutate_on_read[("campaign", "advantage_state_info")] = {"advantage_state": "DISABLED"}
+    out, _ = _run(meta, _draft(tmp_path, ads=1))
+    fields = {c["field"] for c in out.readback["checks"]}
+    assert out.readback["ok"] is True
+    assert "advantage_campaign" in fields and "advantage_placements" not in fields

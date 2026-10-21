@@ -1060,7 +1060,8 @@ class CampaignCreator:
         checks.append({"object": obj, "field": fld, "expected": expected, "actual": actual,
                        "ok": _same(expected, actual), "not_read": _not_read(expected, actual)})
 
-    def _campaign_checks(self, plan: CampaignPlan, camp: dict, targetings: list[dict]) -> list[dict]:
+    def _campaign_checks(self, plan: CampaignPlan, camp: dict, manual: bool) -> list[dict]:
+        """`manual` - у кампании в Meta есть группы с ручным списком площадок (ACL-1050)."""
         checks: list[dict] = []
 
         def check(f: str, e: Any, a: Any) -> None:
@@ -1075,13 +1076,16 @@ class CampaignCreator:
         check("tag", plan.label, plan.label if plan.label in _labels(camp) else "")
         # ACL-1050: Advantage+ кампания Meta сама раздаёт площадки (ставками value rules,
         # без ручного списка), и Audience Network получает бюджет. Билдер такие кампании
-        # не создаёт. Поля нет в ответе — сверять нечем, площадки всё равно сверяются
-        # по позициям в группах.
+        # не создаёт. Поля (или ключа в нём) нет в ответе — сверять нечем, площадки всё
+        # равно сверяются по позициям в группах. Состояние площадок сверяем, только когда
+        # группы с ручным списком уже есть: у кампании без групп оно не проверено вживую,
+        # и своя прерванная кампания не должна из-за него уходить на новое имя.
         adv = camp.get("advantage_state_info")
         if isinstance(adv, dict):
-            check("advantage_campaign", ADVANTAGE_OFF, adv.get("advantage_state"))
-            if any(t.get("publisher_platforms") for t in targetings):
-                check("advantage_placements", ADVANTAGE_OFF, adv.get("advantage_placement_state"))
+            if "advantage_state" in adv:
+                check("advantage_campaign", ADVANTAGE_OFF, adv["advantage_state"])
+            if manual and "advantage_placement_state" in adv:
+                check("advantage_placements", ADVANTAGE_OFF, adv["advantage_placement_state"])
         return checks
 
     def _adset_checks(self, plan: CampaignPlan, ad_set: AdSetPlan, targeting: dict, row: dict,
@@ -1146,7 +1150,8 @@ class CampaignCreator:
         """
         found: list[dict] = []
         camp = self.client.get(f"/{campaign_id}", {"fields": CAMPAIGN_FIELDS})
-        diffs = _describe_diffs(self._campaign_checks(plan, camp, targetings))
+        manual = any(hit and t.get("publisher_platforms") for t, hit in zip(targetings, found_sets))
+        diffs = _describe_diffs(self._campaign_checks(plan, camp, manual))
         if diffs:
             found.append({"object": f"campaign {plan.name!r}", "kind": "campaign", "differences": diffs})
         for ad_set, targeting, hit in zip(plan.ad_sets, targetings, found_sets):
@@ -1637,7 +1642,8 @@ class CampaignCreator:
             check(obj, "tag", plan.label, plan.label if plan.label in _labels(row) else "")
 
         camp = self.client.get(f"/{out.campaign_id}", {"fields": CAMPAIGN_FIELDS})
-        checks += self._campaign_checks(plan, camp, targetings)
+        checks += self._campaign_checks(plan, camp,
+                                        any(t.get("publisher_platforms") for t in targetings))
 
         # ACL-1775: форма принадлежит Странице - читаем список форм ещё раз, уже после записи.
         page_forms = (_forms.read_page_forms(self.client, plan.page_id)
