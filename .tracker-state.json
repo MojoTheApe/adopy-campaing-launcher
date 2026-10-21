@@ -53771,7 +53771,7 @@
             "session": "run_l2_19"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-L219",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -53790,7 +53790,7 @@
         },
         "pr": 955,
         "queued_at": "2026-10-20T09:54:30+00:00",
-        "review_report": "# Returned only to release the review lane: the review baseline is stale\n\nMain moved to 1c6ab78e after the review (batch #1016 merged), so the independent review no longer matches the frozen baseline and `batch approve` is refused. The code review itself found no blocking problems, and the evidence stays on record in the review notes.\n\nNext step for the author: when the coordinator says this task's batch turn is near, merge the then-current main into the original branch, run the affected tests, hand off, and get a short fresh review of the delta (content was already reviewed).",
+        "review_report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578063+00:00",
@@ -53808,7 +53808,8 @@
           "actor": "Coordinator-M1011A",
           "session": "coord-m1011a-20261015",
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
-        }
+        },
+        "rework": true
       },
       "29": {
         "implementers": [
@@ -106774,6 +106775,18 @@
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
         },
         "batch_id": null
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-21T13:09:11+00:00",
+        "issue": 19,
+        "operation": {
+          "id": "d1f707dbcc5444d098dd09e3902517b1",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -110251,50 +110264,6 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-20T12:31:53+00:00"
-      },
-      "19": {
-        "issue": 19,
-        "pr": 955,
-        "branch": "codex/acl-106-empty-period-owner",
-        "head_sha": "64499cb326cc234c94177a51c2d002ae93ec0061",
-        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "scope": "ce291401dfa6489828ba973eb602b744efb113657552fbfff1bcb7f342232d99",
-        "review": {
-          "kind": "independent-review",
-          "verdict": "approved",
-          "reviewer": "Reviewer-R106W",
-          "review_session": "reviewer-r106w-20261020",
-          "execution_lane": "df11f3d8eb8b4aa09d271dddd4e322ba",
-          "implementer": "Worker-L219",
-          "head_sha": "64499cb326cc234c94177a51c2d002ae93ec0061",
-          "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "tree_sha": "66644864c2bfc0fac653d2aa6ff3f418cf6f8b55",
-          "issues": [
-            19
-          ],
-          "report": "Independent re-review of PR #955 (ACL-106, empty period says whose emptiness it is) at head 64499cb3 on base main c6150160. The change adds _period_owner(report) in src/web/app.py, computed from the already-cached period report with no workbook frame rescan: it returns a manager-scoped owner only when my_cm and a period are set, countries exist, other managers have cm_comparison rows (rows without a CM name, nan or none are ignored) and none of them is the current manager; it is passed to the template as period_owner. report.html gets a new manager-scoped notice (manager name autoescaped by Jinja) shown only when report.countries is truthy and the book covers the period, while the existing whole-workbook notice (shown when there are no countries or the book does not cover the period) gets one extra sentence that nobody has rows for these dates; the conditions are mutually exclusive, so at most one notice renders. Docs CHANGELOG/PROJECT got short entries and tests/test_empty_period_owner.py adds 110 lines of tests. Delta check versus the previously approved head 33cde2ba: the PR's own added/removed lines relative to each merge-base hash identically (md5 of the +/- line sets equal), so the approved content is unchanged and the main merge only brought main's own changes; the diff work/main...HEAD touches exactly five files (CHANGELOG, PROJECT, app.py +29, report.html +12, the new test). Tests run in the worktree with the repo venv: tests/test_empty_period_owner.py and tests/test_sidebar_without_workbook.py (the only tests referencing the notice markup) gave 23 passed, no failures. CI on the head is fully green: ACL verification, Classify and check project tooling, Installer verification, Process instructions, descriptor, linux tests 3.13 shards 1/2/3, windows tests 3.13 and tracker-link all pass; two installer build jobs were skipped as not applicable. Nits: none blocking; the new notice reuses the id workbook-period-notice, which is harmless because the blocks are mutually exclusive. No live checks claimed.",
-          "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "recorded_at": "2026-10-20T12:37:10+00:00",
-          "issue_scopes": {
-            "19": "ce291401dfa6489828ba973eb602b744efb113657552fbfff1bcb7f342232d99"
-          }
-        },
-        "lane": {
-          "id": "df11f3d8eb8b4aa09d271dddd4e322ba",
-          "pr": 955,
-          "issues": [
-            19
-          ],
-          "actor": "Reviewer-R106W",
-          "session": "reviewer-r106w-20261020",
-          "coordinator": "Coordinator-M1011A",
-          "started_at": "2026-10-20T11:42:13+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-20T12:38:06+00:00"
       },
       "53": {
         "issue": 53,
