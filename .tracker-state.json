@@ -46816,6 +46816,18 @@
         "state": "implementing",
         "started_at": "2026-10-21T07:18:03+00:00",
         "from_status": "status:todo"
+      },
+      "1050": {
+        "actor": "Worker-P10212050",
+        "session": "run_p1021_2050",
+        "coordinator": "Coordinator-P1021A",
+        "branch": "work/acl-2050-placement-readback",
+        "worktree": "C:\\acl-pl-2050",
+        "id": "134be080abf54f0d86f200e73d2d5d0f",
+        "issue": 1050,
+        "state": "implementing",
+        "started_at": "2026-10-21T07:20:19+00:00",
+        "from_status": "status:idea"
       }
     },
     "tasks": {
@@ -55575,6 +55587,17 @@
         "pr": 1047,
         "queued_at": "2026-10-20T13:04:45+00:00",
         "reviewer": "Reviewer-R2046V"
+      },
+      "1050": {
+        "implementers": [
+          {
+            "actor": "Worker-P10212050",
+            "session": "run_p1021_2050"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-P10212050",
+        "coordinator": "Coordinator-P1021A"
       }
     },
     "actors": {
@@ -58412,6 +58435,10 @@
       },
       "Worker-A1021784": {
         "session": "run_a1021_784w",
+        "role": "Worker"
+      },
+      "Worker-P10212050": {
+        "session": "run_p1021_2050",
         "role": "Worker"
       }
     },
@@ -104539,6 +104566,13 @@
         "issue": 784,
         "claim": "d78988a3ebfe48deaaefd948639051f3",
         "actor": "Worker-A1021784"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-21T07:20:19+00:00",
+        "issue": 1050,
+        "claim": "134be080abf54f0d86f200e73d2d5d0f",
+        "actor": "Worker-P10212050"
       }
     ],
     "policy": {
