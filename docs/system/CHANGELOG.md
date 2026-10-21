@@ -1,5 +1,12 @@
 # System history
 
+## ACL-2066 — CPL in the default Optimization columns — 2026-10-21
+
+The account campaign table's default Optimization preset now shows CPL (BI spend /
+leads) right before CPA (FTD). Layouts already saved in the browser get CPL inserted
+before CPA once (flag `cpl_seen`); a user who removes it afterwards keeps that choice.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1066).
+
 ## ACL-1381 — Consistent Builder ad-text wording — 2026-10-18
 
 Complete the older text-label request while preserving ACL-1769's later numbered

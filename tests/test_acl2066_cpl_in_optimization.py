@@ -1,4 +1,4 @@
-"""ACL-2064: CPL виден в пресете Optimization (по умолчанию) и в уже сохранённых раскладках."""
+"""ACL-2066: CPL виден в пресете Optimization (по умолчанию) и в уже сохранённых раскладках."""
 import re
 from pathlib import Path
 
