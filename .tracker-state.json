@@ -47913,6 +47913,18 @@
         "state": "implementing",
         "started_at": "2026-10-21T22:16:11+00:00",
         "from_status": "status:todo"
+      },
+      "165": {
+        "actor": "Worker-W1021165",
+        "session": "run_w1021_1165",
+        "coordinator": "Coordinator-I1021A",
+        "branch": "codex/acl-1165-attach-attempt-log",
+        "worktree": "C:\\acl-int-w1165",
+        "id": "a345280aa3d14093b2a8ba49863b2d4b",
+        "issue": 165,
+        "state": "implementing",
+        "started_at": "2026-10-21T22:24:43+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -54805,9 +54817,13 @@
           {
             "actor": "Worker-W1021165",
             "session": "run_w1021_1165"
+          },
+          {
+            "actor": "Worker-W1021165",
+            "session": "run_w1021_1165"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-W1021165",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -54838,14 +54854,8 @@
           "session": "run_i1021a_1021",
           "report": "Approval is stale against current main 64e73a1e (after ACL-2073 #1075 and ACL-2071 #1076 merged). Author: merge current main into the original branch without changing content (resolve only CHANGELOG append conflicts by keeping both entries), re-run checks, hand off, and get a fresh independent source approval for batch 2b (--deliver)."
         },
-        "reviewer": "Reviewer-S1021165",
-        "return": {
-          "id": "8c9d2deccf924f759bee301083f79d35",
-          "actor": "Coordinator-I1021A",
-          "session": "run_i1021a_1021",
-          "report": "Approval is stale against current main 64e73a1e (after ACL-2073 #1075 and ACL-2071 #1076 merged). Author: merge current main into the original branch without changing content (resolve only CHANGELOG append conflicts by keeping both entries), re-run checks, hand off, and get a fresh independent source approval for batch 2b (--deliver)."
-        },
-        "rework": true
+        "rework": true,
+        "rework_claim": "a345280aa3d14093b2a8ba49863b2d4b"
       },
       "72": {
         "implementers": [
@@ -110443,6 +110453,13 @@
           ],
           "finished_at": "2026-10-21T22:23:48+00:00"
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-21T22:24:43+00:00",
+        "issue": 165,
+        "claim": "a345280aa3d14093b2a8ba49863b2d4b",
+        "actor": "Worker-W1021165"
       }
     ],
     "policy": {
