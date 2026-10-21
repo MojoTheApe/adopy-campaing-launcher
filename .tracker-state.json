@@ -47864,20 +47864,6 @@
         "started_at": "2026-10-21T22:16:11+00:00",
         "from_status": "status:todo"
       },
-      "840": {
-        "actor": "Worker-W1021840",
-        "session": "run_w1021_1840",
-        "coordinator": "Coordinator-I1021A",
-        "branch": "codex/acl-1840-country-footer-inset",
-        "worktree": "C:\\acl-int-w1840",
-        "id": "8ad5a2a58312405e9965218183ced0f2",
-        "issue": 840,
-        "state": "handoff",
-        "started_at": "2026-10-21T22:17:20+00:00",
-        "from_status": "status:todo",
-        "pr": 846,
-        "report": "ACL-1840 round 3: refresh of approval baseline (no content change).\n- Previous head: 01730a5cca32c3969d847b72fce461bf2a2a1dc2\n- New head: fb579d4ad7fbf40bb45bad6d4c42a7729ff3fa13 (merge of origin/main 64e73a1e151b6611517cd9643dfb911ef54d6832); PR #846 shows this head.\n- Conflicts: none (clean merge). Diff vs main: the 4 task files only, 153 insertions.\n- Tests: the PR's own tests ran green in the previous round (19 passed); this round only merged main, no content change.\n- CI at handoff time: tracker-link failed only because the task was still in implementing state (PR linkage: move to Review); it will be rerun once after handoff. Other jobs (linux 1/2/3, windows, installer) were still running on the new head; results reported separately by the worker."
-      },
       "1050": {
         "actor": "Worker-P1021F2050",
         "session": "run_p1021f_2050",
@@ -52693,7 +52679,7 @@
             "session": "run_w1021_1840"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1021840",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -52702,16 +52688,16 @@
           "coordinator": "Coordinator-I1021A",
           "branch": "codex/acl-1840-country-footer-inset",
           "worktree": "C:\\acl-int-w1840",
-          "id": "6116b4b4aaf747c9b9d7c409f628de81",
+          "id": "8ad5a2a58312405e9965218183ced0f2",
           "issue": 840,
           "state": "handoff",
-          "started_at": "2026-10-21T13:47:55+00:00",
+          "started_at": "2026-10-21T22:17:20+00:00",
           "from_status": "status:todo",
           "pr": 846,
-          "report": "ACL-1840 refresh of approval baseline (no content change).\n- Old head: df22816f5be2ad23724c8c0b242018488aa46d95\n- New head: 01730a5cca32c3969d847b72fce461bf2a2a1dc2 (merge of origin/main 0ea237b0e4ceededbfd0683dff9e57c20059a115)\n- Only conflict: docs/system/CHANGELOG.md, both-sides append; kept both entries (ACL-1840 and ACL-1626). report.html auto-merged.\n- diff origin/main...HEAD: the 4 task files only (CHANGELOG, report.html, footer fixture, footer layout test), 153 insertions.\n- Tests: py -m pytest tests/test_country_campaign_footer_layout.py -> 19 passed.\n- Base: main. CI on new head: all checks pass (linux 1/2/3, windows, tracker-link, process, installer skipped as expected)."
+          "report": "ACL-1840 round 3: refresh of approval baseline (no content change).\n- Previous head: 01730a5cca32c3969d847b72fce461bf2a2a1dc2\n- New head: fb579d4ad7fbf40bb45bad6d4c42a7729ff3fa13 (merge of origin/main 64e73a1e151b6611517cd9643dfb911ef54d6832); PR #846 shows this head.\n- Conflicts: none (clean merge). Diff vs main: the 4 task files only, 153 insertions.\n- Tests: the PR's own tests ran green in the previous round (19 passed); this round only merged main, no content change.\n- CI at handoff time: tracker-link failed only because the task was still in implementing state (PR linkage: move to Review); it will be rerun once after handoff. Other jobs (linux 1/2/3, windows, installer) were still running on the new head; results reported separately by the worker."
         },
         "pr": 846,
-        "queued_at": "2026-10-21T13:58:02+00:00",
+        "queued_at": "2026-10-21T22:19:48+00:00",
         "review_report": "Approval is stale against current main 64e73a1e (after ACL-2073 #1075 and ACL-2071 #1076 merged). Author: merge current main into the original branch without changing content (resolve only CHANGELOG append conflicts by keeping both entries), re-run checks, hand off, and get a fresh independent source approval for batch 2b (--deliver).",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -52723,9 +52709,7 @@
           "actor": "Coordinator-I1021A",
           "session": "run_i1021a_1021",
           "report": "Approval is stale against current main 64e73a1e (after ACL-2073 #1075 and ACL-2071 #1076 merged). Author: merge current main into the original branch without changing content (resolve only CHANGELOG append conflicts by keeping both entries), re-run checks, hand off, and get a fresh independent source approval for batch 2b (--deliver)."
-        },
-        "rework": true,
-        "rework_claim": "8ad5a2a58312405e9965218183ced0f2"
+        }
       },
       "841": {
         "implementers": [
@@ -63221,7 +63205,8 @@
       1053,
       1054,
       710,
-      1069
+      1069,
+      840
     ],
     "review": {
       "id": "85d6b6ac4dc844c49bb56e0b4196ce08",
@@ -110311,6 +110296,13 @@
         "at": "2026-10-21T22:18:58+00:00",
         "batch_id": "1105e34df46449f9801ef245f30c4bfb",
         "pr": 1076
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-21T22:19:48+00:00",
+        "issue": 840,
+        "pr": 846,
+        "actor": "Worker-W1021840"
       }
     ],
     "policy": {
