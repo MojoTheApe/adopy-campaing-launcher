@@ -47038,9 +47038,11 @@
         "worktree": "C:\\acl-int-w1840",
         "id": "6116b4b4aaf747c9b9d7c409f628de81",
         "issue": 840,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T13:47:55+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 846,
+        "report": "ACL-1840 refresh of approval baseline (no content change).\n- Old head: df22816f5be2ad23724c8c0b242018488aa46d95\n- New head: 01730a5cca32c3969d847b72fce461bf2a2a1dc2 (merge of origin/main 0ea237b0e4ceededbfd0683dff9e57c20059a115)\n- Only conflict: docs/system/CHANGELOG.md, both-sides append; kept both entries (ACL-1840 and ACL-1626). report.html auto-merged.\n- diff origin/main...HEAD: the 4 task files only (CHANGELOG, report.html, footer fixture, footer layout test), 153 insertions.\n- Tests: py -m pytest tests/test_country_campaign_footer_layout.py -> 19 passed.\n- Base: main. CI on new head: all checks pass (linux 1/2/3, windows, tracker-link, process, installer skipped as expected)."
       },
       "165": {
         "actor": "Worker-W1021165",
