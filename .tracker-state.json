@@ -47449,9 +47449,11 @@
         "worktree": "C:\\acl-2071",
         "id": "5e1c746491d54127b3913ca2229972ed",
         "issue": 1071,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T18:39:30+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 1072,
+        "report": "ACL-2071 refresh handoff. Merged main c01583ea into work/acl-2071-verify-published-tag (no conflicts, no code changes); new head b89655ebfade925201f3b06dc446070bbba9f621. The diff vs main is unchanged (5 files: verify-published-tag.yml, 2 tests, 2 docs). Affected tests: 267 passed, 1 skipped (complete_delivery, ci_workflows, ci_scope, ci_layout)."
       }
     },
     "tasks": {
