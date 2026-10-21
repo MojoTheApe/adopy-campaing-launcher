@@ -47065,6 +47065,18 @@
         "state": "implementing",
         "started_at": "2026-10-21T13:47:55+00:00",
         "from_status": "status:todo"
+      },
+      "165": {
+        "actor": "Worker-W1021165",
+        "session": "run_w1021_1165",
+        "coordinator": "Coordinator-I1021A",
+        "branch": "codex/acl-1165-attach-attempt-log",
+        "worktree": "C:\\acl-int-w1165",
+        "id": "15a71cb9e78d4965b19b7d67ebe39dda",
+        "issue": 165,
+        "state": "implementing",
+        "started_at": "2026-10-21T13:48:39+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -53937,11 +53949,15 @@
           {
             "actor": "Worker-W144D",
             "session": "w144d-20261019"
+          },
+          {
+            "actor": "Worker-W1021165",
+            "session": "run_w1021_1165"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-W144D",
-        "coordinator": "Coordinator-C1016A",
+        "state": "implementing",
+        "worker": "Worker-W1021165",
+        "coordinator": "Coordinator-I1021A",
         "handoff": {
           "actor": "Worker-W144D",
           "session": "w144d-20261019",
@@ -53964,20 +53980,14 @@
           "at": "2026-10-17T16:30:39.578065+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-R1165X",
         "return_operation": {
           "id": "b9da93d484904d028c1630782c0d3fe7",
           "actor": "Coordinator-C1016A",
           "session": "c7e3da-20261016",
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
         },
-        "return": {
-          "id": "b9da93d484904d028c1630782c0d3fe7",
-          "actor": "Coordinator-C1016A",
-          "session": "c7e3da-20261016",
-          "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
-        },
-        "rework": true
+        "rework": true,
+        "rework_claim": "15a71cb9e78d4965b19b7d67ebe39dda"
       },
       "72": {
         "implementers": [
@@ -59260,6 +59270,10 @@
       },
       "Worker-W1021840": {
         "session": "run_w1021_1840",
+        "role": "Worker"
+      },
+      "Worker-W1021165": {
+        "session": "run_w1021_1165",
         "role": "Worker"
       }
     },
@@ -107293,6 +107307,13 @@
         "issue": 840,
         "claim": "6116b4b4aaf747c9b9d7c409f628de81",
         "actor": "Worker-W1021840"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-21T13:48:39+00:00",
+        "issue": 165,
+        "claim": "15a71cb9e78d4965b19b7d67ebe39dda",
+        "actor": "Worker-W1021165"
       }
     ],
     "policy": {
