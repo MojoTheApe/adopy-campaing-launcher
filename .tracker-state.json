@@ -51422,7 +51422,7 @@
             "session": "wrs1827-20261015"
           }
         ],
-        "state": "approved",
+        "state": "returning_approval",
         "worker": "Worker-RS1827",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -51447,7 +51447,19 @@
           "at": "2026-10-17T16:30:39.577996+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-R1827V"
+        "reviewer": "Reviewer-R1827V",
+        "return_operation": {
+          "id": "ac8d89994f104def8463efe3674b097c",
+          "actor": "Coordinator-C0930A",
+          "session": "coord_c0930a_1009",
+          "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
+        },
+        "return": {
+          "id": "ac8d89994f104def8463efe3674b097c",
+          "actor": "Coordinator-C0930A",
+          "session": "coord_c0930a_1009",
+          "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
+        }
       },
       "771": {
         "implementers": [
