@@ -40,6 +40,16 @@ producer names, triggers, policies and runtime behavior stay intact. This record
 project verification behavior; it does not establish a cost saving or delivery.
 [Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/971).
 
+## RPA: the first of two attach attempts is no longer logged as a verdict - ACL-1165
+
+- A failed strict attach attempt now logs "strict attempt found no own CDP port (not final: a lenient attach
+  may be tried next)"; a failed lenient attempt logs a neutral "lenient attempt found no CDP debug port either".
+  Both stay at INFO and no longer contain "attachment unavailable".
+- "attachment unavailable" is logged once, at WARNING, only when every path is exhausted: when DirectCDP
+  refuses to relaunch an open profile that has no CDP port. The message points to opening the profile in
+  the Multilogin Desktop app.
+- Log text only. The relaunch refusal, its error text and the `FB_RPA_ALLOW_UNPROXIED_RELAUNCH` gate are unchanged.
+
 ## API publish: no review window when there is nothing to review — ACL-1784 — 2026-10-17
 
 With `fb_backend=api` a finished job keeps the Multilogin profile as a review

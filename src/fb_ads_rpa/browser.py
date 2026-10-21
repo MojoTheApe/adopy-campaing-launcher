@@ -1882,10 +1882,21 @@ class MultiloginDirectCDPProvider:
             return None
         port = self._discover_owned_debug_port(user_data_dir) if strict_profile else self._discover_debug_port(user_data_dir, profile_id)
         if port is None:
-            log.info(
-                "Profile %s is running but no CDP debug port found — attachment unavailable",
-                profile_id,
-            )
+            # Промежуточный шаг, не итог (ACL-1165): после строгой попытки
+            # вызывающий может попробовать мягкую; итог пишет тот, кто исчерпал
+            # все пути (`open` ниже — отказ от перезапуска).
+            if strict_profile:
+                log.info(
+                    "Profile %s is running; strict attempt found no own CDP port "
+                    "(not final: a lenient attach may be tried next)",
+                    profile_id,
+                )
+            else:
+                log.info(
+                    "Profile %s is running; lenient attempt found no CDP debug port either "
+                    "(the caller decides what happens next)",
+                    profile_id,
+                )
             return None
         try:
             cdp_url = f"http://127.0.0.1:{port}"
@@ -1955,6 +1966,14 @@ class MultiloginDirectCDPProvider:
                 if running
                 else "the profile is not running"
             )
+            if running:
+                # Итог: строгая и мягкая попытки исчерпаны (ACL-1165).
+                log.warning(
+                    "Profile %s is running but no CDP debug port was found by any attach "
+                    "attempt - attachment unavailable; refusing to relaunch without the "
+                    "profile's proxy. Open the profile in the Multilogin Desktop app and retry.",
+                    profile_id,
+                )
             raise RuntimeError(
                 f"{account_label}: refusing to relaunch this Multilogin profile. "
                 f"DirectCDP can only attach to a profile MLX itself started, and {why}. "
