@@ -46918,9 +46918,11 @@
         "worktree": "C:\\acl-rv-558",
         "id": "68ffc5082a644728a1bb615b596c4661",
         "issue": 558,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T11:49:47+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 963,
+        "report": "ACL-1558 re-handoff after reviewer return (--keep-lane).\nPR 963, head 00016495, contains current main ea41acbf.\nFix: added '# linux-ok: scrubber input string, not a real path' to the backslash path string at tests/test_acl1558_scrubber_shapes.py:88, which tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis flagged. The file is not marked windows_only. Test-only change.\nTests: tests/test_acl_test_platform.py and tests/test_acl1558_scrubber_shapes.py: 152 passed.\nFull suite not run locally; CI is the acceptance signal."
       }
     },
     "tasks": {
