@@ -46993,6 +46993,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T12:56:11+00:00",
         "from_status": "status:todo"
+      },
+      "1050": {
+        "actor": "Worker-P1021B2050",
+        "session": "run_p1021b_2050",
+        "coordinator": "Coordinator-P1021B",
+        "branch": "work/acl-2050-placement-readback",
+        "worktree": "C:\\acl-pl-2050",
+        "id": "7ebb22f43a4f49208156669333462411",
+        "issue": 1050,
+        "state": "implementing",
+        "started_at": "2026-10-21T12:37:42+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -55826,11 +55838,15 @@
           {
             "actor": "Worker-P10212050",
             "session": "run_p1021_2050"
+          },
+          {
+            "actor": "Worker-P1021B2050",
+            "session": "run_p1021b_2050"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-P10212050",
-        "coordinator": "Coordinator-P1021A",
+        "state": "implementing",
+        "worker": "Worker-P1021B2050",
+        "coordinator": "Coordinator-P1021B",
         "handoff": {
           "actor": "Worker-P10212050",
           "session": "run_p1021_2050",
@@ -55847,9 +55863,9 @@
         },
         "pr": 1058,
         "queued_at": "2026-10-21T08:13:17+00:00",
-        "reviewer": "Reviewer-P1021B2050",
         "review_report": "# ACL-2050 / PR #1058 source review - changes requested\n\nReviewer: Reviewer-P1021B2050\nHead: b6fe1a3a582f7b6854afcb837b620c5e272c06be\nBase: main ea41acbf\n\n## Blocking 1 - placements_summary is order-sensitive\nIn `src/fb_api/creator.py` `_adset_checks`, the new `placements_summary` check compares\n`placements_text(targeting) != placements_text(t)`. `placements_text` joins\nfacebook/instagram positions and device platforms in the order the lists arrive, so it is an\norder-sensitive string. The per-field checks above it (`publisher_platforms`,\n`facebook_positions`, `instagram_positions`, `devices`) go through `_same`, which compares lists\norder-insensitively. If Meta reads back the same placements in a different order, every per-field\ncheck passes but `placements_summary` fails and publishing is falsely stopped.\n\nRequired fix:\n- Make the summary check order-insensitive (e.g. compare normalized/sorted sets, or only emit\n  the summary when one of the per-field `_same` checks fails); the display text may stay as is.\n- Test: read-back with the same placements in a different order passes (no stop).\n- Test: a genuinely different placement set (or automatic placements) still stops with the\n  placements_summary line.\n\n## Non-blocking 2 - no visible warning when placement state is not verified\nWhen `placement_state_verified` is false the information lives only in diagnostics and the user\nsees no warning. Optional: show a visible warning in the result/UI.\n\nReference: earlier review comment\nhttps://github.com/MojoTheApe/adopy-campaing-launcher/pull/1058#issuecomment-6311643945",
-        "rework": true
+        "rework": true,
+        "rework_claim": "7ebb22f43a4f49208156669333462411"
       },
       "1052": {
         "implementers": [
@@ -58879,6 +58895,10 @@
       "Reviewer-P1021B2050": {
         "session": "rev_p1021b_2050",
         "role": "Reviewer"
+      },
+      "Worker-P1021B2050": {
+        "session": "run_p1021b_2050",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -106453,6 +106473,13 @@
           "report": "# ACL-2050 / PR #1058 source review - changes requested\n\nReviewer: Reviewer-P1021B2050\nHead: b6fe1a3a582f7b6854afcb837b620c5e272c06be\nBase: main ea41acbf\n\n## Blocking 1 - placements_summary is order-sensitive\nIn `src/fb_api/creator.py` `_adset_checks`, the new `placements_summary` check compares\n`placements_text(targeting) != placements_text(t)`. `placements_text` joins\nfacebook/instagram positions and device platforms in the order the lists arrive, so it is an\norder-sensitive string. The per-field checks above it (`publisher_platforms`,\n`facebook_positions`, `instagram_positions`, `devices`) go through `_same`, which compares lists\norder-insensitively. If Meta reads back the same placements in a different order, every per-field\ncheck passes but `placements_summary` fails and publishing is falsely stopped.\n\nRequired fix:\n- Make the summary check order-insensitive (e.g. compare normalized/sorted sets, or only emit\n  the summary when one of the per-field `_same` checks fails); the display text may stay as is.\n- Test: read-back with the same placements in a different order passes (no stop).\n- Test: a genuinely different placement set (or automatic placements) still stops with the\n  placements_summary line.\n\n## Non-blocking 2 - no visible warning when placement state is not verified\nWhen `placement_state_verified` is false the information lives only in diagnostics and the user\nsees no warning. Optional: show a visible warning in the result/UI.\n\nReference: earlier review comment\nhttps://github.com/MojoTheApe/adopy-campaing-launcher/pull/1058#issuecomment-6311643945",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-21T12:37:42+00:00",
+        "issue": 1050,
+        "claim": "7ebb22f43a4f49208156669333462411",
+        "actor": "Worker-P1021B2050"
       }
     ],
     "policy": {
