@@ -6045,6 +6045,27 @@
         "issue_scopes": {
           "403": "79942f16908c0b764f0a00264d25581261294a973c1654c7af182bc7657f940a"
         }
+      },
+      "1058": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-P1021C2050",
+        "review_session": "rev_p1021c_2050",
+        "execution_lane": "c442fb1fffe74319aedb385b7e0ee033",
+        "implementer": "Worker-P1021B2050",
+        "head_sha": "b3fb0f6d7bbed2013d9750037ac2f34a49d40e4a",
+        "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+        "tree_sha": "6ce05fded879b773679fd793b684b9fc0ca316c2",
+        "report": "Verdict: approved (independent re-review of head b3fb0f6d against main ea41acbf, which HEAD contains).\nScope vs main: src/fb_api/creator.py, tests/test_acl2050_placement_readback.py, docs/system/CHANGELOG.md.\nSpec: read-back now reads campaign advantage_state_info{advantage_state,advantage_placement_state,advantage_audience_state} and ad set value_rules_applied/value_rule_set_id through the existing GETs. advantage_placement_state other than DISABLED is a blocking mismatch; missing or different publisher_platforms/positions/devices stay blocking via the existing per-field checks, plus a readable placements_summary line ('automatic (Advantage+ placements)' vs manual list). Blocking failures surface in English via publish_api blocking_failures. No auto-fix.\nPrior blocking finding fixed: placements_summary is added only when one of the four placement lists differs under the order-insensitive _same, so the same placements in another order pass (test_same_placements_in_other_order_pass); a genuinely different set or automatic placements still stop (test_different_placement_set_still_stops_with_summary, test_positions_missing_stops). placements_summary is in _SKIP_DIFF so the ACL-1902 existing-campaign description does not duplicate the placements line.\nNon-blocking suggestion taken: a visible English warning when advantage_placement_state is not returned; it fires only on read-back after create, not in the name-choice step; diagnostics carry placement_state_verified.\nSide finding: campaign-level advantage_audience_state=ENABLED and applied value rules are warnings + readback.diagnostics only, as specified.\nRead-only: only GET fields changed; no new write keys, no value rules or account_controls writes. Russian comments, English user-facing text, no secrets or account ids.\nTests: test_acl2050_placement_readback (9) + test_acl1761_api_create, _existing_check, _parity, test_acl1902_name_suffix, test_acl1776_create_forms: 326 passed; readback consumers test_acl1775_instant_forms, test_acl1766_map_pixel, test_acl1761_creative_lookup, test_acl1800_campaign_commands, test_acl1899_upload_progress: 339 passed. No full suite.\nNon-blocking: _existing_differences now also checks advantage_placement_state on an earlier campaign (a missing key is skipped); a resumed campaign of ours with zero ad sets is assumed to read DISABLED as the live probe showed for API-created campaigns - not live-verified. advantage_placement_state has no _FIELD_TITLES entry, so the rename message shows the raw field name.\nLive check (owner): confirm the new fields read without a Graph error on a real account and Check plan stays green on manual placements.",
+        "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          1050
+        ],
+        "recorded_at": "2026-10-21T12:48:52+00:00",
+        "issue_scopes": {
+          "1050": "1aefcfe1e72c2e3155f61da7fe6643fc80f2d6236181d8c5c8fe6d40b4da616b"
+        }
       }
     },
     "stage": {
