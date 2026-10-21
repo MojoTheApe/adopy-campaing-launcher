@@ -46910,20 +46910,6 @@
         "started_at": "2026-10-20T12:56:11+00:00",
         "from_status": "status:todo"
       },
-      "668": {
-        "actor": "Worker-A1021668",
-        "session": "run_a1021_668w",
-        "coordinator": "Coordinator-A1021A",
-        "branch": "work/acl-1668-missing-creative",
-        "worktree": "C:\\acl-rv-668",
-        "id": "d4ddd64c9f2c4c779b592b9192818b37",
-        "issue": 668,
-        "state": "handoff",
-        "started_at": "2026-10-21T11:33:07+00:00",
-        "from_status": "status:todo",
-        "pr": 975,
-        "report": "# ACL-1668 handoff after review return (head 5e7baa80, main ea41acbf already contained)\n\nDisclosure: the fixture edits in four test files were made in the worktree BEFORE this re-claim succeeded (slots were full); they were kept uncommitted and committed only after the claim (d4ddd64c).\n\nFindings:\n1. BLOCKER (58 browser tests red in CI): fixed in the fixtures, product behaviour untouched. tests/test_drawer_review_browser.py defines OFFLINE_FILES (offline*.png, good.png, fixed.png, as {filename, rel_path, folder, type, size_bytes}); the offline /api/creatives route in test_drawer_review_browser, test_builder_multi_publish_browser, test_campaign_build_dot_browser and test_builder_second_primary_text returns it. percent, publish_selected, acl1604_preflight and foot_stays_put inherit it by import.\n2. CHANGELOG: ACL-1668 entry added at the top of docs/system/CHANGELOG.md.\n3. cbPublish: the missing-file refusal now runs before cbPreflightDecision, like cbPublishAll.\nNon-blocking wording note left as is.\n\nTests (local, final head): the 8 files above plus test_builder_review_browser.py and test_acl1668_missing_creative_publish.py: all pass, except tests/test_campaign_build_dot_browser.py::test_building_then_finished_clean_and_with_errors, which fails also on clean main ea41acbf (reproduced in a separate main worktree; fails on the `other` campaign dot, unrelated to this task). It passed in one earlier local run, so it looks flaky/pre-existing. The other 9 dot tests pass. Secret scan clean. Full suite not run locally; CI is the acceptance signal.\nNo owner live check needed."
-      },
       "558": {
         "actor": "Worker-A1021558",
         "session": "run_a1021_558w",
@@ -54527,7 +54513,7 @@
             "session": "run_a1021_668w"
           }
         ],
-        "state": "implementing",
+        "state": "reviewing",
         "worker": "Worker-A1021668",
         "coordinator": "Coordinator-A1021A",
         "handoff": {
@@ -54536,24 +54522,23 @@
           "coordinator": "Coordinator-A1021A",
           "branch": "work/acl-1668-missing-creative",
           "worktree": "C:\\acl-rv-668",
-          "id": "024751fca33b4f4bb63cdc5b30c8618c",
+          "id": "d4ddd64c9f2c4c779b592b9192818b37",
           "issue": 668,
           "state": "handoff",
-          "started_at": "2026-10-21T09:41:09+00:00",
+          "started_at": "2026-10-21T11:33:07+00:00",
           "from_status": "status:todo",
           "pr": 975,
-          "report": "# ACL-1668 handoff (review tail resume)\n\n- Merged current main (ea41acbf) into work/acl-1668-missing-creative with a no-ff merge; new head 0429dc28. Previous head 266059ca.\n- Conflicts: none (clean merge, 126 commits behind before).\n- Tests run: tests/test_acl1668_missing_creative_publish.py, tests/test_builder_review_browser.py, tests/test_second_primary_text_reaches_the_robot.py -> 29 passed. acl_scan_secrets.py: clean.\n- Full suite not run locally; CI is the acceptance signal.\n- No owner live check needed; no source changes beyond the merge."
+          "report": "# ACL-1668 handoff after review return (head 5e7baa80, main ea41acbf already contained)\n\nDisclosure: the fixture edits in four test files were made in the worktree BEFORE this re-claim succeeded (slots were full); they were kept uncommitted and committed only after the claim (d4ddd64c).\n\nFindings:\n1. BLOCKER (58 browser tests red in CI): fixed in the fixtures, product behaviour untouched. tests/test_drawer_review_browser.py defines OFFLINE_FILES (offline*.png, good.png, fixed.png, as {filename, rel_path, folder, type, size_bytes}); the offline /api/creatives route in test_drawer_review_browser, test_builder_multi_publish_browser, test_campaign_build_dot_browser and test_builder_second_primary_text returns it. percent, publish_selected, acl1604_preflight and foot_stays_put inherit it by import.\n2. CHANGELOG: ACL-1668 entry added at the top of docs/system/CHANGELOG.md.\n3. cbPublish: the missing-file refusal now runs before cbPreflightDecision, like cbPublishAll.\nNon-blocking wording note left as is.\n\nTests (local, final head): the 8 files above plus test_builder_review_browser.py and test_acl1668_missing_creative_publish.py: all pass, except tests/test_campaign_build_dot_browser.py::test_building_then_finished_clean_and_with_errors, which fails also on clean main ea41acbf (reproduced in a separate main worktree; fails on the `other` campaign dot, unrelated to this task). It passed in one earlier local run, so it looks flaky/pre-existing. The other 9 dot tests pass. Secret scan clean. Full suite not run locally; CI is the acceptance signal.\nNo owner live check needed."
         },
         "pr": 975,
-        "queued_at": "2026-10-21T09:49:09+00:00",
+        "queued_at": "2026-10-21T11:51:30+00:00",
         "review_report": "# ACL-1668 source review: returned for fixes (head 0429dc28)\n\nReviewer-A1021668. I reviewed the full scope against main ea41acbf. HEAD contains main, and the merge 0429dc28 is clean (`git show --cc` is empty). The diff touches only 4 files: enrich_draft.py, report.html and two tests. I found no leaked identifiers. The new UI strings are in English.\n\n## The feature itself is correct\n- Spec 1: after the list refresh, the row is marked \"File missing - pick again\" in `var(--bad)` and the name stays in the field. It counts only once the list has actually loaded, and it compares the hidden value with filename/rel_path the same way the picker stores it.\n- Spec 2: cbPublish and cbPublishAll (the only two publish entry points) list the affected rows in the confirm and refuse to send. The enrichment message is clear.\n- Spec 3: tests were added. tests/test_acl1668_missing_creative_publish.py, tests/test_builder_review_browser.py and tests/test_second_primary_text_reaches_the_robot.py pass locally (29 passed).\n\n## BLOCKING: the change breaks 58 existing browser tests (CI linux shards 1/2/3 are red)\nMany existing browser fixtures put a creative straight into the hidden field (for example `s.querySelector('[name$=\"_ad_0_creative_file\"]').value='offline-0.png'`). Their offline `/api/creatives` route answers `{\"files\": []}`. Now that a loaded empty list counts as \"file missing\", every such row is marked missing. cbPublish and cbPublishAll then refuse with \"Not sent: a chosen creative file is missing\", so the queue never starts.\n\nFailing in CI run 39579487653:\n- tests/test_campaign_build_percent_browser.py (15)\n- tests/test_builder_multi_publish_browser.py (11)\n- tests/test_campaign_build_dot_browser.py (10)\n- tests/test_builder_publish_selected_browser.py (9)\n- tests/test_drawer_review_browser.py (6 + 1 error, \"CB_QUEUE is not defined\")\n- tests/test_acl1604_preflight_browser.py (3; one assertion shows the literal alert 'Not sent: a chosen creative file is missing \u2014 pick it again.')\n- tests/test_builder_foot_stays_put_browser.py (3)\n- tests/test_builder_second_primary_text.py (1)\n\nI reproduced test_drawer_review_browser.py locally: on 0429dc28, 6 failed and 1 error; on main ea41acbf, 13 passed.\n\nFix: update these fixtures so their `/api/creatives` route returns the files they select. Easiest is a `files` entry `{filename, rel_path, folder:'', type:'Image', size_bytes:1}` for every name the test sets, e.g. `offline-N.png`. Alternatively, choose files through the picker. Keep the product behaviour, and do not weaken cbCreativeMissing for tests. Then run all eight files above, plus tests/test_builder_review_browser.py and tests/test_acl1668_missing_creative_publish.py.\n\n## Should fix in the same round\n- docs/system/CHANGELOG.md has no ACL-1668 entry. docs/system/PROJECT.md says a system change records what/why and the task/PR link there. Add a short entry at the top.\n- In cbPublish's confirm callback, `cbPreflightDecision(...)` runs before the missing-file refusal, so a refused publish still records a preflight decision. cbPublishAll does it the other way round: it refuses first. Move the missing-file check to the top of the callback in cbPublish to match.\n\n## Non-blocking notes\n- The confirm block is titled \"Nothing was sent:\" while the dialog still offers the build button. Wording such as \"These ads will not be sent until you pick the file again:\" would read better. Optional.\n- If the very first /api/creatives answer is an error (folder unavailable) with an empty list, every chosen row is marked \"File missing\". Publishing would fail anyway, so this is acceptable.\n\nNo owner live check is needed: the change is UI/enrichment only and does not act on any ad account.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578098+00:00",
           "remote_process_stopped_verified": false
         },
-        "rework": true,
-        "rework_claim": "d4ddd64c9f2c4c779b592b9192818b37"
+        "reviewer": "Reviewer-A1021668"
       },
       "358": {
         "implementers": [
@@ -105786,6 +105771,21 @@
         "issue": 558,
         "claim": "68ffc5082a644728a1bb615b596c4661",
         "actor": "Worker-A1021558"
+      },
+      {
+        "event": "review-resumed",
+        "at": "2026-10-21T11:51:35+00:00",
+        "pr": 975,
+        "issues": [
+          668
+        ]
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-21T11:51:40+00:00",
+        "issue": 668,
+        "pr": 975,
+        "actor": "Worker-A1021668"
       }
     ],
     "policy": {
@@ -115605,20 +115605,6 @@
         "started_at": "2026-10-21T09:47:33+00:00",
         "state": "reviewing"
       },
-      "975": {
-        "id": "660fc5d221644f569004957afbef6ff6",
-        "pr": 975,
-        "issues": [
-          668
-        ],
-        "actor": "Reviewer-A1021668",
-        "session": "run_a1021_668r",
-        "coordinator": "Coordinator-A1021A",
-        "started_at": "2026-10-21T09:51:05+00:00",
-        "state": "fixing",
-        "report": "# ACL-1668 source review: returned for fixes (head 0429dc28)\n\nReviewer-A1021668. I reviewed the full scope against main ea41acbf. HEAD contains main, and the merge 0429dc28 is clean (`git show --cc` is empty). The diff touches only 4 files: enrich_draft.py, report.html and two tests. I found no leaked identifiers. The new UI strings are in English.\n\n## The feature itself is correct\n- Spec 1: after the list refresh, the row is marked \"File missing - pick again\" in `var(--bad)` and the name stays in the field. It counts only once the list has actually loaded, and it compares the hidden value with filename/rel_path the same way the picker stores it.\n- Spec 2: cbPublish and cbPublishAll (the only two publish entry points) list the affected rows in the confirm and refuse to send. The enrichment message is clear.\n- Spec 3: tests were added. tests/test_acl1668_missing_creative_publish.py, tests/test_builder_review_browser.py and tests/test_second_primary_text_reaches_the_robot.py pass locally (29 passed).\n\n## BLOCKING: the change breaks 58 existing browser tests (CI linux shards 1/2/3 are red)\nMany existing browser fixtures put a creative straight into the hidden field (for example `s.querySelector('[name$=\"_ad_0_creative_file\"]').value='offline-0.png'`). Their offline `/api/creatives` route answers `{\"files\": []}`. Now that a loaded empty list counts as \"file missing\", every such row is marked missing. cbPublish and cbPublishAll then refuse with \"Not sent: a chosen creative file is missing\", so the queue never starts.\n\nFailing in CI run 39579487653:\n- tests/test_campaign_build_percent_browser.py (15)\n- tests/test_builder_multi_publish_browser.py (11)\n- tests/test_campaign_build_dot_browser.py (10)\n- tests/test_builder_publish_selected_browser.py (9)\n- tests/test_drawer_review_browser.py (6 + 1 error, \"CB_QUEUE is not defined\")\n- tests/test_acl1604_preflight_browser.py (3; one assertion shows the literal alert 'Not sent: a chosen creative file is missing \u2014 pick it again.')\n- tests/test_builder_foot_stays_put_browser.py (3)\n- tests/test_builder_second_primary_text.py (1)\n\nI reproduced test_drawer_review_browser.py locally: on 0429dc28, 6 failed and 1 error; on main ea41acbf, 13 passed.\n\nFix: update these fixtures so their `/api/creatives` route returns the files they select. Easiest is a `files` entry `{filename, rel_path, folder:'', type:'Image', size_bytes:1}` for every name the test sets, e.g. `offline-N.png`. Alternatively, choose files through the picker. Keep the product behaviour, and do not weaken cbCreativeMissing for tests. Then run all eight files above, plus tests/test_builder_review_browser.py and tests/test_acl1668_missing_creative_publish.py.\n\n## Should fix in the same round\n- docs/system/CHANGELOG.md has no ACL-1668 entry. docs/system/PROJECT.md says a system change records what/why and the task/PR link there. Add a short entry at the top.\n- In cbPublish's confirm callback, `cbPreflightDecision(...)` runs before the missing-file refusal, so a refused publish still records a preflight decision. cbPublishAll does it the other way round: it refuses first. Move the missing-file check to the top of the callback in cbPublish to match.\n\n## Non-blocking notes\n- The confirm block is titled \"Nothing was sent:\" while the dialog still offers the build button. Wording such as \"These ads will not be sent until you pick the file again:\" would read better. Optional.\n- If the very first /api/creatives answer is an error (folder unavailable) with an empty list, every chosen row is marked \"File missing\". Publishing would fail anyway, so this is acceptable.\n\nNo owner live check is needed: the change is UI/enrichment only and does not act on any ad account.",
-        "keep_lane": true
-      },
       "963": {
         "id": "ef4d9e1456394d828e9b91eeb10b3ea8",
         "pr": 963,
@@ -115644,6 +115630,20 @@
         "coordinator": "Coordinator-A1021A",
         "started_at": "2026-10-21T11:39:07+00:00",
         "state": "reviewing"
+      },
+      "975": {
+        "id": "660fc5d221644f569004957afbef6ff6",
+        "pr": 975,
+        "issues": [
+          668
+        ],
+        "actor": "Reviewer-A1021668",
+        "session": "run_a1021_668r",
+        "coordinator": "Coordinator-A1021A",
+        "started_at": "2026-10-21T11:51:35+00:00",
+        "state": "reviewing",
+        "report": "# ACL-1668 source review: returned for fixes (head 0429dc28)\n\nReviewer-A1021668. I reviewed the full scope against main ea41acbf. HEAD contains main, and the merge 0429dc28 is clean (`git show --cc` is empty). The diff touches only 4 files: enrich_draft.py, report.html and two tests. I found no leaked identifiers. The new UI strings are in English.\n\n## The feature itself is correct\n- Spec 1: after the list refresh, the row is marked \"File missing - pick again\" in `var(--bad)` and the name stays in the field. It counts only once the list has actually loaded, and it compares the hidden value with filename/rel_path the same way the picker stores it.\n- Spec 2: cbPublish and cbPublishAll (the only two publish entry points) list the affected rows in the confirm and refuse to send. The enrichment message is clear.\n- Spec 3: tests were added. tests/test_acl1668_missing_creative_publish.py, tests/test_builder_review_browser.py and tests/test_second_primary_text_reaches_the_robot.py pass locally (29 passed).\n\n## BLOCKING: the change breaks 58 existing browser tests (CI linux shards 1/2/3 are red)\nMany existing browser fixtures put a creative straight into the hidden field (for example `s.querySelector('[name$=\"_ad_0_creative_file\"]').value='offline-0.png'`). Their offline `/api/creatives` route answers `{\"files\": []}`. Now that a loaded empty list counts as \"file missing\", every such row is marked missing. cbPublish and cbPublishAll then refuse with \"Not sent: a chosen creative file is missing\", so the queue never starts.\n\nFailing in CI run 39579487653:\n- tests/test_campaign_build_percent_browser.py (15)\n- tests/test_builder_multi_publish_browser.py (11)\n- tests/test_campaign_build_dot_browser.py (10)\n- tests/test_builder_publish_selected_browser.py (9)\n- tests/test_drawer_review_browser.py (6 + 1 error, \"CB_QUEUE is not defined\")\n- tests/test_acl1604_preflight_browser.py (3; one assertion shows the literal alert 'Not sent: a chosen creative file is missing \u2014 pick it again.')\n- tests/test_builder_foot_stays_put_browser.py (3)\n- tests/test_builder_second_primary_text.py (1)\n\nI reproduced test_drawer_review_browser.py locally: on 0429dc28, 6 failed and 1 error; on main ea41acbf, 13 passed.\n\nFix: update these fixtures so their `/api/creatives` route returns the files they select. Easiest is a `files` entry `{filename, rel_path, folder:'', type:'Image', size_bytes:1}` for every name the test sets, e.g. `offline-N.png`. Alternatively, choose files through the picker. Keep the product behaviour, and do not weaken cbCreativeMissing for tests. Then run all eight files above, plus tests/test_builder_review_browser.py and tests/test_acl1668_missing_creative_publish.py.\n\n## Should fix in the same round\n- docs/system/CHANGELOG.md has no ACL-1668 entry. docs/system/PROJECT.md says a system change records what/why and the task/PR link there. Add a short entry at the top.\n- In cbPublish's confirm callback, `cbPreflightDecision(...)` runs before the missing-file refusal, so a refused publish still records a preflight decision. cbPublishAll does it the other way round: it refuses first. Move the missing-file check to the top of the callback in cbPublish to match.\n\n## Non-blocking notes\n- The confirm block is titled \"Nothing was sent:\" while the dialog still offers the build button. Wording such as \"These ads will not be sent until you pick the file again:\" would read better. Optional.\n- If the very first /api/creatives answer is an error (folder unavailable) with an empty list, every chosen row is marked \"File missing\". Publishing would fail anyway, so this is acceptable.\n\nNo owner live check is needed: the change is UI/enrichment only and does not act on any ad account.",
+        "keep_lane": true
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
