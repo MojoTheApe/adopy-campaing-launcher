@@ -51422,7 +51422,7 @@
             "session": "wrs1827-20261015"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-RS1827",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -51441,7 +51441,7 @@
         },
         "pr": 829,
         "queued_at": "2026-10-19T12:27:37+00:00",
-        "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
+        "review_report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.577996+00:00",
@@ -51459,7 +51459,8 @@
           "actor": "Coordinator-C0930A",
           "session": "coord_c0930a_1009",
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
-        }
+        },
+        "rework": true
       },
       "771": {
         "implementers": [
@@ -106875,6 +106876,18 @@
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
         },
         "batch_id": null
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-21T13:11:34+00:00",
+        "issue": 827,
+        "operation": {
+          "id": "ac8d89994f104def8463efe3674b097c",
+          "actor": "Coordinator-C0930A",
+          "session": "coord_c0930a_1009",
+          "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -108282,50 +108295,6 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-16T10:41:58+00:00"
-      },
-      "827": {
-        "issue": 827,
-        "pr": 829,
-        "branch": "codex/acl-1827-design-parity-shell",
-        "head_sha": "d69bfa32162bec6a042d3d8bf2b03c542a349a75",
-        "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
-        "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "scope": "fdf30ddff65f891825fc8a270531da766faed723eadbc1aa4b976e58374d588c",
-        "review": {
-          "kind": "independent-review",
-          "verdict": "approved",
-          "reviewer": "Reviewer-R1827V",
-          "implementer": "Worker-RS1827",
-          "review_session": "r1827v-20261019",
-          "execution_lane": "55a77729e4d846cbb45cfba7ac1df2cc",
-          "head_sha": "d69bfa32162bec6a042d3d8bf2b03c542a349a75",
-          "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
-          "tree_sha": "c51c7129a01c43d92a5cb495d15f4b02c4a756f0",
-          "report": "Reviewed PR 829 head d69bfa32 (merge of main 435bc154) against current main. The 1827 diff is unchanged by the refresh: git diff origin/main..head and git diff af0ade29..662abff0 have the same 6-file stat (1048+/25-) and identical md5 (fc354eb6...) once the volatile index lines are ignored. Main's ACL-1381 change to report.html is only ad-title to ad-text label wording in the builder; it does not overlap the 1827 hunks (KPI row, sidebar, Robot health popover) and the merge is clean, with the 1381 wording still present. All 16 of main's data-view values remain in the sidebar (17 in head, one added). The 1778 header is intact (test_header passes). New UI strings are English; Russian appears only in Python docstrings and comments. No secrets, real ids or ad-account polling found, and no setInterval or new polling was added. Tests: tests/test_acl1827_shell_parity.py, tests/test_header.py, tests/test_screens_are_in_english.py, tests/test_acl1797_design_system.py gave 56 passed, 0 failed. CI was not awaited. No blocking findings.",
-          "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "issues": [
-            827
-          ],
-          "recorded_at": "2026-10-19T12:42:10+00:00",
-          "issue_scopes": {
-            "827": "fdf30ddff65f891825fc8a270531da766faed723eadbc1aa4b976e58374d588c"
-          }
-        },
-        "lane": {
-          "id": "55a77729e4d846cbb45cfba7ac1df2cc",
-          "pr": 829,
-          "issues": [
-            827
-          ],
-          "actor": "Reviewer-R1827V",
-          "session": "r1827v-20261019",
-          "coordinator": "Coordinator-C0930A",
-          "started_at": "2026-10-19T12:33:31+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-19T12:55:38+00:00"
       },
       "971": {
         "issue": 971,
