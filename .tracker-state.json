@@ -46897,9 +46897,11 @@
         "worktree": "C:\\acl-rv-626",
         "id": "d62a4efbc422440a8c0b0936ce55e004",
         "issue": 626,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T09:52:53+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 967,
+        "report": "ACL-1626 (PR 967) resume handoff: current main merged into the PR branch.\n\nMerged: work/main ea41acbf into work/acl-1626-notes-set-aside (merge commit d460cfba). Trial merge was clean, no conflicts; task diff vs main is unchanged (src/web/account_notes.py, src/web/app.py, src/web/templates/report.html, tests/test_acl1620_account_notes.py).\n\nTests (affected only): tests/test_acl1620_account_notes.py and tests/test_acl1633_country_notes.py: 44 passed. The 8 failures and 1 error in the first run are all in Playwright browser tests (environment: missing _design_tokens module, acl.test navigation timeout, asyncio.run inside a running event loop left by a failed browser fixture). The 3 non-browser tests that were collateral (damaged file reported in save response, same-millisecond corruptions, millisecond backup name) pass when run on their own (3 passed). Same browser environment errors were reported in the prior handoff. acl_scan_secrets.py: clean.\n\nFull suite not run locally; CI is the acceptance signal (browser tests need CI).\n\nNeeds owner live check: Issue item 3 (write, edit and clear a note on the owner's machine, restart the dashboard, note survives). Also the page banner is browser-tested only in CI. Dashboard needs a serve.py restart for the Python change."
       },
       "1054": {
         "actor": "Worker-F1021W2",
