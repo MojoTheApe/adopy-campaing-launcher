@@ -47295,20 +47295,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
-      },
-      "1071": {
-        "actor": "Worker-Q1021A",
-        "session": "acl_verify_tag_e51b7063",
-        "coordinator": "Coordinator-I1021A",
-        "branch": "work/acl-2071-verify-published-tag",
-        "worktree": "C:\\acl-2071",
-        "id": "0817e899cdde427aaf4ae1b807202dbf",
-        "issue": 1071,
-        "state": "handoff",
-        "started_at": "2026-10-21T15:58:21+00:00",
-        "from_status": "status:todo",
-        "pr": 1072,
-        "report": "ACL-2071 handoff. Branch work/acl-2071-verify-published-tag @ a3c51338, PR #1072 into main. New manual workflow verify-published-tag.yml (inputs tag + previous_tag) reuses the unchanged 'Verify published Windows package' steps through the updater trust path; complete-delivery.yml, release.yml and delivery authorization are unchanged; no tracker writes. Affected tests pass (80 and 267). The workflow is dispatch-only, so hosted proof comes from the first dispatch after integration (1064 vs 1034)."
       }
     },
     "tasks": {
@@ -56556,7 +56542,7 @@
             "session": "acl_verify_tag_e51b7063"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-Q1021A",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -56565,13 +56551,16 @@
           "coordinator": "Coordinator-I1021A",
           "branch": "work/acl-2071-verify-published-tag",
           "worktree": "C:\\acl-2071",
-          "id": "6cd03b7c92f94d598290d152bc575109",
+          "id": "0817e899cdde427aaf4ae1b807202dbf",
           "issue": 1071,
-          "state": "stopping",
-          "started_at": "2026-10-21T14:37:05+00:00",
+          "state": "handoff",
+          "started_at": "2026-10-21T15:58:21+00:00",
           "from_status": "status:todo",
-          "report": "Cancelled by owner 2026-10-21 (chose option c: no process change). Implementation was not pushed; the local worktree C:/acl-2071 holds an uncommitted draft only. No PR. The Issue is left for the owner to close."
-        }
+          "pr": 1072,
+          "report": "ACL-2071 handoff. Branch work/acl-2071-verify-published-tag @ a3c51338, PR #1072 into main. New manual workflow verify-published-tag.yml (inputs tag + previous_tag) reuses the unchanged 'Verify published Windows package' steps through the updater trust path; complete-delivery.yml, release.yml and delivery authorization are unchanged; no tracker writes. Affected tests pass (80 and 267). The workflow is dispatch-only, so hosted proof comes from the first dispatch after integration (1064 vs 1034)."
+        },
+        "pr": 1072,
+        "queued_at": "2026-10-21T16:01:49+00:00"
       }
     },
     "actors": {
@@ -62533,7 +62522,8 @@
       1053,
       1054,
       710,
-      1069
+      1069,
+      1071
     ],
     "review": null,
     "history": [
@@ -108981,6 +108971,13 @@
         "at": "2026-10-21T15:58:21+00:00",
         "issue": 1071,
         "claim": "0817e899cdde427aaf4ae1b807202dbf",
+        "actor": "Worker-Q1021A"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-21T16:01:49+00:00",
+        "issue": 1071,
+        "pr": 1072,
         "actor": "Worker-Q1021A"
       }
     ],
