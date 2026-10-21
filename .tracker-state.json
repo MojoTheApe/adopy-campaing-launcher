@@ -4000,27 +4000,6 @@
           "923": "b0101848e5d32a0f9893c621b441512adc87b90efc670f3efd927d592d734386"
         }
       },
-      "820": {
-        "kind": "independent-review",
-        "verdict": "approved",
-        "reviewer": "Reviewer-R1816U",
-        "implementer": "Worker-RS1816",
-        "review_session": "r1816u-20261016",
-        "execution_lane": "dacdf9c1929644b490a8a70e2f59a390",
-        "head_sha": "76b5accba12fc67f2349310555592316d033784a",
-        "base_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
-        "tree_sha": "aefe39e1fa51eafadb8ed1494351bb0ad1bfba30",
-        "report": "Head 76b5accba12fc67f2349310555592316d033784a is a clean merge of origin/main af0ade29b106129089dbabd3f208b548efa246d9. The 1816 diff against main is byte-identical to the previously approved one (git diff origin/main head vs git diff 3ee7c6d9 4d2f8edd: same 12 files, 2293 insertions, identical md5). Re-read the full diff: evaluation is read-only towards Meta (rules modules import only local evidence/model/store; no Graph or campaign-command calls, no HTTP clients); the API (/rules/evaluations, /rules/evaluate-now) only reads the journal or enqueues a job, guarded by api backend and loopback; triggers are event listeners (new workbook, successful inventory read) feeding a single daemon worker queue, with no timers, sleeps or polling of live accounts; Automatic mode stays blocked because automatic_eligible comes from evidence and is further gated by weak identity, stale data and missing reconciliation; user-facing strings are English; no secrets or real ids. Tests: pytest tests/test_acl1816_rules_evaluate.py tests/test_rules_store.py tests/test_acl1815_rules_evidence.py gave 189 passed. No blocking findings.",
-        "main_sha": "af0ade29b106129089dbabd3f208b548efa246d9",
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "issues": [
-          816
-        ],
-        "recorded_at": "2026-10-16T10:23:13+00:00",
-        "issue_scopes": {
-          "816": "6a1db86c40b5cc712b42d116a961f25e6b6f3db33793c0cf8e8e912e1dfa657a"
-        }
-      },
       "829": {
         "kind": "independent-review",
         "verdict": "approved",
@@ -51161,7 +51140,7 @@
           "at": "2026-10-17T16:30:39.577990+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-R1816V"
+        "reviewer": "Reviewer-X1021816"
       },
       "822": {
         "implementers": [
@@ -59297,6 +59276,10 @@
       },
       "Reviewer-S1021106": {
         "session": "run_s1021_106",
+        "role": "Reviewer"
+      },
+      "Reviewer-X1021816": {
+        "session": "run_x1021_1816",
         "role": "Reviewer"
       }
     },
@@ -107577,6 +107560,24 @@
           "report": "Content approved on 2f82fe86, but the required check ACL verification fails deterministically (2/2 runs): tests/test_media_attachment_identity.py::test_the_picked_tile_and_the_ad_show_the_same_thumbnail[False] 'dirty' == 'attached'. It passes on main+ACL-1165, so this is likely an ACL-1839 x main interaction. The author must investigate and fix, then get a fresh review.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-takeover",
+        "at": "2026-10-21T14:49:53+00:00",
+        "previous": {
+          "id": "c2ff818609fd44c99998f17deee0ad08",
+          "pr": 820,
+          "issues": [
+            816
+          ],
+          "actor": "Reviewer-R1816V",
+          "session": "r1816v-20261019",
+          "coordinator": "Coordinator-C0930A",
+          "started_at": "2026-10-19T13:01:50+00:00",
+          "state": "reviewing"
+        },
+        "claim": "ebde0786d68346b3a1d6930e829c8d3b",
+        "reason": "Owner confirmed 2026-10-21: \u00ab1816 \u2014 \u0441\u0435\u0441\u0441\u0438\u044f \u0440\u0435\u0432\u044c\u044e\u0435\u0440\u0430 \u043c\u0435\u0440\u0442\u0432\u0430\u00bb; previous Reviewer-R1816V run stopped; lane recovered to free capacity"
       }
     ],
     "policy": {
@@ -117361,18 +117362,6 @@
       "ineligible": {}
     },
     "source_reviews": {
-      "820": {
-        "id": "c2ff818609fd44c99998f17deee0ad08",
-        "pr": 820,
-        "issues": [
-          816
-        ],
-        "actor": "Reviewer-R1816V",
-        "session": "r1816v-20261019",
-        "coordinator": "Coordinator-C0930A",
-        "started_at": "2026-10-19T13:01:50+00:00",
-        "state": "reviewing"
-      },
       "1057": {
         "id": "3a3312e381c743e79fe418f51f66dded",
         "pr": 1057,
@@ -117407,6 +117396,18 @@
         "session": "run_s1021_106",
         "coordinator": "Coordinator-I1021A",
         "started_at": "2026-10-21T14:46:45+00:00",
+        "state": "reviewing"
+      },
+      "820": {
+        "id": "ebde0786d68346b3a1d6930e829c8d3b",
+        "pr": 820,
+        "issues": [
+          816
+        ],
+        "actor": "Reviewer-X1021816",
+        "session": "run_x1021_1816",
+        "coordinator": "Coordinator-I1021A",
+        "started_at": "2026-10-19T13:01:50+00:00",
         "state": "reviewing"
       }
     },
