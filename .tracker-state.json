@@ -46825,9 +46825,11 @@
         "worktree": "C:\\acl-pl-2052",
         "id": "6c4335af4817455e988b5372a27bd126",
         "issue": 1052,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T07:56:12+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 1057,
+        "report": "ACL-2052: PR #1057, head 60670a16. Four doc pages added to watcher sources; 8 registry entries (limited/test/deprecated) for value rules, account controls, bid_adjustments retirement, placement_soft_opt_out and the classic-placements live fact, all scoped by applies_to.feature (check_job unchanged, test-proved). CHANGELOG updated. Tests: 34 passed (acl2052 + acl1781 + meta_docs_watch_1782). No builder change."
       }
     },
     "tasks": {
