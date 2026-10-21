@@ -707,36 +707,37 @@
   },
   {
     "id": "value_rules.decrease_cap",
-    "kind": "required_field",
+    "kind": "fact",
     "applies_to": {
       "feature": "value_rules"
     },
-    "required": [
-      "adjust_sign",
-      "adjust_value"
-    ],
     "status": "limited",
     "source_url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/bidding/value-rules.md",
     "checked_date": "2026-10-21",
-    "note": "adjust_sign DECREASE is capped at 90 (confirmed on a new-layout test account: a UI rule was stored as 90). INCREASE and DECREASE are both allowed."
+    "note": "adjust_sign DECREASE is capped at 90 (confirmed on a new-layout test account: a UI rule was stored as 90). INCREASE and DECREASE are both allowed.",
+    "limits": {
+      "DECREASE": {
+        "max": 90
+      }
+    }
   },
   {
     "id": "account_controls.placement_exclusions",
-    "kind": "placements_by_objective",
+    "kind": "fact",
     "applies_to": {
       "feature": "account_controls"
     },
-    "allowed": [
+    "status": "limited",
+    "source_url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/reference/ad-account/account_controls",
+    "checked_date": "2026-10-21",
+    "note": "POST /act_<id>/account_controls with placement_controls.placement_exclusions accepts only the listed values (account level, not ad set placements). On new-layout Advantage+ campaigns this is the only way to fully exclude Audience Network. No DELETE endpoint.",
+    "values": [
       "audience_network_classic",
       "audience_network_rewarded_video",
       "audience_network_instream_video",
       "facebook_marketplace",
       "facebook_rhc"
-    ],
-    "status": "limited",
-    "source_url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/reference/ad-account/account_controls",
-    "checked_date": "2026-10-21",
-    "note": "POST /act_<id>/account_controls with placement_controls.placement_exclusions; only these values are accepted. On new-layout Advantage+ campaigns this is the only way to fully exclude Audience Network. No DELETE endpoint."
+    ]
   },
   {
     "id": "account_controls.post",
@@ -754,17 +755,14 @@
   },
   {
     "id": "bid_adjustments.retired",
-    "kind": "required_field",
+    "kind": "fact",
     "applies_to": {
       "feature": "bid_adjustments"
     },
-    "required": [
-      "bid_adjustments"
-    ],
     "status": "deprecated",
     "source_url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/bidding-and-optimization/bid-multiplier",
     "checked_date": "2026-10-21",
-    "note": "Legacy bid_adjustments (bid multiplier) is being retired and cannot be combined with value rules. Do not use for new ad sets."
+    "note": "Legacy bid_adjustments (bid multiplier) is being retired and cannot be combined with value rules. Do not use it for new ad sets."
   },
   {
     "id": "placement_soft_opt_out.spend",
@@ -786,16 +784,13 @@
   },
   {
     "id": "placements.classic_non_advantage_leads",
-    "kind": "placements_by_objective",
+    "kind": "fact",
     "applies_to": {
       "feature": "classic_placements_non_advantage_leads"
     },
-    "allowed": [
-      "publisher_platforms"
-    ],
     "status": "test",
-    "source_url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/reference/ad-account/account_controls",
+    "source_url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/bidding/value-rules.md",
     "checked_date": "2026-10-21",
-    "note": "Live check 2026-10-20/21 on a new-layout test account: the new layout applies to Advantage+ leads campaigns (advantage_state=ADVANTAGE_PLUS_LEADS); non-Advantage+ Leads campaigns created via API still accept classic publisher_platforms."
+    "note": "Live check 2026-10-20/21 on a new-layout test account (not stated on a docs page): the new layout applies to Advantage+ leads campaigns (advantage_state=ADVANTAGE_PLUS_LEADS); non-Advantage+ Leads campaigns created via API still accept classic publisher_platforms. Source URL is the related value-rules page."
   }
 ]

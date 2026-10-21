@@ -35,12 +35,20 @@ def test_registry_entries_validate_and_are_not_ga():
             "placements.classic_non_advantage_leads"} <= ids
     for r in rules:
         assert r["status"] in ("limited", "test", "deprecated"), r["id"]
-        assert r["source_url"] in NEW_URLS or r["id"].startswith("placements."), r["id"]
+        assert r["source_url"] in NEW_URLS, r["id"]
         assert "feature" in r["applies_to"], r["id"]
     by = {r["id"]: r for r in rules}
     assert by["value_rules.bid_strategy"]["allowed"] == ["LOWEST_COST_WITHOUT_CAP", "COST_CAP"]
     assert "audience_controls" in by["account_controls.post"]["required"]
-    assert "DECREASE" in by["value_rules.decrease_cap"]["note"] and "90" in by["value_rules.decrease_cap"]["note"]
+    # Факты без проверяемой формы — вид fact, а не required_field/placements.
+    for rid in ("bid_adjustments.retired", "placements.classic_non_advantage_leads",
+                "account_controls.placement_exclusions", "value_rules.decrease_cap"):
+        assert by[rid]["kind"] == "fact" and by[rid]["note"], rid
+    assert by["value_rules.decrease_cap"]["limits"] == {"DECREASE": {"max": 90}}
+    assert "facebook_rhc" in by["account_controls.placement_exclusions"]["values"]
+    assert by["bid_adjustments.retired"]["status"] == "deprecated"
+    assert "account_controls" not in by["placements.classic_non_advantage_leads"]["source_url"]
+    assert "live check" in by["placements.classic_non_advantage_leads"]["note"].lower()
 
 
 def _job(**kw):
@@ -62,3 +70,16 @@ def test_check_job_unchanged_for_existing_builder_jobs():
             _job(objective="OUTCOME_SALES", bid_strategy="LOWEST_COST_WITHOUT_CAP")]
     for j in jobs:
         assert mr.check_job(j, full) == mr.check_job(j, old)
+
+
+def test_fact_kind_requires_note_and_is_skipped_by_check_job():
+    import pytest
+    base = {"id": "f.1", "kind": "fact", "applies_to": {}, "status": "limited",
+            "source_url": "https://example.com/doc", "checked_date": "2026-10-21", "note": "text"}
+    mr.validate_rules([base])
+    for bad in ({**base, "note": ""}, {k: v for k, v in base.items() if k != "note"}):
+        with pytest.raises(mr.MetaRulesError):
+            mr.validate_rules([bad])
+    # applies_to пустой: fact подходил бы любому заданию, но check_job его не читает
+    rs = mr.RuleSet(meta={}, rules=(base,))
+    assert mr.check_job(_job(), rs) == []

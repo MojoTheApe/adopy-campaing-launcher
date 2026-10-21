@@ -8,7 +8,8 @@ LOWEST_COST_WITHOUT_CAP / COST_CAP), account controls placement exclusions,
 legacy bid_adjustments retirement, placement_soft_opt_out (up to 5%), and the
 live fact that non-Advantage+ Leads campaigns via API still accept classic
 publisher_platforms. Entries are limited/test/deprecated and scoped so existing
-builder checks are unchanged. No builder behavior change.
+builder checks are unchanged. Facts the builder cannot check yet use a new
+documentation-only `fact` kind that `check_job` skips. No builder behavior change.
 [Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1052).
 
 ## ACL-1381 — Consistent Builder ad-text wording — 2026-10-18
