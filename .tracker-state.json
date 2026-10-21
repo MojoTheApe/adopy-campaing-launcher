@@ -47030,6 +47030,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
+      },
+      "1071": {
+        "actor": "Worker-Q1021A",
+        "session": "acl_verify_tag_e51b7063",
+        "coordinator": "Coordinator-I1021A",
+        "branch": "work/acl-2071-verify-published-tag",
+        "worktree": "C:\\acl-2071",
+        "id": "6cd03b7c92f94d598290d152bc575109",
+        "issue": 1071,
+        "state": "implementing",
+        "started_at": "2026-10-21T14:37:05+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -56255,6 +56267,17 @@
         },
         "pr": 1070,
         "queued_at": "2026-10-21T14:23:24+00:00"
+      },
+      "1071": {
+        "implementers": [
+          {
+            "actor": "Worker-Q1021A",
+            "session": "acl_verify_tag_e51b7063"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-Q1021A",
+        "coordinator": "Coordinator-I1021A"
       }
     },
     "actors": {
@@ -59281,6 +59304,10 @@
       "Reviewer-S1021838": {
         "session": "run_s1021_1838",
         "role": "Reviewer"
+      },
+      "Worker-Q1021A": {
+        "session": "acl_verify_tag_e51b7063",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -107461,6 +107488,13 @@
         "issue": 19,
         "pr": 955,
         "actor": "Worker-W1021106"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-21T14:37:05+00:00",
+        "issue": 1071,
+        "claim": "6cd03b7c92f94d598290d152bc575109",
+        "actor": "Worker-Q1021A"
       }
     ],
     "policy": {
