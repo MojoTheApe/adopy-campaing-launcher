@@ -1123,11 +1123,20 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
                 if not _abandoned(job_id):
                     _jobs[job_id]["profile_closed"] = True
             _append_creative_notice(job_id, publish_api.PROFILE_CLOSED_NOTICE)
+        # Профиль, который поднял сам job, остался открытым (Stop, ACL_KEEP_PROFILES_OPEN,
+        # пробный запуск, сбой остановки): место не отпускаем, иначе очередь поднимет
+        # второй профиль поверх открытого окна (ACL-1603).
+        try:
+            started = bool(publisher.started_profile)
+        except Exception:
+            started = True
+        still_open = outcome != "closed" and started
         with _jobs_lock:
             if not _abandoned(job_id):
-                _jobs[job_id]["review_window"] = not settled
+                _jobs[job_id]["review_window"] = (not settled) or still_open
         if outcome != "closed":
-            _append_creative_notice(job_id, _api_review_window_notice(wrote=wrote, clean=clean))
+            _append_creative_notice(
+                job_id, _api_review_window_notice(wrote=wrote, clean=clean, still_open=still_open))
         _finish(job_id, cancelled=cancelled)
 
 
@@ -1140,7 +1149,13 @@ API_REVIEW_NOTICE = ("Kept the profile open for review: Meta received writes tha
                      "did not fully confirm. Check the campaigns, then close the profile.")
 
 
-def _api_review_window_notice(*, wrote: bool, clean: bool) -> str:
+API_STILL_OPEN_NOTICE = ("The profile this job started is still open, so its slot stays taken. "
+                         "Close the profile to free the slot.")
+
+
+def _api_review_window_notice(*, wrote: bool, clean: bool, still_open: bool = False) -> str:
+    if still_open and (clean or not wrote):
+        return API_STILL_OPEN_NOTICE
     if not wrote:
         return API_NO_WRITE_NOTICE
     return API_CLEAN_NOTICE if clean else API_REVIEW_NOTICE

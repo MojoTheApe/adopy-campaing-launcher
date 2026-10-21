@@ -264,6 +264,11 @@ class ApiPublisher:
         return self.cancel_event.is_set()
 
     @property
+    def started_profile(self) -> bool:
+        """Профиль поднят самим заданием (не пользователем) — ACL-1784."""
+        return bool(getattr(self._opened, "started_now", False))
+
+    @property
     def writes(self) -> int:
         """Сколько записей ушло в Meta за задание, включая с неизвестным итогом (ACL-1784)."""
         return int(getattr(self._client, "writes", 0) or 0) if self._client is not None else 0

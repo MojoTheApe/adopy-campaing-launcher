@@ -86,9 +86,14 @@ class FakePublisher:
 
     def finish_job(self, account_label, *, clean, other_job_waits=False):
         self.finish_calls.append({"clean": clean, "other": other_job_waits})
-        if clean and not other_job_waits and self.scenario.get("started_now"):
+        if (clean and not other_job_waits and self.scenario.get("started_now")
+                and not self.scenario.get("left_open")):
             return "closed"
         return ""
+
+    @property
+    def started_profile(self):
+        return bool(self.scenario.get("started_now"))
 
     def close(self, *, force=False):
         pass
@@ -203,6 +208,94 @@ def test_an_error_after_a_write_keeps_the_review_window(api_job):
     assert pj.API_REVIEW_NOTICE in job["creative_notices"]
 
 
+# ── профиль, поднятый заданием, остался открытым: место держим (ревью B1) ──
+
+def test_a_job_started_profile_left_open_without_a_write_keeps_the_slot(api_job):
+    slots, job, _ = api_job({"drafts": [{"name": "C1"}], "open_raises": True,
+                             "started_now": True, "left_open": True})
+    assert not job.get("profile_closed")
+    assert _kept(slots) == [("KLD_BFL_B96", True)]
+    assert job["review_window"] is True
+    assert pj.API_STILL_OPEN_NOTICE in job["creative_notices"]
+    assert pj.API_NO_WRITE_NOTICE not in job["creative_notices"]
+
+
+def test_a_clean_job_whose_started_profile_stays_open_keeps_the_slot(api_job):
+    slots, job, _ = api_job({"drafts": [{"name": "C1"}], "writes": 5, "result": _ok_result,
+                             "started_now": True, "left_open": True})
+    assert _kept(slots) == [("KLD_BFL_B96", True)]
+    assert pj.API_STILL_OPEN_NOTICE in job["creative_notices"]
+    assert pj.API_CLEAN_NOTICE not in job["creative_notices"]
+
+
+def test_a_user_opened_profile_still_frees_the_slot_when_left_open(api_job):
+    slots, job, _ = api_job({"drafts": [{"name": "C1"}], "open_raises": True,
+                             "started_now": False, "left_open": True})
+    assert _kept(slots) == []
+    assert pj.API_NO_WRITE_NOTICE in job["creative_notices"]
+
+
+@pytest.fixture
+def real_publisher(monkeypatch):
+    stops = []
+    monkeypatch.setattr(publish_api, "_stop_profile", lambda e, label: stops.append(label))
+    monkeypatch.setattr(publish_api, "_keep_profiles_open", lambda: False)
+    from src.fb_api import stop_log
+    monkeypatch.setattr(stop_log, "record_stop", lambda pid: None)
+
+    def make(*, dry_run=False, started=True):
+        pub = publish_api.ApiPublisher(dry_run=dry_run)
+        pub._opened = SimpleNamespace(started_now=started)
+        pub._entry = SimpleNamespace(profile_id="")
+        return pub
+
+    make.stops = stops
+    return make
+
+
+def test_real_finish_job_closes_a_job_started_profile_after_a_clean_job(real_publisher):
+    pub = real_publisher()
+    assert pub.started_profile is True
+    assert pub.finish_job("A", clean=True) == "closed"
+    assert real_publisher.stops == ["A"]
+
+
+def test_real_finish_job_leaves_the_profile_open_after_a_stop_before_the_first_write(real_publisher):
+    pub = real_publisher()
+    pub.cancel()
+    assert pub.finish_job("A", clean=True) == ""
+    assert pub.started_profile is True and real_publisher.stops == []
+
+
+def test_real_finish_job_leaves_the_profile_open_when_the_keep_open_switch_is_set(
+        real_publisher, monkeypatch):
+    monkeypatch.setattr(publish_api, "_keep_profiles_open", lambda: True)
+    pub = real_publisher()
+    assert pub.finish_job("A", clean=True) == ""
+    assert real_publisher.stops == []
+
+
+def test_real_finish_job_leaves_the_profile_open_after_a_dry_run(real_publisher):
+    pub = real_publisher(dry_run=True)
+    assert pub.finish_job("A", clean=True) == ""
+    assert real_publisher.stops == []
+
+
+def test_real_finish_job_leaves_the_profile_open_when_stopping_fails(real_publisher, monkeypatch):
+    def boom(entry, label):
+        raise RuntimeError("stop failed")
+    monkeypatch.setattr(publish_api, "_stop_profile", boom)
+    pub = real_publisher()
+    assert pub.finish_job("A", clean=True) == ""
+    assert pub.started_profile is True
+
+
+def test_started_profile_is_false_for_a_user_opened_profile(real_publisher):
+    assert real_publisher(started=False).started_profile is False
+    assert publish_api.ApiPublisher().started_profile is False
+
+
 def test_the_notices_are_english():
-    for text in (pj.API_NO_WRITE_NOTICE, pj.API_CLEAN_NOTICE, pj.API_REVIEW_NOTICE):
+    for text in (pj.API_NO_WRITE_NOTICE, pj.API_CLEAN_NOTICE, pj.API_REVIEW_NOTICE,
+                 pj.API_STILL_OPEN_NOTICE):
         assert text.isascii()

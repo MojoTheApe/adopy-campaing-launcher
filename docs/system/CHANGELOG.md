@@ -26,7 +26,9 @@ did not confirm them all. A job that wrote nothing (plan or preflight error,
 stop before the first write) or whose every campaign is created and verified
 frees its slot; it stops the profile only if the job started it, never one the
 user opened. The job panel states in English why the window was or was not
-kept. The RPA path is unchanged.
+kept. If a profile the job started stays open anyway (Stop, the keep-open
+switch, a dry run, a failed stop), the slot stays taken and the panel says the
+profile is still open. The RPA path is unchanged.
 
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
