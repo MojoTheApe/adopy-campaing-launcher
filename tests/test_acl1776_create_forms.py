@@ -850,6 +850,13 @@ def test_a_missing_or_invalid_template_and_a_double_choice_stop_the_plan(tmp_pat
         cr.plan_from_draft(_tpl_draft(tmp_path, ["aaaaaaaaaaaa"]), template_loader=lambda _i: bad)
 
 
+def test_a_saved_template_with_a_legacy_locale_still_builds_a_plan(tmp_path):
+    # ACL-2053: язык старого шаблона вне закрытого списка не должен ломать публикацию.
+    legacy = {**copy.deepcopy(ft.validate(TEMPLATE)[0]), "id": "bbbbbbbbbbbb", "locale": "ES_MX"}
+    plan = cr.plan_from_draft(_tpl_draft(tmp_path, ["bbbbbbbbbbbb"]), template_loader=lambda _i: legacy)
+    assert plan.ad_sets[0].ads[0].form_template["locale"] == "ES_MX"
+
+
 def test_a_website_ad_set_ignores_a_stray_template(tmp_path):
     tid = _saved()["id"]
     d = _draft(tmp_path, ads=1)
