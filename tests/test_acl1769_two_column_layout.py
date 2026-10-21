@@ -36,9 +36,9 @@ def _page() -> str:
 
 
 def _slot_code() -> str:
-    """Тело buildBlankSlotHTML без комментариев (в комментариях ABO упомянут словами)."""
+    """Раздел набора и тело buildBlankSlotHTML без комментариев (в комментариях ABO упомянут словами)."""
     page = _page()
-    slot = page[page.index("function buildBlankSlotHTML"):]
+    slot = page[page.index("function buildAdsetSectionHTML"):]
     slot = slot[: slot.index("// ── Tracking link save")]
     return re.sub(r"/\*.*?\*/", "", slot, flags=re.S)
 
@@ -109,7 +109,9 @@ def test_the_campaign_name_has_an_optional_override_field():
 
 def test_every_control_without_a_backend_is_disabled_and_names_its_task():
     out = json.loads(_run("--future"))
-    assert set(out) >= {"adsets", "copyAdset", "texts", "placements", "gender", "languages", "cta", "copyTo"}
+    assert set(out) >= {"texts", "placements", "copyTo"}
+    assert not {"adsets", "copyAdset"} & set(out), "ACL-1768: наборы - настоящие, а не заглушки"
+    assert not {"gender", "languages", "cta"} & set(out), "ACL-1767: это уже настоящие поля, а не заглушки"
     assert "forms" not in out, "ACL-1775: Instant Forms - настоящий выбор, а не заглушка"
     for key, v in out.items():
         for kind in ("button", "select"):
@@ -119,7 +121,7 @@ def test_every_control_without_a_backend_is_disabled_and_names_its_task():
     page = _page()
     used = set(re.findall(r"\b(?:future|futureHtml)\('([A-Za-z]+)'", page))
     assert used <= set(out), f"страница ссылается на ключи вне таблицы: {used - set(out)}"
-    assert used >= {"adsets", "copyAdset", "texts", "placements", "media", "gender", "languages", "cta", "copyTo"}
+    assert used >= {"texts", "placements", "media", "copyTo"}
 
 
 def test_old_drafts_load_without_the_new_field():
@@ -129,7 +131,8 @@ def test_old_drafts_load_without_the_new_field():
     page = _page()
     keep = page[page.index("window.cbKeep = (function () {"):]
     keep = keep[: keep.index("\n})();")]
-    assert "var VERSION = 2;" in keep, "версия хранилища сменилась — нужна миграция и её тест"
+    assert "var VERSION = 4;" in keep and "function migrate(" in keep, "ACL-1768: v3 -> v4, миграция и её тест в builder_keep_harness.cjs"
+    assert "parsed.v === 2" in keep and "parsed.v === 3" in keep, "цепочка миграций v2 -> v3 -> v4"
     assert "if (!f || !(f in data.fields)) return;" in keep, "поле, которого нет в черновике, обнулится"
 
 
@@ -193,7 +196,8 @@ def test_the_ui_shows_only_what_the_creator_sends():
     from src.fb_api import creator as cr
 
     page = _page()
-    assert cr.CTA_TYPE == "LEARN_MORE" and "'cta', 'select', 'Learn more'" in page
+    # ACL-1767: кнопка - настоящий выбор; умолчание то же, что у создателя
+    assert cr.CTA_TYPE == "LEARN_MORE" and 'data-default="LEARN_MORE"' in page
     # ACL-1775: выбор Website / Instant Form - настоящий, значения те, что шлёт создатель
     assert cr.DESTINATION == "WEBSITE" and cr.DEST_WEBSITE == "website" and cr.DEST_FORM == "instant_form"
     assert 'value="website" selected>Website<' in page and 'value="instant_form">Instant Form<' in page
@@ -203,7 +207,7 @@ def test_the_ui_shows_only_what_the_creator_sends():
     # Список ОС в карточке — тот, который создатель умеет превратить в таргетинг.
     slot = _slot_code()
     os_opts = set(re.search(r"mkSel\(idx, 'os', \[([^\]]*)\]", slot).group(1).replace("'", "").replace(" ", "").split(","))
-    assert os_opts == {"All", "iOS"}
+    assert os_opts == {"All", "iOS", "Android"}   # ACL-1767: Android - только API (в RPA пункт выключен)
     from src.fb_api.creator import targeting_for  # noqa: F401  (ветка user_os есть в создателе)
     src = (ROOT / "src" / "fb_api" / "creator.py").read_text(encoding="utf-8")
     assert 'user_os' in src and '"ios"' in src.lower()

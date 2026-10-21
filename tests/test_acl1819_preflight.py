@@ -146,6 +146,22 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
     "primary_126_warns": (_with(ads=_ad(1, body="y" * 126)), "primary_len", "warning", [2]),
     "cta_ok": (_with(), "cta_allowed", "ok", []),
     "cta_wrong": (_with(ads=_ad(0, cta="SHOP_NOW")), "cta_allowed", "error", [1]),
+    # ACL-1767: список кнопок по месту конверсии, устройства и старт набора.
+    "cta_new_website_ok": (_with(ads=_ad(0, cta="BOOK_NOW")), "cta_allowed", "ok", []),
+    "cta_order_now_not_for_forms": (_with(destination="instant_form",
+                                          ads=[{**a, "form_id": "7", "cta": "ORDER_NOW"} for a in _ok_input()["ads"]]),
+                                    "cta_allowed", "error", [1, 2]),
+    "cta_order_now_on_website_ok": (_with(ads=_ad(1, cta="ORDER_NOW")), "cta_allowed", "ok", []),
+    "devices_ok": (_with(), "devices_consistent", "ok", []),
+    "devices_ios_version_ok": (_with(os="iOS", os_min="14.0", device="mobile"), "devices_consistent", "ok", []),
+    "devices_ios_desktop": (_with(os="iOS", device="desktop"), "devices_consistent", "error", []),
+    "devices_version_needs_os": (_with(os="All", os_min="14"), "devices_consistent", "error", []),
+    "devices_version_bad": (_with(os="Android", os_min="14.x"), "devices_consistent", "error", []),
+    "start_empty_ok": (_with(), "start_time_valid", "ok", []),
+    "start_future_ok": (_with(start_time="2026-10-20T10:00", now="2026-10-12T12:00"), "start_time_valid", "ok", []),
+    "start_today_ok": (_with(start_time="2026-10-12T08:00", now="2026-10-12T12:00"), "start_time_valid", "ok", []),
+    "start_bad_format": (_with(start_time="20.10.2026 10:00", now="2026-10-12T12:00"), "start_time_valid", "error", []),
+    "start_in_the_past": (_with(start_time="2026-10-11T23:00", now="2026-10-12T12:00"), "start_time_valid", "error", []),
     "budget_ok": (_with(), "budget_set", "ok", []),
     "budget_missing": (_with(budget=None), "budget_set", "error", []),
     "budget_zero": (_with(budget="0"), "budget_set", "error", []),
@@ -183,6 +199,47 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
                                         ads=[{**a, "form_id": "7"} for a in _ok_input()["ads"]]),
                                   "link_https", None, []),
 }
+
+
+# ACL-1768: наборы. Те же фикстуры идут и через страницу (паритет), и через Python.
+def _set(name: str, ads=None, **over) -> dict:
+    base = {"name": name, "destination": "website", "age_min": 35, "age_max": 35, "os": "All",
+            "device": "", "os_min": "", "start_time": "", "ads": copy.deepcopy(ads if ads is not None else _ok_input()["ads"])}
+    base.update(over)
+    return base
+
+
+def _multi(*sets: dict, **over) -> dict:
+    inp = _ok_input()
+    inp.pop("ads")
+    inp["ad_sets"] = list(sets)
+    inp.update(over)
+    return inp
+
+
+CLIENT_CASES.update({
+    "adset_names_ok": (_with(), "adset_names_unique", "ok", []),
+    "adset_names_two_ok": (_multi(_set("A"), _set("B")), "adset_names_unique", "ok", []),
+    "adset_names_dup": (_multi(_set("A"), _set(" a ")), "adset_names_unique", "error", []),
+    "adset_has_ads_ok": (_with(), "adset_has_ads", "ok", []),
+    "adset_empty": (_multi(_set("A"), _set("B", ads=[])), "adset_has_ads", "error", []),
+    "second_set_age_bad": (_multi(_set("A"), _set("B", age_min=17, age_max=17)), "age_range", "error", []),
+    "second_set_devices_bad": (_multi(_set("A"), _set("B", os="iOS", device="desktop")),
+                               "devices_consistent", "error", []),
+    "second_set_start_past": (_multi(_set("A"), _set("B", start_time="2026-10-01T10:00"), now="2026-10-12T12:00"),
+                              "start_time_valid", "error", []),
+    "ads_numbered_across_sets": (_multi(_set("A"), _set("B", ads=_ad(0, file=""))), "media_chosen", "error", [3]),
+    "same_ad_names_in_two_sets_ok": (_multi(_set("A"), _set("B")), "ad_names_unique", "ok", []),
+    "same_ad_names_inside_a_set": (_multi(_set("A"), _set("B", ads=_ad(1, name="1000 - Text0"))),
+                                   "ad_names_unique", "error", [3, 4]),
+    "mixed_destinations_cta_per_set": (
+        _multi(_set("A"), _set("B", destination="instant_form",
+                               ads=[{**a, "form_id": "7", "cta": "ORDER_NOW"} for a in _ok_input()["ads"]])),
+        "cta_allowed", "error", [3, 4]),
+    "mixed_destinations_forms_only_for_forms": (
+        _multi(_set("A"), _set("B", destination="instant_form", ads=_ad(0, form_id="7"))),
+        "form_chosen", "error", [4]),
+})
 
 
 @pytest.mark.parametrize("name", sorted(CLIENT_CASES))
@@ -319,7 +376,7 @@ def test_a_clean_campaign_has_no_server_error(tmp_path):
     assert out.error == "" and not pf.blocks(out.audit)
     assert {v["rule"]: v["status"] for v in out.audit} == {
         "account_active": "ok", "page_ok": "ok", "pixel_ok": "ok", "country_resolves": "ok",
-        "language_resolves": "ok", "interests_resolve": "ok", "media_readable": "ok", "media_limits": "ok",
+        "language_resolves": "ok", "interests_resolve": "ok", "interests_confirmed": "ok", "media_readable": "ok", "media_limits": "ok",
         "media_vertical": "ok", "budget_min": "ok", "existing_diffs": "ok"}
 
 
