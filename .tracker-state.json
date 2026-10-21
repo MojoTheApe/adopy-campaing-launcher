@@ -56561,7 +56561,7 @@
         },
         "pr": 1072,
         "queued_at": "2026-10-21T16:01:49+00:00",
-        "reviewer": "Reviewer-S1021071"
+        "reviewer": "Reviewer-T1021071"
       }
     },
     "actors": {
@@ -59611,6 +59611,10 @@
       },
       "Reviewer-S1021071": {
         "session": "run_s1021_2071",
+        "role": "Reviewer"
+      },
+      "Reviewer-T1021071": {
+        "session": "run_t1021_2071",
         "role": "Reviewer"
       }
     },
@@ -108990,6 +108994,24 @@
         "pr": 1072,
         "lane": "316cd194f55d4844a8359c750a1ec611",
         "actor": "Reviewer-S1021071"
+      },
+      {
+        "event": "review-takeover",
+        "at": "2026-10-21T16:47:11+00:00",
+        "previous": {
+          "id": "316cd194f55d4844a8359c750a1ec611",
+          "pr": 1072,
+          "issues": [
+            1071
+          ],
+          "actor": "Reviewer-S1021071",
+          "session": "run_s1021_2071",
+          "coordinator": "Coordinator-I1021A",
+          "started_at": "2026-10-21T16:40:54+00:00",
+          "state": "reviewing"
+        },
+        "claim": "06ee0ec7688a4f40b756193647f1238b",
+        "reason": "previous reviewer ran inside the coordinator session; owner-mandated delivery queue 2026-10-21"
       }
     ],
     "policy": {
@@ -119205,13 +119227,13 @@
         "state": "reviewing"
       },
       "1072": {
-        "id": "316cd194f55d4844a8359c750a1ec611",
+        "id": "06ee0ec7688a4f40b756193647f1238b",
         "pr": 1072,
         "issues": [
           1071
         ],
-        "actor": "Reviewer-S1021071",
-        "session": "run_s1021_2071",
+        "actor": "Reviewer-T1021071",
+        "session": "run_t1021_2071",
         "coordinator": "Coordinator-I1021A",
         "started_at": "2026-10-21T16:40:54+00:00",
         "state": "reviewing"
