@@ -3555,8 +3555,9 @@ async def api_account_notes_set(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": f"{kind} is required"}, status_code=400)
     if not isinstance(text, str):
         return JSONResponse({"ok": False, "error": "text must be a string"}, status_code=400)
+    aside: dict = {}
     try:
-        notes = _account_notes.set_note(label, text, kind, if_empty=body.get("if_empty") is True)
+        notes = _account_notes.set_note(label, text, kind, if_empty=body.get("if_empty") is True, report=aside)
     except _account_notes.NoteChanged:
         # Undo не затирает свежий текст: заметку успели написать заново.
         return JSONResponse({"ok": False, "error": "The note changed meanwhile"}, status_code=409)
@@ -3565,7 +3566,12 @@ async def api_account_notes_set(request: Request) -> JSONResponse:
     except OSError:
         return JSONResponse({"ok": False, "error": "Could not save the note. Try again."}, status_code=500)
     key = _account_notes.country_key(label) if kind == "country" else label.strip()
-    return JSONResponse({"ok": True, "kind": kind, kind: label.strip(), "key": key, "text": notes.get(key, "")})
+    out = {"ok": True, "kind": kind, kind: label.strip(), "key": key, "text": notes.get(key, "")}
+    if aside.get("set_aside"):
+        # Файл заметок был испорчен и отложен в сторону: скажем об этом на странице.
+        out["set_aside"] = aside["set_aside"]
+        out["warning"] = f"Notes file was damaged; a copy was kept at {aside['set_aside']}"
+    return JSONResponse(out)
 
 
 @app.post("/api/accounts-hidden")
