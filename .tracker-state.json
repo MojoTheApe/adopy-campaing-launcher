@@ -47295,6 +47295,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
+      },
+      "1071": {
+        "actor": "Worker-Q1021A",
+        "session": "acl_verify_tag_e51b7063",
+        "coordinator": "Coordinator-I1021A",
+        "branch": "work/acl-2071-verify-published-tag",
+        "worktree": "C:\\acl-2071",
+        "id": "0817e899cdde427aaf4ae1b807202dbf",
+        "issue": 1071,
+        "state": "implementing",
+        "started_at": "2026-10-21T15:58:21+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -56536,9 +56548,13 @@
           {
             "actor": "Worker-Q1021A",
             "session": "acl_verify_tag_e51b7063"
+          },
+          {
+            "actor": "Worker-Q1021A",
+            "session": "acl_verify_tag_e51b7063"
           }
         ],
-        "state": "stopped",
+        "state": "implementing",
         "worker": "Worker-Q1021A",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -108957,6 +108973,13 @@
           },
           "report": "Assembly stopped on a source-content conflict in docs/system/CHANGELOG.md: ACL-1840 (#846) conflicts with earlier members, and ACL-106 (#955) also conflicts (both are CHANGELOG append conflicts). Per BATCH_INTEGRATION, conflicts are not resolved in the batch branch. Cancelling before main and beginning a smaller conflict-free subset of the same intake: ACL-2050, ACL-1838, ACL-1165. ACL-1840 and ACL-106 stay Approved in the intake for the next batch, after an author refresh onto the new main."
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-21T15:58:21+00:00",
+        "issue": 1071,
+        "claim": "0817e899cdde427aaf4ae1b807202dbf",
+        "actor": "Worker-Q1021A"
       }
     ],
     "policy": {
