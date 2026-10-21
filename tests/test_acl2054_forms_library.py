@@ -384,3 +384,116 @@ def test_an_unreachable_library_is_a_503_with_the_reason(team):
     backend.get = down
     resp = asyncio.run(web.api_form_templates_save(_Req(TEMPLATE)))
     assert resp.status_code == 503 and "Nothing was saved" in json.loads(resp.body)["errors"][0]
+
+
+# ── ревью-правки ──────────────────────────────────────────────────────────
+
+@pytest.fixture
+def unseeded(tmp_path, monkeypatch):
+    """Репозиторий данных с targets/ad_texts, но без form_templates.json (как в проде)."""
+    backend = tl.MemoryBackend()
+    for kind in ("targets", "ad_texts"):
+        backend.files[tl.FILES[kind][0]] = (tl._dump(tl.empty(kind)), f"seed-{kind}")
+    tl.use_backend(backend)
+    monkeypatch.setattr(tl, "_status", {})
+    d = tmp_path / "Anna"
+    d.mkdir()
+    (d / "selected_cm.txt").write_text("Anna", encoding="utf-8")
+    monkeypatch.setenv("ACL_CONFIG_DIR", str(d))
+    tl._pulled.clear()
+    yield backend
+    tl.use_backend(None)
+
+
+def test_a_library_without_the_forms_file_reads_as_empty_and_the_first_write_creates_it(unseeded, tmp_path):
+    assert ft.load() == [] and ft.get("aaaaaaaaaaaa") is None
+    view = ft.listing(force=True)
+    assert view["rows"] == [] and view["library"]["ok"] is True
+    assert "form_templates.json" not in unseeded.files
+    saved = ft.save(TEMPLATE)
+    assert saved["id"] in lib_data(unseeded)["templates"]
+    assert ft.get(saved["id"]) == saved
+
+
+def test_migration_works_against_a_library_without_the_forms_file(unseeded, tmp_path):
+    _local_file(tmp_path, [ft.validate({**TEMPLATE, "id": "111111111111"})[0]])
+    assert ft.migration_status()["uploadable"] == 1
+    assert ft.migrate_local()["uploaded"] == 1
+    assert [t["name"] for t in ft.load()] == ["Demo form"]
+
+
+def test_the_seed_script_knows_the_forms_kind():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("seed_tl", "scripts/seed_team_library.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert "form_templates" in mod.KINDS
+
+
+def test_migration_does_not_resurrect_a_template_deleted_in_the_library(team, tmp_path):
+    _, on = team
+    on("Anna")
+    saved = ft.save(TEMPLATE)
+    ft.delete(saved["id"])
+    _local_file(tmp_path, [ft.validate({**TEMPLATE, "id": "888888888888"})[0]])
+    st = ft.migration_status()
+    assert st["uploadable"] == 0
+    assert "eleted in the team library" in st["skipped"][0]["reason"]
+    assert ft.migrate_local()["uploaded"] == 0 and ft.load() == []
+
+
+def test_a_missing_template_error_points_at_the_upload(team, tmp_path):
+    from src.fb_api import creator
+    _, on = team
+    on("Anna")
+    src = open(creator.__file__, encoding="utf-8").read()
+    assert "If it was saved on this computer before the library was connected, upload it from the Forms tab" in src
+
+
+def test_mixed_case_ids_still_load_and_stay_editable(team):
+    backend, on = team
+    on("Anna")
+    rec = {**TEMPLATE, "id": "AbCdEf012345"}
+    put_raw(backend, {"AbCdEf012345": rec})
+    [row] = ft.listing()["rows"]
+    assert row["invalid"] is False and row["id"] == "abcdef012345"
+    assert ft.get("AbCdEf012345")["name"] == "Demo form"
+    ft.save({**TEMPLATE, "id": "AbCdEf012345", "headline": "Edited"})
+    assert [t["headline"] for t in ft.load()] == ["Edited"]
+    assert len(lib_data(backend)["templates"]) == 1
+    assert ft.delete("AbCdEf012345") is True
+
+
+def test_a_key_both_active_and_deleted_does_not_block_the_team(team):
+    backend, on = team
+    on("Anna")
+    put_raw(backend, {BROKEN["id"]: {**BROKEN, "privacy_url": "https://example.com/p"}},
+            {BROKEN["id"]: {"data": BROKEN, "deleted_by": "x", "deleted_at": "t"}})
+    assert [t["id"] for t in ft.load()] == [BROKEN["id"]]
+    ft.save(TEMPLATE)
+    assert len(ft.load()) == 2
+
+
+def test_editing_keeps_fields_the_editor_does_not_know(team):
+    backend, on = team
+    on("Anna")
+    saved = ft.save(TEMPLATE)
+    data = lib_data(backend)
+    data["templates"][saved["id"]]["future_field"] = {"keep": 1}
+    put_raw(backend, data["templates"])
+    ft.save({**TEMPLATE, "id": saved["id"], "headline": "Edited"})
+    assert lib_data(backend)["templates"][saved["id"]]["future_field"] == {"keep": 1}
+
+
+def test_the_list_endpoint_turns_a_local_read_failure_into_a_503(team, monkeypatch):
+    from src.web import app as web
+    monkeypatch.setattr(ft, "listing", lambda force=False: (_ for _ in ()).throw(OSError("locked")))
+    resp = web.api_form_templates_list()
+    assert resp.status_code == 503 and "could not be read" in json.loads(resp.body)["errors"][0]
+
+
+def test_local_rows_without_an_id_count_for_the_duplicate_name_check(local):
+    ft.library_path().parent.mkdir(parents=True, exist_ok=True)
+    ft.library_path().write_text(json.dumps({"templates": [{"name": "Demo form"}]}), encoding="utf-8")
+    with pytest.raises(ft.TemplateError, match="already exists"):
+        ft.save(TEMPLATE)

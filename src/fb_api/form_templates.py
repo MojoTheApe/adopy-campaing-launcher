@@ -286,6 +286,26 @@ def _atomic_json(path: Path, data: dict[str, Any]) -> None:
     _atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8"))
 
 
+def _lower_keys(snap: dict[str, Any]) -> dict[str, Any]:
+    """Ключи записей - id в нижнем регистре (как всегда читал validate); при совпадении первая запись."""
+    for part in ("templates", "deleted"):
+        fixed: dict[str, Any] = {}
+        for key, rec in snap[part].items():
+            fixed.setdefault(key.strip().lower() if isinstance(key, str) else key, rec)
+        snap[part] = fixed
+    # Побеждает активная запись: удалённая с тем же ключом не показывается.
+    for key in [k for k in snap["deleted"] if k in snap["templates"]]:
+        del snap["deleted"][key]
+    return snap
+
+
+def snapshot() -> dict[str, Any]:
+    """Локальные шаблоны машины в формате репозитория - для первого наполнения."""
+    with _transaction():
+        snap, _ = _local_read()
+    return {"version": 1, "templates": snap["templates"], "deleted": snap["deleted"]}
+
+
 def _name_of(rec: Any) -> str:
     return _s(rec.get("name")) if isinstance(rec, dict) else ""
 
@@ -301,7 +321,7 @@ def _read_copy() -> dict[str, Any]:
         return _empty()
     if not isinstance(data.get("deleted"), dict):
         data["deleted"] = {}
-    return data
+    return _lower_keys(data)
 
 
 def _apply_library(lib: dict[str, Any]) -> None:
@@ -338,6 +358,7 @@ def _local_read(strict: bool = False) -> tuple[dict[str, Any], list[Any]]:
     rows = data.get("templates") if isinstance(data, dict) else None
     for row in rows if isinstance(rows, list) else []:
         rid = row.get("id") if isinstance(row, dict) else None
+        rid = rid.strip().lower() if isinstance(rid, str) else rid
         if isinstance(rid, str) and rid and rid not in snap["templates"]:
             snap["templates"][rid] = row
         else:
@@ -345,7 +366,8 @@ def _local_read(strict: bool = False) -> tuple[dict[str, Any], list[Any]]:
     deleted = data.get("deleted") if isinstance(data, dict) else None
     if isinstance(deleted, dict):
         snap["deleted"] = deleted
-    return snap, extras
+    snap["_extras"] = extras      # для проверки имён; в файл не пишется
+    return _lower_keys(snap), extras
 
 
 def _local_write(snap: dict[str, Any], extras: list[Any]) -> None:
@@ -451,6 +473,12 @@ def listing(force: bool = False) -> dict[str, Any]:
 
 def _mutate(change, message: str):
     tl = _tl()
+    inner = change
+
+    def change(lib):                       # noqa: F811 - обёртка: ключи всегда в нижнем регистре
+        _lower_keys(lib)
+        return inner(lib)
+
     if tl.configured():
         try:
             return tl.transact(KIND, change, message)[1]
@@ -466,7 +494,9 @@ def _mutate(change, message: str):
 
 
 def _taken(lib: dict[str, Any], name: str, own: str = "") -> bool:
-    return any(k != own and _name_of(r).casefold() == name.casefold() for k, r in lib["templates"].items())
+    own = own.lower()
+    rows = [(k, r) for k, r in lib["templates"].items()] + [(None, r) for r in lib.get("_extras", [])]
+    return any(k != own and _name_of(r).casefold() == name.casefold() for k, r in rows)
 
 
 def _free_id(lib: dict[str, Any]) -> str:
@@ -504,7 +534,10 @@ def save(raw: Any) -> dict[str, Any]:
             raise TemplateError([f"At most {MAX_TEMPLATES} templates"])
         tid = tid or _free_id(lib)
         out = {**clean, "id": tid}
-        lib["templates"][tid] = _stamp(dict(out), lib["templates"].get(tid))
+        was = lib["templates"].get(tid)
+        # Поля записи, которых редактор не знает (поле из будущей версии), едут дальше.
+        merged = {**(was if isinstance(was, dict) else {}), **out}
+        lib["templates"][tid] = _stamp(merged, was)
         return out
 
     return _mutate(change, f"Save form template {clean['name']}")
@@ -581,6 +614,7 @@ def _plan_migration(local_rows: list[Any], lib: dict[str, Any]) -> tuple[list[di
     adds: list[dict[str, Any]] = []
     skipped: list[dict[str, str]] = []
     used = set(lib["templates"]) | set(lib["deleted"])
+    gone = {_name_of(rec.get("data")).casefold() for rec in lib["deleted"].values() if isinstance(rec, dict)}
     for row in local_rows:
         clean, errors = validate(row)
         name = clean["name"] or _name_of(row) or "(no name)"
@@ -591,6 +625,8 @@ def _plan_migration(local_rows: list[Any], lib: dict[str, Any]) -> tuple[list[di
             same = in_lib[key] == content_hash(clean)
             skipped.append({"name": name, "reason": "Already in the team library" if same else
                             "A template with this name and different content is already in the team library"})
+        elif key in gone:
+            skipped.append({"name": name, "reason": "Deleted in the team library — restore it from Recently deleted instead"})
         elif len(lib["templates"]) + len(adds) >= MAX_TEMPLATES:
             skipped.append({"name": name, "reason": f"The team library is full ({MAX_TEMPLATES} templates)"})
         else:

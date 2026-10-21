@@ -828,7 +828,7 @@ def test_the_missing_permission_is_only_a_warning_because_the_token_list_may_lie
 
 def test_a_missing_or_invalid_template_and_a_double_choice_stop_the_plan(tmp_path):
     d = _tpl_draft(tmp_path, ["0123456789ab"])
-    with pytest.raises(cr.PlanError, match="not found in the Forms library"):
+    with pytest.raises(cr.PlanError, match="not found in the team Forms library"):
         cr.plan_from_draft(d)
     tid = _saved()["id"]
     d2 = _tpl_draft(tmp_path, [tid])

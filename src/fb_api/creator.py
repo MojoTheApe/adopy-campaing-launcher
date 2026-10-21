@@ -302,7 +302,7 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
             elif template_id:
                 tpl = load_template(template_id)
                 if tpl is None:
-                    problems.append(f"Ad {i}: the form template was not found in the Forms library")
+                    problems.append(f"Ad {i}: the form template was not found in the team Forms library. If it was saved on this computer before the library was connected, upload it from the Forms tab")
                 else:
                     clean, errs = _ft.validate(tpl)
                     if errs:

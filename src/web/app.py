@@ -5285,6 +5285,9 @@ def api_form_templates_list(force: bool = False) -> JSONResponse:
         view = form_templates.listing(force=force)
     except form_templates.TemplateError as exc:
         return JSONResponse({"ok": False, "errors": exc.errors}, status_code=503)
+    except OSError:
+        return JSONResponse({"ok": False, "errors": ["The form template library could not be read on this computer. Try again."]},
+                            status_code=503)
     valid = {r["id"]: r["template"] for r in view["rows"] if not r["invalid"]}
     return JSONResponse({"ok": True, "templates": sorted(valid.values(), key=lambda t: t["name"].casefold()),
                          "rows": view["rows"], "deleted": view["deleted"], "library": view["library"],
