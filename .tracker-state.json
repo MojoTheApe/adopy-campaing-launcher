@@ -48080,9 +48080,11 @@
         "worktree": "/Users/dmitry.o/Documents/ChatGPT/ACL/tmp/acl-2079-isolated-process-support",
         "id": "de604ff03d72482290f410e51c760efa",
         "issue": 1079,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T23:52:18+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 1080,
+        "report": "ACL-2079 refreshed source handoff by actual original Worker-V7Q2R8 after genuine Reviewer-H8K4N7 completed source-review return for changed main. Same original branch/task/PR1080; new actual claimde604ff03d72482290f410e51c760efa. Current head2c71d1bde0ee190b1123c4dcd1936b8d19d555b3, tree9af89d5bc9c17df277decdda8fe517fd52485722, actualmain/basee8bf31f8921ec6a8f79c824f39c1fc3beff2f359. Merge parents preserve prior source3b7253f053294c5118ba4ea640c65c9a23ac02b7 and accepted newmain. All seven new main product/docs/test files are included byte-identical. The diff against current main remains16 support/instruction files; the only new author content since the original candidate is the explicit current-base/history paragraph in PROCESS_SUPPORT_ACL.md.\n\nSame accepted published Master1.8.0 fddcdd0d60db2e14cce0a53e6af23e12356c3bc7 / Tracker3.10.0 e71c9829247e60d79031dbb1bb038896fcedf4cc, exact canonical closure/baseline, local template conflict resolutions, three descriptor fields and byte-identical Trackerconfig. Current-base product/config/dependencies/build/parser/scripts/adoptionguard and existing release/verification/publication workflows remain unchanged. Fresh affected Master-adoption/workflow suite80passed7.15seconds, freshscanner/diffcheck passed. Original frozen731toolingtests/5manifesttests and all16 original native checks (Linux, Windows and installer included) are historical evidence for3b/64e, not approval of this changed baseline. New required hostedCI is running on2c71d1bd and must finish normally. Maintained current selection is idempotent.\n\nFresh actual independent whole-original-Issue source review and supported canonical proof/current scope are required, followed by source approval only when current requiredCI passes. Do not directmergeSourcePR, take foreign owners/intake/requests, infer oldsourceapproval, select optional policies or request product installer for this canonical process-support scope. Shared reader installation still awaits the owner's concrete transfer approval; no isolated receipt writer is active. Genuine ordinary frozen integration/combined review/actual main proof and remaining native acceptance/rollout remain required. ACL2071 separate supplemental completion and ACL2069 original developer/scope remain intact."
       }
     },
     "tasks": {
