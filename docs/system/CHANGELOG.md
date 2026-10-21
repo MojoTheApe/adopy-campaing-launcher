@@ -1,5 +1,25 @@
 # System history
 
+## ACL-2054 — Shared team library of Instant Form templates and a Forms tab — 2026-10-21
+
+Form templates become a third team library kind (`form_templates.json` in the data
+repository, keyed by template id) with the rules of targets and ad texts: every change
+goes straight to the repository with a sha check and retry, delete is soft with
+Recently deleted and Restore, publishing reads a local copy
+(`form_templates_library.json`), and without `ACL_LIBRARY_REPO`/`ACL_LIBRARY_TOKEN`
+everything works on the machine-local `form_templates.json` as before. `save`, `load`,
+`get` and `delete` keep their signatures, so plan building is unchanged. Entries that
+fail `form_templates.validate` are never dropped or erased by a later write: they stay
+in the file, show as invalid in the list and are not offered to the builder or the
+robot until fixed. New Forms tab: list (name, author, last change, locale, contact
+fields and question count), New, Edit, Duplicate, Delete, Recently deleted/Restore;
+the editor states that forms already created on Pages do not change. When the
+library is connected, machine-local templates are offered for explicit upload ("Upload
+N local templates to the team library"), duplicates by name and content are skipped
+and reported, and the local file is kept. The builder picker reads the same list.
+Import from a Page is a separate step that depends on ACL-2053.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1054).
+
 ## ACL-1381 — Consistent Builder ad-text wording — 2026-10-18
 
 Complete the older text-label request while preserving ACL-1769's later numbered
