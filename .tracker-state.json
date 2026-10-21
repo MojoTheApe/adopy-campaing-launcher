@@ -46909,9 +46909,11 @@
         "worktree": "C:\\acl-int-w377",
         "id": "80fae1fb1ff84648bb871e0dd8360249",
         "issue": 377,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T10:05:27+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 935,
+        "report": "# ACL-1377 handoff (approval baseline refresh)\n- Change: only a merge of main (ea41acbf960f53cdd0486c50dda491ec3981dfcf) into the PR #935 branch. Merge was clean, no conflicts, no content changes of my own.\n- Previous head: e548e74f96f1642e2e18aaa98b2c549801f208e6. New head: 33e09b6791038d25560d7a42548cc7dd46e7311d.\n- `git diff main...HEAD --stat`: only the task files (src/web/app.py, src/web/templates/report.html, tests/test_dashboard_review.py, tests/test_the_account_tree_on_screen.py).\n- Tests run: tests/test_dashboard_review.py tests/test_the_account_tree_on_screen.py -> 144 passed.\n- Needs fresh independent review against current main."
       }
     },
     "tasks": {
