@@ -46921,20 +46921,6 @@
         "state": "implementing",
         "started_at": "2026-10-21T10:15:15+00:00",
         "from_status": "status:todo"
-      },
-      "558": {
-        "actor": "Worker-A1021558",
-        "session": "run_a1021_558w",
-        "coordinator": "Coordinator-A1021A",
-        "branch": "work/acl-1558-scrubber-shapes",
-        "worktree": "C:\\acl-rv-558",
-        "id": "aa8e8a3f91134445b1712a26aa0540b4",
-        "issue": 558,
-        "state": "handoff",
-        "started_at": "2026-10-21T11:16:56+00:00",
-        "from_status": "status:todo",
-        "pr": 963,
-        "report": "ACL-1558 handoff (resume of review tail, owner instruction 2026-10-21).\nPR 963, branch work/acl-1558-scrubber-shapes, head d120b75c. Merged work/main ea41acbf (--no-ff) into the existing PR branch.\nConflicts: only docs/system/CHANGELOG.md; kept both sides (ACL-1558 entry plus main's ACL-1381 and ACL-1971 entries). No code conflicts.\nOne extra change: the scrubber test used the synthetic key act_123456789012345, which scripts/acl_scan_secrets.py flagged as an ad account id; replaced with the allowlisted placeholder act_1234567890123456 (no behavior change).\nTests run: 415 passed (scrubber, telemetry, sentry, run summary tests incl. test_acl1558_scrubber_shapes and the no-hang test); after the test edit, the 1558 and no-hang tests re-run: 75 passed. acl_scan_secrets.py: clean.\nFull suite not run locally; CI is the acceptance signal. No owner live check needed (scrubber code only)."
       }
     },
     "tasks": {
@@ -54149,25 +54135,25 @@
             "session": "run_a1021_558w"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-A1021558",
         "coordinator": "Coordinator-A1021A",
         "handoff": {
-          "actor": "Worker-W1558M",
-          "session": "622fd2f5-ec4b-4ed3-9102-43e164915329",
-          "coordinator": "Coordinator-M1011A",
+          "actor": "Worker-A1021558",
+          "session": "run_a1021_558w",
+          "coordinator": "Coordinator-A1021A",
           "branch": "work/acl-1558-scrubber-shapes",
-          "worktree": "C:\\acl-1558",
-          "id": "af427451e1d04e74904f49c784113c47",
+          "worktree": "C:\\acl-rv-558",
+          "id": "aa8e8a3f91134445b1712a26aa0540b4",
           "issue": 558,
           "state": "handoff",
-          "started_at": "2026-10-17T06:18:19+00:00",
+          "started_at": "2026-10-21T11:16:56+00:00",
           "from_status": "status:todo",
           "pr": 963,
-          "report": "ACL-1558 handoff to review.\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/963, branch work/acl-1558-scrubber-shapes, head bbf18a02, base af0ade29 (work/main).\nDone: bare EAA token -> <token>; user:pass@host[:port] -> <user>:<hidden>@host[:port] (host kept); dict keys with act_/6+ digit ids, emails, int ids scrubbed in scrub_diag (Sentry contexts) and fb_api scrub_value; collisions keep both entries. All patterns bounded, linear.\nChecks: touched scrubber/telemetry/sentry tests 376 passed locally, no-hang test green with new probes; full suite left to GitHub CI.\nPre-review: independent read-only subagent, round 1 request changes (7 findings, fixed), round 2 approve on bbf18a02; remaining low trade-offs listed in PR.\nRemaining: official source review; nothing live verified (not needed: scrubber code only)."
+          "report": "ACL-1558 handoff (resume of review tail, owner instruction 2026-10-21).\nPR 963, branch work/acl-1558-scrubber-shapes, head d120b75c. Merged work/main ea41acbf (--no-ff) into the existing PR branch.\nConflicts: only docs/system/CHANGELOG.md; kept both sides (ACL-1558 entry plus main's ACL-1381 and ACL-1971 entries). No code conflicts.\nOne extra change: the scrubber test used the synthetic key act_123456789012345, which scripts/acl_scan_secrets.py flagged as an ad account id; replaced with the allowlisted placeholder act_1234567890123456 (no behavior change).\nTests run: 415 passed (scrubber, telemetry, sentry, run summary tests incl. test_acl1558_scrubber_shapes and the no-hang test); after the test edit, the 1558 and no-hang tests re-run: 75 passed. acl_scan_secrets.py: clean.\nFull suite not run locally; CI is the acceptance signal. No owner live check needed (scrubber code only)."
         },
         "pr": 963,
-        "queued_at": "2026-10-17T06:39:50+00:00",
+        "queued_at": "2026-10-21T11:31:38+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -61677,7 +61663,8 @@
     "review_queue": [
       1050,
       1053,
-      1054
+      1054,
+      558
     ],
     "review": null,
     "history": [
@@ -105684,6 +105671,13 @@
           },
           "report": "Intake cancelled by Coordinator-C1021B: created for a 5-task batch (891 992 784 854 855); 4 of 5 sources are stale against current main. Re-intake against all Approved to select an eligible batch."
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-21T11:31:38+00:00",
+        "issue": 558,
+        "pr": 963,
+        "actor": "Worker-A1021558"
       }
     ],
     "policy": {
