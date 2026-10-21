@@ -47038,9 +47038,11 @@
         "worktree": "C:\\acl-int-w1165",
         "id": "15a71cb9e78d4965b19b7d67ebe39dda",
         "issue": 165,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T13:48:39+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 953,
+        "report": "ACL-1165 / PR #953: refresh of approval baseline only, no content change.\n- Merged origin/main (0ea237b0) into codex/acl-1165-attach-attempt-log: old head 8418a7b2, new head 40697868.\n- One conflict, docs/system/CHANGELOG.md (append vs append); kept both entries. No code conflicts.\n- Diff vs origin/main: only CHANGELOG.md, src/fb_ads_rpa/browser.py, tests/test_the_first_attach_attempt_is_not_logged_as_a_verdict.py.\n- Tests: py -m pytest tests/test_the_first_attach_attempt_is_not_logged_as_a_verdict.py -> 3 passed.\n- CI on new head: all green (linux x3, windows, ACL verification, tooling, installer) except tracker-link, which failed only because the task was not yet in Review; to be rerun after handoff."
       },
       "19": {
         "actor": "Worker-W1021106",
