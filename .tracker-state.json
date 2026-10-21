@@ -47039,9 +47039,11 @@
         "worktree": "C:\\acl-int-w106",
         "id": "f77c0dd76a53486baf1dd56982c0ca94",
         "issue": 19,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T14:03:50+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 955,
+        "report": "ACL-106 refresh: merged origin/main (0ea237b0) into codex/acl-106-empty-period-owner. Old head 64499cb3, new head 56aad18d.\nOnly conflict: docs/system/CHANGELOG.md append; kept both entries. No content change otherwise.\nDiff vs main: 5 task files only (CHANGELOG, PROJECT.md, src/web/app.py, report.html, tests/test_empty_period_owner.py).\nTests: py -m pytest tests/test_empty_period_owner.py -> 10 passed.\nCI on 56aad18d: all pass (windows, linux 1/2/3, installer, descriptor, process) except tracker-link, which failed only because the task was not yet in Review."
       }
     },
     "tasks": {
