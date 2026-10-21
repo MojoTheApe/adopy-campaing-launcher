@@ -47053,6 +47053,18 @@
         "state": "implementing",
         "started_at": "2026-10-21T14:03:50+00:00",
         "from_status": "status:todo"
+      },
+      "1069": {
+        "actor": "Worker-P1021A",
+        "session": "acl2069_engine_pin_e51b7063",
+        "coordinator": "Coordinator-I1021A",
+        "branch": "work/acl-2069-engine-pin",
+        "worktree": "C:\\acl-2069",
+        "id": "b058d180bbf84817929def22fba5ff0f",
+        "issue": 1069,
+        "state": "implementing",
+        "started_at": "2026-10-21T14:06:02+00:00",
+        "from_status": "status:backlog"
       }
     },
     "tasks": {
@@ -56254,6 +56266,17 @@
           "from_status": "status:idea",
           "report": "# ACL-2063 paused by owner 2026-10-21: Delivery queue first\n\nWork saved on branch work/acl-2063-scheduled-account-reads (pushed to MojoTheApe, no PR), head 0454a2f6, base main ea41acbf, worktree C:\\acl-auto-read.\nDone: design + plan (docs/superpowers/...), Task 1 structure-only read (f34c3466, 893d5402, reviewed, fixes applied), Task 2 refresh queue (170d5b22, 0454a2f6).\nOpen Task 2 re-review findings (must be fixed before Task 3):\n1. Critical: a successful forced read of another account clears a checkpoint halt raised by a different profile; checkpoint halts must lift only for the halting account (store kind+account in the halt).\n2. start() after a timed-out stop() leaves no worker (_stop stays True).\n3. Halt is in-memory per process; checkpoint stop must persist (write stop into attempt) and be honoured after restart / by the other dashboard process.\n4. attention/schedule re-read accounts whose last attempt failed recently; skip if the failed attempt is younger than FRESH_S.\n5. Freshness checked only at enqueue; re-check at pop.\nMinor: cooldown from text must be max(text, COOLDOWN_S); partial with logged_out/page_unresponsive \u2192 account; forced request for the running account is dropped; schedule entries need a window tag; row stays \"updating\" on BaseException.\nRemaining: Tasks 3-8 of the plan, merge current main, PR, review. No live runs were done."
         }
+      },
+      "1069": {
+        "implementers": [
+          {
+            "actor": "Worker-P1021A",
+            "session": "acl2069_engine_pin_e51b7063"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-P1021A",
+        "coordinator": "Coordinator-I1021A"
       }
     },
     "actors": {
@@ -59271,6 +59294,10 @@
       },
       "Worker-W1021106": {
         "session": "run_w1021_106",
+        "role": "Worker"
+      },
+      "Worker-P1021A": {
+        "session": "acl2069_engine_pin_e51b7063",
         "role": "Worker"
       }
     },
@@ -107353,6 +107380,13 @@
         "issue": 19,
         "claim": "f77c0dd76a53486baf1dd56982c0ca94",
         "actor": "Worker-W1021106"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-21T14:06:02+00:00",
+        "issue": 1069,
+        "claim": "b058d180bbf84817929def22fba5ff0f",
+        "actor": "Worker-P1021A"
       }
     ],
     "policy": {
