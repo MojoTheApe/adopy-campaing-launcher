@@ -63256,21 +63256,7 @@
       840,
       19
     ],
-    "review": {
-      "id": "40bcf098074045179dedfaf148383372",
-      "batch_id": "21ad574948cf4aa7bff078d191c31d9f",
-      "pr": 1077,
-      "issues": [
-        1050,
-        838,
-        165
-      ],
-      "actor": "Reviewer-L1021B77",
-      "session": "run_l1021_b77",
-      "coordinator": "Coordinator-I1021A",
-      "state": "reviewing",
-      "started_at": "2026-10-21T22:51:01+00:00"
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -110905,6 +110891,12 @@
           "state": "reviewing",
           "started_at": "2026-10-21T22:51:01+00:00"
         }
+      },
+      {
+        "event": "batch-review-returned",
+        "at": "2026-10-21T23:11:09+00:00",
+        "batch_id": "21ad574948cf4aa7bff078d191c31d9f",
+        "report": "Integration review of PR1077 (batch 21ad574948cf4aa7bff078d191c31d9f, head a5359f68, tree 47adbe5d, main 64e73a1e) returned for rebuild: required combined CI is red, so the candidate cannot be approved.\n\nContent review found no defect: composition is main + exactly three clean merge commits of the frozen tips 988c551a/8a4fd24e/255d715f in order (remerge-diff empty), final tree equals the union of the three source diffs, PR lines and the stored delivery request (requested, complete-delivery.yml, \"Verify published Windows package\") are correct, the three changes do not interact, UI text is English, no leaked ids.\n\nCI: CI run 39688853853 failed on attempt 1 (linux tests 3.13 shard 3) and on the single allowed full rerun, attempt 2 (linux tests 3.11 shard 3), both with tests/test_additional_ad_without_creative_has_no_text.py::test_an_ad_whose_creative_failed_gets_no_text_attempt ('ad2_creative_upload:library_has_no_copy ...' instead of 'ad2_creative_upload'). Installer run 39688853841 and Windows tests passed.\n\nCause (reproduced locally on main 64e73a1e too): test isolation on main, not a member defect. tests/test_bench_b97_picker_and_crop_1007.py leaves meta_dom's thread-local _upload_why_tls (last_upload_why) set to library_has_no_copy; tests/conftest.py _crop_and_media_refusal_state_per_test (ACL-2073) resets crop_step and _media_refusal_tls/_reuse_state but not _upload_why_tls. `pytest tests/test_bench_b97_picker_and_crop_1007.py tests/test_additional_ad_without_creative_has_no_text.py` fails on both main and the candidate. The batch's two new test files shift the loadfile shard partition so both files land in one worker.\n\nRequired: a separate reviewed test-isolation fix on main (reset meta_dom._set_upload_why(None) in that conftest fixture), then batch refresh/rebuild on the new main, fresh combined CI and a fresh independent integration review. No member author return is needed."
       }
     ],
     "policy": {
@@ -121248,7 +121240,7 @@
       "id": "21ad574948cf4aa7bff078d191c31d9f",
       "actor": "Coordinator-I1021A",
       "session": "run_i1021a_1021",
-      "state": "reviewing",
+      "state": "fixing",
       "issues": [
         1050,
         838,
@@ -121394,7 +121386,27 @@
       "started_at": "2026-10-21T22:45:13+00:00",
       "pr": 1077,
       "entered_stage": false,
-      "history": [],
+      "history": [
+        {
+          "review": {
+            "id": "40bcf098074045179dedfaf148383372",
+            "batch_id": "21ad574948cf4aa7bff078d191c31d9f",
+            "pr": 1077,
+            "issues": [
+              1050,
+              838,
+              165
+            ],
+            "actor": "Reviewer-L1021B77",
+            "session": "run_l1021_b77",
+            "coordinator": "Coordinator-I1021A",
+            "state": "reviewing",
+            "started_at": "2026-10-21T22:51:01+00:00"
+          },
+          "reason": "Integration review of PR1077 (batch 21ad574948cf4aa7bff078d191c31d9f, head a5359f68, tree 47adbe5d, main 64e73a1e) returned for rebuild: required combined CI is red, so the candidate cannot be approved.\n\nContent review found no defect: composition is main + exactly three clean merge commits of the frozen tips 988c551a/8a4fd24e/255d715f in order (remerge-diff empty), final tree equals the union of the three source diffs, PR lines and the stored delivery request (requested, complete-delivery.yml, \"Verify published Windows package\") are correct, the three changes do not interact, UI text is English, no leaked ids.\n\nCI: CI run 39688853853 failed on attempt 1 (linux tests 3.13 shard 3) and on the single allowed full rerun, attempt 2 (linux tests 3.11 shard 3), both with tests/test_additional_ad_without_creative_has_no_text.py::test_an_ad_whose_creative_failed_gets_no_text_attempt ('ad2_creative_upload:library_has_no_copy ...' instead of 'ad2_creative_upload'). Installer run 39688853841 and Windows tests passed.\n\nCause (reproduced locally on main 64e73a1e too): test isolation on main, not a member defect. tests/test_bench_b97_picker_and_crop_1007.py leaves meta_dom's thread-local _upload_why_tls (last_upload_why) set to library_has_no_copy; tests/conftest.py _crop_and_media_refusal_state_per_test (ACL-2073) resets crop_step and _media_refusal_tls/_reuse_state but not _upload_why_tls. `pytest tests/test_bench_b97_picker_and_crop_1007.py tests/test_additional_ad_without_creative_has_no_text.py` fails on both main and the candidate. The batch's two new test files shift the loadfile shard partition so both files land in one worker.\n\nRequired: a separate reviewed test-isolation fix on main (reset meta_dom._set_upload_why(None) in that conftest fixture), then batch refresh/rebuild on the new main, fresh combined CI and a fresh independent integration review. No member author return is needed.",
+          "at": "2026-10-21T23:11:09+00:00"
+        }
+      ],
       "delivery_request": {
         "schema_version": 1,
         "state": "requested",
