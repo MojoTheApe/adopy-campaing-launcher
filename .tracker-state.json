@@ -55828,7 +55828,7 @@
             "session": "run_p1021_2050"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-P10212050",
         "coordinator": "Coordinator-P1021A",
         "handoff": {
@@ -55846,7 +55846,8 @@
           "report": "ACL-2050 done: PR #1058, head b6fe1a3a. API builder read-back verifies Meta kept manual placements (advantage_placement_state, positions) and reports value rules / audience flag as diagnostics. Tests: tests/test_acl2050_placement_readback.py (6 pass) + affected creator tests; env-only failures (fastapi/openpyxl absent locally); full suite in CI. Remaining: live confirmation that value_rules_applied/value_rule_set_id/advantage_state_info fields read back without a Graph error on a new-layout account."
         },
         "pr": 1058,
-        "queued_at": "2026-10-21T08:13:17+00:00"
+        "queued_at": "2026-10-21T08:13:17+00:00",
+        "reviewer": "Reviewer-P1021B2050"
       },
       "1052": {
         "implementers": [
@@ -58872,6 +58873,10 @@
       "Coordinator-I1021A": {
         "session": "run_i1021a_1021",
         "role": "Coordinator"
+      },
+      "Reviewer-P1021B2050": {
+        "session": "rev_p1021b_2050",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -61767,7 +61772,6 @@
       }
     },
     "review_queue": [
-      1050,
       1053,
       1054
     ],
@@ -106422,6 +106426,13 @@
           "entered_stage": false,
           "history": []
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-21T12:35:08+00:00",
+        "pr": 1058,
+        "lane": "63d52ce6355b4240aaa136de592a40d8",
+        "actor": "Reviewer-P1021B2050"
       }
     ],
     "policy": {
@@ -116668,6 +116679,18 @@
         "session": "rev_p1021_2052",
         "coordinator": "Coordinator-P1021A",
         "started_at": "2026-10-21T09:47:33+00:00",
+        "state": "reviewing"
+      },
+      "1058": {
+        "id": "63d52ce6355b4240aaa136de592a40d8",
+        "pr": 1058,
+        "issues": [
+          1050
+        ],
+        "actor": "Reviewer-P1021B2050",
+        "session": "rev_p1021b_2050",
+        "coordinator": "Coordinator-P1021B",
+        "started_at": "2026-10-21T12:35:08+00:00",
         "state": "reviewing"
       }
     },
