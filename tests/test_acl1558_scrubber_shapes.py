@@ -85,7 +85,7 @@ def test_proxy_credentials_are_hidden_and_the_host_is_kept(raw, expected):
     "write to support@example.com please",
     "mailto:support@example.com",
     "step 12:30 done, retry at 13:00",
-    r"saved to C:\Users\demo@corp\out.txt",
+    r"saved to C:\Users\demo@corp\out.txt",  # linux-ok: scrubber input string, not a real path
     "https://example.com/path",
     "time 10:15 user@ host",
     "email:john@example.com sent",
