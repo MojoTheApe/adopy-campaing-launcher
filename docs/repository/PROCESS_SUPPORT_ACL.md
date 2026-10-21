@@ -1,5 +1,59 @@
 # ACL canonical support and the product boundary
 
+## ACL-2079: isolated manual verification support
+
+This separate support update selects published Master1.8.0
+`fddcdd0d60db2e14cce0a53e6af23e12356c3bc7` (release420144866) and
+Tracker3.10.0 `e71c9829247e60d79031dbb1bb038896fcedf4cc` (release420140493).
+Actual upstream main checks and clean immutable no-override Python3.9 pair
+39691739580 passed. The canonical skill mirror/catalog is verified at1.0.23.
+The earlier ACL-2026 scope, owners, counts and evidence below remain history;
+they are not silently reused as approval of this new task.
+
+Compare the complete new source against actual main
+`64e73a1e151b6611517cd9643dfb911ef54d6832`. The maintained renderer/merger stopped
+at two genuine local conflicts. Explicit resolution preserves the descriptor
+workflow's master compatibility push, draft validation, permissions, jobs and
+concurrency; only its exact Master Action pin changes. VERIFICATION preserves
+ACL's local navigation, stronger fast/full policy and absent optional-CI selection;
+only its exact standard links change. Both canonical old/new template files differ
+solely in that pin. The maintained writer installs the generated plan and exact
+canonical new baseline after validation; local exceptions remain local exceptions.
+No upstream generator, exported helper or baseline provenance is hand-authored.
+
+Tracker config is byte-identical. The descriptor changes only standard revision,
+standard version and Tracker revision. Preserve the guarded operator wrapper,
+active adoption record, execution3/5/5/5, disabled Stage with permanent stage,
+all targets/checks/authorization, aliases/offset, optional-policy absence and
+incumbent claims, frozen batches, original scopes and delivery requests. No state
+migration, takeover, native retry-policy activation or new controller is selected.
+ACL-2069/PR1070 retains its original developer, source and separate acceptance.
+
+Product, configuration, packaging, dependencies, runtime/update scripts and all
+existing product verification/publication workflows remain unchanged. The
+manifest parser and its linked_numbers helper stay unchanged. Actual reachable
+release-governance policy gains canonical handling for the new process receipt;
+it therefore needs the affected delivery/guard regressions and required native CI,
+not a claim that all release tooling is unreachable. The new logic and all helper
+bytes come from the independently reviewed published pair. Existing product
+requests remain pending until their real configured delivery succeeds.
+
+Canonical process_support1 and instruction schema1 remain unchanged. This support
+upgrade uses normal source approval and a genuine frozen integration batch with
+independent whole-scope product-isolation review; it grants no direct-main route
+and requests no product publication. Shared reader installation must precede
+activation of new isolated receipt writers. ACL-2071's original task, main proof,
+reviewers, acceptance and successful official Windows run39684127119 remain
+separate evidence. Only after actual reader deployment and reviewed adoption may
+the supported supplemental command record its independently assessed process
+outcome. A pending old receipt remains in history; no source merge alone is Done.
+
+Worker-V7Q2R8 is the actual new task implementer in its dedicated worktree.
+Current source checks, exact scope/proof, independent review and actual main
+readback will be recorded in ACL-2079; this author report does not supply approval.
+
+## Earlier ACL-2026 evidence
+
 This document records the boundary for [ACL-2026](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1026),
 including its latest owner amendment. It is author evidence for independent review,
 not a local completion algorithm or an approval. The canonical mechanism is
