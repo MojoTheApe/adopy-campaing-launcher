@@ -47325,9 +47325,11 @@
         "worktree": "C:\\acl-shardfix",
         "id": "a4104b96d4ce429fad5ca6198da48c02",
         "issue": 1073,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T16:53:14+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 1074,
+        "report": "## Handoff ACL-2073 (Worker-F1021A, run_f1021a_1021, 2026-10-21)\n\nPR #1074, branch `work/acl-2073-shard-test-isolation`, head 662aeb6f, base main 0ea237b0. Tests only: `tests/conftest.py`, `tests/test_crop_state_does_not_leak_between_tests.py`.\n\nRoot cause: `tests/test_bench_b97_picker_and_crop_1007.py::test_crop_that_never_draws_its_cards_is_named_by_the_card` calls `crop_step.apply`, which leaves `crop_step._tls.failure = \"crop_square_card_missing\"` in the worker's main thread. When sharding (PRs adding test files) put that file in the same xdist `--dist loadfile` worker before `tests/test_media_attachment_identity.py`, the first library reuse there took the stale failure via `meta_dom._crop_refusal` -> `REUSE_DIRTY`. Consumed once, so only `[False]` failed. Production resets this state per ad (`set_plan`/`reset_attempt`); not a product bug.\n\nFix: autouse conftest fixture resets `crop_step` state (`set_plan(None)`), `meta_dom` media refusal and `_reuse_state[\"counter_missing\"]` before/after every test, only for already imported modules. Guard: two ordered tests; the second fails without the autouse reset (verified) and passes with it.\n\nChecks:\n- Before fix: b97 single test + media identity file -> 1 failed (same assertion as CI). Shard 3 list at a3c51338 contains both files.\n- After fix: b97 + media identity + guard + crop_step_original_and_story + story_not_placed_is_a_warning + crop_gate_on_every_success + acl_test_shard -> 134 passed.\n- Serial local run of the first 89 shard-3 files (CI order at a3c51338) was stopped at ~77% on the Coordinator's request after PR CI went green; it showed one failure at ~53% in a file unrelated to this change (not identified; likely a local Windows/timing test), and had not reached the media file. Not counted as evidence.\n- CI on PR #1074 (per Coordinator): Linux shards incl. (3.11, 3)/(3.13, 3) and ACL verification green."
       }
     },
     "tasks": {
