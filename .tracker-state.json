@@ -47910,9 +47910,11 @@
         "worktree": "C:\\acl-int-w1838",
         "id": "74e6a44ca1a540f5b32fd469de6d4227",
         "issue": 838,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T22:16:11+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 842,
+        "report": "ACL-1838 refresh round 2: merged origin/main (64e73a1e151b) into codex/acl-1838-country-active-line, clean merge, no conflicts, no content change.\nOld head fba8ae7d2d06; new head 8a4fd24e11793bfade0be980e449fa4ffa1aab8c (GitHub shows it on PR #842, base main).\nDiff vs main: CHANGELOG.md, PROJECT.md, report.html only. No PR tests exist; none run.\nCI: all pass except tracker-link, which fails only because the task was In Progress (\"move it to Review before a ready PR\"); rerun after handoff."
       },
       "165": {
         "actor": "Worker-W1021165",
