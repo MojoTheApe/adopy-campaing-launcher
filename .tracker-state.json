@@ -5225,21 +5225,21 @@
       },
       "846": {
         "kind": "independent-review",
+        "reviewer": "Reviewer-S1021840",
+        "implementer": "Worker-W1021840",
         "verdict": "approved",
-        "reviewer": "Reviewer-Q2001B",
-        "review_session": "q2001b-20261020",
-        "execution_lane": "bbcea4d98c114acfb962d09dde96db1b",
-        "implementer": "Worker-RH2020W",
-        "head_sha": "df22816f5be2ad23724c8c0b242018488aa46d95",
-        "base_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
-        "tree_sha": "9d79eeeed3c918f4a525c5ddbe409c61a00e61df",
-        "report": "Re-review of ACL-1840 / Issue 840 (earlier content approval by Reviewer-RV1015F, PR comment 6187249870). Scope: scoped CSS only in report.html (.amap-country > .hc.hc-after padding aligned to the connection-form .85rem inset, wrapping of footer, journal summary and body), a sanitized fixture, a Chromium geometry test and a CHANGELOG entry; English text, no secrets, one Tracker issues line. Head contains current main c6150160. Earlier requests: CHANGELOG sentence 'dormant on main' was replaced and now says the rule applies to the footer ACL-1798 mounts and is no longer dormant (fixed). The fixture is still a hand-copied subset of main's _campaign_table.html CSS rather than main's real template (non-blocking, the earlier request said 'ideally'; the copied rules match main's current .hc/.hc-foot/.hc-hist values) and its header comment still says main does not contain the component, which is stale; follow-up suggested, not blocking. Tests: tests/test_country_campaign_footer_layout.py 19 passed locally (1280/1024/320 px, light/dark, empty/populated/filtered, keyboard disclosure, focus inside card, baseline reproduces the missing inset). CI all green on this head. Not claimed: live visual check in the installed app.",
-        "main_sha": "c61501607ce11744e45add8b0d3b314368c216c5",
+        "head_sha": "01730a5cca32c3969d847b72fce461bf2a2a1dc2",
+        "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+        "tree_sha": "9b0796a16535152f042976676ec815cda8ae4cc8",
+        "review_session": "run_s1021_1840",
+        "execution_lane": "fff1d5e736494527b9b4ceadcf74c4a8",
+        "report": "Re-review of refreshed head 01730a5c (merge of main 0ea237b0 into df22816f). git show --cc shows a single hand-resolved hunk, docs/system/CHANGELOG.md, with both the ACL-1840 and ACL-1626 entries intact; report.html merged cleanly. Diff vs main is 4 files, 153 insertions: CHANGELOG, scoped .amap-country > .hc-after CSS in report.html, sanitized fixture, layout test. Scope meets Issue #840 criteria on current main: inset shared by footer, journal summary and body; focus outline stays inside the card; spacing from account rows and workbook notice; empty/populated/filtered at 1280/1024/320 in light and dark; no global summary styling. CI on this exact head passed: all jobs green (linux 1-3, windows, process instructions, ACL verification, installer verification). Note: CHANGELOG diff also carries ~19 cosmetic blank lines before unrelated headings, inherited from the previously approved df22816f; harmless.",
+        "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
         "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
         "issues": [
           840
         ],
-        "recorded_at": "2026-10-20T08:45:25+00:00",
+        "recorded_at": "2026-10-21T14:48:11+00:00",
         "issue_scopes": {
           "840": "ef493a159bfb31c8be24551b9a4f3d90b60904a49576c51b0b94efdfdf6c5d40"
         }
