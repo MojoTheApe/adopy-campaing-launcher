@@ -1073,6 +1073,11 @@ class CampaignCreator:
         check("daily_budget", str(want["daily_budget"]), str(camp.get("daily_budget") or ""))
         check("bid_strategy", BID_STRATEGY, camp.get("bid_strategy"))
         check("tag", plan.label, plan.label if plan.label in _labels(camp) else "")
+        # ACL-2050: новый макет Advantage+ - Meta может молча включить автоплощадки. Поле не вернули
+        # (старый API / нет прав) - не блокируем, а отмечаем в диагностике; ENABLED - блокирует.
+        state = _advantage_info(camp).get("advantage_placement_state")
+        if state is not None:
+            check("advantage_placement_state", "DISABLED", state)
         return checks
 
     def _adset_checks(self, plan: CampaignPlan, ad_set: AdSetPlan, targeting: dict, row: dict,
@@ -1122,6 +1127,10 @@ class CampaignCreator:
         check("instagram_positions", targeting.get("instagram_positions") or [],
               t.get("instagram_positions") or [])
         check("devices", targeting.get("device_platforms") or [], t.get("device_platforms") or [])
+        # ACL-2050: одна понятная строка, если Meta не сохранила ручные площадки (автоплощадки/другой список).
+        want_pl, got_pl = placements_text(targeting), placements_text(t)
+        if targeting.get("publisher_platforms") and want_pl != got_pl:
+            check("placements_summary", want_pl, got_pl)
         return checks
 
     # -- найденные кампания и группы против плана (до любой записи под ними)
@@ -1626,6 +1635,16 @@ class CampaignCreator:
 
         camp = self.client.get(f"/{out.campaign_id}", {"fields": CAMPAIGN_FIELDS})
         checks += self._campaign_checks(plan, camp)
+        # ACL-2050: диагностика (не блокирует): что Meta сказала про автоаудиторию и правила ставок.
+        info = _advantage_info(camp)
+        diag: dict[str, Any] = {"advantage_state": info.get("advantage_state"),
+                                "advantage_placement_state": info.get("advantage_placement_state"),
+                                "advantage_audience_state": info.get("advantage_audience_state"),
+                                "adsets_with_value_rules": 0}
+        diag["placement_state_verified"] = bool(info.get("advantage_placement_state"))
+        if info.get("advantage_audience_state") == "ENABLED":
+            out.warnings.append("Meta reports advantage_audience_state=ENABLED at campaign level; the ad sets "
+                                "were sent with Advantage+ audience off (verify in Ads Manager).")
 
         # ACL-1775: форма принадлежит Странице - читаем список форм ещё раз, уже после записи.
         page_forms = (_forms.read_page_forms(self.client, plan.page_id)
@@ -1635,6 +1654,9 @@ class CampaignCreator:
             obj = f"ad set {ad_set.name}"
             row = self.client.get(f"/{adset_id}", {"fields": ADSET_FIELDS})
             checks += self._adset_checks(plan, ad_set, targeting, row, out.campaign_id)
+            if row.get("value_rules_applied") or row.get("value_rule_set_id"):
+                diag["adsets_with_value_rules"] += 1
+                out.warnings.append(f"Meta applied bid value rules to {obj}; the builder did not set them.")
 
             ads = self.client.get_all(f"/{adset_id}/ads", {
                 "fields": "id,name,status,adset_id,adlabels{name},"
@@ -1718,15 +1740,19 @@ class CampaignCreator:
             for aobj, ad, h in image_ads:
                 check(aobj, "image_file", image_name(ad.path, files[ad.path]), names.get(h, ""))
         mismatches = [c for c in checks if not c["ok"]]
-        return {"ok": not mismatches, "checked": len(checks), "checks": checks, "mismatches": mismatches}
+        return {"ok": not mismatches, "checked": len(checks), "checks": checks, "mismatches": mismatches,
+                "diagnostics": diag}
 
 
-CAMPAIGN_FIELDS = "name,objective,status,daily_budget,bid_strategy,adlabels{name}"
+# ACL-2050: advantage_state_info и value_rules_* - только чтение, для сверки площадок после записи.
+CAMPAIGN_FIELDS = ("name,objective,status,daily_budget,bid_strategy,adlabels{name},"
+                   "advantage_state_info{advantage_state,advantage_placement_state,advantage_audience_state}")
 ADSET_FIELDS = ("name,status,campaign_id,optimization_goal,billing_event,destination_type,"
-                "promoted_object,targeting,start_time,end_time,adlabels{name}")
+                "promoted_object,targeting,start_time,end_time,adlabels{name},"
+                "value_rules_applied,value_rule_set_id")
 _PLACEMENT_FIELDS = ("publisher_platforms", "facebook_positions", "instagram_positions", "devices")
 #: Не показываем как «отличие от билдера»: имя и метку доказал поиск, остальное — сверка после записи.
-_SKIP_DIFF = {"name", "tag", "campaign_id", "schedule"}
+_SKIP_DIFF = {"name", "tag", "campaign_id", "schedule", "placements_summary"}
 _FIELD_TITLES = {"geo": "countries", "age_min": "minimum age", "age_max": "maximum age",
                  "languages": "languages", "detailed_targeting": "detailed targeting",
                  "os": "operating system", "pixel": "pixel", "conversion_event": "conversion event",
@@ -1734,6 +1760,11 @@ _FIELD_TITLES = {"geo": "countries", "age_min": "minimum age", "age_max": "maxim
                  "destination_type": "destination", "daily_budget": "daily budget",
                  "promoted_page": "Page of the ad set",
                  "bid_strategy": "bid strategy"}
+
+
+def _advantage_info(camp: dict) -> dict:
+    info = camp.get("advantage_state_info")
+    return info if isinstance(info, dict) else {}
 
 
 def _show(value: Any) -> str:
