@@ -1,76 +1,88 @@
-# Repository instructions and application changes use separate routes
+# Reviewed repository instructions
 
-[ACL-1750](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/750)
-prepares the owner's 2026-10-08 decision. The matching process policy must already
-be present in main before a source can use the new route. This adoption changes
-policy, helpers and CI, so it follows the existing stage route. Source preparation
-is not activation; [ACL-1747](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/747)
-and its draft main promotion retain their genuine old-policy handoff and the
-[BATCH_INTEGRATION.md](BATCH_INTEGRATION.md) service/state cutover gates.
+This optional route lets a complete instruction-only source PR merge to main
+without a stage or package cycle. The task, independent review and successful
+configured checks remain required. The repository owner opts in explicitly with
+matching `process_instructions` in `tracker/config.json` and
+`workflow.process_instructions` in `delivery.json`:
 
-## Instruction-only route
+```json
+{"schema_version": 1, "required_checks": ["descriptor", "tracker-link", "Process instructions"]}
+```
 
-A task that changes only normal Markdown files at `AGENTS.md`, `CLAUDE.md` or
-`docs/repository/**/*.md` follows:
+Names identify actual successful GitHub Actions checks on the exact source head.
+The list must be unique, nonblank and include `descriptor` and `tracker-link`.
+The opt-in requires an existing independent-review delivery policy; a malformed
+manual config without one fails validation. Its delivery fingerprint does not change. An absent setting
+preserves the existing legacy, execution-v1 or execution-v2/v3 lifecycle. Adoption,
+service installation and deployment require their existing explicit authorization.
+Export uses `export-template --process-instructions POLICY.json`; the exporter
+never inherits this setting from the engine configuration. Master initializer and
+validator support are tracked in [MR-16](https://github.com/MojoTheApe/master-repo/issues/16).
 
-**Claimed work -> Review -> independent review and instruction checks -> main -> Merged.**
+## Fixed eligibility
 
-Keep the real one-task source PR, Worker and independent Reviewer. The matching
-`workflow.process_instructions` and Tracker `process_instructions` objects must
-explicitly select schema1 and the actual checks `descriptor`, `tracker-link` and
-`Process instructions`. The pinned engine records current review and admits the
-source directly into main; this route does not enter Approved or a batch. Its
-normal reviewed-Merged receipt completes the instruction-only task without an
-application installer or runtime delivery claim. Review-return, author reclaim,
-fresh head/base/scope approval and normal Merged recording still apply.
+Only root `AGENTS.md`, root `CLAUDE.md`, and Markdown files beneath
+`docs/repository/` qualify. A nonempty complete diff is reconstructed from both
+immutable Git trees and verified Git blobs. Every changed file must be a normal
+non-executable regular UTF-8 file, bounded to one MiB and without binary NULs.
+Additions and deletions qualify; a rename qualifies only when both paths qualify.
+Symlinks, executable modes, unsafe paths, missing content, malformed or truncated
+trees cannot establish this route. Mixed changes, configuration, scripts, CI,
+runtime, product and other documentation retain the ordinary delivery route.
+Titles, labels, author claims and opt-out text cannot select the exception.
 
-The task's source review lane is held through the direct main merge. Under the
-prepared schema-3 policy it consumes one of five source slots; each held process
-lane blocks new intake/batch creation. Live activation follows
-[SOURCE_REVIEWS.md](SOURCE_REVIEWS.md). A staged or active
-integration candidate blocks the shortcut: changing main underneath its frozen
-baseline is not a permitted convenience. After a completed process merge, stage
-may lag only by those already-admitted instruction changes. The pinned engine's
-read-only `stage_base_compatible` gate verifies the bounded first-parent chain,
-actual process merge receipts, current task scope/policy and exact tree before
-allowing the next ordinary stage candidate or batch. It never updates or rewrites
-stage. Missing receipts, mixed content, stale scope or an unexplained divergence
-block admission; preserve the refs and inspect the failing evidence.
+The exact opt-in must already exist in both authoritative base configuration and
+base descriptor; a caller's temporary configuration cannot activate it. The
+working source includes the exact main baseline. The exported portable helper
+`tracker_process_instructions.py` exposes `policy(config)`,
+`classify(request, config, pr)` and
+`classify_local(config, repository, base_sha, head_sha)`. Classification returns
+`None` for empty or mixed diffs, a complete immutable proof for eligible changes,
+or raises `ValueError` when proof is unsafe or incomplete. The local classifier
+uses the same predicate and complete Git objects. CI separately establishes the
+actual repository, event, main/source refs and current revisions.
 
-The CI selector calls the pinned portable classifier on complete immutable Git
-commits and trees. Both base and head must have the unchanged matching process
-opt-in. A known one-task source targets current main. A main push must match the
-actual official repository, event head and fetched main ref, with the same opt-in
-already in its exact before commit. Unknown/missing history or stale refs require
-ordinary full checks. Successful classification skips Linux/Windows application
-tests and installer jobs, while the secret scan, project tooling, descriptor,
-Tracker linkage and local instruction-link checks remain applicable. These checks
-are not an independent-review or merge-admission receipt.
+## Review, merge and recovery
 
-## Application and other changes
+Create and claim the actual task before work. A process source links exactly one
+task and targets main using the normal ticket branch/title convention. Legacy
+projects retain their existing task slot and distinct independent reviewer and
+implementer attestation. Execution-v1/v2/v3 projects use the actual Worker handoff,
+Reviewer claim/session and source review lane. In v2/v3 this route goes Review to
+Merged: it cannot become Approved, enter an intake/batch or acquire Coordinator
+integration ownership. Other tasks continue to use their ordinary flow.
 
-Runtime/system/product knowledge, README, packaging, scripts, workflows, config,
-policy, dependencies and mixed changes keep the normal route:
+`record-review` binds the independent report to the exact source head, main base,
+resulting tree, complete instruction diff, task scope and process policy. Run
+`check-merge` immediately before the real merge; it verifies current main, current
+scope/dependencies, actual successful checks and current independent ownership.
+Held stage, integration or running intake work blocks process review acquisition
+and merge until that work finishes. A held process source review lane prevents
+new intake or batch claims through the same state CAS, including retained fix
+ownership. This prevents silently invalidating frozen work.
 
-**Review -> Approved -> a Coordinator's reviewed batch of at most five -> main -> verified delivery.**
+After the actual merge, use the normal reviewed `merged` dry run and apply. Its
+first parent must equal the reviewed main base, and its tree must equal the
+reviewed source tree; merge resolution or extra content invalidates the proof.
+The retained process receipt is verified review/merge evidence. It makes the task
+complete without pretending that a package was published or a deployment ran.
+Public snapshots expose only a safe completion flag; reports, manifests, sessions,
+claims and private history stay in durable private state. Dependencies and release
+readiness use the same genuine completion receipt.
 
-The [temporary selected route](POST_MAIN_DELIVERY.md) was activated on 2026-10-15
-UTC and currently omits Stage. Ordinary sources remain approval-only; only the
-genuine reserved combined batch enters main. The permanent `stage` branch/history is retained
-for the separately reviewed restoration procedure there. When staging is enabled,
-the pre-main batch route includes exact Stage verification and unchanged promotion.
+Concurrent writes fail the normal state CAS. Partial label/completion operations
+can resume without losing review or ownership. A stopped execution Reviewer may
+be replaced through the existing explicit takeover, with a fresh independent
+review of the actual merged source and first parent before completion. Old
+completed PRs cannot complete reopened execution tasks or changed task scopes.
+After a completed process merge, the next ordinary stage candidate may bridge an
+idle stage-to-main instruction gap only when the pinned helper proves the complete
+eligible diff and every intervening first-parent merge has its retained current
+verified process receipt, independent review, policy and unchanged task scope.
+Unknown commits, missing receipts or unsafe changes fail. This read-only allowance
+never resets a branch; current main remains the exact frozen candidate baseline.
+Ordinary source checks, combined review, full CI, actual stage verification and
+unchanged main promotion remain mandatory.
 
-An Approved queue may contain more than five tasks. Each batch preserves actual
-source authors and their independent reviews; combined review and complete
-applicable checks verify the assembled content. Installation, stable release,
-update/restart/recovery and employee rollout keep the existing runtime controls.
-
-Eligibility is determined from actual paths and Git blob modes, not a title,
-label or an author's claim that work is process-related. Added executable or
-symbolic-link files, moves from outside the fixed instruction paths, truncated
-API data, unknown paths and changed policy cannot use the shortcut. Deleting or
-renaming an allowed normal instruction file still needs complete proof of both
-sides. CI/policy/helper changes adopt through the ordinary route, even when their
-purpose is process improvement. Manual/release runs and stage/batch/promotion
-contexts retain complete applicable verification. Never relabel a product task
-or trim its outstanding acceptance criteria to obtain instruction completion.
+Implementation: [TT-79](https://github.com/MojoTheApe/task-tracker/issues/79).
