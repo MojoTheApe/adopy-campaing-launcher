@@ -117626,7 +117626,51 @@
         "session": "run_s1021_1165",
         "coordinator": "Coordinator-I1021A",
         "started_at": "2026-10-21T14:52:53+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 165,
+          "pr": 953,
+          "branch": "codex/acl-1165-attach-attempt-log",
+          "head_sha": "40697868a26252dbe6526135de71a1d0dd134a59",
+          "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+          "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "234afaf33da792fa11b47c0538a8af5bcf7f638df359ca829680721c26712410",
+          "review": {
+            "kind": "independent-review",
+            "reviewer": "Reviewer-S1021165",
+            "implementer": "Worker-W1021165",
+            "verdict": "approved",
+            "head_sha": "40697868a26252dbe6526135de71a1d0dd134a59",
+            "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+            "tree_sha": "86e73ca4923a553f8b4e9782a6dc23970b82afff",
+            "execution_lane": "e2174997980a4e36a04aedc21c45ea85",
+            "review_session": "run_s1021_1165",
+            "report": "Independent review of PR #953 (ACL-1165, Issue #165) at head 40697868, a refresh merge of main 0ea237b0 into the previously approved 8418a7b2. (1) Merge: git show --cc shows exactly one hand-resolved hunk, docs/system/CHANGELOG.md; main's ACL-1784 entry is intact (one occurrence, unchanged) and the ACL-1165 entry sits beside it. Diff vs main is 3 files only: CHANGELOG (+10), src/fb_ads_rpa/browser.py (+23/-4), tests/test_the_first_attach_attempt_is_not_logged_as_a_verdict.py (+80). browser.py and the test are identical to the previously approved content. (2) browser.py is log-only: in _try_attach_existing the single INFO 'attachment unavailable' line is replaced by two neutral INFO lines (strict: 'not final'; lenient: 'caller decides'), return None unchanged; in open() one log.warning is added inside the existing refusal gate (FB_RPA_ALLOW_UNPROXIED_RELAUNCH not set, profile running) immediately before the unchanged RuntimeError. No change to attach/retry control flow, the relaunch refusal, its text or the env gate, and nothing that can open or relaunch a profile outside Multilogin (the gate still refuses; no new launch path). (3) Criteria on current main: main still has the old verdict-style INFO line at browser.py:1886, so the fix is not yet present and still needed. Issue #165 expectations are met: intermediate failure is not worded as a result; the real outcome is a single WARNING with the pointer to Multilogin Desktop. (4) Tests: the 3 new caplog tests plus test_browser_relaunch_gate.py pass (16 passed) in a throwaway detached worktree of the exact head. (5) CI on exact head 40697868 (gh pr view headRefOid matches): all checks pass (ACL verification, Process instructions, descriptor, installer classify/verify, linux tests 1/2/3, windows tests, tracker-link); only build jobs skipped as not applicable. Mergeable. No findings blocking.",
+            "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              165
+            ],
+            "recorded_at": "2026-10-21T14:56:58+00:00",
+            "issue_scopes": {
+              "165": "234afaf33da792fa11b47c0538a8af5bcf7f638df359ca829680721c26712410"
+            }
+          },
+          "lane": {
+            "id": "e2174997980a4e36a04aedc21c45ea85",
+            "pr": 953,
+            "issues": [
+              165
+            ],
+            "actor": "Reviewer-S1021165",
+            "session": "run_s1021_1165",
+            "coordinator": "Coordinator-I1021A",
+            "started_at": "2026-10-21T14:52:53+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-21T14:57:36+00:00"
+        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
