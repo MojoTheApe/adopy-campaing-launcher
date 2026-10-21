@@ -54794,7 +54794,7 @@
             "session": "run_w1021_1165"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-W1021165",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -110610,6 +110610,68 @@
         "issue": 19,
         "pr": 955,
         "actor": "Worker-W1021106"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-21T22:43:05+00:00",
+        "issue": 165,
+        "pr": 953,
+        "review": {
+          "id": "4911434001dd47aeb94e8f8eeb761ba2",
+          "pr": 953,
+          "issues": [
+            165
+          ],
+          "actor": "Reviewer-K1021165",
+          "session": "run_k1021_165",
+          "coordinator": "Coordinator-I1021A",
+          "started_at": "2026-10-21T22:40:29+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 165,
+            "pr": 953,
+            "branch": "codex/acl-1165-attach-attempt-log",
+            "head_sha": "255d715f9600550820dbabf2541a3cc120a4a848",
+            "base_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+            "main_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "234afaf33da792fa11b47c0538a8af5bcf7f638df359ca829680721c26712410",
+            "review": {
+              "kind": "independent-review",
+              "implementer": "Worker-W1021165",
+              "reviewer": "Reviewer-K1021165",
+              "head_sha": "255d715f9600550820dbabf2541a3cc120a4a848",
+              "base_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+              "tree_sha": "44c17710dc312d109a2dcb82d2b28eed08a52007",
+              "verdict": "approved",
+              "execution_lane": "4911434001dd47aeb94e8f8eeb761ba2",
+              "review_session": "run_k1021_165",
+              "report": "ACL-1165 PR953 refresh review. Merge 255d715f is clean (parents 40697868 + main 64e73a1e). Diff vs main = CHANGELOG entry, browser.py log-only change, one new test. Strict/lenient attach misses now INFO without 'unavailable'; single WARNING 'attachment unavailable' only in open() right before the unchanged relaunch refusal (only when running). Attach logic, timing, refusal text and FB_RPA_ALLOW_UNPROXIED_RELAUNCH gate untouched; no ids leaked (placeholder profile ids only). Tests meaningful (3 new + relaunch gate: 16 passed). Required CI green on 255d715f incl. linux 1-3, windows, tracker-link.",
+              "main_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                165
+              ],
+              "recorded_at": "2026-10-21T22:41:35+00:00",
+              "issue_scopes": {
+                "165": "234afaf33da792fa11b47c0538a8af5bcf7f638df359ca829680721c26712410"
+              }
+            },
+            "lane": {
+              "id": "4911434001dd47aeb94e8f8eeb761ba2",
+              "pr": 953,
+              "issues": [
+                165
+              ],
+              "actor": "Reviewer-K1021165",
+              "session": "run_k1021_165",
+              "coordinator": "Coordinator-I1021A",
+              "started_at": "2026-10-21T22:40:29+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-21T22:42:38+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -115134,6 +115196,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-21T22:35:01+00:00"
+      },
+      "165": {
+        "issue": 165,
+        "pr": 953,
+        "branch": "codex/acl-1165-attach-attempt-log",
+        "head_sha": "255d715f9600550820dbabf2541a3cc120a4a848",
+        "base_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+        "main_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "234afaf33da792fa11b47c0538a8af5bcf7f638df359ca829680721c26712410",
+        "review": {
+          "kind": "independent-review",
+          "implementer": "Worker-W1021165",
+          "reviewer": "Reviewer-K1021165",
+          "head_sha": "255d715f9600550820dbabf2541a3cc120a4a848",
+          "base_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+          "tree_sha": "44c17710dc312d109a2dcb82d2b28eed08a52007",
+          "verdict": "approved",
+          "execution_lane": "4911434001dd47aeb94e8f8eeb761ba2",
+          "review_session": "run_k1021_165",
+          "report": "ACL-1165 PR953 refresh review. Merge 255d715f is clean (parents 40697868 + main 64e73a1e). Diff vs main = CHANGELOG entry, browser.py log-only change, one new test. Strict/lenient attach misses now INFO without 'unavailable'; single WARNING 'attachment unavailable' only in open() right before the unchanged relaunch refusal (only when running). Attach logic, timing, refusal text and FB_RPA_ALLOW_UNPROXIED_RELAUNCH gate untouched; no ids leaked (placeholder profile ids only). Tests meaningful (3 new + relaunch gate: 16 passed). Required CI green on 255d715f incl. linux 1-3, windows, tracker-link.",
+          "main_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            165
+          ],
+          "recorded_at": "2026-10-21T22:41:35+00:00",
+          "issue_scopes": {
+            "165": "234afaf33da792fa11b47c0538a8af5bcf7f638df359ca829680721c26712410"
+          }
+        },
+        "lane": {
+          "id": "4911434001dd47aeb94e8f8eeb761ba2",
+          "pr": 953,
+          "issues": [
+            165
+          ],
+          "actor": "Reviewer-K1021165",
+          "session": "run_k1021_165",
+          "coordinator": "Coordinator-I1021A",
+          "started_at": "2026-10-21T22:40:29+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-21T22:42:38+00:00"
       }
     },
     "batches": {
@@ -120933,62 +121039,6 @@
         "coordinator": "Coordinator-P1021A",
         "started_at": "2026-10-21T09:47:33+00:00",
         "state": "reviewing"
-      },
-      "953": {
-        "id": "4911434001dd47aeb94e8f8eeb761ba2",
-        "pr": 953,
-        "issues": [
-          165
-        ],
-        "actor": "Reviewer-K1021165",
-        "session": "run_k1021_165",
-        "coordinator": "Coordinator-I1021A",
-        "started_at": "2026-10-21T22:40:29+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 165,
-          "pr": 953,
-          "branch": "codex/acl-1165-attach-attempt-log",
-          "head_sha": "255d715f9600550820dbabf2541a3cc120a4a848",
-          "base_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
-          "main_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "234afaf33da792fa11b47c0538a8af5bcf7f638df359ca829680721c26712410",
-          "review": {
-            "kind": "independent-review",
-            "implementer": "Worker-W1021165",
-            "reviewer": "Reviewer-K1021165",
-            "head_sha": "255d715f9600550820dbabf2541a3cc120a4a848",
-            "base_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
-            "tree_sha": "44c17710dc312d109a2dcb82d2b28eed08a52007",
-            "verdict": "approved",
-            "execution_lane": "4911434001dd47aeb94e8f8eeb761ba2",
-            "review_session": "run_k1021_165",
-            "report": "ACL-1165 PR953 refresh review. Merge 255d715f is clean (parents 40697868 + main 64e73a1e). Diff vs main = CHANGELOG entry, browser.py log-only change, one new test. Strict/lenient attach misses now INFO without 'unavailable'; single WARNING 'attachment unavailable' only in open() right before the unchanged relaunch refusal (only when running). Attach logic, timing, refusal text and FB_RPA_ALLOW_UNPROXIED_RELAUNCH gate untouched; no ids leaked (placeholder profile ids only). Tests meaningful (3 new + relaunch gate: 16 passed). Required CI green on 255d715f incl. linux 1-3, windows, tracker-link.",
-            "main_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              165
-            ],
-            "recorded_at": "2026-10-21T22:41:35+00:00",
-            "issue_scopes": {
-              "165": "234afaf33da792fa11b47c0538a8af5bcf7f638df359ca829680721c26712410"
-            }
-          },
-          "lane": {
-            "id": "4911434001dd47aeb94e8f8eeb761ba2",
-            "pr": 953,
-            "issues": [
-              165
-            ],
-            "actor": "Reviewer-K1021165",
-            "session": "run_k1021_165",
-            "coordinator": "Coordinator-I1021A",
-            "started_at": "2026-10-21T22:40:29+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-21T22:42:38+00:00"
-        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
