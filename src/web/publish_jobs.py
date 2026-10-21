@@ -814,6 +814,9 @@ def _summarize_results(
         "failed_count": len(failed),
         "expected_count": expected_total,
         "campaign_names": [str(r.get("campaign_name") or "?") for r in results],
+        # ACL-1902: имя в Meta, если оно отличается от имени из билдера (имена выше - из билдера).
+        "published_as": {str(r.get("campaign_name") or "?"): str(r["published_as"])
+                         for r in results if r.get("published_as")},
         "blocking_failures": blocking_failures,
         "errors": errors,
     }
