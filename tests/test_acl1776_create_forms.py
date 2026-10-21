@@ -172,7 +172,7 @@ BAD_TEMPLATES = [
     ("junk_privacy", {"privacy_url": "https://nodot"}, "must start with https://"),
     ("no_thanks", {"thank_you_text": ""}, "Thank-you screen text is required"),
     ("http_site", {"website_url": "http://example.com"}, "Website link"),
-    ("bad_locale", {"locale": "english"}, "Locale must look like"),
+    ("bad_locale", {"locale": "english"}, "Unknown locale"),
     ("six_questions", {"questions": [{"label": f"q{i}", "type": "short_answer"} for i in range(6)]}, "At most 5"),
     ("empty_question", {"questions": [{"label": " ", "type": "short_answer"}]}, "Question 1: text is required"),
     ("one_option", {"questions": [{"label": "q", "type": "multiple_choice", "options": ["a"]}]}, "at least 2 options"),
@@ -267,6 +267,14 @@ FORM_MATRIX = [
     ("ok_json_strings", PAGE, "leadgen_forms", {**BASE, "questions": json.dumps(BASE["questions"]),
                                                 "privacy_policy": json.dumps(BASE["privacy_policy"])}, True),
     ("ok_follow_up_https", PAGE, "leadgen_forms", _p(follow_up_action_url="https://example.com/after"), True),
+    ("ok_settings_bool", PAGE, "leadgen_forms",
+     _p(is_optimized_for_quality=True, block_display_for_non_targeted_viewer=True), True),
+    ("ok_first_last_name", PAGE, "leadgen_forms",
+     _p(questions=[{"type": "FIRST_NAME"}, {"type": "LAST_NAME"}, {"type": "PHONE"}]), True),
+    ("setting_string_bool", PAGE, "leadgen_forms", _p(is_optimized_for_quality="false"), False),
+    ("setting_number_bool", PAGE, "leadgen_forms", _p(block_display_for_non_targeted_viewer=1), False),
+    ("follow_up_too_long", PAGE, "leadgen_forms", _p(follow_up_action_url="https://example.com/" + "a" * 1100), False),
+    ("first_name_with_label", PAGE, "leadgen_forms", _p(questions=[{"type": "FIRST_NAME", "label": "x"}]), False),
     ("tos_top_level", PAGE, "leadgen_forms", _p(tos_accepted=True), False),
     ("tos_false_too", PAGE, "leadgen_forms", _p(tos_accepted=False), False),
     ("tos_upper", PAGE, "leadgen_forms", _p(TOS_ACCEPTED=True), False),
@@ -355,7 +363,8 @@ def test_the_two_policy_chains_do_not_overlap():
         wp.check_form_create(PAGE, "POST", f"/{ACT}/campaigns", {"name": "x · ACL abcdef"}, pinned_page=PAGE)
     assert "tos_accepted" in wp.FORBIDDEN_ANYWHERE and "tos_accepted" not in wp.FORM_KEYS
     assert wp.FORM_KEYS == frozenset({"name", "questions", "privacy_policy", "thank_you_page", "context_card",
-                                      "question_page_custom_headline", "locale", "follow_up_action_url"})
+                                      "question_page_custom_headline", "locale", "follow_up_action_url",
+                                      "is_optimized_for_quality", "block_display_for_non_targeted_viewer"})
 
 
 def test_the_policy_does_not_mutate_the_callers_params():

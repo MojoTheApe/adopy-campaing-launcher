@@ -76,6 +76,32 @@ Parent ACL-1923 retains actual activation and publication verification.
 - Stacked on ACL-1776 (depends on the ACL-1761...1776 stack). Chunked upload for files over 200 MB
   (ACL-891) can reuse the job / progress plumbing.
 
+## Builder: form templates match buyer-made Instant Forms - ACL-2053
+
+- Compared with a live buyer form (account D71, 2026-10-20) and brought templates to parity. New optional
+  template fields (old saved templates load unchanged, with the same content hash and form name):
+  first name / last name contact fields (refused together with full name), `questions_first` (custom
+  questions before the contact fields), `intro_title` (own title of the intro card; the headline is used
+  when empty), `follow_up_action_url` (https, up to 1000 characters; the thank-you text becomes optional
+  when it is set, the thank-you screen is then skipped), `form_type` (More volume by default = 
+  `is_optimized_for_quality=false`, or Higher intent), and a locale chosen from the 32 languages Graph
+  accepts on create (default EN_US; an unknown one gives "Unknown locale").
+- Every created form now also sends `is_optimized_for_quality` and `block_display_for_non_targeted_viewer=true`.
+  The rest of the request body for an old template is byte-for-byte the same (golden test).
+- Write policy: only the three new top-level keys (`is_optimized_for_quality`, `block_display_for_non_targeted_viewer`
+  must be real booleans; `follow_up_action_url` https and length-checked) and the question types
+  FIRST_NAME / LAST_NAME were added, in Python and in the page helper. Any tos/terms key is still refused.
+- Not done, on purpose: `allow_organic_lead` - the Graph create reference lists only the deprecated
+  `allow_organic_lead_retrieval`, "no organic display" is `block_display_for_non_targeted_viewer`.
+  `context_card.cover_photo` - the reference describes it as a FILE upload (needs `pages_manage_posts`) next to
+  `cover_photo_id` (id of an already uploaded photo); that needs an upload edge and files, which the closed
+  policy forbids, so the cover image stays out. Reference:
+  https://developers.facebook.com/docs/graph-api/reference/page/leadgen_forms/
+- Multiple-choice output (`type CUSTOM`, `options [{key, value}]`) already matched Meta's shape; the keys are
+  our `question_N` / `qN_option_M` (Graph accepts any key), unchanged to keep old form names stable.
+- Tests: `tests/test_acl2053_form_parity.py` with the sanitized live form in
+  `tests/fixtures/meta/acl2053_d71_form_sanitized.json`.
+
 ## Builder: Instant Forms - the robot creates a form from a template (API backend) - ACL-1776
 
 - Owner decision 2026-10-12: the robot MAY create an Instant Form on a Page from a saved template. It
