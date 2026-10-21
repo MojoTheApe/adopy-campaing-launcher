@@ -65,6 +65,8 @@ INSIGHT_METRICS = "spend,reach,impressions,frequency,clicks"
 
 #: Какие шаги чтения бывают (ключи `Snapshot.steps`).
 STEPS = ("campaigns", "adsets", "ads", "insights_campaign", "insights_adset", "insights_ad")
+#: ACL-2063: чтение по расписанию берёт только структуру (без Insights и без периода).
+STRUCTURE_STEPS = ("campaigns", "adsets", "ads")
 
 #: Бюджет в Graph приходит в минимальных единицах валюты. Делитель берём из
 #: таблицы, а не «всегда 100»: у иены и воны копеек нет. Валюты вне таблицы
@@ -624,8 +626,11 @@ def _truncated_since(client: Any, before: int) -> bool:
     return len(getattr(client, "truncated", []) or []) > before
 
 
-def read_into(snap: Snapshot, client: Any, act: str) -> None:
+def read_into(snap: Snapshot, client: Any, act: str, *, structure_only: bool = False) -> None:
     """Чтение описи и Insights в `snap` через уже открытого клиента (только GET).
+
+    `structure_only` (ACL-2063): только кампании, ad set и объявления — ни одного
+    запроса Insights, в `snap.steps` лишь три шага.
 
     Исключения `GraphStop` (лимит, checkpoint, потолок вызовов…) шаг помечают
     `failed`, остальные шаги — `skipped`, и дальше клиент не зовётся: решение за
@@ -690,7 +695,7 @@ def read_into(snap: Snapshot, client: Any, act: str) -> None:
         if not snap.currency:
             snap.currency = next((m["currency"] for m in got.values() if m.get("currency")), "")
 
-    for step in STEPS:
+    for step in (STRUCTURE_STEPS if structure_only else STEPS):
         snap.steps[step] = "skipped"
 
     campaigns = fetch("campaigns", "campaigns", CAMPAIGN_FIELDS, "campaign")
@@ -707,9 +712,10 @@ def read_into(snap: Snapshot, client: Any, act: str) -> None:
         ads = fetch("ads", "ads", AD_FIELDS, "ad")
         if ads is not None:
             snap.ads = ads
-        insights("campaign", snap.campaigns)
-        insights("adset", snap.adsets)
-        insights("ad", snap.ads)
+        if not structure_only:
+            insights("campaign", snap.campaigns)
+            insights("adset", snap.adsets)
+            insights("ad", snap.ads)
     except GraphStop:
         # Стоп Meta (лимит, checkpoint…) не бросаем: прочитанное остаётся, снимок
         # «неполный»; причина уже в `snap.problems`, клиент больше не зовётся.
@@ -730,16 +736,22 @@ def finalize(snap: Snapshot) -> None:
         snap.problems.append(f"{len(tree['orphan_adsets'])} ad sets belong to campaigns that were not returned")
     if tree["orphan_ads"]:
         snap.problems.append(f"{len(tree['orphan_ads'])} ads belong to ad sets that were not returned")
-    clean = all(snap.steps.get(s) == "ok" for s in STEPS) and not snap.problems
+    # Структурный снимок (ACL-2063) не знает шагов Insights: «ok» — когда ok три шага.
+    needed = STEPS if "insights_campaign" in snap.steps else STRUCTURE_STEPS
+    clean = all(snap.steps.get(s) == "ok" for s in needed) and not snap.problems
     snap.state = "ok" if clean else "partial"
 
 
-def read_via_api(account: str, date_from: str, date_to: str = "") -> Snapshot:
+def read_via_api(account: str, date_from: str = "", date_to: str = "", *,
+                 structure_only: bool = False, trigger: str = "") -> Snapshot:
     """Опись аккаунта через Graph API в профиле. Тот же `_session`, что у Read spend."""
     from src.analysis_agent import account_spend_api as _api
     from src.fb_api.graph import GraphStop
 
-    date_to = date_to or date_from
+    if structure_only:
+        date_from = date_to = ""
+    else:
+        date_to = date_to or date_from
     snap = Snapshot(account=account, state="failed", date_from=date_from, date_to=date_to)
     started = time.monotonic()
     notes: dict = {}
@@ -748,7 +760,7 @@ def read_via_api(account: str, date_from: str, date_to: str = "") -> Snapshot:
         with _api._session(account) as sess:  # noqa: SLF001
             try:
                 try:
-                    read_into(snap, sess.client, sess.act)
+                    read_into(snap, sess.client, sess.act, structure_only=structure_only)
                 finally:
                     snap.calls = int(getattr(sess.client, "calls", 0) or 0)
                 if sess.client.stopped is not None:
@@ -768,9 +780,35 @@ def read_via_api(account: str, date_from: str, date_to: str = "") -> Snapshot:
         if isinstance(exc, GraphStop):
             stop = exc.kind
             _api._report_stop(exc, account)  # noqa: SLF001
+    if trigger:
+        notes = {**notes, "trigger": trigger}
     _api._telemetry("campaigns", account, snap.state != "failed", time.monotonic() - started, notes,  # noqa: SLF001
                     error=snap.error, stop=stop)
     return snap
+
+
+def run_read(account: str, *, trigger: str) -> Snapshot:
+    """Синхронное чтение только структуры (ACL-2063): без Insights, без периода.
+
+    Очередь та же, что у `start_read`: `browser_operation.reading()` и замок
+    профиля аккаунта. Результат кладётся в хранилище через `put_result`.
+    """
+    began = time.time()
+    started_at = _as._now()  # noqa: SLF001
+    try:
+        with browser_operation.reading(), _as._lock_for(account):  # noqa: SLF001
+            done = read_via_api(account, structure_only=True, trigger=trigger)
+    except Exception as exc:  # noqa: BLE001
+        done = Snapshot(account=account, state="failed", error=f"{type(exc).__name__}: {exc}")
+    done.started_at = started_at
+    done.finished_at = _as._now()  # noqa: SLF001
+    done.finished_at_utc = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    done.took_s = round(time.time() - began, 1)
+    try:
+        put_result(done)
+    except Exception:  # noqa: BLE001
+        log.exception("Could not persist the campaign inventory of %s", account)
+    return done
 
 
 def default_reader() -> Callable[[str, str, str], Snapshot]:

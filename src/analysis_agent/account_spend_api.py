@@ -607,10 +607,14 @@ def _telemetry(kind: str, account: str, ok: bool, took_s: float, sess_notes: dic
         event["error"] = error[:200]
     if stop:
         event["stop"] = stop
+    trigger = sess_notes.get("trigger")
+    if trigger:
+        event["trigger"] = trigger  # ACL-2063: чем вызвано чтение (schedule/attention/...)
     _tm.record(event)
     _as._record("api_read", ok, took_s,
                 {"account": account, "kind": kind, "source": "api",
-                 "calls": sess_notes.get("calls", 0), **({"stop": stop} if stop else {})})
+                 "calls": sess_notes.get("calls", 0), **({"stop": stop} if stop else {}),
+                 **({"trigger": trigger} if trigger else {})})
 
 
 def _report_stop(exc: BaseException, account: str) -> None:
