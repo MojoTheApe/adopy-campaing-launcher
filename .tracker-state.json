@@ -47914,20 +47914,6 @@
         "state": "implementing",
         "started_at": "2026-10-21T23:15:13+00:00",
         "from_status": "status:idea"
-      },
-      "1079": {
-        "actor": "Worker-V7Q2R8",
-        "session": "root_acl2079_20261022",
-        "coordinator": "Coordinator-R6M9H2",
-        "branch": "codex/acl-2079-isolated-process-support",
-        "worktree": "/Users/dmitry.o/Documents/ChatGPT/ACL/tmp/acl-2079-isolated-process-support",
-        "id": "40f800beeb254a04afac77e6f3c0a393",
-        "issue": 1079,
-        "state": "handoff",
-        "started_at": "2026-10-21T23:17:14+00:00",
-        "from_status": "status:todo",
-        "pr": 1080,
-        "report": "ACL-2079 genuine source handoff by Worker-V7Q2R8 from dedicated branch codex/acl-2079-isolated-process-support. Base64e73a1e151b6611517cd9643dfb911ef54d6832, head3b7253f053294c5118ba4ea640c65c9a23ac02b7, tree8096717bf6079d94da2ceac3995394f6c608bdfd. Sixteen files select published Master1.8.0 fddcdd0d60db2e14cce0a53e6af23e12356c3bc7 / Tracker3.10.0 e71c9829247e60d79031dbb1bb038896fcedf4cc and its exact generated closure/baseline. Two real local template conflicts were explicitly resolved preserving all ACL policy and changing only upstream pin references; maintained writer/idempotence verified. Root AGENTS/EARLY_ADOPTION current navigation corrected; historical evidence retained.\n\nActual local checks: frozen full existing14-module tooling731passed419.76seconds; real unchanged manifest parser5passed; after final navigation fixes80affectedtests passed4.93seconds; scanner and diffcheck passed. Exact upstream merged pair Python3.9 no-override run39691739580 passed. Product/runtime/config/dependencies/build/parser/scripts and existing product publication/verification workflows unchanged; canonical governance policy is reachable and its affected regressions apply. Config/adoption/foreign ownership/scopes/requests untouched. Complete author isolation report is docs/repository/PROCESS_SUPPORT_ACL.md. Full original Issue requirements and final immutable source need genuine independent review and process-support proof, complete required hostedCI, then source approval only. Do not direct-merge source, reuse ACL2069 ownership, take foreign integration1077, create product publication, activate optional state policy, or mark ACL2071Done from this adoption. Reader installation before new writers and normal frozen integration/combined review/actual main proof remain required. Source implementation complete; awaiting independent review and checks."
       }
     },
     "tasks": {
@@ -57267,9 +57253,25 @@
             "session": "root_acl2079_20261022"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-V7Q2R8",
-        "coordinator": "Coordinator-R6M9H2"
+        "coordinator": "Coordinator-R6M9H2",
+        "handoff": {
+          "actor": "Worker-V7Q2R8",
+          "session": "root_acl2079_20261022",
+          "coordinator": "Coordinator-R6M9H2",
+          "branch": "codex/acl-2079-isolated-process-support",
+          "worktree": "/Users/dmitry.o/Documents/ChatGPT/ACL/tmp/acl-2079-isolated-process-support",
+          "id": "40f800beeb254a04afac77e6f3c0a393",
+          "issue": 1079,
+          "state": "handoff",
+          "started_at": "2026-10-21T23:17:14+00:00",
+          "from_status": "status:todo",
+          "pr": 1080,
+          "report": "ACL-2079 genuine source handoff by Worker-V7Q2R8 from dedicated branch codex/acl-2079-isolated-process-support. Base64e73a1e151b6611517cd9643dfb911ef54d6832, head3b7253f053294c5118ba4ea640c65c9a23ac02b7, tree8096717bf6079d94da2ceac3995394f6c608bdfd. Sixteen files select published Master1.8.0 fddcdd0d60db2e14cce0a53e6af23e12356c3bc7 / Tracker3.10.0 e71c9829247e60d79031dbb1bb038896fcedf4cc and its exact generated closure/baseline. Two real local template conflicts were explicitly resolved preserving all ACL policy and changing only upstream pin references; maintained writer/idempotence verified. Root AGENTS/EARLY_ADOPTION current navigation corrected; historical evidence retained.\n\nActual local checks: frozen full existing14-module tooling731passed419.76seconds; real unchanged manifest parser5passed; after final navigation fixes80affectedtests passed4.93seconds; scanner and diffcheck passed. Exact upstream merged pair Python3.9 no-override run39691739580 passed. Product/runtime/config/dependencies/build/parser/scripts and existing product publication/verification workflows unchanged; canonical governance policy is reachable and its affected regressions apply. Config/adoption/foreign ownership/scopes/requests untouched. Complete author isolation report is docs/repository/PROCESS_SUPPORT_ACL.md. Full original Issue requirements and final immutable source need genuine independent review and process-support proof, complete required hostedCI, then source approval only. Do not direct-merge source, reuse ACL2069 ownership, take foreign integration1077, create product publication, activate optional state policy, or mark ACL2071Done from this adoption. Reader installation before new writers and normal frozen integration/combined review/actual main proof remain required. Source implementation complete; awaiting independent review and checks."
+        },
+        "pr": 1080,
+        "queued_at": "2026-10-21T23:36:33+00:00"
       }
     },
     "actors": {
@@ -63315,7 +63317,8 @@
       710,
       1069,
       840,
-      19
+      19,
+      1079
     ],
     "review": {
       "id": "81c84f5b24814b6a9e288601519a6d9a",
@@ -111010,6 +111013,13 @@
           "state": "reviewing",
           "started_at": "2026-10-21T23:30:43+00:00"
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-21T23:36:33+00:00",
+        "issue": 1079,
+        "pr": 1080,
+        "actor": "Worker-V7Q2R8"
       }
     ],
     "policy": {
