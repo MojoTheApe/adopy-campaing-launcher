@@ -46970,18 +46970,6 @@
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
       },
-      "1039": {
-        "actor": "Worker-BCHIP",
-        "session": "bchip_20261020",
-        "coordinator": "Coordinator-M1011A",
-        "branch": "work/acl-2039-builder-editor-chips",
-        "worktree": "C:\\acl-2039-builder-chips",
-        "id": "204876da555149a18bfca8d6a12b4dc3",
-        "issue": 1039,
-        "state": "implementing",
-        "started_at": "2026-10-20T12:30:12+00:00",
-        "from_status": "status:idea"
-      },
       "1050": {
         "actor": "Worker-P1021B2050",
         "session": "run_p1021b_2050",
@@ -47005,6 +46993,18 @@
         "state": "implementing",
         "started_at": "2026-10-21T12:38:29+00:00",
         "from_status": "status:todo"
+      },
+      "1039": {
+        "actor": "Worker-W1021039",
+        "session": "run_w1021_2039",
+        "coordinator": "Coordinator-I1021A",
+        "branch": "work/acl-2039-builder-editor-chips",
+        "worktree": "C:\\acl-int-w2039",
+        "id": "cc8dcbccb50b448d954fe9133e67fcd3",
+        "issue": 1039,
+        "state": "implementing",
+        "started_at": "2026-10-21T12:40:14+00:00",
+        "from_status": "status:idea"
       }
     },
     "tasks": {
@@ -55803,11 +55803,15 @@
           {
             "actor": "Worker-BCHIP",
             "session": "bchip_20261020"
+          },
+          {
+            "actor": "Worker-W1021039",
+            "session": "run_w1021_2039"
           }
         ],
         "state": "implementing",
-        "worker": "Worker-BCHIP",
-        "coordinator": "Coordinator-M1011A"
+        "worker": "Worker-W1021039",
+        "coordinator": "Coordinator-I1021A"
       },
       "1046": {
         "implementers": [
@@ -58906,6 +58910,10 @@
       },
       "Worker-W1021710": {
         "session": "run_w1021_710",
+        "role": "Worker"
+      },
+      "Worker-W1021039": {
+        "session": "run_w1021_2039",
         "role": "Worker"
       }
     },
@@ -106507,6 +106515,25 @@
         },
         "claim": "a155a25beb2f46ed88a09edeb81da12b",
         "reason": "Owner instruction 2026-10-21: previous Worker-T1020710 idle since 2026-10-20, stopped; task reassigned to Worker-W1021710"
+      },
+      {
+        "event": "takeover",
+        "at": "2026-10-21T12:40:14+00:00",
+        "issue": 1039,
+        "previous": {
+          "actor": "Worker-BCHIP",
+          "session": "bchip_20261020",
+          "coordinator": "Coordinator-M1011A",
+          "branch": "work/acl-2039-builder-editor-chips",
+          "worktree": "C:\\acl-2039-builder-chips",
+          "id": "204876da555149a18bfca8d6a12b4dc3",
+          "issue": 1039,
+          "state": "implementing",
+          "started_at": "2026-10-20T12:30:12+00:00",
+          "from_status": "status:idea"
+        },
+        "claim": "cc8dcbccb50b448d954fe9133e67fcd3",
+        "reason": "Owner instruction 2026-10-21: previous Worker-BCHIP idle since 2026-10-20, stopped; task reassigned to Worker-W1021039"
       }
     ],
     "policy": {
