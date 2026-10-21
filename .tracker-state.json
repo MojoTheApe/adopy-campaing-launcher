@@ -47304,9 +47304,11 @@
         "worktree": "C:\\acl-2071",
         "id": "0817e899cdde427aaf4ae1b807202dbf",
         "issue": 1071,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T15:58:21+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 1072,
+        "report": "ACL-2071 handoff. Branch work/acl-2071-verify-published-tag @ a3c51338, PR #1072 into main. New manual workflow verify-published-tag.yml (inputs tag + previous_tag) reuses the unchanged 'Verify published Windows package' steps through the updater trust path; complete-delivery.yml, release.yml and delivery authorization are unchanged; no tracker writes. Affected tests pass (80 and 267). The workflow is dispatch-only, so hosted proof comes from the first dispatch after integration (1064 vs 1034)."
       }
     },
     "tasks": {
