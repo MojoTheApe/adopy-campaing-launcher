@@ -10,8 +10,17 @@
 ни в запросе. Страница, не принявшая условия, - остановка с просьбой к
 человеку принять их в Meta.
 
-Хранение - `form_templates.json` в машинной папке (`get_local_config_dir()`),
-как у остальных библиотек: не в гите, у каждого байера своя.
+Хранение (ACL-2054). Библиотека шаблонов общая на всю команду - третий вид
+`team_library` (`form_templates.json` в приватном репозитории данных, ключ
+записи - id шаблона): правка сразу в репозиторий с проверкой sha, удаление
+мягкое (`deleted` + Restore). На машине лежит копия для чтения
+(`form_templates_library.json`), по ней работает публикация. Не настроена
+библиотека (нет ACL_LIBRARY_REPO / ACL_LIBRARY_TOKEN) - всё как раньше: файл
+`form_templates.json` в машинной папке (`get_local_config_dir()`).
+
+Запись, не прошедшая `validate` (старая, поправленная руками, с полем из
+будущей версии), не выбрасывается и не стирается следующей записью: она
+остаётся как есть, в списке помечается invalid, в публикацию не попадает.
 """
 from __future__ import annotations
 
@@ -216,10 +225,46 @@ def form_params(tpl: dict[str, Any]) -> dict[str, Any]:
 
 # ───────────────────────── хранилище ─────────────────────────
 
+
+#: Метки автора и времени (added_by, added_at, updated_by, updated_at) лежат рядом
+#: с содержанием, но validate их отбрасывает - на хэш формы они не влияют.
+COPY_NAME = "form_templates_library.json"
+KIND = "form_templates"
+
+_CONTACT_LABEL = {"name": "Name", "email": "Email", "phone": "Phone"}
+
+
+class TemplateError(ValueError):
+    """Шаблон не сохранён; `errors` - список по-английски."""
+
+    def __init__(self, errors: list[str]):
+        super().__init__("; ".join(errors))
+        self.errors = errors
+
+
+class LibraryUnavailable(TemplateError):
+    """Общая библиотека недоступна: ничего не сохранено."""
+
+
 def library_path() -> Path:
+    """Локальный файл шаблонов машины (до командной библиотеки и без неё)."""
     from config.paths import get_local_config_dir
 
     return Path(get_local_config_dir()) / "form_templates.json"
+
+
+def _copy_path() -> Path:
+    return library_path().with_name(COPY_NAME)
+
+
+def _tl():
+    from src.analysis_agent import team_library
+
+    return team_library
+
+
+def _team() -> bool:
+    return _tl().configured()
 
 
 @contextmanager
@@ -231,36 +276,118 @@ def _transaction():
             yield
 
 
-def _read(strict: bool = False) -> list[dict[str, Any]]:
-    path = library_path()
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return []
-    except (OSError, ValueError):
-        if strict:
-            raise
-        return []
-    rows = data.get("templates") if isinstance(data, dict) else None
-    out = []
-    for row in rows if isinstance(rows, list) else []:
-        clean, errors = validate(row)
-        if clean["id"] and not errors:
-            out.append(clean)
-    return out
+def _empty() -> dict[str, Any]:
+    return {"version": 1, "templates": {}, "deleted": {}}
 
 
-def _write(rows: list[dict[str, Any]]) -> None:
+def _atomic_json(path: Path, data: dict[str, Any]) -> None:
     from config.paths import _atomic_write
 
-    _atomic_write(library_path(), json.dumps({"templates": rows}, ensure_ascii=False, indent=2,
-                                             sort_keys=True).encode("utf-8"))
+    _atomic_write(path, json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8"))
+
+
+def _name_of(rec: Any) -> str:
+    return _s(rec.get("name")) if isinstance(rec, dict) else ""
+
+
+# ── копия библиотеки на машине ──
+
+def _read_copy() -> dict[str, Any]:
+    try:
+        data = json.loads(_copy_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return _empty()
+    if not isinstance(data, dict) or not isinstance(data.get("templates"), dict):
+        return _empty()
+    if not isinstance(data.get("deleted"), dict):
+        data["deleted"] = {}
+    return data
+
+
+def _apply_library(lib: dict[str, Any]) -> None:
+    """Свежая версия библиотеки становится копией для чтения на этой машине."""
+    with _transaction():
+        _atomic_json(_copy_path(), lib)
+
+
+def _register() -> None:
+    _tl().on_update(KIND, _apply_library, lambda: _read_copy().get("library_synced_at", ""))
+
+
+_register()
+
+
+# ── локальный файл машины ──
+
+def _local_read(strict: bool = False) -> tuple[dict[str, Any], list[Any]]:
+    """Локальный файл -> (снимок {templates: {id: запись}, deleted}, строки без id).
+
+    Строки не чистятся: битые и без id возвращаются как есть, чтобы запись
+    файла не стёрла их. `strict` - нечитаемый файл не заменяется пустым.
+    """
+    try:
+        data = json.loads(library_path().read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        data = {}
+    except (OSError, ValueError) as exc:
+        if strict:
+            raise OSError("The local form template file could not be read") from exc
+        data = {}
+    snap = _empty()
+    extras: list[Any] = []
+    rows = data.get("templates") if isinstance(data, dict) else None
+    for row in rows if isinstance(rows, list) else []:
+        rid = row.get("id") if isinstance(row, dict) else None
+        if isinstance(rid, str) and rid and rid not in snap["templates"]:
+            snap["templates"][rid] = row
+        else:
+            extras.append(row)
+    deleted = data.get("deleted") if isinstance(data, dict) else None
+    if isinstance(deleted, dict):
+        snap["deleted"] = deleted
+    return snap, extras
+
+
+def _local_write(snap: dict[str, Any], extras: list[Any]) -> None:
+    rows = sorted(snap["templates"].values(), key=lambda r: _name_of(r).casefold()) + list(extras)
+    _atomic_json(library_path(), {"templates": rows, "deleted": snap["deleted"]})
+
+
+def _local_rows() -> list[Any]:
+    with _transaction():
+        snap, extras = _local_read()
+    return list(snap["templates"].values()) + extras
+
+
+# ── чтение ──
+
+def pull(force: bool = False) -> dict[str, Any]:
+    return _tl().pull(KIND, force=force)
+
+
+def library_status() -> dict[str, Any]:
+    return _tl().status(KIND)
+
+
+def _snapshot(force: bool = False) -> dict[str, Any]:
+    """Снимок для чтения: копия библиотеки, а без библиотеки - файл машины."""
+    if _team():
+        pull(force=force)
+        with _transaction():
+            return _read_copy()
+    with _transaction():
+        return _local_read()[0]
 
 
 def load() -> list[dict[str, Any]]:
-    """Все шаблоны (битые строки и битый файл молча пропускаются: страница не падает)."""
-    with _lock:
-        return _read()
+    """Годные к публикации шаблоны. Битые записи не исчезают, но и не отдаются."""
+    out = []
+    for key, rec in _snapshot()["templates"].items():
+        clean, errors = validate(rec)
+        if not errors and clean["id"] == key:
+            out.append(clean)
+    out.sort(key=lambda t: t["name"].casefold())
+    return out
 
 
 def get(template_id: str) -> dict[str, Any] | None:
@@ -268,12 +395,97 @@ def get(template_id: str) -> dict[str, Any] | None:
     return next((t for t in load() if t["id"] == tid), None)
 
 
-class TemplateError(ValueError):
-    """Шаблон не сохранён; `errors` - список по-английски."""
+def summary(tpl: dict[str, Any]) -> str:
+    contacts = ", ".join(_CONTACT_LABEL[k] for k in tpl.get("contact_fields") or [] if k in _CONTACT_LABEL)
+    n = len(tpl.get("questions") or [])
+    return f"{contacts or 'No contact fields'} · " + (f"{n} question{'s' if n != 1 else ''}" if n else "no questions")
 
-    def __init__(self, errors: list[str]):
-        super().__init__("; ".join(errors))
-        self.errors = errors
+
+def _row(key: str, rec: Any) -> dict[str, Any]:
+    clean, errors = validate(rec)
+    if not errors and clean["id"] != key:
+        errors = ["The template id does not match its library entry"]
+    meta = rec if isinstance(rec, dict) else {}
+    if _ID_RE.match(key):
+        clean["id"] = key
+    return {
+        "id": key, "name": clean["name"] or key or "(no name)", "locale": clean["locale"], "summary": summary(clean),
+        "author": str(meta.get("updated_by") or meta.get("added_by") or ""),
+        "changed_at": str(meta.get("updated_at") or meta.get("added_at") or ""),
+        "added_by": str(meta.get("added_by") or ""), "updated_by": str(meta.get("updated_by") or ""),
+        "invalid": bool(errors), "errors": errors, "template": clean,
+    }
+
+
+def recently_deleted(snap: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    snap = snap if snap is not None else _snapshot()
+    rows = []
+    for key, rec in snap["deleted"].items():
+        row = _row(key, rec.get("data"))
+        row.update({"deleted_by": str(rec.get("deleted_by") or ""), "deleted_at": str(rec.get("deleted_at") or "")})
+        rows.append(row)
+    rows.sort(key=lambda r: r["deleted_at"], reverse=True)
+    return rows[:100]
+
+
+def listing(force: bool = False) -> dict[str, Any]:
+    """Всё, что нужно вкладке Forms: строки (с invalid), удалённые, состояние, перенос."""
+    snap = _snapshot(force)
+    rows = [_row(k, r) for k, r in snap["templates"].items()]
+    if not _team():
+        # Строки локального файла без id: показываем (invalid), не трогаем.
+        with _transaction():
+            extras = _local_read()[1]
+        for rec in extras:
+            row = _row("", rec)
+            row["errors"] = row["errors"] + ["The row has no id, so it cannot be edited here"]
+            row["invalid"] = True
+            row["id"] = ""
+            rows.append(row)
+    rows.sort(key=lambda r: r["name"].casefold())
+    return {"rows": rows, "deleted": recently_deleted(snap), "library": library_status(),
+            "migration": migration_status(snap)}
+
+
+# ── правки: в репозиторий библиотеки или, без неё, в файл машины ──
+
+def _mutate(change, message: str):
+    tl = _tl()
+    if tl.configured():
+        try:
+            return tl.transact(KIND, change, message)[1]
+        except tl.WriteUncertain as exc:
+            raise LibraryUnavailable([str(exc)]) from exc
+        except tl.LibraryError as exc:
+            raise LibraryUnavailable([f"{exc} Nothing was saved."]) from exc
+    with _transaction():
+        snap, extras = _local_read(strict=True)
+        result = change(snap)
+        _local_write(snap, extras)
+        return result
+
+
+def _taken(lib: dict[str, Any], name: str, own: str = "") -> bool:
+    return any(k != own and _name_of(r).casefold() == name.casefold() for k, r in lib["templates"].items())
+
+
+def _free_id(lib: dict[str, Any]) -> str:
+    while True:
+        tid = uuid.uuid4().hex[:12]
+        if tid not in lib["templates"] and tid not in lib["deleted"]:
+            return tid
+
+
+def _stamp(rec: dict[str, Any], was: Any = None) -> dict[str, Any]:
+    """Метки автора и времени поверх содержания шаблона."""
+    tl = _tl()
+    was = was if isinstance(was, dict) else {}
+    if was.get("added_at") or was.get("added_by"):
+        rec["added_by"], rec["added_at"] = str(was.get("added_by") or ""), str(was.get("added_at") or "")
+        rec["updated_by"], rec["updated_at"] = tl.author(), tl.now()
+    else:
+        rec["added_by"], rec["added_at"] = tl.author(), tl.now()
+    return rec
 
 
 def save(raw: Any) -> dict[str, Any]:
@@ -281,29 +493,136 @@ def save(raw: Any) -> dict[str, Any]:
     clean, errors = validate(raw)
     if errors:
         raise TemplateError(errors)
-    with _transaction():
-        rows = _read(strict=True)
-        if not clean["id"]:
-            clean["id"] = uuid.uuid4().hex[:12]
-        same = [t for t in rows if t["name"].casefold() == clean["name"].casefold() and t["id"] != clean["id"]]
-        if same:
+
+    def change(lib):
+        tid = clean["id"]
+        if tid and tid in lib["deleted"] and tid not in lib["templates"]:
+            raise TemplateError(["This template was deleted. Restore it from Recently deleted instead of editing it"])
+        if _taken(lib, clean["name"], tid):
             raise TemplateError([f"A template named {clean['name']!r} already exists"])
-        rows = [t for t in rows if t["id"] != clean["id"]]
-        if len(rows) >= MAX_TEMPLATES:
+        if tid not in lib["templates"] and len(lib["templates"]) >= MAX_TEMPLATES:
             raise TemplateError([f"At most {MAX_TEMPLATES} templates"])
-        rows.append(clean)
-        rows.sort(key=lambda t: t["name"].casefold())
-        _write(rows)
-    return clean
+        tid = tid or _free_id(lib)
+        out = {**clean, "id": tid}
+        lib["templates"][tid] = _stamp(dict(out), lib["templates"].get(tid))
+        return out
+
+    return _mutate(change, f"Save form template {clean['name']}")
 
 
 def delete(template_id: str) -> bool:
-    """Убрать шаблон ИЗ БИБЛИОТЕКИ (локально). Формы на Страницах не трогаются никогда."""
-    tid = str(template_id or "").strip().lower()
-    with _transaction():
-        rows = _read(strict=True)
-        left = [t for t in rows if t["id"] != tid]
-        if len(left) == len(rows):
+    """Убрать шаблон в Recently deleted. Формы на Страницах не трогаются никогда."""
+    tid = str(template_id or "").strip()
+
+    def change(lib):
+        key = tid if tid in lib["templates"] else tid.lower()
+        if key not in lib["templates"]:
             return False
-        _write(left)
-    return True
+        lib["deleted"][key] = {"data": lib["templates"].pop(key),
+                               "deleted_by": _tl().author(), "deleted_at": _tl().now()}
+        return True
+
+    return bool(tid) and _mutate(change, f"Delete form template {tid}")
+
+
+def restore(template_id: str) -> dict[str, Any]:
+    tid = str(template_id or "").strip()
+
+    def change(lib):
+        rec = lib["deleted"].get(tid)
+        if rec is None:
+            raise TemplateError(["This template is not in Recently deleted. It may have been restored on another machine"])
+        data = dict(rec["data"])
+        name = _name_of(data)
+        if name and _taken(lib, name, tid):
+            raise TemplateError([f"A template named {name!r} already exists. Rename or delete it first"])
+        if len(lib["templates"]) >= MAX_TEMPLATES:
+            raise TemplateError([f"At most {MAX_TEMPLATES} templates"])
+        data["updated_by"], data["updated_at"] = _tl().author(), _tl().now()
+        del lib["deleted"][tid]
+        lib["templates"][tid] = data
+        return validate(data)[0]
+
+    return _mutate(change, f"Restore form template {tid}")
+
+
+def duplicate(template_id: str) -> dict[str, Any]:
+    tid = str(template_id or "").strip().lower()
+
+    def change(lib):
+        if tid not in lib["templates"]:
+            raise TemplateError(["Template not found. It may have been removed on another machine"])
+        clean, errors = validate(lib["templates"][tid])
+        if errors:
+            raise TemplateError(["Fix the template before duplicating it"] + errors)
+        name = clean["name"]
+        for n in range(1, 1000):
+            suffix = " (copy)" if n == 1 else f" (copy {n})"
+            name = clean["name"][:MAX_NAME - len(suffix)].rstrip() + suffix
+            if not _taken(lib, name):
+                break
+        if len(lib["templates"]) >= MAX_TEMPLATES:
+            raise TemplateError([f"At most {MAX_TEMPLATES} templates"])
+        new = {**clean, "id": _free_id(lib), "name": name}
+        lib["templates"][new["id"]] = _stamp(dict(new))
+        return new
+
+    return _mutate(change, f"Duplicate form template {tid}")
+
+
+# ── перенос локальных шаблонов в общую библиотеку ──
+
+def _plan_migration(local_rows: list[Any], lib: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    """Что из локального файла можно загрузить, и что и почему пропускается."""
+    in_lib: dict[str, str | None] = {}
+    for rec in lib["templates"].values():
+        clean, errors = validate(rec)
+        in_lib[_name_of(rec).casefold()] = None if errors else content_hash(clean)
+    adds: list[dict[str, Any]] = []
+    skipped: list[dict[str, str]] = []
+    used = set(lib["templates"]) | set(lib["deleted"])
+    for row in local_rows:
+        clean, errors = validate(row)
+        name = clean["name"] or _name_of(row) or "(no name)"
+        key = name.casefold()
+        if errors:
+            skipped.append({"name": name, "reason": "Invalid template: " + errors[0]})
+        elif key in in_lib:
+            same = in_lib[key] == content_hash(clean)
+            skipped.append({"name": name, "reason": "Already in the team library" if same else
+                            "A template with this name and different content is already in the team library"})
+        elif len(lib["templates"]) + len(adds) >= MAX_TEMPLATES:
+            skipped.append({"name": name, "reason": f"The team library is full ({MAX_TEMPLATES} templates)"})
+        else:
+            if not clean["id"] or clean["id"] in used:
+                clean["id"] = ""
+                while not clean["id"] or clean["id"] in used:
+                    clean["id"] = uuid.uuid4().hex[:12]
+            used.add(clean["id"])
+            adds.append(clean)
+            in_lib[key] = content_hash(clean)     # второй локальный с тем же именем уже не загрузится
+    return adds, skipped
+
+
+def migration_status(snap: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Сколько локальных шаблонов можно предложить загрузить в общую библиотеку."""
+    if not _team():
+        return {"available": False, "uploadable": 0, "skipped": []}
+    adds, skipped = _plan_migration(_local_rows(), snap if snap is not None else _snapshot())
+    return {"available": True, "uploadable": len(adds), "skipped": skipped}
+
+
+def migrate_local() -> dict[str, Any]:
+    """Загрузить локальные шаблоны одним коммитом. Локальный файл остаётся нетронутым."""
+    if not _team():
+        raise TemplateError(["The team library is not connected on this machine"])
+    rows = _local_rows()
+    tl = _tl()
+
+    def change(lib):
+        adds, skipped = _plan_migration(rows, lib)
+        for clean in adds:
+            lib["templates"][clean["id"]] = {**clean, "added_by": tl.author(), "added_at": tl.now()}
+        return {"uploaded": len(adds), "skipped": skipped}
+
+    return _mutate(change, "Upload local form templates")
