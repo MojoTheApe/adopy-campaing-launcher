@@ -60366,6 +60366,10 @@
       "Worker-V7Q2R8": {
         "session": "root_acl2079_20261022",
         "role": "Worker"
+      },
+      "Reviewer-N1022B77": {
+        "session": "run_n1022_b77",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -63311,7 +63315,21 @@
       840,
       19
     ],
-    "review": null,
+    "review": {
+      "id": "81c84f5b24814b6a9e288601519a6d9a",
+      "batch_id": "21ad574948cf4aa7bff078d191c31d9f",
+      "pr": 1077,
+      "issues": [
+        1050,
+        838,
+        165
+      ],
+      "actor": "Reviewer-N1022B77",
+      "session": "run_n1022_b77",
+      "coordinator": "Coordinator-I1021A",
+      "state": "reviewing",
+      "started_at": "2026-10-21T23:30:43+00:00"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -110971,6 +110989,25 @@
         "event": "batch-refreshed",
         "at": "2026-10-21T23:27:10+00:00",
         "batch_id": "21ad574948cf4aa7bff078d191c31d9f"
+      },
+      {
+        "event": "batch-review-acquired",
+        "at": "2026-10-21T23:30:43+00:00",
+        "review": {
+          "id": "81c84f5b24814b6a9e288601519a6d9a",
+          "batch_id": "21ad574948cf4aa7bff078d191c31d9f",
+          "pr": 1077,
+          "issues": [
+            1050,
+            838,
+            165
+          ],
+          "actor": "Reviewer-N1022B77",
+          "session": "run_n1022_b77",
+          "coordinator": "Coordinator-I1021A",
+          "state": "reviewing",
+          "started_at": "2026-10-21T23:30:43+00:00"
+        }
       }
     ],
     "policy": {
@@ -121314,7 +121351,7 @@
       "id": "21ad574948cf4aa7bff078d191c31d9f",
       "actor": "Coordinator-I1021A",
       "session": "run_i1021a_1021",
-      "state": "assembling",
+      "state": "reviewing",
       "issues": [
         1050,
         838,
@@ -121458,7 +121495,7 @@
       "branch": "codex/batch-21ad574948cf4aa7bff078d191c31d9f",
       "intake": "de9b5c030e6e4717832324cb2b5aa3e6",
       "started_at": "2026-10-21T22:45:13+00:00",
-      "pr": null,
+      "pr": 1077,
       "entered_stage": false,
       "history": [
         {
