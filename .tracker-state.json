@@ -56844,7 +56844,7 @@
             "session": "run_p1021d_2050"
           }
         ],
-        "state": "approved",
+        "state": "returning_approval",
         "worker": "Worker-P1021D2050",
         "coordinator": "Coordinator-P1021B",
         "handoff": {
@@ -56865,12 +56865,18 @@
         "queued_at": "2026-10-21T13:54:02+00:00",
         "review_report": "ACL-2050 approval is stale vs main 0ea237b0 (batch #1064 merged). Author merges current main into work/acl-2050-placement-readback (no force), reruns affected tests, hands off; fresh independent review and approval required. No content change requested.",
         "return_operation": {
-          "id": "3c12c5a9de1241c68f50205413778980",
+          "id": "e8e33b6985674245be5990a8c959ebbc",
           "actor": "Coordinator-P1021B",
           "session": "run_p1021b_1021",
-          "report": "ACL-2050 approval is stale vs main 0ea237b0 (batch #1064 merged). Author merges current main into work/acl-2050-placement-readback (no force), reruns affected tests, hands off; fresh independent review and approval required. No content change requested."
+          "report": "ACL-2050 approval is stale vs main 64e73a1e. Author merges current main into work/acl-2050-placement-readback (no force), reruns affected tests, hands off; fresh independent review and approval required. No content change requested."
         },
-        "reviewer": "Reviewer-P1021E2050"
+        "reviewer": "Reviewer-P1021E2050",
+        "return": {
+          "id": "e8e33b6985674245be5990a8c959ebbc",
+          "actor": "Coordinator-P1021B",
+          "session": "run_p1021b_1021",
+          "report": "ACL-2050 approval is stale vs main 64e73a1e. Author merges current main into work/acl-2050-placement-readback (no force), reruns affected tests, hands off; fresh independent review and approval required. No content change requested."
+        }
       },
       "1052": {
         "implementers": [
