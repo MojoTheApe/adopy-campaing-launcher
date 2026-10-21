@@ -55879,7 +55879,7 @@
             "session": "c8f54e83"
           }
         ],
-        "state": "approved",
+        "state": "returning_approval",
         "worker": "Worker-c8f54e83",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -55898,7 +55898,19 @@
         },
         "pr": 1041,
         "queued_at": "2026-10-20T12:20:42+00:00",
-        "reviewer": "Reviewer-R2037V"
+        "reviewer": "Reviewer-R2037V",
+        "return_operation": {
+          "id": "2ae82633a6b6469f8009ff3852801cc6",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
+        },
+        "return": {
+          "id": "2ae82633a6b6469f8009ff3852801cc6",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
+        }
       },
       "1038": {
         "implementers": [
