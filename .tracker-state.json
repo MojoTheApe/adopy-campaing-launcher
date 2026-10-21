@@ -46918,9 +46918,11 @@
         "worktree": "C:\\acl-rv-142",
         "id": "d1752307b8b14173a7e7f26dd5cbba7c",
         "issue": 142,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T10:15:15+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 983,
+        "report": "ACL-1142 (PR #983): merged current main (ea41acbf) into the PR branch; new head fbb98941. Merge commit only, no other edits.\n\nConflicts: only docs/system/CHANGELOG.md; kept both sides (main's ACL-1381 and ACL-1971 entries plus the task's entry). src/web/app.py, src/web/publish_jobs.py and src/web/templates/report.html auto-merged cleanly.\n\nTests run (affected only): test_acl1142_per_job_teach, test_pacing_takeover, test_acl1614*, test_acl1702*, test_acl1603*, test_campaign_build_dot_browser, test_create_wizard_flow -> 146 passed, 2 failed.\n- test_acl1702_tab_unblock_real_chromium[/adsmanager/manage/ads/edit]: TargetClosedError under load (-n 2); rerun alone, all 4 pass.\n- test_campaign_build_dot_browser::test_building_then_finished_clean_and_with_errors: fails identically on unmodified work/main (ea41acbf) at line 173 (the \"other\" account's campaign row is not in the DOM because the tree shows only the selected account). Pre-existing on main, not caused by this task or the merge; the test file is identical to main's. Needs a separate fix.\nacl_scan_secrets.py: clean. Full suite not run locally; CI is the acceptance signal.\n\nOwner live check: none required beyond the earlier two-account teach banner scenario; no live checks were done here."
       },
       "668": {
         "actor": "Worker-A1021668",
