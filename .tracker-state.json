@@ -46988,19 +46988,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
-      },
-      "1071": {
-        "actor": "Worker-Q1021A",
-        "session": "acl_verify_tag_e51b7063",
-        "coordinator": "Coordinator-I1021A",
-        "branch": "work/acl-2071-verify-published-tag",
-        "worktree": "C:\\acl-2071",
-        "id": "6cd03b7c92f94d598290d152bc575109",
-        "issue": 1071,
-        "state": "stopping",
-        "started_at": "2026-10-21T14:37:05+00:00",
-        "from_status": "status:todo",
-        "report": "Cancelled by owner 2026-10-21 (chose option c: no process change). Implementation was not pushed; the local worktree C:/acl-2071 holds an uncommitted draft only. No PR. The Issue is left for the owner to close."
       }
     },
     "tasks": {
@@ -56239,9 +56226,22 @@
             "session": "acl_verify_tag_e51b7063"
           }
         ],
-        "state": "implementing",
+        "state": "stopped",
         "worker": "Worker-Q1021A",
-        "coordinator": "Coordinator-I1021A"
+        "coordinator": "Coordinator-I1021A",
+        "handoff": {
+          "actor": "Worker-Q1021A",
+          "session": "acl_verify_tag_e51b7063",
+          "coordinator": "Coordinator-I1021A",
+          "branch": "work/acl-2071-verify-published-tag",
+          "worktree": "C:\\acl-2071",
+          "id": "6cd03b7c92f94d598290d152bc575109",
+          "issue": 1071,
+          "state": "stopping",
+          "started_at": "2026-10-21T14:37:05+00:00",
+          "from_status": "status:todo",
+          "report": "Cancelled by owner 2026-10-21 (chose option c: no process change). Implementation was not pushed; the local worktree C:/acl-2071 holds an uncommitted draft only. No PR. The Issue is left for the owner to close."
+        }
       }
     },
     "actors": {
@@ -107733,6 +107733,13 @@
             "approved_at": "2026-10-21T14:54:55+00:00"
           }
         }
+      },
+      {
+        "event": "stopped",
+        "at": "2026-10-21T14:58:39+00:00",
+        "issue": 1071,
+        "actor": "Worker-Q1021A",
+        "report": "Cancelled by owner 2026-10-21 (chose option c: no process change). Implementation was not pushed; the local worktree C:/acl-2071 holds an uncommitted draft only. No PR. The Issue is left for the owner to close."
       }
     ],
     "policy": {
