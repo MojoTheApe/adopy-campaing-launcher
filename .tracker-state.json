@@ -6106,6 +6106,31 @@
         "issue_scopes": {
           "1073": "362c232e4aebc19597b6b6e9b1a9afeba7e25d36a0de5dade6f6d23304e9ccfb"
         }
+      },
+      "1075": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-H1021B75",
+        "review_session": "run_h1021_b75",
+        "execution_lane": "cb5a70fa617f405484f374f24584b590",
+        "implementer": "Coordinator-I1021A",
+        "batch_id": "7c49855e0d0c48ecbd5ae30cd85b453f",
+        "source_heads": [
+          "662aeb6f30adbf0af82dbb93501d09fbf1bfc183"
+        ],
+        "head_sha": "5b96ca4c10dc193ebf56eb562e56e190091ed9cc",
+        "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+        "tree_sha": "79f383d1d22fe3b2dddd2a57bae777ad4a4cf1c1",
+        "report": "Independent combined integration review of batch 7c49855e0d0c48ecbd5ae30cd85b453f / PR #1075 -> main by Reviewer-H1021B75 (run_h1021_b75), a separate run from Coordinator-I1021A, Worker-F1021A and source Reviewer-G1021073; implemented no member. Composition: main 0ea237b0..5b96ca4c contains exactly two commits: frozen source tip 662aeb6f ([ACL-2073], parent 0ea237b0) and one merge commit 5b96ca4c with parents 0ea237b0 + 662aeb6f; no extra commits. Final tree 79f383d1 equals source tip tree (git diff 5b96ca4c 662aeb6f empty) and the frozen member review tree_sha. Diff vs main: tests/conftest.py +29 (autouse function fixture resetting crop_step via set_plan(None), meta_dom._note_media_refused(None) and _reuse_state['counter_missing']=False before/after each test, only for modules already in sys.modules) and new tests/test_crop_state_does_not_leak_between_tests.py +34; no src/, scripts/, .github/, installer, delivery.json or tracker changes. Verified the referenced functions/state exist at base (crop_step.set_plan clears plan/failure/done/unseen_said/warning/forward_stuck; meta_dom._note_media_refused, media_refused_on_ad, _reuse_state). Locally at head: the new test + test_media_attachment_identity.py + test_bench_b97_picker_and_crop_1007.py -> 51 passed; bench file followed by media file in one process -> 49 passed. PR body has exactly 'Tracker issues: ACL-2073' and 'Tracker batch: 7c49855e0d0c48ecbd5ae30cd85b453f'; no Issue-closing keywords. Batch has no delivery request, correct for a test-only outcome. Combined CI on head 5b96ca4c fully green with no reruns: linux 3.11/3.13 shards 1-3, windows 3.13, descriptor, tracker-link, process instructions, project tooling, ACL verification, installer classify/build inputs/build-install-repair-uninstall/installer verification. Verdict: approved.",
+        "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          1073
+        ],
+        "recorded_at": "2026-10-21T18:19:39+00:00",
+        "issue_scopes": {
+          "1073": "362c232e4aebc19597b6b6e9b1a9afeba7e25d36a0de5dade6f6d23304e9ccfb"
+        }
       }
     },
     "stage": {
