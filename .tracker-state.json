@@ -46816,6 +46816,18 @@
         "state": "implementing",
         "started_at": "2026-10-21T08:19:12+00:00",
         "from_status": "status:idea"
+      },
+      "784": {
+        "actor": "Worker-A1021784",
+        "session": "run_a1021_784w",
+        "coordinator": "Coordinator-A1021A",
+        "branch": "work/acl-1784-api-no-review-window",
+        "worktree": "C:\\acl-rv-784",
+        "id": "7d6c1b8469654b25bccaf8b037bae070",
+        "issue": 784,
+        "state": "implementing",
+        "started_at": "2026-10-21T08:28:55+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -53986,9 +53998,13 @@
           {
             "actor": "Worker-A1021784",
             "session": "run_a1021_784w"
+          },
+          {
+            "actor": "Worker-A1021784",
+            "session": "run_a1021_784w"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-A1021784",
         "coordinator": "Coordinator-A1021A",
         "handoff": {
@@ -54013,8 +54029,8 @@
           "at": "2026-10-17T16:30:39.578088+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-A1021784",
-        "rework": true
+        "rework": true,
+        "rework_claim": "7d6c1b8469654b25bccaf8b037bae070"
       },
       "558": {
         "implementers": [
@@ -104740,6 +104756,13 @@
         "issue": 880,
         "pr": 1044,
         "actor": "Worker-A1021880"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-21T08:28:55+00:00",
+        "issue": 784,
+        "claim": "7d6c1b8469654b25bccaf8b037bae070",
+        "actor": "Worker-A1021784"
       }
     ],
     "policy": {
