@@ -45372,6 +45372,55 @@
           }
         },
         "recorded_at": "2026-10-21T15:07:19+00:00"
+      },
+      "7c49855e0d0c48ecbd5ae30cd85b453f": {
+        "evidence": {
+          "kind": "post-main-acceptance",
+          "batch_id": "7c49855e0d0c48ecbd5ae30cd85b453f",
+          "pr": 1075,
+          "merge_sha": "c01583ea07d77b884616d9bf896bf71315f5e8a2",
+          "head_sha": "5b96ca4c10dc193ebf56eb562e56e190091ed9cc",
+          "tree_sha": "79f383d1d22fe3b2dddd2a57bae777ad4a4cf1c1",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            1073
+          ],
+          "source_heads": [
+            "662aeb6f30adbf0af82dbb93501d09fbf1bfc183"
+          ],
+          "issue_scopes": {
+            "1073": "362c232e4aebc19597b6b6e9b1a9afeba7e25d36a0de5dade6f6d23304e9ccfb"
+          },
+          "reviewer": "Reviewer-H1021B75",
+          "review_session": "run_h1021_b75",
+          "execution_lane": "cb5a70fa617f405484f374f24584b590",
+          "coordinator": "Coordinator-I1021A",
+          "coordinator_session": "run_i1021a_1021",
+          "criteria": {
+            "1073": [
+              {
+                "line": 16,
+                "criterion": "- [ ] `pytest tests/test_bench_b97_picker_and_crop_1007.py tests/test_media_attachment_identity.py` passes (failed before the fix).",
+                "result": "passed",
+                "evidence": "On merged main c01583ea (tree 79f383d1) in a fresh detached worktree: `pytest tests/test_bench_b97_picker_and_crop_1007.py tests/test_media_attachment_identity.py` -> 49 passed. Same pair with the pre-fix conftest.py from base 0ea237b0 swapped in -> 1 failed, 48 passed (the failure that the fix removes)."
+              },
+              {
+                "line": 17,
+                "criterion": "- [ ] A regression test fails without the conftest reset and passes with it.",
+                "result": "passed",
+                "evidence": "tests/test_crop_state_does_not_leak_between_tests.py on main c01583ea: with the merged conftest.py (autouse reset) -> 2 passed; with base 0ea237b0 conftest.py (no reset) -> 1 failed, 1 passed (test_the_next_test_starts_clean fails). Worktree restored clean afterwards."
+              },
+              {
+                "line": 18,
+                "criterion": "- [ ] Affected test files pass locally; CI Linux shards pass.",
+                "result": "passed",
+                "evidence": "Affected files together on main c01583ea: test_crop_state_does_not_leak_between_tests.py + test_bench_b97_picker_and_crop_1007.py + test_media_attachment_identity.py -> 51 passed locally (Windows, Python). CI: combined CI of PR #1075 on head 5b96ca4c (tree 79f383d1, identical to main c01583ea tree): runs 39647917942 and 39647917898 all green without reruns - linux tests 3.11 shards 1/2/3, 3.13 shards 1/2/3, windows 3.13, ACL verification, installer build/install/repair/uninstall; main push CI run 39652729499 on c01583ea succeeded (ACL verification/tooling/process success, test jobs skipped as reuse of the same tested tree)."
+              }
+            ]
+          },
+          "report": "Post-main acceptance of ACL-2073 by retained independent integration Reviewer-H1021B75 (run_h1021_b75, lane cb5a70fa) on admitted main merge c01583ea of batch PR #1075 (head 5b96ca4c, tree 79f383d1). All three unchecked criteria re-verified locally on the merged main tree with before/after comparison against base 0ea237b0 conftest.py, plus the green combined CI of #1075 and successful main push CI."
+        },
+        "recorded_at": "2026-10-21T18:31:39+00:00"
       }
     },
     "policy_migrations": [
@@ -109344,6 +109393,12 @@
           "state": "reviewing",
           "started_at": "2026-10-21T17:58:00+00:00"
         }
+      },
+      {
+        "event": "post-main-acceptance-recorded",
+        "at": "2026-10-21T18:31:39+00:00",
+        "batch_id": "7c49855e0d0c48ecbd5ae30cd85b453f",
+        "pr": 1075
       }
     ],
     "policy": {
