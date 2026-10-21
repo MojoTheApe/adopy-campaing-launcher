@@ -1,5 +1,15 @@
 # System history
 
+## ACL-1668 — Builder marks a chosen creative whose file is missing — 2026-10-21
+
+When the refreshed creatives list no longer contains a creative chosen on an ad row,
+the Builder marks the row "File missing — pick again" in the error colour and keeps
+the name visible. Publish and Publish all refuse such rows and list them in the
+confirm; the publish-time enrichment message for a missing file is clearer. The
+refusal runs before any preflight decision is recorded. Existing offline browser
+fixtures now list the files they select. No ad account is touched.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/668).
+
 ## ACL-1381 — Consistent Builder ad-text wording — 2026-10-18
 
 Complete the older text-label request while preserving ACL-1769's later numbered

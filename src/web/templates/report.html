@@ -16138,8 +16138,8 @@ window.cbPublish = function(form) {
   _safeConfirm(cbApiMode()
       ? (ticked.length ? 'Create the selected campaigns as PAUSED campaigns?' : 'Create this campaign as a PAUSED campaign?')
       : (ticked.length ? 'Build the selected campaigns as drafts?' : 'Build this campaign as a draft?'), bodyHtml, function() {
-    if (pf && window.cbPreflightDecision) window.cbPreflightDecision(mine && !anyway ? [] : [accLabel], mine && !anyway ? [accLabel] : [], mine && anyway ? [accLabel] : []);
     if (missingFiles.length) { window.alert('Not sent: a chosen creative file is missing \u2014 pick it again.'); return; }
+    if (pf && window.cbPreflightDecision) window.cbPreflightDecision(mine && !anyway ? [] : [accLabel], mine && !anyway ? [accLabel] : [], mine && anyway ? [accLabel] : []);
     if (mine && !anyway) { window.alert(accLabel + ' is not ready — fix it, or tick "Run anyway".'); return; }
     if (onlySlot || ticked.length) {
       var got = _runPublishQueue([form], window.cbTree.showQueue, onlySlot || ticked);

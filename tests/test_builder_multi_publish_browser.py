@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import pytest
 from playwright.sync_api import expect, sync_playwright
 from test_builder_per_account import _render
-from test_drawer_review_browser import fields
+from test_drawer_review_browser import OFFLINE_FILES, fields
 
 ACTIVE = ('pending', 'queued', 'running', 'cancelling')
 # Форма ищется по аккаунту, а не по номеру: раскрытая в ящике форма
@@ -70,7 +70,7 @@ def _route_for(html, state):
         if r.request.resource_type == 'document':
             r.fulfill(content_type='text/html', body=html)
             return
-        data = {'files': [], 'texts': [], 'profiles': [], 'waiting': False}
+        data = {'files': OFFLINE_FILES, 'texts': [], 'profiles': [], 'waiting': False}
         if path == '/preview-publish':
             f = fields(r.request)
             data = {'plan': [{'Campaign Name': f[f'camp_{i}_name'], 'errors': [], 'warnings': [], '_ads_raw': []}
