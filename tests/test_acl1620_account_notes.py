@@ -44,7 +44,17 @@ class _Req:
 
 
 def _post(body):
-    r = asyncio.run(web.api_account_notes_set(_Req(body)))
+    # Run in a worker thread: after the module-scoped Playwright fixture an event
+    # loop is already running in this thread, and asyncio.run() would refuse.
+    box = {}
+
+    def _run():
+        box["r"] = asyncio.run(web.api_account_notes_set(_Req(body)))
+
+    t = threading.Thread(target=_run)
+    t.start()
+    t.join()
+    r = box["r"]
     return r.status_code, json.loads(r.body)
 
 

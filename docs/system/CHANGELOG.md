@@ -1,5 +1,13 @@
 # System history
 
+## ACL-1626 — Account notes: damaged notes file is reported — 2026-10-21
+
+When the account notes file is damaged and set aside, the dashboard now logs a
+warning, returns the set-aside notice in the save response and shows a one-line
+banner on the account map. The backup name has millisecond resolution plus a
+collision counter, so two corruptions in the same moment keep both copies.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/626).
+
 ## ACL-1381 — Consistent Builder ad-text wording — 2026-10-18
 
 Complete the older text-label request while preserving ACL-1769's later numbered
