@@ -46909,9 +46909,11 @@
         "worktree": "C:\\acl-rv-626",
         "id": "fcf06a92dac546ee9d0363bec8f245b0",
         "issue": 626,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T10:53:24+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 967,
+        "report": "ACL-1626 (PR 967) rework after review return: CI failure fixed.\n\nCause: the three new non-browser tests call _post(), which used asyncio.run(); after the module-scoped Playwright fixture an event loop is already running in the thread, so asyncio.run() raised \"cannot be called from a running event loop\".\nFix (commit 2b1c5229, on top of main ea41acbf, which the branch already contains): _post() now runs the handler in a worker thread. Added the ACL-1626 entry to docs/system/CHANGELOG.md.\n\nTests: whole tests/test_acl1620_account_notes.py in one process: 16 passed, including the three target tests (damaged file reported and logged, same-millisecond corruptions, millisecond backup name). 5 failed and 1 error remain, all Playwright browser tests failing on local environment errors (missing _design_tokens module, acl.test navigation timeout); they ran in CI before this change. Full suite not run locally; CI is the acceptance signal.\n\nNeeds owner live check: issue item 3 (write, edit and clear a note, restart the dashboard, the note survives)."
       }
     },
     "tasks": {
