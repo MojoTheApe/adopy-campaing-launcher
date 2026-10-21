@@ -45793,6 +45793,61 @@
           "report": "Post-main acceptance of ACL-2073 by retained independent integration Reviewer-H1021B75 (run_h1021_b75, lane cb5a70fa) on admitted main merge c01583ea of batch PR #1075 (head 5b96ca4c, tree 79f383d1). All three unchecked criteria re-verified locally on the merged main tree with before/after comparison against base 0ea237b0 conftest.py, plus the green combined CI of #1075 and successful main push CI."
         },
         "recorded_at": "2026-10-21T18:31:39+00:00"
+      },
+      "1105e34df46449f9801ef245f30c4bfb": {
+        "evidence": {
+          "kind": "post-main-acceptance",
+          "batch_id": "1105e34df46449f9801ef245f30c4bfb",
+          "pr": 1076,
+          "merge_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+          "head_sha": "5cdfcee698abcf528413bb1dbed39386e32af673",
+          "tree_sha": "9814c3d28219d0914e2b1b7cab65fbe41c65481f",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            1071
+          ],
+          "source_heads": [
+            "b89655ebfade925201f3b06dc446070bbba9f621"
+          ],
+          "issue_scopes": {
+            "1071": "c1c17f3e3ebe9dd15b00fd45eee146f5f5122550cbce8457dd84974144556657"
+          },
+          "reviewer": "Reviewer-J1021B76",
+          "review_session": "run_j1021_b76",
+          "execution_lane": "85d6b6ac4dc844c49bb56e0b4196ce08",
+          "coordinator": "Coordinator-I1021A",
+          "coordinator_session": "run_i1021a_1021",
+          "report": "Post-main acceptance of ACL-2071 by the retained independent integration Reviewer on main 64e73a1e (merge of PR 1076, tree 9814c3d2 identical to the reviewed head). I inspected the first hosted dispatch 39684127119 myself (gh run view, job steps, logs, downloaded evidence and request artifacts), re-ran the affected workflow tests on main, confirmed complete-delivery.yml unchanged and main CI green, and checked the docs. Line 2 rests on executing the exact resolve code with stubbed channel responses plus the needs: resolve dependency; no hosted negative run was performed.",
+          "criteria": {
+            "1071": [
+              {
+                "line": 26,
+                "criterion": "- [ ] Dispatching with the current latest published tag runs the identical Windows acceptance steps and uploads `acl-delivery-evidence-<run>-<attempt>` (request.json and evidence.json) and the logs artifact.",
+                "result": "passed",
+                "evidence": "Hosted run 39684127119 of .github/workflows/verify-published-tag.yml (workflow_dispatch on main 64e73a1e, TAG=acl-release-2026-10-21.1064, PREVIOUS_TAG=acl-release-2026-10-20.1034) concluded success: job 119513748579 'Resolve the published release tag' and job 119514065196 'Verify published Windows package' green; the verify job ran the same 8 steps as complete-delivery.yml verify (checkout of manifest commit 0ea237b0, test_update_cycle.py --published-request, acl_delivery_evidence.py). Artifacts acl-delivery-evidence-39684127119-1 (request.json + evidence.json, downloaded: result passed, target 'ACL stable Windows installer and update channel', merge_shas [0ea237b0], 6 checks, release acl-release-2026-10-21.1064 installer sha256 c17addab...), acl-delivery-logs-39684127119-1 (250631 bytes) and acl-tag-request-39684127119-1 were uploaded."
+              },
+              {
+                "line": 27,
+                "criterion": "- [ ] A tag that is not the latest published stable release fails in the resolve job, before any install.",
+                "result": "passed",
+                "evidence": "Not shown by a hosted negative run; verified by executing the exact embedded resolve script from verify-published-tag.yml on main 64e73a1e with channel/fetch_latest stubbed: an older non-latest tag, a latest prerelease, a wrong previous_tag and a malformed tag each raise SystemExit inside the resolve step before any request artifact is written, while the latest tag passes; the Windows install job declares needs: resolve, so it never starts after a resolve failure. The hosted positive run 39684127119 proves the same resolve code executes on the runner."
+              },
+              {
+                "line": 28,
+                "criterion": "- [ ] `complete-delivery.yml` is byte-identical; the workflow lint and tooling tests that cover workflows pass.",
+                "result": "passed",
+                "evidence": "git diff c01583ea 64e73a1e -- .github/workflows/complete-delivery.yml is empty (byte-identical). On main 64e73a1e tests/test_acl_ci_workflows.py, test_acl_ci_scope.py, test_ci_layout.py and test_acl_complete_delivery.py: 267 passed, 1 skipped; both workflow YAMLs parse. PR 1076 head 5cdfcee6 (same tree 9814c3d2 as main) passed all 16 combined checks; main push CI 39672655339, Windows installer 39672655445 and Delivery setup 39672655298 on 64e73a1e succeeded."
+              },
+              {
+                "line": 29,
+                "criterion": "- [ ] The repository docs describe the manual run and its use with `record-delivery --evidence-file`.",
+                "result": "passed",
+                "evidence": "docs/repository/POST_MAIN_DELIVERY.md section 'Manual acceptance of a published tag' and the 2026-10-21 ACL-2071 entry in docs/repository/CHANGELOG.md on main 64e73a1e describe the manual dispatch (tag, previous_tag, latest-stable and previous_tag refusals, same evidence/log artifacts, shared concurrency, no tracker writes) and that an operator may pass evidence.json to record-delivery --evidence-file."
+              }
+            ]
+          }
+        },
+        "recorded_at": "2026-10-21T22:18:58+00:00"
       }
     },
     "policy_migrations": [
@@ -110248,6 +110303,12 @@
         "issue": 1050,
         "claim": "dcc509e2fca14fe8ae2412801a92b0c7",
         "actor": "Worker-P1021F2050"
+      },
+      {
+        "event": "post-main-acceptance-recorded",
+        "at": "2026-10-21T22:18:58+00:00",
+        "batch_id": "1105e34df46449f9801ef245f30c4bfb",
+        "pr": 1076
       }
     ],
     "policy": {
