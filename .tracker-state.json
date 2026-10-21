@@ -59694,6 +59694,10 @@
       "Reviewer-G1021073": {
         "session": "run_g1021_2073",
         "role": "Reviewer"
+      },
+      "Reviewer-H1021B75": {
+        "session": "run_h1021_b75",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -62611,7 +62615,19 @@
       710,
       1069
     ],
-    "review": null,
+    "review": {
+      "id": "cb5a70fa617f405484f374f24584b590",
+      "batch_id": "7c49855e0d0c48ecbd5ae30cd85b453f",
+      "pr": 1075,
+      "issues": [
+        1073
+      ],
+      "actor": "Reviewer-H1021B75",
+      "session": "run_h1021_b75",
+      "coordinator": "Coordinator-I1021A",
+      "state": "reviewing",
+      "started_at": "2026-10-21T17:58:00+00:00"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -109286,6 +109302,23 @@
           "entered_stage": false,
           "history": []
         }
+      },
+      {
+        "event": "batch-review-acquired",
+        "at": "2026-10-21T17:58:00+00:00",
+        "review": {
+          "id": "cb5a70fa617f405484f374f24584b590",
+          "batch_id": "7c49855e0d0c48ecbd5ae30cd85b453f",
+          "pr": 1075,
+          "issues": [
+            1073
+          ],
+          "actor": "Reviewer-H1021B75",
+          "session": "run_h1021_b75",
+          "coordinator": "Coordinator-I1021A",
+          "state": "reviewing",
+          "started_at": "2026-10-21T17:58:00+00:00"
+        }
       }
     ],
     "policy": {
@@ -119511,7 +119544,7 @@
       "id": "7c49855e0d0c48ecbd5ae30cd85b453f",
       "actor": "Coordinator-I1021A",
       "session": "run_i1021a_1021",
-      "state": "assembling",
+      "state": "reviewing",
       "issues": [
         1073
       ],
@@ -119565,7 +119598,7 @@
       "branch": "codex/batch-7c49855e0d0c48ecbd5ae30cd85b453f",
       "intake": "0ef9bdb5cdd24421b94f910697cc25c4",
       "started_at": "2026-10-21T17:52:00+00:00",
-      "pr": null,
+      "pr": 1075,
       "entered_stage": false,
       "history": []
     },
