@@ -46813,9 +46813,11 @@
         "worktree": "C:\\acl-pl-2050",
         "id": "134be080abf54f0d86f200e73d2d5d0f",
         "issue": 1050,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T07:20:19+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 1058,
+        "report": "ACL-2050 done: PR #1058, head b6fe1a3a. API builder read-back verifies Meta kept manual placements (advantage_placement_state, positions) and reports value rules / audience flag as diagnostics. Tests: tests/test_acl2050_placement_readback.py (6 pass) + affected creator tests; env-only failures (fastapi/openpyxl absent locally); full suite in CI. Remaining: live confirmation that value_rules_applied/value_rule_set_id/advantage_state_info fields read back without a Graph error on a new-layout account."
       },
       "1052": {
         "actor": "Worker-P10212052",
