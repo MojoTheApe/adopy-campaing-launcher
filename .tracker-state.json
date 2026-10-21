@@ -46855,9 +46855,11 @@
         "worktree": "C:\\acl-rv-668",
         "id": "024751fca33b4f4bb63cdc5b30c8618c",
         "issue": 668,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T09:41:09+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 975,
+        "report": "# ACL-1668 handoff (review tail resume)\n\n- Merged current main (ea41acbf) into work/acl-1668-missing-creative with a no-ff merge; new head 0429dc28. Previous head 266059ca.\n- Conflicts: none (clean merge, 126 commits behind before).\n- Tests run: tests/test_acl1668_missing_creative_publish.py, tests/test_builder_review_browser.py, tests/test_second_primary_text_reaches_the_robot.py -> 29 passed. acl_scan_secrets.py: clean.\n- Full suite not run locally; CI is the acceptance signal.\n- No owner live check needed; no source changes beyond the merge."
       }
     },
     "tasks": {
