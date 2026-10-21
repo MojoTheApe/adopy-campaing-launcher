@@ -111580,6 +111580,11 @@
         "issue": 1079,
         "pr": 1080,
         "actor": "Worker-V7Q2R8"
+      },
+      {
+        "event": "included-sources-closed",
+        "at": "2026-10-21T23:57:45+00:00",
+        "batch_id": "21ad574948cf4aa7bff078d191c31d9f"
       }
     ],
     "policy": {
@@ -122264,7 +122269,8 @@
           1077
         ],
         "finished_at": "2026-10-21T23:49:54+00:00",
-        "closing_sources": true
+        "closing_sources": false,
+        "sources_closed": true
       }
     },
     "integration": null,
