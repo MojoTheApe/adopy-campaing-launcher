@@ -123,18 +123,30 @@ def fetch_raw(cfg: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
     return pd.DataFrame(list(rows), columns=cols)
 
 
-def to_workbook_frame(
-    raw: pd.DataFrame, cm_map: Dict[str, str], *, keep_unmapped: bool = False
-) -> pd.DataFrame:
-    """Строки BI → схема книги Stats.
-
-    Имя CM берётся из карты кодов. Строке с ``CM_ID = Unknown`` достаётся
-    менеджер, к которому этот аккаунт относится в остальных строках BI
-    (чужой код на общем аккаунте — не наш, его не присваиваем). Остальные строки — чужие команды и
-    Taboola: книга их не содержала, поэтому по умолчанию они отбрасываются;
-    с ``keep_unmapped`` остаются под именем ``CM <код>``.
-    """
+def normalize(raw: pd.DataFrame) -> pd.DataFrame:
+    """Сырые строки BI → колонки и типы книги; ``CM_ID`` остаётся как есть."""
     df = raw.rename(columns=COLUMN_MAP).copy()
+    df["CM_ID"] = df["CM_ID"].fillna(UNKNOWN).astype(str).str.strip()
+    for col in ("# Leads", "# FTDs"):
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype("int64")
+    for col in ("$ Spend", "$ Net"):
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0).astype("float64")
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    for col in ("Country", "Account Alias", "Adset Name", "Ad Title", "Ad Asset", "Variant"):
+        df[col] = df[col].fillna("").astype(str).str.strip()
+    return df
+
+
+def assign_cm(df: pd.DataFrame, cm_map: Dict[str, str], *, keep_unmapped: bool = False) -> pd.DataFrame:
+    """``CM_ID`` → имя менеджера (колонка ``CM``), ``CM_ID`` убирается.
+
+    Строке с ``CM_ID = Unknown`` достаётся менеджер, к которому этот аккаунт
+    относится в остальных строках BI (чужой код на общем аккаунте — не наш,
+    его не присваиваем). Остальные строки — чужие команды и Taboola: книга их
+    не содержала, поэтому по умолчанию они отбрасываются; с ``keep_unmapped``
+    остаются под именем ``CM <код>``.
+    """
+    df = df.copy()
     codes = df.pop("CM_ID").fillna(UNKNOWN).astype(str).str.strip()
     names = codes.map(cm_map)
 
@@ -146,20 +158,22 @@ def to_workbook_frame(
     if not keep_unmapped:
         df, codes, names = df[names.notna()].copy(), codes[names.notna()], names[names.notna()]
     df["CM"] = names.fillna("CM " + codes)
-
-    for col in ("# Leads", "# FTDs"):
-        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype("int64")
-    for col in ("$ Spend", "$ Net"):
-        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0).astype("float64")
-    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-    for col in ("Country", "Account Alias", "Adset Name", "Ad Title", "Ad Asset", "Variant"):
-        df[col] = df[col].fillna("").astype(str).str.strip()
     return df
 
 
+def to_workbook_frame(
+    raw: pd.DataFrame, cm_map: Dict[str, str], *, keep_unmapped: bool = False
+) -> pd.DataFrame:
+    """Строки BI → схема книги Stats (см. normalize + assign_cm)."""
+    return assign_cm(normalize(raw), cm_map, keep_unmapped=keep_unmapped)
+
+
+def keep_all_cms() -> bool:
+    return (os.environ.get("BI_STATS_ALL_CMS") or "").strip().lower() in ("1", "true", "yes")
+
+
 def read_bi_stats() -> pd.DataFrame:
-    keep = (os.environ.get("BI_STATS_ALL_CMS") or "").strip().lower() in ("1", "true", "yes")
-    return to_workbook_frame(fetch_raw(), load_cm_map(), keep_unmapped=keep)
+    return to_workbook_frame(fetch_raw(), load_cm_map(), keep_unmapped=keep_all_cms())
 
 
 def fetch_revision(cfg: Optional[Dict[str, Any]] = None) -> str:

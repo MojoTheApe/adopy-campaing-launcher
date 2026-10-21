@@ -31,7 +31,9 @@ CM_MAP = {"1106": "Evgeni Sedin"}
 
 
 @pytest.fixture(autouse=True)
-def _clean_env(monkeypatch):
+def _clean_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("BI_ARCHIVE_PATH", str(tmp_path / "archive.sqlite3"))
+    monkeypatch.setitem(morning_service._WORKBOOK_CACHE, "key", None)
     for name in ("BI_MYSQL_HOST", "BI_MYSQL_USER", "BI_MYSQL_PASSWORD", "FB_STATS_SOURCE"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setitem(bi_stats._REV, "value", None)
@@ -122,7 +124,7 @@ def test_bi_is_read_first_when_enabled(monkeypatch, tmp_path):
     assert df["$ Spend"].sum() == pytest.approx(12.5)
 
 
-def test_bi_failure_falls_back_to_workbook_with_note(monkeypatch, tmp_path):
+def test_bi_failure_shows_saved_days_with_note(monkeypatch, tmp_path):
     _enable_bi(monkeypatch)
 
     def boom(cfg=None):
@@ -133,7 +135,8 @@ def test_bi_failure_falls_back_to_workbook_with_note(monkeypatch, tmp_path):
 
     df = morning_service._load_enriched_df(str(book))
 
-    assert df.attrs["stats_source"] == "excel"
+    # Архив пуст, книга импортирована в него — показаны её дни; Refresh повторит BI.
+    assert df.attrs["stats_source"] == "archive"
     assert "BI unavailable" in df.attrs["stats_note"]
     assert df["$ Spend"].sum() == pytest.approx(4.0)
 
@@ -174,3 +177,97 @@ def test_revision_survives_network_error(monkeypatch):
     assert bi_stats.refresh_revision() == "unavailable"
     monkeypatch.setitem(bi_stats._REV, "value", "r1")
     assert bi_stats.refresh_revision(force=True) == "r1"
+
+
+def _book_two_days(path: Path) -> Path:
+    wb = Workbook()
+    ws = wb.active
+    ws.append(STATS_REQUIRED_COLUMNS + ["Date"])
+    for day, spend in ((datetime(2026, 1, 5), 7.0), (datetime(2026, 10, 18), 4.0)):
+        ws.append(["Mexico", "FacebookDoc101", "MX_AMZ_All_Image_134_HV_40_22.10", "Image 134",
+                   1, 0, spend, "Evgeni Sedin", "Amazon", 0.0, day])
+    wb.save(path)
+    return path
+
+
+def test_workbook_supplies_history_for_days_bi_does_not_have(monkeypatch, tmp_path):
+    _enable_bi(monkeypatch)
+    monkeypatch.setattr(bi_stats, "fetch_raw", lambda cfg=None: _raw([ROW_KNOWN]))
+    monkeypatch.setattr(bi_stats, "load_cm_map", lambda path=None: CM_MAP)
+    book = _book_two_days(tmp_path / "stats.xlsx")
+
+    df = morning_service._load_enriched_df(str(book))
+
+    by_day = df.groupby("Date")["$ Spend"].sum().to_dict()
+    # 05.01 — только в книге; 18.10 есть в BI, книжные 4.0 за этот день отброшены.
+    assert by_day == {pd.Timestamp("2026-01-05"): 7.0, pd.Timestamp("2026-10-18"): 12.5}
+    assert df.attrs["stats_source"] == "bi"
+
+
+def test_workbook_is_read_once_per_file_version(monkeypatch, tmp_path):
+    book = str(_book_two_days(tmp_path / "stats.xlsx"))
+    calls = []
+    real = morning_service.read_stats_workbook
+    monkeypatch.setattr(morning_service, "read_stats_workbook", lambda p: calls.append(p) or real(p))
+    monkeypatch.setitem(morning_service._WORKBOOK_CACHE, "key", None)
+
+    morning_service._read_workbook_cached(book)
+    morning_service._read_workbook_cached(book)
+    assert len(calls) == 1
+
+
+ROW_DAY = lambda day, spend, code="1106": [code, day, "FacebookDoc101", "MX_AMZ_All_Image_134_HV_40_22.10",  # noqa: E731
+                                          "Image 134", "Amazon", "Mexico", "21701_es", 1, 0, Decimal(spend), Decimal("0")]
+
+
+def test_archive_keeps_days_that_left_the_bi_window(monkeypatch, tmp_path):
+    _enable_bi(monkeypatch)
+    monkeypatch.setattr(bi_stats, "load_cm_map", lambda path=None: CM_MAP)
+    windows = iter([
+        _raw([ROW_DAY(date(2026, 10, 13), "5"), ROW_DAY(date(2026, 10, 14), "6")]),
+        # Следующий день: 13.10 выпал из окна, 14.10 пересчитан, пришёл 15.10.
+        _raw([ROW_DAY(date(2026, 10, 14), "9"), ROW_DAY(date(2026, 10, 15), "7")]),
+    ])
+    monkeypatch.setattr(bi_stats, "fetch_raw", lambda cfg=None: next(windows))
+    absent = str(tmp_path / "absent.xlsx")
+
+    morning_service._read_stats_rows(absent)
+    rows, source, note = morning_service._read_stats_rows(absent)
+
+    by_day = rows.groupby("Date")["$ Spend"].sum().to_dict()
+    assert by_day == {pd.Timestamp("2026-10-13"): 5.0, pd.Timestamp("2026-10-14"): 9.0,
+                      pd.Timestamp("2026-10-15"): 7.0}
+    assert source == "bi" and note is None
+    assert set(rows["CM"]) == {"Evgeni Sedin"}
+
+
+def test_workbook_imported_once_and_never_over_bi_days(monkeypatch, tmp_path):
+    from src.analysis_agent import bi_archive
+
+    _enable_bi(monkeypatch)
+    monkeypatch.setattr(bi_stats, "load_cm_map", lambda path=None: CM_MAP)
+    monkeypatch.setattr(bi_stats, "fetch_raw", lambda cfg=None: _raw([ROW_KNOWN]))
+    book = str(_book_two_days(tmp_path / "stats.xlsx"))
+    reads = []
+    real = morning_service.read_stats_workbook
+    monkeypatch.setattr(morning_service, "read_stats_workbook", lambda p: reads.append(p) or real(p))
+
+    rows, _, _ = morning_service._read_stats_rows(book)
+    morning_service._read_stats_rows(book)
+
+    assert len(reads) == 1  # та же версия файла — не перечитывается
+    by_day = rows.groupby("Date")["$ Spend"].sum().to_dict()
+    assert by_day == {pd.Timestamp("2026-01-05"): 7.0, pd.Timestamp("2026-10-18"): 12.5}
+    assert bi_archive.archive_days() == {"bi": 1, "workbook": 1}
+
+
+def test_cm_map_change_applies_to_archived_days(monkeypatch, tmp_path):
+    _enable_bi(monkeypatch)
+    monkeypatch.setattr(bi_stats, "fetch_raw", lambda cfg=None: _raw([ROW_DAY(date(2026, 10, 13), "5", "4006")]))
+    absent = str(tmp_path / "absent.xlsx")
+    monkeypatch.setattr(bi_stats, "load_cm_map", lambda path=None: {})
+    rows, _, _ = morning_service._read_stats_rows(absent)
+    assert rows.empty  # код ещё не в карте — строка не наша
+    monkeypatch.setattr(bi_stats, "load_cm_map", lambda path=None: {"4006": "Yinon Avraham"})
+    rows, _, _ = morning_service._read_stats_rows(absent)
+    assert list(rows["CM"]) == ["Yinon Avraham"]

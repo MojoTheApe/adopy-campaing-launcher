@@ -16,6 +16,7 @@ import csv
 import os
 import re
 import sys
+import threading
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -136,22 +137,92 @@ def _load_enriched_df(
     return df
 
 
+# Книга за год — ~260 тыс. строк и почти минута чтения. При BI она нужна
+# только как история до первой даты BI, поэтому читается один раз на версию
+# файла, а не на каждую новую загрузку BI.
+_WORKBOOK_CACHE: Dict[str, Any] = {"key": None, "df": None}
+_WORKBOOK_LOCK = threading.Lock()
+
+
+def _read_workbook_cached(excel_path: str) -> pd.DataFrame:
+    key = (excel_path, os.path.getmtime(excel_path))
+    with _WORKBOOK_LOCK:
+        if _WORKBOOK_CACHE["key"] != key:
+            _WORKBOOK_CACHE["df"] = read_stats_workbook(excel_path)
+            _WORKBOOK_CACHE["key"] = key
+        return _WORKBOOK_CACHE["df"]
+
+
+def merge_bi_with_history(bi: pd.DataFrame, book: pd.DataFrame) -> pd.DataFrame:
+    """BI за свои даты, книга — за все остальные.
+
+    BI хранит только последние дни, книга — весь год. День, который есть в
+    BI, целиком берётся из BI (там свежие FTD/Net, BI пересчитывает прошлые
+    дни); остальные дни — из книги, чтобы тренды и периоды не обрезались.
+    """
+    if book is None or book.empty:
+        return bi
+    book_dates = pd.to_datetime(book["Date"], errors="coerce").dt.normalize()
+    bi_dates = set(pd.to_datetime(bi["Date"], errors="coerce").dt.normalize().dropna())
+    history = book[~book_dates.isin(bi_dates)].copy()
+    history["Date"] = book_dates[history.index]
+    return pd.concat([history, bi], ignore_index=True, sort=False)
+
+
+def _workbook_version(excel_path: str) -> str:
+    st = os.stat(excel_path)
+    return f"{os.path.abspath(excel_path)}|{st.st_mtime}|{st.st_size}"
+
+
 def _read_stats_rows(excel_path: str) -> Tuple[pd.DataFrame, str, Optional[str]]:
     """(строки в схеме книги, источник, предупреждение).
 
-    ACL-103: BI первым, если настроен; при его ошибке — книга, с
-    предупреждением на странице. Без книги ошибка BI поднимается как есть.
+    ACL-103: при BI — локальный архив (bi_archive): окно BI дописывается в
+    него при каждом чтении, книга импортируется только за дни без BI и только
+    при новой версии файла. Источник ``bi`` — окно BI прочитано сейчас;
+    ``archive`` — BI не ответил, показан архив (Refresh попробует снова);
+    ``excel`` — без BI, как раньше.
     """
-    if bi_stats.bi_enabled():
-        try:
-            return bi_stats.read_bi_stats(), "bi", None
-        except Exception as e:  # noqa: BLE001 — фолбэк на книгу ниже
+    if not bi_stats.bi_enabled():
+        return read_stats_workbook(excel_path), "excel", None
+    from src.analysis_agent import bi_archive
+
+    notes: List[str] = []
+    window = None
+    try:
+        window = bi_stats.normalize(bi_stats.fetch_raw())
+    except Exception as e:  # noqa: BLE001 — покажем архив/книгу ниже
+        notes.append(f"BI unavailable ({type(e).__name__}: {e}) — showing saved days.")
+    try:
+        if window is not None:
+            bi_archive.ingest_bi_window(window)
+        if os.path.isfile(excel_path):
+            version = _workbook_version(excel_path)
+            if bi_archive.workbook_version_seen() != version:
+                bi_archive.ingest_workbook(_read_workbook_cached(excel_path), version)
+        stored = bi_archive.read_archive()
+    except Exception as e:  # noqa: BLE001 — архив сломан: без него, как до архива
+        notes.append(f"Stats archive unavailable ({type(e).__name__}: {e}).")
+        stored = None
+
+    if stored is None:
+        if window is None:
             if not os.path.isfile(excel_path):
-                raise bi_stats.BIUnavailable(f"BI unavailable and no Stats workbook: {type(e).__name__}: {e}") from e
-            note = f"BI unavailable ({type(e).__name__}: {e}) — showing the Stats workbook instead."
-            print(f"[morning_service] {note}", file=sys.stderr)
-            return read_stats_workbook(excel_path), "excel", note
-    return read_stats_workbook(excel_path), "excel", None
+                raise bi_stats.BIUnavailable("BI and the stats archive are unavailable and there is no Stats workbook")
+            return _read_workbook_cached(excel_path).copy(), "excel", " ".join(notes)
+        bi = bi_stats.assign_cm(window, bi_stats.load_cm_map(), keep_unmapped=bi_stats.keep_all_cms())
+        book = _read_workbook_cached(excel_path) if os.path.isfile(excel_path) else None
+        return merge_bi_with_history(bi, book), "bi", " ".join(notes)
+
+    if stored.empty:
+        raise bi_stats.BIUnavailable("BI unavailable, the stats archive is empty and there is no Stats workbook")
+    from_bi = stored[stored["source"] == "bi"].drop(columns=["source", "CM"])
+    from_book = stored[stored["source"] == "workbook"].drop(columns=["source", "CM_ID"])
+    from_bi = bi_stats.assign_cm(from_bi, bi_stats.load_cm_map(), keep_unmapped=bi_stats.keep_all_cms())
+    rows = pd.concat([from_book, from_bi], ignore_index=True, sort=False)
+    if window is None:
+        print(f"[morning_service] {notes[0]}", file=sys.stderr)
+    return rows, ("bi" if window is not None else "archive"), (" ".join(notes) or None)
 
 
 def load_morning_report(
@@ -314,8 +385,8 @@ def load_morning_report(
     # Provide the source Excel path on the report for the renderer header.
     report["source_excel"] = resolved_excel
     report["stats_source"] = enriched_df.attrs.get("stats_source", "excel")
-    if report["stats_source"] == "bi":
-        report["source_excel"] = "BI (MySQL)"
+    if report["stats_source"] in ("bi", "archive"):
+        report["source_excel"] = "BI (MySQL) + local stats archive"
     note = enriched_df.attrs.get("stats_note")
     if note:
         warnings.append(note)
