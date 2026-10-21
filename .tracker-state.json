@@ -48071,20 +48071,6 @@
         "state": "implementing",
         "started_at": "2026-10-21T23:15:13+00:00",
         "from_status": "status:idea"
-      },
-      "1079": {
-        "actor": "Worker-V7Q2R8",
-        "session": "root_acl2079_20261022",
-        "coordinator": "Coordinator-R6M9H2",
-        "branch": "codex/acl-2079-isolated-process-support",
-        "worktree": "/Users/dmitry.o/Documents/ChatGPT/ACL/tmp/acl-2079-isolated-process-support",
-        "id": "de604ff03d72482290f410e51c760efa",
-        "issue": 1079,
-        "state": "handoff",
-        "started_at": "2026-10-21T23:52:18+00:00",
-        "from_status": "status:todo",
-        "pr": 1080,
-        "report": "ACL-2079 refreshed source handoff by actual original Worker-V7Q2R8 after genuine Reviewer-H8K4N7 completed source-review return for changed main. Same original branch/task/PR1080; new actual claimde604ff03d72482290f410e51c760efa. Current head2c71d1bde0ee190b1123c4dcd1936b8d19d555b3, tree9af89d5bc9c17df277decdda8fe517fd52485722, actualmain/basee8bf31f8921ec6a8f79c824f39c1fc3beff2f359. Merge parents preserve prior source3b7253f053294c5118ba4ea640c65c9a23ac02b7 and accepted newmain. All seven new main product/docs/test files are included byte-identical. The diff against current main remains16 support/instruction files; the only new author content since the original candidate is the explicit current-base/history paragraph in PROCESS_SUPPORT_ACL.md.\n\nSame accepted published Master1.8.0 fddcdd0d60db2e14cce0a53e6af23e12356c3bc7 / Tracker3.10.0 e71c9829247e60d79031dbb1bb038896fcedf4cc, exact canonical closure/baseline, local template conflict resolutions, three descriptor fields and byte-identical Trackerconfig. Current-base product/config/dependencies/build/parser/scripts/adoptionguard and existing release/verification/publication workflows remain unchanged. Fresh affected Master-adoption/workflow suite80passed7.15seconds, freshscanner/diffcheck passed. Original frozen731toolingtests/5manifesttests and all16 original native checks (Linux, Windows and installer included) are historical evidence for3b/64e, not approval of this changed baseline. New required hostedCI is running on2c71d1bd and must finish normally. Maintained current selection is idempotent.\n\nFresh actual independent whole-original-Issue source review and supported canonical proof/current scope are required, followed by source approval only when current requiredCI passes. Do not directmergeSourcePR, take foreign owners/intake/requests, infer oldsourceapproval, select optional policies or request product installer for this canonical process-support scope. Shared reader installation still awaits the owner's concrete transfer approval; no isolated receipt writer is active. Genuine ordinary frozen integration/combined review/actual main proof and remaining native acceptance/rollout remain required. ACL2071 separate supplemental completion and ACL2069 original developer/scope remain intact."
       }
     },
     "tasks": {
@@ -57431,7 +57417,7 @@
             "session": "root_acl2079_20261022"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-V7Q2R8",
         "coordinator": "Coordinator-R6M9H2",
         "handoff": {
@@ -57440,19 +57426,17 @@
           "coordinator": "Coordinator-R6M9H2",
           "branch": "codex/acl-2079-isolated-process-support",
           "worktree": "/Users/dmitry.o/Documents/ChatGPT/ACL/tmp/acl-2079-isolated-process-support",
-          "id": "40f800beeb254a04afac77e6f3c0a393",
+          "id": "de604ff03d72482290f410e51c760efa",
           "issue": 1079,
           "state": "handoff",
-          "started_at": "2026-10-21T23:17:14+00:00",
+          "started_at": "2026-10-21T23:52:18+00:00",
           "from_status": "status:todo",
           "pr": 1080,
-          "report": "ACL-2079 genuine source handoff by Worker-V7Q2R8 from dedicated branch codex/acl-2079-isolated-process-support. Base64e73a1e151b6611517cd9643dfb911ef54d6832, head3b7253f053294c5118ba4ea640c65c9a23ac02b7, tree8096717bf6079d94da2ceac3995394f6c608bdfd. Sixteen files select published Master1.8.0 fddcdd0d60db2e14cce0a53e6af23e12356c3bc7 / Tracker3.10.0 e71c9829247e60d79031dbb1bb038896fcedf4cc and its exact generated closure/baseline. Two real local template conflicts were explicitly resolved preserving all ACL policy and changing only upstream pin references; maintained writer/idempotence verified. Root AGENTS/EARLY_ADOPTION current navigation corrected; historical evidence retained.\n\nActual local checks: frozen full existing14-module tooling731passed419.76seconds; real unchanged manifest parser5passed; after final navigation fixes80affectedtests passed4.93seconds; scanner and diffcheck passed. Exact upstream merged pair Python3.9 no-override run39691739580 passed. Product/runtime/config/dependencies/build/parser/scripts and existing product publication/verification workflows unchanged; canonical governance policy is reachable and its affected regressions apply. Config/adoption/foreign ownership/scopes/requests untouched. Complete author isolation report is docs/repository/PROCESS_SUPPORT_ACL.md. Full original Issue requirements and final immutable source need genuine independent review and process-support proof, complete required hostedCI, then source approval only. Do not direct-merge source, reuse ACL2069 ownership, take foreign integration1077, create product publication, activate optional state policy, or mark ACL2071Done from this adoption. Reader installation before new writers and normal frozen integration/combined review/actual main proof remain required. Source implementation complete; awaiting independent review and checks."
+          "report": "ACL-2079 refreshed source handoff by actual original Worker-V7Q2R8 after genuine Reviewer-H8K4N7 completed source-review return for changed main. Same original branch/task/PR1080; new actual claimde604ff03d72482290f410e51c760efa. Current head2c71d1bde0ee190b1123c4dcd1936b8d19d555b3, tree9af89d5bc9c17df277decdda8fe517fd52485722, actualmain/basee8bf31f8921ec6a8f79c824f39c1fc3beff2f359. Merge parents preserve prior source3b7253f053294c5118ba4ea640c65c9a23ac02b7 and accepted newmain. All seven new main product/docs/test files are included byte-identical. The diff against current main remains16 support/instruction files; the only new author content since the original candidate is the explicit current-base/history paragraph in PROCESS_SUPPORT_ACL.md.\n\nSame accepted published Master1.8.0 fddcdd0d60db2e14cce0a53e6af23e12356c3bc7 / Tracker3.10.0 e71c9829247e60d79031dbb1bb038896fcedf4cc, exact canonical closure/baseline, local template conflict resolutions, three descriptor fields and byte-identical Trackerconfig. Current-base product/config/dependencies/build/parser/scripts/adoptionguard and existing release/verification/publication workflows remain unchanged. Fresh affected Master-adoption/workflow suite80passed7.15seconds, freshscanner/diffcheck passed. Original frozen731toolingtests/5manifesttests and all16 original native checks (Linux, Windows and installer included) are historical evidence for3b/64e, not approval of this changed baseline. New required hostedCI is running on2c71d1bd and must finish normally. Maintained current selection is idempotent.\n\nFresh actual independent whole-original-Issue source review and supported canonical proof/current scope are required, followed by source approval only when current requiredCI passes. Do not directmergeSourcePR, take foreign owners/intake/requests, infer oldsourceapproval, select optional policies or request product installer for this canonical process-support scope. Shared reader installation still awaits the owner's concrete transfer approval; no isolated receipt writer is active. Genuine ordinary frozen integration/combined review/actual main proof and remaining native acceptance/rollout remain required. ACL2071 separate supplemental completion and ACL2069 original developer/scope remain intact."
         },
         "pr": 1080,
-        "queued_at": "2026-10-21T23:36:33+00:00",
-        "review_report": "# ACL-2079 source review return: actual main advanced\n\nActual independent Reviewer-H8K4N7, session review_acl2079_tt194_20261022, own source lane8868dd0a735f495fa20775bdcd81c9b0 returns only ACL-2079 / PR1080 to its original author.\n\nThe complete16-file source head3b7253f053294c5118ba4ea640c65c9a23ac02b7, base64e73a1e151b6611517cd9643dfb911ef54d6832 and tree8096717bf6079d94da2ceac3995394f6c608bdfd had no remaining source findings. The genuine canonical proof edef44f7c06ed761cbbe104fcaa372d425760f55713b4927bc28cabe5607453e and independently assessed original scope142a010f210e112a16dd120aa0ad5d1733f5cacbc06b341e3068e9067559716f remain historical evidence of that exact candidate. Native source review was recorded2026-10-21T23:40:29Z; source approval was never performed because required CI was still running.\n\nBefore approval, authoritative main advanced to e8bf31f8921ec6a8f79c824f39c1fc3beff2f359, tree47adbe5dcb33213bbe48fe7a69bbf98056660343, through the genuine foreign PR1077 merge containing ACL-2050, ACL-1838 and ACL-1165. Its first parent is the previously reviewed64e73a1e. This is an actual baseline change, not a speculative conflict or source defect. ACL has no adopted task-context compatibility route allowing this source to retain old-main approval.\n\nRequired resolution: original Worker-V7Q2R8 must take its supported fresh author claim on the same original branch/worktree, incorporate actual current main without dropping the new product work or ACL-specific controls, assess semantic interactions and complete the applicable checks/handoff for that immutable result. Preserve unchanged valid731-tooling/80-navigation/5-manifest and upstream evidence within its actual coverage; this return does not order arbitrary repeat runs or imply disjoint paths prove compatibility. Configured hosted events and actual source/combined/platform admission still apply.\n\nPreserve ACL-2069/PR1070, all foreign ownership/batches/intake and product delivery requests. This owned return acquires no integration, clears no foreign slot, changes no task requirements and creates no product publication request. Fresh independent exact-source review and canonical proof are required after the genuine author handoff. Existing source CI may finish on the old head; it is not represented as proof of a newer head or new-main composition.",
-        "rework": true,
-        "rework_claim": "de604ff03d72482290f410e51c760efa"
+        "queued_at": "2026-10-21T23:55:33+00:00",
+        "review_report": "# ACL-2079 source review return: actual main advanced\n\nActual independent Reviewer-H8K4N7, session review_acl2079_tt194_20261022, own source lane8868dd0a735f495fa20775bdcd81c9b0 returns only ACL-2079 / PR1080 to its original author.\n\nThe complete16-file source head3b7253f053294c5118ba4ea640c65c9a23ac02b7, base64e73a1e151b6611517cd9643dfb911ef54d6832 and tree8096717bf6079d94da2ceac3995394f6c608bdfd had no remaining source findings. The genuine canonical proof edef44f7c06ed761cbbe104fcaa372d425760f55713b4927bc28cabe5607453e and independently assessed original scope142a010f210e112a16dd120aa0ad5d1733f5cacbc06b341e3068e9067559716f remain historical evidence of that exact candidate. Native source review was recorded2026-10-21T23:40:29Z; source approval was never performed because required CI was still running.\n\nBefore approval, authoritative main advanced to e8bf31f8921ec6a8f79c824f39c1fc3beff2f359, tree47adbe5dcb33213bbe48fe7a69bbf98056660343, through the genuine foreign PR1077 merge containing ACL-2050, ACL-1838 and ACL-1165. Its first parent is the previously reviewed64e73a1e. This is an actual baseline change, not a speculative conflict or source defect. ACL has no adopted task-context compatibility route allowing this source to retain old-main approval.\n\nRequired resolution: original Worker-V7Q2R8 must take its supported fresh author claim on the same original branch/worktree, incorporate actual current main without dropping the new product work or ACL-specific controls, assess semantic interactions and complete the applicable checks/handoff for that immutable result. Preserve unchanged valid731-tooling/80-navigation/5-manifest and upstream evidence within its actual coverage; this return does not order arbitrary repeat runs or imply disjoint paths prove compatibility. Configured hosted events and actual source/combined/platform admission still apply.\n\nPreserve ACL-2069/PR1070, all foreign ownership/batches/intake and product delivery requests. This owned return acquires no integration, clears no foreign slot, changes no task requirements and creates no product publication request. Fresh independent exact-source review and canonical proof are required after the genuine author handoff. Existing source CI may finish on the old head; it is not represented as proof of a newer head or new-main composition."
       }
     },
     "actors": {
@@ -63517,7 +63501,8 @@
       710,
       1069,
       840,
-      19
+      19,
+      1079
     ],
     "review": null,
     "history": [
@@ -111587,6 +111572,13 @@
         "at": "2026-10-21T23:52:18+00:00",
         "issue": 1079,
         "claim": "de604ff03d72482290f410e51c760efa",
+        "actor": "Worker-V7Q2R8"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-21T23:55:33+00:00",
+        "issue": 1079,
+        "pr": 1080,
         "actor": "Worker-V7Q2R8"
       }
     ],
