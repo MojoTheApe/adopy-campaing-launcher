@@ -55732,7 +55732,7 @@
             "session": "run_l4_53"
           }
         ],
-        "state": "approved",
+        "state": "returning_approval",
         "worker": "Worker-L453",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -55751,7 +55751,19 @@
         },
         "pr": 1032,
         "queued_at": "2026-10-20T09:45:38+00:00",
-        "reviewer": "Reviewer-R402W"
+        "reviewer": "Reviewer-R402W",
+        "return_operation": {
+          "id": "0c36dec13db647b8bc6eed67079db67f",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
+        },
+        "return": {
+          "id": "0c36dec13db647b8bc6eed67079db67f",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
+        }
       },
       "230": {
         "implementers": [
