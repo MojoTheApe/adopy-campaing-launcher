@@ -56060,7 +56060,7 @@
             "session": "run_p1021d_2050"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-P1021D2050",
         "coordinator": "Coordinator-P1021B",
         "handoff": {
@@ -56085,7 +56085,8 @@
           "actor": "Coordinator-P1021B",
           "session": "run_p1021b_1021",
           "report": "ACL-2050 approval is stale vs main 0ea237b0 (batch #1064 merged). Author merges current main into work/acl-2050-placement-readback (no force), reruns affected tests, hands off; fresh independent review and approval required. No content change requested."
-        }
+        },
+        "reviewer": "Reviewer-P1021E2050"
       },
       "1052": {
         "implementers": [
@@ -59267,6 +59268,10 @@
       "Reviewer-S1021839": {
         "session": "run_s1021_1839",
         "role": "Reviewer"
+      },
+      "Reviewer-P1021E2050": {
+        "session": "rev_p1021e_2050",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -62165,8 +62170,7 @@
       1053,
       1054,
       710,
-      838,
-      1050
+      838
     ],
     "review": {
       "id": "3cbfef49299841b6912867db49cc431f",
@@ -107327,6 +107331,13 @@
         "pr": 843,
         "lane": "4de90b9341ff40cc8fa7adae6e8da6ac",
         "actor": "Reviewer-S1021839"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-21T13:56:37+00:00",
+        "pr": 1058,
+        "lane": "31abb15e88a742dd89f051476b34d20d",
+        "actor": "Reviewer-P1021E2050"
       }
     ],
     "policy": {
@@ -117057,6 +117068,18 @@
         "session": "run_s1021_1839",
         "coordinator": "Coordinator-I1021A",
         "started_at": "2026-10-21T13:55:19+00:00",
+        "state": "reviewing"
+      },
+      "1058": {
+        "id": "31abb15e88a742dd89f051476b34d20d",
+        "pr": 1058,
+        "issues": [
+          1050
+        ],
+        "actor": "Reviewer-P1021E2050",
+        "session": "rev_p1021e_2050",
+        "coordinator": "Coordinator-P1021B",
+        "started_at": "2026-10-21T13:56:37+00:00",
         "state": "reviewing"
       }
     },
