@@ -46918,9 +46918,11 @@
         "worktree": "C:\\acl-rv-668",
         "id": "d4ddd64c9f2c4c779b592b9192818b37",
         "issue": 668,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T11:33:07+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 975,
+        "report": "# ACL-1668 handoff after review return (head 5e7baa80, main ea41acbf already contained)\n\nDisclosure: the fixture edits in four test files were made in the worktree BEFORE this re-claim succeeded (slots were full); they were kept uncommitted and committed only after the claim (d4ddd64c).\n\nFindings:\n1. BLOCKER (58 browser tests red in CI): fixed in the fixtures, product behaviour untouched. tests/test_drawer_review_browser.py defines OFFLINE_FILES (offline*.png, good.png, fixed.png, as {filename, rel_path, folder, type, size_bytes}); the offline /api/creatives route in test_drawer_review_browser, test_builder_multi_publish_browser, test_campaign_build_dot_browser and test_builder_second_primary_text returns it. percent, publish_selected, acl1604_preflight and foot_stays_put inherit it by import.\n2. CHANGELOG: ACL-1668 entry added at the top of docs/system/CHANGELOG.md.\n3. cbPublish: the missing-file refusal now runs before cbPreflightDecision, like cbPublishAll.\nNon-blocking wording note left as is.\n\nTests (local, final head): the 8 files above plus test_builder_review_browser.py and test_acl1668_missing_creative_publish.py: all pass, except tests/test_campaign_build_dot_browser.py::test_building_then_finished_clean_and_with_errors, which fails also on clean main ea41acbf (reproduced in a separate main worktree; fails on the `other` campaign dot, unrelated to this task). It passed in one earlier local run, so it looks flaky/pre-existing. The other 9 dot tests pass. Secret scan clean. Full suite not run locally; CI is the acceptance signal.\nNo owner live check needed."
       },
       "558": {
         "actor": "Worker-A1021558",
