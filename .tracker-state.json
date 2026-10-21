@@ -54689,7 +54689,7 @@
             "session": "run_w1021_1165"
           }
         ],
-        "state": "approved",
+        "state": "returning_approval",
         "worker": "Worker-W1021165",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -54715,12 +54715,18 @@
           "remote_process_stopped_verified": false
         },
         "return_operation": {
-          "id": "b9da93d484904d028c1630782c0d3fe7",
-          "actor": "Coordinator-C1016A",
-          "session": "c7e3da-20261016",
-          "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
+          "id": "8c9d2deccf924f759bee301083f79d35",
+          "actor": "Coordinator-I1021A",
+          "session": "run_i1021a_1021",
+          "report": "Approval is stale against current main 64e73a1e (after ACL-2073 #1075 and ACL-2071 #1076 merged). Author: merge current main into the original branch without changing content (resolve only CHANGELOG append conflicts by keeping both entries), re-run checks, hand off, and get a fresh independent source approval for batch 2b (--deliver)."
         },
-        "reviewer": "Reviewer-S1021165"
+        "reviewer": "Reviewer-S1021165",
+        "return": {
+          "id": "8c9d2deccf924f759bee301083f79d35",
+          "actor": "Coordinator-I1021A",
+          "session": "run_i1021a_1021",
+          "report": "Approval is stale against current main 64e73a1e (after ACL-2073 #1075 and ACL-2071 #1076 merged). Author: merge current main into the original branch without changing content (resolve only CHANGELOG append conflicts by keeping both entries), re-run checks, hand off, and get a fresh independent source approval for batch 2b (--deliver)."
+        }
       },
       "72": {
         "implementers": [
