@@ -51932,7 +51932,7 @@
             "session": "run_l1_845"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-L1845",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -51951,7 +51951,7 @@
         },
         "pr": 850,
         "queued_at": "2026-10-20T11:34:45+00:00",
-        "review_report": "# Returned to the author: merge conflict with main, content not reviewed\n\nPR 850 cannot be brought up to current main c61501607ce11744e45add8b0d3b314368c216c5: `gh pr update-branch` reports a merge conflict (checked 2026-10-19/20). A source review must bind the current main baseline, so this task cannot be reviewed or approved as is.\n\nThe content of this PR was NOT reviewed in this pass; this return carries no code findings.\n\nNext step for the author: merge current main into the original branch, resolve the conflict, run the affected tests, push, and hand off again for a full independent review.",
+        "review_report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578011+00:00",
@@ -51969,7 +51969,8 @@
           "actor": "Coordinator-M1011A",
           "session": "coord-m1011a-20261015",
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
-        }
+        },
+        "rework": true
       },
       "844": {
         "implementers": [
@@ -106900,6 +106901,18 @@
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
         },
         "batch_id": null
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-21T13:12:10+00:00",
+        "issue": 845,
+        "operation": {
+          "id": "6f12b9cbcfd643ecaa8b78a2bf386d62",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -110421,50 +110434,6 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-20T14:08:17+00:00"
-      },
-      "845": {
-        "issue": 845,
-        "pr": 850,
-        "branch": "codex/acl-1845-publish-button-design",
-        "head_sha": "7cd286ec6d8fde7bf9ecf510d7b23fe3fbb617ec",
-        "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-        "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "scope": "9c7c2106bea898283bcc702c2c771bee801df7835d57d9916bdef93032e9e44a",
-        "review": {
-          "kind": "independent-review",
-          "verdict": "approved",
-          "reviewer": "Reviewer-R1845V",
-          "review_session": "reviewer-r1845v-20261020",
-          "execution_lane": "766eb6ba60734c0ca9270121d9c239e3",
-          "implementer": "Worker-L1845",
-          "head_sha": "7cd286ec6d8fde7bf9ecf510d7b23fe3fbb617ec",
-          "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-          "tree_sha": "1db5d2621c1ca725c27805e5a52f5fe8b638c5d7",
-          "issues": [
-            845
-          ],
-          "report": "Reviewed the full diff work/main..HEAD (6 files; CHANGELOG, report.html, 4 browser tests) at head 7cd286ec against main 259ae7f1. The merge with main kept main's ACL-1761 PAUSED/drafts label (only the count switches to t.open.length), main's pre-flight gate (applyGate/CB_PF_GATE) and drafts footer; the branch is not stacked on other unmerged tasks (log work/main..HEAD holds only ACL-1845 commits and merges of main). The PR makes the footer button the single primary publication action in a new .cbd-publication block with a live scope line (checkbox selection or all, excluding accounts already building) and a count that equals what is dispatched (t.send / t.open); the open campaign's action is restyled as a secondary link; unavailable state is a pale-blue disabled style with a visible reason; zero eligible campaigns or unknown queue state disable the button in refreshPublication, applyGate and showQueue; refreshTicks always calls refreshAudit->applyGate after refreshPublication so the pre-flight block is never overridden and there is no second path around the gate; aria-busy is informative only and guarded for stub buttons; confirmation dialog moved from inline styles to theme-token classes with payload semantics unchanged; all colors use design tokens in both themes, focus-visible and reduced-motion are handled, labels are English. No acceptance criterion is deferred (the CHANGELOG states the newer expanded runtime adoption is a separate upstream dependency, consistent with the Issue). Tests run locally: test_publish_button_design_browser, test_acl1826_mlx_session_lost, test_builder_publish_selected_browser, test_drawer_review_browser 74 passed; test_builder_multi_publish_browser 12 passed. Hosted CI on the head is fully green (linux 1-3, windows, ACL verification, installer verification, tracker-link, descriptor). Non-blocking nits: the CHANGELOG diff adds stray blank lines before unrelated headings (merge artifact); the typeof ticks guard in showQueue exists only for a test harness. No live checks claimed.",
-          "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "recorded_at": "2026-10-20T14:18:10+00:00",
-          "issue_scopes": {
-            "845": "9c7c2106bea898283bcc702c2c771bee801df7835d57d9916bdef93032e9e44a"
-          }
-        },
-        "lane": {
-          "id": "766eb6ba60734c0ca9270121d9c239e3",
-          "pr": 850,
-          "issues": [
-            845
-          ],
-          "actor": "Reviewer-R1845V",
-          "session": "reviewer-r1845v-20261020",
-          "coordinator": "Coordinator-M1011A",
-          "started_at": "2026-10-20T13:48:54+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-20T14:18:58+00:00"
       },
       "138": {
         "issue": 138,
