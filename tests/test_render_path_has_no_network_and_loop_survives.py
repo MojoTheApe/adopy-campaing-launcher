@@ -146,7 +146,9 @@ def test_the_cause_clearing_the_mark_on_the_loop_thread_kills_every_next_step():
             print("run failed", type(exc).__name__, flush=True)
     """)
     proc = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=30)
-    assert "is not the running loop" in proc.stderr
+    # Формулировка зависит от версии Python: 3.11/3.12 — «is not the running loop»,
+    # 3.13 — «no running event loop». Суть одна: метка текущего цикла сброшена.
+    assert ("is not the running loop" in proc.stderr) or ("no running event loop" in proc.stderr)
     assert "other survived" not in proc.stdout
 
 
