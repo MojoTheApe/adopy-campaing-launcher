@@ -11,13 +11,30 @@
         "SUBSCRIBE",
         "CONTACT_US",
         "DOWNLOAD",
-        "GET_OFFER"
+        "GET_OFFER",
+        "BOOK_NOW",
+        "ORDER_NOW",
+        "REQUEST_TIME"
+      ],
+      "leads_instant_form": [
+        "LEARN_MORE",
+        "SIGN_UP",
+        "APPLY_NOW",
+        "GET_QUOTE",
+        "SUBSCRIBE",
+        "CONTACT_US",
+        "DOWNLOAD",
+        "GET_OFFER",
+        "BOOK_NOW",
+        "REQUEST_TIME"
       ]
     },
     "default_objective": "leads",
     "link_re": "^https://[^\\s/?#:]+\\.[^\\s/?#:]+(:\\d+)?([/?#]\\S*)?$",
     "max_headline": 40,
     "max_primary_visible": 125,
+    "os_min_re": "^[0-9]{1,2}(\\.[0-9]{1,2})?$",
+    "start_re": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}$",
     "track_re": "\\?[^#\\s]*[^=&#\\s]="
   },
   "rules": [
@@ -355,6 +372,32 @@
       "hint": "age must be between 18 and 65, and min not above max",
       "id": "age_range",
       "label": "Age 18-65",
+      "severity": "error",
+      "side": "client",
+      "unit": "campaign"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "adset",
+        "sel": "[name$=\"_os\"]"
+      },
+      "hint": "iOS and Android are mobile only (not desktop only), and a minimum version needs iOS or Android and looks like 14 or 14.0",
+      "id": "devices_consistent",
+      "label": "Devices and OS version fit together",
+      "severity": "error",
+      "side": "client",
+      "unit": "campaign"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "adset",
+        "sel": "[name$=\"_start_time\"]"
+      },
+      "hint": "enter the start as date and time, not earlier than today (ad account time zone)",
+      "id": "start_time_valid",
+      "label": "Start time",
       "severity": "error",
       "side": "client",
       "unit": "campaign"
