@@ -54554,7 +54554,7 @@
             "session": "run_a1021_358w"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-A1021358",
         "coordinator": "Coordinator-A1021A",
         "handoff": {
@@ -54578,7 +54578,8 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578099+00:00",
           "remote_process_stopped_verified": false
-        }
+        },
+        "reviewer": "Reviewer-A1021358"
       },
       "403": {
         "implementers": [
@@ -58768,6 +58769,10 @@
       "Worker-A1021558": {
         "session": "run_a1021_558w",
         "role": "Worker"
+      },
+      "Reviewer-A1021358": {
+        "session": "run_a1021_358r",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -61665,8 +61670,7 @@
     "review_queue": [
       1050,
       1053,
-      1054,
-      358
+      1054
     ],
     "review": null,
     "history": [
@@ -105533,6 +105537,13 @@
         "issue": 558,
         "claim": "aa8e8a3f91134445b1712a26aa0540b4",
         "actor": "Worker-A1021558"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-21T11:19:24+00:00",
+        "pr": 974,
+        "lane": "edb2d80250c842668526b6a94e793b8d",
+        "actor": "Reviewer-A1021358"
       }
     ],
     "policy": {
@@ -115327,6 +115338,18 @@
         "state": "reviewing",
         "report": "ACL-1626 (PR 967) review return at d460cfba - one blocking finding (CI red), content otherwise approved.\n\nBLOCKING: required CI \"linux tests (3.13, 1)\" fails on this head (run 39581343441, job 119160086116): 3 failed, 3034 passed.\n  FAILED tests/test_acl1620_account_notes.py::test_a_damaged_file_is_reported_in_the_save_response_and_logged\n  FAILED tests/test_acl1620_account_notes.py::test_two_corruptions_in_the_same_millisecond_keep_both_copies\n  FAILED tests/test_acl1620_account_notes.py::test_the_backup_name_has_millisecond_resolution\n  - RuntimeError: asyncio.run() cannot be called from a running event loop\nCause: the new tests were appended at the end of the module, after the module-scoped `browser` fixture (line ~222). Once that fixture has started sync Playwright, an event loop is running in the main thread for the rest of the module, so `_post()` (asyncio.run at line 47) fails. They pass only when run in isolation (that is why the handoff saw \"3 passed\" separately). This is deterministic, not an environment issue; it also reproduces locally.\nFix (either): move the four new tests above the `browser` fixture, next to the other non-browser tests (e.g. after test_a_wrong_root_is_preserved_too); or make `_post` run the handler in a worker thread as the fixture's route handler already does (lines ~248-251). Moving the tests is the smaller change. Then run the whole file in one process (non-browser tests must pass even when browser tests fail/skip locally) and get CI green.\n\nEverything else checked and fine (no other change needed): spec 1 (log warning + set_aside/warning in the save response + role=alert banner with the exact Issue wording), spec 2 (ms-resolution name + collision counter under the machine-file lock), scope limited to the 4 files, PR body has exactly one Tracker issues line, no leaks, English UI text, merge of main ea41acbf clean.\nNon-blocking (optional in the same fix): add a short docs/system/CHANGELOG.md entry for the new response fields and banner; the banner itself is only checked by a source-string test.\nSpec 3 (owner live check: write/edit/clear a note, restart the dashboard, note survives) remains for the owner separately; not a reason for this return.",
         "keep_lane": true
+      },
+      "974": {
+        "id": "edb2d80250c842668526b6a94e793b8d",
+        "pr": 974,
+        "issues": [
+          358
+        ],
+        "actor": "Reviewer-A1021358",
+        "session": "run_a1021_358r",
+        "coordinator": "Coordinator-A1021A",
+        "started_at": "2026-10-21T11:19:24+00:00",
+        "state": "reviewing"
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
