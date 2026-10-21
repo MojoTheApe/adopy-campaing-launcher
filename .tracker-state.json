@@ -5856,6 +5856,27 @@
             ]
           }
         }
+      },
+      "961": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-A1021784",
+        "implementer": "Worker-A1021784",
+        "head_sha": "f125642bbad9a67cc7d53f4b140f26894ad108af",
+        "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+        "tree_sha": "5db17581d82b8bddf92dde850667f2ee98ee5785",
+        "execution_lane": "0da8125a7c8b406f882b5209d6fe91db",
+        "review_session": "run_a1021_784r",
+        "report": "ACL-1784 / PR #961 independent source review - APPROVED at f125642b (contains main ea41acbf).\nScope: full diff vs main - docs/system/CHANGELOG.md, src/web/publish_api.py (read-only ApiPublisher.writes and started_profile), src/web/publish_jobs.py (_run_api settled/still_open/review_window + English notices; _run_job_inner releases the slot when review_window is False), tests/test_acl1784_api_review_window.py (18 tests). No unrelated files. Merge commit a525a67a resolved only adjacent CHANGELOG entries correctly. PR body: one 'Tracker issues: ACL-1784' line, no closing keywords. No leaked ids/tokens/paths (account labels only, as in the Issue). User-facing notices English. RPA path unchanged (review_window never set there).\nAcceptance: plan error leaves no kept window and the next queued job starts at cap 1; preflight stop closes a job-started profile and frees the slot for a user-opened one; clean job releases its slot (closes a job-started profile); readback mismatch / error after a write keeps the window. Tests use fake publisher and real ProfileSlots; the real finish_job is exercised for clean/stop/keep-open/dry-run/stop-failure.\nEarlier blocking finding B1 (slot freed while a job-started profile stayed open, false notice) is fixed: still_open = outcome != 'closed' and started_profile keeps the slot and shows API_STILL_OPEN_NOTICE.\nNon-blocking: on a user Stop before the first write the job-started profile is not stopped (ACL-1614 leaves the window open on cancel); the slot stays taken and the notice is truthful. I accept this as a conservative reading of the Issue's 'stops before the first write', which plan/preflight stops satisfy; owner may ask for auto-stop later. Writes counter counts Meta-refused POSTs as writes (conservative). The fix was written before the worker claim and committed after it (process note only).\nTests run locally: test_acl1784, test_acl1603, test_acl1761_api_create, test_acl1761_plan_check, test_acl1614, test_a_finished_clean_profile_closes_itself, test_acl1812: 365 passed.\nLive check: owner check of the panel notice on the test dashboard can follow separately.",
+        "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          784
+        ],
+        "recorded_at": "2026-10-21T09:00:28+00:00",
+        "issue_scopes": {
+          "784": "5b56fa44c5d2cc279506d3496eb5ed078f5e6d463f7cd1a06f6355db6f6b7bf7"
+        }
       }
     },
     "stage": {
