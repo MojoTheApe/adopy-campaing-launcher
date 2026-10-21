@@ -46910,20 +46910,6 @@
         "started_at": "2026-10-20T12:56:11+00:00",
         "from_status": "status:todo"
       },
-      "142": {
-        "actor": "Worker-A1021142",
-        "session": "run_a1021_142w",
-        "coordinator": "Coordinator-A1021A",
-        "branch": "work/acl-1142-per-job-pacing",
-        "worktree": "C:\\acl-rv-142",
-        "id": "d1752307b8b14173a7e7f26dd5cbba7c",
-        "issue": 142,
-        "state": "handoff",
-        "started_at": "2026-10-21T10:15:15+00:00",
-        "from_status": "status:todo",
-        "pr": 983,
-        "report": "ACL-1142 (PR #983): merged current main (ea41acbf) into the PR branch; new head fbb98941. Merge commit only, no other edits.\n\nConflicts: only docs/system/CHANGELOG.md; kept both sides (main's ACL-1381 and ACL-1971 entries plus the task's entry). src/web/app.py, src/web/publish_jobs.py and src/web/templates/report.html auto-merged cleanly.\n\nTests run (affected only): test_acl1142_per_job_teach, test_pacing_takeover, test_acl1614*, test_acl1702*, test_acl1603*, test_campaign_build_dot_browser, test_create_wizard_flow -> 146 passed, 2 failed.\n- test_acl1702_tab_unblock_real_chromium[/adsmanager/manage/ads/edit]: TargetClosedError under load (-n 2); rerun alone, all 4 pass.\n- test_campaign_build_dot_browser::test_building_then_finished_clean_and_with_errors: fails identically on unmodified work/main (ea41acbf) at line 173 (the \"other\" account's campaign row is not in the DOM because the tree shows only the selected account). Pre-existing on main, not caused by this task or the merge; the test file is identical to main's. Needs a separate fix.\nacl_scan_secrets.py: clean. Full suite not run locally; CI is the acceptance signal.\n\nOwner live check: none required beyond the earlier two-account teach banner scenario; no live checks were done here."
-      },
       "668": {
         "actor": "Worker-A1021668",
         "session": "run_a1021_668w",
@@ -54873,25 +54859,25 @@
             "session": "run_a1021_142w"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-A1021142",
         "coordinator": "Coordinator-A1021A",
         "handoff": {
-          "actor": "Worker-W1142A",
-          "session": "w1142a-s1",
-          "coordinator": "Coordinator-T1004Q",
+          "actor": "Worker-A1021142",
+          "session": "run_a1021_142w",
+          "coordinator": "Coordinator-A1021A",
           "branch": "work/acl-1142-per-job-pacing",
-          "worktree": "C:\\acl-1142",
-          "id": "abaa09763e9c42839fbb86003c138b4f",
+          "worktree": "C:\\acl-rv-142",
+          "id": "d1752307b8b14173a7e7f26dd5cbba7c",
           "issue": 142,
           "state": "handoff",
-          "started_at": "2026-10-17T13:36:58+00:00",
+          "started_at": "2026-10-21T10:15:15+00:00",
           "from_status": "status:todo",
           "pr": 983,
-          "report": "ACL-1142: teach state in pacing.py is per job; banner names the account and releases only its job; amber dot (build-attn) for a waiting job. PR #983. Tests: test_acl1142_per_job_teach, test_pacing_takeover, test_acl1614, test_acl1702, test_acl1603, test_campaign_build_dot_browser, test_create_wizard_flow all pass. Merge risk: small hunks in publish_jobs.py, report.html, CHANGELOG.md overlapping #869/#936/#961/#863."
+          "report": "ACL-1142 (PR #983): merged current main (ea41acbf) into the PR branch; new head fbb98941. Merge commit only, no other edits.\n\nConflicts: only docs/system/CHANGELOG.md; kept both sides (main's ACL-1381 and ACL-1971 entries plus the task's entry). src/web/app.py, src/web/publish_jobs.py and src/web/templates/report.html auto-merged cleanly.\n\nTests run (affected only): test_acl1142_per_job_teach, test_pacing_takeover, test_acl1614*, test_acl1702*, test_acl1603*, test_campaign_build_dot_browser, test_create_wizard_flow -> 146 passed, 2 failed.\n- test_acl1702_tab_unblock_real_chromium[/adsmanager/manage/ads/edit]: TargetClosedError under load (-n 2); rerun alone, all 4 pass.\n- test_campaign_build_dot_browser::test_building_then_finished_clean_and_with_errors: fails identically on unmodified work/main (ea41acbf) at line 173 (the \"other\" account's campaign row is not in the DOM because the tree shows only the selected account). Pre-existing on main, not caused by this task or the merge; the test file is identical to main's. Needs a separate fix.\nacl_scan_secrets.py: clean. Full suite not run locally; CI is the acceptance signal.\n\nOwner live check: none required beyond the earlier two-account teach banner scenario; no live checks were done here."
         },
         "pr": 983,
-        "queued_at": "2026-10-17T13:46:13+00:00",
+        "queued_at": "2026-10-21T11:35:25+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -61682,7 +61668,8 @@
       1050,
       1053,
       1054,
-      558
+      558,
+      142
     ],
     "review": null,
     "history": [
@@ -105703,6 +105690,13 @@
         "issue": 668,
         "claim": "d4ddd64c9f2c4c779b592b9192818b37",
         "actor": "Worker-A1021668"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-21T11:35:25+00:00",
+        "issue": 142,
+        "pr": 983,
+        "actor": "Worker-A1021142"
       }
     ],
     "policy": {
