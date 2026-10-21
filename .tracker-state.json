@@ -41631,6 +41631,117 @@
             }
           ]
         }
+      },
+      "165": {
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "sources": [
+          {
+            "pr": 1077,
+            "merge_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+            "tree_sha": "47adbe5dcb33213bbe48fe7a69bbf98056660343"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-10-21T23:49:28+00:00",
+        "scope": "234afaf33da792fa11b47c0538a8af5bcf7f638df359ca829680721c26712410",
+        "scope_provenance": {
+          "schema_version": 1,
+          "repository": "MojoTheApe/adopy-campaing-launcher",
+          "issue": 165,
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "target": "ACL stable Windows installer and update channel",
+          "sources": [
+            {
+              "pr": 1077,
+              "merge_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+              "tree_sha": "47adbe5dcb33213bbe48fe7a69bbf98056660343"
+            }
+          ],
+          "accepted_by": [
+            {
+              "kind": "batch-member",
+              "batch_id": "21ad574948cf4aa7bff078d191c31d9f",
+              "pr": 1077,
+              "head_sha": "255d715f9600550820dbabf2541a3cc120a4a848",
+              "base_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+              "tree_sha": "44c17710dc312d109a2dcb82d2b28eed08a52007"
+            }
+          ]
+        }
+      },
+      "838": {
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "sources": [
+          {
+            "pr": 1077,
+            "merge_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+            "tree_sha": "47adbe5dcb33213bbe48fe7a69bbf98056660343"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-10-21T23:49:29+00:00",
+        "scope": "cf3992329999eade635234966dc6a7d8224ec279020d8cb4239227bab85df07b",
+        "scope_provenance": {
+          "schema_version": 1,
+          "repository": "MojoTheApe/adopy-campaing-launcher",
+          "issue": 838,
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "target": "ACL stable Windows installer and update channel",
+          "sources": [
+            {
+              "pr": 1077,
+              "merge_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+              "tree_sha": "47adbe5dcb33213bbe48fe7a69bbf98056660343"
+            }
+          ],
+          "accepted_by": [
+            {
+              "kind": "batch-member",
+              "batch_id": "21ad574948cf4aa7bff078d191c31d9f",
+              "pr": 1077,
+              "head_sha": "8a4fd24e11793bfade0be980e449fa4ffa1aab8c",
+              "base_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+              "tree_sha": "6bc2dfb3f2ca304468e01f8cc99860ddecda3261"
+            }
+          ]
+        }
+      },
+      "1050": {
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "sources": [
+          {
+            "pr": 1077,
+            "merge_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+            "tree_sha": "47adbe5dcb33213bbe48fe7a69bbf98056660343"
+          }
+        ],
+        "state": "pending",
+        "recorded_at": "2026-10-21T23:49:29+00:00",
+        "scope": "1aefcfe1e72c2e3155f61da7fe6643fc80f2d6236181d8c5c8fe6d40b4da616b",
+        "scope_provenance": {
+          "schema_version": 1,
+          "repository": "MojoTheApe/adopy-campaing-launcher",
+          "issue": 1050,
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "target": "ACL stable Windows installer and update channel",
+          "sources": [
+            {
+              "pr": 1077,
+              "merge_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+              "tree_sha": "47adbe5dcb33213bbe48fe7a69bbf98056660343"
+            }
+          ],
+          "accepted_by": [
+            {
+              "kind": "batch-member",
+              "batch_id": "21ad574948cf4aa7bff078d191c31d9f",
+              "pr": 1077,
+              "head_sha": "988c551a496077c1432347dcf689df641addf3ef",
+              "base_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+              "tree_sha": "19cb33353b30082c1213fdcf9aa3adadf166485a"
+            }
+          ]
+        }
       }
     },
     "promotions": {
@@ -47917,6 +48028,21 @@
         ],
         "source_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
         "recorded_at": "2026-10-21T22:22:32+00:00"
+      },
+      "1077": {
+        "tree_sha": "47adbe5dcb33213bbe48fe7a69bbf98056660343",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "route": "batch",
+        "main_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+        "batch_id": "21ad574948cf4aa7bff078d191c31d9f",
+        "pr": 1077,
+        "issues": [
+          1050,
+          838,
+          165
+        ],
+        "source_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+        "recorded_at": "2026-10-21T23:49:32+00:00"
       }
     }
   },
