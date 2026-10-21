@@ -47005,20 +47005,6 @@
         "started_at": "2026-10-21T12:40:14+00:00",
         "from_status": "status:idea"
       },
-      "1065": {
-        "actor": "Worker-K1021A1",
-        "session": "run_k1021a1_2065",
-        "coordinator": "Coordinator-K1021A",
-        "branch": "work/acl-2065-perf-morning-report",
-        "worktree": "C:\\acl-morning-perf",
-        "id": "59e060fba8e64ec4932433500be863fc",
-        "issue": 1065,
-        "state": "handoff",
-        "started_at": "2026-10-21T12:54:15+00:00",
-        "from_status": "status:todo",
-        "pr": 1068,
-        "report": "# ACL-2065 handoff\n\nPR #1068, branch work/acl-2065-perf-morning-report, head a871d559 on main ea41acbf.\nScope: src/analysis_agent/country_workbench.py, morning_report.py, analyze_fb_stats.py; new tests/test_morning_report_cold_build_speed.py; docs/system/CHANGELOG.md.\nProfile and result are in the Issue Handoff: cold build ~12 min -> ~100 s on the year workbook, default-period report JSON 0 differences.\nChecks: 25 affected test files (all importing the three modules), 261 passed locally; full suite in CI.\nRemaining: independent source review, CI, Approved, batch integration, package delivery. Owner live check after delivery: restart the dashboard and see the loading screen end in ~2 minutes."
-      },
       "1066": {
         "actor": "Worker-K1021A2",
         "session": "run_k1021a2_2066",
@@ -56147,9 +56133,25 @@
             "session": "run_k1021a1_2065"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-K1021A1",
-        "coordinator": "Coordinator-K1021A"
+        "coordinator": "Coordinator-K1021A",
+        "handoff": {
+          "actor": "Worker-K1021A1",
+          "session": "run_k1021a1_2065",
+          "coordinator": "Coordinator-K1021A",
+          "branch": "work/acl-2065-perf-morning-report",
+          "worktree": "C:\\acl-morning-perf",
+          "id": "59e060fba8e64ec4932433500be863fc",
+          "issue": 1065,
+          "state": "handoff",
+          "started_at": "2026-10-21T12:54:15+00:00",
+          "from_status": "status:todo",
+          "pr": 1068,
+          "report": "# ACL-2065 handoff\n\nPR #1068, branch work/acl-2065-perf-morning-report, head a871d559 on main ea41acbf.\nScope: src/analysis_agent/country_workbench.py, morning_report.py, analyze_fb_stats.py; new tests/test_morning_report_cold_build_speed.py; docs/system/CHANGELOG.md.\nProfile and result are in the Issue Handoff: cold build ~12 min -> ~100 s on the year workbook, default-period report JSON 0 differences.\nChecks: 25 affected test files (all importing the three modules), 261 passed locally; full suite in CI.\nRemaining: independent source review, CI, Approved, batch integration, package delivery. Owner live check after delivery: restart the dashboard and see the loading screen end in ~2 minutes."
+        },
+        "pr": 1068,
+        "queued_at": "2026-10-21T13:17:37+00:00"
       },
       "1066": {
         "implementers": [
@@ -62028,7 +62030,8 @@
     "review_queue": [
       1053,
       1054,
-      710
+      710,
+      1065
     ],
     "review": {
       "id": "3cbfef49299841b6912867db49cc431f",
@@ -107029,6 +107032,13 @@
             "approved_at": "2026-10-21T13:08:05+00:00"
           }
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-21T13:17:37+00:00",
+        "issue": 1065,
+        "pr": 1068,
+        "actor": "Worker-K1021A1"
       }
     ],
     "policy": {
