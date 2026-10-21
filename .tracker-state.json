@@ -46978,9 +46978,11 @@
         "worktree": "C:\\acl-pl-2050",
         "id": "7ebb22f43a4f49208156669333462411",
         "issue": 1050,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T12:37:42+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 1058,
+        "report": "# ACL-2050 handoff (review fix)\n\nHead: b3fb0f6d (branch work/acl-2050-placement-readback, pushed to work; main unchanged ea41acbf).\n\nChanges\n- src/fb_api/creator.py `_adset_checks`: `placements_summary` is now added only when publisher_platforms, facebook_positions, instagram_positions or device_platforms differ via the order-insensitive `_same` (same rule as the per-field checks). Genuinely different sets and automatic (Advantage+, empty lists) still stop.\n- Read-back now adds a visible English warning when `advantage_placement_state` is not returned (\"placement mode was not verified (check in Ads Manager)\"). Not blocking.\n- tests/test_acl2050_placement_readback.py: +3 tests (reordered lists pass and publishable; different set still stops with per-field and summary mismatch; warning on missing/present advantage_state_info).\n- docs/system/CHANGELOG.md: ACL-2050 entry extended.\n\nTests (run with `py -m pytest`, the `python` on PATH lacks pytest)\n- test_acl2050_placement_readback.py: 9 passed.\n- test_acl1761_api_create*, existing_check, parity, test_acl1902*, test_acl1776_create_forms*: 317 passed (incl. the 9 above), no failures. No full suite.\n\nRemaining live check for owner\n- Confirm advantage_state_info is read without Graph #100 error on a real account.\n- Check plan green on manual placements; red with a clear text on Advantage+."
       },
       "710": {
         "actor": "Worker-W1021710",
