@@ -47013,9 +47013,11 @@
         "worktree": "C:\\acl-morning-perf",
         "id": "59e060fba8e64ec4932433500be863fc",
         "issue": 1065,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T12:54:15+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 1068,
+        "report": "# ACL-2065 handoff\n\nPR #1068, branch work/acl-2065-perf-morning-report, head a871d559 on main ea41acbf.\nScope: src/analysis_agent/country_workbench.py, morning_report.py, analyze_fb_stats.py; new tests/test_morning_report_cold_build_speed.py; docs/system/CHANGELOG.md.\nProfile and result are in the Issue Handoff: cold build ~12 min -> ~100 s on the year workbook, default-period report JSON 0 differences.\nChecks: 25 affected test files (all importing the three modules), 261 passed locally; full suite in CI.\nRemaining: independent source review, CI, Approved, batch integration, package delivery. Owner live check after delivery: restart the dashboard and see the loading screen end in ~2 minutes."
       },
       "1066": {
         "actor": "Worker-K1021A2",
