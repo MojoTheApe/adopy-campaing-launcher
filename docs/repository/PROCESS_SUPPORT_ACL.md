@@ -9,7 +9,8 @@ whole-scope review remain authoritative.
 ## Accepted scope and provenance
 
 Select published Master1.7.2 `4f148cbbbc2c9c65a7fdebba9b37551f91566e04`
-and Tracker3.9.2 `3d32586d72e4621f70d56d35f1e199a19fa13b00`.
+and Tracker3.9.2 `3d32586d72e4621f70d56d35f1e199a19fa13b00`. ACL-2069 later moved the engine pin to
+Tracker3.9.3 `9e9a75fc927df0b3368ea54758190bc85cfef043` with byte-identical exported helpers.
 The cumulative task adopts common activity/history, process/product separation,
 Pause support and shared lifecycle/correction guidance. The owner explicitly
 selected one combined update on the original Issue/PR. The genuine source Reviewer

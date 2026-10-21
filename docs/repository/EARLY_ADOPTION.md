@@ -4,8 +4,9 @@
 
 [ACL-2026](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1026)
 selects published Master 1.7.2
-`4f148cbbbc2c9c65a7fdebba9b37551f91566e04` for common instructions. Tracker 3.9.2
-`3d32586d72e4621f70d56d35f1e199a19fa13b00` retains the support introduced by ACL-1987
+`4f148cbbbc2c9c65a7fdebba9b37551f91566e04` for common instructions. Tracker 3.9.3
+`9e9a75fc927df0b3368ea54758190bc85cfef043` (pinned by ACL-2069; same exported helpers
+as Tracker 3.9.2 `3d32586d72e4621f70d56d35f1e199a19fa13b00`) retains the support introduced by ACL-1987
 and the shared [executor activity contract](EXECUTOR_ACTIVITY.md), and adds
 canonical [process-support completion](PROCESS_SUPPORT.md), explicit phase-preserving
 [Pause/Resume support](TASK_PAUSE.md), and shared lifecycle/correction guidance. Existing

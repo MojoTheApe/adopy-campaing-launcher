@@ -1,5 +1,16 @@
 # Repository process history
 
+## 2026-10-21 — ACL-2069 engine pin with automatic replay of lost state writes
+
+ACL moves its pinned engine from Tracker3.9.2 `3d32586d` to Tracker3.9.3
+`9e9a75fc927df0b3368ea54758190bc85cfef043`. That revision contains TT-187: a tracker
+command whose state write loses the compare-and-swap to another session replays from a
+fresh read with full re-validation, at most five attempts. Review acquisition reads PR
+facts before the state, state is written as compact JSON, and transient GitHub reads are
+retried. It also contains TT-185, a UI-only queue widget change. All 42 exported helper
+files are byte-identical to the previous pin, and the instruction templates are unchanged.
+Policies, capacity, live state and product inputs are unchanged.
+
 ## 2026-10-20 — ACL-2026 cumulative common support
 
 The owner requested one cumulative ACL update on the original Issue/PR. After the
