@@ -2710,21 +2710,21 @@
       },
       "842": {
         "kind": "independent-review",
-        "reviewer": "Reviewer-S1021838",
         "implementer": "Worker-W1021838",
+        "reviewer": "Reviewer-K1021838",
+        "head_sha": "8a4fd24e11793bfade0be980e449fa4ffa1aab8c",
+        "base_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+        "tree_sha": "6bc2dfb3f2ca304468e01f8cc99860ddecda3261",
+        "execution_lane": "3b5e15115d5f4243a2762e127d39d604",
+        "review_session": "run_k1021_838",
         "verdict": "approved",
-        "head_sha": "fba8ae7d2d06df449fcc71286c258dca1b948c89",
-        "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
-        "tree_sha": "c49f6692f303c8b506d49a28594efaf35b210457",
-        "execution_lane": "daaedd8d469146078adb8b1937fe6e4e",
-        "review_session": "run_s1021_1838",
-        "report": "Refresh of PR842 = clean merge of main 0ea237b0 into bc9ba5c8; git show --cc of fba8ae7d has zero combined-diff lines (no hand-resolved hunks). Diff vs main is exactly docs/system/CHANGELOG.md, docs/system/PROJECT.md, src/web/templates/report.html (19+/3-); the report.html hunks (position:relative on .sidebar-country-btn; .live::before dot replaced by absolute 2px accent line, pointer-events:none) are identical to the previously approved change. Meets Issue #838 criteria on current main: 2px line only for .live (existing s.active predicate untouched), no marker for inactive, no pointer target/hover, selection/FTD logic untouched, accent token used (theme-safe), expanded highlight separate. Docs updated. CI on head all green. Not re-run: browser scenarios (rely on worker evidence).",
-        "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+        "report": "Refresh review ACL-1838 PR842. Head 8a4fd24e is a clean merge of main 64e73a1e into previously approved fba8ae7d; git diff 64e73a1e..8a4fd24e touches only docs/system/CHANGELOG.md, docs/system/PROJECT.md, src/web/templates/report.html (+19/-3) = task scope. CSS: live country dot (::before inline-block) replaced by absolutely positioned static 2px accent line (left 4px, top/bottom 9px, pointer-events none, button position:relative); inactive rows have no marker; activity predicate/expanded highlight/actions unchanged; padding 0.75rem leaves no text overlap. English docs/UI text, no leaked ids. Affected tests tests/test_country_refresh_review.py 18 passed. Required CI on 8a4fd24e all green (linux 1-3, windows, installer, tracker-link, descriptor, process instructions, ACL verification). No findings.",
+        "main_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
         "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
         "issues": [
           838
         ],
-        "recorded_at": "2026-10-21T14:11:33+00:00",
+        "recorded_at": "2026-10-21T22:34:36+00:00",
         "issue_scopes": {
           "838": "cf3992329999eade635234966dc6a7d8224ec279020d8cb4239227bab85df07b"
         }
