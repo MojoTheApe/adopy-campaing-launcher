@@ -12,7 +12,7 @@ new endpoints. Commands refresh the account in their own session after a write.
 
 **Tech Stack:** Python 3.14 (FastAPI/Starlette app in `src/web/app.py`), vanilla JS in Jinja templates, pytest.
 
-**Spec:** `docs/superpowers/specs/2026-10-21-scheduled-account-reads-design.md` (ACL-1063)
+**Spec:** `docs/superpowers/specs/2026-10-21-scheduled-account-reads-design.md` (ACL-2063)
 
 ## Global Constraints
 
@@ -46,7 +46,7 @@ new endpoints. Commands refresh the account in their own session after a write.
 **Files:**
 - Modify: `src/analysis_agent/campaign_inventory.py` (`STEPS` :67, `read_into` :627, `finalize` :720,
   `read_via_api` :737, `start_read` :804)
-- Test: `tests/test_acl1063_structure_read.py`
+- Test: `tests/test_acl2063_structure_read.py`
 
 **Interfaces:**
 - Produces: `STRUCTURE_STEPS = ("campaigns", "adsets", "ads")`;
@@ -63,17 +63,17 @@ new endpoints. Commands refresh the account in their own session after a write.
   - `test_structure_only_finalize_ok`: all three steps ok → `snap.state == "ok"` (missing insight steps are not "partial").
   - `test_run_read_stores_snapshot`: `run_read("A", trigger="schedule")` with a monkeypatched reader → `get_snapshot("A").state == "ok"` and `date_from == ""`.
   - `test_rules_without_insights_not_reconciled`: `reconcile_spend(structure_snapshot, window, 100.0)["status"] == "not_reconciled"`.
-- [ ] **Step 2: Run** `C:/acl-test-9095q/.venv/Scripts/python.exe -m pytest tests/test_acl1063_structure_read.py -q` → FAIL.
+- [ ] **Step 2: Run** `C:/acl-test-9095q/.venv/Scripts/python.exe -m pytest tests/test_acl2063_structure_read.py -q` → FAIL.
 - [ ] **Step 3: Implement** the three signatures above; telemetry call in `read_via_api` passes
   `notes["trigger"] = trigger`.
 - [ ] **Step 4: Run** the new test plus `tests/test_acl1798_campaign_inventory.py tests/test_acl1815_rules_evidence.py` → PASS.
-- [ ] **Step 5: Commit** `[ACL-1063] campaign inventory: structure-only read`.
+- [ ] **Step 5: Commit** `[ACL-2063] campaign inventory: structure-only read`.
 
 ### Task 2: Refresh queue with freshness and stop classification
 
 **Files:**
 - Create: `src/analysis_agent/account_refresh.py`
-- Test: `tests/test_acl1063_refresh_queue.py`
+- Test: `tests/test_acl2063_refresh_queue.py`
 
 **Interfaces:**
 - Consumes: `campaign_inventory.run_read`, `campaign_inventory.get_snapshot`.
@@ -100,18 +100,18 @@ new endpoints. Commands refresh the account in their own session after a write.
   - `test_global_failure_halts`: reader fails A with `WinError 10061` → B not read; `state()["halt"]["reason"]` mentions Multilogin.
   - `test_retry_clears_halt`: after global halt, `request("A","retry", force=True)` → read again.
   - `test_period_has_no_entry_point`: module exposes no function taking `date_from` (assert via `inspect`).
-- [ ] **Step 2: Run** `... -m pytest tests/test_acl1063_refresh_queue.py -q` → FAIL.
+- [ ] **Step 2: Run** `... -m pytest tests/test_acl2063_refresh_queue.py -q` → FAIL.
 - [ ] **Step 3: Implement.** Heap ordered by `(PRIORITY[trigger], seq)`; one worker thread; halt is lifted when the
   cooldown in `snap`/stop log has passed (resume the remaining entries of the same window).
 - [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `[ACL-1063] account refresh queue`.
+- [ ] **Step 5: Commit** `[ACL-2063] account refresh queue`.
 
 ### Task 3: Windows, page-open trigger, setting and cross-process lock
 
 **Files:**
 - Modify: `src/analysis_agent/account_refresh.py`
 - Modify: `C:\fb_agents\.claude\launch.json` is **not** touched here (owner's TEST9095 env is set at deploy, Task 8)
-- Test: `tests/test_acl1063_windows.py`
+- Test: `tests/test_acl2063_windows.py`
 
 **Interfaces:**
 - Produces:
@@ -131,17 +131,17 @@ new endpoints. Commands refresh the account in their own session after a write.
   - `test_missed_window_not_caught_up`: last done "08:00", now 19:00 → sweeps "18:00" only (one sweep).
   - `test_disabled_on_other_port`: `ACL_AUTO_REFRESH` unset, port 9095 → `disabled`; with `ACL_AUTO_REFRESH=1` → started.
   - `test_lock_blocks_second_process`: hold the lock in a subprocess → `_drain_once()` does not call the reader.
-- [ ] **Step 2: Run** `... -m pytest tests/test_acl1063_windows.py -q` → FAIL.
+- [ ] **Step 2: Run** `... -m pytest tests/test_acl2063_windows.py -q` → FAIL.
 - [ ] **Step 3: Implement** (lock: `msvcrt.locking` on Windows, `fcntl.flock` elsewhere — follow any existing lock
   helper in `src/` if one exists, e.g. `profile_lease.py`).
 - [ ] **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `[ACL-1063] scheduled windows and page-open trigger`.
+- [ ] **Step 5: Commit** `[ACL-2063] scheduled windows and page-open trigger`.
 
 ### Task 4: HTTP endpoints
 
 **Files:**
 - Modify: `src/web/app.py` (next to `/campaign-inventory/read` :4317)
-- Test: `tests/test_acl1063_endpoints.py`
+- Test: `tests/test_acl2063_endpoints.py`
 
 **Interfaces:**
 - Consumes: Task 2/3 functions.
@@ -156,14 +156,14 @@ new endpoints. Commands refresh the account in their own session after a write.
   `trigger=schedule` → 400; state returns keys `running, queued, halt, sweep, rows`; none of the three handlers
   calls `campaign_inventory.read_via_api` synchronously (monkeypatch it to raise).
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** → PASS.
-- [ ] **Step 5: Commit** `[ACL-1063] account refresh endpoints`.
+- [ ] **Step 5: Commit** `[ACL-2063] account refresh endpoints`.
 
 ### Task 5: Commands refresh the account in their own session
 
 **Files:**
 - Modify: `src/fb_api/commands.py` (`run_op` :576, `_run` :609, stale path :635)
 - Modify: `src/web/campaign_commands.py` (`run_execute`)
-- Test: `tests/test_acl1063_commands_refresh.py`
+- Test: `tests/test_acl2063_commands_refresh.py`
 
 **Interfaces:**
 - Produces: `run_op(..., after_write: Callable[[Any], None] | None = None)` — called with the open `sess` after a
@@ -179,7 +179,7 @@ new endpoints. Commands refresh the account in their own session after a write.
   - `test_after_write_not_called_on_stale`: stale op → callback not called; queue got `("A","action")`.
   - `test_refresh_failure_does_not_fail_command`: callback raises → op still `done`.
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** new test + `tests/test_acl1800_campaign_commands.py` → PASS.
-- [ ] **Step 5: Commit** `[ACL-1063] commands refresh the account after writing`.
+- [ ] **Step 5: Commit** `[ACL-2063] commands refresh the account after writing`.
 
 ### Task 6: Campaign table without read buttons
 
@@ -187,7 +187,7 @@ new endpoints. Commands refresh the account in their own session after a write.
 - Modify: `src/web/templates/_campaign_table.html` (`queueRun` :310, `readOne` :960, `init` :1234, row/header
   buttons, Meta metrics column group)
 - Modify: `src/web/app.py` `/campaign-inventory/tree` and `/children` — stop emitting Meta Insights cells
-- Test: `tests/test_acl1063_table_ui.py` (template/static assertions in the style of `tests/test_acl1800_home_wiring.py`)
+- Test: `tests/test_acl2063_table_ui.py` (template/static assertions in the style of `tests/test_acl1800_home_wiring.py`)
 
 **Interfaces:**
 - Consumes: Task 4 endpoints.
@@ -204,31 +204,31 @@ new endpoints. Commands refresh the account in their own session after a write.
   contains `/account-refresh/page-open`, `/account-refresh/state`, `Retry`, `Refreshing accounts`; tree endpoint JSON
   rows have no `meta` key; a period change URL renders with zero calls to `/campaign-inventory/read`.
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** new test + `tests/test_acl1798_home_campaigns_browser.py tests/test_acl1800_home_wiring.py tests/test_acl1800_account_tree.py`; update assertions in those that pin the removed buttons (they describe the old behaviour) → PASS.
-- [ ] **Step 5: Commit** `[ACL-1063] campaign table: refresh status instead of read buttons`.
+- [ ] **Step 5: Commit** `[ACL-2063] campaign table: refresh status instead of read buttons`.
 
 ### Task 7: Account map without Read spend
 
 **Files:**
 - Modify: `src/web/templates/report.html` (`amapReadSpend` :8645, `amapReadAll` :10394, `amapReadAllControls` :10385,
   "Read again" :9634, header links "Read all spend in <country>", Meta account-spend column)
-- Test: `tests/test_acl1063_account_map_ui.py`
+- Test: `tests/test_acl2063_account_map_ui.py`
 
 - [ ] **Step 1: Write failing tests**: rendered page has no `Read spend`, `Read all spend`, `Read again`,
   `Account spend` column header; the BI `Spend` column remains; `amapApply` still reloads with `date_from/date_to`.
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement** (delete the dead JS paths, not just hide them). **Step 4: Run**
   new test + `tests/test_account_map_period.py tests/test_review_spend_regressions.py tests/test_acl1826_mlx_session_lost.py`;
   update assertions that pin removed controls → PASS.
-- [ ] **Step 5: Commit** `[ACL-1063] account map: no Read spend controls`.
+- [ ] **Step 5: Commit** `[ACL-2063] account map: no Read spend controls`.
 
 ### Task 8: Changelog, PR, TEST9095
 
 **Files:**
-- Modify: `CHANGELOG.md`
+- Modify: `docs/system/CHANGELOG.md`
 - Deploy-only (not committed): TEST9095 launch env `ACL_AUTO_REFRESH=1`
 
 - [ ] **Step 1:** CHANGELOG entry (English): dates never read accounts; three daily refresh windows; Retry per row.
-- [ ] **Step 2:** Run only the touched tests (`tests/test_acl1063_*.py` + those listed in Tasks 1–7). Full suite runs in CI only.
-- [ ] **Step 3:** Commit, push branch, open PR to `main` referencing ACL-1063; tracker handoff to review.
+- [ ] **Step 2:** Run only the touched tests (`tests/test_acl2063_*.py` + those listed in Tasks 1–7). Full suite runs in CI only.
+- [ ] **Step 3:** Commit, push branch, open PR to `main` referencing ACL-2063; tracker handoff to review.
 - [ ] **Step 4 (separate live check task, owner present):** on TEST9095 with `ACL_AUTO_REFRESH=1`: jump through 10
   periods → telemetry shows no `api_read`; first open in a window → accounts read one by one; Pause on a hand-edited
   campaign → nothing written + refresh. Log to Obsidian `Дешборд — Дневник изменений`.
