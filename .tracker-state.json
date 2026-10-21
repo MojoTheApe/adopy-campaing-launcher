@@ -54159,7 +54159,7 @@
             "session": "run_a1021_380w"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-A1021380",
         "coordinator": "Coordinator-A1021A",
         "handoff": {
@@ -105231,6 +105231,68 @@
         "issue": 377,
         "claim": "80fae1fb1ff84648bb871e0dd8360249",
         "actor": "Worker-W1021377"
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-21T10:06:47+00:00",
+        "issue": 380,
+        "pr": 962,
+        "review": {
+          "id": "49b2a919f8b94969b554c96a6e377ae5",
+          "pr": 962,
+          "issues": [
+            380
+          ],
+          "actor": "Reviewer-A1021380",
+          "session": "run_a1021_380r",
+          "coordinator": "Coordinator-A1021A",
+          "started_at": "2026-10-21T09:43:32+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 380,
+            "pr": 962,
+            "branch": "work/acl-1380-ref-options-off-render",
+            "head_sha": "44bdbf2913fdb2cf1b3ba0f69a9a9edf2e4d109c",
+            "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+            "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "5721bfda1929700ea1d2c0d43cc9cf38e82898dada60cc93441f845a1dd5146d",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-A1021380",
+              "implementer": "Worker-A1021380",
+              "head_sha": "44bdbf2913fdb2cf1b3ba0f69a9a9edf2e4d109c",
+              "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "tree_sha": "7a34d570840c5f7896ab70583cbbd0b103c997fc",
+              "execution_lane": "49b2a919f8b94969b554c96a6e377ae5",
+              "review_session": "run_a1021_380r",
+              "report": "Independent source review of PR #962 (ACL-1380) at head 44bdbf29 against main ea41acbf.\nScope: src/web/app.py, src/web/publish_jobs.py, one new test file; no unrelated files. Merge d4b18a2e of main is clean (git show --cc shows no hand-resolved hunks); 44bdbf29 only widens one test assertion for the Python 3.13 wording.\nChecked against the remaining scope of #380 (per the 2026-10-14 tracker review: rules cache, worker pool and warm-up already on main):\n- targeting_registry.pull off the render path: _load_sheet_targets no longer calls pull(force=True); it reads the machine copy and starts at most one background pull() without force (the 15 s throttle applies). team_library.pull holds _pull_lock/its own file lock during the fetch, and the registry lock used by all_targets() is a separate lock, so the render path does not wait on the network. The explicit refresh routes (/api/targeting-profiles, /api/ad-texts) keep force=True, which is intended.\n- Cause of the asyncio errors: reproduced (clearing the running-loop mark on the loop's own thread) and guarded: _clear_inherited_asyncio_loop refuses on the loop thread and logs; worker threads with an inherited mark are still cleared. Its only caller is _run_job_inner at the start of a fresh job thread, so the guard does not block the leaked-Playwright cleanup path. Cancel route covered by a live-uvicorn test.\n- Timings: recorded in the PR (targets on render path 392 ms -> 18 ms measured; GET / figures from the 29.09 profiling, not re-measured live).\nTests run locally (Python 3.13, -n 2): new test file plus cancel-hung-job, dashboard-responsiveness, targeting integration/registry and team library: 123 passed.\nPR body: exactly one Tracker issues: ACL-1380 line, no closing references (closingIssuesReferences empty). No leaked identifiers in diff, commit messages or PR text; no new user-facing strings (one English log line).\nNon-blocking notes: (1) no docs/system/CHANGELOG entry for the behaviour change; (2) _runs_the_loop_here relies on the private BaseEventLoop._thread_id (CPython; returns False safely if absent); (3) a teammate's newly added target appears from the next open rather than the current one, by design.\nLive-check needs: owner check on the live dashboard after a serve.py restart (cold/warm GET / timings, page opens without waiting on GitHub).",
+              "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                380
+              ],
+              "recorded_at": "2026-10-21T09:56:05+00:00",
+              "issue_scopes": {
+                "380": "5721bfda1929700ea1d2c0d43cc9cf38e82898dada60cc93441f845a1dd5146d"
+              }
+            },
+            "lane": {
+              "id": "49b2a919f8b94969b554c96a6e377ae5",
+              "pr": 962,
+              "issues": [
+                380
+              ],
+              "actor": "Reviewer-A1021380",
+              "session": "run_a1021_380r",
+              "coordinator": "Coordinator-A1021A",
+              "started_at": "2026-10-21T09:43:32+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-21T10:00:36+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -109793,6 +109855,50 @@
           "keep_lane": true
         },
         "approved_at": "2026-10-21T09:20:43+00:00"
+      },
+      "380": {
+        "issue": 380,
+        "pr": 962,
+        "branch": "work/acl-1380-ref-options-off-render",
+        "head_sha": "44bdbf2913fdb2cf1b3ba0f69a9a9edf2e4d109c",
+        "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+        "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "5721bfda1929700ea1d2c0d43cc9cf38e82898dada60cc93441f845a1dd5146d",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-A1021380",
+          "implementer": "Worker-A1021380",
+          "head_sha": "44bdbf2913fdb2cf1b3ba0f69a9a9edf2e4d109c",
+          "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+          "tree_sha": "7a34d570840c5f7896ab70583cbbd0b103c997fc",
+          "execution_lane": "49b2a919f8b94969b554c96a6e377ae5",
+          "review_session": "run_a1021_380r",
+          "report": "Independent source review of PR #962 (ACL-1380) at head 44bdbf29 against main ea41acbf.\nScope: src/web/app.py, src/web/publish_jobs.py, one new test file; no unrelated files. Merge d4b18a2e of main is clean (git show --cc shows no hand-resolved hunks); 44bdbf29 only widens one test assertion for the Python 3.13 wording.\nChecked against the remaining scope of #380 (per the 2026-10-14 tracker review: rules cache, worker pool and warm-up already on main):\n- targeting_registry.pull off the render path: _load_sheet_targets no longer calls pull(force=True); it reads the machine copy and starts at most one background pull() without force (the 15 s throttle applies). team_library.pull holds _pull_lock/its own file lock during the fetch, and the registry lock used by all_targets() is a separate lock, so the render path does not wait on the network. The explicit refresh routes (/api/targeting-profiles, /api/ad-texts) keep force=True, which is intended.\n- Cause of the asyncio errors: reproduced (clearing the running-loop mark on the loop's own thread) and guarded: _clear_inherited_asyncio_loop refuses on the loop thread and logs; worker threads with an inherited mark are still cleared. Its only caller is _run_job_inner at the start of a fresh job thread, so the guard does not block the leaked-Playwright cleanup path. Cancel route covered by a live-uvicorn test.\n- Timings: recorded in the PR (targets on render path 392 ms -> 18 ms measured; GET / figures from the 29.09 profiling, not re-measured live).\nTests run locally (Python 3.13, -n 2): new test file plus cancel-hung-job, dashboard-responsiveness, targeting integration/registry and team library: 123 passed.\nPR body: exactly one Tracker issues: ACL-1380 line, no closing references (closingIssuesReferences empty). No leaked identifiers in diff, commit messages or PR text; no new user-facing strings (one English log line).\nNon-blocking notes: (1) no docs/system/CHANGELOG entry for the behaviour change; (2) _runs_the_loop_here relies on the private BaseEventLoop._thread_id (CPython; returns False safely if absent); (3) a teammate's newly added target appears from the next open rather than the current one, by design.\nLive-check needs: owner check on the live dashboard after a serve.py restart (cold/warm GET / timings, page opens without waiting on GitHub).",
+          "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            380
+          ],
+          "recorded_at": "2026-10-21T09:56:05+00:00",
+          "issue_scopes": {
+            "380": "5721bfda1929700ea1d2c0d43cc9cf38e82898dada60cc93441f845a1dd5146d"
+          }
+        },
+        "lane": {
+          "id": "49b2a919f8b94969b554c96a6e377ae5",
+          "pr": 962,
+          "issues": [
+            380
+          ],
+          "actor": "Reviewer-A1021380",
+          "session": "run_a1021_380r",
+          "coordinator": "Coordinator-A1021A",
+          "started_at": "2026-10-21T09:43:32+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-21T10:00:36+00:00"
       }
     },
     "batches": {
@@ -114897,62 +115003,6 @@
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-19T13:01:50+00:00",
         "state": "reviewing"
-      },
-      "962": {
-        "id": "49b2a919f8b94969b554c96a6e377ae5",
-        "pr": 962,
-        "issues": [
-          380
-        ],
-        "actor": "Reviewer-A1021380",
-        "session": "run_a1021_380r",
-        "coordinator": "Coordinator-A1021A",
-        "started_at": "2026-10-21T09:43:32+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 380,
-          "pr": 962,
-          "branch": "work/acl-1380-ref-options-off-render",
-          "head_sha": "44bdbf2913fdb2cf1b3ba0f69a9a9edf2e4d109c",
-          "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-          "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "5721bfda1929700ea1d2c0d43cc9cf38e82898dada60cc93441f845a1dd5146d",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-A1021380",
-            "implementer": "Worker-A1021380",
-            "head_sha": "44bdbf2913fdb2cf1b3ba0f69a9a9edf2e4d109c",
-            "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-            "tree_sha": "7a34d570840c5f7896ab70583cbbd0b103c997fc",
-            "execution_lane": "49b2a919f8b94969b554c96a6e377ae5",
-            "review_session": "run_a1021_380r",
-            "report": "Independent source review of PR #962 (ACL-1380) at head 44bdbf29 against main ea41acbf.\nScope: src/web/app.py, src/web/publish_jobs.py, one new test file; no unrelated files. Merge d4b18a2e of main is clean (git show --cc shows no hand-resolved hunks); 44bdbf29 only widens one test assertion for the Python 3.13 wording.\nChecked against the remaining scope of #380 (per the 2026-10-14 tracker review: rules cache, worker pool and warm-up already on main):\n- targeting_registry.pull off the render path: _load_sheet_targets no longer calls pull(force=True); it reads the machine copy and starts at most one background pull() without force (the 15 s throttle applies). team_library.pull holds _pull_lock/its own file lock during the fetch, and the registry lock used by all_targets() is a separate lock, so the render path does not wait on the network. The explicit refresh routes (/api/targeting-profiles, /api/ad-texts) keep force=True, which is intended.\n- Cause of the asyncio errors: reproduced (clearing the running-loop mark on the loop's own thread) and guarded: _clear_inherited_asyncio_loop refuses on the loop thread and logs; worker threads with an inherited mark are still cleared. Its only caller is _run_job_inner at the start of a fresh job thread, so the guard does not block the leaked-Playwright cleanup path. Cancel route covered by a live-uvicorn test.\n- Timings: recorded in the PR (targets on render path 392 ms -> 18 ms measured; GET / figures from the 29.09 profiling, not re-measured live).\nTests run locally (Python 3.13, -n 2): new test file plus cancel-hung-job, dashboard-responsiveness, targeting integration/registry and team library: 123 passed.\nPR body: exactly one Tracker issues: ACL-1380 line, no closing references (closingIssuesReferences empty). No leaked identifiers in diff, commit messages or PR text; no new user-facing strings (one English log line).\nNon-blocking notes: (1) no docs/system/CHANGELOG entry for the behaviour change; (2) _runs_the_loop_here relies on the private BaseEventLoop._thread_id (CPython; returns False safely if absent); (3) a teammate's newly added target appears from the next open rather than the current one, by design.\nLive-check needs: owner check on the live dashboard after a serve.py restart (cold/warm GET / timings, page opens without waiting on GitHub).",
-            "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              380
-            ],
-            "recorded_at": "2026-10-21T09:56:05+00:00",
-            "issue_scopes": {
-              "380": "5721bfda1929700ea1d2c0d43cc9cf38e82898dada60cc93441f845a1dd5146d"
-            }
-          },
-          "lane": {
-            "id": "49b2a919f8b94969b554c96a6e377ae5",
-            "pr": 962,
-            "issues": [
-              380
-            ],
-            "actor": "Reviewer-A1021380",
-            "session": "run_a1021_380r",
-            "coordinator": "Coordinator-A1021A",
-            "started_at": "2026-10-21T09:43:32+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-21T10:00:36+00:00"
-        }
       },
       "1057": {
         "id": "3a3312e381c743e79fe418f51f66dded",
