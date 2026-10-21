@@ -46816,6 +46816,18 @@
         "state": "implementing",
         "started_at": "2026-10-21T08:19:12+00:00",
         "from_status": "status:idea"
+      },
+      "380": {
+        "actor": "Worker-A1021380",
+        "session": "run_a1021_380w",
+        "coordinator": "Coordinator-A1021A",
+        "branch": "work/acl-1380-ref-options-off-render",
+        "worktree": "C:\\acl-rv-380",
+        "id": "53489ce9eba24b279641762d10fa629e",
+        "issue": 380,
+        "state": "implementing",
+        "started_at": "2026-10-21T08:52:04+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -54057,11 +54069,15 @@
           {
             "actor": "Worker-W1380M",
             "session": "s-1380-334896ca"
+          },
+          {
+            "actor": "Worker-A1021380",
+            "session": "run_a1021_380w"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-W1380M",
-        "coordinator": "Coordinator-M1011A",
+        "state": "implementing",
+        "worker": "Worker-A1021380",
+        "coordinator": "Coordinator-A1021A",
         "handoff": {
           "actor": "Worker-W1380M",
           "session": "s-1380-334896ca",
@@ -58528,6 +58544,10 @@
       "Reviewer-P10212052": {
         "session": "rev_p1021_2052",
         "role": "Reviewer"
+      },
+      "Worker-A1021380": {
+        "session": "run_a1021_380w",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -104822,6 +104842,13 @@
           "report": "Approval is stale against current main ea41acbf (PR #1049), so batch intake rejects it (\"source approval is stale for its PR, main or policy\"). Author: merge current main into the original branch without changing content, re-run checks, hand off, and get a fresh independent source approval. Then it goes into the next frozen batch. Returned by the owner-authorized integration run (2026-10-21), acting under the recorded approval coordinator."
         },
         "batch_id": null
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-21T08:52:04+00:00",
+        "issue": 380,
+        "claim": "53489ce9eba24b279641762d10fa629e",
+        "actor": "Worker-A1021380"
       }
     ],
     "policy": {
