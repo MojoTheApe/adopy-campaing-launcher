@@ -47902,20 +47902,6 @@
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
       },
-      "838": {
-        "actor": "Worker-W1021838",
-        "session": "run_w1021_1838",
-        "coordinator": "Coordinator-I1021A",
-        "branch": "codex/acl-1838-country-active-line",
-        "worktree": "C:\\acl-int-w1838",
-        "id": "74e6a44ca1a540f5b32fd469de6d4227",
-        "issue": 838,
-        "state": "handoff",
-        "started_at": "2026-10-21T22:16:11+00:00",
-        "from_status": "status:todo",
-        "pr": 842,
-        "report": "ACL-1838 refresh round 2: merged origin/main (64e73a1e151b) into codex/acl-1838-country-active-line, clean merge, no conflicts, no content change.\nOld head fba8ae7d2d06; new head 8a4fd24e11793bfade0be980e449fa4ffa1aab8c (GitHub shows it on PR #842, base main).\nDiff vs main: CHANGELOG.md, PROJECT.md, report.html only. No PR tests exist; none run.\nCI: all pass except tracker-link, which fails only because the task was In Progress (\"move it to Review before a ready PR\"); rerun after handoff."
-      },
       "165": {
         "actor": "Worker-W1021165",
         "session": "run_w1021_1165",
@@ -52625,7 +52611,7 @@
             "session": "run_w1021_1838"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1021838",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -52634,16 +52620,16 @@
           "coordinator": "Coordinator-I1021A",
           "branch": "codex/acl-1838-country-active-line",
           "worktree": "C:\\acl-int-w1838",
-          "id": "e9c852bfb5fe4070836d65a3b5cbe6e6",
+          "id": "74e6a44ca1a540f5b32fd469de6d4227",
           "issue": 838,
           "state": "handoff",
-          "started_at": "2026-10-21T13:39:13+00:00",
+          "started_at": "2026-10-21T22:16:11+00:00",
           "from_status": "status:todo",
           "pr": 842,
-          "report": "ACL-1838 refresh: merged origin/main (0ea237b0e4ce) into codex/acl-1838-country-active-line, clean merge, no conflicts, no content change.\nOld head bc9ba5c808673dd775511c85e90ffe30c7b9beb1; new head fba8ae7d2d06df449fcc71286c258dca1b948c89. PR base is main.\nDiff vs main: only docs/system/CHANGELOG.md, docs/system/PROJECT.md, src/web/templates/report.html.\nTests: PR has no test files of its own; no existing test references the changed selector, so none run locally.\nCI on new head: all checks pass (linux 1/2/3, windows, tracker-link, verification)."
+          "report": "ACL-1838 refresh round 2: merged origin/main (64e73a1e151b) into codex/acl-1838-country-active-line, clean merge, no conflicts, no content change.\nOld head fba8ae7d2d06; new head 8a4fd24e11793bfade0be980e449fa4ffa1aab8c (GitHub shows it on PR #842, base main).\nDiff vs main: CHANGELOG.md, PROJECT.md, report.html only. No PR tests exist; none run.\nCI: all pass except tracker-link, which fails only because the task was In Progress (\"move it to Review before a ready PR\"); rerun after handoff."
         },
         "pr": 842,
-        "queued_at": "2026-10-21T13:44:29+00:00",
+        "queued_at": "2026-10-21T22:30:46+00:00",
         "review_report": "Approval is stale against current main 64e73a1e (after ACL-2073 #1075 and ACL-2071 #1076 merged). Author: merge current main into the original branch without changing content (resolve only CHANGELOG append conflicts by keeping both entries), re-run checks, hand off, and get a fresh independent source approval for batch 2b (--deliver).",
         "return_operation": {
           "id": "8b488913f24f47a9af4f673a92361b0b",
@@ -52655,9 +52641,7 @@
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578004+00:00",
           "remote_process_stopped_verified": false
-        },
-        "rework": true,
-        "rework_claim": "74e6a44ca1a540f5b32fd469de6d4227"
+        }
       },
       "839": {
         "implementers": [
@@ -63283,7 +63267,8 @@
       1054,
       710,
       1069,
-      840
+      840,
+      838
     ],
     "review": null,
     "history": [
@@ -110484,6 +110469,13 @@
         "issue": 19,
         "claim": "77b2b4182aa84a27bd7c91f51540d51a",
         "actor": "Worker-W1021106"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-21T22:30:46+00:00",
+        "issue": 838,
+        "pr": 842,
+        "actor": "Worker-W1021838"
       }
     ],
     "policy": {
