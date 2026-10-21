@@ -6203,6 +6203,37 @@
             ]
           }
         }
+      },
+      "1077": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "implementer": "Coordinator-I1021A",
+        "reviewer": "Reviewer-N1022B77",
+        "review_session": "run_n1022_b77",
+        "execution_lane": "81c84f5b24814b6a9e288601519a6d9a",
+        "batch_id": "21ad574948cf4aa7bff078d191c31d9f",
+        "source_heads": [
+          "988c551a496077c1432347dcf689df641addf3ef",
+          "8a4fd24e11793bfade0be980e449fa4ffa1aab8c",
+          "255d715f9600550820dbabf2541a3cc120a4a848"
+        ],
+        "head_sha": "9f801669ff978cd266800bdf9b2157a613161cef",
+        "base_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+        "tree_sha": "47adbe5dcb33213bbe48fe7a69bbf98056660343",
+        "report": "Independent integration review of batch 21ad574948cf4aa7bff078d191c31d9f, PR1077 rebuilt head 9f801669 (after batch refresh + detached rebuild; old head a5359f68 archived as evidence) tree 47adbe5d against main 64e73a1e. Reviewer run Reviewer-N1022B77/run_n1022_b77 is distinct from Coordinator-I1021A, Workers P1021F2050/W1021838/W1021165, source Reviewers P1021G2050/K1021838/K1021165 and earlier integration Reviewers L1021B77/M1022B77.\nRe-verified on 9f801669: first-parent chain is main 64e73a1e + exactly three merge commits c1dc47b6 (tip 988c551a, ACL-2050), ac527bf0 (tip 8a4fd24e, ACL-1838), 9f801669 (tip 255d715f, ACL-1165) in frozen order; second parents equal the frozen manifest heads and the current open source PR heads #1058/#842/#953; git show --remerge-diff is empty for all three; every source merge-base is 64e73a1e. Tree 47adbe5d is byte-identical to the previously content-reviewed a5359f68 tree (git diff empty), so the content findings below carry over unchanged. PR body unchanged ('Tracker issues: ACL-2050, ACL-1838, ACL-1165', 'Tracker batch: 21ad574948cf4aa7bff078d191c31d9f'). Delivery request still stored on the integration: state requested, target ACL stable Windows installer and update channel, .github/workflows/complete-delivery.yml, job 'Verify published Windows package', actor Coordinator-I1021A.\nFinal tree vs union of source diffs: 7 files (+295/-11). creator.py and its test equal #1058's blobs; report.html and PROJECT.md equal #842's; browser.py and its test equal #953's; docs/system/CHANGELOG.md is exactly the three source entries (14+10+8 lines) with no other change.\nInteractions: the three changes are disjoint in code and behaviour. ACL-2050 (src/fb_api/creator.py) is API-path read-only: CAMPAIGN_FIELDS adds advantage_state_info, ADSET_FIELDS adds value_rules_applied/value_rule_set_id; advantage_placement_state != DISABLED blocks when returned, missing state is an English warning plus diagnostics.placement_state_verified=false, placements_summary is order-insensitive and in _SKIP_DIFF; readback gains a 'diagnostics' key that publish_api/report.html consumers ignore (they read ok/mismatches). ACL-1838 (report.html) is CSS-only: .sidebar-country-btn position:relative and the live ::before becomes an absolute 2px accent line with pointer-events:none; no template/JS change, does not touch the API builder UI. ACL-1165 (src/fb_ads_rpa/browser.py) changes log text/level only: intermediate strict/lenient attach failures are neutral INFO, one WARNING 'attachment unavailable' only on the relaunch refusal; RuntimeError text and FB_RPA_ALLOW_UNPROXIED_RELAUNCH gate unchanged. No shared symbols, no behavioural conflict.\nAdded user-facing strings are English; added lines contain no account/profile ids, tokens or URLs with ids (ACL-1165 test uses a placeholder profile id).\nLocal affected tests on the same tree (earlier integration run): test_acl2050_placement_readback, test_acl1761_api_create/_existing_check/_parity, test_acl1880_manual_page, test_the_first_attach_attempt_is_not_logged_as_a_verdict, test_attach_short_path, test_country_refresh_review (221 passed), test_browser_relaunch_gate, test_a_reopen_retries_while_multilogin_holds_the_profile (20 passed). No local full suite. This run re-ran tests/test_acl2050_placement_readback.py, tests/test_the_first_attach_attempt_is_not_logged_as_a_verdict.py and tests/test_browser_relaunch_gate.py on 9f801669: 25 passed.\nCombined CI on head 9f801669, attempt 1, no reruns, no reused jobs: CI run 39693617290 success (linux tests 3.11 shards 1-3, 3.13 shards 1-3, windows tests 3.13, Classify and check project tooling, Process instructions, ACL verification); Windows installer run 39693617971 success (Classify installer changes, Verify build inputs, Build, install, repair, and uninstall, Installer verification); Tracker linkage 39693617133 success; Delivery setup/descriptor 39693617114 success. The intermittent main test-isolation leak (meta_dom _upload_why_tls not reset by tests/conftest.py, seen on a5359f68) did not reproduce in this run; it is a pre-existing main defect, not a member defect, and its fix is tracked separately for the next batch.\nNon-blocking, owner live checks outside unit scope: ACL-2050 new fields must read on a real new-layout account without Graph error #100 (CAMPAIGN_FIELDS is also used by the existing-campaign check); Check plan green on manual placements and red with clear English text on an Advantage+ campaign. advantage_placement_state has no _FIELD_TITLES entry (raw key shown).",
+        "main_sha": "64e73a1e151b6611517cd9643dfb911ef54d6832",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          1050,
+          838,
+          165
+        ],
+        "recorded_at": "2026-10-21T23:43:08+00:00",
+        "issue_scopes": {
+          "1050": "1aefcfe1e72c2e3155f61da7fe6643fc80f2d6236181d8c5c8fe6d40b4da616b",
+          "838": "cf3992329999eade635234966dc6a7d8224ec279020d8cb4239227bab85df07b",
+          "165": "234afaf33da792fa11b47c0538a8af5bcf7f638df359ca829680721c26712410"
+        }
       }
     },
     "stage": {
