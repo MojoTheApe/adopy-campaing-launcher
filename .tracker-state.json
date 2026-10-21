@@ -56542,7 +56542,7 @@
             "session": "acl_verify_tag_e51b7063"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-Q1021A",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -56560,7 +56560,8 @@
           "report": "ACL-2071 handoff. Branch work/acl-2071-verify-published-tag @ a3c51338, PR #1072 into main. New manual workflow verify-published-tag.yml (inputs tag + previous_tag) reuses the unchanged 'Verify published Windows package' steps through the updater trust path; complete-delivery.yml, release.yml and delivery authorization are unchanged; no tracker writes. Affected tests pass (80 and 267). The workflow is dispatch-only, so hosted proof comes from the first dispatch after integration (1064 vs 1034)."
         },
         "pr": 1072,
-        "queued_at": "2026-10-21T16:01:49+00:00"
+        "queued_at": "2026-10-21T16:01:49+00:00",
+        "reviewer": "Reviewer-S1021071"
       }
     },
     "actors": {
@@ -59607,6 +59608,10 @@
       "Reviewer-S1021165": {
         "session": "run_s1021_1165",
         "role": "Reviewer"
+      },
+      "Reviewer-S1021071": {
+        "session": "run_s1021_2071",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -62522,8 +62527,7 @@
       1053,
       1054,
       710,
-      1069,
-      1071
+      1069
     ],
     "review": null,
     "history": [
@@ -108979,6 +108983,13 @@
         "issue": 1071,
         "pr": 1072,
         "actor": "Worker-Q1021A"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-21T16:40:54+00:00",
+        "pr": 1072,
+        "lane": "316cd194f55d4844a8359c750a1ec611",
+        "actor": "Reviewer-S1021071"
       }
     ],
     "policy": {
@@ -119191,6 +119202,18 @@
         "session": "rev_p1021_2052",
         "coordinator": "Coordinator-P1021A",
         "started_at": "2026-10-21T09:47:33+00:00",
+        "state": "reviewing"
+      },
+      "1072": {
+        "id": "316cd194f55d4844a8359c750a1ec611",
+        "pr": 1072,
+        "issues": [
+          1071
+        ],
+        "actor": "Reviewer-S1021071",
+        "session": "run_s1021_2071",
+        "coordinator": "Coordinator-I1021A",
+        "started_at": "2026-10-21T16:40:54+00:00",
         "state": "reviewing"
       }
     },
