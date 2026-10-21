@@ -6068,6 +6068,43 @@
         "issue_scopes": {
           "1050": "1aefcfe1e72c2e3155f61da7fe6643fc80f2d6236181d8c5c8fe6d40b4da616b"
         }
+      },
+      "1064": {
+        "kind": "independent-review",
+        "implementer": "Coordinator-I1021A",
+        "reviewer": "Reviewer-B1021A",
+        "head_sha": "bc7f71b68f9e99b7398285dea066aaabe48c92cf",
+        "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+        "tree_sha": "d5f90296e2e0d16431ef87ff18d1d3e457b6ba01",
+        "verdict": "approved",
+        "execution_lane": "3cbfef49299841b6912867db49cc431f",
+        "review_session": "run_b1021a_1021",
+        "batch_id": "36ca88230aef44c598ea961df39585c3",
+        "source_heads": [
+          "f125642bbad9a67cc7d53f4b140f26894ad108af",
+          "8c0e175e274a05af4b923557cbc5dfc839a2e3c7",
+          "33e09b6791038d25560d7a42548cc7dd46e7311d",
+          "44bdbf2913fdb2cf1b3ba0f69a9a9edf2e4d109c",
+          "2b1c52297ef8d0b778285de2f8833037fb5b15d1"
+        ],
+        "report": "Combined integration review of PR #1064 (batch 36ca8823), head bc7f71b6, tree d5f90296, base main ea41acbf. Composition: first-parent chain is main ea41acbf + 5 merge commits in manifest order ACL-1784 #961 (f125642b), ACL-1880 #1044 (8c0e175e), ACL-1377 #935 (33e09b67), ACL-1380 #962 (44bdbf29), ACL-1626 #967 (2b1c5229); each second parent equals the source PR head; every source is based directly on ea41acbf. git show --cc is empty for all 5 merges and each merge tree equals git merge-tree --write-tree of its parents (no hand-resolved hunks); final tree = d5f90296. Shared files: CHANGELOG (1784, 1626: separate new sections), publish_api.py (1784 adds started_profile/writes properties; 1880 changes result_dict publishable/manual_required), publish_jobs.py (1784 slot release/review-window in _run_api and _run_job_inner; 1380 guard in _clear_inherited_asyncio_loop), app.py (1880 page_id parse, /api/account-pages, page-forms page_id, Upload FB refusal; 1377 compact alias key; 1380 background targets refresh; 1626 set_aside response), report.html (disjoint hunks from 1880, 1377, 1626). No duplicated or conflicting logic. Cross-member checks: 1880's builder render path calls /api/account-pages with cached=1, which reads only the local cache and never opens a profile, consistent with 1380's no-network-on-page-open rule. 1880 manual_required makes the result non-publishable, so under 1784 a manual-page API job that wrote campaign/ad sets keeps the profile open for review (appropriate, since the user must add the Page and ads in Ads Manager); the 1784 panel wording then says readback did not fully confirm, while the job panel also shows Manual completion required (cosmetic, non-blocking). Focused member tests on the combined tree: 321 passed; 1 failure (test_acl1880_page_selection::test_account_pages_endpoint_cached_flag) is a local-environment mismatch only (installed starlette 0.36.3 vs pinned starlette==1.7.0; TestClient(FastAPI()) fails identically), to be confirmed by combined CI. Member Workers and source Reviewers are preserved; this is additional integration evidence.",
+        "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          784,
+          880,
+          377,
+          380,
+          626
+        ],
+        "recorded_at": "2026-10-21T13:25:54+00:00",
+        "issue_scopes": {
+          "784": "5b56fa44c5d2cc279506d3496eb5ed078f5e6d463f7cd1a06f6355db6f6b7bf7",
+          "880": "f0747b53c6bf2831d875beca14abdb0741cc792bba462990e368ca1165fcf392",
+          "377": "ba1d91de10f6ab2391b19b6d8e3faeff12e10c23d3500ddb0530bf15a1ad84d1",
+          "380": "5721bfda1929700ea1d2c0d43cc9cf38e82898dada60cc93441f845a1dd5146d",
+          "626": "78daec77f59b269c69b2b0d3072e9dff71bc3675802a71e8a3e2f16b22df80f4"
+        }
       }
     },
     "stage": {
