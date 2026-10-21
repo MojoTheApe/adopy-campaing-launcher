@@ -58983,6 +58983,10 @@
       "Worker-K1021A2": {
         "session": "run_k1021a2_2066",
         "role": "Worker"
+      },
+      "Reviewer-B1021A": {
+        "session": "run_b1021a_1021",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -61881,7 +61885,23 @@
       1053,
       1054
     ],
-    "review": null,
+    "review": {
+      "id": "3cbfef49299841b6912867db49cc431f",
+      "batch_id": "36ca88230aef44c598ea961df39585c3",
+      "pr": 1064,
+      "issues": [
+        784,
+        880,
+        377,
+        380,
+        626
+      ],
+      "actor": "Reviewer-B1021A",
+      "session": "run_b1021a_1021",
+      "coordinator": "Coordinator-I1021A",
+      "state": "reviewing",
+      "started_at": "2026-10-21T13:02:57+00:00"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -106630,6 +106650,27 @@
         "issue": 1066,
         "claim": "418bce5eb2fd4d1ba88843c3099a9c1d",
         "actor": "Worker-K1021A2"
+      },
+      {
+        "event": "batch-review-acquired",
+        "at": "2026-10-21T13:02:57+00:00",
+        "review": {
+          "id": "3cbfef49299841b6912867db49cc431f",
+          "batch_id": "36ca88230aef44c598ea961df39585c3",
+          "pr": 1064,
+          "issues": [
+            784,
+            880,
+            377,
+            380,
+            626
+          ],
+          "actor": "Reviewer-B1021A",
+          "session": "run_b1021a_1021",
+          "coordinator": "Coordinator-I1021A",
+          "state": "reviewing",
+          "started_at": "2026-10-21T13:02:57+00:00"
+        }
       }
     ],
     "policy": {
@@ -116586,7 +116627,7 @@
       "id": "36ca88230aef44c598ea961df39585c3",
       "actor": "Coordinator-I1021A",
       "session": "run_i1021a_1021",
-      "state": "assembling",
+      "state": "reviewing",
       "issues": [
         784,
         880,
@@ -116826,7 +116867,7 @@
       "branch": "codex/batch-36ca88230aef44c598ea961df39585c3",
       "intake": "843ae93d19994cddaf23af35412da7ff",
       "started_at": "2026-10-21T12:30:10+00:00",
-      "pr": null,
+      "pr": 1064,
       "entered_stage": false,
       "history": []
     },
