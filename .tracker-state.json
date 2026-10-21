@@ -46921,20 +46921,6 @@
         "state": "implementing",
         "started_at": "2026-10-21T11:33:07+00:00",
         "from_status": "status:todo"
-      },
-      "403": {
-        "actor": "Worker-A1021403",
-        "session": "run_a1021_403w",
-        "coordinator": "Coordinator-A1021A",
-        "branch": "work/acl-1403-cdp-refused-after-start",
-        "worktree": "C:\\acl-rv-403",
-        "id": "86dd71671c6146f2ba2472080cc1f92a",
-        "issue": 403,
-        "state": "handoff",
-        "started_at": "2026-10-21T11:36:39+00:00",
-        "from_status": "status:todo",
-        "pr": 973,
-        "report": "# ACL-1403 re-handoff report\n\nMerged current main (ea41acbf) into PR #973 branch; merge commit c0e31a58. PR head now contains main.\n\nConflicts (2, both \"keep both sides\"): src/fb_ads_rpa/retry_policy.py (BLOCKING_REVIEW_STEPS: kept main's multilogin_not_running from ACL-1401 plus this task's profile_cdp_refused) and config/sentry_triage_map.json (kept both triage rows). acl_sentry.py, failure_policy.py and profile_trouble.py auto-merged; main's additions there (ACL-1401 launcher-unreachable classification) are disjoint from this task's, checked by reading the diff. browser.py/rpa_publisher.py need no manual change.\n\nTests: 37 test files matching retry/profile/sentry/failure_policy/cdp/multilogin names (includes the task's own test, failure_policy, sentry_triage, job_exception, profile suites): 632 passed. acl_scan_secrets: clean.\nFull suite not run locally; CI is the acceptance signal. No live checks; the root cause (stale port vs race vs crash) remains unestablished as in the prior report - needs the comp38339 serve log, no owner live check required for this merge."
       }
     },
     "tasks": {
@@ -54601,25 +54587,25 @@
             "session": "run_a1021_403w"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-A1021403",
         "coordinator": "Coordinator-A1021A",
         "handoff": {
-          "actor": "Worker-W1403A",
-          "session": "w1403a-1792236912",
-          "coordinator": "Coordinator-T1004Q",
+          "actor": "Worker-A1021403",
+          "session": "run_a1021_403w",
+          "coordinator": "Coordinator-A1021A",
           "branch": "work/acl-1403-cdp-refused-after-start",
-          "worktree": "C:\\acl-1403",
-          "id": "2b83c8bbc58e45c7b8c0d6d8aa30a101",
+          "worktree": "C:\\acl-rv-403",
+          "id": "86dd71671c6146f2ba2472080cc1f92a",
           "issue": 403,
           "state": "handoff",
-          "started_at": "2026-10-17T11:35:53+00:00",
+          "started_at": "2026-10-21T11:36:39+00:00",
           "from_status": "status:todo",
           "pr": 973,
-          "report": "# ACL-1403 report\n\nPR #973. Refused CDP port after an MLX start: the new code waits for the port (1+2+3+3 s; the Stop button ends the wait), then raises ProfileStop `profile_cdp_refused` with a plain English message. It is registered in failure_policy, retry_policy (block and review), sentry_triage_map and the Sentry reason kinds. `report_job_exception` now sets the `machine` tag.\n\nTests (mocks only): tests/test_a_refused_cdp_port_after_start_is_a_named_stop.py (6 tests), plus the profile, failure-policy, sentry-triage and job-exception suites: all pass. test_a_stopped_profile_never_spins_the_robot is a CPU-timing test that failed once under load, unrelated to this change.\n\nNot done: the root cause (stale port, start-up race or crash) could not be established, because the comp38339 serve log was not available. The retry covers the race; the stop covers the other two. PR #960 (ACL-1401) is not merged here; the registry edits are placed away from its hunks, and the launcher classification is left in its `_ensure_browser`."
+          "report": "# ACL-1403 re-handoff report\n\nMerged current main (ea41acbf) into PR #973 branch; merge commit c0e31a58. PR head now contains main.\n\nConflicts (2, both \"keep both sides\"): src/fb_ads_rpa/retry_policy.py (BLOCKING_REVIEW_STEPS: kept main's multilogin_not_running from ACL-1401 plus this task's profile_cdp_refused) and config/sentry_triage_map.json (kept both triage rows). acl_sentry.py, failure_policy.py and profile_trouble.py auto-merged; main's additions there (ACL-1401 launcher-unreachable classification) are disjoint from this task's, checked by reading the diff. browser.py/rpa_publisher.py need no manual change.\n\nTests: 37 test files matching retry/profile/sentry/failure_policy/cdp/multilogin names (includes the task's own test, failure_policy, sentry_triage, job_exception, profile suites): 632 passed. acl_scan_secrets: clean.\nFull suite not run locally; CI is the acceptance signal. No live checks; the root cause (stale port vs race vs crash) remains unestablished as in the prior report - needs the comp38339 serve log, no owner live check required for this merge."
         },
         "pr": 973,
-        "queued_at": "2026-10-17T11:45:04+00:00",
+        "queued_at": "2026-10-21T11:48:35+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -61700,7 +61686,8 @@
     "review_queue": [
       1050,
       1053,
-      1054
+      1054,
+      403
     ],
     "review": null,
     "history": [
@@ -105767,6 +105754,13 @@
           "report": "# ACL-1558 source review: returned for one fix (head d120b75c)\n\nReviewer-A1021558. I reviewed the full scope against main ea41acbf. HEAD contains main. The merge 31a5a167 conflicted only in CHANGELOG, and both sides are kept. The diff touches 5 files: run_telemetry.py, fb_api/telemetry.py, CHANGELOG and two tests. No scope creep. All test values are synthetic. The secrets scan is clean.\n\n## The scrubber is correct\n- Bare `EAA\u2026` token becomes `<token>`. Keyed forms keep `<hidden>`. Words like `EAABshort`, `XEAAB\u2026` and `the EAAs` are left alone.\n- `user:pass@host[:port]` becomes `<user>:<hidden>@host[:port]`. This also works after `http://` and `socks5://`, for IPv4 and `[IPv6]`, and for passwords that contain `@`, `:` or `/`. Paths, `mailto:`/`email:`, `16:9@2x`, `https://user@host` and `git@github.com:org/repo` are not touched.\n- In `scrub_diag`, dict keys that are `act_` ids, 6+ digit ids, emails or integer ids are scrubbed. On collisions `put_unique` keeps both entries. The real `acl_sentry._before_send` path is tested. The Run summary attachment goes through `scrub_diag` too. The fb_api `scrub_value` uses the same `clean_key`.\n- Backtracking: I ran my own adversarial probes at about 100 KB each: slash/at mixes, 63-char label runs, many word starts with 240-char passwords, port-lookahead runs, bracket starts, 255/255 user/password runs, and email-key runs. Each finished in under 0.08 s for both `scrub` and `scrub_key`. At 1 MB the time grows linearly (0.065 s to 0.67 s). There is no catastrophic backtracking.\n- Local tests: 477 of 478 pass in the 1558, no-hang, every-shape, fb_api 1756, run_telemetry, run-summary attachment, sentry snapshot and test_platform files. The one failure is the finding below.\n\n## BLOCKING: the new CI platform rule on main fails (CI windows tests + \"Classify and check project tooling\" + \"Process instructions\" are red)\n`tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis` flags:\n    test_acl1558_scrubber_shapes.py:88 [backslash-path] r\"saved to C:\\Users\\demo@corp\\out.txt\",\nThe same failure appears in CI run 39592451242 (tooling job: 1 failed / 728 passed; windows tests: 1 failed / 326 passed). The \"Process instructions\" job fails only because it requires the tooling job.\nFix (test-only, no behaviour change): this line is data for the scrubber, not a Windows API. Add the waiver comment the rule asks for on that exact line, for example:\n    r\"saved to C:\\Users\\demo@corp\\out.txt\",  # linux-ok: scrubber input string, not a real path\nThen re-run tests/test_acl_test_platform.py and tests/test_acl1558_scrubber_shapes.py locally. Do not mark the whole file windows_only, because the scrubber must stay covered on Linux.\n\n## Non-blocking notes (no change required)\n- Over-scrubbing that errs toward privacy: `Error:foo@example.com` and `12:30@home.example.com` become `<user>:<hidden>@\u2026`. A date-like dict key `20261021` becomes `<id>`. All acceptable.\n- tracker-link run 39592451226 is the stale pre-queue run. The fix push will trigger a new one.\n\nNo owner live check needed (scrubber code only). I keep the lane and will review the fix delta.",
           "keep_lane": true
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-21T11:48:35+00:00",
+        "issue": 403,
+        "pr": 973,
+        "actor": "Worker-A1021403"
       }
     ],
     "policy": {
