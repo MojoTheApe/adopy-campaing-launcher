@@ -54892,7 +54892,7 @@
             "session": "run_w1021_377"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1021377",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -54917,7 +54917,8 @@
           "session": "coord-m1011a-20261015",
           "report": "Approval is stale against current main ea41acbf (PR #1049), so batch intake rejects it (\"source approval is stale for its PR, main or policy\"). Author: merge current main into the original branch without changing content, re-run checks, hand off, and get a fresh independent source approval. Then it goes into the next frozen batch. Returned by the owner-authorized integration run (2026-10-21), acting under the recorded approval coordinator."
         },
-        "review_report": "Approval is stale against current main ea41acbf (PR #1049), so batch intake rejects it (\"source approval is stale for its PR, main or policy\"). Author: merge current main into the original branch without changing content, re-run checks, hand off, and get a fresh independent source approval. Then it goes into the next frozen batch. Returned by the owner-authorized integration run (2026-10-21), acting under the recorded approval coordinator."
+        "review_report": "Approval is stale against current main ea41acbf (PR #1049), so batch intake rejects it (\"source approval is stale for its PR, main or policy\"). Author: merge current main into the original branch without changing content, re-run checks, hand off, and get a fresh independent source approval. Then it goes into the next frozen batch. Returned by the owner-authorized integration run (2026-10-21), acting under the recorded approval coordinator.",
+        "reviewer": "Reviewer-S1021377"
       },
       "987": {
         "implementers": [
@@ -58705,6 +58706,10 @@
       "Worker-A1021142": {
         "session": "run_a1021_142w",
         "role": "Worker"
+      },
+      "Reviewer-S1021377": {
+        "session": "run_s1021_377",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -61601,8 +61606,7 @@
     },
     "review_queue": [
       1050,
-      1053,
-      377
+      1053
     ],
     "review": null,
     "history": [
@@ -105314,6 +105318,13 @@
         "issue": 142,
         "claim": "d1752307b8b14173a7e7f26dd5cbba7c",
         "actor": "Worker-A1021142"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-21T10:18:05+00:00",
+        "pr": 935,
+        "lane": "2e776a8f13264b5e8b6f42cd7e542b02",
+        "actor": "Reviewer-S1021377"
       }
     ],
     "policy": {
@@ -115059,6 +115070,18 @@
         "session": "run_a1021_626r",
         "coordinator": "Coordinator-A1021A",
         "started_at": "2026-10-21T10:04:08+00:00",
+        "state": "reviewing"
+      },
+      "935": {
+        "id": "2e776a8f13264b5e8b6f42cd7e542b02",
+        "pr": 935,
+        "issues": [
+          377
+        ],
+        "actor": "Reviewer-S1021377",
+        "session": "run_s1021_377",
+        "coordinator": "Coordinator-I1021A",
+        "started_at": "2026-10-21T10:18:05+00:00",
         "state": "reviewing"
       }
     },
