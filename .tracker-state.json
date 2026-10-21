@@ -51115,7 +51115,7 @@
             "session": "wrs1816-20261015"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-RS1816",
         "coordinator": "Coordinator-C0930A",
         "handoff": {
@@ -51134,13 +51134,14 @@
         },
         "pr": 820,
         "queued_at": "2026-10-19T12:25:15+00:00",
-        "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
+        "review_report": "Lane recovered after owner-confirmed dead reviewer session. No verdict given. Review is stale against current main 0ea237b0; the author must refresh onto main and request a fresh independent review.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.577990+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-X1021816"
+        "reviewer": "Reviewer-X1021816",
+        "rework": true
       },
       "822": {
         "implementers": [
@@ -107578,6 +107579,24 @@
         },
         "claim": "ebde0786d68346b3a1d6930e829c8d3b",
         "reason": "Owner confirmed 2026-10-21: \u00ab1816 \u2014 \u0441\u0435\u0441\u0441\u0438\u044f \u0440\u0435\u0432\u044c\u044e\u0435\u0440\u0430 \u043c\u0435\u0440\u0442\u0432\u0430\u00bb; previous Reviewer-R1816V run stopped; lane recovered to free capacity"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-21T14:50:55+00:00",
+        "review": {
+          "id": "ebde0786d68346b3a1d6930e829c8d3b",
+          "pr": 820,
+          "issues": [
+            816
+          ],
+          "actor": "Reviewer-X1021816",
+          "session": "run_x1021_1816",
+          "coordinator": "Coordinator-I1021A",
+          "started_at": "2026-10-19T13:01:50+00:00",
+          "state": "returning",
+          "report": "Lane recovered after owner-confirmed dead reviewer session. No verdict given. Review is stale against current main 0ea237b0; the author must refresh onto main and request a fresh independent review.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -117397,20 +117416,6 @@
         "coordinator": "Coordinator-I1021A",
         "started_at": "2026-10-21T14:46:45+00:00",
         "state": "reviewing"
-      },
-      "820": {
-        "id": "ebde0786d68346b3a1d6930e829c8d3b",
-        "pr": 820,
-        "issues": [
-          816
-        ],
-        "actor": "Reviewer-X1021816",
-        "session": "run_x1021_1816",
-        "coordinator": "Coordinator-I1021A",
-        "started_at": "2026-10-19T13:01:50+00:00",
-        "state": "returning",
-        "report": "Lane recovered after owner-confirmed dead reviewer session. No verdict given. Review is stale against current main 0ea237b0; the author must refresh onto main and request a fresh independent review.",
-        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
