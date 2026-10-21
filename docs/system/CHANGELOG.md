@@ -8,7 +8,10 @@ After the API builder creates a campaign, the post-create read-back now also rea
 list, Check plan stops with a blocking English error (no auto-fix). A missing `advantage_state_info`
 is not blocking and is flagged `placement_state_verified=false` in the diagnostics. `advantage_audience_state` at campaign level and applied value
 rules are reported as warnings and in `readback.diagnostics` only. Read-only: no new write keys, no value
-rules or account-level exclusion writes. Tests: `tests/test_acl2050_placement_readback.py`.
+rules or account-level exclusion writes. Review fix: the placements check compares platforms, positions and devices
+order-insensitively, so Meta returning the same lists in another order no longer stops Check plan; a genuinely
+different set or automatic placements still stop. A missing `advantage_placement_state` is now also shown as a
+warning ("placement mode was not verified"). Tests: `tests/test_acl2050_placement_readback.py`.
 [Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1050).
 
 ## ACL-1381 — Consistent Builder ad-text wording — 2026-10-18

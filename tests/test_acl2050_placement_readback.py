@@ -75,3 +75,34 @@ def test_readback_asks_for_the_fields_and_writes_nothing_new(tmp_path):
     asked = str([p[1].get("fields") for p in meta.gets])
     assert "advantage_state_info" in asked and "value_rules_applied" in asked
     assert [p.rsplit("/", 1)[1] for p, _ in meta.posts][:2] == ["campaigns", "adsets"]
+
+
+def test_same_placements_in_other_order_pass(tmp_path):
+    """Meta может вернуть те же списки в другом порядке - это не расхождение."""
+    out, _ = _go(tmp_path, {
+        ("adset", "targeting.publisher_platforms"): ["instagram", "facebook"],
+        ("adset", "targeting.facebook_positions"): ["instream_video", "facebook_reels", "story", "feed"],
+        ("adset", "targeting.instagram_positions"): ["reels", "story", "stream"],
+        ("adset", "targeting.device_platforms"): ["desktop", "mobile"],
+        ("campaign", "advantage_state_info"): KEPT})
+    assert ("ad", "placements_summary") not in _fields(out), out.mismatches
+    assert not [m for m in out.mismatches if "position" in m["field"] or "platform" in m["field"]]
+    assert out.readback["ok"] is True, out.mismatches
+    assert publish_api.result_dict(out)["publishable"] is True
+
+
+def test_different_placement_set_still_stops_with_summary(tmp_path):
+    out, _ = _go(tmp_path, {("adset", "targeting.facebook_positions"): ["story", "feed", "facebook_reels"]})
+    fields = _fields(out)
+    assert ("ad", "facebook_positions") in fields and ("ad", "placements_summary") in fields
+    assert publish_api.result_dict(out)["publishable"] is False
+    out, _ = _go(tmp_path, {("adset", "targeting.instagram_positions"): ["reels", "story", "stream", "explore"]})
+    assert ("ad", "instagram_positions") in _fields(out) and ("ad", "placements_summary") in _fields(out)
+
+
+def test_missing_advantage_state_is_a_visible_warning(tmp_path):
+    out, _ = _go(tmp_path)
+    assert out.readback["diagnostics"]["placement_state_verified"] is False
+    assert any("advantage_placement_state" in w and "not verified" in w for w in out.warnings)
+    out, _ = _go(tmp_path, {("campaign", "advantage_state_info"): KEPT})
+    assert not any("not verified" in w for w in out.warnings)

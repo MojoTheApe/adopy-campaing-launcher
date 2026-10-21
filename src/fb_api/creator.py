@@ -1128,8 +1128,11 @@ class CampaignCreator:
               t.get("instagram_positions") or [])
         check("devices", targeting.get("device_platforms") or [], t.get("device_platforms") or [])
         # ACL-2050: одна понятная строка, если Meta не сохранила ручные площадки (автоплощадки/другой список).
+        # Порядок списков не важен (как в проверках выше): сводка нужна, только если набор реально отличается.
         want_pl, got_pl = placements_text(targeting), placements_text(t)
-        if targeting.get("publisher_platforms") and want_pl != got_pl:
+        if targeting.get("publisher_platforms") and any(
+                not _same(targeting.get(k) or [], t.get(k) or [])
+                for k in ("publisher_platforms", "facebook_positions", "instagram_positions", "device_platforms")):
             check("placements_summary", want_pl, got_pl)
         return checks
 
@@ -1642,6 +1645,9 @@ class CampaignCreator:
                                 "advantage_audience_state": info.get("advantage_audience_state"),
                                 "adsets_with_value_rules": 0}
         diag["placement_state_verified"] = bool(info.get("advantage_placement_state"))
+        if not diag["placement_state_verified"]:
+            out.warnings.append("Meta did not return advantage_placement_state; placement mode was not verified "
+                                "(check in Ads Manager).")
         if info.get("advantage_audience_state") == "ENABLED":
             out.warnings.append("Meta reports advantage_audience_state=ENABLED at campaign level; the ad sets "
                                 "were sent with Advantage+ audience off (verify in Ads Manager).")
