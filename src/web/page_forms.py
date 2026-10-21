@@ -25,10 +25,10 @@ def page_for(entry_page_id: str, client: Any, act: str) -> str:
         return page_id
     pages = client.get_all(f"/{act}/promote_pages", {"fields": "id,name", "limit": 100}, max_pages=1)
     ids = [str(p.get("id")) for p in pages if p.get("id")]
-    return ids[0] if len(ids) == 1 else ""
+    return ids[0] if ids else ""
 
 
-def _read_in_session(account_label: str) -> dict[str, Any]:
+def _read_in_session(account_label: str, selected_page: str | None = None) -> dict[str, Any]:
     from src.analysis_agent import account_spend as _as
     from src.analysis_agent import account_spend_api as _api
 
@@ -39,7 +39,11 @@ def _read_in_session(account_label: str) -> dict[str, Any]:
         if client.allow_writes:
             raise AssertionError("the forms read must not be able to write")
         client.reset_budget(READ_MAX_CALLS)
-        page_id = page_for(entry_page, client, sess.act)
+        if selected_page is None:
+            page_id = page_for(entry_page, client, sess.act)
+        else:
+            from src.web.account_pages import pages_from_client, resolve_selection
+            page_id = resolve_selection(pages_from_client(client, sess.act), selected_page)["id"]
         if not page_id:
             read = _forms.forms_capability("", [])
         else:
@@ -49,13 +53,14 @@ def _read_in_session(account_label: str) -> dict[str, Any]:
     return read.as_dict()
 
 
-def read_forms(account_label: str) -> dict[str, Any]:
+def read_forms(account_label: str, selected_page: str | None = None) -> dict[str, Any]:
     """Формы Страницы аккаунта. Всегда словарь: `ok`, `forms`, `message`, `state`."""
     from src.analysis_agent import account_spend as _as
     from src.analysis_agent import account_spend_api as _api
 
     started = time.monotonic()
-    run = _as.serialized_browser(key=_as._profile_key, reading=True)(_read_in_session)
+    run = _as.serialized_browser(key=_as._profile_key, reading=True)(
+        lambda account: _read_in_session(account, selected_page))
     try:
         out = run(account_label)
         error = ""
