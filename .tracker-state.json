@@ -109201,6 +109201,25 @@
           "ineligible": {},
           "report": "Owner priority: the test-isolation fix ACL-2073 and the batch-31 delivery verifier ACL-2071 integrate first. Merging them moves main and makes the 2b approvals (2050, 1838, 840, 165, 106) stale, so the remaining selection of this intake is cancelled. Task statuses and approvals are unchanged; those tasks will be refreshed and re-frozen in a new intake right before their batch."
         }
+      },
+      {
+        "event": "intake-frozen",
+        "at": "2026-10-21T17:51:07+00:00",
+        "intake": {
+          "id": "0ef9bdb5cdd24421b94f910697cc25c4",
+          "actor": "Coordinator-I1021A",
+          "session": "run_i1021a_1021",
+          "state": "running",
+          "issues": [
+            1073
+          ],
+          "remaining": [
+            1073
+          ],
+          "batches": [],
+          "started_at": "2026-10-21T17:51:07+00:00",
+          "ineligible": {}
+        }
       }
     ],
     "policy": {
@@ -119424,28 +119443,19 @@
     },
     "integration": null,
     "intake": {
-      "id": "83bec33459444079a9e3cd7cb38ccadd",
+      "id": "0ef9bdb5cdd24421b94f910697cc25c4",
       "actor": "Coordinator-I1021A",
       "session": "run_i1021a_1021",
-      "state": "cancelled",
+      "state": "running",
       "issues": [
-        1050,
-        838,
-        840,
-        165,
-        19
+        1073
       ],
       "remaining": [
-        1050,
-        838,
-        840,
-        165,
-        19
+        1073
       ],
       "batches": [],
-      "started_at": "2026-10-21T15:43:33+00:00",
-      "ineligible": {},
-      "report": "Owner priority: the test-isolation fix ACL-2073 and the batch-31 delivery verifier ACL-2071 integrate first. Merging them moves main and makes the 2b approvals (2050, 1838, 840, 165, 106) stale, so the remaining selection of this intake is cancelled. Task statuses and approvals are unchanged; those tasks will be refreshed and re-frozen in a new intake right before their batch."
+      "started_at": "2026-10-21T17:51:07+00:00",
+      "ineligible": {}
     },
     "source_reviews": {
       "1057": {
