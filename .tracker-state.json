@@ -52804,7 +52804,7 @@
             "session": "run_a1021_880w"
           }
         ],
-        "state": "approved",
+        "state": "merged",
         "worker": "Worker-A1021880",
         "coordinator": "Coordinator-A1021A",
         "handoff": {
@@ -52829,7 +52829,8 @@
         },
         "pr": 1044,
         "queued_at": "2026-10-21T08:25:54+00:00",
-        "reviewer": "Reviewer-A1021880"
+        "reviewer": "Reviewer-A1021880",
+        "batch_id": "36ca88230aef44c598ea961df39585c3"
       },
       "886": {
         "implementers": [
@@ -54574,7 +54575,7 @@
             "session": "run_a1021_784w"
           }
         ],
-        "state": "approved",
+        "state": "merged",
         "worker": "Worker-A1021784",
         "coordinator": "Coordinator-A1021A",
         "handoff": {
@@ -54599,7 +54600,8 @@
           "at": "2026-10-17T16:30:39.578088+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-A1021784"
+        "reviewer": "Reviewer-A1021784",
+        "batch_id": "36ca88230aef44c598ea961df39585c3"
       },
       "558": {
         "implementers": [
@@ -54654,7 +54656,7 @@
             "session": "run_a1021_380w"
           }
         ],
-        "state": "approved",
+        "state": "merged",
         "worker": "Worker-A1021380",
         "coordinator": "Coordinator-A1021A",
         "handoff": {
@@ -54679,7 +54681,8 @@
           "at": "2026-10-17T16:30:39.578090+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-A1021380"
+        "reviewer": "Reviewer-A1021380",
+        "batch_id": "36ca88230aef44c598ea961df39585c3"
       },
       "680": {
         "implementers": [
@@ -54876,7 +54879,7 @@
             "session": "run_a1021_626w"
           }
         ],
-        "state": "approved",
+        "state": "merged",
         "worker": "Worker-A1021626",
         "coordinator": "Coordinator-A1021A",
         "handoff": {
@@ -54901,7 +54904,8 @@
           "at": "2026-10-17T16:30:39.578097+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-A1021626"
+        "reviewer": "Reviewer-A1021626",
+        "batch_id": "36ca88230aef44c598ea961df39585c3"
       },
       "968": {
         "implementers": [
@@ -55407,7 +55411,7 @@
             "session": "run_w1021_377"
           }
         ],
-        "state": "approved",
+        "state": "merged",
         "worker": "Worker-W1021377",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -55433,7 +55437,8 @@
           "report": "Approval is stale against current main ea41acbf (PR #1049), so batch intake rejects it (\"source approval is stale for its PR, main or policy\"). Author: merge current main into the original branch without changing content, re-run checks, hand off, and get a fresh independent source approval. Then it goes into the next frozen batch. Returned by the owner-authorized integration run (2026-10-21), acting under the recorded approval coordinator."
         },
         "review_report": "Approval is stale against current main ea41acbf (PR #1049), so batch intake rejects it (\"source approval is stale for its PR, main or policy\"). Author: merge current main into the original branch without changing content, re-run checks, hand off, and get a fresh independent source approval. Then it goes into the next frozen batch. Returned by the owner-authorized integration run (2026-10-21), acting under the recorded approval coordinator.",
-        "reviewer": "Reviewer-S1021377"
+        "reviewer": "Reviewer-S1021377",
+        "batch_id": "36ca88230aef44c598ea961df39585c3"
       },
       "987": {
         "implementers": [
@@ -62487,6 +62492,23 @@
         "coordinator": "Coordinator-ACT174",
         "state": "reviewing",
         "started_at": "2026-10-20T20:25:34+00:00"
+      },
+      "1064": {
+        "id": "3cbfef49299841b6912867db49cc431f",
+        "batch_id": "36ca88230aef44c598ea961df39585c3",
+        "pr": 1064,
+        "issues": [
+          784,
+          880,
+          377,
+          380,
+          626
+        ],
+        "actor": "Reviewer-B1021A",
+        "session": "run_b1021a_1021",
+        "coordinator": "Coordinator-I1021A",
+        "state": "reviewing",
+        "started_at": "2026-10-21T13:02:57+00:00"
       }
     },
     "review_queue": [
@@ -62495,23 +62517,7 @@
       710,
       1069
     ],
-    "review": {
-      "id": "3cbfef49299841b6912867db49cc431f",
-      "batch_id": "36ca88230aef44c598ea961df39585c3",
-      "pr": 1064,
-      "issues": [
-        784,
-        880,
-        377,
-        380,
-        626
-      ],
-      "actor": "Reviewer-B1021A",
-      "session": "run_b1021a_1021",
-      "coordinator": "Coordinator-I1021A",
-      "state": "reviewing",
-      "started_at": "2026-10-21T13:02:57+00:00"
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -108115,6 +108121,279 @@
         "at": "2026-10-21T15:07:19+00:00",
         "batch_id": "36ca88230aef44c598ea961df39585c3",
         "pr": 1064
+      },
+      {
+        "event": "batch-integrated",
+        "at": "2026-10-21T15:36:18+00:00",
+        "batch": {
+          "id": "36ca88230aef44c598ea961df39585c3",
+          "actor": "Coordinator-I1021A",
+          "session": "run_i1021a_1021",
+          "state": "merged",
+          "issues": [
+            784,
+            880,
+            377,
+            380,
+            626
+          ],
+          "members": [
+            {
+              "issue": 784,
+              "pr": 961,
+              "branch": "work/acl-1784-api-no-review-window",
+              "head_sha": "f125642bbad9a67cc7d53f4b140f26894ad108af",
+              "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "5b56fa44c5d2cc279506d3496eb5ed078f5e6d463f7cd1a06f6355db6f6b7bf7",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-A1021784",
+                "implementer": "Worker-A1021784",
+                "head_sha": "f125642bbad9a67cc7d53f4b140f26894ad108af",
+                "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+                "tree_sha": "5db17581d82b8bddf92dde850667f2ee98ee5785",
+                "execution_lane": "0da8125a7c8b406f882b5209d6fe91db",
+                "review_session": "run_a1021_784r",
+                "report": "ACL-1784 / PR #961 independent source review - APPROVED at f125642b (contains main ea41acbf).\nScope: full diff vs main - docs/system/CHANGELOG.md, src/web/publish_api.py (read-only ApiPublisher.writes and started_profile), src/web/publish_jobs.py (_run_api settled/still_open/review_window + English notices; _run_job_inner releases the slot when review_window is False), tests/test_acl1784_api_review_window.py (18 tests). No unrelated files. Merge commit a525a67a resolved only adjacent CHANGELOG entries correctly. PR body: one 'Tracker issues: ACL-1784' line, no closing keywords. No leaked ids/tokens/paths (account labels only, as in the Issue). User-facing notices English. RPA path unchanged (review_window never set there).\nAcceptance: plan error leaves no kept window and the next queued job starts at cap 1; preflight stop closes a job-started profile and frees the slot for a user-opened one; clean job releases its slot (closes a job-started profile); readback mismatch / error after a write keeps the window. Tests use fake publisher and real ProfileSlots; the real finish_job is exercised for clean/stop/keep-open/dry-run/stop-failure.\nEarlier blocking finding B1 (slot freed while a job-started profile stayed open, false notice) is fixed: still_open = outcome != 'closed' and started_profile keeps the slot and shows API_STILL_OPEN_NOTICE.\nNon-blocking: on a user Stop before the first write the job-started profile is not stopped (ACL-1614 leaves the window open on cancel); the slot stays taken and the notice is truthful. I accept this as a conservative reading of the Issue's 'stops before the first write', which plan/preflight stops satisfy; owner may ask for auto-stop later. Writes counter counts Meta-refused POSTs as writes (conservative). The fix was written before the worker claim and committed after it (process note only).\nTests run locally: test_acl1784, test_acl1603, test_acl1761_api_create, test_acl1761_plan_check, test_acl1614, test_a_finished_clean_profile_closes_itself, test_acl1812: 365 passed.\nLive check: owner check of the panel notice on the test dashboard can follow separately.",
+                "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  784
+                ],
+                "recorded_at": "2026-10-21T09:00:28+00:00",
+                "issue_scopes": {
+                  "784": "5b56fa44c5d2cc279506d3496eb5ed078f5e6d463f7cd1a06f6355db6f6b7bf7"
+                }
+              },
+              "lane": {
+                "id": "0da8125a7c8b406f882b5209d6fe91db",
+                "pr": 961,
+                "issues": [
+                  784
+                ],
+                "actor": "Reviewer-A1021784",
+                "session": "run_a1021_784r",
+                "coordinator": "Coordinator-A1021A",
+                "started_at": "2026-10-21T08:42:06+00:00",
+                "state": "reviewing",
+                "report": "ACL-1784 / PR #961 independent source review \u2014 RETURNED for a fix (Reviewer-A1021784, head a525a67a, contains main ea41acbf).\n\nScope checked: full diff vs work/main (CHANGELOG, src/web/publish_api.py, src/web/publish_jobs.py, new tests/test_acl1784_api_review_window.py), the Issue spec/acceptance, PR body (one `Tracker issues: ACL-1784` line, no closing keywords), merge commit a525a67a (`git show --cc`: only CHANGELOG adjacent entries, resolved correctly, no code touched). No leaked ids/tokens/paths; notices are English; RPA path unchanged (`review_window` never set there). Local tests: test_acl1784_api_review_window, test_acl1603_stable_slots, test_acl1761_*, test_acl1614_cancel_hung_job, test_acl1812_warm_sessions \u2014 404 passed.\n\nBLOCKING finding B1 \u2014 the slot is released while a profile the job started is still running, and the panel says the opposite.\n\nIn `_run_api`, `settled = clean or not wrote` drives both `review_window = not settled` (which makes `_run_job_inner` call `_slots.release` instead of `_slots.keep`) and the notice. But `ApiPublisher.finish_job` can still return \"\" (profile left open) for a job-started profile even when `clean=True`:\n- `self.cancelled()` \u2014 user pressed Stop before the first write (cancel_job intentionally leaves the Multilogin window open, ACL-1614);\n- `_keep_profiles_open()` \u2014 owner switch ACL_KEEP_PROFILES_OPEN;\n- `self.dry_run` \u2014 finish_job forces clean=False (dry_run=1 jobs are reachable from the publish endpoint);\n- `_stop_profile` raised (stop failure).\nIn all of these, wrote=False \u2192 settled=True \u2192 review_window=False \u2192 the slot is freed, yet the Mimic window the job started keeps running. That is exactly the hazard ACL-1603 guards against (queue launching extra Mimics over open windows; with cap 1 a second profile starts while the first is still open). The panel then shows API_NO_WRITE_NOTICE \"the profile is not kept open for review\", which is false. The Stop-before-first-write case also misses the Issue spec (\"stops before the first write\" \u2192 close our tab, release the slot, stop the profile if the job started it): the profile is neither stopped nor counted.\n\nRequired fix (either is acceptable, keep it small):\n(a) Release the slot only when the profile is actually not left open by the job: `outcome == \"closed\"` OR the job did not start the profile (user-opened \u2014 spec says release in that case). If a job-started profile stays open for any other reason (cancel, keep-open switch, dry run, stop failure), keep the slot as before and do not show the \"not kept open\" notice (show an accurate one or none). And/or\n(b) For a no-write stop, let finish_job stop the job-started profile despite `cancelled()` (spec), and still fall back to (a) when stopping did not happen.\nExpose what you need from ApiPublisher read-only (e.g. a `started_profile` property from `self._opened.started_now`) rather than reaching into privates.\n\nTests to add (fakes; the current FakePublisher.finish_job does not model cancel/keep-open/dry-run/stop-failure, so it cannot catch this): Stop before the first write on a job-started profile; ACL_KEEP_PROFILES_OPEN=1 with a clean no-write or clean job on a job-started profile; finish_job returning \"\" for a job-started profile \u2014 each must either close the profile or keep the slot, and the notice must match the real state. Prefer driving the real `ApiPublisher.finish_job` with a faked `_opened`/`_stop_profile` for at least one case.\n\nNon-blocking notes:\n- `wrote` falls back to True on an exception \u2014 good (conservative).\n- GraphError rejections count as writes (`GraphClient.writes` increments before POST), so a Meta-refused write keeps the window \u2014 conservative, acceptable.\n- CI on a525a67a: all test/installer/descriptor checks green; `tracker-link` failed because it ran before handoff (\"move it to Review before a ready PR\") \u2014 rerun it on the next head.\n- Owner live check (panel notice on the test dashboard) can follow separately as the Issue allows.\n\nLane kept (--keep-lane); I will review the fix delta.",
+                "keep_lane": true
+              },
+              "approved_at": "2026-10-21T09:20:43+00:00"
+            },
+            {
+              "issue": 880,
+              "pr": 1044,
+              "branch": "work/acl-1880-page-selection",
+              "head_sha": "8c0e175e274a05af4b923557cbc5dfc839a2e3c7",
+              "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "f0747b53c6bf2831d875beca14abdb0741cc792bba462990e368ca1165fcf392",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-A1021880",
+                "implementer": "Worker-A1021880",
+                "head_sha": "8c0e175e274a05af4b923557cbc5dfc839a2e3c7",
+                "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+                "tree_sha": "03d48b2b65f66f3eaef4c285112c687d5db967d6",
+                "execution_lane": "5b2e2778e470457cb04021aaf9a357ac",
+                "review_session": "run_a1021_880r",
+                "report": "Independent review of PR #1044 (ACL-1880, campaign-local Facebook Page selection), round 4, by Reviewer-A1021880.\n\nHead 8c0e175e is a --no-ff merge of ec2a527d and main ea41acbf. git show --cc has no hand-resolved hunks. The head tree 03d48b2b equals `git merge-tree --write-tree ec2a527d ea41acbf`. `git diff main..head` is byte-identical to the diff I reviewed at ec2a527d (27 files, +937/-34).\n\nPrevious blocker (round 3) is resolved: /build-upload now refuses with a visible English error when any campaign has an explicit page_id, instead of silently dropping it. Automatic still exports. Both cases are tested in tests/test_web_build_upload.py.\n\nChecked against the Issue acceptance:\n- New and duplicated campaigns use Automatic, the first available destination Page. Duplicates reset the Page through SKIP_FIELDS. When a slot changes account, its Page is cleared.\n- An explicit Page is campaign-local. page_provided skips the account-map fallback, and the map is never written (tested).\n- Multiple Pages, confirmed empty, failed load, retry and stale responses are tested offline in Python and Playwright. The 12 h Pages cache stores only ready/empty results, force=1 bypasses it, and the builder render reads the cache only.\n- Preflight: Automatic resolves to the first Page. A confirmed empty list on a website campaign gives a warning and a PAUSED campaign and ad sets with no ads (manual_required, publishable=false, a retry completes the same campaign). Instant Forms and an unavailable explicit Page are blocked with actionable English messages.\n- RPA with an explicit Page: the Pages are re-read before creation and checked against the account act. Identity is verified on the first ad and on every extra ad. page_identity is BLOCKING, non-retryable, in the flow stops and in GUIDE. Non-recorded engines are refused. Automatic leaves Identity untouched.\n\nScope is ACL-1880 only, plus the requested cache carry-over (tests/test_queue_wait_reads.py). No leaked ids, tokens, emails or local paths. The PR body has exactly one Tracker issues line and no closing keywords. User-facing text is in English.\n\nTests (affected suites): 149 passed, 1 failed. The failure is test_account_pages_endpoint_cached_flag, a Starlette/httpx TestClient(app=) TypeError in the old local venv; it passes in CI.\n\nNon-blocking notes:\n- The PROJECT.md ACL-1880 block has a stray H1 heading, and there is no CHANGELOG.md entry.\n- On RPA the builder note still says \"Automatic: <first Page>\", though Ads Manager's own default Identity may differ.\n- Commit ec2a527d has the placeholder author `trial <t@t>`.\n- PR #1025 (ACL-1897) is still open; whichever PR lands second resolves the creator.py/preflight overlap.\n\nThe owner still has to check live that the Identity picker can switch to a different Page in Ads Manager. This does not block the offline acceptance.",
+                "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  880
+                ],
+                "recorded_at": "2026-10-21T09:04:16+00:00",
+                "issue_scopes": {
+                  "880": "f0747b53c6bf2831d875beca14abdb0741cc792bba462990e368ca1165fcf392"
+                }
+              },
+              "lane": {
+                "id": "5b2e2778e470457cb04021aaf9a357ac",
+                "pr": 1044,
+                "issues": [
+                  880
+                ],
+                "actor": "Reviewer-A1021880",
+                "session": "run_a1021_880r",
+                "coordinator": "Coordinator-A1021A",
+                "started_at": "2026-10-21T08:26:08+00:00",
+                "state": "reviewing",
+                "report": "# Return: PR #1044 (ACL-1880), review round 4 by Reviewer-A1021880\n\n**Content approved at ec2a527db4d173b50314f778c001fe75c4cecbba. Merge current main only (ea41acbf960f53cdd0486c50dda491ec3981dfcf), no content change.**\n\nThe head was based on main 259ae7f1 and does not contain current main ea41acbf (7 commits ahead, ACL-2026 tooling/docs only). `git merge-tree` of the head and current main merges cleanly with no conflicts. After the merge I will review the merge delta (`git show --cc`) and the full diff again, then record the review.\n\n## Previous blocking finding: resolved\nReviewer-R1880W found that `/build-upload` silently dropped an explicit Page. ec2a527d fixes it. `build_upload` now refuses with a visible English `upload_errors` message when any slot has a non-empty `page_id`. This mirrors the existing Instant Forms refusal on that path. Automatic (empty) still exports. `tests/test_web_build_upload.py` covers both cases.\n\n## Checked (full scope vs main)\n- Explicit Page is campaign-local. `page_provided` skips the account-map fallback, and no map write happens (tested). Duplicates reset the Page (`SKIP_FIELDS`). When a slot moves to another account, its Page is cleared.\n- Automatic means the first available Page. On the API path it is resolved in `resolve_page`. Preflight returns ok for multiple Pages and a warning for the manual shell on a confirmed empty list. Instant Forms and an explicitly unavailable Page are still blocked, with actionable English messages.\n- Loading, failed, empty and not_loaded are separate states. Refresh bypasses the cache. A stale response is dropped by a request-identity check. Failures are never cached (12 h TTL). The builder render reads the cache only.\n- RPA: an explicit Page is re-read with force, checked against the account act, and verified on the first ad and every extra ad. `page_identity` is BLOCKING, non-retryable, in the flow-stop list and in GUIDE. Non-recorded engines are refused. Automatic leaves Identity untouched.\n- Manual shell: the campaign and ad sets are created PAUSED with no ads. The result has `manual_required` set and `publishable=false`. A retry completes the same campaign.\n- Merge commits 44060638, 88387d25 and 89dc6c56 have no hand-resolved hunks. No unrelated files are included. `test_queue_wait_reads.py` (cache part) is the carry-over that the Issue requested.\n- No leaked ids, tokens, emails or local paths in the diff or PR body. The PR body has exactly one `Tracker issues: ACL-1880` line and no closing keywords. User-facing strings are in English.\n- Tests: 150 affected tests (1880 suites, 1819 preflight, build_upload, duplicate, failure_policy, 1775 forms): 149 passed, 1 failed. The failure is `test_account_pages_endpoint_cached_flag`, a Starlette/httpx `TestClient(app=)` TypeError from the old local venv. The previous round saw the same failure, and the test passed in CI.\n\n## Non-blocking notes\n- The `docs/system/PROJECT.md` ACL-1880 section is updated. The second block has a level-1 heading (`# ACL-1880: manual completion\u2026`) inside a level-3 section with no blank line before it. This is cosmetic. There is no `docs/system/CHANGELOG.md` entry.\n- The builder note still says \"Automatic: <first Page>\" on the RPA backend, where Ads Manager's own default Identity may differ (raised in round 3 and still open).\n- ec2a527d has author `trial <t@t>`. This is not a leak, only a placeholder identity.\n- PR #1025 (ACL-1897) is still OPEN. Whichever PR lands second must resolve the creator.py/preflight-test overlap.\n\n## Live check\nThe alternate-Page Identity picker in live Ads Manager is not verified. The owner needs to check it live; this does not block the offline acceptance.",
+                "keep_lane": true
+              },
+              "approved_at": "2026-10-21T09:06:55+00:00"
+            },
+            {
+              "issue": 377,
+              "pr": 935,
+              "branch": "work/acl-1377-workbook-key",
+              "head_sha": "33e09b6791038d25560d7a42548cc7dd46e7311d",
+              "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "ba1d91de10f6ab2391b19b6d8e3faeff12e10c23d3500ddb0530bf15a1ad84d1",
+              "review": {
+                "kind": "independent-review",
+                "implementer": "Worker-W1021377",
+                "reviewer": "Reviewer-S1021377",
+                "head_sha": "33e09b6791038d25560d7a42548cc7dd46e7311d",
+                "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+                "tree_sha": "cee7b9fb69e69a5a3648cc7a6bfdd26166694f46",
+                "verdict": "approved",
+                "execution_lane": "2e776a8f13264b5e8b6f42cd7e542b02",
+                "review_session": "run_s1021_377",
+                "report": "ACL-1377 / PR935 independent re-review on current main ea41acbf. Delta since previously approved e548e74f is only the clean main merge 33e09b67 (git show --cc shows no hand-resolved hunks). Diff vs main is exactly src/web/app.py, src/web/templates/report.html, tests/test_dashboard_review.py, tests/test_the_account_tree_on_screen.py. Behaviour: _alias_without_id_suffix falls back to a compact alphanumeric key only after the exact key finds nothing, unique match only, rule-keys excluded, country-scoped; Facebook_6540_<id> -> Facebook6540 without collision with 6545/65400; existing matches unchanged. Meta-only campaign rows get a quiet 'not in workbook' hint, suppressed for zero Meta numbers and an empty workbook. Tests cover match, near-name collision, ambiguity, underscore-priority, country scope, tree hint on/off. Source CI green on the head: descriptor, tracker-link (passed on one rerun after an early-state failure), process instructions, linux 1-3, windows (passed on one rerun after unrelated bootstrap-harness 60s timeout), installer verification.",
+                "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  377
+                ],
+                "recorded_at": "2026-10-21T10:49:07+00:00",
+                "issue_scopes": {
+                  "377": "ba1d91de10f6ab2391b19b6d8e3faeff12e10c23d3500ddb0530bf15a1ad84d1"
+                }
+              },
+              "lane": {
+                "id": "2e776a8f13264b5e8b6f42cd7e542b02",
+                "pr": 935,
+                "issues": [
+                  377
+                ],
+                "actor": "Reviewer-S1021377",
+                "session": "run_s1021_377",
+                "coordinator": "Coordinator-I1021A",
+                "started_at": "2026-10-21T10:18:05+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-21T10:49:53+00:00"
+            },
+            {
+              "issue": 380,
+              "pr": 962,
+              "branch": "work/acl-1380-ref-options-off-render",
+              "head_sha": "44bdbf2913fdb2cf1b3ba0f69a9a9edf2e4d109c",
+              "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "5721bfda1929700ea1d2c0d43cc9cf38e82898dada60cc93441f845a1dd5146d",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-A1021380",
+                "implementer": "Worker-A1021380",
+                "head_sha": "44bdbf2913fdb2cf1b3ba0f69a9a9edf2e4d109c",
+                "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+                "tree_sha": "7a34d570840c5f7896ab70583cbbd0b103c997fc",
+                "execution_lane": "49b2a919f8b94969b554c96a6e377ae5",
+                "review_session": "run_a1021_380r",
+                "report": "Independent source review of PR #962 (ACL-1380) at head 44bdbf29 against main ea41acbf.\nScope: src/web/app.py, src/web/publish_jobs.py, one new test file; no unrelated files. Merge d4b18a2e of main is clean (git show --cc shows no hand-resolved hunks); 44bdbf29 only widens one test assertion for the Python 3.13 wording.\nChecked against the remaining scope of #380 (per the 2026-10-14 tracker review: rules cache, worker pool and warm-up already on main):\n- targeting_registry.pull off the render path: _load_sheet_targets no longer calls pull(force=True); it reads the machine copy and starts at most one background pull() without force (the 15 s throttle applies). team_library.pull holds _pull_lock/its own file lock during the fetch, and the registry lock used by all_targets() is a separate lock, so the render path does not wait on the network. The explicit refresh routes (/api/targeting-profiles, /api/ad-texts) keep force=True, which is intended.\n- Cause of the asyncio errors: reproduced (clearing the running-loop mark on the loop's own thread) and guarded: _clear_inherited_asyncio_loop refuses on the loop thread and logs; worker threads with an inherited mark are still cleared. Its only caller is _run_job_inner at the start of a fresh job thread, so the guard does not block the leaked-Playwright cleanup path. Cancel route covered by a live-uvicorn test.\n- Timings: recorded in the PR (targets on render path 392 ms -> 18 ms measured; GET / figures from the 29.09 profiling, not re-measured live).\nTests run locally (Python 3.13, -n 2): new test file plus cancel-hung-job, dashboard-responsiveness, targeting integration/registry and team library: 123 passed.\nPR body: exactly one Tracker issues: ACL-1380 line, no closing references (closingIssuesReferences empty). No leaked identifiers in diff, commit messages or PR text; no new user-facing strings (one English log line).\nNon-blocking notes: (1) no docs/system/CHANGELOG entry for the behaviour change; (2) _runs_the_loop_here relies on the private BaseEventLoop._thread_id (CPython; returns False safely if absent); (3) a teammate's newly added target appears from the next open rather than the current one, by design.\nLive-check needs: owner check on the live dashboard after a serve.py restart (cold/warm GET / timings, page opens without waiting on GitHub).",
+                "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  380
+                ],
+                "recorded_at": "2026-10-21T09:56:05+00:00",
+                "issue_scopes": {
+                  "380": "5721bfda1929700ea1d2c0d43cc9cf38e82898dada60cc93441f845a1dd5146d"
+                }
+              },
+              "lane": {
+                "id": "49b2a919f8b94969b554c96a6e377ae5",
+                "pr": 962,
+                "issues": [
+                  380
+                ],
+                "actor": "Reviewer-A1021380",
+                "session": "run_a1021_380r",
+                "coordinator": "Coordinator-A1021A",
+                "started_at": "2026-10-21T09:43:32+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-21T10:00:36+00:00"
+            },
+            {
+              "issue": 626,
+              "pr": 967,
+              "branch": "work/acl-1626-notes-set-aside",
+              "head_sha": "2b1c52297ef8d0b778285de2f8833037fb5b15d1",
+              "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "78daec77f59b269c69b2b0d3072e9dff71bc3675802a71e8a3e2f16b22df80f4",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-A1021626",
+                "implementer": "Worker-A1021626",
+                "head_sha": "2b1c52297ef8d0b778285de2f8833037fb5b15d1",
+                "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+                "tree_sha": "182a3f5484b54663d2d1282c31341885b09be888",
+                "execution_lane": "6e6f0aa4453643d8a27046aa779e60f2",
+                "review_session": "run_a1021_626r",
+                "report": "Independent source re-review of ACL-1626 (PR 967) at 2b1c5229 (contains main ea41acbf; earlier merge d460cfba clean).\nDelta since the return (d460cfba..2b1c5229): tests/test_acl1620_account_notes.py _post() now runs the handler via asyncio.run in a worker thread (same pattern as the browser fixture's route handler), fixing the deterministic CI failure ('asyncio.run() cannot be called from a running event loop' after the module-scoped Playwright fixture). caplog and monkeypatch on notes.datetime remain effective across the thread (root logger handler / module global). docs/system/CHANGELOG.md gains an accurate ACL-1626 entry. No product-code change in the delta.\nFull scope vs main re-checked: src/web/account_notes.py, src/web/app.py, src/web/templates/report.html, tests/test_acl1620_account_notes.py, docs/system/CHANGELOG.md. Spec 1 met (WARNING log with backup path; save response carries set_aside and warning 'Notes file was damaged; a copy was kept at <path>'; role=alert banner on the account map). Spec 2 met (ms-resolution backup name plus collision counter under the machine-file lock). PR body has exactly one 'Tracker issues: ACL-1626' line, no closing keywords. No leaked ids/tokens/personal paths; user-facing text English.\nTests: whole test file run in one process locally; the new non-browser tests pass after the browser fixture; Playwright browser tests fail locally for environment reasons only (acl.test navigation timeout); CI is authoritative.\nNon-blocking: banner covered only by a template source-string test; if a save fails with OSError after the file was set aside, the user is not told about the copy (log only).\nSpec 3 (owner live check: write/edit/clear a note, restart the dashboard, note survives) is owner-only and not performed; it exercises the unchanged ACL-1620 persistence path and follows separately. Needs owner live check and a serve.py restart for the Python change.\nVerdict: approved.",
+                "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  626
+                ],
+                "recorded_at": "2026-10-21T11:07:47+00:00",
+                "issue_scopes": {
+                  "626": "78daec77f59b269c69b2b0d3072e9dff71bc3675802a71e8a3e2f16b22df80f4"
+                }
+              },
+              "lane": {
+                "id": "6e6f0aa4453643d8a27046aa779e60f2",
+                "pr": 967,
+                "issues": [
+                  626
+                ],
+                "actor": "Reviewer-A1021626",
+                "session": "run_a1021_626r",
+                "coordinator": "Coordinator-A1021A",
+                "started_at": "2026-10-21T11:02:29+00:00",
+                "state": "reviewing",
+                "report": "ACL-1626 (PR 967) review return at d460cfba - one blocking finding (CI red), content otherwise approved.\n\nBLOCKING: required CI \"linux tests (3.13, 1)\" fails on this head (run 39581343441, job 119160086116): 3 failed, 3034 passed.\n  FAILED tests/test_acl1620_account_notes.py::test_a_damaged_file_is_reported_in_the_save_response_and_logged\n  FAILED tests/test_acl1620_account_notes.py::test_two_corruptions_in_the_same_millisecond_keep_both_copies\n  FAILED tests/test_acl1620_account_notes.py::test_the_backup_name_has_millisecond_resolution\n  - RuntimeError: asyncio.run() cannot be called from a running event loop\nCause: the new tests were appended at the end of the module, after the module-scoped `browser` fixture (line ~222). Once that fixture has started sync Playwright, an event loop is running in the main thread for the rest of the module, so `_post()` (asyncio.run at line 47) fails. They pass only when run in isolation (that is why the handoff saw \"3 passed\" separately). This is deterministic, not an environment issue; it also reproduces locally.\nFix (either): move the four new tests above the `browser` fixture, next to the other non-browser tests (e.g. after test_a_wrong_root_is_preserved_too); or make `_post` run the handler in a worker thread as the fixture's route handler already does (lines ~248-251). Moving the tests is the smaller change. Then run the whole file in one process (non-browser tests must pass even when browser tests fail/skip locally) and get CI green.\n\nEverything else checked and fine (no other change needed): spec 1 (log warning + set_aside/warning in the save response + role=alert banner with the exact Issue wording), spec 2 (ms-resolution name + collision counter under the machine-file lock), scope limited to the 4 files, PR body has exactly one Tracker issues line, no leaks, English UI text, merge of main ea41acbf clean.\nNon-blocking (optional in the same fix): add a short docs/system/CHANGELOG.md entry for the new response fields and banner; the banner itself is only checked by a source-string test.\nSpec 3 (owner live check: write/edit/clear a note, restart the dashboard, note survives) remains for the owner separately; not a reason for this return.",
+                "keep_lane": true
+              },
+              "approved_at": "2026-10-21T11:25:09+00:00"
+            }
+          ],
+          "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+          "branch": "codex/batch-36ca88230aef44c598ea961df39585c3",
+          "intake": "843ae93d19994cddaf23af35412da7ff",
+          "started_at": "2026-10-21T12:30:10+00:00",
+          "pr": 1064,
+          "entered_stage": false,
+          "history": [],
+          "review": {
+            "id": "3cbfef49299841b6912867db49cc431f",
+            "batch_id": "36ca88230aef44c598ea961df39585c3",
+            "pr": 1064,
+            "issues": [
+              784,
+              880,
+              377,
+              380,
+              626
+            ],
+            "actor": "Reviewer-B1021A",
+            "session": "run_b1021a_1021",
+            "coordinator": "Coordinator-I1021A",
+            "state": "reviewing",
+            "started_at": "2026-10-21T13:02:57+00:00"
+          },
+          "main_prs": [
+            1064
+          ],
+          "finished_at": "2026-10-21T15:36:18+00:00"
+        }
       }
     ],
     "policy": {
@@ -117757,261 +118036,283 @@
         "finished_at": "2026-10-20T21:15:31+00:00",
         "closing_sources": false,
         "sources_closed": true
-      }
-    },
-    "integration": {
-      "id": "36ca88230aef44c598ea961df39585c3",
-      "actor": "Coordinator-I1021A",
-      "session": "run_i1021a_1021",
-      "state": "reviewing",
-      "issues": [
-        784,
-        880,
-        377,
-        380,
-        626
-      ],
-      "members": [
-        {
-          "issue": 784,
-          "pr": 961,
-          "branch": "work/acl-1784-api-no-review-window",
-          "head_sha": "f125642bbad9a67cc7d53f4b140f26894ad108af",
-          "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-          "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "5b56fa44c5d2cc279506d3496eb5ed078f5e6d463f7cd1a06f6355db6f6b7bf7",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-A1021784",
-            "implementer": "Worker-A1021784",
+      },
+      "36ca88230aef44c598ea961df39585c3": {
+        "id": "36ca88230aef44c598ea961df39585c3",
+        "actor": "Coordinator-I1021A",
+        "session": "run_i1021a_1021",
+        "state": "merged",
+        "issues": [
+          784,
+          880,
+          377,
+          380,
+          626
+        ],
+        "members": [
+          {
+            "issue": 784,
+            "pr": 961,
+            "branch": "work/acl-1784-api-no-review-window",
             "head_sha": "f125642bbad9a67cc7d53f4b140f26894ad108af",
             "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-            "tree_sha": "5db17581d82b8bddf92dde850667f2ee98ee5785",
-            "execution_lane": "0da8125a7c8b406f882b5209d6fe91db",
-            "review_session": "run_a1021_784r",
-            "report": "ACL-1784 / PR #961 independent source review - APPROVED at f125642b (contains main ea41acbf).\nScope: full diff vs main - docs/system/CHANGELOG.md, src/web/publish_api.py (read-only ApiPublisher.writes and started_profile), src/web/publish_jobs.py (_run_api settled/still_open/review_window + English notices; _run_job_inner releases the slot when review_window is False), tests/test_acl1784_api_review_window.py (18 tests). No unrelated files. Merge commit a525a67a resolved only adjacent CHANGELOG entries correctly. PR body: one 'Tracker issues: ACL-1784' line, no closing keywords. No leaked ids/tokens/paths (account labels only, as in the Issue). User-facing notices English. RPA path unchanged (review_window never set there).\nAcceptance: plan error leaves no kept window and the next queued job starts at cap 1; preflight stop closes a job-started profile and frees the slot for a user-opened one; clean job releases its slot (closes a job-started profile); readback mismatch / error after a write keeps the window. Tests use fake publisher and real ProfileSlots; the real finish_job is exercised for clean/stop/keep-open/dry-run/stop-failure.\nEarlier blocking finding B1 (slot freed while a job-started profile stayed open, false notice) is fixed: still_open = outcome != 'closed' and started_profile keeps the slot and shows API_STILL_OPEN_NOTICE.\nNon-blocking: on a user Stop before the first write the job-started profile is not stopped (ACL-1614 leaves the window open on cancel); the slot stays taken and the notice is truthful. I accept this as a conservative reading of the Issue's 'stops before the first write', which plan/preflight stops satisfy; owner may ask for auto-stop later. Writes counter counts Meta-refused POSTs as writes (conservative). The fix was written before the worker claim and committed after it (process note only).\nTests run locally: test_acl1784, test_acl1603, test_acl1761_api_create, test_acl1761_plan_check, test_acl1614, test_a_finished_clean_profile_closes_itself, test_acl1812: 365 passed.\nLive check: owner check of the panel notice on the test dashboard can follow separately.",
             "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
             "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              784
-            ],
-            "recorded_at": "2026-10-21T09:00:28+00:00",
-            "issue_scopes": {
-              "784": "5b56fa44c5d2cc279506d3496eb5ed078f5e6d463f7cd1a06f6355db6f6b7bf7"
-            }
+            "scope": "5b56fa44c5d2cc279506d3496eb5ed078f5e6d463f7cd1a06f6355db6f6b7bf7",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-A1021784",
+              "implementer": "Worker-A1021784",
+              "head_sha": "f125642bbad9a67cc7d53f4b140f26894ad108af",
+              "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "tree_sha": "5db17581d82b8bddf92dde850667f2ee98ee5785",
+              "execution_lane": "0da8125a7c8b406f882b5209d6fe91db",
+              "review_session": "run_a1021_784r",
+              "report": "ACL-1784 / PR #961 independent source review - APPROVED at f125642b (contains main ea41acbf).\nScope: full diff vs main - docs/system/CHANGELOG.md, src/web/publish_api.py (read-only ApiPublisher.writes and started_profile), src/web/publish_jobs.py (_run_api settled/still_open/review_window + English notices; _run_job_inner releases the slot when review_window is False), tests/test_acl1784_api_review_window.py (18 tests). No unrelated files. Merge commit a525a67a resolved only adjacent CHANGELOG entries correctly. PR body: one 'Tracker issues: ACL-1784' line, no closing keywords. No leaked ids/tokens/paths (account labels only, as in the Issue). User-facing notices English. RPA path unchanged (review_window never set there).\nAcceptance: plan error leaves no kept window and the next queued job starts at cap 1; preflight stop closes a job-started profile and frees the slot for a user-opened one; clean job releases its slot (closes a job-started profile); readback mismatch / error after a write keeps the window. Tests use fake publisher and real ProfileSlots; the real finish_job is exercised for clean/stop/keep-open/dry-run/stop-failure.\nEarlier blocking finding B1 (slot freed while a job-started profile stayed open, false notice) is fixed: still_open = outcome != 'closed' and started_profile keeps the slot and shows API_STILL_OPEN_NOTICE.\nNon-blocking: on a user Stop before the first write the job-started profile is not stopped (ACL-1614 leaves the window open on cancel); the slot stays taken and the notice is truthful. I accept this as a conservative reading of the Issue's 'stops before the first write', which plan/preflight stops satisfy; owner may ask for auto-stop later. Writes counter counts Meta-refused POSTs as writes (conservative). The fix was written before the worker claim and committed after it (process note only).\nTests run locally: test_acl1784, test_acl1603, test_acl1761_api_create, test_acl1761_plan_check, test_acl1614, test_a_finished_clean_profile_closes_itself, test_acl1812: 365 passed.\nLive check: owner check of the panel notice on the test dashboard can follow separately.",
+              "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                784
+              ],
+              "recorded_at": "2026-10-21T09:00:28+00:00",
+              "issue_scopes": {
+                "784": "5b56fa44c5d2cc279506d3496eb5ed078f5e6d463f7cd1a06f6355db6f6b7bf7"
+              }
+            },
+            "lane": {
+              "id": "0da8125a7c8b406f882b5209d6fe91db",
+              "pr": 961,
+              "issues": [
+                784
+              ],
+              "actor": "Reviewer-A1021784",
+              "session": "run_a1021_784r",
+              "coordinator": "Coordinator-A1021A",
+              "started_at": "2026-10-21T08:42:06+00:00",
+              "state": "reviewing",
+              "report": "ACL-1784 / PR #961 independent source review \u2014 RETURNED for a fix (Reviewer-A1021784, head a525a67a, contains main ea41acbf).\n\nScope checked: full diff vs work/main (CHANGELOG, src/web/publish_api.py, src/web/publish_jobs.py, new tests/test_acl1784_api_review_window.py), the Issue spec/acceptance, PR body (one `Tracker issues: ACL-1784` line, no closing keywords), merge commit a525a67a (`git show --cc`: only CHANGELOG adjacent entries, resolved correctly, no code touched). No leaked ids/tokens/paths; notices are English; RPA path unchanged (`review_window` never set there). Local tests: test_acl1784_api_review_window, test_acl1603_stable_slots, test_acl1761_*, test_acl1614_cancel_hung_job, test_acl1812_warm_sessions \u2014 404 passed.\n\nBLOCKING finding B1 \u2014 the slot is released while a profile the job started is still running, and the panel says the opposite.\n\nIn `_run_api`, `settled = clean or not wrote` drives both `review_window = not settled` (which makes `_run_job_inner` call `_slots.release` instead of `_slots.keep`) and the notice. But `ApiPublisher.finish_job` can still return \"\" (profile left open) for a job-started profile even when `clean=True`:\n- `self.cancelled()` \u2014 user pressed Stop before the first write (cancel_job intentionally leaves the Multilogin window open, ACL-1614);\n- `_keep_profiles_open()` \u2014 owner switch ACL_KEEP_PROFILES_OPEN;\n- `self.dry_run` \u2014 finish_job forces clean=False (dry_run=1 jobs are reachable from the publish endpoint);\n- `_stop_profile` raised (stop failure).\nIn all of these, wrote=False \u2192 settled=True \u2192 review_window=False \u2192 the slot is freed, yet the Mimic window the job started keeps running. That is exactly the hazard ACL-1603 guards against (queue launching extra Mimics over open windows; with cap 1 a second profile starts while the first is still open). The panel then shows API_NO_WRITE_NOTICE \"the profile is not kept open for review\", which is false. The Stop-before-first-write case also misses the Issue spec (\"stops before the first write\" \u2192 close our tab, release the slot, stop the profile if the job started it): the profile is neither stopped nor counted.\n\nRequired fix (either is acceptable, keep it small):\n(a) Release the slot only when the profile is actually not left open by the job: `outcome == \"closed\"` OR the job did not start the profile (user-opened \u2014 spec says release in that case). If a job-started profile stays open for any other reason (cancel, keep-open switch, dry run, stop failure), keep the slot as before and do not show the \"not kept open\" notice (show an accurate one or none). And/or\n(b) For a no-write stop, let finish_job stop the job-started profile despite `cancelled()` (spec), and still fall back to (a) when stopping did not happen.\nExpose what you need from ApiPublisher read-only (e.g. a `started_profile` property from `self._opened.started_now`) rather than reaching into privates.\n\nTests to add (fakes; the current FakePublisher.finish_job does not model cancel/keep-open/dry-run/stop-failure, so it cannot catch this): Stop before the first write on a job-started profile; ACL_KEEP_PROFILES_OPEN=1 with a clean no-write or clean job on a job-started profile; finish_job returning \"\" for a job-started profile \u2014 each must either close the profile or keep the slot, and the notice must match the real state. Prefer driving the real `ApiPublisher.finish_job` with a faked `_opened`/`_stop_profile` for at least one case.\n\nNon-blocking notes:\n- `wrote` falls back to True on an exception \u2014 good (conservative).\n- GraphError rejections count as writes (`GraphClient.writes` increments before POST), so a Meta-refused write keeps the window \u2014 conservative, acceptable.\n- CI on a525a67a: all test/installer/descriptor checks green; `tracker-link` failed because it ran before handoff (\"move it to Review before a ready PR\") \u2014 rerun it on the next head.\n- Owner live check (panel notice on the test dashboard) can follow separately as the Issue allows.\n\nLane kept (--keep-lane); I will review the fix delta.",
+              "keep_lane": true
+            },
+            "approved_at": "2026-10-21T09:20:43+00:00"
           },
-          "lane": {
-            "id": "0da8125a7c8b406f882b5209d6fe91db",
-            "pr": 961,
-            "issues": [
-              784
-            ],
-            "actor": "Reviewer-A1021784",
-            "session": "run_a1021_784r",
-            "coordinator": "Coordinator-A1021A",
-            "started_at": "2026-10-21T08:42:06+00:00",
-            "state": "reviewing",
-            "report": "ACL-1784 / PR #961 independent source review \u2014 RETURNED for a fix (Reviewer-A1021784, head a525a67a, contains main ea41acbf).\n\nScope checked: full diff vs work/main (CHANGELOG, src/web/publish_api.py, src/web/publish_jobs.py, new tests/test_acl1784_api_review_window.py), the Issue spec/acceptance, PR body (one `Tracker issues: ACL-1784` line, no closing keywords), merge commit a525a67a (`git show --cc`: only CHANGELOG adjacent entries, resolved correctly, no code touched). No leaked ids/tokens/paths; notices are English; RPA path unchanged (`review_window` never set there). Local tests: test_acl1784_api_review_window, test_acl1603_stable_slots, test_acl1761_*, test_acl1614_cancel_hung_job, test_acl1812_warm_sessions \u2014 404 passed.\n\nBLOCKING finding B1 \u2014 the slot is released while a profile the job started is still running, and the panel says the opposite.\n\nIn `_run_api`, `settled = clean or not wrote` drives both `review_window = not settled` (which makes `_run_job_inner` call `_slots.release` instead of `_slots.keep`) and the notice. But `ApiPublisher.finish_job` can still return \"\" (profile left open) for a job-started profile even when `clean=True`:\n- `self.cancelled()` \u2014 user pressed Stop before the first write (cancel_job intentionally leaves the Multilogin window open, ACL-1614);\n- `_keep_profiles_open()` \u2014 owner switch ACL_KEEP_PROFILES_OPEN;\n- `self.dry_run` \u2014 finish_job forces clean=False (dry_run=1 jobs are reachable from the publish endpoint);\n- `_stop_profile` raised (stop failure).\nIn all of these, wrote=False \u2192 settled=True \u2192 review_window=False \u2192 the slot is freed, yet the Mimic window the job started keeps running. That is exactly the hazard ACL-1603 guards against (queue launching extra Mimics over open windows; with cap 1 a second profile starts while the first is still open). The panel then shows API_NO_WRITE_NOTICE \"the profile is not kept open for review\", which is false. The Stop-before-first-write case also misses the Issue spec (\"stops before the first write\" \u2192 close our tab, release the slot, stop the profile if the job started it): the profile is neither stopped nor counted.\n\nRequired fix (either is acceptable, keep it small):\n(a) Release the slot only when the profile is actually not left open by the job: `outcome == \"closed\"` OR the job did not start the profile (user-opened \u2014 spec says release in that case). If a job-started profile stays open for any other reason (cancel, keep-open switch, dry run, stop failure), keep the slot as before and do not show the \"not kept open\" notice (show an accurate one or none). And/or\n(b) For a no-write stop, let finish_job stop the job-started profile despite `cancelled()` (spec), and still fall back to (a) when stopping did not happen.\nExpose what you need from ApiPublisher read-only (e.g. a `started_profile` property from `self._opened.started_now`) rather than reaching into privates.\n\nTests to add (fakes; the current FakePublisher.finish_job does not model cancel/keep-open/dry-run/stop-failure, so it cannot catch this): Stop before the first write on a job-started profile; ACL_KEEP_PROFILES_OPEN=1 with a clean no-write or clean job on a job-started profile; finish_job returning \"\" for a job-started profile \u2014 each must either close the profile or keep the slot, and the notice must match the real state. Prefer driving the real `ApiPublisher.finish_job` with a faked `_opened`/`_stop_profile` for at least one case.\n\nNon-blocking notes:\n- `wrote` falls back to True on an exception \u2014 good (conservative).\n- GraphError rejections count as writes (`GraphClient.writes` increments before POST), so a Meta-refused write keeps the window \u2014 conservative, acceptable.\n- CI on a525a67a: all test/installer/descriptor checks green; `tracker-link` failed because it ran before handoff (\"move it to Review before a ready PR\") \u2014 rerun it on the next head.\n- Owner live check (panel notice on the test dashboard) can follow separately as the Issue allows.\n\nLane kept (--keep-lane); I will review the fix delta.",
-            "keep_lane": true
-          },
-          "approved_at": "2026-10-21T09:20:43+00:00"
-        },
-        {
-          "issue": 880,
-          "pr": 1044,
-          "branch": "work/acl-1880-page-selection",
-          "head_sha": "8c0e175e274a05af4b923557cbc5dfc839a2e3c7",
-          "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-          "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "f0747b53c6bf2831d875beca14abdb0741cc792bba462990e368ca1165fcf392",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-A1021880",
-            "implementer": "Worker-A1021880",
+          {
+            "issue": 880,
+            "pr": 1044,
+            "branch": "work/acl-1880-page-selection",
             "head_sha": "8c0e175e274a05af4b923557cbc5dfc839a2e3c7",
             "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-            "tree_sha": "03d48b2b65f66f3eaef4c285112c687d5db967d6",
-            "execution_lane": "5b2e2778e470457cb04021aaf9a357ac",
-            "review_session": "run_a1021_880r",
-            "report": "Independent review of PR #1044 (ACL-1880, campaign-local Facebook Page selection), round 4, by Reviewer-A1021880.\n\nHead 8c0e175e is a --no-ff merge of ec2a527d and main ea41acbf. git show --cc has no hand-resolved hunks. The head tree 03d48b2b equals `git merge-tree --write-tree ec2a527d ea41acbf`. `git diff main..head` is byte-identical to the diff I reviewed at ec2a527d (27 files, +937/-34).\n\nPrevious blocker (round 3) is resolved: /build-upload now refuses with a visible English error when any campaign has an explicit page_id, instead of silently dropping it. Automatic still exports. Both cases are tested in tests/test_web_build_upload.py.\n\nChecked against the Issue acceptance:\n- New and duplicated campaigns use Automatic, the first available destination Page. Duplicates reset the Page through SKIP_FIELDS. When a slot changes account, its Page is cleared.\n- An explicit Page is campaign-local. page_provided skips the account-map fallback, and the map is never written (tested).\n- Multiple Pages, confirmed empty, failed load, retry and stale responses are tested offline in Python and Playwright. The 12 h Pages cache stores only ready/empty results, force=1 bypasses it, and the builder render reads the cache only.\n- Preflight: Automatic resolves to the first Page. A confirmed empty list on a website campaign gives a warning and a PAUSED campaign and ad sets with no ads (manual_required, publishable=false, a retry completes the same campaign). Instant Forms and an unavailable explicit Page are blocked with actionable English messages.\n- RPA with an explicit Page: the Pages are re-read before creation and checked against the account act. Identity is verified on the first ad and on every extra ad. page_identity is BLOCKING, non-retryable, in the flow stops and in GUIDE. Non-recorded engines are refused. Automatic leaves Identity untouched.\n\nScope is ACL-1880 only, plus the requested cache carry-over (tests/test_queue_wait_reads.py). No leaked ids, tokens, emails or local paths. The PR body has exactly one Tracker issues line and no closing keywords. User-facing text is in English.\n\nTests (affected suites): 149 passed, 1 failed. The failure is test_account_pages_endpoint_cached_flag, a Starlette/httpx TestClient(app=) TypeError in the old local venv; it passes in CI.\n\nNon-blocking notes:\n- The PROJECT.md ACL-1880 block has a stray H1 heading, and there is no CHANGELOG.md entry.\n- On RPA the builder note still says \"Automatic: <first Page>\", though Ads Manager's own default Identity may differ.\n- Commit ec2a527d has the placeholder author `trial <t@t>`.\n- PR #1025 (ACL-1897) is still open; whichever PR lands second resolves the creator.py/preflight overlap.\n\nThe owner still has to check live that the Identity picker can switch to a different Page in Ads Manager. This does not block the offline acceptance.",
             "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
             "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              880
-            ],
-            "recorded_at": "2026-10-21T09:04:16+00:00",
-            "issue_scopes": {
-              "880": "f0747b53c6bf2831d875beca14abdb0741cc792bba462990e368ca1165fcf392"
-            }
+            "scope": "f0747b53c6bf2831d875beca14abdb0741cc792bba462990e368ca1165fcf392",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-A1021880",
+              "implementer": "Worker-A1021880",
+              "head_sha": "8c0e175e274a05af4b923557cbc5dfc839a2e3c7",
+              "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "tree_sha": "03d48b2b65f66f3eaef4c285112c687d5db967d6",
+              "execution_lane": "5b2e2778e470457cb04021aaf9a357ac",
+              "review_session": "run_a1021_880r",
+              "report": "Independent review of PR #1044 (ACL-1880, campaign-local Facebook Page selection), round 4, by Reviewer-A1021880.\n\nHead 8c0e175e is a --no-ff merge of ec2a527d and main ea41acbf. git show --cc has no hand-resolved hunks. The head tree 03d48b2b equals `git merge-tree --write-tree ec2a527d ea41acbf`. `git diff main..head` is byte-identical to the diff I reviewed at ec2a527d (27 files, +937/-34).\n\nPrevious blocker (round 3) is resolved: /build-upload now refuses with a visible English error when any campaign has an explicit page_id, instead of silently dropping it. Automatic still exports. Both cases are tested in tests/test_web_build_upload.py.\n\nChecked against the Issue acceptance:\n- New and duplicated campaigns use Automatic, the first available destination Page. Duplicates reset the Page through SKIP_FIELDS. When a slot changes account, its Page is cleared.\n- An explicit Page is campaign-local. page_provided skips the account-map fallback, and the map is never written (tested).\n- Multiple Pages, confirmed empty, failed load, retry and stale responses are tested offline in Python and Playwright. The 12 h Pages cache stores only ready/empty results, force=1 bypasses it, and the builder render reads the cache only.\n- Preflight: Automatic resolves to the first Page. A confirmed empty list on a website campaign gives a warning and a PAUSED campaign and ad sets with no ads (manual_required, publishable=false, a retry completes the same campaign). Instant Forms and an unavailable explicit Page are blocked with actionable English messages.\n- RPA with an explicit Page: the Pages are re-read before creation and checked against the account act. Identity is verified on the first ad and on every extra ad. page_identity is BLOCKING, non-retryable, in the flow stops and in GUIDE. Non-recorded engines are refused. Automatic leaves Identity untouched.\n\nScope is ACL-1880 only, plus the requested cache carry-over (tests/test_queue_wait_reads.py). No leaked ids, tokens, emails or local paths. The PR body has exactly one Tracker issues line and no closing keywords. User-facing text is in English.\n\nTests (affected suites): 149 passed, 1 failed. The failure is test_account_pages_endpoint_cached_flag, a Starlette/httpx TestClient(app=) TypeError in the old local venv; it passes in CI.\n\nNon-blocking notes:\n- The PROJECT.md ACL-1880 block has a stray H1 heading, and there is no CHANGELOG.md entry.\n- On RPA the builder note still says \"Automatic: <first Page>\", though Ads Manager's own default Identity may differ.\n- Commit ec2a527d has the placeholder author `trial <t@t>`.\n- PR #1025 (ACL-1897) is still open; whichever PR lands second resolves the creator.py/preflight overlap.\n\nThe owner still has to check live that the Identity picker can switch to a different Page in Ads Manager. This does not block the offline acceptance.",
+              "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                880
+              ],
+              "recorded_at": "2026-10-21T09:04:16+00:00",
+              "issue_scopes": {
+                "880": "f0747b53c6bf2831d875beca14abdb0741cc792bba462990e368ca1165fcf392"
+              }
+            },
+            "lane": {
+              "id": "5b2e2778e470457cb04021aaf9a357ac",
+              "pr": 1044,
+              "issues": [
+                880
+              ],
+              "actor": "Reviewer-A1021880",
+              "session": "run_a1021_880r",
+              "coordinator": "Coordinator-A1021A",
+              "started_at": "2026-10-21T08:26:08+00:00",
+              "state": "reviewing",
+              "report": "# Return: PR #1044 (ACL-1880), review round 4 by Reviewer-A1021880\n\n**Content approved at ec2a527db4d173b50314f778c001fe75c4cecbba. Merge current main only (ea41acbf960f53cdd0486c50dda491ec3981dfcf), no content change.**\n\nThe head was based on main 259ae7f1 and does not contain current main ea41acbf (7 commits ahead, ACL-2026 tooling/docs only). `git merge-tree` of the head and current main merges cleanly with no conflicts. After the merge I will review the merge delta (`git show --cc`) and the full diff again, then record the review.\n\n## Previous blocking finding: resolved\nReviewer-R1880W found that `/build-upload` silently dropped an explicit Page. ec2a527d fixes it. `build_upload` now refuses with a visible English `upload_errors` message when any slot has a non-empty `page_id`. This mirrors the existing Instant Forms refusal on that path. Automatic (empty) still exports. `tests/test_web_build_upload.py` covers both cases.\n\n## Checked (full scope vs main)\n- Explicit Page is campaign-local. `page_provided` skips the account-map fallback, and no map write happens (tested). Duplicates reset the Page (`SKIP_FIELDS`). When a slot moves to another account, its Page is cleared.\n- Automatic means the first available Page. On the API path it is resolved in `resolve_page`. Preflight returns ok for multiple Pages and a warning for the manual shell on a confirmed empty list. Instant Forms and an explicitly unavailable Page are still blocked, with actionable English messages.\n- Loading, failed, empty and not_loaded are separate states. Refresh bypasses the cache. A stale response is dropped by a request-identity check. Failures are never cached (12 h TTL). The builder render reads the cache only.\n- RPA: an explicit Page is re-read with force, checked against the account act, and verified on the first ad and every extra ad. `page_identity` is BLOCKING, non-retryable, in the flow-stop list and in GUIDE. Non-recorded engines are refused. Automatic leaves Identity untouched.\n- Manual shell: the campaign and ad sets are created PAUSED with no ads. The result has `manual_required` set and `publishable=false`. A retry completes the same campaign.\n- Merge commits 44060638, 88387d25 and 89dc6c56 have no hand-resolved hunks. No unrelated files are included. `test_queue_wait_reads.py` (cache part) is the carry-over that the Issue requested.\n- No leaked ids, tokens, emails or local paths in the diff or PR body. The PR body has exactly one `Tracker issues: ACL-1880` line and no closing keywords. User-facing strings are in English.\n- Tests: 150 affected tests (1880 suites, 1819 preflight, build_upload, duplicate, failure_policy, 1775 forms): 149 passed, 1 failed. The failure is `test_account_pages_endpoint_cached_flag`, a Starlette/httpx `TestClient(app=)` TypeError from the old local venv. The previous round saw the same failure, and the test passed in CI.\n\n## Non-blocking notes\n- The `docs/system/PROJECT.md` ACL-1880 section is updated. The second block has a level-1 heading (`# ACL-1880: manual completion\u2026`) inside a level-3 section with no blank line before it. This is cosmetic. There is no `docs/system/CHANGELOG.md` entry.\n- The builder note still says \"Automatic: <first Page>\" on the RPA backend, where Ads Manager's own default Identity may differ (raised in round 3 and still open).\n- ec2a527d has author `trial <t@t>`. This is not a leak, only a placeholder identity.\n- PR #1025 (ACL-1897) is still OPEN. Whichever PR lands second must resolve the creator.py/preflight-test overlap.\n\n## Live check\nThe alternate-Page Identity picker in live Ads Manager is not verified. The owner needs to check it live; this does not block the offline acceptance.",
+              "keep_lane": true
+            },
+            "approved_at": "2026-10-21T09:06:55+00:00"
           },
-          "lane": {
-            "id": "5b2e2778e470457cb04021aaf9a357ac",
-            "pr": 1044,
-            "issues": [
-              880
-            ],
-            "actor": "Reviewer-A1021880",
-            "session": "run_a1021_880r",
-            "coordinator": "Coordinator-A1021A",
-            "started_at": "2026-10-21T08:26:08+00:00",
-            "state": "reviewing",
-            "report": "# Return: PR #1044 (ACL-1880), review round 4 by Reviewer-A1021880\n\n**Content approved at ec2a527db4d173b50314f778c001fe75c4cecbba. Merge current main only (ea41acbf960f53cdd0486c50dda491ec3981dfcf), no content change.**\n\nThe head was based on main 259ae7f1 and does not contain current main ea41acbf (7 commits ahead, ACL-2026 tooling/docs only). `git merge-tree` of the head and current main merges cleanly with no conflicts. After the merge I will review the merge delta (`git show --cc`) and the full diff again, then record the review.\n\n## Previous blocking finding: resolved\nReviewer-R1880W found that `/build-upload` silently dropped an explicit Page. ec2a527d fixes it. `build_upload` now refuses with a visible English `upload_errors` message when any slot has a non-empty `page_id`. This mirrors the existing Instant Forms refusal on that path. Automatic (empty) still exports. `tests/test_web_build_upload.py` covers both cases.\n\n## Checked (full scope vs main)\n- Explicit Page is campaign-local. `page_provided` skips the account-map fallback, and no map write happens (tested). Duplicates reset the Page (`SKIP_FIELDS`). When a slot moves to another account, its Page is cleared.\n- Automatic means the first available Page. On the API path it is resolved in `resolve_page`. Preflight returns ok for multiple Pages and a warning for the manual shell on a confirmed empty list. Instant Forms and an explicitly unavailable Page are still blocked, with actionable English messages.\n- Loading, failed, empty and not_loaded are separate states. Refresh bypasses the cache. A stale response is dropped by a request-identity check. Failures are never cached (12 h TTL). The builder render reads the cache only.\n- RPA: an explicit Page is re-read with force, checked against the account act, and verified on the first ad and every extra ad. `page_identity` is BLOCKING, non-retryable, in the flow-stop list and in GUIDE. Non-recorded engines are refused. Automatic leaves Identity untouched.\n- Manual shell: the campaign and ad sets are created PAUSED with no ads. The result has `manual_required` set and `publishable=false`. A retry completes the same campaign.\n- Merge commits 44060638, 88387d25 and 89dc6c56 have no hand-resolved hunks. No unrelated files are included. `test_queue_wait_reads.py` (cache part) is the carry-over that the Issue requested.\n- No leaked ids, tokens, emails or local paths in the diff or PR body. The PR body has exactly one `Tracker issues: ACL-1880` line and no closing keywords. User-facing strings are in English.\n- Tests: 150 affected tests (1880 suites, 1819 preflight, build_upload, duplicate, failure_policy, 1775 forms): 149 passed, 1 failed. The failure is `test_account_pages_endpoint_cached_flag`, a Starlette/httpx `TestClient(app=)` TypeError from the old local venv. The previous round saw the same failure, and the test passed in CI.\n\n## Non-blocking notes\n- The `docs/system/PROJECT.md` ACL-1880 section is updated. The second block has a level-1 heading (`# ACL-1880: manual completion\u2026`) inside a level-3 section with no blank line before it. This is cosmetic. There is no `docs/system/CHANGELOG.md` entry.\n- The builder note still says \"Automatic: <first Page>\" on the RPA backend, where Ads Manager's own default Identity may differ (raised in round 3 and still open).\n- ec2a527d has author `trial <t@t>`. This is not a leak, only a placeholder identity.\n- PR #1025 (ACL-1897) is still OPEN. Whichever PR lands second must resolve the creator.py/preflight-test overlap.\n\n## Live check\nThe alternate-Page Identity picker in live Ads Manager is not verified. The owner needs to check it live; this does not block the offline acceptance.",
-            "keep_lane": true
-          },
-          "approved_at": "2026-10-21T09:06:55+00:00"
-        },
-        {
-          "issue": 377,
-          "pr": 935,
-          "branch": "work/acl-1377-workbook-key",
-          "head_sha": "33e09b6791038d25560d7a42548cc7dd46e7311d",
-          "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-          "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "ba1d91de10f6ab2391b19b6d8e3faeff12e10c23d3500ddb0530bf15a1ad84d1",
-          "review": {
-            "kind": "independent-review",
-            "implementer": "Worker-W1021377",
-            "reviewer": "Reviewer-S1021377",
+          {
+            "issue": 377,
+            "pr": 935,
+            "branch": "work/acl-1377-workbook-key",
             "head_sha": "33e09b6791038d25560d7a42548cc7dd46e7311d",
             "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-            "tree_sha": "cee7b9fb69e69a5a3648cc7a6bfdd26166694f46",
-            "verdict": "approved",
-            "execution_lane": "2e776a8f13264b5e8b6f42cd7e542b02",
-            "review_session": "run_s1021_377",
-            "report": "ACL-1377 / PR935 independent re-review on current main ea41acbf. Delta since previously approved e548e74f is only the clean main merge 33e09b67 (git show --cc shows no hand-resolved hunks). Diff vs main is exactly src/web/app.py, src/web/templates/report.html, tests/test_dashboard_review.py, tests/test_the_account_tree_on_screen.py. Behaviour: _alias_without_id_suffix falls back to a compact alphanumeric key only after the exact key finds nothing, unique match only, rule-keys excluded, country-scoped; Facebook_6540_<id> -> Facebook6540 without collision with 6545/65400; existing matches unchanged. Meta-only campaign rows get a quiet 'not in workbook' hint, suppressed for zero Meta numbers and an empty workbook. Tests cover match, near-name collision, ambiguity, underscore-priority, country scope, tree hint on/off. Source CI green on the head: descriptor, tracker-link (passed on one rerun after an early-state failure), process instructions, linux 1-3, windows (passed on one rerun after unrelated bootstrap-harness 60s timeout), installer verification.",
             "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
             "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              377
-            ],
-            "recorded_at": "2026-10-21T10:49:07+00:00",
-            "issue_scopes": {
-              "377": "ba1d91de10f6ab2391b19b6d8e3faeff12e10c23d3500ddb0530bf15a1ad84d1"
-            }
+            "scope": "ba1d91de10f6ab2391b19b6d8e3faeff12e10c23d3500ddb0530bf15a1ad84d1",
+            "review": {
+              "kind": "independent-review",
+              "implementer": "Worker-W1021377",
+              "reviewer": "Reviewer-S1021377",
+              "head_sha": "33e09b6791038d25560d7a42548cc7dd46e7311d",
+              "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "tree_sha": "cee7b9fb69e69a5a3648cc7a6bfdd26166694f46",
+              "verdict": "approved",
+              "execution_lane": "2e776a8f13264b5e8b6f42cd7e542b02",
+              "review_session": "run_s1021_377",
+              "report": "ACL-1377 / PR935 independent re-review on current main ea41acbf. Delta since previously approved e548e74f is only the clean main merge 33e09b67 (git show --cc shows no hand-resolved hunks). Diff vs main is exactly src/web/app.py, src/web/templates/report.html, tests/test_dashboard_review.py, tests/test_the_account_tree_on_screen.py. Behaviour: _alias_without_id_suffix falls back to a compact alphanumeric key only after the exact key finds nothing, unique match only, rule-keys excluded, country-scoped; Facebook_6540_<id> -> Facebook6540 without collision with 6545/65400; existing matches unchanged. Meta-only campaign rows get a quiet 'not in workbook' hint, suppressed for zero Meta numbers and an empty workbook. Tests cover match, near-name collision, ambiguity, underscore-priority, country scope, tree hint on/off. Source CI green on the head: descriptor, tracker-link (passed on one rerun after an early-state failure), process instructions, linux 1-3, windows (passed on one rerun after unrelated bootstrap-harness 60s timeout), installer verification.",
+              "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                377
+              ],
+              "recorded_at": "2026-10-21T10:49:07+00:00",
+              "issue_scopes": {
+                "377": "ba1d91de10f6ab2391b19b6d8e3faeff12e10c23d3500ddb0530bf15a1ad84d1"
+              }
+            },
+            "lane": {
+              "id": "2e776a8f13264b5e8b6f42cd7e542b02",
+              "pr": 935,
+              "issues": [
+                377
+              ],
+              "actor": "Reviewer-S1021377",
+              "session": "run_s1021_377",
+              "coordinator": "Coordinator-I1021A",
+              "started_at": "2026-10-21T10:18:05+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-21T10:49:53+00:00"
           },
-          "lane": {
-            "id": "2e776a8f13264b5e8b6f42cd7e542b02",
-            "pr": 935,
-            "issues": [
-              377
-            ],
-            "actor": "Reviewer-S1021377",
-            "session": "run_s1021_377",
-            "coordinator": "Coordinator-I1021A",
-            "started_at": "2026-10-21T10:18:05+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-21T10:49:53+00:00"
-        },
-        {
-          "issue": 380,
-          "pr": 962,
-          "branch": "work/acl-1380-ref-options-off-render",
-          "head_sha": "44bdbf2913fdb2cf1b3ba0f69a9a9edf2e4d109c",
-          "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-          "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "5721bfda1929700ea1d2c0d43cc9cf38e82898dada60cc93441f845a1dd5146d",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-A1021380",
-            "implementer": "Worker-A1021380",
+          {
+            "issue": 380,
+            "pr": 962,
+            "branch": "work/acl-1380-ref-options-off-render",
             "head_sha": "44bdbf2913fdb2cf1b3ba0f69a9a9edf2e4d109c",
             "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-            "tree_sha": "7a34d570840c5f7896ab70583cbbd0b103c997fc",
-            "execution_lane": "49b2a919f8b94969b554c96a6e377ae5",
-            "review_session": "run_a1021_380r",
-            "report": "Independent source review of PR #962 (ACL-1380) at head 44bdbf29 against main ea41acbf.\nScope: src/web/app.py, src/web/publish_jobs.py, one new test file; no unrelated files. Merge d4b18a2e of main is clean (git show --cc shows no hand-resolved hunks); 44bdbf29 only widens one test assertion for the Python 3.13 wording.\nChecked against the remaining scope of #380 (per the 2026-10-14 tracker review: rules cache, worker pool and warm-up already on main):\n- targeting_registry.pull off the render path: _load_sheet_targets no longer calls pull(force=True); it reads the machine copy and starts at most one background pull() without force (the 15 s throttle applies). team_library.pull holds _pull_lock/its own file lock during the fetch, and the registry lock used by all_targets() is a separate lock, so the render path does not wait on the network. The explicit refresh routes (/api/targeting-profiles, /api/ad-texts) keep force=True, which is intended.\n- Cause of the asyncio errors: reproduced (clearing the running-loop mark on the loop's own thread) and guarded: _clear_inherited_asyncio_loop refuses on the loop thread and logs; worker threads with an inherited mark are still cleared. Its only caller is _run_job_inner at the start of a fresh job thread, so the guard does not block the leaked-Playwright cleanup path. Cancel route covered by a live-uvicorn test.\n- Timings: recorded in the PR (targets on render path 392 ms -> 18 ms measured; GET / figures from the 29.09 profiling, not re-measured live).\nTests run locally (Python 3.13, -n 2): new test file plus cancel-hung-job, dashboard-responsiveness, targeting integration/registry and team library: 123 passed.\nPR body: exactly one Tracker issues: ACL-1380 line, no closing references (closingIssuesReferences empty). No leaked identifiers in diff, commit messages or PR text; no new user-facing strings (one English log line).\nNon-blocking notes: (1) no docs/system/CHANGELOG entry for the behaviour change; (2) _runs_the_loop_here relies on the private BaseEventLoop._thread_id (CPython; returns False safely if absent); (3) a teammate's newly added target appears from the next open rather than the current one, by design.\nLive-check needs: owner check on the live dashboard after a serve.py restart (cold/warm GET / timings, page opens without waiting on GitHub).",
             "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
             "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              380
-            ],
-            "recorded_at": "2026-10-21T09:56:05+00:00",
-            "issue_scopes": {
-              "380": "5721bfda1929700ea1d2c0d43cc9cf38e82898dada60cc93441f845a1dd5146d"
-            }
+            "scope": "5721bfda1929700ea1d2c0d43cc9cf38e82898dada60cc93441f845a1dd5146d",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-A1021380",
+              "implementer": "Worker-A1021380",
+              "head_sha": "44bdbf2913fdb2cf1b3ba0f69a9a9edf2e4d109c",
+              "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "tree_sha": "7a34d570840c5f7896ab70583cbbd0b103c997fc",
+              "execution_lane": "49b2a919f8b94969b554c96a6e377ae5",
+              "review_session": "run_a1021_380r",
+              "report": "Independent source review of PR #962 (ACL-1380) at head 44bdbf29 against main ea41acbf.\nScope: src/web/app.py, src/web/publish_jobs.py, one new test file; no unrelated files. Merge d4b18a2e of main is clean (git show --cc shows no hand-resolved hunks); 44bdbf29 only widens one test assertion for the Python 3.13 wording.\nChecked against the remaining scope of #380 (per the 2026-10-14 tracker review: rules cache, worker pool and warm-up already on main):\n- targeting_registry.pull off the render path: _load_sheet_targets no longer calls pull(force=True); it reads the machine copy and starts at most one background pull() without force (the 15 s throttle applies). team_library.pull holds _pull_lock/its own file lock during the fetch, and the registry lock used by all_targets() is a separate lock, so the render path does not wait on the network. The explicit refresh routes (/api/targeting-profiles, /api/ad-texts) keep force=True, which is intended.\n- Cause of the asyncio errors: reproduced (clearing the running-loop mark on the loop's own thread) and guarded: _clear_inherited_asyncio_loop refuses on the loop thread and logs; worker threads with an inherited mark are still cleared. Its only caller is _run_job_inner at the start of a fresh job thread, so the guard does not block the leaked-Playwright cleanup path. Cancel route covered by a live-uvicorn test.\n- Timings: recorded in the PR (targets on render path 392 ms -> 18 ms measured; GET / figures from the 29.09 profiling, not re-measured live).\nTests run locally (Python 3.13, -n 2): new test file plus cancel-hung-job, dashboard-responsiveness, targeting integration/registry and team library: 123 passed.\nPR body: exactly one Tracker issues: ACL-1380 line, no closing references (closingIssuesReferences empty). No leaked identifiers in diff, commit messages or PR text; no new user-facing strings (one English log line).\nNon-blocking notes: (1) no docs/system/CHANGELOG entry for the behaviour change; (2) _runs_the_loop_here relies on the private BaseEventLoop._thread_id (CPython; returns False safely if absent); (3) a teammate's newly added target appears from the next open rather than the current one, by design.\nLive-check needs: owner check on the live dashboard after a serve.py restart (cold/warm GET / timings, page opens without waiting on GitHub).",
+              "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                380
+              ],
+              "recorded_at": "2026-10-21T09:56:05+00:00",
+              "issue_scopes": {
+                "380": "5721bfda1929700ea1d2c0d43cc9cf38e82898dada60cc93441f845a1dd5146d"
+              }
+            },
+            "lane": {
+              "id": "49b2a919f8b94969b554c96a6e377ae5",
+              "pr": 962,
+              "issues": [
+                380
+              ],
+              "actor": "Reviewer-A1021380",
+              "session": "run_a1021_380r",
+              "coordinator": "Coordinator-A1021A",
+              "started_at": "2026-10-21T09:43:32+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-21T10:00:36+00:00"
           },
-          "lane": {
-            "id": "49b2a919f8b94969b554c96a6e377ae5",
-            "pr": 962,
-            "issues": [
-              380
-            ],
-            "actor": "Reviewer-A1021380",
-            "session": "run_a1021_380r",
-            "coordinator": "Coordinator-A1021A",
-            "started_at": "2026-10-21T09:43:32+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-21T10:00:36+00:00"
-        },
-        {
-          "issue": 626,
-          "pr": 967,
-          "branch": "work/acl-1626-notes-set-aside",
-          "head_sha": "2b1c52297ef8d0b778285de2f8833037fb5b15d1",
-          "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-          "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "78daec77f59b269c69b2b0d3072e9dff71bc3675802a71e8a3e2f16b22df80f4",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-A1021626",
-            "implementer": "Worker-A1021626",
+          {
+            "issue": 626,
+            "pr": 967,
+            "branch": "work/acl-1626-notes-set-aside",
             "head_sha": "2b1c52297ef8d0b778285de2f8833037fb5b15d1",
             "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-            "tree_sha": "182a3f5484b54663d2d1282c31341885b09be888",
-            "execution_lane": "6e6f0aa4453643d8a27046aa779e60f2",
-            "review_session": "run_a1021_626r",
-            "report": "Independent source re-review of ACL-1626 (PR 967) at 2b1c5229 (contains main ea41acbf; earlier merge d460cfba clean).\nDelta since the return (d460cfba..2b1c5229): tests/test_acl1620_account_notes.py _post() now runs the handler via asyncio.run in a worker thread (same pattern as the browser fixture's route handler), fixing the deterministic CI failure ('asyncio.run() cannot be called from a running event loop' after the module-scoped Playwright fixture). caplog and monkeypatch on notes.datetime remain effective across the thread (root logger handler / module global). docs/system/CHANGELOG.md gains an accurate ACL-1626 entry. No product-code change in the delta.\nFull scope vs main re-checked: src/web/account_notes.py, src/web/app.py, src/web/templates/report.html, tests/test_acl1620_account_notes.py, docs/system/CHANGELOG.md. Spec 1 met (WARNING log with backup path; save response carries set_aside and warning 'Notes file was damaged; a copy was kept at <path>'; role=alert banner on the account map). Spec 2 met (ms-resolution backup name plus collision counter under the machine-file lock). PR body has exactly one 'Tracker issues: ACL-1626' line, no closing keywords. No leaked ids/tokens/personal paths; user-facing text English.\nTests: whole test file run in one process locally; the new non-browser tests pass after the browser fixture; Playwright browser tests fail locally for environment reasons only (acl.test navigation timeout); CI is authoritative.\nNon-blocking: banner covered only by a template source-string test; if a save fails with OSError after the file was set aside, the user is not told about the copy (log only).\nSpec 3 (owner live check: write/edit/clear a note, restart the dashboard, note survives) is owner-only and not performed; it exercises the unchanged ACL-1620 persistence path and follows separately. Needs owner live check and a serve.py restart for the Python change.\nVerdict: approved.",
             "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
             "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              626
-            ],
-            "recorded_at": "2026-10-21T11:07:47+00:00",
-            "issue_scopes": {
-              "626": "78daec77f59b269c69b2b0d3072e9dff71bc3675802a71e8a3e2f16b22df80f4"
-            }
-          },
-          "lane": {
-            "id": "6e6f0aa4453643d8a27046aa779e60f2",
-            "pr": 967,
-            "issues": [
-              626
-            ],
-            "actor": "Reviewer-A1021626",
-            "session": "run_a1021_626r",
-            "coordinator": "Coordinator-A1021A",
-            "started_at": "2026-10-21T11:02:29+00:00",
-            "state": "reviewing",
-            "report": "ACL-1626 (PR 967) review return at d460cfba - one blocking finding (CI red), content otherwise approved.\n\nBLOCKING: required CI \"linux tests (3.13, 1)\" fails on this head (run 39581343441, job 119160086116): 3 failed, 3034 passed.\n  FAILED tests/test_acl1620_account_notes.py::test_a_damaged_file_is_reported_in_the_save_response_and_logged\n  FAILED tests/test_acl1620_account_notes.py::test_two_corruptions_in_the_same_millisecond_keep_both_copies\n  FAILED tests/test_acl1620_account_notes.py::test_the_backup_name_has_millisecond_resolution\n  - RuntimeError: asyncio.run() cannot be called from a running event loop\nCause: the new tests were appended at the end of the module, after the module-scoped `browser` fixture (line ~222). Once that fixture has started sync Playwright, an event loop is running in the main thread for the rest of the module, so `_post()` (asyncio.run at line 47) fails. They pass only when run in isolation (that is why the handoff saw \"3 passed\" separately). This is deterministic, not an environment issue; it also reproduces locally.\nFix (either): move the four new tests above the `browser` fixture, next to the other non-browser tests (e.g. after test_a_wrong_root_is_preserved_too); or make `_post` run the handler in a worker thread as the fixture's route handler already does (lines ~248-251). Moving the tests is the smaller change. Then run the whole file in one process (non-browser tests must pass even when browser tests fail/skip locally) and get CI green.\n\nEverything else checked and fine (no other change needed): spec 1 (log warning + set_aside/warning in the save response + role=alert banner with the exact Issue wording), spec 2 (ms-resolution name + collision counter under the machine-file lock), scope limited to the 4 files, PR body has exactly one Tracker issues line, no leaks, English UI text, merge of main ea41acbf clean.\nNon-blocking (optional in the same fix): add a short docs/system/CHANGELOG.md entry for the new response fields and banner; the banner itself is only checked by a source-string test.\nSpec 3 (owner live check: write/edit/clear a note, restart the dashboard, note survives) remains for the owner separately; not a reason for this return.",
-            "keep_lane": true
-          },
-          "approved_at": "2026-10-21T11:25:09+00:00"
-        }
-      ],
-      "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-      "branch": "codex/batch-36ca88230aef44c598ea961df39585c3",
-      "intake": "843ae93d19994cddaf23af35412da7ff",
-      "started_at": "2026-10-21T12:30:10+00:00",
-      "pr": 1064,
-      "entered_stage": false,
-      "history": []
+            "scope": "78daec77f59b269c69b2b0d3072e9dff71bc3675802a71e8a3e2f16b22df80f4",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-A1021626",
+              "implementer": "Worker-A1021626",
+              "head_sha": "2b1c52297ef8d0b778285de2f8833037fb5b15d1",
+              "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "tree_sha": "182a3f5484b54663d2d1282c31341885b09be888",
+              "execution_lane": "6e6f0aa4453643d8a27046aa779e60f2",
+              "review_session": "run_a1021_626r",
+              "report": "Independent source re-review of ACL-1626 (PR 967) at 2b1c5229 (contains main ea41acbf; earlier merge d460cfba clean).\nDelta since the return (d460cfba..2b1c5229): tests/test_acl1620_account_notes.py _post() now runs the handler via asyncio.run in a worker thread (same pattern as the browser fixture's route handler), fixing the deterministic CI failure ('asyncio.run() cannot be called from a running event loop' after the module-scoped Playwright fixture). caplog and monkeypatch on notes.datetime remain effective across the thread (root logger handler / module global). docs/system/CHANGELOG.md gains an accurate ACL-1626 entry. No product-code change in the delta.\nFull scope vs main re-checked: src/web/account_notes.py, src/web/app.py, src/web/templates/report.html, tests/test_acl1620_account_notes.py, docs/system/CHANGELOG.md. Spec 1 met (WARNING log with backup path; save response carries set_aside and warning 'Notes file was damaged; a copy was kept at <path>'; role=alert banner on the account map). Spec 2 met (ms-resolution backup name plus collision counter under the machine-file lock). PR body has exactly one 'Tracker issues: ACL-1626' line, no closing keywords. No leaked ids/tokens/personal paths; user-facing text English.\nTests: whole test file run in one process locally; the new non-browser tests pass after the browser fixture; Playwright browser tests fail locally for environment reasons only (acl.test navigation timeout); CI is authoritative.\nNon-blocking: banner covered only by a template source-string test; if a save fails with OSError after the file was set aside, the user is not told about the copy (log only).\nSpec 3 (owner live check: write/edit/clear a note, restart the dashboard, note survives) is owner-only and not performed; it exercises the unchanged ACL-1620 persistence path and follows separately. Needs owner live check and a serve.py restart for the Python change.\nVerdict: approved.",
+              "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                626
+              ],
+              "recorded_at": "2026-10-21T11:07:47+00:00",
+              "issue_scopes": {
+                "626": "78daec77f59b269c69b2b0d3072e9dff71bc3675802a71e8a3e2f16b22df80f4"
+              }
+            },
+            "lane": {
+              "id": "6e6f0aa4453643d8a27046aa779e60f2",
+              "pr": 967,
+              "issues": [
+                626
+              ],
+              "actor": "Reviewer-A1021626",
+              "session": "run_a1021_626r",
+              "coordinator": "Coordinator-A1021A",
+              "started_at": "2026-10-21T11:02:29+00:00",
+              "state": "reviewing",
+              "report": "ACL-1626 (PR 967) review return at d460cfba - one blocking finding (CI red), content otherwise approved.\n\nBLOCKING: required CI \"linux tests (3.13, 1)\" fails on this head (run 39581343441, job 119160086116): 3 failed, 3034 passed.\n  FAILED tests/test_acl1620_account_notes.py::test_a_damaged_file_is_reported_in_the_save_response_and_logged\n  FAILED tests/test_acl1620_account_notes.py::test_two_corruptions_in_the_same_millisecond_keep_both_copies\n  FAILED tests/test_acl1620_account_notes.py::test_the_backup_name_has_millisecond_resolution\n  - RuntimeError: asyncio.run() cannot be called from a running event loop\nCause: the new tests were appended at the end of the module, after the module-scoped `browser` fixture (line ~222). Once that fixture has started sync Playwright, an event loop is running in the main thread for the rest of the module, so `_post()` (asyncio.run at line 47) fails. They pass only when run in isolation (that is why the handoff saw \"3 passed\" separately). This is deterministic, not an environment issue; it also reproduces locally.\nFix (either): move the four new tests above the `browser` fixture, next to the other non-browser tests (e.g. after test_a_wrong_root_is_preserved_too); or make `_post` run the handler in a worker thread as the fixture's route handler already does (lines ~248-251). Moving the tests is the smaller change. Then run the whole file in one process (non-browser tests must pass even when browser tests fail/skip locally) and get CI green.\n\nEverything else checked and fine (no other change needed): spec 1 (log warning + set_aside/warning in the save response + role=alert banner with the exact Issue wording), spec 2 (ms-resolution name + collision counter under the machine-file lock), scope limited to the 4 files, PR body has exactly one Tracker issues line, no leaks, English UI text, merge of main ea41acbf clean.\nNon-blocking (optional in the same fix): add a short docs/system/CHANGELOG.md entry for the new response fields and banner; the banner itself is only checked by a source-string test.\nSpec 3 (owner live check: write/edit/clear a note, restart the dashboard, note survives) remains for the owner separately; not a reason for this return.",
+              "keep_lane": true
+            },
+            "approved_at": "2026-10-21T11:25:09+00:00"
+          }
+        ],
+        "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+        "branch": "codex/batch-36ca88230aef44c598ea961df39585c3",
+        "intake": "843ae93d19994cddaf23af35412da7ff",
+        "started_at": "2026-10-21T12:30:10+00:00",
+        "pr": 1064,
+        "entered_stage": false,
+        "history": [],
+        "review": {
+          "id": "3cbfef49299841b6912867db49cc431f",
+          "batch_id": "36ca88230aef44c598ea961df39585c3",
+          "pr": 1064,
+          "issues": [
+            784,
+            880,
+            377,
+            380,
+            626
+          ],
+          "actor": "Reviewer-B1021A",
+          "session": "run_b1021a_1021",
+          "coordinator": "Coordinator-I1021A",
+          "state": "reviewing",
+          "started_at": "2026-10-21T13:02:57+00:00"
+        },
+        "main_prs": [
+          1064
+        ],
+        "finished_at": "2026-10-21T15:36:18+00:00"
+      }
     },
+    "integration": null,
     "intake": {
       "id": "843ae93d19994cddaf23af35412da7ff",
       "actor": "Coordinator-I1021A",
       "session": "run_i1021a_1021",
-      "state": "running",
+      "state": "finished",
       "issues": [
         784,
         880,
@@ -118019,14 +118320,10 @@
         380,
         626
       ],
-      "remaining": [
-        784,
-        880,
-        377,
-        380,
-        626
+      "remaining": [],
+      "batches": [
+        "36ca88230aef44c598ea961df39585c3"
       ],
-      "batches": [],
       "started_at": "2026-10-21T12:29:04+00:00",
       "ineligible": {}
     },
