@@ -46818,20 +46818,6 @@
         "from_status": "status:idea",
         "pr": 1058,
         "report": "ACL-2050 done: PR #1058, head b6fe1a3a. API builder read-back verifies Meta kept manual placements (advantage_placement_state, positions) and reports value rules / audience flag as diagnostics. Tests: tests/test_acl2050_placement_readback.py (6 pass) + affected creator tests; env-only failures (fastapi/openpyxl absent locally); full suite in CI. Remaining: live confirmation that value_rules_applied/value_rule_set_id/advantage_state_info fields read back without a Graph error on a new-layout account."
-      },
-      "1052": {
-        "actor": "Worker-P10212052",
-        "session": "run_p1021_2052",
-        "coordinator": "Coordinator-P1021A",
-        "branch": "work/acl-2052-meta-rules-value-rules",
-        "worktree": "C:\\acl-pl-2052",
-        "id": "6c4335af4817455e988b5372a27bd126",
-        "issue": 1052,
-        "state": "handoff",
-        "started_at": "2026-10-21T07:56:12+00:00",
-        "from_status": "status:idea",
-        "pr": 1057,
-        "report": "ACL-2052: PR #1057, head 60670a16. Four doc pages added to watcher sources; 8 registry entries (limited/test/deprecated) for value rules, account controls, bid_adjustments retirement, placement_soft_opt_out and the classic-placements live fact, all scoped by applies_to.feature (check_job unchanged, test-proved). CHANGELOG updated. Tests: 34 passed (acl2052 + acl1781 + meta_docs_watch_1782). No builder change."
       }
     },
     "tasks": {
@@ -55613,9 +55599,25 @@
             "session": "run_p1021_2052"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-P10212052",
-        "coordinator": "Coordinator-P1021A"
+        "coordinator": "Coordinator-P1021A",
+        "handoff": {
+          "actor": "Worker-P10212052",
+          "session": "run_p1021_2052",
+          "coordinator": "Coordinator-P1021A",
+          "branch": "work/acl-2052-meta-rules-value-rules",
+          "worktree": "C:\\acl-pl-2052",
+          "id": "6c4335af4817455e988b5372a27bd126",
+          "issue": 1052,
+          "state": "handoff",
+          "started_at": "2026-10-21T07:56:12+00:00",
+          "from_status": "status:idea",
+          "pr": 1057,
+          "report": "ACL-2052: PR #1057, head 60670a16. Four doc pages added to watcher sources; 8 registry entries (limited/test/deprecated) for value rules, account controls, bid_adjustments retirement, placement_soft_opt_out and the classic-placements live fact, all scoped by applies_to.feature (check_job unchanged, test-proved). CHANGELOG updated. Tests: 34 passed (acl2052 + acl1781 + meta_docs_watch_1782). No builder change."
+        },
+        "pr": 1057,
+        "queued_at": "2026-10-21T08:12:53+00:00"
       }
     },
     "actors": {
@@ -61360,7 +61362,9 @@
         "started_at": "2026-10-20T20:25:34+00:00"
       }
     },
-    "review_queue": [],
+    "review_queue": [
+      1052
+    ],
     "review": null,
     "history": [
       {
@@ -104656,6 +104660,13 @@
           "report": "ACL-1784 / PR #961 independent source review \u2014 RETURNED for a fix (Reviewer-A1021784, head a525a67a, contains main ea41acbf).\n\nScope checked: full diff vs work/main (CHANGELOG, src/web/publish_api.py, src/web/publish_jobs.py, new tests/test_acl1784_api_review_window.py), the Issue spec/acceptance, PR body (one `Tracker issues: ACL-1784` line, no closing keywords), merge commit a525a67a (`git show --cc`: only CHANGELOG adjacent entries, resolved correctly, no code touched). No leaked ids/tokens/paths; notices are English; RPA path unchanged (`review_window` never set there). Local tests: test_acl1784_api_review_window, test_acl1603_stable_slots, test_acl1761_*, test_acl1614_cancel_hung_job, test_acl1812_warm_sessions \u2014 404 passed.\n\nBLOCKING finding B1 \u2014 the slot is released while a profile the job started is still running, and the panel says the opposite.\n\nIn `_run_api`, `settled = clean or not wrote` drives both `review_window = not settled` (which makes `_run_job_inner` call `_slots.release` instead of `_slots.keep`) and the notice. But `ApiPublisher.finish_job` can still return \"\" (profile left open) for a job-started profile even when `clean=True`:\n- `self.cancelled()` \u2014 user pressed Stop before the first write (cancel_job intentionally leaves the Multilogin window open, ACL-1614);\n- `_keep_profiles_open()` \u2014 owner switch ACL_KEEP_PROFILES_OPEN;\n- `self.dry_run` \u2014 finish_job forces clean=False (dry_run=1 jobs are reachable from the publish endpoint);\n- `_stop_profile` raised (stop failure).\nIn all of these, wrote=False \u2192 settled=True \u2192 review_window=False \u2192 the slot is freed, yet the Mimic window the job started keeps running. That is exactly the hazard ACL-1603 guards against (queue launching extra Mimics over open windows; with cap 1 a second profile starts while the first is still open). The panel then shows API_NO_WRITE_NOTICE \"the profile is not kept open for review\", which is false. The Stop-before-first-write case also misses the Issue spec (\"stops before the first write\" \u2192 close our tab, release the slot, stop the profile if the job started it): the profile is neither stopped nor counted.\n\nRequired fix (either is acceptable, keep it small):\n(a) Release the slot only when the profile is actually not left open by the job: `outcome == \"closed\"` OR the job did not start the profile (user-opened \u2014 spec says release in that case). If a job-started profile stays open for any other reason (cancel, keep-open switch, dry run, stop failure), keep the slot as before and do not show the \"not kept open\" notice (show an accurate one or none). And/or\n(b) For a no-write stop, let finish_job stop the job-started profile despite `cancelled()` (spec), and still fall back to (a) when stopping did not happen.\nExpose what you need from ApiPublisher read-only (e.g. a `started_profile` property from `self._opened.started_now`) rather than reaching into privates.\n\nTests to add (fakes; the current FakePublisher.finish_job does not model cancel/keep-open/dry-run/stop-failure, so it cannot catch this): Stop before the first write on a job-started profile; ACL_KEEP_PROFILES_OPEN=1 with a clean no-write or clean job on a job-started profile; finish_job returning \"\" for a job-started profile \u2014 each must either close the profile or keep the slot, and the notice must match the real state. Prefer driving the real `ApiPublisher.finish_job` with a faked `_opened`/`_stop_profile` for at least one case.\n\nNon-blocking notes:\n- `wrote` falls back to True on an exception \u2014 good (conservative).\n- GraphError rejections count as writes (`GraphClient.writes` increments before POST), so a Meta-refused write keeps the window \u2014 conservative, acceptable.\n- CI on a525a67a: all test/installer/descriptor checks green; `tracker-link` failed because it ran before handoff (\"move it to Review before a ready PR\") \u2014 rerun it on the next head.\n- Owner live check (panel notice on the test dashboard) can follow separately as the Issue allows.\n\nLane kept (--keep-lane); I will review the fix delta.",
           "keep_lane": true
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-21T08:12:53+00:00",
+        "issue": 1052,
+        "pr": 1057,
+        "actor": "Worker-P10212052"
       }
     ],
     "policy": {
