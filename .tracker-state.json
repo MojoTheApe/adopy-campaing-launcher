@@ -56687,7 +56687,7 @@
             "session": "acl_verify_tag_e51b7063"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-Q1021A",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -56706,7 +56706,9 @@
         },
         "pr": 1072,
         "queued_at": "2026-10-21T16:01:49+00:00",
-        "reviewer": "Reviewer-T1021071"
+        "reviewer": "Reviewer-T1021071",
+        "review_report": "Stale vs main c01583ea (ACL-2073 test fix); author merges main into work/acl-2071-verify-published-tag and hands off again. No findings in the change itself (prior approved review of a3c51338 stands for the unchanged files).",
+        "rework": true
       },
       "1073": {
         "implementers": [
@@ -109518,6 +109520,24 @@
         "event": "included-sources-closed",
         "at": "2026-10-21T18:37:19+00:00",
         "batch_id": "7c49855e0d0c48ecbd5ae30cd85b453f"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-21T18:38:36+00:00",
+        "review": {
+          "id": "06ee0ec7688a4f40b756193647f1238b",
+          "pr": 1072,
+          "issues": [
+            1071
+          ],
+          "actor": "Reviewer-T1021071",
+          "session": "run_t1021_2071",
+          "coordinator": "Coordinator-I1021A",
+          "started_at": "2026-10-21T16:40:54+00:00",
+          "state": "returning",
+          "report": "Stale vs main c01583ea (ACL-2073 test fix); author merges main into work/acl-2071-verify-published-tag and hands off again. No findings in the change itself (prior approved review of a3c51338 stands for the unchanged files).",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -119848,20 +119868,6 @@
         "coordinator": "Coordinator-P1021A",
         "started_at": "2026-10-21T09:47:33+00:00",
         "state": "reviewing"
-      },
-      "1072": {
-        "id": "06ee0ec7688a4f40b756193647f1238b",
-        "pr": 1072,
-        "issues": [
-          1071
-        ],
-        "actor": "Reviewer-T1021071",
-        "session": "run_t1021_2071",
-        "coordinator": "Coordinator-I1021A",
-        "started_at": "2026-10-21T16:40:54+00:00",
-        "state": "returning",
-        "report": "Stale vs main c01583ea (ACL-2073 test fix); author merges main into work/acl-2071-verify-published-tag and hands off again. No findings in the change itself (prior approved review of a3c51338 stands for the unchanged files).",
-        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
