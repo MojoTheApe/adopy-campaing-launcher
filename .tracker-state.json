@@ -47004,6 +47004,18 @@
         "state": "implementing",
         "started_at": "2026-10-21T12:40:14+00:00",
         "from_status": "status:idea"
+      },
+      "1063": {
+        "actor": "Worker-K1021A3",
+        "session": "run_k1021a3_2063",
+        "coordinator": "Coordinator-K1021A",
+        "branch": "work/acl-2063-scheduled-account-reads",
+        "worktree": "C:\\acl-auto-read",
+        "id": "91a0c06d72414058a3cc0c9b10c9f47e",
+        "issue": 1063,
+        "state": "implementing",
+        "started_at": "2026-10-21T13:19:31+00:00",
+        "from_status": "status:idea"
       }
     },
     "tasks": {
@@ -56167,6 +56179,17 @@
         },
         "pr": 1067,
         "queued_at": "2026-10-21T13:18:40+00:00"
+      },
+      "1063": {
+        "implementers": [
+          {
+            "actor": "Worker-K1021A3",
+            "session": "run_k1021a3_2063"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-K1021A3",
+        "coordinator": "Coordinator-K1021A"
       }
     },
     "actors": {
@@ -59137,6 +59160,10 @@
       "Reviewer-B1021A": {
         "session": "run_b1021a_1021",
         "role": "Reviewer"
+      },
+      "Worker-K1021A3": {
+        "session": "run_k1021a3_2063",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -107051,6 +107078,13 @@
         "issue": 1066,
         "pr": 1067,
         "actor": "Worker-K1021A2"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-21T13:19:31+00:00",
+        "issue": 1063,
+        "claim": "91a0c06d72414058a3cc0c9b10c9f47e",
+        "actor": "Worker-K1021A3"
       }
     ],
     "policy": {
