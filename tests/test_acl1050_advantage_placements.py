@@ -105,10 +105,13 @@ def test_resume_of_our_campaign_without_ad_sets_keeps_its_name(tmp_path):
     assert out.stop_kind == "unknown"
     camp = next(o for o in meta.objects.values() if o["_kind"] == "campaign")
     assert not [o for o in meta.objects.values() if o["_kind"] == "adset"]
-    camp["advantage_state_info"] = {**OFF, "advantage_placement_state": "ENABLED"}
+    camp["advantage_state_info"] = {**OFF, "advantage_state": "ADVANTAGE_PLUS_LEADS",
+                                    "advantage_placement_state": "ENABLED"}
     out2, _ = _run(meta, _draft(tmp_path, ads=1))
     assert out2.error == "", out2.error
     assert [o["name"] for o in meta.objects.values() if o["_kind"] == "campaign"] == ["MX Leads 1"]
+    # …а сверка после записи групп по-прежнему ловит Advantage+.
+    assert {"advantage_campaign", "advantage_placements"} <= {m["field"] for m in out2.mismatches}
 
 
 def test_a_partial_advantage_state_skips_the_missing_key(tmp_path):

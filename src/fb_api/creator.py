@@ -1077,14 +1077,15 @@ class CampaignCreator:
         # ACL-1050: Advantage+ кампания Meta сама раздаёт площадки (ставками value rules,
         # без ручного списка), и Audience Network получает бюджет. Билдер такие кампании
         # не создаёт. Поля (или ключа в нём) нет в ответе — сверять нечем, площадки всё
-        # равно сверяются по позициям в группах. Состояние площадок сверяем, только когда
-        # группы с ручным списком уже есть: у кампании без групп оно не проверено вживую,
-        # и своя прерванная кампания не должна из-за него уходить на новое имя.
+        # равно сверяются по позициям в группах. Состояние сверяем, только когда группы
+        # с ручным списком уже есть: у кампании без групп оно не проверено вживую, и своя
+        # прерванная кампания не должна из-за него уходить на новое имя (сверка после
+        # записи его всё равно проверит).
         adv = camp.get("advantage_state_info")
-        if isinstance(adv, dict):
+        if isinstance(adv, dict) and manual:
             if "advantage_state" in adv:
                 check("advantage_campaign", ADVANTAGE_OFF, adv["advantage_state"])
-            if manual and "advantage_placement_state" in adv:
+            if "advantage_placement_state" in adv:
                 check("advantage_placements", ADVANTAGE_OFF, adv["advantage_placement_state"])
         return checks
 
