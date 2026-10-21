@@ -115124,7 +115124,51 @@
         "session": "run_s1021_377",
         "coordinator": "Coordinator-I1021A",
         "started_at": "2026-10-21T10:18:05+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 377,
+          "pr": 935,
+          "branch": "work/acl-1377-workbook-key",
+          "head_sha": "33e09b6791038d25560d7a42548cc7dd46e7311d",
+          "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+          "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "ba1d91de10f6ab2391b19b6d8e3faeff12e10c23d3500ddb0530bf15a1ad84d1",
+          "review": {
+            "kind": "independent-review",
+            "implementer": "Worker-W1021377",
+            "reviewer": "Reviewer-S1021377",
+            "head_sha": "33e09b6791038d25560d7a42548cc7dd46e7311d",
+            "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+            "tree_sha": "cee7b9fb69e69a5a3648cc7a6bfdd26166694f46",
+            "verdict": "approved",
+            "execution_lane": "2e776a8f13264b5e8b6f42cd7e542b02",
+            "review_session": "run_s1021_377",
+            "report": "ACL-1377 / PR935 independent re-review on current main ea41acbf. Delta since previously approved e548e74f is only the clean main merge 33e09b67 (git show --cc shows no hand-resolved hunks). Diff vs main is exactly src/web/app.py, src/web/templates/report.html, tests/test_dashboard_review.py, tests/test_the_account_tree_on_screen.py. Behaviour: _alias_without_id_suffix falls back to a compact alphanumeric key only after the exact key finds nothing, unique match only, rule-keys excluded, country-scoped; Facebook_6540_<id> -> Facebook6540 without collision with 6545/65400; existing matches unchanged. Meta-only campaign rows get a quiet 'not in workbook' hint, suppressed for zero Meta numbers and an empty workbook. Tests cover match, near-name collision, ambiguity, underscore-priority, country scope, tree hint on/off. Source CI green on the head: descriptor, tracker-link (passed on one rerun after an early-state failure), process instructions, linux 1-3, windows (passed on one rerun after unrelated bootstrap-harness 60s timeout), installer verification.",
+            "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              377
+            ],
+            "recorded_at": "2026-10-21T10:49:07+00:00",
+            "issue_scopes": {
+              "377": "ba1d91de10f6ab2391b19b6d8e3faeff12e10c23d3500ddb0530bf15a1ad84d1"
+            }
+          },
+          "lane": {
+            "id": "2e776a8f13264b5e8b6f42cd7e542b02",
+            "pr": 935,
+            "issues": [
+              377
+            ],
+            "actor": "Reviewer-S1021377",
+            "session": "run_s1021_377",
+            "coordinator": "Coordinator-I1021A",
+            "started_at": "2026-10-21T10:18:05+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-21T10:49:53+00:00"
+        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
