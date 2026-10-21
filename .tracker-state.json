@@ -5982,6 +5982,27 @@
         "issue_scopes": {
           "142": "49f1f917094019d1b79413f66028494e4ff8166d50e00ce2facfe24ce680e2ee"
         }
+      },
+      "963": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-A1021558",
+        "implementer": "Worker-A1021558",
+        "head_sha": "00016495a87c0f6783b6ed0d70d250bc1b737015",
+        "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+        "tree_sha": "fe9b3fff82393baa52b7079663d805c98b5e6efc",
+        "execution_lane": "ef4d9e1456394d828e9b91eeb10b3ea8",
+        "review_session": "run_a1021_558r",
+        "report": "ACL-1558 independent source review: approved at 00016495 (base main ea41acbf).\nScope (full diff vs main, 5 files): src/fb_ads_rpa/run_telemetry.py, src/fb_api/telemetry.py, docs/system/CHANGELOG.md, tests/test_acl1558_scrubber_shapes.py, tests/test_the_scrubber_never_hangs_on_a_cut_secret.py. No scope creep.\nFix delta since my return at d120b75c: one `# linux-ok: scrubber input string, not a real path` comment on the backslash-path test string at line 88. It satisfies the main CI rule test_no_unmarked_test_file_uses_windows_only_apis, and the file stays on Linux CI. Merge 31a5a167 conflicted only in CHANGELOG, and both sides are kept.\nChecked against every acceptance criterion:\n(1) A bare EAA token becomes <token>; keyed forms keep <hidden>; words that only start like a token are left alone.\n(2) user:pass@host[:port] becomes <user>:<hidden>@host[:port], also after http:// and socks5://, for IPv4 and [IPv6], with @ : / inside the password. The host and port stay visible. Paths, mailto:, email:, 16:9@2x, https://user@host and git@ URLs are not touched.\n(3) Dict keys holding act_ ids, 6+ digit ids, emails or integer ids are scrubbed in scrub_diag, so also in Sentry contexts via the tested acl_sentry._before_send path and in the Run summary attachment. Collisions keep both entries. fb_api scrub_value shares clean_key.\n(4) No regression; the no-hang test is green.\nBacktracking: my own adversarial probes of about 100 KB each all ran in under 0.08 s, and time grew linearly up to 1 MB.\nTests run locally: before the fix, 477 of 478 passed across the scrubber, no-hang, every-shape, fb_api 1756, run_telemetry, run-summary attachment, sentry snapshot and test_platform files; the only failure was the line-88 rule. After the fix, the test_platform, 1558 and no-hang files pass.\nHygiene: the secrets scan is clean; all values are synthetic; the PR body has exactly one Tracker issues line and no closing keywords.\nNon-blocking notes: a few cases are over-scrubbed on the privacy side (Error:foo@example.com, 12:30@host.tld, a date-like key 20261021 becomes <id>).\nNo owner live check needed (scrubber code only).",
+        "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          558
+        ],
+        "recorded_at": "2026-10-21T12:00:32+00:00",
+        "issue_scopes": {
+          "558": "59cee4a7bc79b8f2e03b6a1489e01dc79d07358171007b65077d58fef3df549c"
+        }
       }
     },
     "stage": {
