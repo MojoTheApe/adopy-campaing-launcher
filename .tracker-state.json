@@ -46970,20 +46970,6 @@
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
       },
-      "1050": {
-        "actor": "Worker-P1021B2050",
-        "session": "run_p1021b_2050",
-        "coordinator": "Coordinator-P1021B",
-        "branch": "work/acl-2050-placement-readback",
-        "worktree": "C:\\acl-pl-2050",
-        "id": "7ebb22f43a4f49208156669333462411",
-        "issue": 1050,
-        "state": "handoff",
-        "started_at": "2026-10-21T12:37:42+00:00",
-        "from_status": "status:todo",
-        "pr": 1058,
-        "report": "# ACL-2050 handoff (review fix)\n\nHead: b3fb0f6d (branch work/acl-2050-placement-readback, pushed to work; main unchanged ea41acbf).\n\nChanges\n- src/fb_api/creator.py `_adset_checks`: `placements_summary` is now added only when publisher_platforms, facebook_positions, instagram_positions or device_platforms differ via the order-insensitive `_same` (same rule as the per-field checks). Genuinely different sets and automatic (Advantage+, empty lists) still stop.\n- Read-back now adds a visible English warning when `advantage_placement_state` is not returned (\"placement mode was not verified (check in Ads Manager)\"). Not blocking.\n- tests/test_acl2050_placement_readback.py: +3 tests (reordered lists pass and publishable; different set still stops with per-field and summary mismatch; warning on missing/present advantage_state_info).\n- docs/system/CHANGELOG.md: ACL-2050 entry extended.\n\nTests (run with `py -m pytest`, the `python` on PATH lacks pytest)\n- test_acl2050_placement_readback.py: 9 passed.\n- test_acl1761_api_create*, existing_check, parity, test_acl1902*, test_acl1776_create_forms*: 317 passed (incl. the 9 above), no failures. No full suite.\n\nRemaining live check for owner\n- Confirm advantage_state_info is read without Graph #100 error on a real account.\n- Check plan green on manual placements; red with a clear text on Advantage+."
-      },
       "710": {
         "actor": "Worker-W1021710",
         "session": "run_w1021_710",
@@ -55854,28 +55840,26 @@
             "session": "run_p1021b_2050"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-P1021B2050",
         "coordinator": "Coordinator-P1021B",
         "handoff": {
-          "actor": "Worker-P10212050",
-          "session": "run_p1021_2050",
-          "coordinator": "Coordinator-P1021A",
+          "actor": "Worker-P1021B2050",
+          "session": "run_p1021b_2050",
+          "coordinator": "Coordinator-P1021B",
           "branch": "work/acl-2050-placement-readback",
           "worktree": "C:\\acl-pl-2050",
-          "id": "134be080abf54f0d86f200e73d2d5d0f",
+          "id": "7ebb22f43a4f49208156669333462411",
           "issue": 1050,
           "state": "handoff",
-          "started_at": "2026-10-21T07:20:19+00:00",
-          "from_status": "status:idea",
+          "started_at": "2026-10-21T12:37:42+00:00",
+          "from_status": "status:todo",
           "pr": 1058,
-          "report": "ACL-2050 done: PR #1058, head b6fe1a3a. API builder read-back verifies Meta kept manual placements (advantage_placement_state, positions) and reports value rules / audience flag as diagnostics. Tests: tests/test_acl2050_placement_readback.py (6 pass) + affected creator tests; env-only failures (fastapi/openpyxl absent locally); full suite in CI. Remaining: live confirmation that value_rules_applied/value_rule_set_id/advantage_state_info fields read back without a Graph error on a new-layout account."
+          "report": "# ACL-2050 handoff (review fix)\n\nHead: b3fb0f6d (branch work/acl-2050-placement-readback, pushed to work; main unchanged ea41acbf).\n\nChanges\n- src/fb_api/creator.py `_adset_checks`: `placements_summary` is now added only when publisher_platforms, facebook_positions, instagram_positions or device_platforms differ via the order-insensitive `_same` (same rule as the per-field checks). Genuinely different sets and automatic (Advantage+, empty lists) still stop.\n- Read-back now adds a visible English warning when `advantage_placement_state` is not returned (\"placement mode was not verified (check in Ads Manager)\"). Not blocking.\n- tests/test_acl2050_placement_readback.py: +3 tests (reordered lists pass and publishable; different set still stops with per-field and summary mismatch; warning on missing/present advantage_state_info).\n- docs/system/CHANGELOG.md: ACL-2050 entry extended.\n\nTests (run with `py -m pytest`, the `python` on PATH lacks pytest)\n- test_acl2050_placement_readback.py: 9 passed.\n- test_acl1761_api_create*, existing_check, parity, test_acl1902*, test_acl1776_create_forms*: 317 passed (incl. the 9 above), no failures. No full suite.\n\nRemaining live check for owner\n- Confirm advantage_state_info is read without Graph #100 error on a real account.\n- Check plan green on manual placements; red with a clear text on Advantage+."
         },
         "pr": 1058,
-        "queued_at": "2026-10-21T08:13:17+00:00",
-        "review_report": "# ACL-2050 / PR #1058 source review - changes requested\n\nReviewer: Reviewer-P1021B2050\nHead: b6fe1a3a582f7b6854afcb837b620c5e272c06be\nBase: main ea41acbf\n\n## Blocking 1 - placements_summary is order-sensitive\nIn `src/fb_api/creator.py` `_adset_checks`, the new `placements_summary` check compares\n`placements_text(targeting) != placements_text(t)`. `placements_text` joins\nfacebook/instagram positions and device platforms in the order the lists arrive, so it is an\norder-sensitive string. The per-field checks above it (`publisher_platforms`,\n`facebook_positions`, `instagram_positions`, `devices`) go through `_same`, which compares lists\norder-insensitively. If Meta reads back the same placements in a different order, every per-field\ncheck passes but `placements_summary` fails and publishing is falsely stopped.\n\nRequired fix:\n- Make the summary check order-insensitive (e.g. compare normalized/sorted sets, or only emit\n  the summary when one of the per-field `_same` checks fails); the display text may stay as is.\n- Test: read-back with the same placements in a different order passes (no stop).\n- Test: a genuinely different placement set (or automatic placements) still stops with the\n  placements_summary line.\n\n## Non-blocking 2 - no visible warning when placement state is not verified\nWhen `placement_state_verified` is false the information lives only in diagnostics and the user\nsees no warning. Optional: show a visible warning in the result/UI.\n\nReference: earlier review comment\nhttps://github.com/MojoTheApe/adopy-campaing-launcher/pull/1058#issuecomment-6311643945",
-        "rework": true,
-        "rework_claim": "7ebb22f43a4f49208156669333462411"
+        "queued_at": "2026-10-21T12:41:17+00:00",
+        "review_report": "# ACL-2050 / PR #1058 source review - changes requested\n\nReviewer: Reviewer-P1021B2050\nHead: b6fe1a3a582f7b6854afcb837b620c5e272c06be\nBase: main ea41acbf\n\n## Blocking 1 - placements_summary is order-sensitive\nIn `src/fb_api/creator.py` `_adset_checks`, the new `placements_summary` check compares\n`placements_text(targeting) != placements_text(t)`. `placements_text` joins\nfacebook/instagram positions and device platforms in the order the lists arrive, so it is an\norder-sensitive string. The per-field checks above it (`publisher_platforms`,\n`facebook_positions`, `instagram_positions`, `devices`) go through `_same`, which compares lists\norder-insensitively. If Meta reads back the same placements in a different order, every per-field\ncheck passes but `placements_summary` fails and publishing is falsely stopped.\n\nRequired fix:\n- Make the summary check order-insensitive (e.g. compare normalized/sorted sets, or only emit\n  the summary when one of the per-field `_same` checks fails); the display text may stay as is.\n- Test: read-back with the same placements in a different order passes (no stop).\n- Test: a genuinely different placement set (or automatic placements) still stops with the\n  placements_summary line.\n\n## Non-blocking 2 - no visible warning when placement state is not verified\nWhen `placement_state_verified` is false the information lives only in diagnostics and the user\nsees no warning. Optional: show a visible warning in the result/UI.\n\nReference: earlier review comment\nhttps://github.com/MojoTheApe/adopy-campaing-launcher/pull/1058#issuecomment-6311643945"
       },
       "1052": {
         "implementers": [
@@ -61813,7 +61797,8 @@
     },
     "review_queue": [
       1053,
-      1054
+      1054,
+      1050
     ],
     "review": null,
     "history": [
@@ -106536,6 +106521,13 @@
         },
         "claim": "cc8dcbccb50b448d954fe9133e67fcd3",
         "reason": "Owner instruction 2026-10-21: previous Worker-BCHIP idle since 2026-10-20, stopped; task reassigned to Worker-W1021039"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-21T12:41:17+00:00",
+        "issue": 1050,
+        "pr": 1058,
+        "actor": "Worker-P1021B2050"
       }
     ],
     "policy": {
