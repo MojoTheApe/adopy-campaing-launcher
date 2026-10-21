@@ -108426,6 +108426,271 @@
           "started_at": "2026-10-21T15:43:33+00:00",
           "ineligible": {}
         }
+      },
+      {
+        "event": "batch-frozen",
+        "at": "2026-10-21T15:44:56+00:00",
+        "batch": {
+          "id": "26765cc9cb494bcaab042d34eccab29c",
+          "actor": "Coordinator-I1021A",
+          "session": "run_i1021a_1021",
+          "state": "assembling",
+          "issues": [
+            1050,
+            838,
+            840,
+            165,
+            19
+          ],
+          "members": [
+            {
+              "issue": 1050,
+              "pr": 1058,
+              "branch": "work/acl-2050-placement-readback",
+              "head_sha": "e87cdde5032d7b1f0e0ff2a35103de3e38548646",
+              "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+              "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "1aefcfe1e72c2e3155f61da7fe6643fc80f2d6236181d8c5c8fe6d40b4da616b",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-P1021E2050",
+                "review_session": "rev_p1021e_2050",
+                "execution_lane": "31abb15e88a742dd89f051476b34d20d",
+                "implementer": "Worker-P1021D2050",
+                "head_sha": "e87cdde5032d7b1f0e0ff2a35103de3e38548646",
+                "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+                "tree_sha": "9814146dab50135ac4b83c4d63c23ece2d075929",
+                "report": "Verdict: approved (independent re-review of head e87cdde5 against main 0ea237b0, which HEAD contains as a merge parent; merge-base == main).\nScope vs main: only src/fb_api/creator.py, tests/test_acl2050_placement_readback.py, docs/system/CHANGELOG.md.\nMerge check: e87cdde5 has no hand-resolved hunks in creator.py or the test file; the ACL-2050 +/- lines vs main are byte-identical to the pre-merge ACL-2050 diff of approved b3fb0f6d. Only conflict was CHANGELOG (both entries kept, ACL-2050 entry on top).\nSemantic interactions with main (ACL-1880 manual page, preflight changes): value-rules warning/diagnostic is counted before main's needs_manual_page() `continue`, so ad set placement checks, placements_summary and value-rule diagnostics still run for manual-completion runs while ad readback is skipped as main intends; campaign-level advantage_placement_state check and non-verified warning are independent of page resolution; preflight_account/page_names/MANUAL_PAGE_NOTICE do not touch read-back fields. diagnostics key is additive in the readback dict.\nSpec (Issue #1050): campaign advantage_state_info and ad set value_rules_applied/value_rule_set_id read via existing GETs; advantage_placement_state != DISABLED blocks; missing/different positions block via per-field checks plus order-insensitive placements_summary (in _SKIP_DIFF); missing state -> visible English warning + placement_state_verified=false; audience flag and value rules are warnings/diagnostics only. Read-only: no new write keys.\nTests: test_acl2050_placement_readback (9), test_acl1761_api_create, _existing_check, _parity, test_acl1902_name_suffix, test_acl1776_create_forms, test_acl1819_preflight, test_acl1880_manual_page: 414 passed. No full suite.\nNon-blocking (unchanged from prior review): advantage_placement_state has no _FIELD_TITLES entry; live check by owner that the new fields read without a Graph error on a real account.",
+                "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  1050
+                ],
+                "recorded_at": "2026-10-21T14:01:58+00:00",
+                "issue_scopes": {
+                  "1050": "1aefcfe1e72c2e3155f61da7fe6643fc80f2d6236181d8c5c8fe6d40b4da616b"
+                }
+              },
+              "lane": {
+                "id": "31abb15e88a742dd89f051476b34d20d",
+                "pr": 1058,
+                "issues": [
+                  1050
+                ],
+                "actor": "Reviewer-P1021E2050",
+                "session": "rev_p1021e_2050",
+                "coordinator": "Coordinator-P1021B",
+                "started_at": "2026-10-21T13:56:37+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-21T14:31:51+00:00"
+            },
+            {
+              "issue": 838,
+              "pr": 842,
+              "branch": "codex/acl-1838-country-active-line",
+              "head_sha": "fba8ae7d2d06df449fcc71286c258dca1b948c89",
+              "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+              "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "cf3992329999eade635234966dc6a7d8224ec279020d8cb4239227bab85df07b",
+              "review": {
+                "kind": "independent-review",
+                "reviewer": "Reviewer-S1021838",
+                "implementer": "Worker-W1021838",
+                "verdict": "approved",
+                "head_sha": "fba8ae7d2d06df449fcc71286c258dca1b948c89",
+                "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+                "tree_sha": "c49f6692f303c8b506d49a28594efaf35b210457",
+                "execution_lane": "daaedd8d469146078adb8b1937fe6e4e",
+                "review_session": "run_s1021_1838",
+                "report": "Refresh of PR842 = clean merge of main 0ea237b0 into bc9ba5c8; git show --cc of fba8ae7d has zero combined-diff lines (no hand-resolved hunks). Diff vs main is exactly docs/system/CHANGELOG.md, docs/system/PROJECT.md, src/web/templates/report.html (19+/3-); the report.html hunks (position:relative on .sidebar-country-btn; .live::before dot replaced by absolute 2px accent line, pointer-events:none) are identical to the previously approved change. Meets Issue #838 criteria on current main: 2px line only for .live (existing s.active predicate untouched), no marker for inactive, no pointer target/hover, selection/FTD logic untouched, accent token used (theme-safe), expanded highlight separate. Docs updated. CI on head all green. Not re-run: browser scenarios (rely on worker evidence).",
+                "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  838
+                ],
+                "recorded_at": "2026-10-21T14:11:33+00:00",
+                "issue_scopes": {
+                  "838": "cf3992329999eade635234966dc6a7d8224ec279020d8cb4239227bab85df07b"
+                }
+              },
+              "lane": {
+                "id": "daaedd8d469146078adb8b1937fe6e4e",
+                "pr": 842,
+                "issues": [
+                  838
+                ],
+                "actor": "Reviewer-S1021838",
+                "session": "run_s1021_1838",
+                "coordinator": "Coordinator-I1021A",
+                "started_at": "2026-10-21T14:07:13+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-21T14:12:17+00:00"
+            },
+            {
+              "issue": 840,
+              "pr": 846,
+              "branch": "codex/acl-1840-country-footer-inset",
+              "head_sha": "01730a5cca32c3969d847b72fce461bf2a2a1dc2",
+              "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+              "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "ef493a159bfb31c8be24551b9a4f3d90b60904a49576c51b0b94efdfdf6c5d40",
+              "review": {
+                "kind": "independent-review",
+                "reviewer": "Reviewer-S1021840",
+                "implementer": "Worker-W1021840",
+                "verdict": "approved",
+                "head_sha": "01730a5cca32c3969d847b72fce461bf2a2a1dc2",
+                "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+                "tree_sha": "9b0796a16535152f042976676ec815cda8ae4cc8",
+                "review_session": "run_s1021_1840",
+                "execution_lane": "fff1d5e736494527b9b4ceadcf74c4a8",
+                "report": "Re-review of refreshed head 01730a5c (merge of main 0ea237b0 into df22816f). git show --cc shows a single hand-resolved hunk, docs/system/CHANGELOG.md, with both the ACL-1840 and ACL-1626 entries intact; report.html merged cleanly. Diff vs main is 4 files, 153 insertions: CHANGELOG, scoped .amap-country > .hc-after CSS in report.html, sanitized fixture, layout test. Scope meets Issue #840 criteria on current main: inset shared by footer, journal summary and body; focus outline stays inside the card; spacing from account rows and workbook notice; empty/populated/filtered at 1280/1024/320 in light and dark; no global summary styling. CI on this exact head passed: all jobs green (linux 1-3, windows, process instructions, ACL verification, installer verification). Note: CHANGELOG diff also carries ~19 cosmetic blank lines before unrelated headings, inherited from the previously approved df22816f; harmless.",
+                "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  840
+                ],
+                "recorded_at": "2026-10-21T14:48:11+00:00",
+                "issue_scopes": {
+                  "840": "ef493a159bfb31c8be24551b9a4f3d90b60904a49576c51b0b94efdfdf6c5d40"
+                }
+              },
+              "lane": {
+                "id": "fff1d5e736494527b9b4ceadcf74c4a8",
+                "pr": 846,
+                "issues": [
+                  840
+                ],
+                "actor": "Reviewer-S1021840",
+                "session": "run_s1021_1840",
+                "coordinator": "Coordinator-I1021A",
+                "started_at": "2026-10-21T14:45:49+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-21T14:51:16+00:00"
+            },
+            {
+              "issue": 165,
+              "pr": 953,
+              "branch": "codex/acl-1165-attach-attempt-log",
+              "head_sha": "40697868a26252dbe6526135de71a1d0dd134a59",
+              "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+              "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "234afaf33da792fa11b47c0538a8af5bcf7f638df359ca829680721c26712410",
+              "review": {
+                "kind": "independent-review",
+                "reviewer": "Reviewer-S1021165",
+                "implementer": "Worker-W1021165",
+                "verdict": "approved",
+                "head_sha": "40697868a26252dbe6526135de71a1d0dd134a59",
+                "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+                "tree_sha": "86e73ca4923a553f8b4e9782a6dc23970b82afff",
+                "execution_lane": "e2174997980a4e36a04aedc21c45ea85",
+                "review_session": "run_s1021_1165",
+                "report": "Independent review of PR #953 (ACL-1165, Issue #165) at head 40697868, a refresh merge of main 0ea237b0 into the previously approved 8418a7b2. (1) Merge: git show --cc shows exactly one hand-resolved hunk, docs/system/CHANGELOG.md; main's ACL-1784 entry is intact (one occurrence, unchanged) and the ACL-1165 entry sits beside it. Diff vs main is 3 files only: CHANGELOG (+10), src/fb_ads_rpa/browser.py (+23/-4), tests/test_the_first_attach_attempt_is_not_logged_as_a_verdict.py (+80). browser.py and the test are identical to the previously approved content. (2) browser.py is log-only: in _try_attach_existing the single INFO 'attachment unavailable' line is replaced by two neutral INFO lines (strict: 'not final'; lenient: 'caller decides'), return None unchanged; in open() one log.warning is added inside the existing refusal gate (FB_RPA_ALLOW_UNPROXIED_RELAUNCH not set, profile running) immediately before the unchanged RuntimeError. No change to attach/retry control flow, the relaunch refusal, its text or the env gate, and nothing that can open or relaunch a profile outside Multilogin (the gate still refuses; no new launch path). (3) Criteria on current main: main still has the old verdict-style INFO line at browser.py:1886, so the fix is not yet present and still needed. Issue #165 expectations are met: intermediate failure is not worded as a result; the real outcome is a single WARNING with the pointer to Multilogin Desktop. (4) Tests: the 3 new caplog tests plus test_browser_relaunch_gate.py pass (16 passed) in a throwaway detached worktree of the exact head. (5) CI on exact head 40697868 (gh pr view headRefOid matches): all checks pass (ACL verification, Process instructions, descriptor, installer classify/verify, linux tests 1/2/3, windows tests, tracker-link); only build jobs skipped as not applicable. Mergeable. No findings blocking.",
+                "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  165
+                ],
+                "recorded_at": "2026-10-21T14:56:58+00:00",
+                "issue_scopes": {
+                  "165": "234afaf33da792fa11b47c0538a8af5bcf7f638df359ca829680721c26712410"
+                }
+              },
+              "lane": {
+                "id": "e2174997980a4e36a04aedc21c45ea85",
+                "pr": 953,
+                "issues": [
+                  165
+                ],
+                "actor": "Reviewer-S1021165",
+                "session": "run_s1021_1165",
+                "coordinator": "Coordinator-I1021A",
+                "started_at": "2026-10-21T14:52:53+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-21T14:57:36+00:00"
+            },
+            {
+              "issue": 19,
+              "pr": 955,
+              "branch": "codex/acl-106-empty-period-owner",
+              "head_sha": "56aad18d204ffd82209ecf9fb3b9777bd5e9d89d",
+              "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+              "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "ce291401dfa6489828ba973eb602b744efb113657552fbfff1bcb7f342232d99",
+              "review": {
+                "kind": "independent-review",
+                "reviewer": "Reviewer-S1021106",
+                "implementer": "Worker-W1021106",
+                "verdict": "approved",
+                "head_sha": "56aad18d204ffd82209ecf9fb3b9777bd5e9d89d",
+                "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+                "tree_sha": "9ec763a7ae19a0e896e43627cb1b35f4e7804c28",
+                "execution_lane": "0fb5911df437452abe7f7093a3284166",
+                "review_session": "run_s1021_106",
+                "report": "Re-review of refreshed head 56aad18d (merge of main 0ea237b0 into 64499cb3). git show --cc shows exactly one combined hunk, docs/system/CHANGELOG.md; diff vs main for it has no removed lines, so ACL-1626 and ACL-1381 entries are intact and the ACL-106 entry is added. Diff vs main is purely additive (161 insertions, 0 deletions) across CHANGELOG, PROJECT.md, src/web/app.py (_period_owner + period_owner context), report.html (manager notice block, whole-workbook wording line), tests/test_empty_period_owner.py; app.py and report.html apply cleanly on top of batch-1 changes. Criteria on current main plus PR: manager-with-no-rows-while-others-have-them gets a distinct message naming manager and dates; nobody-has-rows keeps the workbook notice with added 'may need updating' line; scoped to chosen dates/manager; account map and reading controls remain (full-page render test). Blocks are mutually exclusive (manager block needs countries and book_covers_period, workbook block needs the opposite), no duplicate notice id. tests/test_empty_period_owner.py: 10 passed locally on the exact head. CI on 56aad18d all green (linux 1-3, windows, verification, tracker-link); PR MERGEABLE against main.",
+                "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  19
+                ],
+                "recorded_at": "2026-10-21T14:54:08+00:00",
+                "issue_scopes": {
+                  "19": "ce291401dfa6489828ba973eb602b744efb113657552fbfff1bcb7f342232d99"
+                }
+              },
+              "lane": {
+                "id": "0fb5911df437452abe7f7093a3284166",
+                "pr": 955,
+                "issues": [
+                  19
+                ],
+                "actor": "Reviewer-S1021106",
+                "session": "run_s1021_106",
+                "coordinator": "Coordinator-I1021A",
+                "started_at": "2026-10-21T14:46:45+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-21T14:54:55+00:00"
+            }
+          ],
+          "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+          "branch": "codex/batch-26765cc9cb494bcaab042d34eccab29c",
+          "intake": "83bec33459444079a9e3cd7cb38ccadd",
+          "started_at": "2026-10-21T15:44:56+00:00",
+          "pr": null,
+          "entered_stage": false,
+          "history": [],
+          "delivery_request": {
+            "schema_version": 1,
+            "state": "requested",
+            "batch_id": "26765cc9cb494bcaab042d34eccab29c",
+            "issues": [
+              1050,
+              838,
+              840,
+              165,
+              19
+            ],
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "target": "ACL stable Windows installer and update channel",
+            "workflow": ".github/workflows/complete-delivery.yml",
+            "job": "Verify published Windows package",
+            "actor": "Coordinator-I1021A",
+            "session": "run_i1021a_1021",
+            "requested_at": "2026-10-21T15:44:56+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -118341,7 +118606,267 @@
         "sources_closed": true
       }
     },
-    "integration": null,
+    "integration": {
+      "id": "26765cc9cb494bcaab042d34eccab29c",
+      "actor": "Coordinator-I1021A",
+      "session": "run_i1021a_1021",
+      "state": "assembling",
+      "issues": [
+        1050,
+        838,
+        840,
+        165,
+        19
+      ],
+      "members": [
+        {
+          "issue": 1050,
+          "pr": 1058,
+          "branch": "work/acl-2050-placement-readback",
+          "head_sha": "e87cdde5032d7b1f0e0ff2a35103de3e38548646",
+          "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+          "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "1aefcfe1e72c2e3155f61da7fe6643fc80f2d6236181d8c5c8fe6d40b4da616b",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-P1021E2050",
+            "review_session": "rev_p1021e_2050",
+            "execution_lane": "31abb15e88a742dd89f051476b34d20d",
+            "implementer": "Worker-P1021D2050",
+            "head_sha": "e87cdde5032d7b1f0e0ff2a35103de3e38548646",
+            "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+            "tree_sha": "9814146dab50135ac4b83c4d63c23ece2d075929",
+            "report": "Verdict: approved (independent re-review of head e87cdde5 against main 0ea237b0, which HEAD contains as a merge parent; merge-base == main).\nScope vs main: only src/fb_api/creator.py, tests/test_acl2050_placement_readback.py, docs/system/CHANGELOG.md.\nMerge check: e87cdde5 has no hand-resolved hunks in creator.py or the test file; the ACL-2050 +/- lines vs main are byte-identical to the pre-merge ACL-2050 diff of approved b3fb0f6d. Only conflict was CHANGELOG (both entries kept, ACL-2050 entry on top).\nSemantic interactions with main (ACL-1880 manual page, preflight changes): value-rules warning/diagnostic is counted before main's needs_manual_page() `continue`, so ad set placement checks, placements_summary and value-rule diagnostics still run for manual-completion runs while ad readback is skipped as main intends; campaign-level advantage_placement_state check and non-verified warning are independent of page resolution; preflight_account/page_names/MANUAL_PAGE_NOTICE do not touch read-back fields. diagnostics key is additive in the readback dict.\nSpec (Issue #1050): campaign advantage_state_info and ad set value_rules_applied/value_rule_set_id read via existing GETs; advantage_placement_state != DISABLED blocks; missing/different positions block via per-field checks plus order-insensitive placements_summary (in _SKIP_DIFF); missing state -> visible English warning + placement_state_verified=false; audience flag and value rules are warnings/diagnostics only. Read-only: no new write keys.\nTests: test_acl2050_placement_readback (9), test_acl1761_api_create, _existing_check, _parity, test_acl1902_name_suffix, test_acl1776_create_forms, test_acl1819_preflight, test_acl1880_manual_page: 414 passed. No full suite.\nNon-blocking (unchanged from prior review): advantage_placement_state has no _FIELD_TITLES entry; live check by owner that the new fields read without a Graph error on a real account.",
+            "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              1050
+            ],
+            "recorded_at": "2026-10-21T14:01:58+00:00",
+            "issue_scopes": {
+              "1050": "1aefcfe1e72c2e3155f61da7fe6643fc80f2d6236181d8c5c8fe6d40b4da616b"
+            }
+          },
+          "lane": {
+            "id": "31abb15e88a742dd89f051476b34d20d",
+            "pr": 1058,
+            "issues": [
+              1050
+            ],
+            "actor": "Reviewer-P1021E2050",
+            "session": "rev_p1021e_2050",
+            "coordinator": "Coordinator-P1021B",
+            "started_at": "2026-10-21T13:56:37+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-21T14:31:51+00:00"
+        },
+        {
+          "issue": 838,
+          "pr": 842,
+          "branch": "codex/acl-1838-country-active-line",
+          "head_sha": "fba8ae7d2d06df449fcc71286c258dca1b948c89",
+          "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+          "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "cf3992329999eade635234966dc6a7d8224ec279020d8cb4239227bab85df07b",
+          "review": {
+            "kind": "independent-review",
+            "reviewer": "Reviewer-S1021838",
+            "implementer": "Worker-W1021838",
+            "verdict": "approved",
+            "head_sha": "fba8ae7d2d06df449fcc71286c258dca1b948c89",
+            "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+            "tree_sha": "c49f6692f303c8b506d49a28594efaf35b210457",
+            "execution_lane": "daaedd8d469146078adb8b1937fe6e4e",
+            "review_session": "run_s1021_1838",
+            "report": "Refresh of PR842 = clean merge of main 0ea237b0 into bc9ba5c8; git show --cc of fba8ae7d has zero combined-diff lines (no hand-resolved hunks). Diff vs main is exactly docs/system/CHANGELOG.md, docs/system/PROJECT.md, src/web/templates/report.html (19+/3-); the report.html hunks (position:relative on .sidebar-country-btn; .live::before dot replaced by absolute 2px accent line, pointer-events:none) are identical to the previously approved change. Meets Issue #838 criteria on current main: 2px line only for .live (existing s.active predicate untouched), no marker for inactive, no pointer target/hover, selection/FTD logic untouched, accent token used (theme-safe), expanded highlight separate. Docs updated. CI on head all green. Not re-run: browser scenarios (rely on worker evidence).",
+            "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              838
+            ],
+            "recorded_at": "2026-10-21T14:11:33+00:00",
+            "issue_scopes": {
+              "838": "cf3992329999eade635234966dc6a7d8224ec279020d8cb4239227bab85df07b"
+            }
+          },
+          "lane": {
+            "id": "daaedd8d469146078adb8b1937fe6e4e",
+            "pr": 842,
+            "issues": [
+              838
+            ],
+            "actor": "Reviewer-S1021838",
+            "session": "run_s1021_1838",
+            "coordinator": "Coordinator-I1021A",
+            "started_at": "2026-10-21T14:07:13+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-21T14:12:17+00:00"
+        },
+        {
+          "issue": 840,
+          "pr": 846,
+          "branch": "codex/acl-1840-country-footer-inset",
+          "head_sha": "01730a5cca32c3969d847b72fce461bf2a2a1dc2",
+          "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+          "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "ef493a159bfb31c8be24551b9a4f3d90b60904a49576c51b0b94efdfdf6c5d40",
+          "review": {
+            "kind": "independent-review",
+            "reviewer": "Reviewer-S1021840",
+            "implementer": "Worker-W1021840",
+            "verdict": "approved",
+            "head_sha": "01730a5cca32c3969d847b72fce461bf2a2a1dc2",
+            "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+            "tree_sha": "9b0796a16535152f042976676ec815cda8ae4cc8",
+            "review_session": "run_s1021_1840",
+            "execution_lane": "fff1d5e736494527b9b4ceadcf74c4a8",
+            "report": "Re-review of refreshed head 01730a5c (merge of main 0ea237b0 into df22816f). git show --cc shows a single hand-resolved hunk, docs/system/CHANGELOG.md, with both the ACL-1840 and ACL-1626 entries intact; report.html merged cleanly. Diff vs main is 4 files, 153 insertions: CHANGELOG, scoped .amap-country > .hc-after CSS in report.html, sanitized fixture, layout test. Scope meets Issue #840 criteria on current main: inset shared by footer, journal summary and body; focus outline stays inside the card; spacing from account rows and workbook notice; empty/populated/filtered at 1280/1024/320 in light and dark; no global summary styling. CI on this exact head passed: all jobs green (linux 1-3, windows, process instructions, ACL verification, installer verification). Note: CHANGELOG diff also carries ~19 cosmetic blank lines before unrelated headings, inherited from the previously approved df22816f; harmless.",
+            "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              840
+            ],
+            "recorded_at": "2026-10-21T14:48:11+00:00",
+            "issue_scopes": {
+              "840": "ef493a159bfb31c8be24551b9a4f3d90b60904a49576c51b0b94efdfdf6c5d40"
+            }
+          },
+          "lane": {
+            "id": "fff1d5e736494527b9b4ceadcf74c4a8",
+            "pr": 846,
+            "issues": [
+              840
+            ],
+            "actor": "Reviewer-S1021840",
+            "session": "run_s1021_1840",
+            "coordinator": "Coordinator-I1021A",
+            "started_at": "2026-10-21T14:45:49+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-21T14:51:16+00:00"
+        },
+        {
+          "issue": 165,
+          "pr": 953,
+          "branch": "codex/acl-1165-attach-attempt-log",
+          "head_sha": "40697868a26252dbe6526135de71a1d0dd134a59",
+          "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+          "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "234afaf33da792fa11b47c0538a8af5bcf7f638df359ca829680721c26712410",
+          "review": {
+            "kind": "independent-review",
+            "reviewer": "Reviewer-S1021165",
+            "implementer": "Worker-W1021165",
+            "verdict": "approved",
+            "head_sha": "40697868a26252dbe6526135de71a1d0dd134a59",
+            "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+            "tree_sha": "86e73ca4923a553f8b4e9782a6dc23970b82afff",
+            "execution_lane": "e2174997980a4e36a04aedc21c45ea85",
+            "review_session": "run_s1021_1165",
+            "report": "Independent review of PR #953 (ACL-1165, Issue #165) at head 40697868, a refresh merge of main 0ea237b0 into the previously approved 8418a7b2. (1) Merge: git show --cc shows exactly one hand-resolved hunk, docs/system/CHANGELOG.md; main's ACL-1784 entry is intact (one occurrence, unchanged) and the ACL-1165 entry sits beside it. Diff vs main is 3 files only: CHANGELOG (+10), src/fb_ads_rpa/browser.py (+23/-4), tests/test_the_first_attach_attempt_is_not_logged_as_a_verdict.py (+80). browser.py and the test are identical to the previously approved content. (2) browser.py is log-only: in _try_attach_existing the single INFO 'attachment unavailable' line is replaced by two neutral INFO lines (strict: 'not final'; lenient: 'caller decides'), return None unchanged; in open() one log.warning is added inside the existing refusal gate (FB_RPA_ALLOW_UNPROXIED_RELAUNCH not set, profile running) immediately before the unchanged RuntimeError. No change to attach/retry control flow, the relaunch refusal, its text or the env gate, and nothing that can open or relaunch a profile outside Multilogin (the gate still refuses; no new launch path). (3) Criteria on current main: main still has the old verdict-style INFO line at browser.py:1886, so the fix is not yet present and still needed. Issue #165 expectations are met: intermediate failure is not worded as a result; the real outcome is a single WARNING with the pointer to Multilogin Desktop. (4) Tests: the 3 new caplog tests plus test_browser_relaunch_gate.py pass (16 passed) in a throwaway detached worktree of the exact head. (5) CI on exact head 40697868 (gh pr view headRefOid matches): all checks pass (ACL verification, Process instructions, descriptor, installer classify/verify, linux tests 1/2/3, windows tests, tracker-link); only build jobs skipped as not applicable. Mergeable. No findings blocking.",
+            "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              165
+            ],
+            "recorded_at": "2026-10-21T14:56:58+00:00",
+            "issue_scopes": {
+              "165": "234afaf33da792fa11b47c0538a8af5bcf7f638df359ca829680721c26712410"
+            }
+          },
+          "lane": {
+            "id": "e2174997980a4e36a04aedc21c45ea85",
+            "pr": 953,
+            "issues": [
+              165
+            ],
+            "actor": "Reviewer-S1021165",
+            "session": "run_s1021_1165",
+            "coordinator": "Coordinator-I1021A",
+            "started_at": "2026-10-21T14:52:53+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-21T14:57:36+00:00"
+        },
+        {
+          "issue": 19,
+          "pr": 955,
+          "branch": "codex/acl-106-empty-period-owner",
+          "head_sha": "56aad18d204ffd82209ecf9fb3b9777bd5e9d89d",
+          "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+          "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "ce291401dfa6489828ba973eb602b744efb113657552fbfff1bcb7f342232d99",
+          "review": {
+            "kind": "independent-review",
+            "reviewer": "Reviewer-S1021106",
+            "implementer": "Worker-W1021106",
+            "verdict": "approved",
+            "head_sha": "56aad18d204ffd82209ecf9fb3b9777bd5e9d89d",
+            "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+            "tree_sha": "9ec763a7ae19a0e896e43627cb1b35f4e7804c28",
+            "execution_lane": "0fb5911df437452abe7f7093a3284166",
+            "review_session": "run_s1021_106",
+            "report": "Re-review of refreshed head 56aad18d (merge of main 0ea237b0 into 64499cb3). git show --cc shows exactly one combined hunk, docs/system/CHANGELOG.md; diff vs main for it has no removed lines, so ACL-1626 and ACL-1381 entries are intact and the ACL-106 entry is added. Diff vs main is purely additive (161 insertions, 0 deletions) across CHANGELOG, PROJECT.md, src/web/app.py (_period_owner + period_owner context), report.html (manager notice block, whole-workbook wording line), tests/test_empty_period_owner.py; app.py and report.html apply cleanly on top of batch-1 changes. Criteria on current main plus PR: manager-with-no-rows-while-others-have-them gets a distinct message naming manager and dates; nobody-has-rows keeps the workbook notice with added 'may need updating' line; scoped to chosen dates/manager; account map and reading controls remain (full-page render test). Blocks are mutually exclusive (manager block needs countries and book_covers_period, workbook block needs the opposite), no duplicate notice id. tests/test_empty_period_owner.py: 10 passed locally on the exact head. CI on 56aad18d all green (linux 1-3, windows, verification, tracker-link); PR MERGEABLE against main.",
+            "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              19
+            ],
+            "recorded_at": "2026-10-21T14:54:08+00:00",
+            "issue_scopes": {
+              "19": "ce291401dfa6489828ba973eb602b744efb113657552fbfff1bcb7f342232d99"
+            }
+          },
+          "lane": {
+            "id": "0fb5911df437452abe7f7093a3284166",
+            "pr": 955,
+            "issues": [
+              19
+            ],
+            "actor": "Reviewer-S1021106",
+            "session": "run_s1021_106",
+            "coordinator": "Coordinator-I1021A",
+            "started_at": "2026-10-21T14:46:45+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-21T14:54:55+00:00"
+        }
+      ],
+      "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+      "branch": "codex/batch-26765cc9cb494bcaab042d34eccab29c",
+      "intake": "83bec33459444079a9e3cd7cb38ccadd",
+      "started_at": "2026-10-21T15:44:56+00:00",
+      "pr": null,
+      "entered_stage": false,
+      "history": [],
+      "delivery_request": {
+        "schema_version": 1,
+        "state": "requested",
+        "batch_id": "26765cc9cb494bcaab042d34eccab29c",
+        "issues": [
+          1050,
+          838,
+          840,
+          165,
+          19
+        ],
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "target": "ACL stable Windows installer and update channel",
+        "workflow": ".github/workflows/complete-delivery.yml",
+        "job": "Verify published Windows package",
+        "actor": "Coordinator-I1021A",
+        "session": "run_i1021a_1021",
+        "requested_at": "2026-10-21T15:44:56+00:00"
+      }
+    },
     "intake": {
       "id": "83bec33459444079a9e3cd7cb38ccadd",
       "actor": "Coordinator-I1021A",
