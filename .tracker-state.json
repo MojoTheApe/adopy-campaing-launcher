@@ -56161,7 +56161,7 @@
             "session": "run_k1021a2_2066"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-K1021A2",
         "coordinator": "Coordinator-K1021A",
         "handoff": {
@@ -56179,7 +56179,8 @@
           "report": "# ACL-2066 handoff\n\nPR #1067, branch work/acl-2066-cpl-in-optimization, head bfd11263 on main ea41acbf.\nScope: src/web/templates/_campaign_table.html (b_cpl added to the Optimization preset before b_cpa; saved localStorage layouts get b_cpl inserted before b_cpa once, saved layout then carries cpl_seen), tests/test_acl2066_cpl_in_optimization.py (new), docs/system/CHANGELOG.md entry.\nChecks: test_acl2066_cpl_in_optimization.py + test_acl1798_campaign_inventory.py 59 passed locally; full suite in CI.\nRemaining: independent source review, CI, Approved, batch integration, package delivery. No live checks were run; owner checks the column on the dashboard after delivery."
         },
         "pr": 1067,
-        "queued_at": "2026-10-21T13:18:40+00:00"
+        "queued_at": "2026-10-21T13:18:40+00:00",
+        "reviewer": "Reviewer-K1021R2066"
       },
       "1063": {
         "implementers": [
@@ -59169,6 +59170,10 @@
       "Reviewer-K1021R2065": {
         "session": "rev_k1021r_2065",
         "role": "Reviewer"
+      },
+      "Reviewer-K1021R2066": {
+        "session": "rev_k1021r_2066",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -62066,8 +62071,7 @@
     "review_queue": [
       1053,
       1054,
-      710,
-      1066
+      710
     ],
     "review": {
       "id": "3cbfef49299841b6912867db49cc431f",
@@ -107096,6 +107100,13 @@
         "pr": 1068,
         "lane": "1fefebd3b4d34ec495d25b8476d66b15",
         "actor": "Reviewer-K1021R2065"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-21T13:22:29+00:00",
+        "pr": 1067,
+        "lane": "379a09548821493e9da1c9b1003da87c",
+        "actor": "Reviewer-K1021R2066"
       }
     ],
     "policy": {
@@ -116870,6 +116881,18 @@
         "session": "rev_k1021r_2065",
         "coordinator": "Coordinator-K1021A",
         "started_at": "2026-10-21T13:21:23+00:00",
+        "state": "reviewing"
+      },
+      "1067": {
+        "id": "379a09548821493e9da1c9b1003da87c",
+        "pr": 1067,
+        "issues": [
+          1066
+        ],
+        "actor": "Reviewer-K1021R2066",
+        "session": "rev_k1021r_2066",
+        "coordinator": "Coordinator-K1021A",
+        "started_at": "2026-10-21T13:22:29+00:00",
         "state": "reviewing"
       }
     },
