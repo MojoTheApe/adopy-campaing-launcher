@@ -54808,7 +54808,7 @@
             "session": "run_w1021_1165"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1021165",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -54838,7 +54838,8 @@
           "actor": "Coordinator-I1021A",
           "session": "run_i1021a_1021",
           "report": "Approval is stale against current main 64e73a1e (after ACL-2073 #1075 and ACL-2071 #1076 merged). Author: merge current main into the original branch without changing content (resolve only CHANGELOG append conflicts by keeping both entries), re-run checks, hand off, and get a fresh independent source approval for batch 2b (--deliver)."
-        }
+        },
+        "reviewer": "Reviewer-K1021165"
       },
       "72": {
         "implementers": [
@@ -60316,6 +60317,10 @@
       "Reviewer-K1021838": {
         "session": "run_k1021_838",
         "role": "Reviewer"
+      },
+      "Reviewer-K1021165": {
+        "session": "run_k1021_165",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -63258,8 +63263,7 @@
       1054,
       710,
       1069,
-      840,
-      165
+      840
     ],
     "review": null,
     "history": [
@@ -110605,6 +110609,13 @@
         "issue": 165,
         "pr": 953,
         "actor": "Worker-W1021165"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-21T22:40:29+00:00",
+        "pr": 953,
+        "lane": "4911434001dd47aeb94e8f8eeb761ba2",
+        "actor": "Reviewer-K1021165"
       }
     ],
     "policy": {
@@ -120927,6 +120938,18 @@
         "session": "rev_p1021_2052",
         "coordinator": "Coordinator-P1021A",
         "started_at": "2026-10-21T09:47:33+00:00",
+        "state": "reviewing"
+      },
+      "953": {
+        "id": "4911434001dd47aeb94e8f8eeb761ba2",
+        "pr": 953,
+        "issues": [
+          165
+        ],
+        "actor": "Reviewer-K1021165",
+        "session": "run_k1021_165",
+        "coordinator": "Coordinator-I1021A",
+        "started_at": "2026-10-21T22:40:29+00:00",
         "state": "reviewing"
       }
     },
