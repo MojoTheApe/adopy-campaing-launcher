@@ -46909,20 +46909,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T12:56:11+00:00",
         "from_status": "status:todo"
-      },
-      "558": {
-        "actor": "Worker-A1021558",
-        "session": "run_a1021_558w",
-        "coordinator": "Coordinator-A1021A",
-        "branch": "work/acl-1558-scrubber-shapes",
-        "worktree": "C:\\acl-rv-558",
-        "id": "68ffc5082a644728a1bb615b596c4661",
-        "issue": 558,
-        "state": "handoff",
-        "started_at": "2026-10-21T11:49:47+00:00",
-        "from_status": "status:todo",
-        "pr": 963,
-        "report": "ACL-1558 re-handoff after reviewer return (--keep-lane).\nPR 963, head 00016495, contains current main ea41acbf.\nFix: added '# linux-ok: scrubber input string, not a real path' to the backslash path string at tests/test_acl1558_scrubber_shapes.py:88, which tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis flagged. The file is not marked windows_only. Test-only change.\nTests: tests/test_acl_test_platform.py and tests/test_acl1558_scrubber_shapes.py: 152 passed.\nFull suite not run locally; CI is the acceptance signal."
       }
     },
     "tasks": {
@@ -54141,7 +54127,7 @@
             "session": "run_a1021_558w"
           }
         ],
-        "state": "implementing",
+        "state": "reviewing",
         "worker": "Worker-A1021558",
         "coordinator": "Coordinator-A1021A",
         "handoff": {
@@ -54150,24 +54136,23 @@
           "coordinator": "Coordinator-A1021A",
           "branch": "work/acl-1558-scrubber-shapes",
           "worktree": "C:\\acl-rv-558",
-          "id": "aa8e8a3f91134445b1712a26aa0540b4",
+          "id": "68ffc5082a644728a1bb615b596c4661",
           "issue": 558,
           "state": "handoff",
-          "started_at": "2026-10-21T11:16:56+00:00",
+          "started_at": "2026-10-21T11:49:47+00:00",
           "from_status": "status:todo",
           "pr": 963,
-          "report": "ACL-1558 handoff (resume of review tail, owner instruction 2026-10-21).\nPR 963, branch work/acl-1558-scrubber-shapes, head d120b75c. Merged work/main ea41acbf (--no-ff) into the existing PR branch.\nConflicts: only docs/system/CHANGELOG.md; kept both sides (ACL-1558 entry plus main's ACL-1381 and ACL-1971 entries). No code conflicts.\nOne extra change: the scrubber test used the synthetic key act_123456789012345, which scripts/acl_scan_secrets.py flagged as an ad account id; replaced with the allowlisted placeholder act_1234567890123456 (no behavior change).\nTests run: 415 passed (scrubber, telemetry, sentry, run summary tests incl. test_acl1558_scrubber_shapes and the no-hang test); after the test edit, the 1558 and no-hang tests re-run: 75 passed. acl_scan_secrets.py: clean.\nFull suite not run locally; CI is the acceptance signal. No owner live check needed (scrubber code only)."
+          "report": "ACL-1558 re-handoff after reviewer return (--keep-lane).\nPR 963, head 00016495, contains current main ea41acbf.\nFix: added '# linux-ok: scrubber input string, not a real path' to the backslash path string at tests/test_acl1558_scrubber_shapes.py:88, which tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis flagged. The file is not marked windows_only. Test-only change.\nTests: tests/test_acl_test_platform.py and tests/test_acl1558_scrubber_shapes.py: 152 passed.\nFull suite not run locally; CI is the acceptance signal."
         },
         "pr": 963,
-        "queued_at": "2026-10-21T11:31:38+00:00",
+        "queued_at": "2026-10-21T11:53:23+00:00",
         "review_report": "# ACL-1558 source review: returned for one fix (head d120b75c)\n\nReviewer-A1021558. I reviewed the full scope against main ea41acbf. HEAD contains main. The merge 31a5a167 conflicted only in CHANGELOG, and both sides are kept. The diff touches 5 files: run_telemetry.py, fb_api/telemetry.py, CHANGELOG and two tests. No scope creep. All test values are synthetic. The secrets scan is clean.\n\n## The scrubber is correct\n- Bare `EAA\u2026` token becomes `<token>`. Keyed forms keep `<hidden>`. Words like `EAABshort`, `XEAAB\u2026` and `the EAAs` are left alone.\n- `user:pass@host[:port]` becomes `<user>:<hidden>@host[:port]`. This also works after `http://` and `socks5://`, for IPv4 and `[IPv6]`, and for passwords that contain `@`, `:` or `/`. Paths, `mailto:`/`email:`, `16:9@2x`, `https://user@host` and `git@github.com:org/repo` are not touched.\n- In `scrub_diag`, dict keys that are `act_` ids, 6+ digit ids, emails or integer ids are scrubbed. On collisions `put_unique` keeps both entries. The real `acl_sentry._before_send` path is tested. The Run summary attachment goes through `scrub_diag` too. The fb_api `scrub_value` uses the same `clean_key`.\n- Backtracking: I ran my own adversarial probes at about 100 KB each: slash/at mixes, 63-char label runs, many word starts with 240-char passwords, port-lookahead runs, bracket starts, 255/255 user/password runs, and email-key runs. Each finished in under 0.08 s for both `scrub` and `scrub_key`. At 1 MB the time grows linearly (0.065 s to 0.67 s). There is no catastrophic backtracking.\n- Local tests: 477 of 478 pass in the 1558, no-hang, every-shape, fb_api 1756, run_telemetry, run-summary attachment, sentry snapshot and test_platform files. The one failure is the finding below.\n\n## BLOCKING: the new CI platform rule on main fails (CI windows tests + \"Classify and check project tooling\" + \"Process instructions\" are red)\n`tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis` flags:\n    test_acl1558_scrubber_shapes.py:88 [backslash-path] r\"saved to C:\\Users\\demo@corp\\out.txt\",\nThe same failure appears in CI run 39592451242 (tooling job: 1 failed / 728 passed; windows tests: 1 failed / 326 passed). The \"Process instructions\" job fails only because it requires the tooling job.\nFix (test-only, no behaviour change): this line is data for the scrubber, not a Windows API. Add the waiver comment the rule asks for on that exact line, for example:\n    r\"saved to C:\\Users\\demo@corp\\out.txt\",  # linux-ok: scrubber input string, not a real path\nThen re-run tests/test_acl_test_platform.py and tests/test_acl1558_scrubber_shapes.py locally. Do not mark the whole file windows_only, because the scrubber must stay covered on Linux.\n\n## Non-blocking notes (no change required)\n- Over-scrubbing that errs toward privacy: `Error:foo@example.com` and `12:30@home.example.com` become `<user>:<hidden>@\u2026`. A date-like dict key `20261021` becomes `<id>`. All acceptable.\n- tracker-link run 39592451226 is the stale pre-queue run. The fix push will trigger a new one.\n\nNo owner live check needed (scrubber code only). I keep the lane and will review the fix delta.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578089+00:00",
           "remote_process_stopped_verified": false
         },
-        "rework": true,
-        "rework_claim": "68ffc5082a644728a1bb615b596c4661"
+        "reviewer": "Reviewer-A1021558"
       },
       "380": {
         "implementers": [
@@ -105788,6 +105773,21 @@
         "issue": 668,
         "pr": 975,
         "actor": "Worker-A1021668"
+      },
+      {
+        "event": "review-resumed",
+        "at": "2026-10-21T11:53:28+00:00",
+        "pr": 963,
+        "issues": [
+          558
+        ]
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-21T11:53:34+00:00",
+        "issue": 558,
+        "pr": 963,
+        "actor": "Worker-A1021558"
       }
     ],
     "policy": {
@@ -115607,20 +115607,6 @@
         "started_at": "2026-10-21T09:47:33+00:00",
         "state": "reviewing"
       },
-      "963": {
-        "id": "ef4d9e1456394d828e9b91eeb10b3ea8",
-        "pr": 963,
-        "issues": [
-          558
-        ],
-        "actor": "Reviewer-A1021558",
-        "session": "run_a1021_558r",
-        "coordinator": "Coordinator-A1021A",
-        "started_at": "2026-10-21T11:37:20+00:00",
-        "state": "fixing",
-        "report": "# ACL-1558 source review: returned for one fix (head d120b75c)\n\nReviewer-A1021558. I reviewed the full scope against main ea41acbf. HEAD contains main. The merge 31a5a167 conflicted only in CHANGELOG, and both sides are kept. The diff touches 5 files: run_telemetry.py, fb_api/telemetry.py, CHANGELOG and two tests. No scope creep. All test values are synthetic. The secrets scan is clean.\n\n## The scrubber is correct\n- Bare `EAA\u2026` token becomes `<token>`. Keyed forms keep `<hidden>`. Words like `EAABshort`, `XEAAB\u2026` and `the EAAs` are left alone.\n- `user:pass@host[:port]` becomes `<user>:<hidden>@host[:port]`. This also works after `http://` and `socks5://`, for IPv4 and `[IPv6]`, and for passwords that contain `@`, `:` or `/`. Paths, `mailto:`/`email:`, `16:9@2x`, `https://user@host` and `git@github.com:org/repo` are not touched.\n- In `scrub_diag`, dict keys that are `act_` ids, 6+ digit ids, emails or integer ids are scrubbed. On collisions `put_unique` keeps both entries. The real `acl_sentry._before_send` path is tested. The Run summary attachment goes through `scrub_diag` too. The fb_api `scrub_value` uses the same `clean_key`.\n- Backtracking: I ran my own adversarial probes at about 100 KB each: slash/at mixes, 63-char label runs, many word starts with 240-char passwords, port-lookahead runs, bracket starts, 255/255 user/password runs, and email-key runs. Each finished in under 0.08 s for both `scrub` and `scrub_key`. At 1 MB the time grows linearly (0.065 s to 0.67 s). There is no catastrophic backtracking.\n- Local tests: 477 of 478 pass in the 1558, no-hang, every-shape, fb_api 1756, run_telemetry, run-summary attachment, sentry snapshot and test_platform files. The one failure is the finding below.\n\n## BLOCKING: the new CI platform rule on main fails (CI windows tests + \"Classify and check project tooling\" + \"Process instructions\" are red)\n`tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis` flags:\n    test_acl1558_scrubber_shapes.py:88 [backslash-path] r\"saved to C:\\Users\\demo@corp\\out.txt\",\nThe same failure appears in CI run 39592451242 (tooling job: 1 failed / 728 passed; windows tests: 1 failed / 326 passed). The \"Process instructions\" job fails only because it requires the tooling job.\nFix (test-only, no behaviour change): this line is data for the scrubber, not a Windows API. Add the waiver comment the rule asks for on that exact line, for example:\n    r\"saved to C:\\Users\\demo@corp\\out.txt\",  # linux-ok: scrubber input string, not a real path\nThen re-run tests/test_acl_test_platform.py and tests/test_acl1558_scrubber_shapes.py locally. Do not mark the whole file windows_only, because the scrubber must stay covered on Linux.\n\n## Non-blocking notes (no change required)\n- Over-scrubbing that errs toward privacy: `Error:foo@example.com` and `12:30@home.example.com` become `<user>:<hidden>@\u2026`. A date-like dict key `20261021` becomes `<id>`. All acceptable.\n- tracker-link run 39592451226 is the stale pre-queue run. The fix push will trigger a new one.\n\nNo owner live check needed (scrubber code only). I keep the lane and will review the fix delta.",
-        "keep_lane": true
-      },
       "983": {
         "id": "e9b5b0bb343b4ea9b17443d9c06def14",
         "pr": 983,
@@ -115645,6 +115631,20 @@
         "started_at": "2026-10-21T11:51:35+00:00",
         "state": "reviewing",
         "report": "# ACL-1668 source review: returned for fixes (head 0429dc28)\n\nReviewer-A1021668. I reviewed the full scope against main ea41acbf. HEAD contains main, and the merge 0429dc28 is clean (`git show --cc` is empty). The diff touches only 4 files: enrich_draft.py, report.html and two tests. I found no leaked identifiers. The new UI strings are in English.\n\n## The feature itself is correct\n- Spec 1: after the list refresh, the row is marked \"File missing - pick again\" in `var(--bad)` and the name stays in the field. It counts only once the list has actually loaded, and it compares the hidden value with filename/rel_path the same way the picker stores it.\n- Spec 2: cbPublish and cbPublishAll (the only two publish entry points) list the affected rows in the confirm and refuse to send. The enrichment message is clear.\n- Spec 3: tests were added. tests/test_acl1668_missing_creative_publish.py, tests/test_builder_review_browser.py and tests/test_second_primary_text_reaches_the_robot.py pass locally (29 passed).\n\n## BLOCKING: the change breaks 58 existing browser tests (CI linux shards 1/2/3 are red)\nMany existing browser fixtures put a creative straight into the hidden field (for example `s.querySelector('[name$=\"_ad_0_creative_file\"]').value='offline-0.png'`). Their offline `/api/creatives` route answers `{\"files\": []}`. Now that a loaded empty list counts as \"file missing\", every such row is marked missing. cbPublish and cbPublishAll then refuse with \"Not sent: a chosen creative file is missing\", so the queue never starts.\n\nFailing in CI run 39579487653:\n- tests/test_campaign_build_percent_browser.py (15)\n- tests/test_builder_multi_publish_browser.py (11)\n- tests/test_campaign_build_dot_browser.py (10)\n- tests/test_builder_publish_selected_browser.py (9)\n- tests/test_drawer_review_browser.py (6 + 1 error, \"CB_QUEUE is not defined\")\n- tests/test_acl1604_preflight_browser.py (3; one assertion shows the literal alert 'Not sent: a chosen creative file is missing \u2014 pick it again.')\n- tests/test_builder_foot_stays_put_browser.py (3)\n- tests/test_builder_second_primary_text.py (1)\n\nI reproduced test_drawer_review_browser.py locally: on 0429dc28, 6 failed and 1 error; on main ea41acbf, 13 passed.\n\nFix: update these fixtures so their `/api/creatives` route returns the files they select. Easiest is a `files` entry `{filename, rel_path, folder:'', type:'Image', size_bytes:1}` for every name the test sets, e.g. `offline-N.png`. Alternatively, choose files through the picker. Keep the product behaviour, and do not weaken cbCreativeMissing for tests. Then run all eight files above, plus tests/test_builder_review_browser.py and tests/test_acl1668_missing_creative_publish.py.\n\n## Should fix in the same round\n- docs/system/CHANGELOG.md has no ACL-1668 entry. docs/system/PROJECT.md says a system change records what/why and the task/PR link there. Add a short entry at the top.\n- In cbPublish's confirm callback, `cbPreflightDecision(...)` runs before the missing-file refusal, so a refused publish still records a preflight decision. cbPublishAll does it the other way round: it refuses first. Move the missing-file check to the top of the callback in cbPublish to match.\n\n## Non-blocking notes\n- The confirm block is titled \"Nothing was sent:\" while the dialog still offers the build button. Wording such as \"These ads will not be sent until you pick the file again:\" would read better. Optional.\n- If the very first /api/creatives answer is an error (folder unavailable) with an empty list, every chosen row is marked \"File missing\". Publishing would fail anyway, so this is acceptable.\n\nNo owner live check is needed: the change is UI/enrichment only and does not act on any ad account.",
+        "keep_lane": true
+      },
+      "963": {
+        "id": "ef4d9e1456394d828e9b91eeb10b3ea8",
+        "pr": 963,
+        "issues": [
+          558
+        ],
+        "actor": "Reviewer-A1021558",
+        "session": "run_a1021_558r",
+        "coordinator": "Coordinator-A1021A",
+        "started_at": "2026-10-21T11:53:28+00:00",
+        "state": "reviewing",
+        "report": "# ACL-1558 source review: returned for one fix (head d120b75c)\n\nReviewer-A1021558. I reviewed the full scope against main ea41acbf. HEAD contains main. The merge 31a5a167 conflicted only in CHANGELOG, and both sides are kept. The diff touches 5 files: run_telemetry.py, fb_api/telemetry.py, CHANGELOG and two tests. No scope creep. All test values are synthetic. The secrets scan is clean.\n\n## The scrubber is correct\n- Bare `EAA\u2026` token becomes `<token>`. Keyed forms keep `<hidden>`. Words like `EAABshort`, `XEAAB\u2026` and `the EAAs` are left alone.\n- `user:pass@host[:port]` becomes `<user>:<hidden>@host[:port]`. This also works after `http://` and `socks5://`, for IPv4 and `[IPv6]`, and for passwords that contain `@`, `:` or `/`. Paths, `mailto:`/`email:`, `16:9@2x`, `https://user@host` and `git@github.com:org/repo` are not touched.\n- In `scrub_diag`, dict keys that are `act_` ids, 6+ digit ids, emails or integer ids are scrubbed. On collisions `put_unique` keeps both entries. The real `acl_sentry._before_send` path is tested. The Run summary attachment goes through `scrub_diag` too. The fb_api `scrub_value` uses the same `clean_key`.\n- Backtracking: I ran my own adversarial probes at about 100 KB each: slash/at mixes, 63-char label runs, many word starts with 240-char passwords, port-lookahead runs, bracket starts, 255/255 user/password runs, and email-key runs. Each finished in under 0.08 s for both `scrub` and `scrub_key`. At 1 MB the time grows linearly (0.065 s to 0.67 s). There is no catastrophic backtracking.\n- Local tests: 477 of 478 pass in the 1558, no-hang, every-shape, fb_api 1756, run_telemetry, run-summary attachment, sentry snapshot and test_platform files. The one failure is the finding below.\n\n## BLOCKING: the new CI platform rule on main fails (CI windows tests + \"Classify and check project tooling\" + \"Process instructions\" are red)\n`tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis` flags:\n    test_acl1558_scrubber_shapes.py:88 [backslash-path] r\"saved to C:\\Users\\demo@corp\\out.txt\",\nThe same failure appears in CI run 39592451242 (tooling job: 1 failed / 728 passed; windows tests: 1 failed / 326 passed). The \"Process instructions\" job fails only because it requires the tooling job.\nFix (test-only, no behaviour change): this line is data for the scrubber, not a Windows API. Add the waiver comment the rule asks for on that exact line, for example:\n    r\"saved to C:\\Users\\demo@corp\\out.txt\",  # linux-ok: scrubber input string, not a real path\nThen re-run tests/test_acl_test_platform.py and tests/test_acl1558_scrubber_shapes.py locally. Do not mark the whole file windows_only, because the scrubber must stay covered on Linux.\n\n## Non-blocking notes (no change required)\n- Over-scrubbing that errs toward privacy: `Error:foo@example.com` and `12:30@home.example.com` become `<user>:<hidden>@\u2026`. A date-like dict key `20261021` becomes `<id>`. All acceptable.\n- tracker-link run 39592451226 is the stale pre-queue run. The fix push will trigger a new one.\n\nNo owner live check needed (scrubber code only). I keep the lane and will review the fix delta.",
         "keep_lane": true
       }
     },
