@@ -117408,7 +117408,9 @@
         "session": "run_x1021_1816",
         "coordinator": "Coordinator-I1021A",
         "started_at": "2026-10-19T13:01:50+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "Lane recovered after owner-confirmed dead reviewer session. No verdict given. Review is stale against current main 0ea237b0; the author must refresh onto main and request a fresh independent review.",
+        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
