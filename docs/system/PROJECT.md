@@ -49,6 +49,13 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   After an unknown upload result the readback is repeated up to 6 times over about 2 minutes, counted in
   the per-campaign call budget. Writes without a file keep the short timeout. The write policy is
   unchanged and identical in Python and in the page helper.
+  Advantage+ placement guard (ACL-1050): the readback and the check of an earlier campaign also read
+  `advantage_state_info` (campaign) and `value_rules_applied` (ad set). The builder never creates
+  Advantage+ campaigns, so `advantage_state` must be `DISABLED`, `advantage_placement_state` must be
+  `DISABLED` when the ad sets have a manual placement list, and no value-rule set may be attached
+  (Meta's newer layout steers placements only by bid value rules, at most -90%, and Audience Network
+  gets budget). If Meta does not return `advantage_state_info` that check is skipped; placements are
+  still compared position by position. Live 21.10 on a test account: API-created campaigns kept the manual list.
   Campaign name (ACL-1902): before any write, in the run and in Check plan, the creator picks the first
   free name of `NAME`, `NAME_2` ... `NAME_20`. No live campaign with that name (deleted/archived do not
   count) -> use it; our own (ACL tag of that name) and identical to the builder -> reuse it (resume of a

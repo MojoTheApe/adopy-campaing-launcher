@@ -1,5 +1,16 @@
 # System history
 
+## ACL-1050 — Readback catches Advantage+ placements — 2026-10-21
+
+Meta's newer layout turns Ads Manager Leads campaigns into Advantage+ leads campaigns
+whose placements are steered only by bid value rules (at most -90%), so Audience
+Network gets budget. The API builder still creates non-Advantage+ campaigns with a
+manual placement list, and Meta keeps it (live check on a test account). The readback and the
+check of an earlier campaign now also compare `advantage_state` /
+`advantage_placement_state` (must be `DISABLED`) and `value_rules_applied` (must be
+off), so a silent switch is reported as a mismatch or sends the run to a new name.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1050).
+
 ## ACL-1381 — Consistent Builder ad-text wording — 2026-10-18
 
 Complete the older text-label request while preserving ACL-1769's later numbered

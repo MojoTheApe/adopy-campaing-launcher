@@ -1060,7 +1060,7 @@ class CampaignCreator:
         checks.append({"object": obj, "field": fld, "expected": expected, "actual": actual,
                        "ok": _same(expected, actual), "not_read": _not_read(expected, actual)})
 
-    def _campaign_checks(self, plan: CampaignPlan, camp: dict) -> list[dict]:
+    def _campaign_checks(self, plan: CampaignPlan, camp: dict, targetings: list[dict]) -> list[dict]:
         checks: list[dict] = []
 
         def check(f: str, e: Any, a: Any) -> None:
@@ -1073,6 +1073,15 @@ class CampaignCreator:
         check("daily_budget", str(want["daily_budget"]), str(camp.get("daily_budget") or ""))
         check("bid_strategy", BID_STRATEGY, camp.get("bid_strategy"))
         check("tag", plan.label, plan.label if plan.label in _labels(camp) else "")
+        # ACL-1050: Advantage+ кампания Meta сама раздаёт площадки (ставками value rules,
+        # без ручного списка), и Audience Network получает бюджет. Билдер такие кампании
+        # не создаёт. Поля нет в ответе — сверять нечем, площадки всё равно сверяются
+        # по позициям в группах.
+        adv = camp.get("advantage_state_info")
+        if isinstance(adv, dict):
+            check("advantage_campaign", ADVANTAGE_OFF, adv.get("advantage_state"))
+            if any(t.get("publisher_platforms") for t in targetings):
+                check("advantage_placements", ADVANTAGE_OFF, adv.get("advantage_placement_state"))
         return checks
 
     def _adset_checks(self, plan: CampaignPlan, ad_set: AdSetPlan, targeting: dict, row: dict,
@@ -1122,6 +1131,9 @@ class CampaignCreator:
         check("instagram_positions", targeting.get("instagram_positions") or [],
               t.get("instagram_positions") or [])
         check("devices", targeting.get("device_platforms") or [], t.get("device_platforms") or [])
+        # ACL-1050: правила ставок по площадкам (value rules) билдер не ставит; привязанный
+        # набор значит, что площадками управляет Meta, а не наш список.
+        check("value_rules", "off", "on" if row.get("value_rules_applied") else "off")
         return checks
 
     # -- найденные кампания и группы против плана (до любой записи под ними)
@@ -1134,7 +1146,7 @@ class CampaignCreator:
         """
         found: list[dict] = []
         camp = self.client.get(f"/{campaign_id}", {"fields": CAMPAIGN_FIELDS})
-        diffs = _describe_diffs(self._campaign_checks(plan, camp))
+        diffs = _describe_diffs(self._campaign_checks(plan, camp, targetings))
         if diffs:
             found.append({"object": f"campaign {plan.name!r}", "kind": "campaign", "differences": diffs})
         for ad_set, targeting, hit in zip(plan.ad_sets, targetings, found_sets):
@@ -1625,7 +1637,7 @@ class CampaignCreator:
             check(obj, "tag", plan.label, plan.label if plan.label in _labels(row) else "")
 
         camp = self.client.get(f"/{out.campaign_id}", {"fields": CAMPAIGN_FIELDS})
-        checks += self._campaign_checks(plan, camp)
+        checks += self._campaign_checks(plan, camp, targetings)
 
         # ACL-1775: форма принадлежит Странице - читаем список форм ещё раз, уже после записи.
         page_forms = (_forms.read_page_forms(self.client, plan.page_id)
@@ -1721,9 +1733,11 @@ class CampaignCreator:
         return {"ok": not mismatches, "checked": len(checks), "checks": checks, "mismatches": mismatches}
 
 
-CAMPAIGN_FIELDS = "name,objective,status,daily_budget,bid_strategy,adlabels{name}"
+CAMPAIGN_FIELDS = "name,objective,status,daily_budget,bid_strategy,adlabels{name},advantage_state_info"
 ADSET_FIELDS = ("name,status,campaign_id,optimization_goal,billing_event,destination_type,"
-                "promoted_object,targeting,start_time,end_time,adlabels{name}")
+                "promoted_object,targeting,start_time,end_time,adlabels{name},value_rules_applied")
+#: `advantage_state_info.*_state` кампании, которую создаёт билдер (ACL-1050).
+ADVANTAGE_OFF = "DISABLED"
 _PLACEMENT_FIELDS = ("publisher_platforms", "facebook_positions", "instagram_positions", "devices")
 #: Не показываем как «отличие от билдера»: имя и метку доказал поиск, остальное — сверка после записи.
 _SKIP_DIFF = {"name", "tag", "campaign_id", "schedule"}
@@ -1733,7 +1747,10 @@ _FIELD_TITLES = {"geo": "countries", "age_min": "minimum age", "age_max": "maxim
                  "optimization_goal": "optimization goal", "billing_event": "billing event",
                  "destination_type": "destination", "daily_budget": "daily budget",
                  "promoted_page": "Page of the ad set",
-                 "bid_strategy": "bid strategy"}
+                 "bid_strategy": "bid strategy",
+                 "advantage_campaign": "Advantage+ campaign",
+                 "advantage_placements": "Advantage+ placements",
+                 "value_rules": "placement value rules"}
 
 
 def _show(value: Any) -> str:
