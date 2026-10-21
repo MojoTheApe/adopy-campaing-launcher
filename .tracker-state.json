@@ -56949,7 +56949,7 @@
             "session": "run_p1021f_2050"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-P1021F2050",
         "coordinator": "Coordinator-P1021B",
         "handoff": {
@@ -56974,7 +56974,8 @@
           "actor": "Coordinator-P1021B",
           "session": "run_p1021b_1021",
           "report": "ACL-2050 approval is stale vs main 64e73a1e. Author merges current main into work/acl-2050-placement-readback (no force), reruns affected tests, hands off; fresh independent review and approval required. No content change requested."
-        }
+        },
+        "reviewer": "Reviewer-P1021G2050"
       },
       "1052": {
         "implementers": [
@@ -60313,6 +60314,10 @@
       "Worker-P1021F2050": {
         "session": "run_p1021f_2050",
         "role": "Worker"
+      },
+      "Reviewer-P1021G2050": {
+        "session": "run_p1021g_2050",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -63242,8 +63247,7 @@
       1054,
       710,
       1069,
-      840,
-      1050
+      840
     ],
     "review": {
       "id": "85d6b6ac4dc844c49bb56e0b4196ce08",
@@ -110347,6 +110351,13 @@
         "issue": 1050,
         "pr": 1058,
         "actor": "Worker-P1021F2050"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-21T22:23:39+00:00",
+        "pr": 1058,
+        "lane": "40fc0e8198054814ade5b9afbf22c1b1",
+        "actor": "Reviewer-P1021G2050"
       }
     ],
     "policy": {
@@ -120561,6 +120572,18 @@
         "session": "rev_p1021_2052",
         "coordinator": "Coordinator-P1021A",
         "started_at": "2026-10-21T09:47:33+00:00",
+        "state": "reviewing"
+      },
+      "1058": {
+        "id": "40fc0e8198054814ade5b9afbf22c1b1",
+        "pr": 1058,
+        "issues": [
+          1050
+        ],
+        "actor": "Reviewer-P1021G2050",
+        "session": "run_p1021g_2050",
+        "coordinator": "Coordinator-P1021B",
+        "started_at": "2026-10-21T22:23:39+00:00",
         "state": "reviewing"
       }
     },
