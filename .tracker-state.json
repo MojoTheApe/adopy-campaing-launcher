@@ -53878,7 +53878,7 @@
             "session": "run_w1021_1165"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1021165",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -53908,7 +53908,8 @@
           "actor": "Coordinator-C1016A",
           "session": "c7e3da-20261016",
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
-        }
+        },
+        "reviewer": "Reviewer-S1021165"
       },
       "72": {
         "implementers": [
@@ -59282,6 +59283,10 @@
       "Reviewer-X1021816": {
         "session": "run_x1021_1816",
         "role": "Reviewer"
+      },
+      "Reviewer-S1021165": {
+        "session": "run_s1021_1165",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -62180,8 +62185,7 @@
       1053,
       1054,
       710,
-      1069,
-      165
+      1069
     ],
     "review": {
       "id": "3cbfef49299841b6912867db49cc431f",
@@ -107659,6 +107663,13 @@
             "approved_at": "2026-10-21T14:51:16+00:00"
           }
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-21T14:52:53+00:00",
+        "pr": 953,
+        "lane": "e2174997980a4e36a04aedc21c45ea85",
+        "actor": "Reviewer-S1021165"
       }
     ],
     "policy": {
@@ -117509,6 +117520,18 @@
         "session": "run_s1021_106",
         "coordinator": "Coordinator-I1021A",
         "started_at": "2026-10-21T14:46:45+00:00",
+        "state": "reviewing"
+      },
+      "953": {
+        "id": "e2174997980a4e36a04aedc21c45ea85",
+        "pr": 953,
+        "issues": [
+          165
+        ],
+        "actor": "Reviewer-S1021165",
+        "session": "run_s1021_1165",
+        "coordinator": "Coordinator-I1021A",
+        "started_at": "2026-10-21T14:52:53+00:00",
         "state": "reviewing"
       }
     },
