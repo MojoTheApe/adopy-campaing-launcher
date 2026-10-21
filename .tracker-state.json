@@ -46900,6 +46900,18 @@
         "state": "implementing",
         "started_at": "2026-10-21T10:15:15+00:00",
         "from_status": "status:todo"
+      },
+      "626": {
+        "actor": "Worker-A1021626",
+        "session": "run_a1021_626w",
+        "coordinator": "Coordinator-A1021A",
+        "branch": "work/acl-1626-notes-set-aside",
+        "worktree": "C:\\acl-rv-626",
+        "id": "fcf06a92dac546ee9d0363bec8f245b0",
+        "issue": 626,
+        "state": "implementing",
+        "started_at": "2026-10-21T10:53:24+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -54363,9 +54375,13 @@
           {
             "actor": "Worker-A1021626",
             "session": "run_a1021_626w"
+          },
+          {
+            "actor": "Worker-A1021626",
+            "session": "run_a1021_626w"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-A1021626",
         "coordinator": "Coordinator-A1021A",
         "handoff": {
@@ -54390,8 +54406,8 @@
           "at": "2026-10-17T16:30:39.578097+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-A1021626",
-        "rework": true
+        "rework": true,
+        "rework_claim": "fcf06a92dac546ee9d0363bec8f245b0"
       },
       "968": {
         "implementers": [
@@ -105437,6 +105453,13 @@
         "issue": 1054,
         "pr": 1061,
         "actor": "Worker-F1021W2"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-21T10:53:24+00:00",
+        "issue": 626,
+        "claim": "fcf06a92dac546ee9d0363bec8f245b0",
+        "actor": "Worker-A1021626"
       }
     ],
     "policy": {
