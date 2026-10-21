@@ -1,5 +1,14 @@
 # Repository process history
 
+## 2026-10-21 — ACL-2071 manual acceptance of a published release tag
+
+A new manual workflow, `verify-published-tag.yml`, runs the unchanged isolated Windows
+install/update/restart/recovery acceptance for an explicitly given tag and its previous
+tag; the tag must be the currently latest published stable release. It produces the same delivery evidence, usable with
+`record-delivery --evidence-file`. Automatic delivery, its authorization,
+`complete-delivery.yml`, `release.yml` and the harness scripts are unchanged; the new
+workflow writes no tracker state.
+
 ## 2026-10-20 — ACL-2026 cumulative common support
 
 The owner requested one cumulative ACL update on the original Issue/PR. After the
