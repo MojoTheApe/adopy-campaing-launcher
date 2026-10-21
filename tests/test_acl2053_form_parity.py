@@ -274,3 +274,51 @@ def test_policy_refuses_a_null_setting():
     params = {**BASE, "block_display_for_non_targeted_viewer": None}
     with pytest.raises(wp.WriteRefused):
         _check(params)
+
+
+# ───────────────────────── правки по ревью ─────────────────────────
+
+def test_a_saved_legacy_locale_outside_the_list_keeps_loading_and_its_hash():
+    clean, errors = ft.validate({**TEMPLATE, "locale": "ES_MX"}, lenient_locale=True)
+    assert errors == [] and clean["locale"] == "ES_MX"
+    _c, strict = ft.validate({**TEMPLATE, "locale": "ES_MX"})
+    assert any("Unknown locale" in e for e in strict), "новый ввод - только из списка"
+    ft.library_path().write_text(json.dumps({"templates": [{**TEMPLATE, "id": "0123456789ab", "locale": "ES_MX"}]}),
+                                 encoding="utf-8")
+    loaded = ft.load()
+    assert [t["locale"] for t in loaded] == ["ES_MX"]
+    name_before = ft.form_name(loaded[0])
+    ft.save({**TEMPLATE, "name": "Another"})              # перезапись файла не стирает чужой шаблон
+    again = {t["id"]: t for t in ft.load()}
+    assert again["0123456789ab"]["locale"] == "ES_MX" and ft.form_name(again["0123456789ab"]) == name_before
+
+
+def test_resaving_a_template_keeps_its_own_legacy_locale_but_rejects_it_for_a_new_one():
+    ft.library_path().write_text(json.dumps({"templates": [{**TEMPLATE, "id": "0123456789ab", "locale": "UK_UA"}]}),
+                                 encoding="utf-8")
+    assert ft.save({**TEMPLATE, "id": "0123456789ab", "locale": "UK_UA", "headline": "New"})["locale"] == "UK_UA"
+    with pytest.raises(ft.TemplateError):
+        ft.save({**TEMPLATE, "name": "Fresh", "locale": "UK_UA"})
+    with pytest.raises(ft.TemplateError):
+        ft.save({**TEMPLATE, "id": "0123456789ab", "locale": "xx"})
+
+
+def test_unsorted_legacy_contacts_keep_the_old_canonical_order_and_hash():
+    a, _ = ft.validate(TEMPLATE)
+    b, _ = ft.validate({**TEMPLATE, "contact_fields": ["phone", "email", "name"]})
+    c, _ = ft.validate({**TEMPLATE, "contact_fields": ["email", "name"]})
+    assert b["contact_fields"] == ["name", "email", "phone"] and c["contact_fields"] == ["name", "email"]
+    assert ft.form_name(b) == ft.form_name(ft.validate({**TEMPLATE, "contact_fields": ["name", "email", "phone"]})[0])
+    d, _ = ft.validate({**TEMPLATE, "contact_fields": ["name", "email"]})
+    assert ft.form_name(c) == ft.form_name(d)
+    e, _ = ft.validate(d71_template(contact_fields=["phone", "first_name", "email"]))
+    assert e["contact_fields"] == ["phone", "first_name", "email"], "с именем/фамилией порядок задаёт автор"
+
+
+def test_the_page_helper_refuses_a_policy_without_bool_keys():
+    from tests.test_acl1776_create_forms import _node_form_matrix
+    from tests.test_acl1776_create_forms import ACT
+    policy = wp.policy_for_page(ACT, PAGE)
+    del policy["form_create"]["bool_keys"]
+    out = _node_form_matrix(policy)
+    assert out["ok"].get("error") == "write_refused"

@@ -58,6 +58,9 @@ LOCALES: tuple[str, ...] = (
 #: Тип формы -> `is_optimized_for_quality` (More volume = false, Higher intent = true).
 FORM_TYPES: dict[str, bool] = {"more_volume": False, "higher_intent": True}
 DEFAULT_FORM_TYPE = "more_volume"
+#: Сохранённые шаблоны могут нести язык вне списка (до ACL-2053 годился любой XX_YY): они
+#: продолжают грузиться и не стираются при перезаписи файла. Список - для нового ввода.
+_LOCALE_RE = re.compile(r"^[A-Z]{2}_[A-Z]{2}$")
 DEFAULT_LINK_TEXT = "Privacy Policy"
 DEFAULT_THANKS_TITLE = "Thank you"
 DEFAULT_BUTTON_TEXT = "Visit website"
@@ -85,9 +88,10 @@ def _multiline(value: Any) -> str:
     return "\n".join(" ".join(line.split()) for line in text.split("\n"))
 
 
-def validate(raw: Any) -> tuple[dict[str, Any], list[str]]:
+def validate(raw: Any, lenient_locale: bool = False) -> tuple[dict[str, Any], list[str]]:
     """Шаблон -> (чистый шаблон, ошибки). Без ошибок шаблон годен для формы.
 
+    `lenient_locale` - для уже сохранённых шаблонов: годится любой язык вида XX_YY.
     Ничего не угадывает: пустое обязательное поле - ошибка, лишний вопрос
     сверх потолка - ошибка (не обрезается молча).
     """
@@ -127,7 +131,12 @@ def validate(raw: Any) -> tuple[dict[str, Any], list[str]]:
         elif key not in chosen:
             chosen.append(key)
     # Порядок - как выбран (у сохранённых шаблонов он уже name, email, phone).
-    out["contact_fields"] = chosen
+    # Без имени/фамилии - старый канонический порядок (иначе хэш и тело запроса поплывут
+    # и на Странице появится дубль формы); с ними порядок задаёт автор.
+    if "first_name" in chosen or "last_name" in chosen:
+        out["contact_fields"] = chosen
+    else:
+        out["contact_fields"] = [k for k in ("name", "email", "phone") if k in chosen]
     if not chosen:
         errors.append("Choose at least one contact field (name, first name, last name, email or phone)")
     if "name" in chosen and ("first_name" in chosen or "last_name" in chosen):
@@ -199,7 +208,7 @@ def validate(raw: Any) -> tuple[dict[str, Any], list[str]]:
     out["button_text"] = _s(src.get("button_text")) or DEFAULT_BUTTON_TEXT
 
     locale = _s(src.get("locale")).upper().replace("-", "_") or DEFAULT_LOCALE
-    if locale not in LOCALES:
+    if not (locale in LOCALES or (lenient_locale and _LOCALE_RE.match(locale))):
         errors.append(f"Unknown locale: {locale} (choose a language from the list)")
     out["locale"] = locale
 
@@ -298,7 +307,7 @@ def _read(strict: bool = False) -> list[dict[str, Any]]:
     rows = data.get("templates") if isinstance(data, dict) else None
     out = []
     for row in rows if isinstance(rows, list) else []:
-        clean, errors = validate(row)
+        clean, errors = validate(row, lenient_locale=True)
         if clean["id"] and not errors:
             out.append(clean)
     return out
@@ -333,6 +342,11 @@ class TemplateError(ValueError):
 def save(raw: Any) -> dict[str, Any]:
     """Сохранить шаблон (новый - с новым id; с id - заменить). Ошибки - `TemplateError`."""
     clean, errors = validate(raw)
+    if errors and isinstance(raw, dict) and not [e for e in errors if not e.startswith("Unknown locale")]:
+        # Язык вне списка допустим лишь тому шаблону, у которого он уже сохранён.
+        old = next((t for t in load() if t["id"] == clean["id"]), None)
+        if old and old["locale"] == clean["locale"]:
+            clean, errors = validate(raw, lenient_locale=True)
     if errors:
         raise TemplateError(errors)
     with _transaction():

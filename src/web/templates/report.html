@@ -5831,7 +5831,8 @@ window.cbLayout = (function () {
 
   function squeeze(v) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); }
 
-  function validateTemplate(t) {
+  /* legacyLocale - язык уже сохранённого шаблона: он допустим, даже если его нет в списке. */
+  function validateTemplate(t, legacyLocale) {
     var e = [], L = FORM_LIMITS;
     t = t || {};
     var name = squeeze(t.name), headline = squeeze(t.headline);
@@ -5874,7 +5875,7 @@ window.cbLayout = (function () {
     var site = String(t.website_url || '').trim();
     if (site && !httpsUrl(site)) e.push('Website link on the thank-you screen must start with https://');
     var locale = squeeze(t.locale).toUpperCase().replace(/-/g, '_') || 'EN_US';
-    if (FORM_LOCALES.indexOf(locale) === -1) e.push('Unknown locale: ' + locale + ' (choose a language from the list)');
+    if (FORM_LOCALES.indexOf(locale) === -1 && !(legacyLocale && locale === String(legacyLocale).toUpperCase() && /^[A-Z]{2}_[A-Z]{2}$/.test(locale))) e.push('Unknown locale: ' + locale + ' (choose a language from the list)');
     var ftype = squeeze(t.form_type).toLowerCase() || 'more_volume';
     if (ftype !== 'more_volume' && ftype !== 'higher_intent') e.push('Form type must be More volume or Higher intent');
     return e;

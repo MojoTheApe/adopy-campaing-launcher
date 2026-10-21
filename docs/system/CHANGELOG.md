@@ -88,6 +88,10 @@ Parent ACL-1923 retains actual activation and publication verification.
   accepts on create (default EN_US; an unknown one gives "Unknown locale").
 - Every created form now also sends `is_optimized_for_quality` and `block_display_for_non_targeted_viewer=true`.
   The rest of the request body for an old template is byte-for-byte the same (golden test).
+- Existing forms found on the Page by name are reused unchanged and keep their old settings; only newly
+  created forms get `is_optimized_for_quality=false` and `block_display_for_non_targeted_viewer=true`.
+  Templates saved earlier with a locale outside the list (any XX_YY) keep loading and keep their form name;
+  the list applies to new input. Contact order of legacy templates (name/email/phone only) stays canonical.
 - Write policy: only the three new top-level keys (`is_optimized_for_quality`, `block_display_for_non_targeted_viewer`
   must be real booleans; `follow_up_action_url` https and length-checked) and the question types
   FIRST_NAME / LAST_NAME were added, in Python and in the page helper. Any tos/terms key is still refused.
