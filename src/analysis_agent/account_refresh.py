@@ -34,10 +34,16 @@ _GLOBAL_CODES: dict[str, tuple[str, float | None]] = {
     "call_budget": ("The call budget for account reads is used up. Raise the limit, then press Retry.", None),
 }
 
-#: Остывание по умолчанию, если в тексте нет минут (секунды; как COOLDOWN_S в account_spend_api).
-_CHECKPOINT_WAIT_S = 600.0
-_RATE_LIMIT_WAIT_S = 300.0
 _MINUTES = re.compile(r"about (\d+) min", re.I)
+
+#: Остановки Meta (`Snapshot.stop`), общие для всех аккаунтов: вид → (причина, ждать по таймеру?).
+#: Чекпоинт и потолок вызовов сами не проходят: только явный Retry, который удался.
+_GLOBAL_STOPS: dict[str, tuple[str, bool]] = {
+    "checkpoint": ("A profile is on a Facebook checkpoint. Solve it inside Multilogin, then press Retry.", False),
+    "rate_limited": ("Meta asked to slow down. Account reads are paused for a while.", True),
+    "policy_block": ("Meta refused the requests. Account reads are paused for a while.", True),
+    "call_budget": _GLOBAL_CODES["call_budget"][:1] + (False,),
+}
 
 
 def _parse_utc(value: str) -> float | None:
@@ -48,9 +54,12 @@ def _parse_utc(value: str) -> float | None:
 
 
 def is_fresh(account: str, *, now: float | None = None) -> bool:
-    """Последний снимок ok/partial моложе `FRESH_S`."""
+    """Последний снимок ok/partial моложе `FRESH_S`, без стопа и без упавшего шага."""
     snap = campaign_inventory.get_snapshot(account)
     if snap is None or snap.state not in ("ok", "partial"):
+        return False
+    # Обрыв на стопе Meta или упавший шаг — снимок неполный, свежим не считается.
+    if snap.stop or any(v == "failed" for v in snap.steps.values()):
         return False
     done = _parse_utc(snap.finished_at_utc)
     if done is None:
@@ -58,31 +67,45 @@ def is_fresh(account: str, *, now: float | None = None) -> bool:
     return 0 <= (time.time() if now is None else now) - done < FRESH_S
 
 
+def _cooldown_s(kind: str, text: str) -> float:
+    """Сколько ждать по таймеру: минуты из текста, иначе COOLDOWN_S по виду остановки."""
+    from src.analysis_agent.account_spend_api import COOLDOWN_S
+
+    mins = _MINUTES.search(text or "")
+    if mins:
+        return int(mins.group(1)) * 60.0
+    return float(COOLDOWN_S.get(kind, 300.0))
+
+
 def _global_stop(snap: Snapshot) -> tuple[str, float | None] | None:
-    """Общая остановка: `(причина по-английски, сколько секунд ждать | None)`."""
+    """Общая остановка: `(причина по-английски, сколько секунд ждать | None)`.
+
+    Сначала коды и вид остановки, строки — только запасной путь.
+    """
     code = (snap.error_code or "").strip()
     if code in _GLOBAL_CODES:
         return _GLOBAL_CODES[code]
-    # Кодов у остальных остановок нет — текст запасной путь.
+    kind = (snap.stop or "").strip()
+    if kind in _GLOBAL_STOPS:
+        reason, timed = _GLOBAL_STOPS[kind]
+        return reason, (_cooldown_s(kind, snap.error) if timed else None)
     text = (snap.error or "").lower()
     if "10061" in text or "launcher.mlx.yt" in text or "multilogin is not running" in text:
         return ("Multilogin is not reachable on this computer. Start the Multilogin app, then press Retry.", None)
-    mins = _MINUTES.search(text)
-    wait = int(mins.group(1)) * 60.0 if mins else None
     if "checkpoint" in text:
-        return ("A profile is on a Facebook checkpoint. Solve it inside Multilogin, then press Retry.",
-                wait or _CHECKPOINT_WAIT_S)
+        return _GLOBAL_STOPS["checkpoint"][0], None
     if "slow down" in text or "rate limit" in text:
-        return ("Meta asked to slow down. Account reads are paused for a while.", wait or _RATE_LIMIT_WAIT_S)
+        return _GLOBAL_STOPS["rate_limited"][0], _cooldown_s("rate_limited", text)
     if "call budget" in text:
         return _GLOBAL_CODES["call_budget"]
     return None
 
 
 def classify(snap: Snapshot) -> Literal["ok", "account", "global"]:
-    if snap.state != "failed":
+    # Стоп бывает и у «partial»-снимка без ошибки: клиент оборвал чтение на adsets/ads.
+    if snap.state != "failed" and not snap.stop:
         return "ok"
-    return "global" if _global_stop(snap) else "account"
+    return "global" if _global_stop(snap) else ("account" if snap.state == "failed" else "ok")
 
 
 class RefreshQueue:
@@ -92,9 +115,13 @@ class RefreshQueue:
         self._clock = clock
         self._lock = threading.Lock()
         self._wake = threading.Condition(self._lock)
+        #: Второй замок: два чтения одновременно не бывает ни при каком вызове _drain_once.
+        self._drain_lock = threading.Lock()
         self._heap: list[tuple[int, int, str]] = []
         #: account → (приоритет, номер, триггер, force); устаревшие записи кучи отбрасываются по номеру
         self._entries: dict[str, tuple[int, int, str, bool]] = {}
+        #: Аккаунты с явным Retry/действием: на паузе без таймера читаются в обход неё (только они).
+        self._bypass: set[str] = set()
         self._seq = 0
         self._running: str | None = None
         self._halt: dict | None = None
@@ -109,17 +136,21 @@ class RefreshQueue:
         halt = self._halt
         if halt and halt["until"] is not None and self._clock() >= halt["until"]:
             self._halt = None
+            self._bypass.clear()
 
     def request(self, account: str, trigger: str, *, force: bool = False) -> dict:
+        """Поставить аккаунт в очередь.
+
+        Явный `retry`/`action` (force) пересчитывает свежесть, но паузу всей очереди не снимает:
+        без таймера он читает только свой аккаунт мимо паузы, и пауза уходит, лишь если чтение
+        удалось; с таймером ждёт его конца. Остальные заявки на паузе встают в очередь.
+        """
         if trigger not in PRIORITY:
             raise ValueError(f"unknown trigger {trigger!r}")
         skipped = False
+        halted = False
         with self._lock:
             self._maybe_lift()
-            if force and trigger in ("retry", "action"):
-                self._halt = None
-            if self._halt is not None:
-                return {"queued": False, "reason": "halted"}
             if self._running == account:
                 return {"queued": False, "reason": "running"}
             if not force and is_fresh(account, now=self._clock()):
@@ -129,11 +160,15 @@ class RefreshQueue:
                 skipped = True
             else:
                 self._push(account, trigger, force)
+                halted = self._halt is not None
+                if halted and force and trigger in ("retry", "action") and self._halt["until"] is None:
+                    self._bypass.add(account)
+                    halted = False
                 self._wake.notify()
         if skipped:
             self._telemetry_skipped(account, trigger)
             return {"queued": False, "reason": "fresh"}
-        return {"queued": True, "reason": "queued"}
+        return {"queued": True, "reason": "halted" if halted else "queued"}
 
     def _push(self, account: str, trigger: str, force: bool) -> None:
         prio = PRIORITY[trigger]
@@ -151,8 +186,7 @@ class RefreshQueue:
         try:
             from src.analysis_agent import account_spend_api
 
-            account_spend_api._telemetry("skipped_fresh", account, True, 0.0,  # noqa: SLF001
-                                         {"trigger": trigger})
+            account_spend_api._telemetry_skip(account, trigger)  # noqa: SLF001
         except Exception:  # noqa: BLE001 — телеметрия не должна ломать очередь
             log.debug("skipped_fresh telemetry was not written", exc_info=True)
 
@@ -173,18 +207,28 @@ class RefreshQueue:
 
     # ───────── работа ─────────
 
-    def _pop(self) -> tuple[str, str] | None:
-        """Следующая заявка или None (пусто / пауза). Вызывать под замком."""
+    def _pop(self) -> tuple[str, str, bool] | None:
+        """Следующая заявка `(аккаунт, триггер, мимо паузы)` или None. Вызывать под замком."""
+        if self._stop:
+            return None
         self._maybe_lift()
         if self._halt is not None:
-            return None
+            # Пауза: только аккаунты с явным Retry/действием, самый приоритетный первым.
+            ready = [(e[:2], a) for a, e in self._entries.items() if a in self._bypass]
+            if not ready:
+                return None
+            _, account = min(ready)
+            entry = self._entries.pop(account)
+            self._bypass.discard(account)
+            return account, entry[2], True
+        self._bypass.clear()
         while self._heap:
             _prio, seq, account = heapq.heappop(self._heap)
             entry = self._entries.get(account)
             if entry is None or entry[1] != seq:
                 continue  # заменена более приоритетной
             del self._entries[account]
-            return account, entry[2]
+            return account, entry[2], False
         return None
 
     def _read(self, account: str, trigger: str) -> Snapshot:
@@ -195,35 +239,53 @@ class RefreshQueue:
 
     def _drain_once(self) -> int:
         """Прочитать всё, что стоит и не на паузе. Возвращает число чтений."""
-        done = 0
-        while True:
-            with self._lock:
-                item = self._pop()
-                if item is None:
-                    return done
-                account, trigger = item
-                self._running = account
-                self._rows[account] = {**self._rows.get(account, {}), "state": "updating", "error": ""}
-            snap = self._read(account, trigger)
-            verdict = classify(snap)
-            with self._lock:
-                self._running = None
-                if self._sweep and trigger == "schedule":
-                    self._sweep["done"] = min(self._sweep["total"], self._sweep["done"] + 1)
-                if verdict == "ok":
-                    self._rows[account] = {"list_at": snap.finished_at, "state": snap.state, "error": ""}
-                else:
-                    self._rows[account] = {"list_at": self._rows.get(account, {}).get("list_at", ""),
-                                           "state": "failed", "error": snap.error or snap.error_code or "failed"}
-                    if verdict == "global":
-                        reason, wait = _global_stop(snap)  # type: ignore[misc]
-                        self._halt = {"reason": reason,
-                                      "until": self._clock() + wait if wait else None}
-            done += 1
+        if not self._drain_lock.acquire(blocking=False):
+            return 0  # читает другой вызов: два чтения сразу не бывает
+        try:
+            done = 0
+            while True:
+                with self._lock:
+                    item = self._pop()
+                    if item is None:
+                        return done
+                    account, trigger, bypassed = item
+                    self._running = account
+                    self._rows[account] = {**self._rows.get(account, {}), "state": "updating", "error": ""}
+                snap = None
+                try:
+                    snap = self._read(account, trigger)
+                finally:
+                    with self._lock:
+                        self._running = None
+                        if snap is not None:
+                            self._settle(account, trigger, snap, bypassed)
+                done += 1
+        finally:
+            self._drain_lock.release()
+
+    def _settle(self, account: str, trigger: str, snap: Snapshot, bypassed: bool) -> None:
+        """Записать итог чтения. Под замком."""
+        verdict = classify(snap)
+        if self._sweep and trigger == "schedule":
+            self._sweep["done"] = min(self._sweep["total"], self._sweep["done"] + 1)
+        prev_at = self._rows.get(account, {}).get("list_at", "")
+        if verdict == "ok":
+            self._rows[account] = {"list_at": snap.finished_at, "state": snap.state, "error": ""}
+            if bypassed and self._halt is not None:
+                self._halt = None  # Retry удался — пауза без таймера снята
+                self._bypass.clear()
+            return
+        why = snap.error or (snap.problems[-1] if snap.problems else "") or snap.error_code or snap.stop or "failed"
+        self._rows[account] = {"list_at": prev_at, "state": "failed", "error": why}
+        if verdict == "global":
+            reason, wait = _global_stop(snap)  # type: ignore[misc]
+            self._halt = {"reason": reason, "until": self._clock() + wait if wait else None}
 
     def _has_work(self) -> bool:
         self._maybe_lift()
-        return bool(self._entries) and self._halt is None
+        if self._halt is None:
+            return bool(self._entries)
+        return any(a in self._bypass for a in self._entries)
 
     def _loop(self) -> None:
         while True:
@@ -241,19 +303,23 @@ class RefreshQueue:
     def start(self) -> None:
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
-                return
+                return  # старый поток ещё жив (в том числе дочитывает после stop): второго не заводим
             self._stop = False
             self._thread = threading.Thread(target=self._loop, name="account-refresh", daemon=True)
             self._thread.start()
 
-    def stop(self) -> None:
+    def stop(self, timeout: float = 10.0) -> None:
+        """Остановить рабочий поток: новых чтений не начнётся; идущее дочитывается."""
         with self._lock:
             self._stop = True
             self._wake.notify_all()
             thread = self._thread
-        if thread is not None:
-            thread.join(timeout=10.0)
-        self._thread = None
+        if thread is None:
+            return
+        thread.join(timeout=timeout)
+        with self._lock:
+            if not thread.is_alive() and self._thread is thread:
+                self._thread = None
 
 
 _QUEUE: RefreshQueue | None = None

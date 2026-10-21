@@ -617,6 +617,15 @@ def _telemetry(kind: str, account: str, ok: bool, took_s: float, sess_notes: dic
                  **({"trigger": trigger} if trigger else {})})
 
 
+def _telemetry_skip(account: str, trigger: str, reason: str = "skipped_fresh") -> None:
+    """ACL-2063: чтение пропущено (свежо) — отдельное событие, не шаг `api_read`.
+
+    Счёт `api_read` остаётся числом настоящих открытий профиля.
+    """
+    _tm.record({"event": "fb_api_skip", "kind": reason, "source": "api", "trigger": trigger})
+    _as._record("api_read_skip", True, 0.0, {"account": account, "reason": reason, "trigger": trigger})
+
+
 def _report_stop(exc: BaseException, account: str) -> None:
     if isinstance(exc, GraphStop) and not isinstance(exc, (LoggedOut, CallBudget)):
         _tm.report_stop(exc.kind, str(exc), {"account": account, "code": exc.code, "source": "dashboard"})

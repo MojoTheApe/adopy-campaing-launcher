@@ -123,6 +123,9 @@ class Snapshot:
     currency: str = ""
     error: str = ""
     error_code: str = ""
+    #: Вид остановки Meta/клиента (`checkpoint`, `rate_limited`, `call_budget`…), если чтение
+    #: оборвалось на ней — даже когда снимок «partial» и `error` пуст (ACL-2063).
+    stop: str = ""
     #: Человеческие причины «неполно»: страницы упёрлись в лимит, шаг не прочитан…
     problems: list[str] = field(default_factory=list)
     #: шаг → ok | truncated | failed | skipped
@@ -653,6 +656,7 @@ def read_into(snap: Snapshot, client: Any, act: str, *, structure_only: bool = F
                                                     "limit": 200}, max_pages=5)
         except GraphStop as exc:
             snap.steps[step] = "failed"
+            snap.stop = snap.stop or exc.kind
             snap.problems.append(f"{step} were not read: {_api._failure(snap.account, exc)[0]}")  # noqa: SLF001
             raise
         except GraphError as exc:
@@ -679,6 +683,7 @@ def read_into(snap: Snapshot, client: Any, act: str, *, structure_only: bool = F
                                          max_pages=3)
         except GraphStop as exc:
             snap.steps[step] = "failed"
+            snap.stop = snap.stop or exc.kind
             snap.problems.append(f"{level} insights were not read: {_api._failure(snap.account, exc)[0]}")  # noqa: SLF001
             raise
         except GraphError as exc:
@@ -780,6 +785,8 @@ def read_via_api(account: str, date_from: str = "", date_to: str = "", *,
         if isinstance(exc, GraphStop):
             stop = exc.kind
             _api._report_stop(exc, account)  # noqa: SLF001
+    if stop:
+        snap.stop = snap.stop or stop
     if trigger:
         notes = {**notes, "trigger": trigger}
     _api._telemetry("campaigns", account, snap.state != "failed", time.monotonic() - started, notes,  # noqa: SLF001
