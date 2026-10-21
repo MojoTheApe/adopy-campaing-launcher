@@ -113,7 +113,7 @@ class _Request:
     def __init__(self, form):
         self._form = form
 
-    async def form(self):
+    async def form(self, **_limits):  # read_form передаёт пределы разбора
         return self._form
 
 
