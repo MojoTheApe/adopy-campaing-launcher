@@ -80,6 +80,13 @@ POLICY: dict[str, tuple[str, str]] = {
         "not close the window, or reopening is switched off on this computer; nothing was "
         "killed and no draft was created - " + _profile.MESSAGES[_profile.OPEN_BY_HAND],
     ),
+    # ACL-1401: лаунчер Multilogin отказал в соединении при запуске профиля.
+    _profile.MLX_NOT_RUNNING: (
+        BLOCKING,
+        "the Multilogin app was not running on this computer (its local launcher refused "
+        "the connection), so the profile could not be opened and no draft was created - "
+        + _profile.MESSAGES[_profile.MLX_NOT_RUNNING],
+    ),
     _profile.RESTART_FAILED: (
         BLOCKING,
         "the profile's browser stopped answering and the robot's restart of the "
@@ -341,6 +348,11 @@ GUIDE: dict[str, tuple[str, str, str]] = {
         "The hand-opened window could not be reopened with automation (Multilogin did not "
         "close it, or reopening is switched off on this computer), so no draft was created.",
         "Close the profile window so Multilogin saves the session, then publish again.",
+    ),
+    _profile.MLX_NOT_RUNNING: (
+        "Multilogin is not running",
+        "The Multilogin app on this computer did not answer, so no profile was opened and no draft was created.",
+        "Start the Multilogin app, then publish again.",
     ),
     _profile.RESTART_FAILED: (
         "Profile restart failed",
