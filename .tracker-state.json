@@ -51762,7 +51762,7 @@
             "session": "refresh_acl1839_20261019"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-R1839C",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -51781,7 +51781,7 @@
         },
         "pr": 843,
         "queued_at": "2026-10-19T12:06:24+00:00",
-        "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
+        "review_report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578005+00:00",
@@ -51799,7 +51799,8 @@
           "actor": "Coordinator-M1011A",
           "session": "coord-m1011a-20261015",
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
-        }
+        },
+        "rework": true
       },
       "840": {
         "implementers": [
@@ -106702,6 +106703,18 @@
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
         },
         "batch_id": null
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-21T13:06:14+00:00",
+        "issue": 839,
+        "operation": {
+          "id": "5099d066346b48618f0b5f12ee7b498b",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -108947,50 +108960,6 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-19T15:11:33+00:00"
-      },
-      "839": {
-        "issue": 839,
-        "pr": 843,
-        "branch": "codex/acl-1839-connection-panel-layout",
-        "head_sha": "608486600db51b357dd49038119caae58fe527bf",
-        "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-        "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "scope": "61a8a6d1b11eb11ae8c76520e1447683670fdbb31e61059e754e07b8aac66c97",
-        "review": {
-          "kind": "independent-review",
-          "verdict": "approved",
-          "reviewer": "Reviewer-R1839X",
-          "review_session": "reviewer-r1839x-20261019",
-          "execution_lane": "eb0c8d9eba93438f886e993859f16f32",
-          "implementer": "Worker-R1839C",
-          "head_sha": "608486600db51b357dd49038119caae58fe527bf",
-          "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-          "tree_sha": "79f8ccc0c3ee99c2811b151aae5727e83b3fb5c2",
-          "issues": [
-            839
-          ],
-          "report": "PR843 changes the shared account connection partial and production CSS: _account_map_add.html gets aria-label 'Connected account' on the known-account select and 'Find Multilogin profile' on the profile search input; report.html gives .amap-ml min-width:0 and overflow-wrap:anywhere so long connection emails/timestamps wrap, bounds .amap-add select/input with min-width:0, max-width:min(15rem,100%) and border-box so they fit a 280 px host, and adds .amap-hits[hidden]{display:none} so cached results stay hidden. Add handler (previous-sibling select lookup), filtering, workspace switching and routes are untouched (diff has no JS/Python changes); all user-facing strings are English. Criteria: (1) selector/search fit 280 px and wider hosts - new real-Chromium test measures geometry over country/accounts/builder hosts x light/dark x 280/720/1040 px and asserts no scrollWidth overflow and no control outside the host; (2) long metadata wraps - synthetic 160-char email in the Multilogin line, no overflow; (3) accessible names - tested via get_by_role textbox/combobox by name; (4) both themes and all three presentations covered; (5) behavior unchanged - Add sibling contract asserted (select.nextElementSibling is Add), hidden results asserted display:none/height 0 then toggle. Tests run: tests/test_account_connection_layout.py 18 passed (real Chromium, 223 s) on the PR head; main's later changes did not touch any amap rules, so the fix is not obsolete. CI on the earlier head 02a9f8a8: all checks SUCCESS (linux tests 1-3, windows tests, ACL verification, Installer verification, descriptor, tracker-link, process instructions), build jobs SKIPPED by design; PR is MERGEABLE. Non-blocking nits: the test substitutes cached-hit and Multilogin text into the rendered HTML via string replace rather than driving the real painter JS; the cumulative diff was refreshed several times via empty main-merge commits. Delta re-review: the coordinator merged current main 1c6ab78e into the branch (new head 60848660); the resulting tree equals my earlier clean merge-tree of old head with main, `git diff work/main...HEAD` is the same four files (CHANGELOG, partial, report.html, layout test) with identical content, report.html .amap rules unaffected by main; tests/test_account_connection_layout.py re-run on the new head: 18 passed (80 s). CI on new head 60848660: all checks SUCCESS (ACL verification, linux tests 1-3, windows tests, Installer verification, descriptor, tracker-link, Process instructions, Classify jobs), Build/Verify build inputs SKIPPED by design. No live checks claimed.",
-          "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "recorded_at": "2026-10-19T17:41:38+00:00",
-          "issue_scopes": {
-            "839": "61a8a6d1b11eb11ae8c76520e1447683670fdbb31e61059e754e07b8aac66c97"
-          }
-        },
-        "lane": {
-          "id": "eb0c8d9eba93438f886e993859f16f32",
-          "pr": 843,
-          "issues": [
-            839
-          ],
-          "actor": "Reviewer-R1839X",
-          "session": "reviewer-r1839x-20261019",
-          "coordinator": "Coordinator-M1011A",
-          "started_at": "2026-10-19T14:44:03+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-19T17:42:20+00:00"
       },
       "165": {
         "issue": 165,
