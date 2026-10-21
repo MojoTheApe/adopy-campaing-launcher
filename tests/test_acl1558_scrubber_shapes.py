@@ -102,7 +102,7 @@ def test_ordinary_text_with_colons_and_at_signs_is_not_over_scrubbed(text):
 
 ID_KEY_DIAG = {
     "act_1234567": "ok",
-    "act_123456789012345": "disabled",
+    "act_1234567890123456": "disabled",
     "1234567": "ok",
     "123456789012345": "ok",
     "buyer.name@example.com": "profile A",
