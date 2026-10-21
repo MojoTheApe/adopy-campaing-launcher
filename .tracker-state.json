@@ -56844,7 +56844,7 @@
             "session": "run_p1021d_2050"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-P1021D2050",
         "coordinator": "Coordinator-P1021B",
         "handoff": {
@@ -56863,7 +56863,7 @@
         },
         "pr": 1058,
         "queued_at": "2026-10-21T13:54:02+00:00",
-        "review_report": "ACL-2050 approval is stale vs main 0ea237b0 (batch #1064 merged). Author merges current main into work/acl-2050-placement-readback (no force), reruns affected tests, hands off; fresh independent review and approval required. No content change requested.",
+        "review_report": "ACL-2050 approval is stale vs main 64e73a1e. Author merges current main into work/acl-2050-placement-readback (no force), reruns affected tests, hands off; fresh independent review and approval required. No content change requested.",
         "return_operation": {
           "id": "e8e33b6985674245be5990a8c959ebbc",
           "actor": "Coordinator-P1021B",
@@ -56876,7 +56876,8 @@
           "actor": "Coordinator-P1021B",
           "session": "run_p1021b_1021",
           "report": "ACL-2050 approval is stale vs main 64e73a1e. Author merges current main into work/acl-2050-placement-readback (no force), reruns affected tests, hands off; fresh independent review and approval required. No content change requested."
-        }
+        },
+        "rework": true
       },
       "1052": {
         "implementers": [
@@ -110197,6 +110198,18 @@
         "issue": 838,
         "claim": "74e6a44ca1a540f5b32fd469de6d4227",
         "actor": "Worker-W1021838"
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-21T22:16:57+00:00",
+        "issue": 1050,
+        "operation": {
+          "id": "e8e33b6985674245be5990a8c959ebbc",
+          "actor": "Coordinator-P1021B",
+          "session": "run_p1021b_1021",
+          "report": "ACL-2050 approval is stale vs main 64e73a1e. Author merges current main into work/acl-2050-placement-readback (no force), reruns affected tests, hands off; fresh independent review and approval required. No content change requested."
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -114545,50 +114558,6 @@
           "keep_lane": true
         },
         "approved_at": "2026-10-21T12:17:47+00:00"
-      },
-      "1050": {
-        "issue": 1050,
-        "pr": 1058,
-        "branch": "work/acl-2050-placement-readback",
-        "head_sha": "e87cdde5032d7b1f0e0ff2a35103de3e38548646",
-        "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
-        "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "scope": "1aefcfe1e72c2e3155f61da7fe6643fc80f2d6236181d8c5c8fe6d40b4da616b",
-        "review": {
-          "kind": "independent-review",
-          "verdict": "approved",
-          "reviewer": "Reviewer-P1021E2050",
-          "review_session": "rev_p1021e_2050",
-          "execution_lane": "31abb15e88a742dd89f051476b34d20d",
-          "implementer": "Worker-P1021D2050",
-          "head_sha": "e87cdde5032d7b1f0e0ff2a35103de3e38548646",
-          "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
-          "tree_sha": "9814146dab50135ac4b83c4d63c23ece2d075929",
-          "report": "Verdict: approved (independent re-review of head e87cdde5 against main 0ea237b0, which HEAD contains as a merge parent; merge-base == main).\nScope vs main: only src/fb_api/creator.py, tests/test_acl2050_placement_readback.py, docs/system/CHANGELOG.md.\nMerge check: e87cdde5 has no hand-resolved hunks in creator.py or the test file; the ACL-2050 +/- lines vs main are byte-identical to the pre-merge ACL-2050 diff of approved b3fb0f6d. Only conflict was CHANGELOG (both entries kept, ACL-2050 entry on top).\nSemantic interactions with main (ACL-1880 manual page, preflight changes): value-rules warning/diagnostic is counted before main's needs_manual_page() `continue`, so ad set placement checks, placements_summary and value-rule diagnostics still run for manual-completion runs while ad readback is skipped as main intends; campaign-level advantage_placement_state check and non-verified warning are independent of page resolution; preflight_account/page_names/MANUAL_PAGE_NOTICE do not touch read-back fields. diagnostics key is additive in the readback dict.\nSpec (Issue #1050): campaign advantage_state_info and ad set value_rules_applied/value_rule_set_id read via existing GETs; advantage_placement_state != DISABLED blocks; missing/different positions block via per-field checks plus order-insensitive placements_summary (in _SKIP_DIFF); missing state -> visible English warning + placement_state_verified=false; audience flag and value rules are warnings/diagnostics only. Read-only: no new write keys.\nTests: test_acl2050_placement_readback (9), test_acl1761_api_create, _existing_check, _parity, test_acl1902_name_suffix, test_acl1776_create_forms, test_acl1819_preflight, test_acl1880_manual_page: 414 passed. No full suite.\nNon-blocking (unchanged from prior review): advantage_placement_state has no _FIELD_TITLES entry; live check by owner that the new fields read without a Graph error on a real account.",
-          "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "issues": [
-            1050
-          ],
-          "recorded_at": "2026-10-21T14:01:58+00:00",
-          "issue_scopes": {
-            "1050": "1aefcfe1e72c2e3155f61da7fe6643fc80f2d6236181d8c5c8fe6d40b4da616b"
-          }
-        },
-        "lane": {
-          "id": "31abb15e88a742dd89f051476b34d20d",
-          "pr": 1058,
-          "issues": [
-            1050
-          ],
-          "actor": "Reviewer-P1021E2050",
-          "session": "rev_p1021e_2050",
-          "coordinator": "Coordinator-P1021B",
-          "started_at": "2026-10-21T13:56:37+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-21T14:31:51+00:00"
       },
       "1073": {
         "issue": 1073,
