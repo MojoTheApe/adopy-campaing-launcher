@@ -115638,7 +115638,51 @@
         "session": "run_a1021_142r",
         "coordinator": "Coordinator-A1021A",
         "started_at": "2026-10-21T11:39:07+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 142,
+          "pr": 983,
+          "branch": "work/acl-1142-per-job-pacing",
+          "head_sha": "fbb98941933cf2b6a45c73258ef2ee4aa3080752",
+          "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+          "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "49f1f917094019d1b79413f66028494e4ff8166d50e00ce2facfe24ce680e2ee",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-A1021142",
+            "implementer": "Worker-A1021142",
+            "head_sha": "fbb98941933cf2b6a45c73258ef2ee4aa3080752",
+            "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+            "tree_sha": "3e8c57ded618854933619bd56a5921df566b4934",
+            "execution_lane": "e9b5b0bb343b4ea9b17443d9c06def14",
+            "review_session": "run_a1021_142r",
+            "report": "ACL-1142 source review (Reviewer-A1021142), head fbb98941, base main ea41acbf. Verdict: approved.\n\nScope: 8 files. job_cancel.py, pacing.py, app.py, publish_jobs.py, report.html, CHANGELOG, a new test, and one updated ACL-1614 test. No unrelated files.\n\nWhat I checked:\n- Teach state per job. pacing keeps _TEACH_WAITING_JOBS keyed by job_cancel.current_job_id(). The job thread binds its id in _run_rpa, and the ads_manager_flow teach call runs on that same thread. A teach wait no longer sets the global _HUMAN_TAKEOVER, so the other jobs keep running. The manual Pause button still stops every job. end_teach_wait no longer clears a manual Pause either, which is a side improvement.\n- Endpoints. POST /rpa-teach/resume?job_id= releases exactly that job. With no job_id it works only while a single job waits, otherwise 409. An unknown job gives 400. GET /rpa-teach/status and /rpa-takeover name the account of each waiting job.\n- Snapshot. get_job adds teach {waiting, step, account_label}. The per-campaign result and telemetry shapes are unchanged.\n- UI. There is one banner per job (id rpa-teach-banner-<jobId>, in a shared stack) with the account escaped via aclEscHtml. Its button posts the job_id. Every running job is polled through cbPollJob, Publish-all included (follow()), so each job gets its own banner. The campaign dot of a waiting job turns build-attn (amber, pulsing). No stale references to the old banner id, _checkTeachMode or _TEACH_WAITING are left.\n- Acceptance. Two accounts at once, banner names the account, answering one does not release the other: covered by the unit and endpoint tests. The concurrency cap is the existing ACL_MAX_PROFILES (ACL-1603). Running campaigns are marked by the existing build dots. Reading and publishing still share the profile lock, untouched here.\n- Merge fbb98941. Only CHANGELOG conflicted; it keeps both sides. app.py, publish_jobs.py and report.html auto-merged. Their PR patches are byte-identical to the original commit daeaac12. main's intervening changes (ACL-1902 published_as and cbPollJob hunks) do not touch the teach paths. HEAD contains main.\n- No leaked identifiers: acl_scan_secrets is clean. Doc19/Doc20 are synthetic labels already used in about 42 tests. User-facing strings are in English. CHANGELOG is updated.\n\nTests (Windows, venv Python, -n 2), run on HEAD: test_acl1142_per_job_teach, test_pacing_takeover, test_acl1614_cancel_hung_job, test_acl1702_tab_watchdog, test_acl1603_stable_slots, test_create_wizard_flow, test_dashboard_stays_responsive_while_report_builds: 141 passed. test_campaign_build_dot_browser: under -n 2 one test timed out on HEAD. Run serially on HEAD, test_building_then_finished_clean_and_with_errors and test_a_blocked_account_pulses_orange... both pass. On unmodified main ea41acbf, with an identical test file, both fail locally at line 173 (the 'other' account's campaign row is absent). So that failure is pre-existing and load/environment-sensitive, and this PR does not cause it. Note: the main push CI on ea41acbf skipped the linux/windows test jobs, so 'main CI green' does not cover this test. The PR's own linux CI is the deciding signal.\n\nNon-blocking follow-ups:\n1. A job cancelled during wait_for_teach_resume (JobCancelled from job_cancel.check) leaves its entry in _TEACH_WAITING_JOBS. Effects: the dashboard-wide view keeps waiting=true, /rpa-takeover reports active, and tab_watchdog._human_holds (which reads the global view) skips unblocking for all later jobs until the dashboard restarts. This is pre-existing: on main the same case left _TEACH_WAITING and _HUMAN_TAKEOVER stuck, which was worse. Suggested fix: pop the job's entry in a finally block (wait_for_teach_resume, or _run_job's finally via end_teach_wait(job_id=job_id)).\n2. tab_watchdog._human_holds still uses the dashboard-wide view, so one job's teach wait suppresses the other jobs' tab watchdog. That direction is conservative; it could pass the job id.\n3. The Hide button still reappears on the next 2 s poll, as it did before.\n4. _TEACH_RESULTS is never pruned per job. The leak is tiny.\n\nLive check: an owner two-account teach scenario (two builds, one waits for Website, the banner names the right account, continue releases only it). It was not run here because it needs real profiles.",
+            "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              142
+            ],
+            "recorded_at": "2026-10-21T11:55:00+00:00",
+            "issue_scopes": {
+              "142": "49f1f917094019d1b79413f66028494e4ff8166d50e00ce2facfe24ce680e2ee"
+            }
+          },
+          "lane": {
+            "id": "e9b5b0bb343b4ea9b17443d9c06def14",
+            "pr": 983,
+            "issues": [
+              142
+            ],
+            "actor": "Reviewer-A1021142",
+            "session": "run_a1021_142r",
+            "coordinator": "Coordinator-A1021A",
+            "started_at": "2026-10-21T11:39:07+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-21T11:58:07+00:00"
+        }
       },
       "975": {
         "id": "660fc5d221644f569004957afbef6ff6",
