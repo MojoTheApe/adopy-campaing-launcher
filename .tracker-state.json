@@ -46993,20 +46993,6 @@
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
       },
-      "710": {
-        "actor": "Worker-W1021710",
-        "session": "run_w1021_710",
-        "coordinator": "Coordinator-I1021A",
-        "branch": "codex/acl-1710-ci-chromium",
-        "worktree": "C:\\acl-int-w710",
-        "id": "a155a25beb2f46ed88a09edeb81da12b",
-        "issue": 710,
-        "state": "handoff",
-        "started_at": "2026-10-21T12:38:29+00:00",
-        "from_status": "status:todo",
-        "pr": 711,
-        "report": "ACL-1710 handoff (Worker-W1021710), PR #711, head d7ffe456.\nChanges: .github/workflows/ci.yml (bounded Chromium install via scripts/ci_retry.sh: Linux 3x300 s, step 16 min; Windows 3x180 s, step 12 min; Playwright download cached by version; apt mirror switched off Azure; apt lock cleanup between attempts; job ceilings Linux 32 / Windows 30), scripts/ci_retry.sh, tests/test_ci_layout.py, tests/test_ci_retry.py, docs/repository/WORKFLOW.md (conflicts with main resolved, numbers made consistent).\nDeviation from Issue: Linux job ceiling 32 instead of ~25, because shard 1 normally runs 20-22 min and the longest green was 29.2 min; 25 would fail normal runs.\nNot done: throwaway-branch `sleep 400` hang run (too expensive); hang proven locally by tests/test_ci_retry.py. 30+ min job check via acl_ci_minutes.py is a post-merge follow-up.\nCI on d7ffe456: all green (linux 3.11/3.13 shards 15-23 min, windows 4m39s, installer, process instructions); Chromium install step 31 s Linux (cold cache), 25 s Windows; only tracker-link failed, because the issue was not yet in Review (expected until this handoff).\nFocused local tests: test_ci_layout + test_ci_retry: 12 passed, 1 skipped."
-      },
       "1039": {
         "actor": "Worker-W1021039",
         "session": "run_w1021_2039",
@@ -49880,24 +49866,25 @@
             "session": "run_w1021_710"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1021710",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
-          "actor": "Worker-WX1012A",
-          "session": "work_wx1012a_20261012",
-          "coordinator": "Coordinator-CX1012A",
+          "actor": "Worker-W1021710",
+          "session": "run_w1021_710",
+          "coordinator": "Coordinator-I1021A",
           "branch": "codex/acl-1710-ci-chromium",
-          "worktree": "C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-1710-2026-10-12",
-          "id": "9da99219db3f424aab59c37cfc78bc53",
+          "worktree": "C:\\acl-int-w710",
+          "id": "a155a25beb2f46ed88a09edeb81da12b",
           "issue": 710,
-          "state": "stopping",
-          "started_at": "2026-10-12T20:20:44+00:00",
+          "state": "handoff",
+          "started_at": "2026-10-21T12:38:29+00:00",
           "from_status": "status:todo",
-          "report": "# ACL-1710 preservation report \u2014 WIP committed, implementation unfinished\n\nActual Worker: `Worker-WX1012A` / `work_wx1012a_20261012` (`local_inventory`). Parent Coordinator: `Coordinator-CX1012A` / `coord_cx1012a_20261012`. Fresh implementation claim: `9da99219db3f424aab59c37cfc78bc53`.\n\nIssue: https://github.com/MojoTheApe/adopy-campaing-launcher/issues/710\nExisting source PR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/711\nOriginal source branch: `codex/acl-1710-ci-chromium`\nOriginal dirty checkout: `C:\\acl-1710-ci-chromium`\nPreservation checkout: `C:\\Users\\EvgeniSedin\\Desktop\\ACM-Worker-1710-2026-10-12`\nVerified pre-copy source and destination HEAD: `bf5a3e254e44d98dfeef60d1f8366783aaf96f27`\nPreservation commit: `27b62a2b054eaa38e7d0905bcfb4492df38f0043`.\nPreserved tree: `82da73c7022d605d037b9fdbc62802e5be13ce37`.\nThe Coordinator explicitly pushed the original branch to the official repository; GitHub confirmed this head and `isDraft: true` for PR #711. The Desktop Worker checkout is clean; the original dirty checkout remains unchanged.\n\n## Preservation performed\n\nRead full saved Issue #710 and PR #711, independent factual recovery return, and repository instructions. The Coordinator verified the original HEAD, exactly four tracked modifications and no untracked files through the required approval, then recorded their SHA256 values in `acl1710-original-source-sha256.json`. The Worker verified the clean destination's HEAD/branch and copied only these four paths:\n\n- `.github/workflows/ci.yml`\n- `docs/repository/WORKFLOW.md`\n- `scripts/ci_retry.sh`\n- `tests/test_ci_layout.py`\n\nEach path was constrained to the explicit source/destination roots and checked as an ordinary file. Every original file matched the Coordinator's pre-copy hash; each copied destination matched the same hash; original hashes remained unchanged afterward. Evidence: `acl1710-preservation-manifest.json`. The copy operation wrote only the four destination files and private audit evidence. The original source/index was not edited, staged, reset or cleaned.\n\nThe preserved WIP switches away from the Azure Ubuntu APT mirror, changes Linux attempts to 150 seconds and step/job ceilings to 10/32 minutes, requires GNU coreutils timeout, bounds retry cleanup to 60 seconds, and updates layout assertions/documentation. The historical patch is +23/-10 across four files. No source improvement, consistency fix or acceptance rewrite was made during preservation.\n\n## Unfinished work \u2014 no readiness claim\n\nThe Issue remains incomplete. Numerical choices differ from the committed PR/original Issue (300-second attempts, 16-minute step, approximately 25-minute Linux job). Preserved documentation still says both 300 and 150 seconds; a workflow comment says 16 minutes while the field says 10. These inconsistencies were deliberately preserved as evidence, not accepted as a final design.\n\nBefore readiness, a legitimate continuing Worker must reconcile the intended limits with the existing acceptance, verify Linux and Windows bounded retry/cleanup/cache behavior and GNU timeout availability, retain check names/tree reuse/release gates, establish the requested before/after comparison across three runs and the real-limit hang/job-duration evidence, reconcile current-main compatibility and the legacy stage-target source route, and obtain fresh required CI plus independent source review. The old PR's quoted local tests/hang simulation were not rerun or independently accepted during this preservation.\n\nActual preservation checks: the Coordinator's secret scan passed and `git diff --check` passed. The commit contains exactly the four named files, 23 insertions and 10 deletions. No test suite, timing benchmark, real-limit hang simulation or new acceptance run was performed for preservation. These integrity checks cannot satisfy the missing performance, hang and follow-up acceptance.\n\n## Stop disposition\n\nThe preservation commit and official push are confirmed and the existing PR is draft. Use supported `execution stop` with this actual Worker/session/claim and this report: preservation complete, implementation unfinished. Do not hand off as ready, record approval, admit a batch, or merge this WIP. No task ownership or acceptance is inferred from the historical checkout. No live profiles, deployments, advertising objects or installation changes were involved."
+          "pr": 711,
+          "report": "ACL-1710 handoff (Worker-W1021710), PR #711, head d7ffe456.\nChanges: .github/workflows/ci.yml (bounded Chromium install via scripts/ci_retry.sh: Linux 3x300 s, step 16 min; Windows 3x180 s, step 12 min; Playwright download cached by version; apt mirror switched off Azure; apt lock cleanup between attempts; job ceilings Linux 32 / Windows 30), scripts/ci_retry.sh, tests/test_ci_layout.py, tests/test_ci_retry.py, docs/repository/WORKFLOW.md (conflicts with main resolved, numbers made consistent).\nDeviation from Issue: Linux job ceiling 32 instead of ~25, because shard 1 normally runs 20-22 min and the longest green was 29.2 min; 25 would fail normal runs.\nNot done: throwaway-branch `sleep 400` hang run (too expensive); hang proven locally by tests/test_ci_retry.py. 30+ min job check via acl_ci_minutes.py is a post-merge follow-up.\nCI on d7ffe456: all green (linux 3.11/3.13 shards 15-23 min, windows 4m39s, installer, process instructions); Chromium install step 31 s Linux (cold cache), 25 s Windows; only tracker-link failed, because the issue was not yet in Review (expected until this handoff).\nFocused local tests: test_ci_layout + test_ci_retry: 12 passed, 1 skipped."
         },
         "pr": 711,
-        "queued_at": "2026-10-07T20:01:21+00:00",
+        "queued_at": "2026-10-21T13:07:48+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -61930,7 +61917,8 @@
     },
     "review_queue": [
       1053,
-      1054
+      1054,
+      710
     ],
     "review": {
       "id": "3cbfef49299841b6912867db49cc431f",
@@ -106754,6 +106742,13 @@
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
         },
         "batch_id": null
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-21T13:07:48+00:00",
+        "issue": 710,
+        "pr": 711,
+        "actor": "Worker-W1021710"
       }
     ],
     "policy": {
