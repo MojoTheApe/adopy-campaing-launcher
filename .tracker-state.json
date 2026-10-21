@@ -47030,19 +47030,6 @@
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
       },
-      "1063": {
-        "actor": "Worker-K1021A3",
-        "session": "run_k1021a3_2063",
-        "coordinator": "Coordinator-K1021A",
-        "branch": "work/acl-2063-scheduled-account-reads",
-        "worktree": "C:\\acl-auto-read",
-        "id": "91a0c06d72414058a3cc0c9b10c9f47e",
-        "issue": 1063,
-        "state": "stopping",
-        "started_at": "2026-10-21T13:19:31+00:00",
-        "from_status": "status:idea",
-        "report": "# ACL-2063 paused by owner 2026-10-21: Delivery queue first\n\nWork saved on branch work/acl-2063-scheduled-account-reads (pushed to MojoTheApe, no PR), head 0454a2f6, base main ea41acbf, worktree C:\\acl-auto-read.\nDone: design + plan (docs/superpowers/...), Task 1 structure-only read (f34c3466, 893d5402, reviewed, fixes applied), Task 2 refresh queue (170d5b22, 0454a2f6).\nOpen Task 2 re-review findings (must be fixed before Task 3):\n1. Critical: a successful forced read of another account clears a checkpoint halt raised by a different profile; checkpoint halts must lift only for the halting account (store kind+account in the halt).\n2. start() after a timed-out stop() leaves no worker (_stop stays True).\n3. Halt is in-memory per process; checkpoint stop must persist (write stop into attempt) and be honoured after restart / by the other dashboard process.\n4. attention/schedule re-read accounts whose last attempt failed recently; skip if the failed attempt is younger than FRESH_S.\n5. Freshness checked only at enqueue; re-check at pop.\nMinor: cooldown from text must be max(text, COOLDOWN_S); partial with logged_out/page_unresponsive \u2192 account; forced request for the running account is dropped; schedule entries need a window tag; row stays \"updating\" on BaseException.\nRemaining: Tasks 3-8 of the plan, merge current main, PR, review. No live runs were done."
-      },
       "1050": {
         "actor": "Worker-P1021D2050",
         "session": "run_p1021d_2050",
@@ -56269,9 +56256,22 @@
             "session": "run_k1021a3_2063"
           }
         ],
-        "state": "implementing",
+        "state": "stopped",
         "worker": "Worker-K1021A3",
-        "coordinator": "Coordinator-K1021A"
+        "coordinator": "Coordinator-K1021A",
+        "handoff": {
+          "actor": "Worker-K1021A3",
+          "session": "run_k1021a3_2063",
+          "coordinator": "Coordinator-K1021A",
+          "branch": "work/acl-2063-scheduled-account-reads",
+          "worktree": "C:\\acl-auto-read",
+          "id": "91a0c06d72414058a3cc0c9b10c9f47e",
+          "issue": 1063,
+          "state": "stopping",
+          "started_at": "2026-10-21T13:19:31+00:00",
+          "from_status": "status:idea",
+          "report": "# ACL-2063 paused by owner 2026-10-21: Delivery queue first\n\nWork saved on branch work/acl-2063-scheduled-account-reads (pushed to MojoTheApe, no PR), head 0454a2f6, base main ea41acbf, worktree C:\\acl-auto-read.\nDone: design + plan (docs/superpowers/...), Task 1 structure-only read (f34c3466, 893d5402, reviewed, fixes applied), Task 2 refresh queue (170d5b22, 0454a2f6).\nOpen Task 2 re-review findings (must be fixed before Task 3):\n1. Critical: a successful forced read of another account clears a checkpoint halt raised by a different profile; checkpoint halts must lift only for the halting account (store kind+account in the halt).\n2. start() after a timed-out stop() leaves no worker (_stop stays True).\n3. Halt is in-memory per process; checkpoint stop must persist (write stop into attempt) and be honoured after restart / by the other dashboard process.\n4. attention/schedule re-read accounts whose last attempt failed recently; skip if the failed attempt is younger than FRESH_S.\n5. Freshness checked only at enqueue; re-check at pop.\nMinor: cooldown from text must be max(text, COOLDOWN_S); partial with logged_out/page_unresponsive \u2192 account; forced request for the running account is dropped; schedule entries need a window tag; row stays \"updating\" on BaseException.\nRemaining: Tasks 3-8 of the plan, merge current main, PR, review. No live runs were done."
+        }
       }
     },
     "actors": {
@@ -107317,6 +107317,13 @@
         "issue": 165,
         "claim": "15a71cb9e78d4965b19b7d67ebe39dda",
         "actor": "Worker-W1021165"
+      },
+      {
+        "event": "stopped",
+        "at": "2026-10-21T13:52:17+00:00",
+        "issue": 1063,
+        "actor": "Worker-K1021A3",
+        "report": "# ACL-2063 paused by owner 2026-10-21: Delivery queue first\n\nWork saved on branch work/acl-2063-scheduled-account-reads (pushed to MojoTheApe, no PR), head 0454a2f6, base main ea41acbf, worktree C:\\acl-auto-read.\nDone: design + plan (docs/superpowers/...), Task 1 structure-only read (f34c3466, 893d5402, reviewed, fixes applied), Task 2 refresh queue (170d5b22, 0454a2f6).\nOpen Task 2 re-review findings (must be fixed before Task 3):\n1. Critical: a successful forced read of another account clears a checkpoint halt raised by a different profile; checkpoint halts must lift only for the halting account (store kind+account in the halt).\n2. start() after a timed-out stop() leaves no worker (_stop stays True).\n3. Halt is in-memory per process; checkpoint stop must persist (write stop into attempt) and be honoured after restart / by the other dashboard process.\n4. attention/schedule re-read accounts whose last attempt failed recently; skip if the failed attempt is younger than FRESH_S.\n5. Freshness checked only at enqueue; re-check at pop.\nMinor: cooldown from text must be max(text, COOLDOWN_S); partial with logged_out/page_unresponsive \u2192 account; forced request for the running account is dropped; schedule entries need a window tag; row stays \"updating\" on BaseException.\nRemaining: Tasks 3-8 of the plan, merge current main, PR, review. No live runs were done."
       }
     ],
     "policy": {
