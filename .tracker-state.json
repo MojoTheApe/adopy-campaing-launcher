@@ -54894,7 +54894,7 @@
             "session": "run_w1021_377"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-W1021377",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -105363,6 +105363,68 @@
           "report": "ACL-1626 (PR 967) review return at d460cfba - one blocking finding (CI red), content otherwise approved.\n\nBLOCKING: required CI \"linux tests (3.13, 1)\" fails on this head (run 39581343441, job 119160086116): 3 failed, 3034 passed.\n  FAILED tests/test_acl1620_account_notes.py::test_a_damaged_file_is_reported_in_the_save_response_and_logged\n  FAILED tests/test_acl1620_account_notes.py::test_two_corruptions_in_the_same_millisecond_keep_both_copies\n  FAILED tests/test_acl1620_account_notes.py::test_the_backup_name_has_millisecond_resolution\n  - RuntimeError: asyncio.run() cannot be called from a running event loop\nCause: the new tests were appended at the end of the module, after the module-scoped `browser` fixture (line ~222). Once that fixture has started sync Playwright, an event loop is running in the main thread for the rest of the module, so `_post()` (asyncio.run at line 47) fails. They pass only when run in isolation (that is why the handoff saw \"3 passed\" separately). This is deterministic, not an environment issue; it also reproduces locally.\nFix (either): move the four new tests above the `browser` fixture, next to the other non-browser tests (e.g. after test_a_wrong_root_is_preserved_too); or make `_post` run the handler in a worker thread as the fixture's route handler already does (lines ~248-251). Moving the tests is the smaller change. Then run the whole file in one process (non-browser tests must pass even when browser tests fail/skip locally) and get CI green.\n\nEverything else checked and fine (no other change needed): spec 1 (log warning + set_aside/warning in the save response + role=alert banner with the exact Issue wording), spec 2 (ms-resolution name + collision counter under the machine-file lock), scope limited to the 4 files, PR body has exactly one Tracker issues line, no leaks, English UI text, merge of main ea41acbf clean.\nNon-blocking (optional in the same fix): add a short docs/system/CHANGELOG.md entry for the new response fields and banner; the banner itself is only checked by a source-string test.\nSpec 3 (owner live check: write/edit/clear a note, restart the dashboard, note survives) remains for the owner separately; not a reason for this return.",
           "keep_lane": true
         }
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-21T10:51:02+00:00",
+        "issue": 377,
+        "pr": 935,
+        "review": {
+          "id": "2e776a8f13264b5e8b6f42cd7e542b02",
+          "pr": 935,
+          "issues": [
+            377
+          ],
+          "actor": "Reviewer-S1021377",
+          "session": "run_s1021_377",
+          "coordinator": "Coordinator-I1021A",
+          "started_at": "2026-10-21T10:18:05+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 377,
+            "pr": 935,
+            "branch": "work/acl-1377-workbook-key",
+            "head_sha": "33e09b6791038d25560d7a42548cc7dd46e7311d",
+            "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+            "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "ba1d91de10f6ab2391b19b6d8e3faeff12e10c23d3500ddb0530bf15a1ad84d1",
+            "review": {
+              "kind": "independent-review",
+              "implementer": "Worker-W1021377",
+              "reviewer": "Reviewer-S1021377",
+              "head_sha": "33e09b6791038d25560d7a42548cc7dd46e7311d",
+              "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "tree_sha": "cee7b9fb69e69a5a3648cc7a6bfdd26166694f46",
+              "verdict": "approved",
+              "execution_lane": "2e776a8f13264b5e8b6f42cd7e542b02",
+              "review_session": "run_s1021_377",
+              "report": "ACL-1377 / PR935 independent re-review on current main ea41acbf. Delta since previously approved e548e74f is only the clean main merge 33e09b67 (git show --cc shows no hand-resolved hunks). Diff vs main is exactly src/web/app.py, src/web/templates/report.html, tests/test_dashboard_review.py, tests/test_the_account_tree_on_screen.py. Behaviour: _alias_without_id_suffix falls back to a compact alphanumeric key only after the exact key finds nothing, unique match only, rule-keys excluded, country-scoped; Facebook_6540_<id> -> Facebook6540 without collision with 6545/65400; existing matches unchanged. Meta-only campaign rows get a quiet 'not in workbook' hint, suppressed for zero Meta numbers and an empty workbook. Tests cover match, near-name collision, ambiguity, underscore-priority, country scope, tree hint on/off. Source CI green on the head: descriptor, tracker-link (passed on one rerun after an early-state failure), process instructions, linux 1-3, windows (passed on one rerun after unrelated bootstrap-harness 60s timeout), installer verification.",
+              "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                377
+              ],
+              "recorded_at": "2026-10-21T10:49:07+00:00",
+              "issue_scopes": {
+                "377": "ba1d91de10f6ab2391b19b6d8e3faeff12e10c23d3500ddb0530bf15a1ad84d1"
+              }
+            },
+            "lane": {
+              "id": "2e776a8f13264b5e8b6f42cd7e542b02",
+              "pr": 935,
+              "issues": [
+                377
+              ],
+              "actor": "Reviewer-S1021377",
+              "session": "run_s1021_377",
+              "coordinator": "Coordinator-I1021A",
+              "started_at": "2026-10-21T10:18:05+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-21T10:49:53+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -109969,6 +110031,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-21T10:00:36+00:00"
+      },
+      "377": {
+        "issue": 377,
+        "pr": 935,
+        "branch": "work/acl-1377-workbook-key",
+        "head_sha": "33e09b6791038d25560d7a42548cc7dd46e7311d",
+        "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+        "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "ba1d91de10f6ab2391b19b6d8e3faeff12e10c23d3500ddb0530bf15a1ad84d1",
+        "review": {
+          "kind": "independent-review",
+          "implementer": "Worker-W1021377",
+          "reviewer": "Reviewer-S1021377",
+          "head_sha": "33e09b6791038d25560d7a42548cc7dd46e7311d",
+          "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+          "tree_sha": "cee7b9fb69e69a5a3648cc7a6bfdd26166694f46",
+          "verdict": "approved",
+          "execution_lane": "2e776a8f13264b5e8b6f42cd7e542b02",
+          "review_session": "run_s1021_377",
+          "report": "ACL-1377 / PR935 independent re-review on current main ea41acbf. Delta since previously approved e548e74f is only the clean main merge 33e09b67 (git show --cc shows no hand-resolved hunks). Diff vs main is exactly src/web/app.py, src/web/templates/report.html, tests/test_dashboard_review.py, tests/test_the_account_tree_on_screen.py. Behaviour: _alias_without_id_suffix falls back to a compact alphanumeric key only after the exact key finds nothing, unique match only, rule-keys excluded, country-scoped; Facebook_6540_<id> -> Facebook6540 without collision with 6545/65400; existing matches unchanged. Meta-only campaign rows get a quiet 'not in workbook' hint, suppressed for zero Meta numbers and an empty workbook. Tests cover match, near-name collision, ambiguity, underscore-priority, country scope, tree hint on/off. Source CI green on the head: descriptor, tracker-link (passed on one rerun after an early-state failure), process instructions, linux 1-3, windows (passed on one rerun after unrelated bootstrap-harness 60s timeout), installer verification.",
+          "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            377
+          ],
+          "recorded_at": "2026-10-21T10:49:07+00:00",
+          "issue_scopes": {
+            "377": "ba1d91de10f6ab2391b19b6d8e3faeff12e10c23d3500ddb0530bf15a1ad84d1"
+          }
+        },
+        "lane": {
+          "id": "2e776a8f13264b5e8b6f42cd7e542b02",
+          "pr": 935,
+          "issues": [
+            377
+          ],
+          "actor": "Reviewer-S1021377",
+          "session": "run_s1021_377",
+          "coordinator": "Coordinator-I1021A",
+          "started_at": "2026-10-21T10:18:05+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-21T10:49:53+00:00"
       }
     },
     "batches": {
@@ -115113,62 +115219,6 @@
         "state": "fixing",
         "report": "ACL-1626 (PR 967) review return at d460cfba - one blocking finding (CI red), content otherwise approved.\n\nBLOCKING: required CI \"linux tests (3.13, 1)\" fails on this head (run 39581343441, job 119160086116): 3 failed, 3034 passed.\n  FAILED tests/test_acl1620_account_notes.py::test_a_damaged_file_is_reported_in_the_save_response_and_logged\n  FAILED tests/test_acl1620_account_notes.py::test_two_corruptions_in_the_same_millisecond_keep_both_copies\n  FAILED tests/test_acl1620_account_notes.py::test_the_backup_name_has_millisecond_resolution\n  - RuntimeError: asyncio.run() cannot be called from a running event loop\nCause: the new tests were appended at the end of the module, after the module-scoped `browser` fixture (line ~222). Once that fixture has started sync Playwright, an event loop is running in the main thread for the rest of the module, so `_post()` (asyncio.run at line 47) fails. They pass only when run in isolation (that is why the handoff saw \"3 passed\" separately). This is deterministic, not an environment issue; it also reproduces locally.\nFix (either): move the four new tests above the `browser` fixture, next to the other non-browser tests (e.g. after test_a_wrong_root_is_preserved_too); or make `_post` run the handler in a worker thread as the fixture's route handler already does (lines ~248-251). Moving the tests is the smaller change. Then run the whole file in one process (non-browser tests must pass even when browser tests fail/skip locally) and get CI green.\n\nEverything else checked and fine (no other change needed): spec 1 (log warning + set_aside/warning in the save response + role=alert banner with the exact Issue wording), spec 2 (ms-resolution name + collision counter under the machine-file lock), scope limited to the 4 files, PR body has exactly one Tracker issues line, no leaks, English UI text, merge of main ea41acbf clean.\nNon-blocking (optional in the same fix): add a short docs/system/CHANGELOG.md entry for the new response fields and banner; the banner itself is only checked by a source-string test.\nSpec 3 (owner live check: write/edit/clear a note, restart the dashboard, note survives) remains for the owner separately; not a reason for this return.",
         "keep_lane": true
-      },
-      "935": {
-        "id": "2e776a8f13264b5e8b6f42cd7e542b02",
-        "pr": 935,
-        "issues": [
-          377
-        ],
-        "actor": "Reviewer-S1021377",
-        "session": "run_s1021_377",
-        "coordinator": "Coordinator-I1021A",
-        "started_at": "2026-10-21T10:18:05+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 377,
-          "pr": 935,
-          "branch": "work/acl-1377-workbook-key",
-          "head_sha": "33e09b6791038d25560d7a42548cc7dd46e7311d",
-          "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-          "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "ba1d91de10f6ab2391b19b6d8e3faeff12e10c23d3500ddb0530bf15a1ad84d1",
-          "review": {
-            "kind": "independent-review",
-            "implementer": "Worker-W1021377",
-            "reviewer": "Reviewer-S1021377",
-            "head_sha": "33e09b6791038d25560d7a42548cc7dd46e7311d",
-            "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-            "tree_sha": "cee7b9fb69e69a5a3648cc7a6bfdd26166694f46",
-            "verdict": "approved",
-            "execution_lane": "2e776a8f13264b5e8b6f42cd7e542b02",
-            "review_session": "run_s1021_377",
-            "report": "ACL-1377 / PR935 independent re-review on current main ea41acbf. Delta since previously approved e548e74f is only the clean main merge 33e09b67 (git show --cc shows no hand-resolved hunks). Diff vs main is exactly src/web/app.py, src/web/templates/report.html, tests/test_dashboard_review.py, tests/test_the_account_tree_on_screen.py. Behaviour: _alias_without_id_suffix falls back to a compact alphanumeric key only after the exact key finds nothing, unique match only, rule-keys excluded, country-scoped; Facebook_6540_<id> -> Facebook6540 without collision with 6545/65400; existing matches unchanged. Meta-only campaign rows get a quiet 'not in workbook' hint, suppressed for zero Meta numbers and an empty workbook. Tests cover match, near-name collision, ambiguity, underscore-priority, country scope, tree hint on/off. Source CI green on the head: descriptor, tracker-link (passed on one rerun after an early-state failure), process instructions, linux 1-3, windows (passed on one rerun after unrelated bootstrap-harness 60s timeout), installer verification.",
-            "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              377
-            ],
-            "recorded_at": "2026-10-21T10:49:07+00:00",
-            "issue_scopes": {
-              "377": "ba1d91de10f6ab2391b19b6d8e3faeff12e10c23d3500ddb0530bf15a1ad84d1"
-            }
-          },
-          "lane": {
-            "id": "2e776a8f13264b5e8b6f42cd7e542b02",
-            "pr": 935,
-            "issues": [
-              377
-            ],
-            "actor": "Reviewer-S1021377",
-            "session": "run_s1021_377",
-            "coordinator": "Coordinator-I1021A",
-            "started_at": "2026-10-21T10:18:05+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-21T10:49:53+00:00"
-        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
