@@ -7462,7 +7462,7 @@ window.cbTree = (function () {
     ["^(browser_window|drafts_pending|tab_woken|create|objective_|campaign_|daily_budget|leads$|continue$|onboarding_modal$|simple_create$|simple_objective$|simple_adset_section$|next_to_adset$)", "campaign"],
     ["^(adset_|conversion_|website_|further_limit|pick_further_limit|advantage_plus|age_suggestion|audience_|before_audience|languages|locations_open|targeting|placements|account_placement|devices_ios|simple_card$|listbox_left_open$|next_to_ad(_stuck_on_adset)?$|simple_ad_section$)", "adset"],
     ["^(ad_level_summary$|destination_sweep|simple_create_draft$)", "final"],
-    ["^(ad\\d*_|creative_|text_variations_off$|text_generation_off$|simple_create_more_ads$|simple_reentry$|loading_modal_reload$|destination_website_selected$|destination_instant_form_off$)", "ad"]
+    ["^(ad\\d*_|creative_|text_variations_off$|text_generation_off$|simple_create_more_ads$|simple_reentry$|loading_modal_reload$|destination_website_selected$|destination_instant_form_off$|page_identity$)", "ad"]
   ],
   "steps": {
     "ad_copy": [1.0, 6],
@@ -13218,7 +13218,10 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       var sel = row.querySelector('.cb-form-select');
       var hid = row.querySelector('input[name$="_form_id"]');
       if (!sel || !hid) return;
-      var entry = window.cbForms[formAccount(row)] || null;
+      var slotEl = row && row.closest ? row.closest('.cb-slot') : null;
+      var pageInput = slotEl ? slotEl.querySelector('input[name$="_page_id"]') : null;
+      var resolvedPage = window.cbResolvedPage ? window.cbResolvedPage(slotEl) : (pageInput ? pageInput.value : '');
+      var entry = window.cbForms[formAccount(row) + '|' + resolvedPage] || null;
       var opts = L.formOptions(entry && entry.forms, hid.value);
       var sig = JSON.stringify([opts, hid.value]);
       if (sel.dataset.sig !== sig) {
@@ -13238,6 +13241,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
 
   /* Место конверсии набора -> что видно и что уходит на сервер. */
   window.cbSyncDestination = function (slot) {
+    if (window.cbSyncPages) window.cbSyncPages(slot);
     var L = window.cbLayout;
     var sel = slot && slot.querySelector ? slot.querySelector('.cb-destination') : null;
     if (!L || !sel) return;
@@ -13303,12 +13307,17 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     var account = row ? formAccount(row) : '';
     var note = row ? row.querySelector('[data-form-note]') : null;
     if (!account || btn.disabled) return;
+    var slotEl = row && row.closest ? row.closest('.cb-slot') : null;
+    var pageInput = slotEl ? slotEl.querySelector('input[name$="_page_id"]') : null;
+    var selectedPage = window.cbResolvedPage ? window.cbResolvedPage(slotEl) : (pageInput ? pageInput.value : '');
+    if (!selectedPage) { if (note) note.textContent = 'Refresh Facebook Pages before loading forms.'; return; }
     btn.disabled = true;
     if (note) note.textContent = 'Reading the forms of the Page from Meta…';
     var body = new FormData();
     body.append('account_label', account);
+    body.append('page_id', selectedPage);
     function done(entry) {
-      window.cbForms[account] = entry;
+      window.cbForms[account + '|' + selectedPage] = entry;
       btn.disabled = false;
       document.querySelectorAll('.cb-slot').forEach(function (s) {
         if (formAccount(s) === account) window.cbFillFormSelects(s);
@@ -13744,7 +13753,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     // Пропускаются только те, у которых своя логика: имя собирается само,
     // счётчик объявлений ставится при их копировании, а таргетинг и ОС уже
     // скопированы выше вместе со своим видимым текстом.
-    var SKIP_FIELDS = { name: 1, ad_count: 1, targeting: 1, os: 1 };
+    var SKIP_FIELDS = { name: 1, ad_count: 1, targeting: 1, os: 1, page_id: 1 };
     var prefix = 'camp_' + srcIdx + '_';
     srcSlot.querySelectorAll('[name^="' + prefix + '"]').forEach(function(srcInput) {
       var field = srcInput.name.slice(prefix.length);
@@ -13905,6 +13914,11 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       /* Бюджет — на кампании (CBO): выбор ABO/CBO владелец снял. */
       '<span class="cb-label">Campaign budget ($/day)</span>' +
       '<input type="number" name="camp_' + idx + '_budget" class="cb-input cb-input-sm" value="" min="1" step="1" placeholder="50" title="Daily budget of the whole campaign">' +
+      '<span class="cb-label">Facebook Page</span>' +
+      '<div class="cb-page-choice"><input type="hidden" name="camp_' + idx + '_page_id" value="">' +
+      '<select class="cb-input cb-page-select" aria-label="Facebook Page" onfocus="cbLoadPages(this.closest(\'.cb-slot\'))" onchange="cbPageChanged(this)"><option value="">Automatic — first available Page of this account</option></select>' +
+      '<div style="font-size:var(--adopy-text-xs);color:var(--muted);overflow-wrap:anywhere" data-page-note role="status"></div>' +
+      '<button type="button" class="cb-page-refresh cb-input" onclick="cbRefreshPages(this.closest(\'.cb-slot\'), true)">Refresh pages</button></div>' +
       '<input type="hidden" name="camp_' + idx + '_name" class="cb-name-hidden" value="">' +
       '</div>' +
       /* Дублирование кампании живёт в её карточке (ACL-1459). */
@@ -15022,9 +15036,11 @@ function cbPlanHtml(data) {
       h += '<div class="cbd-plan-warn" style="color:#b45309">⚠ ' + aclEscHtml(w) + '</div>';
     });
     if (s) {
+      if ((s.manual_required || []).length) h += '<div class="cbd-plan-manual" style="color:var(--warn)"><strong>Manual completion required</strong>: '
+        + s.manual_required.map(aclEscHtml).join(' ') + '</div>';
       var allForms = (s.ad_sets || []).length && (s.ad_sets || []).every(function (x) { return x.destination === 'Instant Form'; });
       h += '<div class="cbd-plan-meta" style="font-size:var(--adopy-text-sm);color:var(--muted)">page '
-        + aclEscHtml(s.page_id || '—') + (s.page_source ? ' (' + aclEscHtml(s.page_source) + ')' : '')
+        + (s.page_name ? aclEscHtml(s.page_name) + ' · ' : '') + aclEscHtml(s.page_id || '—') + (s.page_source ? ' (' + aclEscHtml(s.page_source) + ')' : '')
         + (allForms ? '' : ' · pixel ' + aclEscHtml(s.pixel_id || '—') + (s.pixel_source ? ' (' + aclEscHtml(s.pixel_source) + ')' : ''))
         + ' · ' + aclEscHtml(s.objective || '') + '</div>';
       (s.ad_sets || []).forEach(function (a) {
@@ -15047,6 +15063,8 @@ function cbPlanHtml(data) {
             + ' · CTA ' + aclEscHtml(ad.cta) + '</li>';
         });
         h += '</ol>';
+        if (a.ads_not_created) h += '<div class="cbd-plan-manual">Ads will not be created ('
+          + aclEscHtml(String(a.pending_ad_count || 0)) + ' kept in the builder). Add a Page and ads manually, or retry after Page access is restored.</div>';
       });
     }
     h += '</div>';
@@ -16387,7 +16405,8 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
                     || (r.publishable !== true && r.success);
       var warningOnly = r.publishable === true
                         && !!(r.warnings && r.warnings.length);
-      var icon = !r.success ? '❌' : (blocked ? '❌' : (warningOnly ? '⚠️' : '✅'));
+      var manual = r.success && r.manual_required && r.manual_required.length && !(r.blocking_failures || []).length;
+      var icon = manual ? '⚠️' : (!r.success ? '❌' : (blocked ? '❌' : (warningOnly ? '⚠️' : '✅')));
       html += '<div class="cb-status-row">';
       html += '<span class="cb-status-icon">' + icon + '</span>';
       html += '<span class="cb-status-name">' + aclEscHtml(r.campaign_name || '?')
@@ -16397,6 +16416,8 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
       }
       html += '</div>';
       if (r.backend === 'api') html += cbApiReadbackHtml(r);
+      if (manual) html += '<div class="cb-status-err" style="color:var(--warn);border-color:var(--warn)">Manual completion required: '
+        + r.manual_required.map(aclEscHtml).join(' ') + '</div>';
       if (r.error) {
         // Green is reserved for a finished, publishable draft — an
         // informational note such as the dry-run message. Anything blocking
@@ -18304,6 +18325,7 @@ window.cwWorkbench = (function () {
 })();
 </script>
 {#- ACL-1812: состояние тёплых профилей в строках аккаунтов; всё остальное рисует сам файл. -#}
+<script src="/static/account_pages.js"></script>
 <script src="/static/warm_sessions.js"></script>
 </body>
 </html>

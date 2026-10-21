@@ -2286,6 +2286,8 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                 }
             # Ключ — только у объявлений со вторым текстом: остальные слоты
             # (и записанные из них задания) остаются прежними.
+            if f"camp_{idx}_page_id" in form:
+                slot["page_id"] = str(form.get(f"camp_{idx}_page_id") or "").strip()
             if copy2:
                 slot["copy2"] = copy2
             # ACL-1775: Instant Form. Ключи есть только у слотов с формой; значения
@@ -5253,6 +5255,23 @@ def _instant_form_refusal(slots: list[dict]) -> JSONResponse | None:
     return None
 
 
+@app.post("/api/account-pages")
+async def api_account_pages(request: Request) -> JSONResponse:
+    """Read available Pages under the existing profile read lock; no Meta writes."""
+    from src.web.account_pages import cached_only, read_pages
+
+    form = await request.form()
+    account = str(form.get("account_label") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "state": "failed", "message": "account is required"}, status_code=400)
+    if str(form.get("cached") or "") == "1":
+        # Отрисовка билдера: только кэш на машине, профиль не открывается.
+        return JSONResponse(await asyncio.to_thread(cached_only, account))
+    # Без force — ответ из кэша на машине (12 ч): лишний запуск профиля ради списка Страниц не нужен.
+    force = str(form.get("force") or "") == "1"
+    return JSONResponse(await asyncio.to_thread(read_pages, account, force=force))
+
+
 @app.post("/api/page-forms")
 async def api_page_forms(request: Request) -> JSONResponse:
     """ACL-1775: формы Страницы аккаунта для выбора в билдере. Только по нажатию человека.
@@ -5268,6 +5287,8 @@ async def api_page_forms(request: Request) -> JSONResponse:
     if not publish_api.api_enabled():
         return JSONResponse({"ok": False, "error": "Instant Forms need the Graph API backend (ACL_FB_BACKEND=api)."},
                             status_code=409)
+    if "page_id" in form:
+        return JSONResponse(await asyncio.to_thread(page_forms.read_forms, account, str(form.get("page_id") or "").strip()))
     return JSONResponse(await asyncio.to_thread(page_forms.read_forms, account))
 
 
@@ -5663,6 +5684,15 @@ async def build_upload(request: Request) -> Response:
             _render_report, request,
             upload_errors={(form.get("country") or "").strip() or country:
                            {account_label: ["Instant Forms cannot be exported to Upload FB; use Publish with the API backend."]}},
+        )
+
+    if any((s.get("page_id") or "").strip() for s in slots):
+        # ACL-1880: Upload FB собирается без выбора Page - выбранную явно не терять молча.
+        return await _in_report_pool(
+            _render_report, request,
+            upload_errors={(form.get("country") or "").strip() or country:
+                           {account_label: ["A Facebook Page chosen for a campaign cannot be exported to Upload FB; "
+                                            "use Publish, or set the campaign's Page to Automatic."]}},
         )
 
     # The parser returns the country CODE ("MX"), which the RPA needs — without

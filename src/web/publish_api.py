@@ -211,7 +211,8 @@ def result_dict(outcome: Outcome, *, error: str = "") -> dict[str, Any]:
         "backend": "api",
         "status": "PAUSED" if created else "",
         "success": success,
-        "publishable": success and readback_ok and not blocking,
+        "publishable": success and readback_ok and not blocking and not outcome.manual_required,
+        "manual_required": list(outcome.manual_required),
         "warnings": list(outcome.warnings),
         "blocking_failures": blocking,
         # Текстовая отрисовка панели (список проблем RPA здесь не нужен).
