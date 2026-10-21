@@ -12,6 +12,14 @@
   disclosure at 1280, 1024 and 320 px in both themes. It does not import the
   preview's unrelated changes or assert full integrated/installed verification.
 
+## ACL-1626 — Account notes: damaged notes file is reported — 2026-10-21
+
+When the account notes file is damaged and set aside, the dashboard now logs a
+warning, returns the set-aside notice in the save response and shows a one-line
+banner on the account map. The backup name has millisecond resolution plus a
+collision counter, so two corruptions in the same moment keep both copies.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/626).
+
 ## ACL-1381 — Consistent Builder ad-text wording — 2026-10-18
 
 Complete the older text-label request while preserving ACL-1769's later numbered
@@ -29,6 +37,18 @@ new code head retains candidate verification. Existing aggregate negatives,
 producer names, triggers, policies and runtime behavior stay intact. This records
 project verification behavior; it does not establish a cost saving or delivery.
 [Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/971).
+
+## API publish: no review window when there is nothing to review — ACL-1784 — 2026-10-17
+
+With `fb_backend=api` a finished job keeps the Multilogin profile as a review
+window (holding a queue slot) only when Meta received writes and the readback
+did not confirm them all. A job that wrote nothing (plan or preflight error,
+stop before the first write) or whose every campaign is created and verified
+frees its slot; it stops the profile only if the job started it, never one the
+user opened. The job panel states in English why the window was or was not
+kept. If a profile the job started stays open anyway (Stop, the keep-open
+switch, a dry run, a failed stop), the slot stays taken and the panel says the
+profile is still open. The RPA path is unchanged.
 
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
