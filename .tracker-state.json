@@ -57413,7 +57413,7 @@
             "session": "root_acl2079_20261022"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-V7Q2R8",
         "coordinator": "Coordinator-R6M9H2",
         "handoff": {
@@ -57432,7 +57432,9 @@
         },
         "pr": 1080,
         "queued_at": "2026-10-21T23:36:33+00:00",
-        "reviewer": "Reviewer-H8K4N7"
+        "reviewer": "Reviewer-H8K4N7",
+        "review_report": "# ACL-2079 source review return: actual main advanced\n\nActual independent Reviewer-H8K4N7, session review_acl2079_tt194_20261022, own source lane8868dd0a735f495fa20775bdcd81c9b0 returns only ACL-2079 / PR1080 to its original author.\n\nThe complete16-file source head3b7253f053294c5118ba4ea640c65c9a23ac02b7, base64e73a1e151b6611517cd9643dfb911ef54d6832 and tree8096717bf6079d94da2ceac3995394f6c608bdfd had no remaining source findings. The genuine canonical proof edef44f7c06ed761cbbe104fcaa372d425760f55713b4927bc28cabe5607453e and independently assessed original scope142a010f210e112a16dd120aa0ad5d1733f5cacbc06b341e3068e9067559716f remain historical evidence of that exact candidate. Native source review was recorded2026-10-21T23:40:29Z; source approval was never performed because required CI was still running.\n\nBefore approval, authoritative main advanced to e8bf31f8921ec6a8f79c824f39c1fc3beff2f359, tree47adbe5dcb33213bbe48fe7a69bbf98056660343, through the genuine foreign PR1077 merge containing ACL-2050, ACL-1838 and ACL-1165. Its first parent is the previously reviewed64e73a1e. This is an actual baseline change, not a speculative conflict or source defect. ACL has no adopted task-context compatibility route allowing this source to retain old-main approval.\n\nRequired resolution: original Worker-V7Q2R8 must take its supported fresh author claim on the same original branch/worktree, incorporate actual current main without dropping the new product work or ACL-specific controls, assess semantic interactions and complete the applicable checks/handoff for that immutable result. Preserve unchanged valid731-tooling/80-navigation/5-manifest and upstream evidence within its actual coverage; this return does not order arbitrary repeat runs or imply disjoint paths prove compatibility. Configured hosted events and actual source/combined/platform admission still apply.\n\nPreserve ACL-2069/PR1070, all foreign ownership/batches/intake and product delivery requests. This owned return acquires no integration, clears no foreign slot, changes no task requirements and creates no product publication request. Fresh independent exact-source review and canonical proof are required after the genuine author handoff. Existing source CI may finish on the old head; it is not represented as proof of a newer head or new-main composition.",
+        "rework": true
       }
     },
     "actors": {
@@ -111543,6 +111545,24 @@
           ],
           "finished_at": "2026-10-21T23:49:54+00:00"
         }
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-21T23:51:14+00:00",
+        "review": {
+          "id": "8868dd0a735f495fa20775bdcd81c9b0",
+          "pr": 1080,
+          "issues": [
+            1079
+          ],
+          "actor": "Reviewer-H8K4N7",
+          "session": "review_acl2079_tt194_20261022",
+          "coordinator": "Coordinator-R6M9H2",
+          "started_at": "2026-10-21T23:37:30+00:00",
+          "state": "returning",
+          "report": "# ACL-2079 source review return: actual main advanced\n\nActual independent Reviewer-H8K4N7, session review_acl2079_tt194_20261022, own source lane8868dd0a735f495fa20775bdcd81c9b0 returns only ACL-2079 / PR1080 to its original author.\n\nThe complete16-file source head3b7253f053294c5118ba4ea640c65c9a23ac02b7, base64e73a1e151b6611517cd9643dfb911ef54d6832 and tree8096717bf6079d94da2ceac3995394f6c608bdfd had no remaining source findings. The genuine canonical proof edef44f7c06ed761cbbe104fcaa372d425760f55713b4927bc28cabe5607453e and independently assessed original scope142a010f210e112a16dd120aa0ad5d1733f5cacbc06b341e3068e9067559716f remain historical evidence of that exact candidate. Native source review was recorded2026-10-21T23:40:29Z; source approval was never performed because required CI was still running.\n\nBefore approval, authoritative main advanced to e8bf31f8921ec6a8f79c824f39c1fc3beff2f359, tree47adbe5dcb33213bbe48fe7a69bbf98056660343, through the genuine foreign PR1077 merge containing ACL-2050, ACL-1838 and ACL-1165. Its first parent is the previously reviewed64e73a1e. This is an actual baseline change, not a speculative conflict or source defect. ACL has no adopted task-context compatibility route allowing this source to retain old-main approval.\n\nRequired resolution: original Worker-V7Q2R8 must take its supported fresh author claim on the same original branch/worktree, incorporate actual current main without dropping the new product work or ACL-specific controls, assess semantic interactions and complete the applicable checks/handoff for that immutable result. Preserve unchanged valid731-tooling/80-navigation/5-manifest and upstream evidence within its actual coverage; this return does not order arbitrary repeat runs or imply disjoint paths prove compatibility. Configured hosted events and actual source/combined/platform admission still apply.\n\nPreserve ACL-2069/PR1070, all foreign ownership/batches/intake and product delivery requests. This owned return acquires no integration, clears no foreign slot, changes no task requirements and creates no product publication request. Fresh independent exact-source review and canonical proof are required after the genuine author handoff. Existing source CI may finish on the old head; it is not represented as proof of a newer head or new-main composition.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -122259,20 +122279,6 @@
         "coordinator": "Coordinator-P1021A",
         "started_at": "2026-10-21T09:47:33+00:00",
         "state": "reviewing"
-      },
-      "1080": {
-        "id": "8868dd0a735f495fa20775bdcd81c9b0",
-        "pr": 1080,
-        "issues": [
-          1079
-        ],
-        "actor": "Reviewer-H8K4N7",
-        "session": "review_acl2079_tt194_20261022",
-        "coordinator": "Coordinator-R6M9H2",
-        "started_at": "2026-10-21T23:37:30+00:00",
-        "state": "returning",
-        "report": "# ACL-2079 source review return: actual main advanced\n\nActual independent Reviewer-H8K4N7, session review_acl2079_tt194_20261022, own source lane8868dd0a735f495fa20775bdcd81c9b0 returns only ACL-2079 / PR1080 to its original author.\n\nThe complete16-file source head3b7253f053294c5118ba4ea640c65c9a23ac02b7, base64e73a1e151b6611517cd9643dfb911ef54d6832 and tree8096717bf6079d94da2ceac3995394f6c608bdfd had no remaining source findings. The genuine canonical proof edef44f7c06ed761cbbe104fcaa372d425760f55713b4927bc28cabe5607453e and independently assessed original scope142a010f210e112a16dd120aa0ad5d1733f5cacbc06b341e3068e9067559716f remain historical evidence of that exact candidate. Native source review was recorded2026-10-21T23:40:29Z; source approval was never performed because required CI was still running.\n\nBefore approval, authoritative main advanced to e8bf31f8921ec6a8f79c824f39c1fc3beff2f359, tree47adbe5dcb33213bbe48fe7a69bbf98056660343, through the genuine foreign PR1077 merge containing ACL-2050, ACL-1838 and ACL-1165. Its first parent is the previously reviewed64e73a1e. This is an actual baseline change, not a speculative conflict or source defect. ACL has no adopted task-context compatibility route allowing this source to retain old-main approval.\n\nRequired resolution: original Worker-V7Q2R8 must take its supported fresh author claim on the same original branch/worktree, incorporate actual current main without dropping the new product work or ACL-specific controls, assess semantic interactions and complete the applicable checks/handoff for that immutable result. Preserve unchanged valid731-tooling/80-navigation/5-manifest and upstream evidence within its actual coverage; this return does not order arbitrary repeat runs or imply disjoint paths prove compatibility. Configured hosted events and actual source/combined/platform admission still apply.\n\nPreserve ACL-2069/PR1070, all foreign ownership/batches/intake and product delivery requests. This owned return acquires no integration, clears no foreign slot, changes no task requirements and creates no product publication request. Fresh independent exact-source review and canonical proof are required after the genuine author handoff. Existing source CI may finish on the old head; it is not represented as proof of a newer head or new-main composition.",
-        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
