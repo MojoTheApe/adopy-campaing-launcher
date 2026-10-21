@@ -51821,7 +51821,7 @@
             "session": "rh2020w-20261020"
           }
         ],
-        "state": "approved",
+        "state": "returning_approval",
         "worker": "Worker-RH2020W",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -51846,7 +51846,19 @@
           "at": "2026-10-17T16:30:39.578008+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-Q2001B"
+        "reviewer": "Reviewer-Q2001B",
+        "return_operation": {
+          "id": "f1473739cc364303953852d2d6f67538",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
+        },
+        "return": {
+          "id": "f1473739cc364303953852d2d6f67538",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
+        }
       },
       "841": {
         "implementers": [
