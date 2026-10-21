@@ -53847,7 +53847,7 @@
             "session": "w144d-20261019"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-W144D",
         "coordinator": "Coordinator-C1016A",
         "handoff": {
@@ -53866,7 +53866,7 @@
         },
         "pr": 953,
         "queued_at": "2026-10-19T13:03:50+00:00",
-        "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
+        "review_report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578065+00:00",
@@ -53884,7 +53884,8 @@
           "actor": "Coordinator-C1016A",
           "session": "c7e3da-20261016",
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
-        }
+        },
+        "rework": true
       },
       "72": {
         "implementers": [
@@ -106749,6 +106750,18 @@
         "issue": 710,
         "pr": 711,
         "actor": "Worker-W1021710"
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-21T13:08:33+00:00",
+        "issue": 165,
+        "operation": {
+          "id": "b9da93d484904d028c1630782c0d3fe7",
+          "actor": "Coordinator-C1016A",
+          "session": "c7e3da-20261016",
+          "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -108994,50 +109007,6 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-19T15:11:33+00:00"
-      },
-      "165": {
-        "issue": 165,
-        "pr": 953,
-        "branch": "codex/acl-1165-attach-attempt-log",
-        "head_sha": "8418a7b2416970b68316903fb59e6755ba670f32",
-        "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-        "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "scope": "234afaf33da792fa11b47c0538a8af5bcf7f638df359ca829680721c26712410",
-        "review": {
-          "kind": "independent-review",
-          "verdict": "approved",
-          "reviewer": "Reviewer-R1165X",
-          "review_session": "reviewer-r1165x-20261019",
-          "execution_lane": "02ace1362ec8470ebde2c7aa833affef",
-          "implementer": "Worker-W144D",
-          "head_sha": "8418a7b2416970b68316903fb59e6755ba670f32",
-          "base_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-          "tree_sha": "329d3eeb6825209c1ba87c137692fd8d2f5f7046",
-          "issues": [
-            165
-          ],
-          "report": "The PR changes only log text in MultiloginDirectCDPProvider (src/fb_ads_rpa/browser.py) plus a CHANGELOG entry and a new test file. The failed strict attach attempt now logs at INFO 'strict attempt found no own CDP port (not final: a lenient attach may be tried next)' and the failed lenient attempt logs a neutral INFO 'lenient attempt found no CDP debug port either'; neither contains the word 'unavailable'. 'attachment unavailable' is now emitted once, at WARNING, only in open() after both attempts failed, when the profile is running and the FB_RPA_ALLOW_UNPROXIED_RELAUNCH gate refuses to relaunch, with a pointer to open the profile in Multilogin Desktop. Acceptance criteria: (1) an intermediate failure is no longer described in verdict words - met; (2) the outcome that leads to the dangerous branch (refusal, open in MLX Desktop) is more visible than the intermediate step - met via WARNING vs INFO. RPA safety checked in the diff: the relaunch refusal, the RuntimeError text and the env gate are untouched, no new browser opening, no polling, no secrets in the log lines (only profile_id, as before). Tests: new tests/test_the_first_attach_attempt_is_not_logged_as_a_verdict.py runs the real _try_attach_existing/open with only probes mocked and covers strict-miss then lenient-hit (no 'unavailable', all < WARNING), all-paths-fail (exactly one WARNING with 'attachment unavailable', two quieter step lines, no kill), and a closed profile (no log). I ran it with 6 related files (relaunch_gate, attach_short_path, hand_opened_profile_never_stopped, connect_without_act, campaign_opens_within_two_minutes, reads_open_a_closed_profile): 101 passed, 1 timing-sensitive test in test_reads_open_a_closed_profile.py failed once under load and passed on rerun (21/21), unrelated to log text. CI on head 8418a7b2: all checks pass (ACL verification, Process instructions, linux tests 1/2/3, windows tests, descriptor, tracker-link); installer build jobs skipped. Non-blocking nits: a caller that only does a strict attach and stops will leave an INFO line saying 'not final' with no later final line; code comments are in Russian (repo convention). No live checks claimed.",
-          "main_sha": "1c6ab78e6427895ffaf9ebae43233efaa1481629",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "recorded_at": "2026-10-19T19:10:32+00:00",
-          "issue_scopes": {
-            "165": "234afaf33da792fa11b47c0538a8af5bcf7f638df359ca829680721c26712410"
-          }
-        },
-        "lane": {
-          "id": "02ace1362ec8470ebde2c7aa833affef",
-          "pr": 953,
-          "issues": [
-            165
-          ],
-          "actor": "Reviewer-R1165X",
-          "session": "reviewer-r1165x-20261019",
-          "coordinator": "Coordinator-C1016A",
-          "started_at": "2026-10-19T17:59:38+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-19T19:11:57+00:00"
       },
       "73": {
         "issue": 73,
