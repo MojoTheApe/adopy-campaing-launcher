@@ -47872,9 +47872,11 @@
         "worktree": "C:\\acl-int-w1840",
         "id": "8ad5a2a58312405e9965218183ced0f2",
         "issue": 840,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T22:17:20+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 846,
+        "report": "ACL-1840 round 3: refresh of approval baseline (no content change).\n- Previous head: 01730a5cca32c3969d847b72fce461bf2a2a1dc2\n- New head: fb579d4ad7fbf40bb45bad6d4c42a7729ff3fa13 (merge of origin/main 64e73a1e151b6611517cd9643dfb911ef54d6832); PR #846 shows this head.\n- Conflicts: none (clean merge). Diff vs main: the 4 task files only, 153 insertions.\n- Tests: the PR's own tests ran green in the previous round (19 passed); this round only merged main, no content change.\n- CI at handoff time: tracker-link failed only because the task was still in implementing state (PR linkage: move to Review); it will be rerun once after handoff. Other jobs (linux 1/2/3, windows, installer) were still running on the new head; results reported separately by the worker."
       },
       "1050": {
         "actor": "Worker-P1021F2050",
