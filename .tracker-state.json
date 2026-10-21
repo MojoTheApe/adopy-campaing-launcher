@@ -46813,9 +46813,11 @@
         "worktree": "C:\\acl-rv-784",
         "id": "d78988a3ebfe48deaaefd948639051f3",
         "issue": 784,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T07:18:03+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 961,
+        "report": "ACL-1784 resumed on owner instruction 2026-10-21 (review tail). PR #961, head a525a67a.\nMerged current main (ea41acbf) into work/acl-1784-api-no-review-window with a merge commit (no rebase, no force push). Branch contains work/main.\nConflict: docs/system/CHANGELOG.md only (adjacent entries); kept both sides: main's ACL-1381 and ACL-1971 entries plus the ACL-1784 entry. src/web/publish_api.py and src/web/publish_jobs.py auto-merged with no code changes by me.\nTests (isolated venv, -n 2): test_acl1784_api_review_window, test_acl1761_api_create, test_acl1761_plan_check, test_acl1819_preflight, test_publish_profile_slots, test_acl1603_stable_slots, test_a_finished_clean_profile_closes_itself, test_publish_safety_contract, test_publish_screen_guard_review: 383 passed. scripts/acl_scan_secrets.py: clean.\nFull suite not run locally; CI is the acceptance signal. check-pr 961 before handoff only said the task must be moved to Review (expected until handoff).\nNo owner live check required beyond the original: a kept/not-kept review window panel notice on the test dashboard."
       },
       "1050": {
         "actor": "Worker-P10212050",
