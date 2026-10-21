@@ -47004,20 +47004,6 @@
         "state": "implementing",
         "started_at": "2026-10-21T12:40:14+00:00",
         "from_status": "status:idea"
-      },
-      "1066": {
-        "actor": "Worker-K1021A2",
-        "session": "run_k1021a2_2066",
-        "coordinator": "Coordinator-K1021A",
-        "branch": "work/acl-2066-cpl-in-optimization",
-        "worktree": "C:\\acl-2064-cpl",
-        "id": "418bce5eb2fd4d1ba88843c3099a9c1d",
-        "issue": 1066,
-        "state": "handoff",
-        "started_at": "2026-10-21T12:56:09+00:00",
-        "from_status": "status:todo",
-        "pr": 1067,
-        "report": "# ACL-2066 handoff\n\nPR #1067, branch work/acl-2066-cpl-in-optimization, head bfd11263 on main ea41acbf.\nScope: src/web/templates/_campaign_table.html (b_cpl added to the Optimization preset before b_cpa; saved localStorage layouts get b_cpl inserted before b_cpa once, saved layout then carries cpl_seen), tests/test_acl2066_cpl_in_optimization.py (new), docs/system/CHANGELOG.md entry.\nChecks: test_acl2066_cpl_in_optimization.py + test_acl1798_campaign_inventory.py 59 passed locally; full suite in CI.\nRemaining: independent source review, CI, Approved, batch integration, package delivery. No live checks were run; owner checks the column on the dashboard after delivery."
       }
     },
     "tasks": {
@@ -56162,9 +56148,25 @@
             "session": "run_k1021a2_2066"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-K1021A2",
-        "coordinator": "Coordinator-K1021A"
+        "coordinator": "Coordinator-K1021A",
+        "handoff": {
+          "actor": "Worker-K1021A2",
+          "session": "run_k1021a2_2066",
+          "coordinator": "Coordinator-K1021A",
+          "branch": "work/acl-2066-cpl-in-optimization",
+          "worktree": "C:\\acl-2064-cpl",
+          "id": "418bce5eb2fd4d1ba88843c3099a9c1d",
+          "issue": 1066,
+          "state": "handoff",
+          "started_at": "2026-10-21T12:56:09+00:00",
+          "from_status": "status:todo",
+          "pr": 1067,
+          "report": "# ACL-2066 handoff\n\nPR #1067, branch work/acl-2066-cpl-in-optimization, head bfd11263 on main ea41acbf.\nScope: src/web/templates/_campaign_table.html (b_cpl added to the Optimization preset before b_cpa; saved localStorage layouts get b_cpl inserted before b_cpa once, saved layout then carries cpl_seen), tests/test_acl2066_cpl_in_optimization.py (new), docs/system/CHANGELOG.md entry.\nChecks: test_acl2066_cpl_in_optimization.py + test_acl1798_campaign_inventory.py 59 passed locally; full suite in CI.\nRemaining: independent source review, CI, Approved, batch integration, package delivery. No live checks were run; owner checks the column on the dashboard after delivery."
+        },
+        "pr": 1067,
+        "queued_at": "2026-10-21T13:18:40+00:00"
       }
     },
     "actors": {
@@ -62033,7 +62035,8 @@
       1053,
       1054,
       710,
-      1065
+      1065,
+      1066
     ],
     "review": {
       "id": "3cbfef49299841b6912867db49cc431f",
@@ -107041,6 +107044,13 @@
         "issue": 1065,
         "pr": 1068,
         "actor": "Worker-K1021A1"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-21T13:18:40+00:00",
+        "issue": 1066,
+        "pr": 1067,
+        "actor": "Worker-K1021A2"
       }
     ],
     "policy": {
