@@ -46921,6 +46921,18 @@
         "state": "implementing",
         "started_at": "2026-10-21T10:15:15+00:00",
         "from_status": "status:todo"
+      },
+      "558": {
+        "actor": "Worker-A1021558",
+        "session": "run_a1021_558w",
+        "coordinator": "Coordinator-A1021A",
+        "branch": "work/acl-1558-scrubber-shapes",
+        "worktree": "C:\\acl-rv-558",
+        "id": "aa8e8a3f91134445b1712a26aa0540b4",
+        "issue": 558,
+        "state": "implementing",
+        "started_at": "2026-10-21T11:16:56+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -54129,11 +54141,15 @@
           {
             "actor": "Worker-W1558M",
             "session": "622fd2f5-ec4b-4ed3-9102-43e164915329"
+          },
+          {
+            "actor": "Worker-A1021558",
+            "session": "run_a1021_558w"
           }
         ],
-        "state": "stopped",
-        "worker": "Worker-W1558M",
-        "coordinator": "Coordinator-M1011A",
+        "state": "implementing",
+        "worker": "Worker-A1021558",
+        "coordinator": "Coordinator-A1021A",
         "handoff": {
           "actor": "Worker-W1558M",
           "session": "622fd2f5-ec4b-4ed3-9102-43e164915329",
@@ -58747,6 +58763,10 @@
       },
       "Worker-A1021358": {
         "session": "run_a1021_358w",
+        "role": "Worker"
+      },
+      "Worker-A1021558": {
+        "session": "run_a1021_558w",
         "role": "Worker"
       }
     },
@@ -105506,6 +105526,13 @@
         "issue": 358,
         "pr": 974,
         "actor": "Worker-A1021358"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-21T11:16:56+00:00",
+        "issue": 558,
+        "claim": "aa8e8a3f91134445b1712a26aa0540b4",
+        "actor": "Worker-A1021558"
       }
     ],
     "policy": {
