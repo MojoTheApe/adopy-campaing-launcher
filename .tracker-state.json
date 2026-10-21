@@ -47053,20 +47053,6 @@
         "state": "implementing",
         "started_at": "2026-10-21T14:03:50+00:00",
         "from_status": "status:todo"
-      },
-      "1069": {
-        "actor": "Worker-P1021A",
-        "session": "acl2069_engine_pin_e51b7063",
-        "coordinator": "Coordinator-I1021A",
-        "branch": "work/acl-2069-engine-pin",
-        "worktree": "C:\\acl-2069",
-        "id": "b058d180bbf84817929def22fba5ff0f",
-        "issue": 1069,
-        "state": "handoff",
-        "started_at": "2026-10-21T14:06:02+00:00",
-        "from_status": "status:backlog",
-        "pr": 1070,
-        "report": "ACL-2069 handoff. Branch work/acl-2069-engine-pin @ 99ca92df2456799399d64e5f9b7e9553996726e1, PR #1070 into main. All engine pin references now point to 9e9a75fc927df0b3368ea54758190bc85cfef043 (Tracker3.9.3, TT-187 merged). The 42 exported helper files are byte-identical to 3d32586d, recorded hashes match, and templates/instructions are unchanged. JSON is valid. Affected tooling tests: 359 passed, 2 skipped, 1 failure (Windows symlink test that fails identically on main). Hosted CI and independent review remain. Nothing else changed."
       }
     },
     "tasks": {
@@ -56277,9 +56263,25 @@
             "session": "acl2069_engine_pin_e51b7063"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-P1021A",
-        "coordinator": "Coordinator-I1021A"
+        "coordinator": "Coordinator-I1021A",
+        "handoff": {
+          "actor": "Worker-P1021A",
+          "session": "acl2069_engine_pin_e51b7063",
+          "coordinator": "Coordinator-I1021A",
+          "branch": "work/acl-2069-engine-pin",
+          "worktree": "C:\\acl-2069",
+          "id": "b058d180bbf84817929def22fba5ff0f",
+          "issue": 1069,
+          "state": "handoff",
+          "started_at": "2026-10-21T14:06:02+00:00",
+          "from_status": "status:backlog",
+          "pr": 1070,
+          "report": "ACL-2069 handoff. Branch work/acl-2069-engine-pin @ 99ca92df2456799399d64e5f9b7e9553996726e1, PR #1070 into main. All engine pin references now point to 9e9a75fc927df0b3368ea54758190bc85cfef043 (Tracker3.9.3, TT-187 merged). The 42 exported helper files are byte-identical to 3d32586d, recorded hashes match, and templates/instructions are unchanged. JSON is valid. Affected tooling tests: 359 passed, 2 skipped, 1 failure (Windows symlink test that fails identically on main). Hosted CI and independent review remain. Nothing else changed."
+        },
+        "pr": 1070,
+        "queued_at": "2026-10-21T14:23:24+00:00"
       }
     },
     "actors": {
@@ -62204,7 +62206,8 @@
       1053,
       1054,
       710,
-      840
+      840,
+      1069
     ],
     "review": {
       "id": "3cbfef49299841b6912867db49cc431f",
@@ -107462,6 +107465,13 @@
             "approved_at": "2026-10-21T14:12:17+00:00"
           }
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-21T14:23:24+00:00",
+        "issue": 1069,
+        "pr": 1070,
+        "actor": "Worker-P1021A"
       }
     ],
     "policy": {
