@@ -46855,9 +46855,11 @@
         "worktree": "C:\\acl-pl-2052",
         "id": "3a3d09d4fde44c21b5dbce08c7640720",
         "issue": 1052,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T09:40:17+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 1057,
+        "report": "ACL-2052 review fixes: PR #1057, head 808573c6. New documentation-only `fact` kind in meta_rules loader (needs note; check_job skips it; tested). bid_adjustments.retired, placements.classic_non_advantage_leads (source fixed, live check in note), account_controls.placement_exclusions (values field) and value_rules.decrease_cap (limits DECREASE max 90) moved to it. Blog source categorised as announcements. CHANGELOG updated. Tests: 35 passed (acl2052 + acl1781 + meta_docs_watch_1782). check_job-unchanged test kept."
       },
       "668": {
         "actor": "Worker-A1021668",
