@@ -54,6 +54,7 @@ def main(argv: list[str] | None = None) -> int:
             get_env_files,
             migrate_legacy_account_map,
             migrate_legacy_env,
+            protect_machine_secrets,
         )
 
         if args.provision:
@@ -66,6 +67,7 @@ def main(argv: list[str] | None = None) -> int:
                 notes.append(env_note)
             if map_note:
                 notes.append(map_note)
+            notes.extend(protect_machine_secrets())
         for note in notes:
             print(f"  config: {note}")
         if not notes:
