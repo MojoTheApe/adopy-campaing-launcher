@@ -47316,6 +47316,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
+      },
+      "1073": {
+        "actor": "Worker-F1021A",
+        "session": "run_f1021a_1021",
+        "coordinator": "Coordinator-I1021A",
+        "branch": "work/acl-2073-shard-test-isolation",
+        "worktree": "C:\\acl-shardfix",
+        "id": "a4104b96d4ce429fad5ca6198da48c02",
+        "issue": 1073,
+        "state": "implementing",
+        "started_at": "2026-10-21T16:53:14+00:00",
+        "from_status": "status:idea"
       }
     },
     "tasks": {
@@ -56583,6 +56595,17 @@
         "pr": 1072,
         "queued_at": "2026-10-21T16:01:49+00:00",
         "reviewer": "Reviewer-T1021071"
+      },
+      "1073": {
+        "implementers": [
+          {
+            "actor": "Worker-F1021A",
+            "session": "run_f1021a_1021"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-F1021A",
+        "coordinator": "Coordinator-I1021A"
       }
     },
     "actors": {
@@ -59637,6 +59660,10 @@
       "Reviewer-T1021071": {
         "session": "run_t1021_2071",
         "role": "Reviewer"
+      },
+      "Worker-F1021A": {
+        "session": "run_f1021a_1021",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -109033,6 +109060,13 @@
         },
         "claim": "06ee0ec7688a4f40b756193647f1238b",
         "reason": "previous reviewer ran inside the coordinator session; owner-mandated delivery queue 2026-10-21"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-21T16:53:14+00:00",
+        "issue": 1073,
+        "claim": "a4104b96d4ce429fad5ca6198da48c02",
+        "actor": "Worker-F1021A"
       }
     ],
     "policy": {
