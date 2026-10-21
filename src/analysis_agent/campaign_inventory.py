@@ -796,8 +796,12 @@ def run_read(account: str, *, trigger: str) -> Snapshot:
     began = time.time()
     started_at = _as._now()  # noqa: SLF001
     try:
-        with browser_operation.reading(), _as._lock_for(account):  # noqa: SLF001
-            done = read_via_api(account, structure_only=True, trigger=trigger)
+        if not backend_ready():
+            # Как `start_read`: без бэкенда API профиль не открываем вовсе.
+            done = Snapshot(account=account, state="failed", error=NEEDS_API_MESSAGE, error_code=NEEDS_API_CODE)
+        else:
+            with browser_operation.reading(), _as._lock_for(account):  # noqa: SLF001
+                done = read_via_api(account, structure_only=True, trigger=trigger)
     except Exception as exc:  # noqa: BLE001
         done = Snapshot(account=account, state="failed", error=f"{type(exc).__name__}: {exc}")
     done.started_at = started_at
