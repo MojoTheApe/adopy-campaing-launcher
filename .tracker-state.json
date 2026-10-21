@@ -6085,6 +6085,27 @@
         "issue_scopes": {
           "1071": "c1c17f3e3ebe9dd15b00fd45eee146f5f5122550cbce8457dd84974144556657"
         }
+      },
+      "1074": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-G1021073",
+        "review_session": "run_g1021_2073",
+        "execution_lane": "fbd0f4a2e660463693da3b9a72e3c121",
+        "implementer": "Worker-F1021A",
+        "head_sha": "662aeb6f30adbf0af82dbb93501d09fbf1bfc183",
+        "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+        "tree_sha": "79f383d1d22fe3b2dddd2a57bae777ad4a4cf1c1",
+        "report": "Independent source review of ACL-2073 / PR #1074 (head 662aeb6f, base main 0ea237b0, tree 79f383d1) by Reviewer-G1021073 (run_g1021_2073), not the implementer Worker-F1021A nor Coordinator-I1021A. Scope: 1 commit, 2 files, tests only (tests/conftest.py +29, new tests/test_crop_state_does_not_leak_between_tests.py +34); no src/, scripts/, CI workflow, sharding, packaging, installer, delivery or tracker change. Root cause proven on main 0ea237b0 in a fresh detached worktree: serial `pytest test_bench_b97_picker_and_crop_1007.py::test_crop_that_never_draws_its_cards_is_named_by_the_card test_media_attachment_identity.py::test_the_picked_tile_and_the_ad_show_the_same_thumbnail` -> [False] fails with 'dirty' == 'attached' (same assertion as CI shard 3); the media file alone passes (16 passed); both full files together -> 1 failed / 48 passed. Mechanism confirmed in code: crop_step.apply stores _tls.failure in the main-thread thread-local and nothing clears it; meta_dom._crop_refusal -> crop_step.outcome() -> take_failure() consumes it once, so only the first reuse test fails. In production set_plan/reset_attempt clear it per ad, so this is test pollution. At PR head the same minimal pair passes (3 passed) and both files plus the new guard pass (51 passed). Fix is proper isolation: an autouse function fixture resets crop_step via the public set_plan(None) (clears plan/failure/done/unseen_said/warning/forward_stuck), meta_dom._note_media_refused(None) and _reuse_state['counter_missing']=False before and after each test, only for already-imported modules (sys.modules.get, no import side effects); no skip, xfail or assertion change. Checked that no module/class/session-scoped fixture in tests sets this state (only browser fixtures), so a function-scoped reset cannot wipe intended setup. Regression guard is meaningful: with main's conftest the second ordered test fails (1 failed, 1 passed), with the PR's conftest it passes. Affected tests at head (all 23 files referencing crop_step/_crop/media_refused_on_ad/_reuse_state/_note_media_refused/_crop_refusal, serial, one process): 477 passed. CHANGELOG: no entry; docs/system/PROJECT.md asks for CHANGELOG entries on system behavior changes and test-only fixes on main (44bdbf29, 39afcefd, b9684b1a) carry none, so this is consistent; rationale is in the conftest comment. Note: at this head the new test file shifts placement and b97 is no longer in linux shard 3, so green shard 3 alone does not prove the fix; the local serial reproduction above does. Hosted CI at review time: all test/installer/tooling checks green on this head; tracker-link failed earlier only because the Issue was not yet in Review and must be green before batch approve.",
+        "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          1073
+        ],
+        "recorded_at": "2026-10-21T17:41:06+00:00",
+        "issue_scopes": {
+          "1073": "362c232e4aebc19597b6b6e9b1a9afeba7e25d36a0de5dade6f6d23304e9ccfb"
+        }
       }
     },
     "stage": {
