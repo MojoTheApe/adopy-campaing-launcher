@@ -47901,20 +47901,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
-      },
-      "19": {
-        "actor": "Worker-W1021106",
-        "session": "run_w1021_106",
-        "coordinator": "Coordinator-I1021A",
-        "branch": "codex/acl-106-empty-period-owner",
-        "worktree": "C:\\acl-int-w106",
-        "id": "77b2b4182aa84a27bd7c91f51540d51a",
-        "issue": 19,
-        "state": "handoff",
-        "started_at": "2026-10-21T22:28:56+00:00",
-        "from_status": "status:todo",
-        "pr": 955,
-        "report": "ACL-106 round 2: merged origin/main (64e73a1e) into codex/acl-106-empty-period-owner. Old head 56aad18d, new head 7a15c521. No conflicts. Diff vs main: the same 5 task files. Tests: tests/test_empty_period_owner.py 10 passed. CI on 7a15c521: all pass except tracker-link (task state, Review not yet set); rerun after handoff."
       }
     },
     "tasks": {
@@ -54719,7 +54705,7 @@
             "session": "run_w1021_106"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1021106",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -54728,16 +54714,16 @@
           "coordinator": "Coordinator-I1021A",
           "branch": "codex/acl-106-empty-period-owner",
           "worktree": "C:\\acl-int-w106",
-          "id": "f77c0dd76a53486baf1dd56982c0ca94",
+          "id": "77b2b4182aa84a27bd7c91f51540d51a",
           "issue": 19,
           "state": "handoff",
-          "started_at": "2026-10-21T14:03:50+00:00",
+          "started_at": "2026-10-21T22:28:56+00:00",
           "from_status": "status:todo",
           "pr": 955,
-          "report": "ACL-106 refresh: merged origin/main (0ea237b0) into codex/acl-106-empty-period-owner. Old head 64499cb3, new head 56aad18d.\nOnly conflict: docs/system/CHANGELOG.md append; kept both entries. No content change otherwise.\nDiff vs main: 5 task files only (CHANGELOG, PROJECT.md, src/web/app.py, report.html, tests/test_empty_period_owner.py).\nTests: py -m pytest tests/test_empty_period_owner.py -> 10 passed.\nCI on 56aad18d: all pass (windows, linux 1/2/3, installer, descriptor, process) except tracker-link, which failed only because the task was not yet in Review."
+          "report": "ACL-106 round 2: merged origin/main (64e73a1e) into codex/acl-106-empty-period-owner. Old head 56aad18d, new head 7a15c521. No conflicts. Diff vs main: the same 5 task files. Tests: tests/test_empty_period_owner.py 10 passed. CI on 7a15c521: all pass except tracker-link (task state, Review not yet set); rerun after handoff."
         },
         "pr": 955,
-        "queued_at": "2026-10-21T14:35:49+00:00",
+        "queued_at": "2026-10-21T22:42:18+00:00",
         "review_report": "Approval is stale against current main 64e73a1e (after ACL-2073 #1075 and ACL-2071 #1076 merged). Author: merge current main into the original branch without changing content (resolve only CHANGELOG append conflicts by keeping both entries), re-run checks, hand off, and get a fresh independent source approval for batch 2b (--deliver).",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -54749,9 +54735,7 @@
           "actor": "Coordinator-I1021A",
           "session": "run_i1021a_1021",
           "report": "Approval is stale against current main 64e73a1e (after ACL-2073 #1075 and ACL-2071 #1076 merged). Author: merge current main into the original branch without changing content (resolve only CHANGELOG append conflicts by keeping both entries), re-run checks, hand off, and get a fresh independent source approval for batch 2b (--deliver)."
-        },
-        "rework": true,
-        "rework_claim": "77b2b4182aa84a27bd7c91f51540d51a"
+        }
       },
       "29": {
         "implementers": [
@@ -63265,7 +63249,8 @@
       1054,
       710,
       1069,
-      840
+      840,
+      19
     ],
     "review": null,
     "history": [
@@ -110618,6 +110603,13 @@
         "pr": 953,
         "lane": "4911434001dd47aeb94e8f8eeb761ba2",
         "actor": "Reviewer-K1021165"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-21T22:42:18+00:00",
+        "issue": 19,
+        "pr": 955,
+        "actor": "Worker-W1021106"
       }
     ],
     "policy": {
