@@ -47038,9 +47038,10 @@
         "worktree": "C:\\acl-int-w2039",
         "id": "cc8dcbccb50b448d954fe9133e67fcd3",
         "issue": 1039,
-        "state": "implementing",
+        "state": "stopping",
         "started_at": "2026-10-21T12:40:14+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "report": "Stacked on ACL-1768 / PR #833 (base). Branch refreshed with main ea41acbf at f0dbe128, CI green except tracker-link (base is not main). Resume after #833 is merged into main: retarget #1045 to main, merge main, hand off."
       },
       "1063": {
         "actor": "Worker-K1021A3",
