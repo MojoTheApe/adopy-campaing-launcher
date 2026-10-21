@@ -256,6 +256,12 @@ def validate(section):
 
 def state(shared, config, *, projected=False):
     """Selection is separate from activation; all configured readers are fenced."""
+    if shared.get('schema_version') == 8:
+        try:
+            from . import pause_policy
+        except ImportError:
+            import tracker_pause_policy as pause_policy
+        shared = pause_policy.decode(shared)
     selected = policy(config)
     section = shared.get('ci_retry')
     summary = projected and isinstance(section,dict) and set(section)=={'policy','repository'} and 'schema_version' not in shared

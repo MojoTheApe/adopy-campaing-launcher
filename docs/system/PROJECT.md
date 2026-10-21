@@ -166,3 +166,26 @@ existing release publisher, verifies actual published packages on isolated Windo
 and records exact task delivery only from the successful native acceptance job.
 Source preparation, policy activation and actual delivery remain distinct facts;
 see [the process runbook](../repository/POST_MAIN_DELIVERY.md) and parent ACL-1923.
+
+### ACL-1880 — campaign-local Facebook Page selection (2026-10-13)
+
+The builder reads available Page names and IDs through `/api/account-pages`, using the existing read-only profile session and profile lock. New campaign cards start with Automatic; duplicates copy other settings but reset Page selection. The first Page in the destination account's returned order is shown and resolved before creation. Explicit campaign choices never write the account map. Legacy non-builder drafts retain map fallback.
+
+Loading failures and confirmed empty lists are distinct and support Refresh pages. A truncated discovery result is refused. API preflight still validates an explicit Page's membership, and its existing creative readback validates the resulting identity. Instant Form caches are keyed by the resolved Page ID, including in Automatic mode.
+
+RPA resolves the selection before campaign creation and passes the ID and unique display name to the recorded flow. Every ad verifies Identity; failure is non-retryable and not publishable. The existing sanitized `tests/fixtures/ads_manager/simple_create_2026_09_27.html` supplies regression coverage for the captured collapsed Identity summary. Picker interaction has offline native/custom-control tests; a live alternate-Page picker pilot has not been performed. Unrecognized or ambiguous controls fail closed. Other RPA engines are refused for builder Page selections until they implement Identity verification.
+
+Verification uses synthetic accounts and mocked browser/API transports only. The isolated local dashboard preview is not a production deployment or a stage/main merge.
+# ACL-1880: manual completion when the automatic Page list is empty
+
+Owner revised the acceptance on 2026-10-13: use the first available Page; if none
+is available, allow preparation for manual completion. In the API website path,
+a confirmed empty list and no explicit Page now produces a warning. The worker
+creates only a PAUSED campaign and its PAUSED ad sets, with readback of those
+objects. It does not upload media or create creatives/ads without a Page. Results
+carry `manual_required` and remain non-publishable. The operator adds Page/ads in
+Ads Manager or retries after Page access is restored; normal identity labels
+reuse the same campaign/ad sets. The original builder retains the ad inputs.
+Instant Forms and an explicitly unavailable Page still block, as do failed Page
+reads. The RPA path retains its existing Identity requirements. This supersedes
+the earlier requirement that every empty Page list blocks all preparation.
