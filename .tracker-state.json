@@ -5940,6 +5940,27 @@
         "issue_scopes": {
           "1052": "9ec0c2a8ad90f824b35527de9cf47751b33907bd2c0104ad4cf93e9d60afe4ed"
         }
+      },
+      "967": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-A1021626",
+        "implementer": "Worker-A1021626",
+        "head_sha": "2b1c52297ef8d0b778285de2f8833037fb5b15d1",
+        "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+        "tree_sha": "182a3f5484b54663d2d1282c31341885b09be888",
+        "execution_lane": "6e6f0aa4453643d8a27046aa779e60f2",
+        "review_session": "run_a1021_626r",
+        "report": "Independent source re-review of ACL-1626 (PR 967) at 2b1c5229 (contains main ea41acbf; earlier merge d460cfba clean).\nDelta since the return (d460cfba..2b1c5229): tests/test_acl1620_account_notes.py _post() now runs the handler via asyncio.run in a worker thread (same pattern as the browser fixture's route handler), fixing the deterministic CI failure ('asyncio.run() cannot be called from a running event loop' after the module-scoped Playwright fixture). caplog and monkeypatch on notes.datetime remain effective across the thread (root logger handler / module global). docs/system/CHANGELOG.md gains an accurate ACL-1626 entry. No product-code change in the delta.\nFull scope vs main re-checked: src/web/account_notes.py, src/web/app.py, src/web/templates/report.html, tests/test_acl1620_account_notes.py, docs/system/CHANGELOG.md. Spec 1 met (WARNING log with backup path; save response carries set_aside and warning 'Notes file was damaged; a copy was kept at <path>'; role=alert banner on the account map). Spec 2 met (ms-resolution backup name plus collision counter under the machine-file lock). PR body has exactly one 'Tracker issues: ACL-1626' line, no closing keywords. No leaked ids/tokens/personal paths; user-facing text English.\nTests: whole test file run in one process locally; the new non-browser tests pass after the browser fixture; Playwright browser tests fail locally for environment reasons only (acl.test navigation timeout); CI is authoritative.\nNon-blocking: banner covered only by a template source-string test; if a save fails with OSError after the file was set aside, the user is not told about the copy (log only).\nSpec 3 (owner live check: write/edit/clear a note, restart the dashboard, note survives) is owner-only and not performed; it exercises the unchanged ACL-1620 persistence path and follows separately. Needs owner live check and a serve.py restart for the Python change.\nVerdict: approved.",
+        "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          626
+        ],
+        "recorded_at": "2026-10-21T11:07:47+00:00",
+        "issue_scopes": {
+          "626": "78daec77f59b269c69b2b0d3072e9dff71bc3675802a71e8a3e2f16b22df80f4"
+        }
       }
     },
     "stage": {
