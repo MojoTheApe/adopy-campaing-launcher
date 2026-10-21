@@ -46855,9 +46855,11 @@
         "worktree": "C:\\acl-2053",
         "id": "b2df83de8be4412eb19e18d805f4e5b3",
         "issue": 1053,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T08:19:12+00:00",
-        "from_status": "status:idea"
+        "from_status": "status:idea",
+        "pr": 1060,
+        "report": "Implemented ACL-2053 in PR #1060 (branch work/acl-2053-form-template-parity, head c272d379). Two pre-handoff read-only reviews; all findings fixed. Affected tests 264 passed locally; full suite in CI. Cover image and allow_organic_lead left out with reasons in the PR. Live check of follow_up_action_url needs owner OK."
       }
     },
     "tasks": {
