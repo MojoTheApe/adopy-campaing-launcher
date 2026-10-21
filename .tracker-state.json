@@ -47050,9 +47050,11 @@
         "worktree": "C:\\acl-int-w1839",
         "id": "a8c9a23a34284556afa14c9b377b2b6e",
         "issue": 839,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-21T13:40:24+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 843,
+        "report": "ACL-1839 refresh of PR #843 (no content change).\n- Old head: 608486600db51b357dd49038119caae58fe527bf\n- New head: 2f82fe8679bc5b2acccc7a188cc5a43180cbb960 (merge of origin/main 0ea237b0e4ceededbfd0683dff9e57c20059a115)\n- Only conflict: docs/system/CHANGELOG.md (both entries kept: ACL-1839 then ACL-1626). Base is main.\n- Diff vs main: CHANGELOG.md, _account_map_add.html, report.html, tests/test_account_connection_layout.py only.\n- Tests: py -m pytest tests/test_account_connection_layout.py -> 18 passed.\n- CI on new head: all checks pass (tracker-link, linux tests 1-3, windows tests, process instructions, ACL verification)."
       },
       "1050": {
         "actor": "Worker-P1021D2050",
