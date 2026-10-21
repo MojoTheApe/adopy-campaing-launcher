@@ -2313,6 +2313,10 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                 slot["destination"] = destination
             if destination == "instant_form":
                 slot["lead_form_id"] = (form.get(f"camp_{idx}_ad_{a_idx}_form_id") or "").strip()
+                # ACL-1776: шаблон формы (создаёт робот при публикации); ключ есть только при выборе шаблона.
+                template = (form.get(f"camp_{idx}_ad_{a_idx}_form_template") or "").strip()
+                if template:
+                    slot["lead_form_template"] = template
             slots.append(slot)
     # Return the ISO code, not the raw form value ("Costa Rica"). Confirmed
     # live 2026-07-30: the full name leaked into draft.country, where both
@@ -3057,6 +3061,7 @@ def api_accounts_overview() -> JSONResponse:
             "country": country_by_alias.get(normalize_account_alias(label), ""),
             "stock": row.get("stock") or "",
             "status": row.get("account_status") or "",
+            "label_key": profile_name_key((label or "").split(" ")[0]),
             "ad_account_id": ad_id,
             "profile_id": profile_id,
             "profile_open": profile_id in open_ids,
@@ -3089,6 +3094,7 @@ def api_accounts_overview() -> JSONResponse:
             "country": country_by_alias.get(normalize_account_alias(label), ""),
             "stock": "",
             "status": "",
+            "label_key": profile_name_key((label or "").split(" ")[0]),
             "ad_account_id": ad_id,
             "profile_id": profile_id,
             "profile_open": profile_id in open_ids,
@@ -4562,6 +4568,12 @@ async def goals_read(cm: str = "") -> JSONResponse:
     from starlette.concurrency import run_in_threadpool
 
     who = (cm or "").strip() or (os.environ.get("MY_CM_NAME") or "").strip()
+    me = (os.environ.get("MY_CM_NAME") or "").strip()
+    if who.casefold() != me.casefold() and not goals_store.is_team_lead():
+        return JSONResponse(
+            {"ok": False, "error": f"These are {who}'s goals. Only a team lead sees somebody else's."},
+            status_code=403,
+        )
     seed = await run_in_threadpool(_goal_countries_now, who)
     return JSONResponse({
         "ok": True,
@@ -4569,6 +4581,20 @@ async def goals_read(cm: str = "") -> JSONResponse:
         "goals": goals_store.for_cm(who, seed),
         "team_lead": goals_store.is_team_lead(),
     })
+
+
+@app.get("/goals/overview")
+async def goals_overview() -> JSONResponse:
+    """Every manager's saved goals, read-only. Team lead only (ACL_TEAM_LEAD).
+
+    Same agreement as editing: the flag keeps the UI honest, it is not a lock.
+    """
+    from src.web import goals as goals_store
+
+    if not goals_store.is_team_lead():
+        return JSONResponse(
+            {"ok": False, "error": "Only a team lead sees everyone's goals."}, status_code=403)
+    return JSONResponse({"ok": True, "managers": goals_store.overview()})
 
 
 @app.post("/goals")
@@ -5261,6 +5287,47 @@ async def api_page_forms(request: Request) -> JSONResponse:
     return JSONResponse(await asyncio.to_thread(page_forms.read_forms, account))
 
 
+@app.get("/api/form-templates")
+def api_form_templates_list() -> JSONResponse:
+    """ACL-1776: шаблоны Instant Form из локальной библиотеки (в Meta не ходит)."""
+    from src.fb_api import form_templates
+
+    return JSONResponse({"ok": True, "templates": form_templates.load(),
+                         "limits": {"questions": form_templates.MAX_QUESTIONS}})
+
+
+@app.post("/api/form-templates")
+async def api_form_templates_save(request: Request) -> JSONResponse:
+    """ACL-1776: сохранить шаблон (ошибки проверки - 400, по-английски). Ничего в Meta."""
+    from src.fb_api import form_templates
+
+    try:
+        raw = await request.json()
+    except ValueError:
+        return JSONResponse({"ok": False, "errors": ["The template could not be read"]}, status_code=400)
+    try:
+        saved = await asyncio.to_thread(form_templates.save, raw)
+    except form_templates.TemplateError as exc:
+        return JSONResponse({"ok": False, "errors": exc.errors}, status_code=400)
+    except OSError:
+        return JSONResponse({"ok": False, "errors": ["The template could not be saved on this computer"]},
+                            status_code=500)
+    return JSONResponse({"ok": True, "template": saved})
+
+
+@app.post("/api/form-templates/delete")
+async def api_form_templates_delete(request: Request) -> JSONResponse:
+    """ACL-1776: убрать шаблон из библиотеки. Формы на Страницах не трогаются никогда."""
+    from src.fb_api import form_templates
+
+    try:
+        raw = await request.json()
+    except ValueError:
+        raw = {}
+    removed = await asyncio.to_thread(form_templates.delete, str((raw or {}).get("id") or ""))
+    return JSONResponse({"ok": removed})
+
+
 @app.post("/preview-publish")
 async def preview_publish(request: Request) -> JSONResponse:
     """Dry-run: convert form slots → PublishJob plan, return JSON (no Meta API calls)."""
@@ -5769,6 +5836,14 @@ async def multilogin_search(request: Request) -> JSONResponse:
             clean = clean[:160].rstrip() + "…"
         return JSONResponse({"ok": False, "error": f"Multilogin refused the profile list: {clean}"})
 
+    # ACL-1202: the account key (the same rule the overview uses for its
+    # suggestion) rides along, so a picker can recognise "this is the one"
+    # in a search answer without a second copy of the rule in the page.
+    from src.fb_ads_rpa.mlx_profiles import profile_name_key
+
+    for _p in profiles:
+        if isinstance(_p, dict):
+            _p.setdefault("key", profile_name_key(_p.get("name") or ""))
     return JSONResponse({"ok": True, "profiles": profiles, "folders": folders})
 
 
