@@ -4811,27 +4811,6 @@
           "855": "a1c5335428b3f33c420132d25b8a2c5cb6061e075b76ecc2f0456302a91a3700"
         }
       },
-      "843": {
-        "kind": "independent-review",
-        "reviewer": "Reviewer-S1021839",
-        "implementer": "Worker-W1021839",
-        "verdict": "approved",
-        "head_sha": "2f82fe8679bc5b2acccc7a188cc5a43180cbb960",
-        "base_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
-        "tree_sha": "a9220c24d33b2c09423fb4c049de7c71ec5e7baf",
-        "execution_lane": "4de90b9341ff40cc8fa7adae6e8da6ac",
-        "review_session": "run_s1021_1839",
-        "report": "Merge 2f82fe86 (main 0ea237b0 into 60848660). git show --cc shows a single hand-resolved hunk, docs/system/CHANGELOG.md: ACL-1839 entry on top, main's ACL-1626 entry intact and unchanged. Diff vs main is exactly CHANGELOG, _account_map_add.html (aria-labels on known-account select and profile search), report.html (.amap-ml min-width/overflow-wrap, .amap-add select/input min-width:0 and max-width:min(15rem,100%), .amap-hits[hidden] display none) and tests/test_account_connection_layout.py (real-Chromium, production partial+CSS, 3 hosts x 2 themes x 280/720/1040 px, geometry, accessible names, Add sibling lookup, hidden results). Selectors, handlers and routes unchanged. All Issue 839 acceptance criteria met on current main. CI green per worker. No findings.",
-        "main_sha": "0ea237b0e4ceededbfd0683dff9e57c20059a115",
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "issues": [
-          839
-        ],
-        "recorded_at": "2026-10-21T14:09:03+00:00",
-        "issue_scopes": {
-          "839": "61a8a6d1b11eb11ae8c76520e1447683670fdbb31e61059e754e07b8aac66c97"
-        }
-      },
       "982": {
         "kind": "independent-review",
         "verdict": "approved",
@@ -117397,7 +117376,9 @@
         "session": "run_s1021_1839",
         "coordinator": "Coordinator-I1021A",
         "started_at": "2026-10-21T13:55:19+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "Content approved on 2f82fe86, but the required check ACL verification fails deterministically (2/2 runs): tests/test_media_attachment_identity.py::test_the_picked_tile_and_the_ad_show_the_same_thumbnail[False] 'dirty' == 'attached'. It passes on main+ACL-1165, so this is likely an ACL-1839 x main interaction. The author must investigate and fix, then get a fresh review.",
+        "keep_lane": false
       },
       "846": {
         "id": "fff1d5e736494527b9b4ceadcf74c4a8",
