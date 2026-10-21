@@ -55879,7 +55879,7 @@
             "session": "c8f54e83"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-c8f54e83",
         "coordinator": "Coordinator-M1011A",
         "handoff": {
@@ -55910,7 +55910,9 @@
           "actor": "Coordinator-M1011A",
           "session": "coord-m1011a-20261015",
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
-        }
+        },
+        "review_report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21",
+        "rework": true
       },
       "1038": {
         "implementers": [
@@ -106951,6 +106953,18 @@
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
         },
         "batch_id": null
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-21T13:13:15+00:00",
+        "issue": 1037,
+        "operation": {
+          "id": "2ae82633a6b6469f8009ff3852801cc6",
+          "actor": "Coordinator-M1011A",
+          "session": "coord-m1011a-20261015",
+          "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -110560,50 +110574,6 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-20T14:36:53+00:00"
-      },
-      "1037": {
-        "issue": 1037,
-        "pr": 1041,
-        "branch": "work/acl-2037-changelog-fragments",
-        "head_sha": "7ff672a370098bc2ec5b9356bbea7ab929b70e6c",
-        "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-        "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "scope": "63ab9afd123776df93881b7fc0d961bb5eb25318e4fedcec40fd69af6b75223f",
-        "review": {
-          "kind": "independent-review",
-          "verdict": "approved",
-          "reviewer": "Reviewer-R2037V",
-          "review_session": "reviewer-r2037v-20261020",
-          "execution_lane": "7f0832547fd94b108d587c92d8926c4d",
-          "implementer": "Worker-c8f54e83",
-          "head_sha": "7ff672a370098bc2ec5b9356bbea7ab929b70e6c",
-          "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-          "tree_sha": "becdd12ff86cd67f4fc46ddc3b22be95f0c5dc92",
-          "issues": [
-            1037
-          ],
-          "report": "The PR replaces prepending to the top of docs/system/CHANGELOG.md with one fragment file per task, docs/system/changelog.d/ACL-NNNN[-suffix].md, and adds scripts/fold_changelog.py, which folds fragments into CHANGELOG.md newest first (sorted by date, then task number, so the order is deterministic) and deletes them. A --check mode validates fragments without writing. History is preserved: the fold only prepends new blocks under the existing '# System history' header and keeps the old text unchanged; it handles a BOM, writes LF output, fails cleanly if the header is missing or a fragment is malformed (nothing is written), is idempotent on re-run (an already-present block is not duplicated), and a new entry for an already-listed task is kept. The fragment format is documented in changelog.d/README.md; PROJECT.md and ROUTINE_SENTRY_PROMPT.md now point to fragments, matching the code. AGENTS.md, CLAUDE.md and BRANCHING.md do not mention the CHANGELOG rule, so nothing was left inconsistent. No CI workflow files were changed. In-flight PRs that still edit CHANGELOG.md keep working, since nothing forbids that; they may conflict only once fragments have been folded, which the PR and the ACL-2037 fragment state explicitly (the issue says open PRs are not migrated). Tests: tests/test_fold_changelog_2037.py plus tests/test_acl_ci_scope.py gave 192 passed locally; the new file includes a test that validates the committed fragments and the CHANGELOG header, so fragment format is checked by the pytest CI jobs. CI on the head: all checks pass (linux tests 1/2/3, windows tests, Process instructions, tooling classification, installer verification, descriptor, tracker-link); build jobs skipped as expected for a docs/script change. Branch stacking: git log work/main..HEAD shows only the task's own commits plus a merge of main, no other unmerged tasks. Non-blocking nits: (1) fold_changelog.py is not yet wired into acl_batch.py / the release scripts and --check is not a separate CI step (only the pytest check covers it), so someone must run the fold manually; the PR body flags this as an open question for the owner, and a follow-up task should wire it in; (2) a fragment with a wrong name or heading fails only in pytest, not with a message pointing to the README. No live checks claimed.",
-          "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "recorded_at": "2026-10-20T14:42:09+00:00",
-          "issue_scopes": {
-            "1037": "63ab9afd123776df93881b7fc0d961bb5eb25318e4fedcec40fd69af6b75223f"
-          }
-        },
-        "lane": {
-          "id": "7f0832547fd94b108d587c92d8926c4d",
-          "pr": 1041,
-          "issues": [
-            1037
-          ],
-          "actor": "Reviewer-R2037V",
-          "session": "reviewer-r2037v-20261020",
-          "coordinator": "Coordinator-M1011A",
-          "started_at": "2026-10-20T14:12:43+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-20T14:42:44+00:00"
       },
       "836": {
         "issue": 836,
