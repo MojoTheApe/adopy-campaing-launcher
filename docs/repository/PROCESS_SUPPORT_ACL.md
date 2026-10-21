@@ -11,7 +11,13 @@ The earlier ACL-2026 scope, owners, counts and evidence below remain history;
 they are not silently reused as approval of this new task.
 
 Compare the complete new source against actual main
-`64e73a1e151b6611517cd9643dfb911ef54d6832`. The maintained renderer/merger stopped
+`e8bf31f8921ec6a8f79c824f39c1fc3beff2f359`. The initial source against64e73a1e
+passed all required native checks, including Linux and Windows installer checks.
+After main advanced through PR1077, the genuine Reviewer returned this source;
+the original Worker reclaimed it and incorporated the seven new main files
+unchanged. That earlier review/check set remains history. The refreshed immutable
+head needs its own current proof, independent review and required native checks.
+The maintained renderer/merger stopped
 at two genuine local conflicts. Explicit resolution preserves the descriptor
 workflow's master compatibility push, draft validation, permissions, jobs and
 concurrency; only its exact Master Action pin changes. VERIFICATION preserves
