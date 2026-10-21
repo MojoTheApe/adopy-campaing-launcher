@@ -46858,20 +46858,6 @@
         "state": "implementing",
         "started_at": "2026-10-21T08:19:12+00:00",
         "from_status": "status:idea"
-      },
-      "380": {
-        "actor": "Worker-A1021380",
-        "session": "run_a1021_380w",
-        "coordinator": "Coordinator-A1021A",
-        "branch": "work/acl-1380-ref-options-off-render",
-        "worktree": "C:\\acl-rv-380",
-        "id": "53489ce9eba24b279641762d10fa629e",
-        "issue": 380,
-        "state": "handoff",
-        "started_at": "2026-10-21T08:52:04+00:00",
-        "from_status": "status:todo",
-        "pr": 962,
-        "report": "PR #962 (work/acl-1380-ref-options-off-render), head 44bdbf29.\n- Merged current main ea41acbf into the branch (126 commits). The merge was clean, no conflicts (src/web/app.py changed on both sides and auto-merged).\n- One fix in this task's own test: test_the_cause_clearing_the_mark_on_the_loop_thread_kills_every_next_step asserted only the Python 3.11/3.12 wording \"is not the running loop\"; Python 3.13 prints \"no running event loop\". The assertion now accepts both. No product code changed.\n- Tests run: tests/test_render_path_has_no_network_and_loop_survives.py (8 passed) plus all 43 test files that reference publish_jobs, _load_ref_options, _load_sheet_targets, ref-data or targeting_registry: 973 tests, 972 passed, 1 failed (the wording above, since fixed and re-run green). acl_scan_secrets: clean.\n- Full suite not run locally; CI is the acceptance signal.\n- The change needs a serve.py restart to take effect on the live dashboard. The owner may want to check cold/warm GET / timings live; these were not re-measured."
       }
     },
     "tasks": {
@@ -54119,25 +54105,25 @@
             "session": "run_a1021_380w"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-A1021380",
         "coordinator": "Coordinator-A1021A",
         "handoff": {
-          "actor": "Worker-W1380M",
-          "session": "s-1380-334896ca",
-          "coordinator": "Coordinator-M1011A",
+          "actor": "Worker-A1021380",
+          "session": "run_a1021_380w",
+          "coordinator": "Coordinator-A1021A",
           "branch": "work/acl-1380-ref-options-off-render",
-          "worktree": "C:\\acl-1380",
-          "id": "a7d6881e4f5743e29b12674bd5c77a9b",
+          "worktree": "C:\\acl-rv-380",
+          "id": "53489ce9eba24b279641762d10fa629e",
           "issue": 380,
           "state": "handoff",
-          "started_at": "2026-10-17T06:18:51+00:00",
+          "started_at": "2026-10-21T08:52:04+00:00",
           "from_status": "status:todo",
           "pr": 962,
-          "report": "PR #962 (work/acl-1380-ref-options-off-render, f3e7bbf3).\n- Render path: _load_sheet_targets reads the machine copy and starts one background non-forced pull; no pull(force=True) on GET / or /api/ref-data. Measured 392 ms median -> 18 ms on the real library.\n- asyncio errors: cause reproduced (clearing the running-loop mark on the server loop thread -> \"loop ... is not the running loop\"). Cancel route covered by a live-uvicorn test; _clear_inherited_asyncio_loop refuses on the loop thread. Zombie/launcher part stays in #163.\n- Cold/warm GET / timings cited from the 29.09 profiling (not re-measured live: owner dashboard not restarted).\n- Tests: 8 new; 148 touched-area tests passed locally. Needs serve.py restart to take effect."
+          "report": "PR #962 (work/acl-1380-ref-options-off-render), head 44bdbf29.\n- Merged current main ea41acbf into the branch (126 commits). The merge was clean, no conflicts (src/web/app.py changed on both sides and auto-merged).\n- One fix in this task's own test: test_the_cause_clearing_the_mark_on_the_loop_thread_kills_every_next_step asserted only the Python 3.11/3.12 wording \"is not the running loop\"; Python 3.13 prints \"no running event loop\". The assertion now accepts both. No product code changed.\n- Tests run: tests/test_render_path_has_no_network_and_loop_survives.py (8 passed) plus all 43 test files that reference publish_jobs, _load_ref_options, _load_sheet_targets, ref-data or targeting_registry: 973 tests, 972 passed, 1 failed (the wording above, since fixed and re-run green). acl_scan_secrets: clean.\n- Full suite not run locally; CI is the acceptance signal.\n- The change needs a serve.py restart to take effect on the live dashboard. The owner may want to check cold/warm GET / timings live; these were not re-measured."
         },
         "pr": 962,
-        "queued_at": "2026-10-17T06:34:52+00:00",
+        "queued_at": "2026-10-21T09:36:12+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -61487,7 +61473,8 @@
       }
     },
     "review_queue": [
-      1050
+      1050,
+      380
     ],
     "review": null,
     "history": [
@@ -105025,6 +105012,13 @@
             "approved_at": "2026-10-21T09:20:43+00:00"
           }
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-21T09:36:12+00:00",
+        "issue": 380,
+        "pr": 962,
+        "actor": "Worker-A1021380"
       }
     ],
     "policy": {
