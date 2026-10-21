@@ -5940,6 +5940,27 @@
         "issue_scopes": {
           "1052": "9ec0c2a8ad90f824b35527de9cf47751b33907bd2c0104ad4cf93e9d60afe4ed"
         }
+      },
+      "967": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-A1021626",
+        "implementer": "Worker-A1021626",
+        "head_sha": "d460cfba8b62848ca7f0c3200c303dbffa7dd0e6",
+        "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+        "tree_sha": "ece4cc06a4e5ab3a274bcb513d7b8ad99992cee7",
+        "execution_lane": "6e6f0aa4453643d8a27046aa779e60f2",
+        "review_session": "run_a1021_626r",
+        "report": "Independent source review of ACL-1626 (PR 967) at d460cfba (merge of main ea41acbf; combined diff of the merge is empty, i.e. clean).\nScope vs main: src/web/account_notes.py, src/web/app.py, src/web/templates/report.html, tests/test_acl1620_account_notes.py. No unrelated files. PR body has exactly one 'Tracker issues: ACL-1626' line, no closing keywords.\nSpec 1 (warn + tell the user): _load_strict logs a WARNING with the backup path and reports set_aside via an optional report dict; POST /api/account-notes returns set_aside and warning 'Notes file was damaged; a copy was kept at <path>' (exact wording from the Issue); the page shows it in a role=alert banner for 15 s above the existing toast. Met.\nSpec 2 (ms resolution): backup name corrupt-YYYYmmdd-HHMMSS-mmm plus a -2, -3 counter on collision; existence check and replace run inside the existing machine-file transaction lock, so no race between writers. Met.\nSpec 3 (owner live check: write/edit/clear a note, restart the dashboard, note survives): not performed (owner-only). This exercises the ACL-1620 persistence path that this change does not alter; the source can be approved with that check following separately per the Issue. Needs owner live check, plus a serve.py restart for the Python change.\nTests: the 4 new tests pass locally (damaged file reported in response and logged; two corruptions in the same millisecond keep both copies; ms-resolution name; template wiring). The full two files: 44 passed, browser (Playwright) tests fail locally for environment reasons (acl.test Page.goto timeout) and collaterally poison later tests in the same process; CI is authoritative.\nLeak check: no account/profile ids, tokens or personal paths in diff, commits or PR text. User-facing strings are English.\nNon-blocking notes: (a) the banner test is a source-string check only, there is no browser test of the banner appearing; (b) no docs/system/CHANGELOG entry for the new response fields/banner (WORKFLOW asks for docs/system updates; nothing existing became stale) - worth adding in a later docs pass; (c) if the save itself fails after the file was set aside (OSError -> 500), the user is not told about the set-aside copy, only the log has it.\nVerdict: approved.",
+        "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          626
+        ],
+        "recorded_at": "2026-10-21T10:22:43+00:00",
+        "issue_scopes": {
+          "626": "78daec77f59b269c69b2b0d3072e9dff71bc3675802a71e8a3e2f16b22df80f4"
+        }
       }
     },
     "stage": {
