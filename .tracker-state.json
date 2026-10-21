@@ -46900,6 +46900,18 @@
         "state": "implementing",
         "started_at": "2026-10-21T09:54:32+00:00",
         "from_status": "status:idea"
+      },
+      "377": {
+        "actor": "Worker-W1021377",
+        "session": "run_w1021_377",
+        "coordinator": "Coordinator-I1021A",
+        "branch": "work/acl-1377-workbook-key",
+        "worktree": "C:\\acl-int-w377",
+        "id": "80fae1fb1ff84648bb871e0dd8360249",
+        "issue": 377,
+        "state": "implementing",
+        "started_at": "2026-10-21T10:05:27+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -54870,11 +54882,15 @@
           {
             "actor": "Worker-K7Q2M",
             "session": "acl-1377"
+          },
+          {
+            "actor": "Worker-W1021377",
+            "session": "run_w1021_377"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-K7Q2M",
-        "coordinator": "Coordinator-M1011A",
+        "state": "implementing",
+        "worker": "Worker-W1021377",
+        "coordinator": "Coordinator-I1021A",
         "handoff": {
           "actor": "Worker-K7Q2M",
           "session": "acl-1377",
@@ -54891,21 +54907,15 @@
         },
         "pr": 935,
         "queued_at": "2026-10-17T19:36:55+00:00",
-        "reviewer": "Reviewer-R1377X",
         "return_operation": {
           "id": "5644e417f8064994934aeea31e327f69",
           "actor": "Coordinator-M1011A",
           "session": "coord-m1011a-20261015",
           "report": "Approval is stale against current main ea41acbf (PR #1049), so batch intake rejects it (\"source approval is stale for its PR, main or policy\"). Author: merge current main into the original branch without changing content, re-run checks, hand off, and get a fresh independent source approval. Then it goes into the next frozen batch. Returned by the owner-authorized integration run (2026-10-21), acting under the recorded approval coordinator."
         },
-        "return": {
-          "id": "5644e417f8064994934aeea31e327f69",
-          "actor": "Coordinator-M1011A",
-          "session": "coord-m1011a-20261015",
-          "report": "Approval is stale against current main ea41acbf (PR #1049), so batch intake rejects it (\"source approval is stale for its PR, main or policy\"). Author: merge current main into the original branch without changing content, re-run checks, hand off, and get a fresh independent source approval. Then it goes into the next frozen batch. Returned by the owner-authorized integration run (2026-10-21), acting under the recorded approval coordinator."
-        },
         "review_report": "Approval is stale against current main ea41acbf (PR #1049), so batch intake rejects it (\"source approval is stale for its PR, main or policy\"). Author: merge current main into the original branch without changing content, re-run checks, hand off, and get a fresh independent source approval. Then it goes into the next frozen batch. Returned by the owner-authorized integration run (2026-10-21), acting under the recorded approval coordinator.",
-        "rework": true
+        "rework": true,
+        "rework_claim": "80fae1fb1ff84648bb871e0dd8360249"
       },
       "987": {
         "implementers": [
@@ -58685,6 +58695,10 @@
       "Reviewer-A1021626": {
         "session": "run_a1021_626r",
         "role": "Reviewer"
+      },
+      "Worker-W1021377": {
+        "session": "run_w1021_377",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -105210,6 +105224,13 @@
         "pr": 967,
         "lane": "6e6f0aa4453643d8a27046aa779e60f2",
         "actor": "Reviewer-A1021626"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-21T10:05:27+00:00",
+        "issue": 377,
+        "claim": "80fae1fb1ff84648bb871e0dd8360249",
+        "actor": "Worker-W1021377"
       }
     ],
     "policy": {
