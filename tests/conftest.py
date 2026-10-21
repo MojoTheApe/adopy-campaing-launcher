@@ -121,6 +121,35 @@ def _hand_window_reopen_off(monkeypatch):
     yield
 
 
+# Каждый тест начинает с чистого состояния шага Crop и отказа по медиа (ACL-2073).
+#
+# `crop_step` хранит отказ Crop в thread-local (`_tls.failure`), `meta_dom` —
+# отказ по медиа объявления (`_media_refusal_tls`) и флаг «у медиатеки нет
+# счётчика» (`_reuse_state`). В продукте их сбрасывает каждое объявление
+# (`set_plan`/`reset_attempt`), а тест, который зовёт `crop_step.apply` без
+# этого, оставлял отказ в главном потоке воркера. 21.10: при `--dist loadfile`
+# `test_bench_b97_picker_and_crop_1007.py` (оставляет
+# `crop_square_card_missing`) попал в один воркер с
+# `test_media_attachment_identity.py`, и первый же повтор из медиатеки там
+# забрал чужой отказ через `_crop_refusal` -> `dirty` вместо `attached` — падение
+# зависело только от того, какие файлы достались шарду 3 CI. Сбрасываются лишь
+# уже импортированные модули: фикстура не тянет Playwright в чужие тесты.
+@pytest.fixture(autouse=True)
+def _crop_and_media_refusal_state_per_test():
+    def reset():
+        crop = sys.modules.get("src.fb_ads_rpa.crop_step")
+        if crop is not None:
+            crop.set_plan(None)
+        md = sys.modules.get("src.fb_ads_rpa.meta_dom")
+        if md is not None:
+            md._note_media_refused(None)
+            md._reuse_state["counter_missing"] = False
+
+    reset()
+    yield
+    reset()
+
+
 # Тесты не закрывают профили Multilogin в конце задания (ACL-1444).
 #
 # Чистое задание закрывает профиль через MLX API. Тест, который доходит до
