@@ -54046,7 +54046,7 @@
             "session": "run_a1021_784w"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-A1021784",
         "coordinator": "Coordinator-A1021A",
         "handoff": {
@@ -104957,6 +104957,72 @@
             "approved_at": "2026-10-21T09:06:55+00:00"
           }
         }
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-21T09:32:51+00:00",
+        "issue": 784,
+        "pr": 961,
+        "review": {
+          "id": "0da8125a7c8b406f882b5209d6fe91db",
+          "pr": 961,
+          "issues": [
+            784
+          ],
+          "actor": "Reviewer-A1021784",
+          "session": "run_a1021_784r",
+          "coordinator": "Coordinator-A1021A",
+          "started_at": "2026-10-21T08:42:06+00:00",
+          "state": "approving",
+          "report": "ACL-1784 / PR #961 independent source review \u2014 RETURNED for a fix (Reviewer-A1021784, head a525a67a, contains main ea41acbf).\n\nScope checked: full diff vs work/main (CHANGELOG, src/web/publish_api.py, src/web/publish_jobs.py, new tests/test_acl1784_api_review_window.py), the Issue spec/acceptance, PR body (one `Tracker issues: ACL-1784` line, no closing keywords), merge commit a525a67a (`git show --cc`: only CHANGELOG adjacent entries, resolved correctly, no code touched). No leaked ids/tokens/paths; notices are English; RPA path unchanged (`review_window` never set there). Local tests: test_acl1784_api_review_window, test_acl1603_stable_slots, test_acl1761_*, test_acl1614_cancel_hung_job, test_acl1812_warm_sessions \u2014 404 passed.\n\nBLOCKING finding B1 \u2014 the slot is released while a profile the job started is still running, and the panel says the opposite.\n\nIn `_run_api`, `settled = clean or not wrote` drives both `review_window = not settled` (which makes `_run_job_inner` call `_slots.release` instead of `_slots.keep`) and the notice. But `ApiPublisher.finish_job` can still return \"\" (profile left open) for a job-started profile even when `clean=True`:\n- `self.cancelled()` \u2014 user pressed Stop before the first write (cancel_job intentionally leaves the Multilogin window open, ACL-1614);\n- `_keep_profiles_open()` \u2014 owner switch ACL_KEEP_PROFILES_OPEN;\n- `self.dry_run` \u2014 finish_job forces clean=False (dry_run=1 jobs are reachable from the publish endpoint);\n- `_stop_profile` raised (stop failure).\nIn all of these, wrote=False \u2192 settled=True \u2192 review_window=False \u2192 the slot is freed, yet the Mimic window the job started keeps running. That is exactly the hazard ACL-1603 guards against (queue launching extra Mimics over open windows; with cap 1 a second profile starts while the first is still open). The panel then shows API_NO_WRITE_NOTICE \"the profile is not kept open for review\", which is false. The Stop-before-first-write case also misses the Issue spec (\"stops before the first write\" \u2192 close our tab, release the slot, stop the profile if the job started it): the profile is neither stopped nor counted.\n\nRequired fix (either is acceptable, keep it small):\n(a) Release the slot only when the profile is actually not left open by the job: `outcome == \"closed\"` OR the job did not start the profile (user-opened \u2014 spec says release in that case). If a job-started profile stays open for any other reason (cancel, keep-open switch, dry run, stop failure), keep the slot as before and do not show the \"not kept open\" notice (show an accurate one or none). And/or\n(b) For a no-write stop, let finish_job stop the job-started profile despite `cancelled()` (spec), and still fall back to (a) when stopping did not happen.\nExpose what you need from ApiPublisher read-only (e.g. a `started_profile` property from `self._opened.started_now`) rather than reaching into privates.\n\nTests to add (fakes; the current FakePublisher.finish_job does not model cancel/keep-open/dry-run/stop-failure, so it cannot catch this): Stop before the first write on a job-started profile; ACL_KEEP_PROFILES_OPEN=1 with a clean no-write or clean job on a job-started profile; finish_job returning \"\" for a job-started profile \u2014 each must either close the profile or keep the slot, and the notice must match the real state. Prefer driving the real `ApiPublisher.finish_job` with a faked `_opened`/`_stop_profile` for at least one case.\n\nNon-blocking notes:\n- `wrote` falls back to True on an exception \u2014 good (conservative).\n- GraphError rejections count as writes (`GraphClient.writes` increments before POST), so a Meta-refused write keeps the window \u2014 conservative, acceptable.\n- CI on a525a67a: all test/installer/descriptor checks green; `tracker-link` failed because it ran before handoff (\"move it to Review before a ready PR\") \u2014 rerun it on the next head.\n- Owner live check (panel notice on the test dashboard) can follow separately as the Issue allows.\n\nLane kept (--keep-lane); I will review the fix delta.",
+          "keep_lane": true,
+          "approval": {
+            "issue": 784,
+            "pr": 961,
+            "branch": "work/acl-1784-api-no-review-window",
+            "head_sha": "f125642bbad9a67cc7d53f4b140f26894ad108af",
+            "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+            "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "5b56fa44c5d2cc279506d3496eb5ed078f5e6d463f7cd1a06f6355db6f6b7bf7",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-A1021784",
+              "implementer": "Worker-A1021784",
+              "head_sha": "f125642bbad9a67cc7d53f4b140f26894ad108af",
+              "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "tree_sha": "5db17581d82b8bddf92dde850667f2ee98ee5785",
+              "execution_lane": "0da8125a7c8b406f882b5209d6fe91db",
+              "review_session": "run_a1021_784r",
+              "report": "ACL-1784 / PR #961 independent source review - APPROVED at f125642b (contains main ea41acbf).\nScope: full diff vs main - docs/system/CHANGELOG.md, src/web/publish_api.py (read-only ApiPublisher.writes and started_profile), src/web/publish_jobs.py (_run_api settled/still_open/review_window + English notices; _run_job_inner releases the slot when review_window is False), tests/test_acl1784_api_review_window.py (18 tests). No unrelated files. Merge commit a525a67a resolved only adjacent CHANGELOG entries correctly. PR body: one 'Tracker issues: ACL-1784' line, no closing keywords. No leaked ids/tokens/paths (account labels only, as in the Issue). User-facing notices English. RPA path unchanged (review_window never set there).\nAcceptance: plan error leaves no kept window and the next queued job starts at cap 1; preflight stop closes a job-started profile and frees the slot for a user-opened one; clean job releases its slot (closes a job-started profile); readback mismatch / error after a write keeps the window. Tests use fake publisher and real ProfileSlots; the real finish_job is exercised for clean/stop/keep-open/dry-run/stop-failure.\nEarlier blocking finding B1 (slot freed while a job-started profile stayed open, false notice) is fixed: still_open = outcome != 'closed' and started_profile keeps the slot and shows API_STILL_OPEN_NOTICE.\nNon-blocking: on a user Stop before the first write the job-started profile is not stopped (ACL-1614 leaves the window open on cancel); the slot stays taken and the notice is truthful. I accept this as a conservative reading of the Issue's 'stops before the first write', which plan/preflight stops satisfy; owner may ask for auto-stop later. Writes counter counts Meta-refused POSTs as writes (conservative). The fix was written before the worker claim and committed after it (process note only).\nTests run locally: test_acl1784, test_acl1603, test_acl1761_api_create, test_acl1761_plan_check, test_acl1614, test_a_finished_clean_profile_closes_itself, test_acl1812: 365 passed.\nLive check: owner check of the panel notice on the test dashboard can follow separately.",
+              "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                784
+              ],
+              "recorded_at": "2026-10-21T09:00:28+00:00",
+              "issue_scopes": {
+                "784": "5b56fa44c5d2cc279506d3496eb5ed078f5e6d463f7cd1a06f6355db6f6b7bf7"
+              }
+            },
+            "lane": {
+              "id": "0da8125a7c8b406f882b5209d6fe91db",
+              "pr": 961,
+              "issues": [
+                784
+              ],
+              "actor": "Reviewer-A1021784",
+              "session": "run_a1021_784r",
+              "coordinator": "Coordinator-A1021A",
+              "started_at": "2026-10-21T08:42:06+00:00",
+              "state": "reviewing",
+              "report": "ACL-1784 / PR #961 independent source review \u2014 RETURNED for a fix (Reviewer-A1021784, head a525a67a, contains main ea41acbf).\n\nScope checked: full diff vs work/main (CHANGELOG, src/web/publish_api.py, src/web/publish_jobs.py, new tests/test_acl1784_api_review_window.py), the Issue spec/acceptance, PR body (one `Tracker issues: ACL-1784` line, no closing keywords), merge commit a525a67a (`git show --cc`: only CHANGELOG adjacent entries, resolved correctly, no code touched). No leaked ids/tokens/paths; notices are English; RPA path unchanged (`review_window` never set there). Local tests: test_acl1784_api_review_window, test_acl1603_stable_slots, test_acl1761_*, test_acl1614_cancel_hung_job, test_acl1812_warm_sessions \u2014 404 passed.\n\nBLOCKING finding B1 \u2014 the slot is released while a profile the job started is still running, and the panel says the opposite.\n\nIn `_run_api`, `settled = clean or not wrote` drives both `review_window = not settled` (which makes `_run_job_inner` call `_slots.release` instead of `_slots.keep`) and the notice. But `ApiPublisher.finish_job` can still return \"\" (profile left open) for a job-started profile even when `clean=True`:\n- `self.cancelled()` \u2014 user pressed Stop before the first write (cancel_job intentionally leaves the Multilogin window open, ACL-1614);\n- `_keep_profiles_open()` \u2014 owner switch ACL_KEEP_PROFILES_OPEN;\n- `self.dry_run` \u2014 finish_job forces clean=False (dry_run=1 jobs are reachable from the publish endpoint);\n- `_stop_profile` raised (stop failure).\nIn all of these, wrote=False \u2192 settled=True \u2192 review_window=False \u2192 the slot is freed, yet the Mimic window the job started keeps running. That is exactly the hazard ACL-1603 guards against (queue launching extra Mimics over open windows; with cap 1 a second profile starts while the first is still open). The panel then shows API_NO_WRITE_NOTICE \"the profile is not kept open for review\", which is false. The Stop-before-first-write case also misses the Issue spec (\"stops before the first write\" \u2192 close our tab, release the slot, stop the profile if the job started it): the profile is neither stopped nor counted.\n\nRequired fix (either is acceptable, keep it small):\n(a) Release the slot only when the profile is actually not left open by the job: `outcome == \"closed\"` OR the job did not start the profile (user-opened \u2014 spec says release in that case). If a job-started profile stays open for any other reason (cancel, keep-open switch, dry run, stop failure), keep the slot as before and do not show the \"not kept open\" notice (show an accurate one or none). And/or\n(b) For a no-write stop, let finish_job stop the job-started profile despite `cancelled()` (spec), and still fall back to (a) when stopping did not happen.\nExpose what you need from ApiPublisher read-only (e.g. a `started_profile` property from `self._opened.started_now`) rather than reaching into privates.\n\nTests to add (fakes; the current FakePublisher.finish_job does not model cancel/keep-open/dry-run/stop-failure, so it cannot catch this): Stop before the first write on a job-started profile; ACL_KEEP_PROFILES_OPEN=1 with a clean no-write or clean job on a job-started profile; finish_job returning \"\" for a job-started profile \u2014 each must either close the profile or keep the slot, and the notice must match the real state. Prefer driving the real `ApiPublisher.finish_job` with a faked `_opened`/`_stop_profile` for at least one case.\n\nNon-blocking notes:\n- `wrote` falls back to True on an exception \u2014 good (conservative).\n- GraphError rejections count as writes (`GraphClient.writes` increments before POST), so a Meta-refused write keeps the window \u2014 conservative, acceptable.\n- CI on a525a67a: all test/installer/descriptor checks green; `tracker-link` failed because it ran before handoff (\"move it to Review before a ready PR\") \u2014 rerun it on the next head.\n- Owner live check (panel notice on the test dashboard) can follow separately as the Issue allows.\n\nLane kept (--keep-lane); I will review the fix delta.",
+              "keep_lane": true
+            },
+            "approved_at": "2026-10-21T09:20:43+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -109473,6 +109539,52 @@
           "keep_lane": true
         },
         "approved_at": "2026-10-21T09:06:55+00:00"
+      },
+      "784": {
+        "issue": 784,
+        "pr": 961,
+        "branch": "work/acl-1784-api-no-review-window",
+        "head_sha": "f125642bbad9a67cc7d53f4b140f26894ad108af",
+        "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+        "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "5b56fa44c5d2cc279506d3496eb5ed078f5e6d463f7cd1a06f6355db6f6b7bf7",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-A1021784",
+          "implementer": "Worker-A1021784",
+          "head_sha": "f125642bbad9a67cc7d53f4b140f26894ad108af",
+          "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+          "tree_sha": "5db17581d82b8bddf92dde850667f2ee98ee5785",
+          "execution_lane": "0da8125a7c8b406f882b5209d6fe91db",
+          "review_session": "run_a1021_784r",
+          "report": "ACL-1784 / PR #961 independent source review - APPROVED at f125642b (contains main ea41acbf).\nScope: full diff vs main - docs/system/CHANGELOG.md, src/web/publish_api.py (read-only ApiPublisher.writes and started_profile), src/web/publish_jobs.py (_run_api settled/still_open/review_window + English notices; _run_job_inner releases the slot when review_window is False), tests/test_acl1784_api_review_window.py (18 tests). No unrelated files. Merge commit a525a67a resolved only adjacent CHANGELOG entries correctly. PR body: one 'Tracker issues: ACL-1784' line, no closing keywords. No leaked ids/tokens/paths (account labels only, as in the Issue). User-facing notices English. RPA path unchanged (review_window never set there).\nAcceptance: plan error leaves no kept window and the next queued job starts at cap 1; preflight stop closes a job-started profile and frees the slot for a user-opened one; clean job releases its slot (closes a job-started profile); readback mismatch / error after a write keeps the window. Tests use fake publisher and real ProfileSlots; the real finish_job is exercised for clean/stop/keep-open/dry-run/stop-failure.\nEarlier blocking finding B1 (slot freed while a job-started profile stayed open, false notice) is fixed: still_open = outcome != 'closed' and started_profile keeps the slot and shows API_STILL_OPEN_NOTICE.\nNon-blocking: on a user Stop before the first write the job-started profile is not stopped (ACL-1614 leaves the window open on cancel); the slot stays taken and the notice is truthful. I accept this as a conservative reading of the Issue's 'stops before the first write', which plan/preflight stops satisfy; owner may ask for auto-stop later. Writes counter counts Meta-refused POSTs as writes (conservative). The fix was written before the worker claim and committed after it (process note only).\nTests run locally: test_acl1784, test_acl1603, test_acl1761_api_create, test_acl1761_plan_check, test_acl1614, test_a_finished_clean_profile_closes_itself, test_acl1812: 365 passed.\nLive check: owner check of the panel notice on the test dashboard can follow separately.",
+          "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            784
+          ],
+          "recorded_at": "2026-10-21T09:00:28+00:00",
+          "issue_scopes": {
+            "784": "5b56fa44c5d2cc279506d3496eb5ed078f5e6d463f7cd1a06f6355db6f6b7bf7"
+          }
+        },
+        "lane": {
+          "id": "0da8125a7c8b406f882b5209d6fe91db",
+          "pr": 961,
+          "issues": [
+            784
+          ],
+          "actor": "Reviewer-A1021784",
+          "session": "run_a1021_784r",
+          "coordinator": "Coordinator-A1021A",
+          "started_at": "2026-10-21T08:42:06+00:00",
+          "state": "reviewing",
+          "report": "ACL-1784 / PR #961 independent source review \u2014 RETURNED for a fix (Reviewer-A1021784, head a525a67a, contains main ea41acbf).\n\nScope checked: full diff vs work/main (CHANGELOG, src/web/publish_api.py, src/web/publish_jobs.py, new tests/test_acl1784_api_review_window.py), the Issue spec/acceptance, PR body (one `Tracker issues: ACL-1784` line, no closing keywords), merge commit a525a67a (`git show --cc`: only CHANGELOG adjacent entries, resolved correctly, no code touched). No leaked ids/tokens/paths; notices are English; RPA path unchanged (`review_window` never set there). Local tests: test_acl1784_api_review_window, test_acl1603_stable_slots, test_acl1761_*, test_acl1614_cancel_hung_job, test_acl1812_warm_sessions \u2014 404 passed.\n\nBLOCKING finding B1 \u2014 the slot is released while a profile the job started is still running, and the panel says the opposite.\n\nIn `_run_api`, `settled = clean or not wrote` drives both `review_window = not settled` (which makes `_run_job_inner` call `_slots.release` instead of `_slots.keep`) and the notice. But `ApiPublisher.finish_job` can still return \"\" (profile left open) for a job-started profile even when `clean=True`:\n- `self.cancelled()` \u2014 user pressed Stop before the first write (cancel_job intentionally leaves the Multilogin window open, ACL-1614);\n- `_keep_profiles_open()` \u2014 owner switch ACL_KEEP_PROFILES_OPEN;\n- `self.dry_run` \u2014 finish_job forces clean=False (dry_run=1 jobs are reachable from the publish endpoint);\n- `_stop_profile` raised (stop failure).\nIn all of these, wrote=False \u2192 settled=True \u2192 review_window=False \u2192 the slot is freed, yet the Mimic window the job started keeps running. That is exactly the hazard ACL-1603 guards against (queue launching extra Mimics over open windows; with cap 1 a second profile starts while the first is still open). The panel then shows API_NO_WRITE_NOTICE \"the profile is not kept open for review\", which is false. The Stop-before-first-write case also misses the Issue spec (\"stops before the first write\" \u2192 close our tab, release the slot, stop the profile if the job started it): the profile is neither stopped nor counted.\n\nRequired fix (either is acceptable, keep it small):\n(a) Release the slot only when the profile is actually not left open by the job: `outcome == \"closed\"` OR the job did not start the profile (user-opened \u2014 spec says release in that case). If a job-started profile stays open for any other reason (cancel, keep-open switch, dry run, stop failure), keep the slot as before and do not show the \"not kept open\" notice (show an accurate one or none). And/or\n(b) For a no-write stop, let finish_job stop the job-started profile despite `cancelled()` (spec), and still fall back to (a) when stopping did not happen.\nExpose what you need from ApiPublisher read-only (e.g. a `started_profile` property from `self._opened.started_now`) rather than reaching into privates.\n\nTests to add (fakes; the current FakePublisher.finish_job does not model cancel/keep-open/dry-run/stop-failure, so it cannot catch this): Stop before the first write on a job-started profile; ACL_KEEP_PROFILES_OPEN=1 with a clean no-write or clean job on a job-started profile; finish_job returning \"\" for a job-started profile \u2014 each must either close the profile or keep the slot, and the notice must match the real state. Prefer driving the real `ApiPublisher.finish_job` with a faked `_opened`/`_stop_profile` for at least one case.\n\nNon-blocking notes:\n- `wrote` falls back to True on an exception \u2014 good (conservative).\n- GraphError rejections count as writes (`GraphClient.writes` increments before POST), so a Meta-refused write keeps the window \u2014 conservative, acceptable.\n- CI on a525a67a: all test/installer/descriptor checks green; `tracker-link` failed because it ran before handoff (\"move it to Review before a ready PR\") \u2014 rerun it on the next head.\n- Owner live check (panel notice on the test dashboard) can follow separately as the Issue allows.\n\nLane kept (--keep-lane); I will review the fix delta.",
+          "keep_lane": true
+        },
+        "approved_at": "2026-10-21T09:20:43+00:00"
       }
     },
     "batches": {
@@ -114577,66 +114689,6 @@
         "coordinator": "Coordinator-C0930A",
         "started_at": "2026-10-19T13:01:50+00:00",
         "state": "reviewing"
-      },
-      "961": {
-        "id": "0da8125a7c8b406f882b5209d6fe91db",
-        "pr": 961,
-        "issues": [
-          784
-        ],
-        "actor": "Reviewer-A1021784",
-        "session": "run_a1021_784r",
-        "coordinator": "Coordinator-A1021A",
-        "started_at": "2026-10-21T08:42:06+00:00",
-        "state": "approving",
-        "report": "ACL-1784 / PR #961 independent source review \u2014 RETURNED for a fix (Reviewer-A1021784, head a525a67a, contains main ea41acbf).\n\nScope checked: full diff vs work/main (CHANGELOG, src/web/publish_api.py, src/web/publish_jobs.py, new tests/test_acl1784_api_review_window.py), the Issue spec/acceptance, PR body (one `Tracker issues: ACL-1784` line, no closing keywords), merge commit a525a67a (`git show --cc`: only CHANGELOG adjacent entries, resolved correctly, no code touched). No leaked ids/tokens/paths; notices are English; RPA path unchanged (`review_window` never set there). Local tests: test_acl1784_api_review_window, test_acl1603_stable_slots, test_acl1761_*, test_acl1614_cancel_hung_job, test_acl1812_warm_sessions \u2014 404 passed.\n\nBLOCKING finding B1 \u2014 the slot is released while a profile the job started is still running, and the panel says the opposite.\n\nIn `_run_api`, `settled = clean or not wrote` drives both `review_window = not settled` (which makes `_run_job_inner` call `_slots.release` instead of `_slots.keep`) and the notice. But `ApiPublisher.finish_job` can still return \"\" (profile left open) for a job-started profile even when `clean=True`:\n- `self.cancelled()` \u2014 user pressed Stop before the first write (cancel_job intentionally leaves the Multilogin window open, ACL-1614);\n- `_keep_profiles_open()` \u2014 owner switch ACL_KEEP_PROFILES_OPEN;\n- `self.dry_run` \u2014 finish_job forces clean=False (dry_run=1 jobs are reachable from the publish endpoint);\n- `_stop_profile` raised (stop failure).\nIn all of these, wrote=False \u2192 settled=True \u2192 review_window=False \u2192 the slot is freed, yet the Mimic window the job started keeps running. That is exactly the hazard ACL-1603 guards against (queue launching extra Mimics over open windows; with cap 1 a second profile starts while the first is still open). The panel then shows API_NO_WRITE_NOTICE \"the profile is not kept open for review\", which is false. The Stop-before-first-write case also misses the Issue spec (\"stops before the first write\" \u2192 close our tab, release the slot, stop the profile if the job started it): the profile is neither stopped nor counted.\n\nRequired fix (either is acceptable, keep it small):\n(a) Release the slot only when the profile is actually not left open by the job: `outcome == \"closed\"` OR the job did not start the profile (user-opened \u2014 spec says release in that case). If a job-started profile stays open for any other reason (cancel, keep-open switch, dry run, stop failure), keep the slot as before and do not show the \"not kept open\" notice (show an accurate one or none). And/or\n(b) For a no-write stop, let finish_job stop the job-started profile despite `cancelled()` (spec), and still fall back to (a) when stopping did not happen.\nExpose what you need from ApiPublisher read-only (e.g. a `started_profile` property from `self._opened.started_now`) rather than reaching into privates.\n\nTests to add (fakes; the current FakePublisher.finish_job does not model cancel/keep-open/dry-run/stop-failure, so it cannot catch this): Stop before the first write on a job-started profile; ACL_KEEP_PROFILES_OPEN=1 with a clean no-write or clean job on a job-started profile; finish_job returning \"\" for a job-started profile \u2014 each must either close the profile or keep the slot, and the notice must match the real state. Prefer driving the real `ApiPublisher.finish_job` with a faked `_opened`/`_stop_profile` for at least one case.\n\nNon-blocking notes:\n- `wrote` falls back to True on an exception \u2014 good (conservative).\n- GraphError rejections count as writes (`GraphClient.writes` increments before POST), so a Meta-refused write keeps the window \u2014 conservative, acceptable.\n- CI on a525a67a: all test/installer/descriptor checks green; `tracker-link` failed because it ran before handoff (\"move it to Review before a ready PR\") \u2014 rerun it on the next head.\n- Owner live check (panel notice on the test dashboard) can follow separately as the Issue allows.\n\nLane kept (--keep-lane); I will review the fix delta.",
-        "keep_lane": true,
-        "approval": {
-          "issue": 784,
-          "pr": 961,
-          "branch": "work/acl-1784-api-no-review-window",
-          "head_sha": "f125642bbad9a67cc7d53f4b140f26894ad108af",
-          "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-          "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "5b56fa44c5d2cc279506d3496eb5ed078f5e6d463f7cd1a06f6355db6f6b7bf7",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-A1021784",
-            "implementer": "Worker-A1021784",
-            "head_sha": "f125642bbad9a67cc7d53f4b140f26894ad108af",
-            "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-            "tree_sha": "5db17581d82b8bddf92dde850667f2ee98ee5785",
-            "execution_lane": "0da8125a7c8b406f882b5209d6fe91db",
-            "review_session": "run_a1021_784r",
-            "report": "ACL-1784 / PR #961 independent source review - APPROVED at f125642b (contains main ea41acbf).\nScope: full diff vs main - docs/system/CHANGELOG.md, src/web/publish_api.py (read-only ApiPublisher.writes and started_profile), src/web/publish_jobs.py (_run_api settled/still_open/review_window + English notices; _run_job_inner releases the slot when review_window is False), tests/test_acl1784_api_review_window.py (18 tests). No unrelated files. Merge commit a525a67a resolved only adjacent CHANGELOG entries correctly. PR body: one 'Tracker issues: ACL-1784' line, no closing keywords. No leaked ids/tokens/paths (account labels only, as in the Issue). User-facing notices English. RPA path unchanged (review_window never set there).\nAcceptance: plan error leaves no kept window and the next queued job starts at cap 1; preflight stop closes a job-started profile and frees the slot for a user-opened one; clean job releases its slot (closes a job-started profile); readback mismatch / error after a write keeps the window. Tests use fake publisher and real ProfileSlots; the real finish_job is exercised for clean/stop/keep-open/dry-run/stop-failure.\nEarlier blocking finding B1 (slot freed while a job-started profile stayed open, false notice) is fixed: still_open = outcome != 'closed' and started_profile keeps the slot and shows API_STILL_OPEN_NOTICE.\nNon-blocking: on a user Stop before the first write the job-started profile is not stopped (ACL-1614 leaves the window open on cancel); the slot stays taken and the notice is truthful. I accept this as a conservative reading of the Issue's 'stops before the first write', which plan/preflight stops satisfy; owner may ask for auto-stop later. Writes counter counts Meta-refused POSTs as writes (conservative). The fix was written before the worker claim and committed after it (process note only).\nTests run locally: test_acl1784, test_acl1603, test_acl1761_api_create, test_acl1761_plan_check, test_acl1614, test_a_finished_clean_profile_closes_itself, test_acl1812: 365 passed.\nLive check: owner check of the panel notice on the test dashboard can follow separately.",
-            "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              784
-            ],
-            "recorded_at": "2026-10-21T09:00:28+00:00",
-            "issue_scopes": {
-              "784": "5b56fa44c5d2cc279506d3496eb5ed078f5e6d463f7cd1a06f6355db6f6b7bf7"
-            }
-          },
-          "lane": {
-            "id": "0da8125a7c8b406f882b5209d6fe91db",
-            "pr": 961,
-            "issues": [
-              784
-            ],
-            "actor": "Reviewer-A1021784",
-            "session": "run_a1021_784r",
-            "coordinator": "Coordinator-A1021A",
-            "started_at": "2026-10-21T08:42:06+00:00",
-            "state": "reviewing",
-            "report": "ACL-1784 / PR #961 independent source review \u2014 RETURNED for a fix (Reviewer-A1021784, head a525a67a, contains main ea41acbf).\n\nScope checked: full diff vs work/main (CHANGELOG, src/web/publish_api.py, src/web/publish_jobs.py, new tests/test_acl1784_api_review_window.py), the Issue spec/acceptance, PR body (one `Tracker issues: ACL-1784` line, no closing keywords), merge commit a525a67a (`git show --cc`: only CHANGELOG adjacent entries, resolved correctly, no code touched). No leaked ids/tokens/paths; notices are English; RPA path unchanged (`review_window` never set there). Local tests: test_acl1784_api_review_window, test_acl1603_stable_slots, test_acl1761_*, test_acl1614_cancel_hung_job, test_acl1812_warm_sessions \u2014 404 passed.\n\nBLOCKING finding B1 \u2014 the slot is released while a profile the job started is still running, and the panel says the opposite.\n\nIn `_run_api`, `settled = clean or not wrote` drives both `review_window = not settled` (which makes `_run_job_inner` call `_slots.release` instead of `_slots.keep`) and the notice. But `ApiPublisher.finish_job` can still return \"\" (profile left open) for a job-started profile even when `clean=True`:\n- `self.cancelled()` \u2014 user pressed Stop before the first write (cancel_job intentionally leaves the Multilogin window open, ACL-1614);\n- `_keep_profiles_open()` \u2014 owner switch ACL_KEEP_PROFILES_OPEN;\n- `self.dry_run` \u2014 finish_job forces clean=False (dry_run=1 jobs are reachable from the publish endpoint);\n- `_stop_profile` raised (stop failure).\nIn all of these, wrote=False \u2192 settled=True \u2192 review_window=False \u2192 the slot is freed, yet the Mimic window the job started keeps running. That is exactly the hazard ACL-1603 guards against (queue launching extra Mimics over open windows; with cap 1 a second profile starts while the first is still open). The panel then shows API_NO_WRITE_NOTICE \"the profile is not kept open for review\", which is false. The Stop-before-first-write case also misses the Issue spec (\"stops before the first write\" \u2192 close our tab, release the slot, stop the profile if the job started it): the profile is neither stopped nor counted.\n\nRequired fix (either is acceptable, keep it small):\n(a) Release the slot only when the profile is actually not left open by the job: `outcome == \"closed\"` OR the job did not start the profile (user-opened \u2014 spec says release in that case). If a job-started profile stays open for any other reason (cancel, keep-open switch, dry run, stop failure), keep the slot as before and do not show the \"not kept open\" notice (show an accurate one or none). And/or\n(b) For a no-write stop, let finish_job stop the job-started profile despite `cancelled()` (spec), and still fall back to (a) when stopping did not happen.\nExpose what you need from ApiPublisher read-only (e.g. a `started_profile` property from `self._opened.started_now`) rather than reaching into privates.\n\nTests to add (fakes; the current FakePublisher.finish_job does not model cancel/keep-open/dry-run/stop-failure, so it cannot catch this): Stop before the first write on a job-started profile; ACL_KEEP_PROFILES_OPEN=1 with a clean no-write or clean job on a job-started profile; finish_job returning \"\" for a job-started profile \u2014 each must either close the profile or keep the slot, and the notice must match the real state. Prefer driving the real `ApiPublisher.finish_job` with a faked `_opened`/`_stop_profile` for at least one case.\n\nNon-blocking notes:\n- `wrote` falls back to True on an exception \u2014 good (conservative).\n- GraphError rejections count as writes (`GraphClient.writes` increments before POST), so a Meta-refused write keeps the window \u2014 conservative, acceptable.\n- CI on a525a67a: all test/installer/descriptor checks green; `tracker-link` failed because it ran before handoff (\"move it to Review before a ready PR\") \u2014 rerun it on the next head.\n- Owner live check (panel notice on the test dashboard) can follow separately as the Issue allows.\n\nLane kept (--keep-lane); I will review the fix delta.",
-            "keep_lane": true
-          },
-          "approved_at": "2026-10-21T09:20:43+00:00"
-        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
