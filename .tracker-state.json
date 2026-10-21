@@ -46805,20 +46805,6 @@
         "started_at": "2026-10-20T12:56:11+00:00",
         "from_status": "status:todo"
       },
-      "784": {
-        "actor": "Worker-A1021784",
-        "session": "run_a1021_784w",
-        "coordinator": "Coordinator-A1021A",
-        "branch": "work/acl-1784-api-no-review-window",
-        "worktree": "C:\\acl-rv-784",
-        "id": "d78988a3ebfe48deaaefd948639051f3",
-        "issue": 784,
-        "state": "handoff",
-        "started_at": "2026-10-21T07:18:03+00:00",
-        "from_status": "status:todo",
-        "pr": 961,
-        "report": "ACL-1784 resumed on owner instruction 2026-10-21 (review tail). PR #961, head a525a67a.\nMerged current main (ea41acbf) into work/acl-1784-api-no-review-window with a merge commit (no rebase, no force push). Branch contains work/main.\nConflict: docs/system/CHANGELOG.md only (adjacent entries); kept both sides: main's ACL-1381 and ACL-1971 entries plus the ACL-1784 entry. src/web/publish_api.py and src/web/publish_jobs.py auto-merged with no code changes by me.\nTests (isolated venv, -n 2): test_acl1784_api_review_window, test_acl1761_api_create, test_acl1761_plan_check, test_acl1819_preflight, test_publish_profile_slots, test_acl1603_stable_slots, test_a_finished_clean_profile_closes_itself, test_publish_safety_contract, test_publish_screen_guard_review: 383 passed. scripts/acl_scan_secrets.py: clean.\nFull suite not run locally; CI is the acceptance signal. check-pr 961 before handoff only said the task must be moved to Review (expected until handoff).\nNo owner live check required beyond the original: a kept/not-kept review window panel notice on the test dashboard."
-      },
       "1050": {
         "actor": "Worker-P10212050",
         "session": "run_p1021_2050",
@@ -53999,25 +53985,25 @@
             "session": "run_a1021_784w"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-A1021784",
         "coordinator": "Coordinator-A1021A",
         "handoff": {
-          "actor": "Worker-W1784A",
-          "session": "11633f9c-acl-1784",
-          "coordinator": "Coordinator-C1016A",
+          "actor": "Worker-A1021784",
+          "session": "run_a1021_784w",
+          "coordinator": "Coordinator-A1021A",
           "branch": "work/acl-1784-api-no-review-window",
-          "worktree": "C:\\acl-1784",
-          "id": "c8b34860c26142858796d7543604ef62",
+          "worktree": "C:\\acl-rv-784",
+          "id": "d78988a3ebfe48deaaefd948639051f3",
           "issue": 784,
           "state": "handoff",
-          "started_at": "2026-10-17T06:17:51+00:00",
+          "started_at": "2026-10-21T07:18:03+00:00",
           "from_status": "status:todo",
           "pr": 961,
-          "report": "ACL-1784 ready for review. PR #961 (work/acl-1784-api-no-review-window, head 23c74400).\nAPI path only: no review window when nothing was written (GraphClient.writes == 0) or every campaign is clean; profile stopped only if the job started it; English panel notice for each case; RPA unchanged.\nChecks: new tests/test_acl1784_api_review_window.py 9 passed (8 fail on old code); related suites 463 passed locally. Full suite pending CI (Actions startup_failure)."
+          "report": "ACL-1784 resumed on owner instruction 2026-10-21 (review tail). PR #961, head a525a67a.\nMerged current main (ea41acbf) into work/acl-1784-api-no-review-window with a merge commit (no rebase, no force push). Branch contains work/main.\nConflict: docs/system/CHANGELOG.md only (adjacent entries); kept both sides: main's ACL-1381 and ACL-1971 entries plus the ACL-1784 entry. src/web/publish_api.py and src/web/publish_jobs.py auto-merged with no code changes by me.\nTests (isolated venv, -n 2): test_acl1784_api_review_window, test_acl1761_api_create, test_acl1761_plan_check, test_acl1819_preflight, test_publish_profile_slots, test_acl1603_stable_slots, test_a_finished_clean_profile_closes_itself, test_publish_safety_contract, test_publish_screen_guard_review: 383 passed. scripts/acl_scan_secrets.py: clean.\nFull suite not run locally; CI is the acceptance signal. check-pr 961 before handoff only said the task must be moved to Review (expected until handoff).\nNo owner live check required beyond the original: a kept/not-kept review window panel notice on the test dashboard."
         },
         "pr": 961,
-        "queued_at": "2026-10-17T06:25:29+00:00",
+        "queued_at": "2026-10-21T07:47:21+00:00",
         "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -61337,7 +61323,9 @@
         "started_at": "2026-10-20T20:25:34+00:00"
       }
     },
-    "review_queue": [],
+    "review_queue": [
+      784
+    ],
     "review": null,
     "history": [
       {
@@ -104594,6 +104582,13 @@
           "report": "# Return: PR #1044 (ACL-1880), review round 4 by Reviewer-A1021880\n\n**Content approved at ec2a527db4d173b50314f778c001fe75c4cecbba. Merge current main only (ea41acbf960f53cdd0486c50dda491ec3981dfcf), no content change.**\n\nThe head was based on main 259ae7f1 and does not contain current main ea41acbf (7 commits ahead, ACL-2026 tooling/docs only). `git merge-tree` of the head and current main merges cleanly with no conflicts. After the merge I will review the merge delta (`git show --cc`) and the full diff again, then record the review.\n\n## Previous blocking finding: resolved\nReviewer-R1880W found that `/build-upload` silently dropped an explicit Page. ec2a527d fixes it. `build_upload` now refuses with a visible English `upload_errors` message when any slot has a non-empty `page_id`. This mirrors the existing Instant Forms refusal on that path. Automatic (empty) still exports. `tests/test_web_build_upload.py` covers both cases.\n\n## Checked (full scope vs main)\n- Explicit Page is campaign-local. `page_provided` skips the account-map fallback, and no map write happens (tested). Duplicates reset the Page (`SKIP_FIELDS`). When a slot moves to another account, its Page is cleared.\n- Automatic means the first available Page. On the API path it is resolved in `resolve_page`. Preflight returns ok for multiple Pages and a warning for the manual shell on a confirmed empty list. Instant Forms and an explicitly unavailable Page are still blocked, with actionable English messages.\n- Loading, failed, empty and not_loaded are separate states. Refresh bypasses the cache. A stale response is dropped by a request-identity check. Failures are never cached (12 h TTL). The builder render reads the cache only.\n- RPA: an explicit Page is re-read with force, checked against the account act, and verified on the first ad and every extra ad. `page_identity` is BLOCKING, non-retryable, in the flow-stop list and in GUIDE. Non-recorded engines are refused. Automatic leaves Identity untouched.\n- Manual shell: the campaign and ad sets are created PAUSED with no ads. The result has `manual_required` set and `publishable=false`. A retry completes the same campaign.\n- Merge commits 44060638, 88387d25 and 89dc6c56 have no hand-resolved hunks. No unrelated files are included. `test_queue_wait_reads.py` (cache part) is the carry-over that the Issue requested.\n- No leaked ids, tokens, emails or local paths in the diff or PR body. The PR body has exactly one `Tracker issues: ACL-1880` line and no closing keywords. User-facing strings are in English.\n- Tests: 150 affected tests (1880 suites, 1819 preflight, build_upload, duplicate, failure_policy, 1775 forms): 149 passed, 1 failed. The failure is `test_account_pages_endpoint_cached_flag`, a Starlette/httpx `TestClient(app=)` TypeError from the old local venv. The previous round saw the same failure, and the test passed in CI.\n\n## Non-blocking notes\n- The `docs/system/PROJECT.md` ACL-1880 section is updated. The second block has a level-1 heading (`# ACL-1880: manual completion\u2026`) inside a level-3 section with no blank line before it. This is cosmetic. There is no `docs/system/CHANGELOG.md` entry.\n- The builder note still says \"Automatic: <first Page>\" on the RPA backend, where Ads Manager's own default Identity may differ (raised in round 3 and still open).\n- ec2a527d has author `trial <t@t>`. This is not a leak, only a placeholder identity.\n- PR #1025 (ACL-1897) is still OPEN. Whichever PR lands second must resolve the creator.py/preflight-test overlap.\n\n## Live check\nThe alternate-Page Identity picker in live Ads Manager is not verified. The owner needs to check it live; this does not block the offline acceptance.",
           "keep_lane": true
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-21T07:47:21+00:00",
+        "issue": 784,
+        "pr": 961,
+        "actor": "Worker-A1021784"
       }
     ],
     "policy": {
