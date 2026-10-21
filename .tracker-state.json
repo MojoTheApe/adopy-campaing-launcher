@@ -6105,27 +6105,6 @@
           "380": "5721bfda1929700ea1d2c0d43cc9cf38e82898dada60cc93441f845a1dd5146d",
           "626": "78daec77f59b269c69b2b0d3072e9dff71bc3675802a71e8a3e2f16b22df80f4"
         }
-      },
-      "1067": {
-        "kind": "independent-review",
-        "implementer": "Worker-K1021A2",
-        "reviewer": "Reviewer-K1021R2066",
-        "review_session": "rev_k1021r_2066",
-        "execution_lane": "379a09548821493e9da1c9b1003da87c",
-        "head_sha": "bfd11263e517d93e1433a8a5a2cc5785c353afe3",
-        "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-        "tree_sha": "b502683fb34f53c9e277ab6eb79330bbe18d0afe",
-        "verdict": "approved",
-        "report": "Independent source review of ACL-2066 / PR #1067 by Reviewer-K1021R2066 (session rev_k1021r_2066, lane 379a09548821493e9da1c9b1003da87c). Head bfd11263e517d93e1433a8a5a2cc5785c353afe3, base (merge-base with work/main) ea41acbf960f53cdd0486c50dda491ec3981dfcf, tree b502683fb34f53c9e277ab6eb79330bbe18d0afe. Implementer Worker-K1021A2.\n\nScope: 3 files (src/web/templates/_campaign_table.html, tests/test_acl2066_cpl_in_optimization.py, docs/system/CHANGELOG.md). Template-only; no Python, server, data, config or secrets.\n\nRequirements check against Issue #1066:\n1. Optimization preset now lists b_cpl immediately before b_cpa. Meta, BI and All presets are unchanged (BI and All already contained b_cpl). Met.\n2. One-time migration of saved layouts: on load, if the saved layout has no cpl_seen flag, shows b_cpa and lacks b_cpl, b_cpl is spliced in right before b_cpa. Layouts without CPA (e.g. Meta preset) are untouched; layouts already showing CPL are untouched. The saved preset name and other visible keys are preserved. saveCols now always persists {preset, visible, cpl_seen: true}; saveCols is the only writer of the storage key (preset change, checkbox toggle, auto-add path all go through it). So a user who unchecks CPL persists visible-without-CPL together with cpl_seen:true and is not re-migrated on later loads. Met.\n   Behaviour for a user who never changes columns: the flag is not persisted until the first saveCols, so CPL is re-inserted in memory on every load; the visible result is the same every time (CPL before CPA), so behaviour is consistent. The first time they remove CPL it persists. Acceptable and matches the Issue wording.\n   Known, accepted edge: a custom layout that deliberately hid CPL before this change (while showing CPA) gets CPL back once; this is inherent in the Issue's one-time design and the user can hide it again permanently.\n   Storage errors remain caught by the existing try/catch.\n3. No server/data changes. Met.\n4. Tests: the new test pins the preset order (b_cpl directly before b_cpa) and the presence of the migration guard and persisted flag. These are source-text assertions, appropriate for this template's existing test style; the existing browser tests of the table (which load the template and switch presets) still pass, though they do not assert CPL specifically. Minor note: the Issue body names the test file test_acl2064_...; the PR renames it to the real task id test_acl2066_... (explained in commit bfd11263) - non-blocking.\n5. CHANGELOG entry is accurate and links the Issue.\n\nLocal affected tests (venv C:/acl-test-9095q): tests/test_acl2066_cpl_in_optimization.py, tests/test_acl1798_campaign_inventory.py, tests/test_acl1800_account_scoped_table.py, tests/test_acl1798_home_campaigns_browser.py - 89 passed. Full suite left to CI.\n\nVerdict: approved. No defects found.",
-        "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "issues": [
-          1066
-        ],
-        "recorded_at": "2026-10-21T13:28:37+00:00",
-        "issue_scopes": {
-          "1066": "ad68c8ab3623dc346cf074eee0161b3faf4a99886bb7875915a705c18d175cd9"
-        }
       }
     },
     "stage": {
@@ -116959,7 +116938,9 @@
         "session": "rev_k1021r_2066",
         "coordinator": "Coordinator-K1021A",
         "started_at": "2026-10-21T13:22:29+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "Content approved (record-review on bfd11263); returned only because main moved ea41acbf -> 0ea237b0 and approval requires the current base. Author merges current main (CHANGELOG conflict only) and hands off for a fresh review.",
+        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
