@@ -53125,7 +53125,7 @@
             "session": "run_w1021_1840"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1021840",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -53155,7 +53155,8 @@
           "actor": "Coordinator-I1021A",
           "session": "run_i1021a_1021",
           "report": "Approval is stale against current main 64e73a1e (after ACL-2073 #1075 and ACL-2071 #1076 merged). Author: merge current main into the original branch without changing content (resolve only CHANGELOG append conflicts by keeping both entries), re-run checks, hand off, and get a fresh independent source approval for batch 2b (--deliver)."
-        }
+        },
+        "reviewer": "Reviewer-R10221840"
       },
       "841": {
         "implementers": [
@@ -60812,6 +60813,10 @@
       "Worker-W1022037": {
         "session": "run_w1022_2037",
         "role": "Worker"
+      },
+      "Reviewer-R10221840": {
+        "session": "run_r1022_1840",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -63769,7 +63774,6 @@
       1054,
       710,
       1069,
-      840,
       19,
       1078
     ],
@@ -111875,6 +111879,13 @@
         "issue": 1078,
         "pr": 1081,
         "actor": "Worker-F1022B"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-22T00:05:05+00:00",
+        "pr": 846,
+        "lane": "d8840f90c7ab49a798cab192c462aaae",
+        "actor": "Reviewer-R10221840"
       }
     ],
     "policy": {
@@ -122604,6 +122615,18 @@
         "session": "review_acl2079_tt194_20261022",
         "coordinator": "Coordinator-R6M9H2",
         "started_at": "2026-10-21T23:58:33+00:00",
+        "state": "reviewing"
+      },
+      "846": {
+        "id": "d8840f90c7ab49a798cab192c462aaae",
+        "pr": 846,
+        "issues": [
+          840
+        ],
+        "actor": "Reviewer-R10221840",
+        "session": "run_r1022_1840",
+        "coordinator": "Coordinator-I1021A",
+        "started_at": "2026-10-22T00:05:05+00:00",
         "state": "reviewing"
       }
     },
