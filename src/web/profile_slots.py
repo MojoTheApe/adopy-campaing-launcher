@@ -468,9 +468,9 @@ class ProfileSlots:
         clock: Callable[[], float] = time.monotonic,
         tick_s: float = TICK_S,
         usage: ProfileUsage | None = None,
-        evictor: Callable[[str, str, str], bool] | None = None,
+        evictor: Callable[[str, str, str, float], bool] | None = None,
     ) -> None:
-        # ACL-2113: `evictor(job_id, label, profile)` закрывает простаивающее «удобное»
+        # ACL-2113: `evictor(job_id, label, profile, idle_s)` закрывает простаивающее «удобное»
         # окно (MLX stop, ждёт выхода процесса) и отвечает, закрыто ли. Вызывается
         # БЕЗ замка очереди. None — окна сами не закрываются.
         self._evictor = evictor
@@ -495,7 +495,10 @@ class ProfileSlots:
     def _busy_profiles(self) -> set[str]:
         # Оставленное открытым окно профиль не «занимает»: его новое задание
         # берёт себе (см. `_reuse_kept`), а не ждёт.
-        return {r["profile"] for r in self._running.values() if not r.get("kept")}
+        # ACL-2113: окно, которое прямо сейчас закрывается (`closing`), занято: задание
+        # того же аккаунта ждёт, пока остановка кончится, и поднимает профиль заново.
+        return {r["profile"] for r in self._running.values()
+                if not r.get("kept") or r.get("closing")}
 
     def _kept(self) -> list[str]:
         return [j for j, r in self._running.items() if r.get("kept")]
@@ -534,7 +537,8 @@ class ProfileSlots:
         Окно «на проверку» остаётся таким и после повторного использования (ACL-2113).
         """
         kinds: list[str] = []
-        for j in [j for j, r in self._running.items() if r.get("kept") and r["profile"] == profile]:
+        for j in [j for j, r in self._running.items()
+                  if r.get("kept") and not r.get("closing") and r["profile"] == profile]:
             kinds.append(self._running[j].get("kept_kind") or KEPT_REVIEW)
             del self._running[j]
         if not kinds:
@@ -596,7 +600,7 @@ class ProfileSlots:
         self._cond.release()
         try:
             try:
-                closed = bool(self._evictor(cand, label, prof))
+                closed = bool(self._evictor(cand, label, prof, idle_s))
             except Exception:
                 log.exception("Could not close the idle kept window of %s", label)
         finally:

@@ -41,7 +41,8 @@ _active_publishers: dict[str, RpaPublisher] = {}
 # Сколько профилей публикуют разом — по свободной памяти машины (ACL-1321).
 # Задания сверх решения ждут в «queued» в порядке отправки; см. profile_slots.
 # ACL-2113: окна, оставленные «для удобства», уступают место простоем (`_evict_kept_window`).
-_slots = ProfileSlots(evictor=lambda job_id, label, profile: _evict_kept_window(job_id, label, profile))
+_slots = ProfileSlots(
+    evictor=lambda job_id, label, profile, idle_s=0.0: _evict_kept_window(job_id, label, profile, idle_s))
 # ACL-1399: ключ отправки со страницы → задание. Publish, чей ответ потерялся
 # (сервер был занят, «Failed to fetch»), страница повторяет с тем же ключом —
 # и получает то же задание, а не второе на тот же аккаунт.
@@ -1172,7 +1173,8 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
         still_open = outcome != "closed" and started
         # ACL-2113: окно, оставленное намеренно после чистой публикации, — «для удобства»
         # (уступает место простоем); всё остальное оставленное — на проверку.
-        convenience = bool(settled and outcome == "kept" and still_open)
+        convenience = bool(clean and getattr(publisher, "stop", None) is None
+                           and outcome == "kept" and still_open)
         with _jobs_lock:
             if not _abandoned(job_id):
                 _jobs[job_id]["review_window"] = (not settled) or still_open
@@ -1497,12 +1499,14 @@ def close_profile(job_id: str) -> dict[str, Any]:
     return {"ok": True, "job_id": job_id, "message": "Closed the profile"}
 
 
-def _stop_idle_profile(account_label: str, profile: str, *, busy_msg: str) -> dict[str, Any]:
+def _stop_idle_profile(account_label: str, profile: str, *, busy_msg: str,
+                       strict: bool = False) -> dict[str, Any]:
     """Мягко остановить профиль под замком профиля (без ожидания замка).
 
     Общее для кнопки «Close profile» и для автозакрытия простаивающих окон
     (ACL-2113). `close_account_profile` возвращается, когда процесс профиля ушёл
-    (правила остановки ACL-2095). Коды отказа: `busy`, `failed`.
+    (правила остановки ACL-2095). Коды отказа: `busy`, `failed`. `strict` (автозакрытие):
+    процесс, не ушедший за срок ожидания, — отказ (`still_running`), окно считается открытым.
     """
     from src.fb_ads_rpa import rpa_publisher as _rp
 
@@ -1511,7 +1515,10 @@ def _stop_idle_profile(account_label: str, profile: str, *, busy_msg: str) -> di
         return {"ok": False, "code": "busy", "error": busy_msg}
     try:
         try:
-            _rp.close_account_profile(account_label)
+            stopped = _rp.close_account_profile(account_label)
+            if strict and stopped == "still_running":
+                return {"ok": False, "code": "still_running",
+                        "error": "The profile process is still running after the stop."}
         except Exception as exc:
             import logging
 
@@ -1536,7 +1543,16 @@ def _stop_idle_profile(account_label: str, profile: str, *, busy_msg: str) -> di
 _closed_for_room: list[dict[str, Any]] = []
 
 
-def _evict_kept_window(kept_job_id: str, account_label: str, profile: str) -> bool:
+def touch_kept(account_label: str) -> None:
+    """Окно аккаунта только что использовали (чтение): срок простоя — с нуля (ACL-2113)."""
+    try:
+        _slots.touch(account_label)
+    except Exception:
+        pass
+
+
+def _evict_kept_window(kept_job_id: str, account_label: str, profile: str,
+                       idle_s: float = 0.0) -> bool:
     """Закрыть простаивающее «удобное» окно ради нового задания (ACL-2113).
 
     Зовёт очередь БЕЗ своего замка. Окно закрывается через MLX stop с ожиданием
@@ -1547,13 +1563,14 @@ def _evict_kept_window(kept_job_id: str, account_label: str, profile: str) -> bo
     label = str(account_label or "").strip()
     if not label:
         return False
-    res = _stop_idle_profile(label, profile, busy_msg="The window is in use")
+    res = _stop_idle_profile(label, profile, busy_msg="The window is in use", strict=True)
     ok = bool(res.get("ok"))
     try:
         from src.fb_ads_rpa import run_telemetry as _rt
 
         _rt.record("kept_window_auto_close", ok, note="idle_lru",
-                   diag={"code": res.get("code", "")})
+                   diag={"account": label, "idle_s": round(float(idle_s), 1),
+                         "code": res.get("code", "")})
     except Exception:
         pass
     if not ok:

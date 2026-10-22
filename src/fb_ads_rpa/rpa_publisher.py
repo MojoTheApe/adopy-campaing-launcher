@@ -448,9 +448,7 @@ class RpaPublisher:
         entry, conn = self._entry, self._conn
         provider = self._provider
         outcome = ""
-        if keep_profiles_open():
-            outcome = "kept_switch"
-        elif not clean:
+        if not clean:
             outcome = "kept_problem"
         elif self._cancelled:
             outcome = "kept_cancelled"
@@ -465,7 +463,18 @@ class RpaPublisher:
                 saved = False
             if not saved:
                 outcome = "kept_unsaved"
+            elif keep_profiles_open():
+                # ACL-2113: «оставлено для удобства» — только после тех же проверок, что и
+                # закрытие: чистое, не отменено, черновик сохранён, окно — робота.
+                owns = getattr(provider, "robot_owns_profile", None)
+                try:
+                    mine = True if not callable(owns) else bool(owns(entry))
+                except Exception:
+                    mine = False
+                outcome = "kept_switch" if mine else "hand_opened"
         self.close()
+        if outcome == "kept_switch" and self._cancelled:
+            outcome = "kept_cancelled"
         if not outcome and self._cancelled:
             # Stop нажали, пока ждали автосохранения (ревью PR #446, F2).
             outcome = "kept_cancelled"
