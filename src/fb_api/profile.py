@@ -378,6 +378,33 @@ def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
     )
 
 
+def wait_gone(profile_id: str, *, timeout_s: float | None = None,
+              probe: Callable[[str], tuple[str, int | None]] | None = None,
+              sleep: Callable[[float], None] = time.sleep,
+              clock: Callable[[], float] = time.monotonic) -> bool:
+    """После stop: дождаться, пока процесс профиля уйдёт (п. 8c, живой B97: ~15 с).
+
+    Статусу MLX Desktop/облака не верим — только процессы на машине. True — ушёл.
+    """
+    budget = _launch.STOP_GONE_WAIT_S if timeout_s is None else float(timeout_s)
+    # Без поиска папки профиля (rglob по ~/mlx долгий): совпадение по id в --user-data-dir.
+    look = probe or (lambda pid: local_debug_port(pid))
+    began = clock()
+    while True:
+        try:
+            kind, _port = look(profile_id)
+        except Exception:  # noqa: BLE001 — нечем посмотреть: не держим остановку
+            return True
+        if kind == "none":
+            _launch._record({"event": "fb_api_stop_gone", "ok": True, "took_s": round(clock() - began, 1)})
+            return True
+        if clock() - began >= budget:
+            _launch._record({"event": "fb_api_stop_gone", "ok": False, "took_s": round(clock() - began, 1),
+                             "left": kind})
+            return False
+        sleep(1.0)
+
+
 def _start_with_one_retry(launcher: Any, profile_id: str, folder_id: str, instance: str, *,
                           local_probe: Callable[[str], tuple[str, int | None]],
                           sleep: Callable[[float], None]) -> tuple[Any, int | None, bool]:

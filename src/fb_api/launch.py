@@ -51,6 +51,14 @@ DEFAULT_COLD_START_S = 40.0
 #: Сколько секунд после старта порт считается «холодным», если вкладку так и не открыли.
 COLD_WINDOW_S = 180.0
 
+#: Нейтральная страница для пробы прокси перед первым заходом в Facebook (п. 7 ACL-2095).
+PROXY_PROBE_ENV = "ACL_PROXY_PROBE_URL"
+DEFAULT_PROXY_PROBE_URL = "https://api.ipify.org/"
+#: Через сколько секунд повторить пробу/первую навигацию после ERR_INVALID_AUTH_CREDENTIALS.
+PROXY_RETRY_S = 12.0
+#: Сколько ждём, пока процесс остановленного профиля уйдёт (п. 8c).
+STOP_GONE_WAIT_S = 30.0
+
 
 def _env_number(name: str, default: float, lo: float, hi: float) -> float:
     try:
@@ -70,6 +78,16 @@ def start_gap_s() -> float:
 
 def cold_start_s() -> float:
     return _env_number(COLD_START_ENV, DEFAULT_COLD_START_S, 10.0, 120.0)
+
+
+def proxy_probe_url() -> str:
+    """Пустая строка (`ACL_PROXY_PROBE_URL=off`) — пробы нет, остаётся повтор первой навигации."""
+    raw = str(os.environ.get(PROXY_PROBE_ENV, "") or DEFAULT_PROXY_PROBE_URL).strip()
+    return "" if raw.lower() in ("off", "0", "none") else raw
+
+
+def is_proxy_auth_error(text: str) -> bool:
+    return "err_invalid_auth_credentials" in str(text or "").lower()
 
 
 def _record(event: dict) -> None:
@@ -191,6 +209,8 @@ _COLD: dict[int, float] = {}
 #: Профиль → его холодный порт: остановка профиля снимает отметку (`forget_profile`).
 _COLD_PROFILE: dict[str, int] = {}
 _COLD_LOCK = threading.Lock()
+#: Порты, чей браузер уже ответил на `/json/version` после старта (старт устоялся).
+_READY: set[int] = set()
 
 
 def _port_of(cdp_url_or_port: Any) -> int:
@@ -211,6 +231,7 @@ def mark_started(port: Any, profile_id: str = "", *, clock: Callable[[], float] 
     if p:
         with _COLD_LOCK:
             _COLD[p] = clock()
+            _READY.discard(p)
             if profile_id:
                 _COLD_PROFILE[str(profile_id)] = p
 
@@ -229,6 +250,14 @@ def cold_since(cdp_url: Any, *, clock: Callable[[], float] = time.monotonic) -> 
         return age
 
 
+def mark_ready(cdp_url: Any) -> None:
+    """Браузер этого порта ответил после старта: stop больше не ждёт (п. 8b)."""
+    p = _port_of(cdp_url)
+    if p:
+        with _COLD_LOCK:
+            _READY.add(p)
+
+
 def forget(cdp_url: Any) -> None:
     """Первая вкладка открыта (или профиль остановлен) — дальше обычные сроки."""
     p = _port_of(cdp_url)
@@ -242,6 +271,69 @@ def forget_profile(profile_id: str) -> None:
         p = _COLD_PROFILE.pop(str(profile_id or ""), 0)
         if p:
             _COLD.pop(p, None)
+            _READY.discard(p)
+
+
+# ───────────────────────── готовность после старта (п. 8) ─────────────────────────
+
+def debug_answers(port: Any, *, timeout: float = 1.5) -> bool:
+    """Отвечает ли браузер на `/json/version` (порт слушается — ещё не значит готов)."""
+    p = _port_of(port)
+    if not p:
+        return False
+    try:
+        import json
+        import urllib.request
+
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(f"http://127.0.0.1:{p}/json/version", timeout=timeout) as resp:
+            return isinstance(json.loads(resp.read().decode("utf-8", errors="replace")), dict)
+    except Exception:
+        return False
+
+
+def wait_ready(port: Any, *, budget_s: float | None = None,
+               answers: Callable[[Any], bool] = debug_answers,
+               sleep: Callable[[float], None] = time.sleep,
+               clock: Callable[[], float] = time.monotonic, poll_s: float = 1.0) -> tuple[bool, float]:
+    """Ждать ответа `/json/version` после старта (живой B97 13:27: порт отдан за 11,6 с,
+    а браузер поднялся на 10–30 с позже). Ответ — (готов, сколько ждали). Не бросает:
+    не дождались — дальше решает холодный бюджет CDP, профиль остаётся нашим."""
+    budget = cold_start_s() if budget_s is None else float(budget_s)
+    began = clock()
+    while True:
+        if answers(port):
+            with _COLD_LOCK:
+                _READY.add(_port_of(port))
+            return True, clock() - began
+        if clock() - began >= budget:
+            return False, clock() - began
+        sleep(poll_s)
+
+
+def wait_start_settled(profile_id: str, *, answers: Callable[[Any], bool] = debug_answers,
+                       sleep: Callable[[float], None] = time.sleep,
+                       clock: Callable[[], float] = time.monotonic) -> str:
+    """Перед stop: старт этого профиля устоялся? Ждём готовности или конца бюджета старта.
+
+    Stop, посланный, пока браузер ещё поднимается, MLX принимает и НЕ выполняет —
+    браузер потом встаёт и висит брошенным (п. 8b). Ответ для телеметрии:
+    "not_ours" / "ready" / "settled" (дождались) / "budget_over".
+    """
+    pid = str(profile_id or "")
+    with _COLD_LOCK:
+        p = _COLD_PROFILE.get(pid, 0)
+        at = _COLD.get(p) if p else None
+        ready = p in _READY
+    if not p or at is None:
+        return "not_ours"
+    if ready:
+        return "ready"
+    left = at + cold_start_s() - clock()
+    if left <= 0:
+        return "budget_over"
+    ok, _took = wait_ready(p, budget_s=left, answers=answers, sleep=sleep, clock=clock)
+    return "settled" if ok else "budget_over"
 
 
 def _listen_for_stops() -> None:

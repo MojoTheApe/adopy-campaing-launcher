@@ -98,6 +98,9 @@ class PageTab:
         self.closed = False
         #: Удалось ли снять троттлинг фона: {"focus": bool, "lifecycle": bool}.
         self.throttle: dict = {}
+        #: Первая навигация после нашего холодного старта ещё впереди (ACL-2095 п. 5/7).
+        self._first_nav_cold = False
+        self._sleep: Callable[[float], None] = time.sleep
 
     @classmethod
     def open(cls, cdp_url: str, *, connect: Callable[..., Any] | None = None,
@@ -120,13 +123,26 @@ class PageTab:
         step = "connect"
         began = time.monotonic()
         try:
+            if cold and connect is None:
+                # П. 8a: порт от MLX — ещё не готовый браузер (B97 13:27: порт отдан за
+                # 11,6 с, браузер поднялся на 10–30 с позже). Ждём `/json/version`.
+                step = "ready"
+                ready, took = _launch.wait_ready(cdp_url, budget_s=call_s)
+                timings["ready_s"] = took
+                if not ready:
+                    raise CdpTimeout(f"ready: the browser did not answer /json/version within {call_s:.0f} s")
+                step = "connect"
             try:
                 cdp = (connect or RawCdp.connect)(cdp_url, timeout=call_s)
             except TimeoutError as exc:
                 raise CdpTimeout(f"connect: the browser did not answer within {call_s:.0f} s") from exc
             timings["connect_s"] = time.monotonic() - began
+            if cold:
+                _launch.mark_ready(cdp_url)
             step = "tab"
             tab = cls._open_on(cdp, cdp_url, call_s, timings, began)
+            # П. 5/7: первая навигация после холодного старта — сначала проба прокси.
+            tab._first_nav_cold = cold
         except BaseException as exc:
             if cold:
                 failed = str(exc).split(":", 1)[0] if isinstance(exc, CdpTimeout) else step
@@ -289,9 +305,59 @@ class PageTab:
         return (got.get("result") or {}).get("value")
 
     def navigate(self, url: str, *, timeout: float = 30.0) -> None:
+        if self._first_nav_cold:
+            self._first_nav_cold = False
+            self._navigate_after_cold_start(url, timeout)
+            return
+        self._navigate_once(url, timeout)
+
+    def _navigate_once(self, url: str, timeout: float) -> None:
         got = self.call("Page.navigate", {"url": url}, timeout=timeout)
         if got.get("errorText"):
             raise PageError(f"navigation failed: {got['errorText']}")
+
+    def _navigate_after_cold_start(self, url: str, timeout: float) -> None:
+        """Первая навигация после нашего старта (ACL-2095 п. 5/7).
+
+        MLX включает вход в прокси через несколько секунд после готовности порта
+        (B97 22.10: api.ipify.org → ERR_INVALID_AUTH_CREDENTIALS, та же вкладка через
+        15 с — загрузилась). Поэтому сначала нейтральная проба (`ACL_PROXY_PROBE_URL`),
+        на ошибку входа — один повтор через `PROXY_RETRY_S`; только потом Facebook.
+        Второй отказ входа — окончательный. Проба упала иначе (сеть, DNS) — не держим.
+        """
+        from src.fb_api import launch as _launch
+
+        began = time.monotonic()
+        probe = _launch.proxy_probe_url()
+        retried = False
+        if probe:
+            try:
+                self._navigate_once(probe, min(timeout, 30.0))
+            except PageError as exc:
+                if not _launch.is_proxy_auth_error(str(exc)):
+                    probe = ""            # проба не про вход в прокси — не решает
+                else:
+                    retried = True
+                    self._sleep(_launch.PROXY_RETRY_S)
+                    try:
+                        self._navigate_once(probe, min(timeout, 30.0))
+                    except PageError as again:
+                        _launch._record({"event": "fb_api_proxy_probe", "ok": False, "retried": True,
+                                         "took_s": round(time.monotonic() - began, 1)})
+                        if _launch.is_proxy_auth_error(str(again)):
+                            raise
+                        probe = ""
+        if probe:
+            _launch._record({"event": "fb_api_proxy_probe", "ok": True, "retried": retried,
+                             "took_s": round(time.monotonic() - began, 1)})
+        try:
+            self._navigate_once(url, timeout)
+        except PageError as exc:
+            # Пробы не было (выключена/не решила) — тот же один повтор на самой первой навигации.
+            if retried or not _launch.is_proxy_auth_error(str(exc)) or probe:
+                raise
+            self._sleep(_launch.PROXY_RETRY_S)
+            self._navigate_once(url, timeout)
 
     def reload(self, *, timeout: float = 30.0) -> None:
         self.call("Page.reload", {"ignoreCache": False}, timeout=timeout)

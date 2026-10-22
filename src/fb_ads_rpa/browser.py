@@ -2816,8 +2816,19 @@ def stop_profile_on_request(entry: AccountMapEntry, account_label: str) -> str:
         raise RuntimeError(f"{account_label}: profile_id is required")
     user_data_dir = _find_mlx_profile_dir(profile_id)
     udd = str(user_data_dir) if user_data_dir is not None else ""
+    # ACL-2095 п. 8: stop, посланный, пока старт ещё не устоялся, MLX принимает и не
+    # выполняет — браузер встаёт брошенным. Ждём готовности поднятого нами профиля.
+    from src.fb_api import launch as _launch
+    from src.fb_api import profile as _fb_profile
+
+    settled = _launch.wait_start_settled(profile_id)
     MultiloginAttachOnlyProvider()._stop_profile(entry, account_label, profile_id, udd, allow_kill=False)
     _ROBOT_PROFILES.pop(profile_id, None)
+    # Закрытым профиль считаем, когда его процесс ушёл (статусу MLX Desktop не верим).
+    gone = _fb_profile.wait_gone(profile_id)
+    if not gone:
+        log.warning("%s: profile %s still has a process %.0f s after the MLX stop (start was %s)",
+                    account_label, profile_id, _launch.STOP_GONE_WAIT_S, settled)
     return "closed"
 
 

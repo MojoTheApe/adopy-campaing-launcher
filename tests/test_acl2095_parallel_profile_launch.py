@@ -31,9 +31,11 @@ def _quiet(monkeypatch):
     monkeypatch.setattr(mlx_session, "note_failure", lambda *a, **k: None)
     launch._COLD.clear()
     launch._COLD_PROFILE.clear()
+    launch._READY.clear()
     yield
     launch._COLD.clear()
     launch._COLD_PROFILE.clear()
+    launch._READY.clear()
 
 
 def _abort() -> Exception:
@@ -112,7 +114,7 @@ def test_second_abort_is_raised_after_exactly_two_starts(not_running):
     requests.exceptions.ReadTimeout("Read timed out"),
     RuntimeError("navigation failed: net::ERR_INVALID_AUTH_CREDENTIALS"),
 ])
-def test_timeouts_and_proxy_auth_are_never_retried(not_running, error):
+def test_timeouts_and_proxy_auth_on_mlx_start_are_never_retried(not_running, error):
     launcher = _Launcher(error, _ok())
     with pytest.raises(Exception):
         _open(launcher)
@@ -368,3 +370,139 @@ def test_check_plan_page_polls_the_waiting_line():
     start = html.index("window.cbCheckPlan = function")
     body = html[start:html.index("\n};", start)]
     assert "/publish-plan/waiting?" in body and "clearInterval(waitTimer)" in body
+
+
+# ───────────────────────── п. 5/7: вход в прокси после холодного старта ─────────────────────────
+
+AUTH = "net::ERR_INVALID_AUTH_CREDENTIALS"
+FB = "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1"
+
+
+class _NavCdp(_Cdp):
+    def __init__(self, errors):
+        super().__init__()
+        self.errors = list(errors)
+        self.urls = []
+
+    def call(self, method, params=None, *, session_id="", timeout=10.0):
+        if method == "Page.navigate":
+            self.urls.append(params["url"])
+            err = self.errors.pop(0) if self.errors else ""
+            return {"frameId": "F", **({"errorText": err} if err else {})}
+        return super().call(method, params, session_id=session_id, timeout=timeout)
+
+
+def _nav_tab(errors, *, cold=True):
+    if cold:
+        launch.mark_started("7001", "P1")
+    cdp = _NavCdp(errors)
+    tab = cdp_mod.PageTab.open("http://127.0.0.1:7001", connect=lambda u, timeout: cdp)
+    slept = []
+    tab._sleep = slept.append
+    return tab, cdp, slept
+
+
+def test_first_navigation_after_cold_start_probes_the_proxy_before_facebook():
+    tab, cdp, slept = _nav_tab([])
+    tab.navigate(FB)
+    assert cdp.urls == [launch.DEFAULT_PROXY_PROBE_URL, FB] and slept == []
+    tab.navigate(FB)                              # дальше — без пробы
+    assert cdp.urls[-1] == FB and len(cdp.urls) == 3
+
+
+def test_proxy_auth_race_on_the_probe_is_retried_once_and_facebook_is_never_hit_unauthenticated():
+    # B97 22.10: первая навигация — ERR_INVALID_AUTH_CREDENTIALS, через 15 с — загрузилась.
+    tab, cdp, slept = _nav_tab([AUTH, ""])
+    tab.navigate(FB)
+    assert cdp.urls == [launch.DEFAULT_PROXY_PROBE_URL, launch.DEFAULT_PROXY_PROBE_URL, FB]
+    assert slept == [launch.PROXY_RETRY_S]
+
+
+def test_proxy_auth_error_on_the_retry_is_final():
+    tab, cdp, slept = _nav_tab([AUTH, AUTH])
+    with pytest.raises(cdp_mod.PageError, match="ERR_INVALID_AUTH_CREDENTIALS"):
+        tab.navigate(FB)
+    assert FB not in cdp.urls and len(slept) == 1
+
+
+def test_proxy_auth_error_on_a_warm_profile_is_final():
+    tab, cdp, slept = _nav_tab([AUTH], cold=False)
+    with pytest.raises(cdp_mod.PageError):
+        tab.navigate(FB)
+    assert cdp.urls == [FB] and slept == []
+
+
+def test_without_a_probe_the_first_cold_navigation_gets_one_retry(monkeypatch):
+    monkeypatch.setenv(launch.PROXY_PROBE_ENV, "off")
+    tab, cdp, slept = _nav_tab([AUTH, ""])
+    tab.navigate(FB)
+    assert cdp.urls == [FB, FB] and slept == [launch.PROXY_RETRY_S]
+
+
+def test_a_probe_failing_for_another_reason_does_not_block_facebook():
+    tab, cdp, slept = _nav_tab(["net::ERR_NAME_NOT_RESOLVED", ""])
+    tab.navigate(FB)
+    assert cdp.urls == [launch.DEFAULT_PROXY_PROBE_URL, FB] and slept == []
+
+
+# ───────────────────────── п. 8: гонки старта и остановки ─────────────────────────
+
+class _Clock:
+    def __init__(self):
+        self.t = 0.0
+
+    def __call__(self):
+        return self.t
+
+    def sleep(self, s):
+        self.t += s
+
+
+def test_ready_means_json_version_answers_not_just_a_listening_port():
+    clock = _Clock()
+    answers = iter([False, False, True])
+    ok, took = launch.wait_ready(7001, budget_s=40, answers=lambda p: next(answers),
+                                 sleep=clock.sleep, clock=clock)
+    assert ok and took == 2.0
+
+
+def test_ready_wait_is_bounded_by_the_cold_budget():
+    clock = _Clock()
+    ok, took = launch.wait_ready(7001, budget_s=5, answers=lambda p: False, sleep=clock.sleep, clock=clock)
+    assert not ok and took >= 5
+
+
+def test_stop_waits_until_our_start_has_settled():
+    clock = _Clock()
+    launch.mark_started("7001", "P1", clock=clock)
+    answers = iter([False, True])
+    assert launch.wait_start_settled("P1", answers=lambda p: next(answers),
+                                     sleep=clock.sleep, clock=clock) == "settled"
+    assert launch.wait_start_settled("P1", answers=lambda p: pytest.fail("no wait"),
+                                     sleep=clock.sleep, clock=clock) == "ready"
+
+
+def test_stop_of_a_profile_we_did_not_start_never_waits():
+    assert launch.wait_start_settled("OTHER", answers=lambda p: pytest.fail("no wait")) == "not_ours"
+
+
+def test_stop_does_not_wait_past_the_start_budget():
+    clock = _Clock()
+    launch.mark_started("7001", "P1", clock=clock)
+    clock.t += launch.cold_start_s() + 1
+    assert launch.wait_start_settled("P1", answers=lambda p: False, sleep=clock.sleep,
+                                     clock=clock) == "budget_over"
+
+
+def test_after_stop_the_profile_is_closed_only_when_its_process_is_gone():
+    clock = _Clock()
+    seen = iter([("port", 61000), ("closing", 61000), ("none", None)])
+    assert prof.wait_gone("P1", probe=lambda pid: next(seen), sleep=clock.sleep, clock=clock)
+    assert clock.t == 2.0
+
+
+def test_wait_for_the_stopped_process_is_bounded():
+    clock = _Clock()
+    assert not prof.wait_gone("P1", timeout_s=30, probe=lambda pid: ("port", 61000),
+                              sleep=clock.sleep, clock=clock)
+    assert 30 <= clock.t <= 31
