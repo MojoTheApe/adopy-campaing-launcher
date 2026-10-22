@@ -140,14 +140,24 @@ def test_describe_diffs_names_manual_changes_too():
     assert got[1] == "maximum age (builder: 55, Meta: 65)" and len(got) == 2
 
 
-def test_active_reused_adset_or_campaign_goes_to_a_new_name(tmp_path):
-    # Статус ACTIVE у найденного объекта — расхождение с билдером: стоп до записей.
-    for kind in ("adset", "campaign"):
-        meta = _first_run(tmp_path, ads=1)
-        obj = next(o for o in meta.objects.values() if o["_kind"] == kind)
-        obj["status"] = "ACTIVE"
-        before = _write_count(meta)
-        out, client = _run(meta, _draft(tmp_path, ads=2))
-        assert out.error == "" and out.published_as == "MX Leads 1_2", kind
-        assert any("status (builder: PAUSED, Meta: ACTIVE)" in w for w in out.warnings), kind
-        assert obj["status"] == "ACTIVE" and _write_count(meta) > before, kind
+def test_active_reused_campaign_goes_to_a_new_name(tmp_path):
+    # Статус ACTIVE у найденной КАМПАНИИ — расхождение с билдером: новое имя, её не трогаем.
+    meta = _first_run(tmp_path, ads=1)
+    obj = next(o for o in meta.objects.values() if o["_kind"] == "campaign")
+    obj["status"] = "ACTIVE"
+    before = _write_count(meta)
+    out, client = _run(meta, _draft(tmp_path, ads=2))
+    assert out.error == "" and out.published_as == "MX Leads 1_2"
+    assert any("status (builder: PAUSED, Meta: ACTIVE)" in w for w in out.warnings)
+    assert obj["status"] == "ACTIVE" and _write_count(meta) > before
+
+
+def test_active_reused_adset_is_not_a_difference_and_is_not_touched(tmp_path):
+    # ACL-2114: наборы создаются ACTIVE, так что найденный ACTIVE набор - норма (ни имени, ни записи).
+    meta = _first_run(tmp_path, ads=1)
+    adset = next(o for o in meta.objects.values() if o["_kind"] == "adset")
+    assert adset["status"] == "ACTIVE"
+    out, client = _run(meta, _draft(tmp_path, ads=1))
+    assert out.error == "" and out.published_as == "MX Leads 1" and out.created == {}
+    assert not any("status" in w for w in out.warnings)
+    assert client.writes == 0 and adset["status"] == "ACTIVE"
