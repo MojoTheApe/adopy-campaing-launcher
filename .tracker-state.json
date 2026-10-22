@@ -128098,7 +128098,51 @@
         "session": "run_ag1021_839",
         "coordinator": "Coordinator-I1021A",
         "started_at": "2026-10-22T07:37:39+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 839,
+          "pr": 843,
+          "branch": "codex/acl-1839-connection-panel-layout",
+          "head_sha": "5a6fafb9fe7045c5bbecccbdd48a6127c48c5c29",
+          "base_sha": "515689dee625bdae3241e2ab4064fd18fa5dac53",
+          "main_sha": "515689dee625bdae3241e2ab4064fd18fa5dac53",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "61a8a6d1b11eb11ae8c76520e1447683670fdbb31e61059e754e07b8aac66c97",
+          "review": {
+            "kind": "independent-review",
+            "implementer": "Worker-W1021839",
+            "reviewer": "Reviewer-AG1021839",
+            "head_sha": "5a6fafb9fe7045c5bbecccbdd48a6127c48c5c29",
+            "base_sha": "515689dee625bdae3241e2ab4064fd18fa5dac53",
+            "tree_sha": "cca88bd39d7cd823b2ba39d6092b2d2b663b25d5",
+            "verdict": "approved",
+            "execution_lane": "979a95715a9b48138b2be99ac0b692e0",
+            "review_session": "run_ag1021_839",
+            "report": "ACL-1839 re-review of PR 843 head 5a6fafb9 against main 515689de. Delta from approved 16a5bd6d is merge-only: git patch-id of the PR diff vs main is identical (79c2c556) before and after; same 4 files (two templates, changelog fragment, layout test). Previous full review (English labels, containment CSS, real-Chromium tests, no leaked ids, fold_changelog valid, 72 combined local tests passed) stands. Required CI green on 5a6fafb9 incl. linux shards 1-3, windows, tracker-link.",
+            "main_sha": "515689dee625bdae3241e2ab4064fd18fa5dac53",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              839
+            ],
+            "recorded_at": "2026-10-22T07:39:00+00:00",
+            "issue_scopes": {
+              "839": "61a8a6d1b11eb11ae8c76520e1447683670fdbb31e61059e754e07b8aac66c97"
+            }
+          },
+          "lane": {
+            "id": "979a95715a9b48138b2be99ac0b692e0",
+            "pr": 843,
+            "issues": [
+              839
+            ],
+            "actor": "Reviewer-AG1021839",
+            "session": "run_ag1021_839",
+            "coordinator": "Coordinator-I1021A",
+            "started_at": "2026-10-22T07:37:39+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-22T07:39:55+00:00"
+        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
