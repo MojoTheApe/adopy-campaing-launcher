@@ -399,6 +399,63 @@ class GraphClient:
             self._slow = True
         return body
 
+    def validate_page(self, act: str, page_id: str, link: str = "") -> dict:
+        """One explicit no-creation proof. Unknown or unsupported responses never pass."""
+        from src.fb_api.page_validation import params
+
+        params(act, page_id, link)
+        validate = getattr(self.transport, "validate_page", None)
+        if not callable(validate):
+            raise GraphError("Safe account-bound Page validation is unavailable")
+        if self.stopped is not None:
+            raise self.stopped
+        if self.unreconciled is not None:
+            raise WritesBlocked(self.unreconciled)
+        if self.calls >= self.max_calls:
+            raise self._stop(CallBudget(f"call budget of {self.max_calls} reached"))
+        self._pace()
+        self.calls += 1
+        self._last_call = self._clock()
+        try:
+            reply = validate(act, page_id, link)
+        except GraphStop as exc:
+            raise self._stop(exc)
+        except ValueError as exc:
+            raise GraphError(f"Page validation refused before sending: {exc}") from exc
+        except Exception as exc:  # noqa: BLE001 - no retry and no creation on unknown validation
+            raise GraphError("Meta did not confirm Page validation") from exc
+        self._last_call = self._clock()
+        if not isinstance(reply, dict) or reply.get("error"):
+            raise GraphError("Meta did not confirm Page validation")
+        usage = usage_from_headers(reply.get("headers"))
+        self.last_usage = usage
+        self.usage_headers_seen = self.usage_headers_seen or bool(usage["seen"])
+        body, status = reply.get("body"), reply.get("status")
+        gerr = body.get("error") if isinstance(body, dict) else None
+        if isinstance(gerr, dict):
+            code, sub = _int(gerr.get("code")), _int(gerr.get("error_subcode"))
+            msg = str(gerr.get("message") or "Page validation refused")
+            kind = classify(code)
+            if kind == "policy":
+                raise self._stop(PolicyBlocked(msg, code=code, subcode=sub))
+            if kind == "rate_limit":
+                raise self._stop(RateLimited(msg, code=code, subcode=sub))
+            if kind == "token":
+                if sub in CHECKPOINT_SUBCODES:
+                    raise self._stop(Checkpoint(msg, code=code, subcode=sub))
+                raise self._stop(LoggedOut(msg, code=code, subcode=sub))
+            raise GraphError(msg, code=code, subcode=sub, status=status)
+        if (not isinstance(status, int) or not 200 <= status < 300
+                or not isinstance(body, dict) or body.get("success") is not True or "id" in body or "error" in body):
+            raise GraphError("Meta did not explicitly confirm no-creation Page validation")
+        pct = usage["max_pct"]
+        if usage["wait_s"] > 0 or pct is not None and pct >= STOP_PCT:
+            raise self._stop(RateLimited("Meta usage limit reached during Page validation",
+                                         retry_after_s=usage["wait_s"] or None))
+        if pct is not None and pct >= SLOW_PCT:
+            self._slow = True
+        return body
+
     # -- одна запись (ACL-1761)
     def post(self, path: str, params: dict | None = None, *, files: dict | None = None,
              filename: str = "", on_ad: bool = False, form_page: str = "",

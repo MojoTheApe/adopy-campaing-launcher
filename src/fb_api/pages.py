@@ -2,7 +2,8 @@
 
 Ads Manager предлагает не только Страницы, привязанные к кабинету, но и те, которыми профиль
 сам управляет с правом рекламы. Робот раньше читал только `promote_pages` и на таких
-аккаунтах не создавал объявления. Здесь только чтения; записей нет.
+аккаунтах не создавал объявления. Список читается; отдельный validate-only creative
+подтверждает связку кабинет/Страница без создания объектов.
 """
 from __future__ import annotations
 
@@ -109,24 +110,18 @@ def record_counts(merged: MergedPages, *, where: str, started: float | None = No
         pass
 
 
-def check_usable(client: Any, page_id: str, name: str = "") -> str:
-    """Страница профиля пригодна для рекламы? Одно чтение; пустая строка - да, иначе причина.
-
-    Записей нет: проверочная запись (`validate_only`) политикой записи запрещена, поэтому
-    спрашиваем у Meta саму Страницу: опубликована и допущена к продвижению.
-    """
-    from src.fb_api.graph import GraphError
+def check_usable(client: Any, page_id: str, name: str = "", *, act: str = "", link: str = "") -> str:
+    """Meta must accept this Page in a validate-only creative for the actual account."""
+    from src.fb_api.graph import GraphError, WritesBlocked
 
     try:
-        got = client.get(f"/{page_id}", {"fields": "id,name,is_published,promotion_eligible,"
-                                                    "promotion_ineligible_reason"})
+        got = client.validate_page(act, page_id, link)
     except GraphError as exc:
-        return f"Meta refused to read the Page ({exc})"
-    if not isinstance(got, dict) or str(got.get("id") or "") != str(page_id):
-        return "Meta did not confirm the Page"
-    if got.get("is_published") is False:
-        return "the Page is not published"
-    if got.get("promotion_eligible") is False:
-        why = str(got.get("promotion_ineligible_reason") or "").strip()
-        return "Meta says the Page cannot be promoted" + (f" ({why})" if why else "")
+        return f"Meta did not prove the Page is usable for this ad account ({exc})"
+    except WritesBlocked as exc:
+        return f"Page validation is blocked by an unresolved earlier write ({exc})"
+    except ValueError as exc:
+        return str(exc)
+    if not isinstance(got, dict) or got.get("success") is not True or "error" in got or "id" in got:
+        return "Meta did not explicitly confirm the Page for this ad account"
     return ""

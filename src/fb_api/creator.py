@@ -1224,6 +1224,7 @@ class CampaignCreator:
     # -- весь путь
     def run(self, plan: CampaignPlan) -> Outcome:
         self._creatives = None
+        self._profile_page_checks = {}
         out = Outcome(campaign_name=plan.name, warnings=list(plan.warnings))
         try:
             self._run(plan, out)
@@ -1244,19 +1245,24 @@ class CampaignCreator:
     def check_profile_page(self, plan: CampaignPlan) -> None:
         """Страница из профиля (не из кабинета) должна пройти проверку пригодности (ACL-2105).
 
-        Одно чтение у Meta на Страницу за жизнь creator'а; записей нет. Отказ - `PlanError` с
-        названием Страницы и причиной, до любой записи.
+        Один validate-only creative для кабинета/Страницы/ссылки; объектов не создаёт.
+        Отказ или неизвестный ответ - PlanError до любых объектов/загрузок/форм.
         """
         pid = plan.page_id
         if not pid or self.facts.page_source_of(pid) != _pg.SOURCE_PROFILE:
             return
+        name = self.facts.page_names.get(pid, pid)
+        if plan.act != self.facts.act:
+            raise PlanError(f"The Page {name!r} ({pid}) validation account differs from the verified ad account. "
+                            "Nothing was created.")
         cache = self.__dict__.setdefault("_profile_page_checks", {})
-        if pid not in cache:
-            cache[pid] = _pg.check_usable(self.client, pid, self.facts.page_names.get(pid, ""))
-        if cache[pid]:
-            name = self.facts.page_names.get(pid, pid)
+        key = (plan.act, pid, plan.link)
+        if key not in cache:
+            cache[key] = _pg.check_usable(self.client, pid, self.facts.page_names.get(pid, ""),
+                                          act=plan.act, link=plan.link)
+        if cache[key]:
             raise PlanError(f"The Page {name!r} ({pid}) belongs to the profile, not to this ad account, and "
-                            f"cannot be used for ads here: {cache[pid]}. Choose another Page or add this Page "
+                            f"cannot be used for ads here: {cache[key]}. Choose another Page or add this Page "
                             "to the ad account in Business Manager. Nothing was created.")
 
     def _prepare(self, plan: CampaignPlan, out: Outcome) -> tuple[list[dict], dict[str, bytes]]:
@@ -1461,6 +1467,7 @@ class CampaignCreator:
         `post` не зовётся ни разу.
         """
         self._creatives = None
+        self._profile_page_checks = {}
         out = Outcome(campaign_name=plan.name, warnings=list(plan.warnings))
         differences: list | None = None
         files: dict | None = None

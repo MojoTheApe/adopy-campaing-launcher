@@ -140,6 +140,33 @@ permission denial or change access, retry, token, pagination or stop rules.
 Callers that replace the exception text with a generic message still need their
 own integration; this boundary alone does not update those messages.
 
+## Profile Page fallback and no-creation proof
+
+ACL-2105 merges ad-account Pages with the profile's own ADVERTISE/MANAGE Pages
+when the account list is empty or omits an explicit choice. Account Pages retain
+priority; picker, plan/result and Instant Forms retain each Page's origin.
+
+Before any objects, uploads or forms are created with a profile Page, both Check
+plan and the real run require one `validate_only` creative for the selected account,
+Page and link. The isolated helper binds its account to navigation (or the verified
+creation account), constructs the fixed parameters itself, and leaves ordinary
+write permissions closed in read sessions. Explicit successful Meta validation
+without an error/object ID is required. Unknown, unsupported and refused responses
+stop with the Page and reason. Proof is reused only within the current operation;
+the actual run checks again after an earlier plan check. Existing call budgets,
+usage/stop guards and unknown-write fences still apply.
+
+The official Meta SDK at `efd8423a2e595ea8d4c04eb824ce113f2f1d68cd` supports
+[creative execution options](https://github.com/facebook/facebook-python-business-sdk/blob/efd8423a2e595ea8d4c04eb824ce113f2f1d68cd/facebook_business/adobjects/adaccount.py),
+[`validate_only`](https://github.com/facebook/facebook-python-business-sdk/blob/efd8423a2e595ea8d4c04eb824ce113f2f1d68cd/facebook_business/adobjects/adcreative.py),
+[Page/link story fields](https://github.com/facebook/facebook-python-business-sdk/blob/efd8423a2e595ea8d4c04eb824ce113f2f1d68cd/facebook_business/adobjects/adcreativeobjectstoryspec.py)
+and [link data](https://github.com/facebook/facebook-python-business-sdk/blob/efd8423a2e595ea8d4c04eb824ce113f2f1d68cd/facebook_business/adobjects/adcreativelinkdata.py).
+These fields do not guarantee the minimal link creative is accepted for every
+Page/plan without uploaded media. Such a refusal blocks creation; there are no
+extra asset reads or fallback writes. This is Page/account usability evidence,
+not a full media/content/ad-review guarantee. Tests use synthetic transports and
+the actual helper offline; no live Meta or profile pilot has been performed.
+
 ## CI feedback and admission
 
 The existing `Classify and check project tooling` result supplies bounded tooling

@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from src.fb_api import creator as cr, graph as g, pages as pg
-from tests.test_acl1761_api_create import ACT, _draft
+from tests.test_acl1761_api_create import ACT, ACT2, _draft
 from tests.test_acl1819_preflight import AuditMeta, _by
 
 
@@ -16,6 +16,17 @@ class ProfileMeta(AuditMeta):
         self.profile = list(profile)
         self.page_reply = page_reply or {}
         self.me_accounts_calls = 0
+        self.validations = []
+
+    def validate_page(self, act, page_id, link):
+        self.validations.append((act, page_id, link))
+        assert act == ACT
+        if self.page_reply.get("is_published") is False:
+            return {"status": 400, "body": {"error": {"code": 100, "message": "the Page is not published"}}}
+        if self.page_reply.get("promotion_eligible") is False:
+            return {"status": 400, "body": {"error": {"code": 100,
+                    "message": self.page_reply.get("promotion_ineligible_reason", "Page refused")}}}
+        return {"status": 200, "body": {"success": True}}
 
     def _get(self, path, params):
         if path == "/me/accounts":
@@ -88,8 +99,8 @@ def test_draft_page_only_in_profile_is_accepted_after_usability_check(tmp_path):
     out = _audit(meta, draft)
     assert _by(out)["page_ok"]["status"] == "ok", _by(out)["page_ok"]
     assert out.plan["summary"]["page_origin"] == "profile"
-    # проверка пригодности была: чтение самой Страницы, ни одной записи
-    assert any(p == "/777" for p, _ in meta.gets) and meta.posts == []
+    # The actual account/Page proof happened once; no creative or other object was created.
+    assert len(meta.validations) == 1 and meta.validations[0][:2] == (ACT, "777") and meta.posts == []
 
 
 @pytest.mark.parametrize("reply, reason", [
@@ -167,3 +178,96 @@ def test_profile_read_path_has_safe_error_context():
     with pytest.raises(g.GraphError) as caught:
         g.GraphClient(T(), min_interval_s=0).get("/me/accounts", {"fields": "id,name,tasks"})
     assert caught.value.details["operation"] == "profile_pages"
+
+
+@pytest.mark.parametrize("action", ["plan", "run"])
+def test_account_creative_refusal_precedes_every_created_object(tmp_path, action):
+    class RefusesForAccount(ProfileMeta):
+        def validate_page(self, act, page_id, link):
+            self.validated = (act, page_id, link)
+            return {"status": 400, "body": {"error": {"code": 100,
+                    "message": "Synthetic Page is not usable for this ad account"}}}
+    meta = RefusesForAccount(pages=(), profile=[_advertise("777")],
+                             page_reply={"is_published": True, "promotion_eligible": True})
+    draft = _draft(tmp_path, ads=1)
+    draft.page_id = "777"
+    client = _client(meta, writes=action == "run")
+    creator = cr.CampaignCreator(client, cr.preflight_account(client, ACT), cr.TargetingResolver(client),
+                                 sleep=lambda _: None)
+    out = creator.plan_only(cr.plan_from_draft(draft)) if action == "plan" else creator.run(cr.plan_from_draft(draft))
+    if action == "plan":
+        assert _by(out)["page_ok"]["status"] == "error", _by(out)["page_ok"]
+    else:
+        assert out.error and not out.campaign_id, out
+    assert meta.validated[:2] == (ACT, "777")
+    assert not meta.posts and not meta.objects and client.writes == 0
+
+
+@pytest.mark.parametrize("reply", [{}, {"id": "123"}, {"success": False}, {"success": "true"},
+                                  {"success": True, "error": None}, {"success": True, "id": "123"}])
+def test_missing_explicit_validation_success_never_proves_page(tmp_path, reply):
+    class UnknownProof(ProfileMeta):
+        def validate_page(self, act, page_id, link):
+            return {"status": 200, "body": reply}
+    meta = UnknownProof(pages=(), profile=[_advertise("777")])
+    draft = _draft(tmp_path, ads=1)
+    draft.page_id = "777"
+    out = _audit(meta, draft)
+    assert _by(out)["page_ok"]["status"] == "error", _by(out)["page_ok"]
+    assert not meta.posts and not meta.objects
+
+
+def test_successful_profile_proof_precedes_the_first_created_object(tmp_path):
+    class OrderedMeta(ProfileMeta):
+        def write(self, *args, **kwargs):
+            assert len(self.validations) == 1 and self.validations[0][:2] == (ACT, "777")
+            return super().write(*args, **kwargs)
+    meta = OrderedMeta(pages=(), profile=[_advertise("777")])
+    draft = _draft(tmp_path, ads=1)
+    draft.page_id = "777"
+    client = _client(meta, writes=True)
+    creator = cr.CampaignCreator(client, cr.preflight_account(client, ACT), cr.TargetingResolver(client),
+                                 sleep=lambda _: None)
+    out = creator.run(cr.plan_from_draft(draft))
+    assert not out.error and out.campaign_id and out.ad_ids, out
+    assert meta.posts and len(meta.validations) == 1
+
+
+def test_run_obtains_fresh_page_proof_after_check_plan(tmp_path):
+    meta = ProfileMeta(pages=(), profile=[_advertise("777")])
+    draft = _draft(tmp_path, ads=1)
+    draft.page_id = "777"
+    client = _client(meta, writes=True)
+    creator = cr.CampaignCreator(client, cr.preflight_account(client, ACT), cr.TargetingResolver(client),
+                                 sleep=lambda _: None)
+    assert not creator.plan_only(cr.plan_from_draft(draft)).error
+    meta.page_reply = {"promotion_eligible": False, "promotion_ineligible_reason": "account permission changed"}
+    out = creator.run(cr.plan_from_draft(draft))
+    assert out.error and "account permission changed" in out.error and not out.campaign_id
+    assert len(meta.validations) == 2 and not meta.posts
+
+
+def test_unavailable_validation_support_does_not_fall_back_to_generic_flags(tmp_path):
+    meta = ProfileMeta(pages=(), profile=[_advertise("777")],
+                       page_reply={"is_published": True, "promotion_eligible": True})
+    meta.validate_page = None
+    draft = _draft(tmp_path, ads=1)
+    draft.page_id = "777"
+    out = _audit(meta, draft)
+    assert _by(out)["page_ok"]["status"] == "error"
+    assert "unavailable" in _by(out)["page_ok"]["detail"]
+    assert not meta.posts and not meta.objects
+
+
+def test_plan_cannot_substitute_an_unverified_ad_account(tmp_path):
+    meta = ProfileMeta(pages=(), profile=[_advertise("777")])
+    draft = _draft(tmp_path, ads=1)
+    draft.page_id = "777"
+    client = _client(meta, writes=True)
+    creator = cr.CampaignCreator(client, cr.preflight_account(client, ACT), cr.TargetingResolver(client),
+                                 sleep=lambda _: None)
+    plan = cr.plan_from_draft(draft)
+    plan.act = ACT2
+    out = creator.run(plan)
+    assert out.error and "777" in out.error and "differs" in out.error
+    assert not out.campaign_id and not meta.validations and not meta.posts
