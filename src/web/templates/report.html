@@ -3692,6 +3692,118 @@
       .cw-ref { border-right: 0; border-bottom: 1px solid var(--border); }
     }
   </style>
+  <style id="shell-1827">
+    /* ACL-1827: боковая колонка, полоса «Вы / Другие» на Home и панель Robot
+       health — по прототипу. Только токены Adopy; префиксы sb- / hk- / rh-. */
+    .sidebar { background: var(--adopy-surface); padding-top: var(--adopy-space-4); }
+    .sidebar .sb-ico { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor;
+      stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .sidebar > .sidebar-link { display: flex; align-items: center; gap: var(--adopy-space-3);
+      font-size: var(--adopy-text-body); min-height: 40px; }
+    .sidebar > .sidebar-link.sidebar-home { background: transparent; border: 0; margin-bottom: 0;
+      font-weight: var(--adopy-weight-regular); color: var(--adopy-text); }
+    .sidebar > .sidebar-link.sidebar-home:hover:not(.active) { background: var(--adopy-surface-hover); color: var(--adopy-text); }
+    .sidebar > .sidebar-link.active, .sidebar > .sidebar-link.sidebar-home.active {
+      background: var(--adopy-selected-bg); color: var(--adopy-link); font-weight: var(--adopy-weight-semibold); }
+    .sidebar-label { font-size: var(--adopy-text-xs); letter-spacing: 0.06em; text-transform: uppercase;
+      font-weight: var(--adopy-weight-medium); color: var(--adopy-text-muted); }
+    .sidebar-label.sb-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--adopy-space-2);
+      margin-top: var(--adopy-space-4); border-top: 1px solid var(--adopy-border); padding-top: var(--adopy-space-4);
+      text-transform: none; letter-spacing: 0; font-size: var(--adopy-text-sm); }
+    .sidebar-label.sb-head span:first-child { color: var(--adopy-text); font-weight: var(--adopy-weight-semibold); }
+    .sb-find { display: flex; align-items: center; gap: var(--adopy-space-2); margin: 0 var(--adopy-space-2) var(--adopy-space-2);
+      padding: 0 var(--adopy-space-2); height: 36px; border: 1px solid var(--adopy-border); border-radius: var(--adopy-radius-sm);
+      background: var(--adopy-surface); color: var(--adopy-text-muted); }
+    .sb-find:focus-within { border-color: var(--adopy-focus);
+      box-shadow: 0 0 0 var(--adopy-focus-width) color-mix(in srgb, var(--adopy-focus) 25%, transparent); }
+    .sb-find input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--adopy-text);
+      font: inherit; font-size: var(--adopy-text-table); }
+    .sb-find input::placeholder { color: var(--adopy-text-muted); }
+    .sidebar-country { position: relative; }
+    .sidebar-country[hidden] { display: none; }
+    .sidebar-country-btn { font-weight: var(--adopy-weight-regular); font-size: var(--adopy-text-body); padding-right: 4.5rem; }
+    .sidebar-country-btn.live { font-weight: var(--adopy-weight-regular); }
+    .sidebar-country.expanded { background: var(--adopy-selected-bg); }
+    .sidebar-country.expanded .sidebar-country-btn { color: var(--adopy-link); font-weight: var(--adopy-weight-semibold); }
+    .sb-ftd { font-size: var(--adopy-text-sm); color: var(--adopy-text-muted); font-variant-numeric: tabular-nums lining-nums; white-space: nowrap; }
+    .sb-ftd-country { position: absolute; right: var(--adopy-space-3); top: 0; height: 40px; display: flex; align-items: center; pointer-events: none; }
+    .sidebar-country.expanded .sb-ftd-country { color: var(--adopy-link); }
+    .sb-assets { padding: 0 var(--adopy-space-1) var(--adopy-space-1); }
+    .sb-asset { display: flex; align-items: center; justify-content: space-between; gap: var(--adopy-space-2); width: 100%;
+      text-align: left; background: none; border: 0; border-radius: var(--adopy-radius-sm); cursor: pointer; color: var(--adopy-text);
+      font: inherit; font-size: var(--adopy-text-table);
+      padding: var(--adopy-space-2) var(--adopy-space-3) var(--adopy-space-2) var(--adopy-space-5); min-height: 36px; }
+    .sb-asset:hover { background: var(--adopy-surface-hover); }
+    .sb-asset:focus-visible, .sb-more summary:focus-visible { outline: var(--adopy-focus-width) solid var(--adopy-focus); outline-offset: 1px; }
+    .sb-asset-name { overflow-wrap: anywhere; }
+    .sb-asset.active { color: var(--adopy-link); font-weight: var(--adopy-weight-semibold); background: var(--adopy-surface);
+      box-shadow: inset 2px 0 0 var(--adopy-primary); }
+    .sb-asset.active .sb-ftd { color: var(--adopy-link); }
+    .sb-more > summary { cursor: pointer; list-style: none; font-size: var(--adopy-text-sm); color: var(--adopy-text-muted);
+      padding: var(--adopy-space-2) var(--adopy-space-3) var(--adopy-space-2) var(--adopy-space-5); border-radius: var(--adopy-radius-sm); }
+    .sb-more > summary::-webkit-details-marker { display: none; }
+    .sb-more > summary::before { content: "\25B8"; display: inline-block; margin-right: var(--adopy-space-2);
+      font-size: var(--adopy-text-xs); transition: transform 120ms var(--ease-out); }
+    .sb-more[open] > summary::before { transform: rotate(90deg); }
+    .sb-more > summary:hover { color: var(--adopy-text); background: var(--adopy-surface-hover); }
+    .sb-empty, .sb-note { margin: var(--adopy-space-3) var(--adopy-space-3) 0; font-size: var(--adopy-text-sm);
+      color: var(--adopy-text-muted); line-height: var(--adopy-leading-ui); }
+    .sb-note { border-top: 1px solid var(--adopy-border); padding-top: var(--adopy-space-3); margin-top: var(--adopy-space-4); }
+    .sb-empty[hidden] { display: none; }
+
+    /* Home: полоса «Вы / Другие» — шесть плиток, три в ряд. */
+    .hk-row { margin: 0 0 var(--adopy-space-6); }
+    .hk-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--adopy-space-1) var(--adopy-space-3); margin-bottom: var(--adopy-space-3); }
+    .hk-title { margin: 0; font-size: var(--adopy-text-section); font-weight: var(--adopy-weight-semibold); }
+    .hk-sub { font-size: var(--adopy-text-sm); color: var(--adopy-text-muted); }
+    .hk-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--adopy-surface);
+      border: 1px solid var(--adopy-border); border-radius: var(--adopy-radius-md); overflow: hidden; }
+    .hk-tile { padding: var(--adopy-space-4) var(--adopy-space-5); min-width: 0;
+      border-right: 1px solid var(--adopy-border); border-bottom: 1px solid var(--adopy-border); }
+    .hk-tile:nth-child(3n) { border-right: 0; }
+    .hk-tile:nth-last-child(-n+3) { border-bottom: 0; }
+    .hk-label { display: flex; justify-content: space-between; align-items: center; gap: var(--adopy-space-2);
+      font-size: var(--adopy-text-table); color: var(--adopy-text-muted); }
+    .hk-chip { font-size: var(--adopy-text-xs); font-weight: var(--adopy-weight-medium); padding: 1px var(--adopy-space-2);
+      border-radius: var(--adopy-radius-sm); background: var(--adopy-selected-bg); color: var(--adopy-link); }
+    .hk-you { margin-top: var(--adopy-space-2); font-size: var(--adopy-text-kpi); line-height: var(--adopy-leading-tight);
+      font-weight: var(--adopy-weight-semibold); color: var(--adopy-link); font-variant-numeric: tabular-nums lining-nums;
+      letter-spacing: -0.02em; overflow-wrap: anywhere; }
+    .hk-you small, .hk-others small { font-size: var(--adopy-text-xs); font-weight: var(--adopy-weight-regular);
+      color: var(--adopy-text-muted); margin-left: var(--adopy-space-2); letter-spacing: 0; }
+    .hk-others { display: flex; justify-content: space-between; gap: var(--adopy-space-2); margin-top: var(--adopy-space-2);
+      font-size: var(--adopy-text-table); color: var(--adopy-text-muted); }
+    .hk-others b { color: var(--adopy-text); font-weight: var(--adopy-weight-medium); font-variant-numeric: tabular-nums lining-nums; }
+    .hk-cap { margin-top: var(--adopy-space-2); font-size: var(--adopy-text-sm); color: var(--adopy-text-muted); }
+    .hk-cap.hk-good { color: var(--adopy-success); }
+    .hk-cap.hk-bad { color: var(--adopy-danger); }
+    @media (max-width: 900px) {
+      .hk-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .hk-tile:nth-child(3n) { border-right: 1px solid var(--adopy-border); }
+      .hk-tile:nth-child(2n) { border-right: 0; }
+      .hk-tile:nth-last-child(-n+3) { border-bottom: 1px solid var(--adopy-border); }
+      .hk-tile:nth-last-child(-n+2) { border-bottom: 0; }
+    }
+
+    /* Robot health: панель под шапкой (ссылка на страницу остаётся). */
+    .rh-pop { position: absolute; z-index: 60; width: min(380px, calc(100% - 2 * var(--adopy-space-4))); box-sizing: border-box;
+      background: var(--adopy-surface-raised); color: var(--adopy-text); border: 1px solid var(--adopy-border);
+      border-radius: var(--adopy-radius-lg); box-shadow: var(--adopy-shadow-popover); padding: var(--adopy-space-4) var(--adopy-space-5); }
+    .rh-pop[hidden] { display: none; }
+    .rh-title { margin: 0; font-size: var(--adopy-text-section); font-weight: var(--adopy-weight-semibold); }
+    .rh-lead { margin: var(--adopy-space-2) 0 var(--adopy-space-3); font-size: var(--adopy-text-table); color: var(--adopy-text-muted); }
+    .rh-body { max-height: 260px; overflow-y: auto; }
+    .rh-row { display: flex; justify-content: space-between; align-items: baseline; gap: var(--adopy-space-3);
+      padding: var(--adopy-space-2) 0; border-top: 1px solid var(--adopy-border); font-size: var(--adopy-text-table); }
+    .rh-row b { font-weight: var(--adopy-weight-semibold); overflow-wrap: anywhere; }
+    .rh-row small { display: block; font-size: var(--adopy-text-sm); color: var(--adopy-text-muted); font-weight: var(--adopy-weight-regular); }
+    .rh-state { white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
+    .rh-state.rh-ok { color: var(--adopy-success); }
+    .rh-state.rh-bad { color: var(--adopy-danger); }
+    .rh-msg { font-size: var(--adopy-text-table); color: var(--adopy-text-muted); padding: var(--adopy-space-2) 0; }
+    .rh-foot { display: flex; justify-content: space-between; align-items: center; gap: var(--adopy-space-3); margin-top: var(--adopy-space-3); }
+    .rh-open { font-size: var(--adopy-text-table); color: var(--adopy-link); }
+  </style>
 </head>
 <body>
 {# Имена аккаунтов Multilogin. Значение приходит из app.py, но шаблон
@@ -3768,7 +3880,7 @@
   </div>
   <div class="head-support">
     {#- ACL-1434: здоровье робота — отдельная страница, только чтение телеметрии. -#}
-    <a href="/robot-health" id="robot-health-link" class="head-btn quiet" title="Success rate of every robot step per account and build">Robot health</a>
+    <a href="/robot-health" id="robot-health-link" class="head-btn quiet" aria-haspopup="dialog" aria-expanded="false" aria-controls="rh-pop" title="Success rate of every robot step per account and build">Robot health</a>
     {#- ACL-354: пожаловаться отсюда, а не сообщением в переписке. Стоит рядом
         с Refresh намеренно: беда случается на экране, и идти за ней в другое
         место человек не станет. -#}
@@ -3817,6 +3929,20 @@
     </dl>
   </div>
 </header>
+
+{#- ACL-1827: «Robot health» открывается панелью под шапкой. Ссылка остаётся
+    настоящей (/robot-health) — без скрипта и по прямой ссылке открывается
+    страница; панель только перехватывает обычный клик. Данные — по запросу к
+    /robot-health/summary (чтение локальной телеметрии, ничего не запускает). -#}
+<div class="rh-pop" id="rh-pop" role="dialog" aria-modal="false" aria-labelledby="rh-title" hidden>
+  <h2 class="rh-title" id="rh-title">Robot health</h2>
+  <p class="rh-lead" id="rh-lead">Last runs per account, from this machine's run log.</p>
+  <div class="rh-body" id="rh-body" aria-live="polite"></div>
+  <div class="rh-foot">
+    <a class="rh-open" href="/robot-health">Open full report</a>
+    <button type="button" class="head-btn" id="rh-close">Close</button>
+  </div>
+</div>
 
 {#- Окно жалобы. Человек пишет только то, что видел; версию, машину, период и
     последние отказавшие шаги прикладывает ACL сам. -#}
@@ -4095,13 +4221,18 @@ async function dashRefresh(ev) {
 {% set is_fallback_mode = report.is_fallback_mode | default(false) %}
 <div class="dashboard-shell">
 <aside class="sidebar" aria-label="Dashboard navigation">
+  {#- ACL-1827: без эмодзи; значки — линейные SVG на currentColor, чтобы цвет
+      шёл из темы. Подпись «Target library» — только текст кнопки: адрес
+      `targets`, id панели и хэш прежние. -#}
   <div class="sidebar-label">Main</div>
-  <button type="button" class="sidebar-link sidebar-home active" data-view="home">🏠 Home</button>
-  <button type="button" class="sidebar-link" data-view="targets">🎯 Targeting</button>
-  <button type="button" class="sidebar-link" data-view="ad-texts">✍️ Ad titles</button>
-  <button type="button" class="sidebar-link" data-view="accounts">🔌 Accounts</button>
+  <button type="button" class="sidebar-link sidebar-home active" data-view="home"><svg class="sb-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11l8-7 8 7v9a1 1 0 01-1 1h-4v-6H9v6H5a1 1 0 01-1-1z"/></svg><span>Home</span></button>
+  <button type="button" class="sidebar-link" data-view="targets"><svg class="sb-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg><span>Target library</span></button>
+  <button type="button" class="sidebar-link" data-view="ad-texts"><svg class="sb-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14M12 5v14M9 19h6"/></svg><span>Ad titles</span></button>
+  <button type="button" class="sidebar-link" data-view="accounts"><svg class="sb-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3v5M15 3v5M6 8h12v4a6 6 0 01-12 0zM12 18v3"/></svg><span>Accounts</span></button>
 
-  <div class="sidebar-label">Countries</div>
+  <div class="sidebar-label sb-head"><span>Countries</span><span title="FTDs: yours / everyone's in the selected period">You / all FTDs</span></div>
+  <label class="sb-find"><svg class="sb-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M16 16l4 4"/></svg>
+    <input type="search" id="sb-find-country" placeholder="Find country" aria-label="Find country" autocomplete="off" spellcheck="false"></label>
   {#- Порядок по расходу, а не по алфавиту: алфавит ничего не говорит, а
       список из двадцати стран человек читает сверху. Список приходит готовым
       из app.py; запасной путь нужен на случай, когда шаблон обновился, а
@@ -4121,10 +4252,25 @@ async function dashRefresh(ev) {
   {% if c.targeting %}{% set sec.n = sec.n + 1 %}{% set n_targeting = sec.n %}{% endif %}
   {% set sec.n = sec.n + 1 %}{% set n_creatives = sec.n %}
   {% set sec.n = sec.n + 1 %}{% set n_optimization = sec.n %}
-  <div class="sidebar-country" data-country="{{ cid }}">
+  <div class="sidebar-country" data-country="{{ cid }}" data-name="{{ c.country | lower }}">
+    {#- Имя страны читает билдер из textContent кнопки — счётчик поэтому лежит
+        рядом, а не внутри, и не ловит клики (pointer-events: none). -#}
     <button type="button" class="sidebar-country-btn{% if s.active %} live{% endif %}" data-country="{{ cid }}"
             {% if s.active %}title="{% if s.spend %}spending{% else %}opened in the account map, nothing spent yet{% endif %}"{% endif %}>{{ c.country }}</button>
+    {%- if s.ftds %}<span class="sb-ftd sb-ftd-country" title="FTDs: yours / everyone's in the selected period">{{ s.ftds.you }} / {{ s.ftds.all }}</span>{% endif %}
     <div class="sidebar-sections">
+      {#- ACL-1827: ассеты страны — строками под названием. «Все ассеты» ведёт на
+          тот же Workbench, что и прежняя ссылка; выбор ассета ставит чип. -#}
+      {% if c.workbench and c.workbench.assets %}
+      <div class="sb-assets" role="group" aria-label="Assets in {{ c.country }}">
+        {% for a in c.workbench.assets %}
+        <button type="button" class="sb-asset" data-country="{{ cid }}" data-asset="{{ a.name }}" title="FTDs: yours / everyone's">
+          <span class="sb-asset-name">{{ a.label }}</span><span class="sb-ftd">{{ a.you_ftds }} / {{ a.ftds }}</span></button>
+        {% endfor %}
+      </div>
+      {% endif %}
+      <details class="sb-more"{% if not c.workbench %} open{% endif %}>
+      <summary>More country views</summary>
       {#- Одна дверь вместо четырёх. My Goals, CM, Accounts и Campaign Builder
           отвечали на один вопрос — как идёт страна и что с этим делать, — и
           стоили четырёх кликов по экранам, которые никогда не видны рядом. -#}
@@ -4137,9 +4283,12 @@ async function dashRefresh(ev) {
       {% if c.targeting %}<button type="button" class="sidebar-link" data-view="country-{{ cid }}-targeting">{{ n_targeting }} Targeting</button>{% endif %}
       <button type="button" class="sidebar-link" data-view="country-{{ cid }}-creatives">{{ n_creatives }} Creatives</button>
       <button type="button" class="sidebar-link" data-view="country-{{ cid }}-optimization">{{ n_optimization }} Optimization</button>
+      </details>
     </div>
   </div>
   {% endfor %}
+  <p class="sb-empty" id="sb-find-empty" hidden>No country matches.</p>
+  <p class="sb-note">Blue marks your results. Counters read you / all FTDs.</p>
 </aside>
 
 <main class="main-content">
@@ -4253,7 +4402,7 @@ async function dashRefresh(ev) {
 </div>
 
 <div id="view-targets" class="view-panel">
-  <h2 class="view-title">Targeting <span class="hint">the team library</span></h2>
+  <h2 class="view-title">Target library <span class="hint">shared by the team</span></h2>
   <p style="color:var(--muted);max-width:70ch">
     One library for the whole team. Add, Edit, Remove and Restore are saved to the team
     library straight away, and every manager sees them the next time the list or the builder opens.
@@ -4371,6 +4520,26 @@ async function dashRefresh(ev) {
     {% endfor %}
     <button type="button" class="gchip gchip-add" onclick="goalEdit(null)">+ country</button>
   </div>
+  {#- ACL-1827: «Вы / Другие» по всем странам, над картой аккаунтов. Числа
+      приходят готовыми из app.py (`home_kpis`, формулы те же, что у Workbench
+      страны: взвешенные, пиры без выбранного байера, мало данных — подпись).
+      Данных нет — полосы нет, а не нули. -#}
+  {% if home_kpis %}
+  <section class="hk-row" id="home-kpis" aria-label="Your results compared with other buyers, all countries">
+    <div class="hk-head"><h2 class="hk-title">You vs Others</h2>
+      <span class="hk-sub">All countries · selected period · others exclude {{ report.my_cm or 'the selected buyer' }}</span></div>
+    <div class="hk-grid">
+      {% for t in home_kpis %}
+      <div class="hk-tile" data-kpi="{{ t.key }}">
+        <div class="hk-label"><span>{{ t.label }}</span><span class="hk-chip">You</span></div>
+        <div class="hk-you">{{ t.you }}{% if t.you_note %}<small>{{ t.you_note }}</small>{% endif %}</div>
+        <div class="hk-others"><span>Others{% if t.others_note %} <small>{{ t.others_note }}</small>{% endif %}</span><b>{{ t.others }}</b></div>
+        <div class="hk-cap{% if t.cls %} {{ t.cls }}{% endif %}">{{ t.caption }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
   {# Countries overview слился в карту аккаунтов (ACL-356, решение владельца
      10.09): две таблицы с одинаковыми колонками читались как дубль. Книжные
      тоталы страны теперь стоят в свёрнутой строке карты, а страна с деньгами
@@ -18235,7 +18404,22 @@ window.cwWorkbench = (function () {
       + 'top ' + (sl[st.tab] || []).length + ' by FTDs</p></div>'
       + tabHtml(sl, st.tab, st) + '<div class="cw-foot">' + esc(TAB_NOTE[st.tab]) + '</div>';
     refreshDest(panel);
+    /* ACL-1827: боковая колонка подсвечивает выбранный ассет. */
+    document.dispatchEvent(new CustomEvent('acl:cwasset', { detail: { country: cid, asset: st.asset } }));
   }
+
+  /* Выбор ассета снаружи (строки ассетов в боковой колонке). Неизвестное имя —
+     «все ассеты», как и при обычной отрисовке. */
+  function selectAsset(cid, asset) {
+    var panel = document.querySelector('.cw-panel[data-country="' + cid + '"]');
+    if (!panel) return false;
+    var st = states[cid] || (states[cid] = { asset: '', tab: 'campaigns', open: {} });
+    st.asset = asset || '';
+    st.open = {};
+    render(panel);
+    return true;
+  }
+  function selectedAsset(cid) { return (states[cid] || {}).asset || ''; }
 
   /* ── Куда уйдёт «Use» ─────────────────────────────────────────────── */
   function activeTarget() {
@@ -18416,7 +18600,144 @@ window.cwWorkbench = (function () {
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 
-  return { planUse: planUse, destinationPath: destinationPath, useEvidence: useEvidence, render: render };
+  return { planUse: planUse, destinationPath: destinationPath, useEvidence: useEvidence, render: render,
+    select: selectAsset, selected: selectedAsset };
+})();
+</script>
+<script id="shell-1827-script">
+/* ACL-1827: поиск страны и строки ассетов в боковой колонке, панель Robot health.
+   Прежние обработчики колонки не трогаются: здесь только добавки. */
+(function () {
+  'use strict';
+
+  /* ── Find country ───────────────────────────────────────────────── */
+  var find = document.getElementById('sb-find-country');
+  var empty = document.getElementById('sb-find-empty');
+  function applyFind() {
+    var q = (find.value || '').trim().toLowerCase();
+    var shown = 0;
+    document.querySelectorAll('.sidebar-country').forEach(function (block) {
+      var hit = !q || (block.dataset.name || '').indexOf(q) !== -1;
+      block.hidden = !hit;
+      if (hit) shown++;
+    });
+    if (empty) empty.hidden = !q || shown > 0;
+  }
+  if (find) {
+    find.addEventListener('input', applyFind);
+    find.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && find.value) { find.value = ''; applyFind(); }
+    });
+  }
+
+  /* ── Строки ассетов под выбранной страной ───────────────────────── */
+  function markAssets(country, asset) {
+    document.querySelectorAll('.sb-asset').forEach(function (b) {
+      var on = b.dataset.country === country && b.dataset.asset === asset;
+      b.classList.toggle('active', on);
+      if (on) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current');
+    });
+  }
+  function currentWorkbench() {
+    var p = document.querySelector('.view-panel.active.cw-panel');
+    return p ? p.dataset.country : '';
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('.sb-asset') : null;
+    if (!b) return;
+    var cid = b.dataset.country, asset = b.dataset.asset;
+    var link = document.querySelector('.sidebar-link[data-view="country-' + cid + '-workbench"]');
+    if (link) link.click();
+    if (window.cwWorkbench && window.cwWorkbench.select) window.cwWorkbench.select(cid, asset);
+    markAssets(cid, asset);
+  });
+  document.addEventListener('acl:cwasset', function (e) {
+    if (currentWorkbench() === e.detail.country) markAssets(e.detail.country, e.detail.asset);
+  });
+  /* Выбор подсвечивается, только пока открыт Workbench этой страны; вид из
+     «More country views» раскрывает свой список, чтобы активный пункт был виден. */
+  document.addEventListener('acl:viewchange', function (e) {
+    var d = e.detail || {};
+    if (/-workbench$/.test(d.view || '')) {
+      var asset = window.cwWorkbench && window.cwWorkbench.selected ? window.cwWorkbench.selected(d.country) : '';
+      markAssets(d.country, asset || '');
+    } else {
+      markAssets('', '\u0000');
+      var active = document.querySelector('.sidebar-sections .sidebar-link.active');
+      var det = active && active.closest('details');
+      if (det) det.open = true;
+    }
+  });
+
+  /* ── Robot health: панель ───────────────────────────────────────── */
+  var link = document.getElementById('robot-health-link');
+  var pop = document.getElementById('rh-pop');
+  if (!link || !pop) return;
+  var body = document.getElementById('rh-body');
+  var lead = document.getElementById('rh-lead');
+  var closeBtn = document.getElementById('rh-close');
+  var loaded = false;
+
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function render(data) {
+    if (!data || data.error || !data.accounts) {
+      body.innerHTML = '<div class="rh-msg">' + esc((data && data.error) || 'No data.') + '</div>';
+      return;
+    }
+    lead.textContent = 'Last ' + data.window + ' runs per account, from this machine’s run log (' + data.n_runs + ' runs in total).';
+    body.innerHTML = data.accounts.map(function (a) {
+      var detail = a.last_ok ? 'Last run clean' : ('Last run failed' + (a.last_failed_steps.length ? ': ' + a.last_failed_steps.join(', ') : '')
+        + (a.last_abort ? ' · ' + a.last_abort : ''));
+      return '<div class="rh-row"><div><b>' + esc(a.account) + '</b><small>' + esc(detail) + '</small></div>'
+        + '<div class="rh-state ' + (a.last_ok ? 'rh-ok' : 'rh-bad') + '">' + a.clean + ' / ' + a.runs + ' clean</div></div>';
+    }).join('');
+  }
+  function load() {
+    body.innerHTML = '<div class="rh-msg">Loading…</div>';
+    fetch('/robot-health/summary', { headers: { 'Accept': 'application/json' } })
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (d) { loaded = true; render(d); })
+      .catch(function () {
+        body.innerHTML = '<div class="rh-msg">The summary could not be read. Open the full report instead.</div>';
+      });
+  }
+  function place() {
+    var host = pop.offsetParent || document.body;
+    var hr = host.getBoundingClientRect(), lr = link.getBoundingClientRect();
+    var w = pop.offsetWidth || 380;
+    var left = Math.min(Math.max(lr.right - hr.left - w, 8), Math.max(hr.width - w - 8, 8));
+    pop.style.left = left + 'px';
+    pop.style.top = (lr.bottom - hr.top + 8) + 'px';
+  }
+  function open() {
+    pop.hidden = false;
+    link.setAttribute('aria-expanded', 'true');
+    place();
+    if (!loaded) load();
+    closeBtn.focus();
+  }
+  function close(refocus) {
+    if (pop.hidden) return;
+    pop.hidden = true;
+    link.setAttribute('aria-expanded', 'false');
+    if (refocus) link.focus();
+  }
+  link.addEventListener('click', function (e) {
+    /* Обычный клик открывает панель; Ctrl/Shift/средняя кнопка — страницу как раньше. */
+    if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    e.preventDefault();
+    if (pop.hidden) open(); else close(true);
+  });
+  closeBtn.addEventListener('click', function () { close(true); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(true); });
+  document.addEventListener('mousedown', function (e) {
+    if (!pop.hidden && !pop.contains(e.target) && e.target !== link) close(false);
+  });
+  window.addEventListener('resize', function () { if (!pop.hidden) place(); });
 })();
 </script>
 {#- ACL-1812: состояние тёплых профилей в строках аккаунтов; всё остальное рисует сам файл. -#}
