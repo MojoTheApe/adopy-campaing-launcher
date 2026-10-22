@@ -49047,9 +49047,11 @@
         "worktree": "C:\\acl-int-w402",
         "id": "1b366d830f8f4afdb35b609fc9a7a628",
         "issue": 53,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-22T05:58:45+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 1032,
+        "report": "# ACL-402 handoff, round 2 (PR #1032)\nFixes the blocking finding: test_markdown_states_it_proposes_no_rule_and_report_includes_it used rows dated 2026-10-19 while acl_telemetry_report.analyse(rows, 7) uses the real date.today(), so it would fail from 2026-10-27.\nFix (test only, no production change): the rows are now dated date.today() - timedelta(days=2); the assertions are unchanged. Commit \"ACL-402: date-independent failure-signature test\", head 8cc6ce8c.\nTests: tests/test_failure_signatures.py 8 passed; also 8 passed with date.today() faked to 2027-03-01 (date patched in src.failure_signatures and the test module).\nCI on new head: all green except tracker-link (task-state only); rerun after this handoff."
       }
     },
     "tasks": {
