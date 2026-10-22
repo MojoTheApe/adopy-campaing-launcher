@@ -4004,20 +4004,20 @@
       "829": {
         "kind": "independent-review",
         "verdict": "approved",
-        "reviewer": "Reviewer-R1827V",
-        "implementer": "Worker-RS1827",
-        "review_session": "r1827v-20261019",
-        "execution_lane": "55a77729e4d846cbb45cfba7ac1df2cc",
-        "head_sha": "d69bfa32162bec6a042d3d8bf2b03c542a349a75",
-        "base_sha": "435bc15467e3bedef515534e9fb407642431f435",
-        "tree_sha": "c51c7129a01c43d92a5cb495d15f4b02c4a756f0",
-        "report": "Reviewed PR 829 head d69bfa32 (merge of main 435bc154) against current main. The 1827 diff is unchanged by the refresh: git diff origin/main..head and git diff af0ade29..662abff0 have the same 6-file stat (1048+/25-) and identical md5 (fc354eb6...) once the volatile index lines are ignored. Main's ACL-1381 change to report.html is only ad-title to ad-text label wording in the builder; it does not overlap the 1827 hunks (KPI row, sidebar, Robot health popover) and the merge is clean, with the 1381 wording still present. All 16 of main's data-view values remain in the sidebar (17 in head, one added). The 1778 header is intact (test_header passes). New UI strings are English; Russian appears only in Python docstrings and comments. No secrets, real ids or ad-account polling found, and no setInterval or new polling was added. Tests: tests/test_acl1827_shell_parity.py, tests/test_header.py, tests/test_screens_are_in_english.py, tests/test_acl1797_design_system.py gave 56 passed, 0 failed. CI was not awaited. No blocking findings.",
-        "main_sha": "435bc15467e3bedef515534e9fb407642431f435",
+        "reviewer": "Reviewer-AD1022827",
+        "review_session": "run_ad1022_827",
+        "execution_lane": "c57e1bb60f264098ad601162c5daca52",
+        "implementer": "Worker-W1022827",
+        "head_sha": "b0308976ddef2b3c6a9b6c36d5c58e46c4ead831",
+        "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+        "tree_sha": "2f08f9077bfba14831002b1c410b870df5f78ba5",
+        "report": "Reviewed ACL-1827 (PR829) head b0308976 vs main 3bc8d973: merge-base equals main so the merge is clean and adds no UI regression; diff = country_workbench (compare_cohorts extracted and shared with you_vs_others; home_you_vs_others/home_kpi_tiles), app.py (home_kpis, sidebar FTD counters, read-only GET /robot-health/summary), robot_health.popover_context, report.html (shell-1827 style/script, six KPI tiles above Account map, no-emoji sidebar, Target library label only, Find country, asset sub-rows, Robot health popover with real href fallback), 2 test files. Spec items met; English UI; no ids leaked. Prototype vs built screenshot pairs checked: placement matches, deferred items disclosed in PR. Changelog fragment ACL-1827.md accurate; fold_changelog.py --check valid. Tests shell_parity + shell_browser: 32 passed. Required CI all green on b0308976.",
+        "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
         "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
         "issues": [
           827
         ],
-        "recorded_at": "2026-10-19T12:42:10+00:00",
+        "recorded_at": "2026-10-22T06:03:33+00:00",
         "issue_scopes": {
           "827": "fdf30ddff65f891825fc8a270531da766faed723eadbc1aa4b976e58374d588c"
         }
