@@ -50362,6 +50362,18 @@
         "state": "implementing",
         "started_at": "2026-10-22T07:56:26+00:00",
         "from_status": "status:todo"
+      },
+      "708": {
+        "actor": "Worker-W1022708",
+        "session": "run_w1022_1708",
+        "coordinator": "Coordinator-I1021A",
+        "branch": "codex/acl-1708-rebrand-leftovers",
+        "worktree": "C:\\acl-int-w1708",
+        "id": "66587dd00a954ec3a21cb7e2a872a9cb",
+        "issue": 708,
+        "state": "implementing",
+        "started_at": "2026-10-22T08:38:53+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -57071,9 +57083,13 @@
           {
             "actor": "Worker-W1022708",
             "session": "run_w1022_1708"
+          },
+          {
+            "actor": "Worker-W1022708",
+            "session": "run_w1022_1708"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-W1022708",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -57104,14 +57120,8 @@
           "session": "run_i1021a_1021",
           "report": "Approval is stale against current main 7224a34c (ACL-2079 batch merged). Author: merge current main (no content change), CI, hand off for a merge-only re-review."
         },
-        "reviewer": "Reviewer-AI1022708",
-        "return": {
-          "id": "0e607be4b2814e9fa56e068b81f8e2d6",
-          "actor": "Coordinator-I1021A",
-          "session": "run_i1021a_1021",
-          "report": "Approval is stale against current main 7224a34c (ACL-2079 batch merged). Author: merge current main (no content change), CI, hand off for a merge-only re-review."
-        },
-        "rework": true
+        "rework": true,
+        "rework_claim": "66587dd00a954ec3a21cb7e2a872a9cb"
       },
       "73": {
         "implementers": [
@@ -117582,6 +117592,13 @@
           "report": "Approval is stale against current main 7224a34c (ACL-2079 batch merged). Author: merge current main (no content change), CI, hand off for a merge-only re-review."
         },
         "batch_id": null
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-22T08:38:54+00:00",
+        "issue": 708,
+        "claim": "66587dd00a954ec3a21cb7e2a872a9cb",
+        "actor": "Worker-W1022708"
       }
     ],
     "policy": {
