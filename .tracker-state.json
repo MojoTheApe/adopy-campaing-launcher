@@ -50351,20 +50351,6 @@
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
       },
-      "708": {
-        "actor": "Worker-W1022708",
-        "session": "run_w1022_1708",
-        "coordinator": "Coordinator-I1021A",
-        "branch": "codex/acl-1708-rebrand-leftovers",
-        "worktree": "C:\\acl-int-w1708",
-        "id": "66587dd00a954ec3a21cb7e2a872a9cb",
-        "issue": 708,
-        "state": "handoff",
-        "started_at": "2026-10-22T08:38:53+00:00",
-        "from_status": "status:todo",
-        "pr": 952,
-        "report": "# ACL-1708 handoff (PR #952, head 09bae735 (main re-merged, no content change))\n\nStrings changed (user-visible):\n1. src/web/app.py, POST /acl/update/apply refusal: \"ACM was not started by its launcher, so nothing would bring it back. Start it from the desktop shortcut and try again.\" -> \"ACM was not started from its desktop shortcut, so nothing would bring it back. Start it from the desktop shortcut and try again.\"\n2. (from PR, already on branch) account_spend_turn_off error: \"Check the launcher window.\" -> \"Check the Adopy Campaign Manager window.\"\n\nNot changed on purpose: internal identifiers, comments, file names (launcher.py, SUPERVISED env, \"launcher\" in code comments / acl_update docstrings), and Multilogin's own \"local launcher\" term in src/fb_ads_rpa/failure_policy.py robot failure text (third-party product wording, not ACM's launcher).\n\nOther PR content: scripts/convert_favicon_to_ico.py deleted, install_dashboard_shortcut.ps1 message updated, requirements-dev.txt comment, report.html viewport meta.\n\nTests: tests/test_web_acl_update.py (11 passed) - refusal test now asserts \"desktop shortcut\" in the message and \"launcher\" not in it (case-insensitive).\nFragment: docs/system/changelog.d/ACL-1708.md; docs/system/CHANGELOG.md equals origin/main; fold_changelog.py --check valid.\nCI on 048fd729: all green except tracker-link (task not yet in Review; to be rerun after handoff)."
-      },
       "839": {
         "actor": "Worker-W1021839",
         "session": "run_w1021_1839",
@@ -57089,7 +57075,7 @@
             "session": "run_w1022_1708"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1022708",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -57098,16 +57084,16 @@
           "coordinator": "Coordinator-I1021A",
           "branch": "codex/acl-1708-rebrand-leftovers",
           "worktree": "C:\\acl-int-w1708",
-          "id": "feae9b38db77409aac34529e207f0425",
+          "id": "66587dd00a954ec3a21cb7e2a872a9cb",
           "issue": 708,
           "state": "handoff",
-          "started_at": "2026-10-22T07:13:23+00:00",
+          "started_at": "2026-10-22T08:38:53+00:00",
           "from_status": "status:todo",
           "pr": 952,
-          "report": "# ACL-1708 handoff (PR #952, head feb776c1 (main re-merged, no content change))\n\nStrings changed (user-visible):\n1. src/web/app.py, POST /acl/update/apply refusal: \"ACM was not started by its launcher, so nothing would bring it back. Start it from the desktop shortcut and try again.\" -> \"ACM was not started from its desktop shortcut, so nothing would bring it back. Start it from the desktop shortcut and try again.\"\n2. (from PR, already on branch) account_spend_turn_off error: \"Check the launcher window.\" -> \"Check the Adopy Campaign Manager window.\"\n\nNot changed on purpose: internal identifiers, comments, file names (launcher.py, SUPERVISED env, \"launcher\" in code comments / acl_update docstrings), and Multilogin's own \"local launcher\" term in src/fb_ads_rpa/failure_policy.py robot failure text (third-party product wording, not ACM's launcher).\n\nOther PR content: scripts/convert_favicon_to_ico.py deleted, install_dashboard_shortcut.ps1 message updated, requirements-dev.txt comment, report.html viewport meta.\n\nTests: tests/test_web_acl_update.py (11 passed) - refusal test now asserts \"desktop shortcut\" in the message and \"launcher\" not in it (case-insensitive).\nFragment: docs/system/changelog.d/ACL-1708.md; docs/system/CHANGELOG.md equals origin/main; fold_changelog.py --check valid.\nCI on 048fd729: all green except tracker-link (task not yet in Review; to be rerun after handoff)."
+          "report": "# ACL-1708 handoff (PR #952, head 09bae735 (main re-merged, no content change))\n\nStrings changed (user-visible):\n1. src/web/app.py, POST /acl/update/apply refusal: \"ACM was not started by its launcher, so nothing would bring it back. Start it from the desktop shortcut and try again.\" -> \"ACM was not started from its desktop shortcut, so nothing would bring it back. Start it from the desktop shortcut and try again.\"\n2. (from PR, already on branch) account_spend_turn_off error: \"Check the launcher window.\" -> \"Check the Adopy Campaign Manager window.\"\n\nNot changed on purpose: internal identifiers, comments, file names (launcher.py, SUPERVISED env, \"launcher\" in code comments / acl_update docstrings), and Multilogin's own \"local launcher\" term in src/fb_ads_rpa/failure_policy.py robot failure text (third-party product wording, not ACM's launcher).\n\nOther PR content: scripts/convert_favicon_to_ico.py deleted, install_dashboard_shortcut.ps1 message updated, requirements-dev.txt comment, report.html viewport meta.\n\nTests: tests/test_web_acl_update.py (11 passed) - refusal test now asserts \"desktop shortcut\" in the message and \"launcher\" not in it (case-insensitive).\nFragment: docs/system/changelog.d/ACL-1708.md; docs/system/CHANGELOG.md equals origin/main; fold_changelog.py --check valid.\nCI on 048fd729: all green except tracker-link (task not yet in Review; to be rerun after handoff)."
         },
         "pr": 952,
-        "queued_at": "2026-10-22T07:28:24+00:00",
+        "queued_at": "2026-10-22T08:54:13+00:00",
         "review_report": "Approval is stale against current main 7224a34c (ACL-2079 batch merged). Author: merge current main (no content change), CI, hand off for a merge-only re-review.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -57119,9 +57105,7 @@
           "actor": "Coordinator-I1021A",
           "session": "run_i1021a_1021",
           "report": "Approval is stale against current main 7224a34c (ACL-2079 batch merged). Author: merge current main (no content change), CI, hand off for a merge-only re-review."
-        },
-        "rework": true,
-        "rework_claim": "66587dd00a954ec3a21cb7e2a872a9cb"
+        }
       },
       "73": {
         "implementers": [
@@ -66144,7 +66128,8 @@
       1054,
       710,
       1069,
-      1086
+      1086,
+      708
     ],
     "review": null,
     "history": [
@@ -117630,6 +117615,13 @@
         "issue": 839,
         "claim": "91854d98a2d44e668cf0504270340513",
         "actor": "Worker-W1021839"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-22T08:54:13+00:00",
+        "issue": 708,
+        "pr": 952,
+        "actor": "Worker-W1022708"
       }
     ],
     "policy": {
