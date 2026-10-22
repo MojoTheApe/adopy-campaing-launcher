@@ -151,7 +151,8 @@ retry policy or employee installation is changed by documenting this plan.
 
 Describe implemented behavior and limitations here when changing the system. Preserve
 plans under original specs, label them as plans, and record what/why and ticket/PR
-links in CHANGELOG.md. Process-only changes belong in ../repository/CHANGELOG.md.
+links in a per-task fragment `changelog.d/ACL-NNNN.md` (folded into CHANGELOG.md by
+`scripts/fold_changelog.py`; see changelog.d/README.md). Process-only changes belong in ../repository/CHANGELOG.md.
 
 Repository instructions have a separately prepared direct-main route described in
 [PROCESS_INSTRUCTIONS.md](../repository/PROCESS_INSTRUCTIONS_ACL.md). Eligibility uses
