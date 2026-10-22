@@ -40,7 +40,7 @@ BUNDLED_FILES = {
     "config/analysis_reading_rules.json", "config/benchmarks.json", "config/content_plan_week.example.json",
     "config/knowledge_base.json", "config/rpa_forbidden_zones.yaml",
 }
-BUNDLED_DIRS = ("config/rpa_intents/", "config/rpa_recipes/", "config/rpa_variations/", "knowledge_base/",
+BUNDLED_DIRS = ("config/meta_rules/", "config/rpa_intents/", "config/rpa_recipes/", "config/rpa_variations/", "knowledge_base/",
                 "src/web/static/", "src/web/templates/")
 
 

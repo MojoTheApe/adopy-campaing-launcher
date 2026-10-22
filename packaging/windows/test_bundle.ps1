@@ -51,6 +51,14 @@ Write-Host "Checking packaged imports..."
 & $Executable --smoke-check
 Assert-LastExitCode "Packaged import smoke check"
 
+Write-Host "Checking bundled Meta rules registry..."
+foreach ($RegistryFile in @("meta.json", "rules.json", "sources.json")) {
+    $RegistryPath = Join-Path $BundleDirectory "_internal/config/meta_rules/$RegistryFile"
+    if (-not (Test-Path $RegistryPath -PathType Leaf)) {
+        throw "Meta rules registry file is missing from the bundle: $RegistryFile"
+    }
+}
+
 # Verify the encoder shipped inside this bundle, not one installed on the runner.
 Write-Host "Checking bundled creative encoder..."
 $EncoderDirectory = Join-Path $BundleDirectory "_internal/imageio_ffmpeg/binaries"
