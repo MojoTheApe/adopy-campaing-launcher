@@ -107,6 +107,11 @@ def test_release_only_becomes_visible_after_all_assets_upload(tmp_path, monkeypa
 
 # --- ACL-1565: a main run that reused a full green run of the same tree -----------------------
 
+@pytest.fixture(autouse=True)
+def no_retry_pause(monkeypatch):
+    monkeypatch.setattr(pub.reuse, "RETRY_PAUSE", 0)
+
+
 @pytest.fixture
 def reused_release(tmp_path, monkeypatch):
     """Real git: stage S had the full run 41; main merge M (same tree) has run 42 with tests skipped."""
@@ -128,7 +133,8 @@ def reused_release(tmp_path, monkeypatch):
                                     "repository": {"full_name": "test/source"},
                                     "head_repository": {"full_name": "test/source"}}
     state = {"stage": stage, "main": main, "main_run": run(42, main, "main"), "stage_run": run(41, stage, "stage"),
-             "main_jobs": jobs_of(42, "skipped"), "stage_jobs": jobs_of(41), "calls": []}
+             "main_jobs": jobs_of(42, "skipped"), "stage_jobs": jobs_of(41), "calls": [],
+             "pulls": [], "annotations": []}
     def gh(*args):
         path = args[1]
         state["calls"].append(path)
@@ -141,6 +147,12 @@ def reused_release(tmp_path, monkeypatch):
         if path.startswith("repos/test/source/actions/workflows/ci.yml/runs?"):
             sha = path.split("head_sha=")[1].split("&")[0]
             return json.dumps({"workflow_runs": [r for r in (state["stage_run"], state["main_run"]) if r["head_sha"] == sha]})
+        if path == "repos/test/source/actions/runs/41":
+            return json.dumps(state["stage_run"])
+        if "/commits/" in path and path.endswith("/pulls?per_page=10"):
+            return json.dumps(state["pulls"])
+        if "/check-runs/" in path and "/annotations" in path:
+            return json.dumps(state["annotations"])
         raise AssertionError(path)
     monkeypatch.setattr(pub, "_gh", gh)
     return state
@@ -354,3 +366,73 @@ def test_gh_and_git_output_decoded_as_utf8(monkeypatch, tmp_path):
     assert pub._git("log").startswith("{")
     assert reuse.gh_api("repos/x/y") == payload
     assert reuse._git(tmp_path, "log").startswith("{")
+
+
+# --- ACL-2107: flaky GitHub listing must not refuse a release whose proof is named by id -------
+
+REUSE_NOTE = {"title": "acl-reused-runs", "message": "runs=41"}
+
+
+def _flaky(state, monkeypatch, *, empty_list_always=False, empty_list_first=0, pulls_fail=0):
+    ok = pub._gh
+    counters = {"list": 0, "pulls": 0}
+
+    def gh(*args):
+        path = args[1]
+        if "/workflows/ci.yml/runs?" in path:
+            counters["list"] += 1
+            if empty_list_always or counters["list"] <= empty_list_first:
+                return json.dumps({"workflow_runs": []})
+        if "/commits/" in path and path.endswith("/pulls?per_page=10"):
+            counters["pulls"] += 1
+            if counters["pulls"] <= pulls_fail:
+                raise subprocess.CalledProcessError(1, "gh")
+        return ok(*args)
+    monkeypatch.setattr(pub, "_gh", gh)
+    return counters
+
+
+def test_empty_head_sha_list_and_a_failing_pulls_call_still_prove_via_the_named_run_id(reused_release, monkeypatch):
+    reused_release["annotations"] = [REUSE_NOTE]
+    counters = _flaky(reused_release, monkeypatch, empty_list_always=True, pulls_fail=1)
+    assert pub.verify_promotion("acl-release-2026-10-04", "test/source") == reused_release["main"]
+    assert counters["pulls"] >= 2 and "repos/test/source/actions/runs/41" in reused_release["calls"]
+
+
+def test_an_empty_head_sha_list_is_retried(reused_release, monkeypatch):
+    counters = _flaky(reused_release, monkeypatch, empty_list_first=2)
+    assert pub.verify_promotion("acl-release-2026-10-04", "test/source") == reused_release["main"]
+    assert counters["list"] > 2
+
+
+def test_persistent_empty_list_without_a_named_run_is_refused(reused_release, monkeypatch):
+    _flaky(reused_release, monkeypatch, empty_list_always=True)
+    with pytest.raises(ValueError, match="neither ran the full test matrix"):
+        pub.verify_promotion("acl-release-2026-10-04", "test/source")
+
+
+def test_pulls_api_error_after_retries_is_could_not_be_proven_not_no_pr(reused_release, monkeypatch):
+    _flaky(reused_release, monkeypatch, pulls_fail=99)
+    with pytest.raises(ValueError, match="could not be proven"):
+        pub.verify_promotion("acl-release-2026-10-04", "test/source")
+
+
+@pytest.mark.parametrize("break_it", [
+    lambda s: s.update(stage_run=dict(s["stage_run"], head_sha="0" * 40)),            # foreign tree
+    lambda s: s.update(stage_run=dict(s["stage_run"], event="pull_request"),
+                       pulls=[_pr(s)]),                                               # no tested-tree note
+    lambda s: s.update(stage_jobs=one_python_jobs(41)),                               # no Python 3.11
+    lambda s: s.update(stage_jobs=jobs_of(41, "skipped")),
+])
+def test_a_named_run_is_still_rejected_when_it_does_not_prove_the_full_tree(reused_release, monkeypatch, break_it):
+    reused_release["annotations"] = [REUSE_NOTE]
+    break_it(reused_release)
+    _flaky(reused_release, monkeypatch, empty_list_always=True)
+    with pytest.raises(ValueError, match="neither ran the full test matrix"):
+        pub.verify_promotion("acl-release-2026-10-04", "test/source")
+
+
+def _pr(state):
+    return {"number": 7, "merged_at": "2026-10-04T00:00:00Z", "merge_commit_sha": state["main"],
+            "head": {"sha": state["stage"], "repo": {"full_name": "test/source"}},
+            "base": {"ref": "main", "repo": {"full_name": "test/source"}}}

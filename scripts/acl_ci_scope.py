@@ -396,6 +396,11 @@ def main():
         tested = reuse.tree_of(Path(__file__).resolve().parents[1], "HEAD")
         if tested:
             print(reuse.marker_line(tested))
+    if result.get("reused_runs") and os.environ.get("GITHUB_REPOSITORY"):
+        # ACL-2107: аннотация с id переиспользованных прогонов - релизные ворота берут их напрямую.
+        line = reuse.reuse_marker_line(result["reused_runs"], os.environ["GITHUB_REPOSITORY"])
+        if line:
+            print(line)
     if args.output:
         with args.output.open("a", encoding="utf-8") as f:
             f.write("windows=" + str(result["windows"]).lower() + "\n")

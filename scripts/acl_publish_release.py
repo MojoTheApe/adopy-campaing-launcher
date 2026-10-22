@@ -63,10 +63,15 @@ def verify_promotion(tag: str, source_repo: str, report=print) -> str:
     try:
         # ACL-1649: полный набор (3.11 + 3.13 + Windows) может быть собран из нескольких прогонов
         # этого дерева — stage, PR в main — и из прогона PR, доказуемо связанного с main-коммитом.
-        heads = reuse.collect_pr_heads(Path.cwd(), _api, source_repo, tree, [sha])
+        # ACL-2107: запросы повторяются; ошибка commits/pulls после повторов - «не доказано», не «нет PR».
+        api = reuse.retrying(_api)
+        heads = reuse.collect_pr_heads(Path.cwd(), api, source_repo, tree, [sha], strict=True)
+        # Прогоны, которые main-прогон сам назвал переиспользованными, берём по id напрямую.
+        named = reuse.reused_run_ids(api, source_repo, jobs, "ci.yml")
         # Собственные пройденные задания записанного main-прогона тоже считаются (3.11 после
         # PR в main идёт именно в нём): он push-прогон этого коммита, поэтому не исключается.
-        proof = reuse.find_reuse(Path.cwd(), _api, source_repo, "ci.yml", tree, pr_heads=heads)
+        proof = reuse.find_reuse(Path.cwd(), api, source_repo, "ci.yml", tree, pr_heads=heads,
+                                 run_ids=named, empty_retries=2)
     except Exception as error:  # noqa: BLE001 — недоказанный прогон = отказ
         raise ValueError("Recorded main CI reused a run that could not be proven: " + type(error).__name__) from error
     if not proof:

@@ -225,5 +225,7 @@ def test_batch_pr_decision_never_reuses_other_runs(candidate, monkeypatch):
                           repo="o/r", api=api)
     assert not calls and "reused_from" not in result and "reuse" not in result
     assert result["linux"] and result["windows"] and result["python"] == ["3.11", "3.13"]
+    # A source PR still goes through the ACL-1649 reuse lookup (the failing fake makes it run full).
+    calls.clear()
     source = scope.decide(root, "pull_request", event(head), repo="o/r", api=api)
-    assert source["python"] == ["3.13"] or "reuse" in source or "reused_from" in source
+    assert calls and source["reuse"] == "lookup-failed-run-full" and source["python"] == ["3.13"]
