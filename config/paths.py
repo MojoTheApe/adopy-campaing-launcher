@@ -593,6 +593,13 @@ def migrate_legacy_env(*, create_from_example: bool = False) -> str:
             update_machine_env({"FB_RPA_ENGINE": "recorded_flow"})
             suffix = "legacy blank RPA engine normalized to recorded_flow"
             note = f"{note}; {suffix}" if note else suffix
+        # ACL-2123: v22.0 pinned from the old .env.example; the Graph API version
+        # now comes from config/meta_rules/meta.json, so the stale pin is cleared.
+        pin = (_read_env_value(local, "META_GRAPH_API_VERSION") or "").strip().lower()
+        if pin == "v22.0":
+            update_machine_env({"META_GRAPH_API_VERSION": ""})
+            suffix = "unsupported META_GRAPH_API_VERSION=v22.0 pin cleared; version now comes from meta.json"
+            note = f"{note}; {suffix}" if note else suffix
     return note
 
 
