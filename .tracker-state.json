@@ -48295,6 +48295,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
+      },
+      "1052": {
+        "actor": "Worker-W1022052",
+        "session": "run_w1022_2052",
+        "coordinator": "Coordinator-I1021A",
+        "branch": "work/acl-2052-meta-rules-value-rules",
+        "worktree": "C:\\acl-int-w2052",
+        "id": "e992f46bf9884c06a2ec2d92b3ae9b10",
+        "issue": 1052,
+        "state": "implementing",
+        "started_at": "2026-10-22T02:59:59+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -57364,11 +57376,15 @@
           {
             "actor": "Worker-P10212052",
             "session": "run_p1021_2052"
+          },
+          {
+            "actor": "Worker-W1022052",
+            "session": "run_w1022_2052"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-P10212052",
-        "coordinator": "Coordinator-P1021A",
+        "state": "implementing",
+        "worker": "Worker-W1022052",
+        "coordinator": "Coordinator-I1021A",
         "handoff": {
           "actor": "Worker-P10212052",
           "session": "run_p1021_2052",
@@ -57386,8 +57402,8 @@
         "pr": 1057,
         "queued_at": "2026-10-21T09:44:35+00:00",
         "review_report": "stale vs main e8bf31f8; author merges current main and hands off for a fresh review; no content findings",
-        "reviewer": "Reviewer-R10222052",
-        "rework": true
+        "rework": true,
+        "rework_claim": "e992f46bf9884c06a2ec2d92b3ae9b10"
       },
       "1053": {
         "implementers": [
@@ -60827,6 +60843,10 @@
       "Reviewer-V1022B82": {
         "session": "run_v1022_b82",
         "role": "Reviewer"
+      },
+      "Worker-W1022052": {
+        "session": "run_w1022_2052",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -112431,6 +112451,13 @@
           "state": "reviewing",
           "started_at": "2026-10-22T01:08:16+00:00"
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-22T02:59:59+00:00",
+        "issue": 1052,
+        "claim": "e992f46bf9884c06a2ec2d92b3ae9b10",
+        "actor": "Worker-W1022052"
       }
     ],
     "policy": {
