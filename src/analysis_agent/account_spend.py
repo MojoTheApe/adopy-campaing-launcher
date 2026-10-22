@@ -980,14 +980,15 @@ def _close_if_still_pending(opened: _ReadOpen) -> None:
         _close_started(opened)
 
 
-def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False) -> None:
+def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False, grace_s: float = 0.0) -> None:
     """После чтения: закрыть то, что чтение запустило (сразу или после паузы)."""
     if not opened.started:
         return
-    if keep_for_next and CLOSE_GRACE_S > 0 and opened.profile_id:
+    grace = grace_s if grace_s > 0 else CLOSE_GRACE_S
+    if keep_for_next and grace > 0 and opened.profile_id:
         with _PENDING_LOCK:
             _PENDING_CLOSE[opened.profile_id] = opened
-        timer = threading.Timer(CLOSE_GRACE_S, _close_if_still_pending, args=(opened,))
+        timer = threading.Timer(grace, _close_if_still_pending, args=(opened,))
         timer.daemon = True
         timer.start()
         return

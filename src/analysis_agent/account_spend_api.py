@@ -289,6 +289,8 @@ class _Session:
     #: Профиль, который это чтение подняло, держится ещё `CLOSE_GRACE_S` после
     #: удачного чтения: за ним придёт чтение стран (ACL-1580).
     keep_next: bool = False
+    #: Своя пауза вместо `CLOSE_GRACE_S` (0 — штатная).
+    keep_grace_s: float = 0.0
 
 
 # Точки подмены в тестах: настоящий браузер здесь не нужен.
@@ -568,7 +570,8 @@ def _session(account: str, *, commands: bool = False):
         # ACL-1580: профиль, который поднято этим чтением, закрывается мягкой
         # остановкой (и при отказе тоже) или ждёт `CLOSE_GRACE_S` под страны.
         try:
-            _as._finish_started(held, keep_for_next=bool(sess and sess.keep_next))
+            _as._finish_started(held, keep_for_next=bool(sess and sess.keep_next),
+                                grace_s=float(sess.keep_grace_s) if sess else 0.0)
         except Exception:
             log.exception("Could not finish the profile the read started (%s)", account)
 
