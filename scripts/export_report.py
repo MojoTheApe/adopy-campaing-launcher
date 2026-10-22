@@ -88,7 +88,8 @@ def header_row(ws, row, values, fill_color=C_HEADER):
 
 # ── Load data ───────────────────────────────────────────────────────────────────
 print(f"Reading {EXCEL_SRC} ...")
-df = pd.read_excel(
+from src.analysis_agent.stats_workbook import read_stats_workbook
+df = read_stats_workbook(
     EXCEL_SRC,
     usecols=["Country", "Account Alias", "CM", "Adset Name",
              "Ad Title", "# Leads", "# FTDs", "$ Spend", "$ Net"]

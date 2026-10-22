@@ -121,6 +121,36 @@ def _hand_window_reopen_off(monkeypatch):
     yield
 
 
+# Каждый тест начинает с чистого состояния шага Crop и отказа по медиа (ACL-2073).
+#
+# `crop_step` хранит отказ Crop в thread-local (`_tls.failure`), `meta_dom` —
+# отказ по медиа объявления (`_media_refusal_tls`) и флаг «у медиатеки нет
+# счётчика» (`_reuse_state`). В продукте их сбрасывает каждое объявление
+# (`set_plan`/`reset_attempt`), а тест, который зовёт `crop_step.apply` без
+# этого, оставлял отказ в главном потоке воркера. 21.10: при `--dist loadfile`
+# `test_bench_b97_picker_and_crop_1007.py` (оставляет
+# `crop_square_card_missing`) попал в один воркер с
+# `test_media_attachment_identity.py`, и первый же повтор из медиатеки там
+# забрал чужой отказ через `_crop_refusal` -> `dirty` вместо `attached` — падение
+# зависело только от того, какие файлы достались шарду 3 CI. Сбрасываются лишь
+# уже импортированные модули: фикстура не тянет Playwright в чужие тесты.
+#
+# ACL-2078 (22.10): сбрасывалась лишь часть состояния — b97 оставлял
+# `_upload_why_tls.why` = `library_has_no_copy`, и
+# `test_additional_ad_without_creative_has_no_text.py` получал
+# `ad2_creative_upload:library_has_no_copy` вместо своей причины. Теперь
+# сбрасываются ВСЕ `threading.local` `meta_dom`/`crop_step`, изменяемые
+# контейнеры уровня модуля и прогон телеметрии главного потока — список и
+# правило «новое состояние вписать туда» в `tests/rpa_module_state.py`.
+@pytest.fixture(autouse=True)
+def _crop_and_media_refusal_state_per_test():
+    from tests import rpa_module_state
+
+    rpa_module_state.reset()
+    yield
+    rpa_module_state.reset()
+
+
 # Тесты не закрывают профили Multilogin в конце задания (ACL-1444).
 #
 # Чистое задание закрывает профиль через MLX API. Тест, который доходит до

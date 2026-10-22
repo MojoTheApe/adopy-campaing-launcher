@@ -380,6 +380,26 @@
    "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/ad-rules/guides/evaluation-spec-filters",
    "title": "фильтры",
    "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/bidding/value-rules.md",
+   "title": "Value rules",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/reference/ad-account/account_controls",
+   "title": "Ad Account / account_controls",
+   "category": "reference"
+  },
+  {
+   "url": "https://developers.facebook.com/documentation/ads-commerce/marketing-api/bidding-and-optimization/bid-multiplier",
+   "title": "Bid multiplier (bid_adjustments)",
+   "category": "guide"
+  },
+  {
+   "url": "https://developers.facebook.com/blog/post/2025/10/08/introducing-limited-spend-on-excluded-placements-in-marketing-api/",
+   "title": "Limited spend on excluded placements",
+   "category": "announcements"
   }
  ]
 }
