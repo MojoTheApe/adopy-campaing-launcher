@@ -221,3 +221,27 @@ def test_cloned_native_logs_bind_the_original_artifact_producer():
     with pytest.raises(ValueError): driver.producer_artifact(log, 92)
     with pytest.raises(ValueError): driver.producer_artifact(log + log, 91)
     with pytest.raises(ValueError): driver.producer_artifact("new verifier failed before acceptance", 91)
+
+
+def test_manual_tag_verification_reuses_verify_steps_without_authorizing():
+    automatic = yaml.safe_load((ROOT / ".github/workflows/complete-delivery.yml").read_text())
+    text = (ROOT / ".github/workflows/verify-published-tag.yml").read_text()
+    manual = yaml.safe_load(text)
+    assert set(manual[True]) == {"workflow_dispatch"}
+    inputs = manual[True]["workflow_dispatch"]["inputs"]
+    assert inputs["tag"]["required"] is True and inputs["previous_tag"]["required"] is True
+    assert manual["concurrency"] == automatic["concurrency"]
+    assert manual["permissions"] == {"contents": "read"}
+    before, after = automatic["jobs"]["verify"], manual["jobs"]["verify"]
+    for key in ("name", "runs-on", "timeout-minutes", "env"):
+        assert after[key] == before[key]
+    def same(step):
+        # Only the unused job-output line of the receipt step is left out.
+        step = {k: v for k, v in step.items() if k != "id"}
+        if "run" in step:
+            step["run"] = "".join(line for line in step["run"].splitlines(True) if "GITHUB_OUTPUT" not in line)
+        return step
+    assert [same(s) for s in after["steps"]] == [same(s) for s in before["steps"]]
+    # It never resolves, authorizes, publishes or records a delivery.
+    for forbidden in ("tracker_delivery_receipt", "release.yml", "--apply", "contents: write", "workflow_run"):
+        assert forbidden not in text

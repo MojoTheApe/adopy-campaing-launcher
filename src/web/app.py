@@ -1190,10 +1190,44 @@ def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
     return result
 
 
+_targets_refresh_lock = threading.Lock()
+_targets_refreshing = False
+
+
+def _refresh_sheet_targets_in_background() -> None:
+    """Обновить копию библиотеки таргетингов в своём потоке, один раз за раз.
+
+    ACL-1380: раньше страница сама ходила в api.github.com (`pull(force=True)`,
+    таймаут 15 с) на каждом открытии и на каждом `/api/ref-data`. Теперь
+    отрисовка читает копию на машине, а обновление идёт рядом: свежие цели
+    коллег видны со следующего открытия. Без force — `pull` сам не ходит в сеть
+    чаще раза в PULL_EVERY_SECONDS; второй поток, пока первый ещё ждёт ответа,
+    не запускается.
+    """
+    global _targets_refreshing
+    with _targets_refresh_lock:
+        if _targets_refreshing:
+            return
+        _targets_refreshing = True
+
+    def run() -> None:
+        global _targets_refreshing
+        try:
+            from src.analysis_agent import targeting_registry as tr
+            tr.pull()
+        except Exception:
+            pass
+        finally:
+            with _targets_refresh_lock:
+                _targets_refreshing = False
+
+    threading.Thread(target=run, daemon=True, name="acl-targets-refresh").start()
+
+
 def _load_sheet_targets() -> list[dict]:
-    """The team targeting library (read copy refreshed from the repository)."""
+    """The team targeting library from the machine's read copy (no network)."""
     from src.analysis_agent import targeting_registry as tr
-    tr.pull(force=True)
+    _refresh_sheet_targets_in_background()
     return [{"code": t.name, "label": t.name, "fb_interest": t.rpa_interests()}
             for t in tr.all_targets()]
 
@@ -1854,6 +1888,34 @@ async def _apply_release_update(active_jobs) -> JSONResponse:
             release_updates.apply_lock.release()
 
 
+def _period_owner(report: dict) -> dict | None:
+    """Whose emptiness a chosen period is, when it is the manager's alone (ACL-106).
+
+    Read from the already-built period report, never from the workbook frame:
+    this runs on every render. `countries` is built from every manager's rows
+    in the period, so no countries means nobody has rows (the existing
+    workbook notice owns that case). Countries with no `is_me` row in any
+    `cm_comparison` mean other managers have rows and this one has none.
+    Rows without a CM name are nobody's and do not count as others' rows.
+    """
+    cm = str(report.get("my_cm") or "").strip().lower()
+    if not cm or not (report.get("period_from") or report.get("period_to")):
+        return None
+    countries = report.get("countries") or []
+    other_rows = 0
+    for country in countries:
+        for row in country.get("cm_comparison") or []:
+            name = str(row.get("cm") or "").strip()
+            if name.lower() in ("", "nan", "none"):
+                continue
+            if row.get("is_me") or name.lower() == cm:
+                return None
+            other_rows += 1
+    if not other_rows:
+        return None
+    return {"kind": "manager", "manager": str(report.get("my_cm")).strip(), "other_cms": other_rows}
+
+
 def _enrich_country_overview(report: Dict[str, Any]) -> None:
     """Ensure per-country my_totals / my_spend for home overview (cached reports)."""
     for country in report.get("countries", []):
@@ -1964,6 +2026,7 @@ def _render_report(
             "account_map": _account_map_view,
             "sidebar_countries": _sidebar_countries(report, _account_map_view),
             "period": {"date_from": date_from, "date_to": date_to, "span": span},
+            "period_owner": _period_owner(report),
             "goals": goals_view,
             # ACL-1799: цель страны (My Goals) для Country Workbench — отдельным
             # числом, не смешанным с порогом из benchmarks и результатом пиров.
@@ -2047,6 +2110,10 @@ def _alias_without_id_suffix(label: str, known) -> str:
 
     Берётся только единственное имя: два разных алиаса в книге — это не
     «выберем первое», а отказ, как и у хвостовой догадки.
+
+    ACL-1377: книга пишет то же имя и без подчёркиваний — `Facebook6540` для
+    `Facebook_6540_<id>`. Сжатый ключ (только буквы и цифры) — второй шаг,
+    после точного: если книга знает имя с подчёркиванием, берётся оно.
     """
     m = _ID_SUFFIX_RE.match((label or "").strip())
     if not m:
@@ -2055,7 +2122,19 @@ def _alias_without_id_suffix(label: str, known) -> str:
     if not want:
         return ""
     hits = {str(a).strip() for a in known if _account_key(a) == want}
+    if not hits:
+        compact = _compact_account_key(m.group("alias"))
+        if compact:
+            hits = {str(a).strip() for a in known if _compact_account_key(a) == compact}
     return next(iter(hits)) if len(hits) == 1 else ""
+
+
+def _compact_account_key(name) -> str:
+    """`account_key` без разделителей: `Facebook_6540` и `Facebook6540` равны (ACL-1377)."""
+    key = _account_key(name)
+    if re.match(r"rule\d+:", key):
+        return ""  # ключ по явному правилу имён не сжимаем: rule1:0x и rule10:x разные
+    return re.sub(r"[^0-9a-z]", "", key)
 
 
 def _alias_by_tail(label: str, known: dict) -> str:
@@ -2286,6 +2365,8 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
                 }
             # Ключ — только у объявлений со вторым текстом: остальные слоты
             # (и записанные из них задания) остаются прежними.
+            if f"camp_{idx}_page_id" in form:
+                slot["page_id"] = str(form.get(f"camp_{idx}_page_id") or "").strip()
             if copy2:
                 slot["copy2"] = copy2
             # ACL-1775: Instant Form. Ключи есть только у слотов с формой; значения
@@ -3045,6 +3126,7 @@ def api_accounts_overview() -> JSONResponse:
             "country": country_by_alias.get(normalize_account_alias(label), ""),
             "stock": row.get("stock") or "",
             "status": row.get("account_status") or "",
+            "label_key": profile_name_key((label or "").split(" ")[0]),
             "ad_account_id": ad_id,
             "profile_id": profile_id,
             "profile_open": profile_id in open_ids,
@@ -3077,6 +3159,7 @@ def api_accounts_overview() -> JSONResponse:
             "country": country_by_alias.get(normalize_account_alias(label), ""),
             "stock": "",
             "status": "",
+            "label_key": profile_name_key((label or "").split(" ")[0]),
             "ad_account_id": ad_id,
             "profile_id": profile_id,
             "profile_open": profile_id in open_ids,
@@ -3501,8 +3584,9 @@ async def api_account_notes_set(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": f"{kind} is required"}, status_code=400)
     if not isinstance(text, str):
         return JSONResponse({"ok": False, "error": "text must be a string"}, status_code=400)
+    aside: dict = {}
     try:
-        notes = _account_notes.set_note(label, text, kind, if_empty=body.get("if_empty") is True)
+        notes = _account_notes.set_note(label, text, kind, if_empty=body.get("if_empty") is True, report=aside)
     except _account_notes.NoteChanged:
         # Undo не затирает свежий текст: заметку успели написать заново.
         return JSONResponse({"ok": False, "error": "The note changed meanwhile"}, status_code=409)
@@ -3511,7 +3595,12 @@ async def api_account_notes_set(request: Request) -> JSONResponse:
     except OSError:
         return JSONResponse({"ok": False, "error": "Could not save the note. Try again."}, status_code=500)
     key = _account_notes.country_key(label) if kind == "country" else label.strip()
-    return JSONResponse({"ok": True, "kind": kind, kind: label.strip(), "key": key, "text": notes.get(key, "")})
+    out = {"ok": True, "kind": kind, kind: label.strip(), "key": key, "text": notes.get(key, "")}
+    if aside.get("set_aside"):
+        # Файл заметок был испорчен и отложен в сторону: скажем об этом на странице.
+        out["set_aside"] = aside["set_aside"]
+        out["warning"] = f"Notes file was damaged; a copy was kept at {aside['set_aside']}"
+    return JSONResponse(out)
 
 
 @app.post("/api/accounts-hidden")
@@ -4550,6 +4639,12 @@ async def goals_read(cm: str = "") -> JSONResponse:
     from starlette.concurrency import run_in_threadpool
 
     who = (cm or "").strip() or (os.environ.get("MY_CM_NAME") or "").strip()
+    me = (os.environ.get("MY_CM_NAME") or "").strip()
+    if who.casefold() != me.casefold() and not goals_store.is_team_lead():
+        return JSONResponse(
+            {"ok": False, "error": f"These are {who}'s goals. Only a team lead sees somebody else's."},
+            status_code=403,
+        )
     seed = await run_in_threadpool(_goal_countries_now, who)
     return JSONResponse({
         "ok": True,
@@ -4557,6 +4652,20 @@ async def goals_read(cm: str = "") -> JSONResponse:
         "goals": goals_store.for_cm(who, seed),
         "team_lead": goals_store.is_team_lead(),
     })
+
+
+@app.get("/goals/overview")
+async def goals_overview() -> JSONResponse:
+    """Every manager's saved goals, read-only. Team lead only (ACL_TEAM_LEAD).
+
+    Same agreement as editing: the flag keeps the UI honest, it is not a lock.
+    """
+    from src.web import goals as goals_store
+
+    if not goals_store.is_team_lead():
+        return JSONResponse(
+            {"ok": False, "error": "Only a team lead sees everyone's goals."}, status_code=403)
+    return JSONResponse({"ok": True, "managers": goals_store.overview()})
 
 
 @app.post("/goals")
@@ -5231,6 +5340,23 @@ def _instant_form_refusal(slots: list[dict]) -> JSONResponse | None:
     return None
 
 
+@app.post("/api/account-pages")
+async def api_account_pages(request: Request) -> JSONResponse:
+    """Read available Pages under the existing profile read lock; no Meta writes."""
+    from src.web.account_pages import cached_only, read_pages
+
+    form = await request.form()
+    account = str(form.get("account_label") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "state": "failed", "message": "account is required"}, status_code=400)
+    if str(form.get("cached") or "") == "1":
+        # Отрисовка билдера: только кэш на машине, профиль не открывается.
+        return JSONResponse(await asyncio.to_thread(cached_only, account))
+    # Без force — ответ из кэша на машине (12 ч): лишний запуск профиля ради списка Страниц не нужен.
+    force = str(form.get("force") or "") == "1"
+    return JSONResponse(await asyncio.to_thread(read_pages, account, force=force))
+
+
 @app.post("/api/page-forms")
 async def api_page_forms(request: Request) -> JSONResponse:
     """ACL-1775: формы Страницы аккаунта для выбора в билдере. Только по нажатию человека.
@@ -5246,6 +5372,8 @@ async def api_page_forms(request: Request) -> JSONResponse:
     if not publish_api.api_enabled():
         return JSONResponse({"ok": False, "error": "Instant Forms need the Graph API backend (ACL_FB_BACKEND=api)."},
                             status_code=409)
+    if "page_id" in form:
+        return JSONResponse(await asyncio.to_thread(page_forms.read_forms, account, str(form.get("page_id") or "").strip()))
     return JSONResponse(await asyncio.to_thread(page_forms.read_forms, account))
 
 
@@ -5643,6 +5771,15 @@ async def build_upload(request: Request) -> Response:
                            {account_label: ["Instant Forms cannot be exported to Upload FB; use Publish with the API backend."]}},
         )
 
+    if any((s.get("page_id") or "").strip() for s in slots):
+        # ACL-1880: Upload FB собирается без выбора Page - выбранную явно не терять молча.
+        return await _in_report_pool(
+            _render_report, request,
+            upload_errors={(form.get("country") or "").strip() or country:
+                           {account_label: ["A Facebook Page chosen for a campaign cannot be exported to Upload FB; "
+                                            "use Publish, or set the campaign's Page to Automatic."]}},
+        )
+
     # The parser returns the country CODE ("MX"), which the RPA needs — without
     # it the audience Language step was silently skipped. But the template looks
     # errors up by the country NAME it renders the section under ("Mexico"), so
@@ -5798,6 +5935,14 @@ async def multilogin_search(request: Request) -> JSONResponse:
             clean = clean[:160].rstrip() + "…"
         return JSONResponse({"ok": False, "error": f"Multilogin refused the profile list: {clean}"})
 
+    # ACL-1202: the account key (the same rule the overview uses for its
+    # suggestion) rides along, so a picker can recognise "this is the one"
+    # in a search answer without a second copy of the rule in the page.
+    from src.fb_ads_rpa.mlx_profiles import profile_name_key
+
+    for _p in profiles:
+        if isinstance(_p, dict):
+            _p.setdefault("key", profile_name_key(_p.get("name") or ""))
     return JSONResponse({"ok": True, "profiles": profiles, "folders": folders})
 
 
