@@ -2763,6 +2763,18 @@ class MultiloginAttachOnlyProvider:
         _record_profile_restart(entry, profile_id, ok=True, where="campaign_open")
         return conn
 
+    def robot_owns_profile(self, entry: AccountMapEntry) -> bool:
+        """Профиль поднят роботом (или робот цеплялся к нему по порту) — ему же решать, закрывать ли.
+
+        Те же условия, что у `close_finished_profile`, но без остановки (ACL-2113): окно,
+        открытое руками, не «оставлено для удобства» — оно не наше.
+        """
+        profile_id = (entry.profile_id or "").strip()
+        if not profile_id:
+            return False
+        user_data_dir = _find_mlx_profile_dir(profile_id)
+        return bool(_robot_profile(profile_id, str(user_data_dir) if user_data_dir is not None else ""))
+
     def close_finished_profile(self, entry: AccountMapEntry, account_label: str) -> str:
         """Закрыть профиль, чьи кампании собрались чисто (ACL-1444).
 
@@ -2833,6 +2845,8 @@ def stop_profile_on_request(entry: AccountMapEntry, account_label: str) -> str:
     if not gone:
         log.warning("%s: profile %s still has a process %.0f s after the MLX stop (start was %s)",
                     account_label, profile_id, _launch.STOP_GONE_WAIT_S, settled)
+        # ACL-2113: автозакрытие простаивающих окон не считает это успехом.
+        return "still_running"
     return "closed"
 
 
