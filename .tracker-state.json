@@ -131746,7 +131746,9 @@
         "session": "run_as1022_710",
         "coordinator": "Coordinator-I1021A",
         "started_at": "2026-10-22T12:17:11+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "Content reviewed OK; merge current main only, no content changes requested.\n\nReviewed head d7ffe456 against Issue 710. Real change vs main is 5 files (+146): ci.yml, WORKFLOW.md, scripts/ci_retry.sh, tests/test_ci_layout.py, tests/test_ci_retry.py. The PR shows +19607/-1281 only because its base is `stage` (stage is 296 commits behind main); the branch is 167 commits behind main.\nSpec match: 3 attempts x 300 s (Linux) / 180 s (Windows), sleep between, apt lock/partial-list cleanup before retry, step timeout 16/12 min, actions/cache keyed on Playwright version, install-deps on cache hit, Linux job 32 min (justified, longest green 29.2), fail-fast with ::error::. Check names and tree-reuse logic untouched. Touched tests (test_ci_layout, test_ci_retry) pass: 12 passed, 1 skipped. PR CI green on this head.\nOnly needed: merge current main into the branch (and retarget/refresh base), then fresh CI. Not covered here: timing evidence from real runs (acceptance, follow-up).",
+        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
