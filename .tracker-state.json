@@ -6283,6 +6283,27 @@
         "issue_scopes": {
           "19": "ce291401dfa6489828ba973eb602b744efb113657552fbfff1bcb7f342232d99"
         }
+      },
+      "1060": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-X1022053",
+        "implementer": "Worker-W1022053",
+        "head_sha": "43b8621259b8c9d813632a175811d8370ea0dd5c",
+        "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+        "tree_sha": "78d5d084a3a3df985bc8132b4daf0e73c6ad4423",
+        "execution_lane": "54f9ef9d3ffd4107bd7a2fd7e5e6a7be",
+        "review_session": "run_x1022_053",
+        "report": "# ACL-2053 / PR #1060 independent source review (Reviewer-X1022053, run_x1022_053)\n\nHead 43b8621259b8c9d813632a175811d8370ea0dd5c, base main 4582039e2e0418e23df19de131165e83e4d312d6 (merge-base = main), tree 78d5d084a3a3df985bc8132b4daf0e73c6ad4423. Reviewed in a fresh detached worktree, full diff vs main (10 files) against the Issue Description, Specifications and acceptance criteria.\n\nVerdict: APPROVED.\n\nSpec coverage:\n- First/last name: CONTACT_TYPES adds first_name/last_name (FIRST_NAME/LAST_NAME), full name kept; full name together with first/last refused (Python + JS mirror). Order: author order when first/last chosen, legacy canonical order otherwise (hash stable).\n- Custom multiple choice: shape CUSTOM + options[{key,value}] unchanged; questions_first selects custom-before-contacts; stored only when true.\n- Intro title: optional intro_title (<=60), falls back to headline. Cover image: documented skip; verified against the Graph Page/leadgen_forms reference - cover_photo is a file upload (pages_manage_posts) or cover_photo_id; closed policy forbids files. Accepted.\n- follow_up_action_url: https-only, <=1000, in validator, JS mirror, write_policy and in-page helper; thank-you text optional only with a follow-up URL (thank_you_page then omitted; body is optional per Graph reference).\n- Settings: is_optimized_for_quality from form_type (default More volume = false), block_display_for_non_targeted_viewer=true on every form; bool-type checks in Python and helper (helper refuses when bool_keys table missing). allow_organic_lead not sent: verified the create reference lists only deprecated allow_organic_lead_retrieval (\"will not be considered\") and recommends block_display_for_non_targeted_viewer; documented deviation, accepted.\n- Locale: select of the 32 Graph create locales (list matches the reference exactly), default EN_US; legacy saved locales (any XX_YY) still load/publish (lenient path in _read, plan_from_draft, and save of an unchanged saved locale).\n- Write policy stays closed: only is_optimized_for_quality, block_display_for_non_targeted_viewer (FORM_KEYS) and FIRST_NAME/LAST_NAME question types added; tos/terms forbidden walk unchanged; tests cover valid/invalid/tos.\n- Legacy JSON: golden test - same clean template, same form name hash (\u00b7 ACL 192c3c), same body except the two new required settings; reused-by-name forms keep their old settings (CHANGELOG).\n- Fixture: sanitized D71 form, all ids replaced by <ID>, page \"Example Page\", URLs example.com. Contains the buyer's ad copy text (no ids/secrets) - allowed by the spec.\n- UI texts and errors English. Fragment docs/system/changelog.d/ACL-2053.md; CHANGELOG.md equals main; fold_changelog.py --check: valid ACL-2037, ACL-2053.\n\nTests run locally (affected only): test_acl2053_form_parity, test_acl1776_create_forms, test_acl1775_instant_forms, test_acl1775_builder_forms: 264 passed.\nCI on 43b86212: CI (linux 1/2/3, windows, ACL verification, tooling, process instructions), Windows installer, descriptor, tracker-link - all success.\n\nNon-blocking notes: validateTemplate(t, legacyLocale) second argument is unused by callers (panel only creates new templates) - harmless. Not verified live: follow_up_action_url without a thank-you page, FIRST_NAME/LAST_NAME acceptance and the new settings on create - separate owner-approved pilot-account step after main (create one form and read it back); not done by this review.\n",
+        "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          1053
+        ],
+        "recorded_at": "2026-10-22T03:33:00+00:00",
+        "issue_scopes": {
+          "1053": "e43d2aa702e2ebd0edd41e4ea895d2876e6967934d41e4d18f3e638ecd7d3871"
+        }
       }
     },
     "stage": {
