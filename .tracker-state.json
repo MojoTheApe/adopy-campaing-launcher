@@ -49039,20 +49039,6 @@
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
       },
-      "845": {
-        "actor": "Worker-W1022845",
-        "session": "run_w1022_1845",
-        "coordinator": "Coordinator-I1021A",
-        "branch": "codex/acl-1845-publish-button-design",
-        "worktree": "C:\\acl-int-w1845",
-        "id": "c918fcae2f5740298d4aba9f6f60e8cc",
-        "issue": 845,
-        "state": "handoff",
-        "started_at": "2026-10-22T05:39:15+00:00",
-        "from_status": "status:todo",
-        "pr": 850,
-        "report": "# ACL-1845 handoff (PR #850)\n\n- Brought branch codex/acl-1845-publish-button-design to current main (3bc8d973) via merge; old head 7cd286ec, new head 98546e1a.\n- Only conflict: docs/system/CHANGELOG.md, resolved by taking main's version entirely.\n- Changelog entry moved to docs/system/changelog.d/ACL-1845.md (original wording, Task link added); fold_changelog.py --check passes.\n- report.html auto-merged cleanly; no code changes beyond the merge.\n- Tests (PR's own files): test_builder_multi_publish_browser, test_builder_publish_selected_browser, test_drawer_review_browser, test_publish_button_design_browser: 49 passed.\n- CI on new head: all pass (linux 1/2/3, windows, ACL verification, tooling, installer) except tracker-link, which fails only because task state is not yet Review."
-      },
       "839": {
         "actor": "Worker-W1021839",
         "session": "run_w1021_1839",
@@ -54004,25 +53990,25 @@
             "session": "run_w1022_1845"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1022845",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
-          "actor": "Worker-L1845",
-          "session": "run_l1_845",
-          "coordinator": "Coordinator-M1011A",
+          "actor": "Worker-W1022845",
+          "session": "run_w1022_1845",
+          "coordinator": "Coordinator-I1021A",
           "branch": "codex/acl-1845-publish-button-design",
-          "worktree": "C:\\acl-1845-wt",
-          "id": "ebe5ab1745374d82b2a35babaf952efb",
+          "worktree": "C:\\acl-int-w1845",
+          "id": "c918fcae2f5740298d4aba9f6f60e8cc",
           "issue": 845,
           "state": "handoff",
-          "started_at": "2026-10-20T10:44:50+00:00",
+          "started_at": "2026-10-22T05:39:15+00:00",
           "from_status": "status:todo",
           "pr": 850,
-          "report": "Review fix (ACL-1845, 2026-10-20): the new aria-busy writes (cbNewRun form loop, showQueue) and the zero-count term in showQueue are guarded so stub buttons/forms of the harness tests no longer throw (test_acl1826_mlx_session_lost + test_publishing_everything_at_once 42 passed). Publish/drawer/build browser tests passed (see PR comment). Branch contains current work/main."
+          "report": "# ACL-1845 handoff (PR #850)\n\n- Brought branch codex/acl-1845-publish-button-design to current main (3bc8d973) via merge; old head 7cd286ec, new head 98546e1a.\n- Only conflict: docs/system/CHANGELOG.md, resolved by taking main's version entirely.\n- Changelog entry moved to docs/system/changelog.d/ACL-1845.md (original wording, Task link added); fold_changelog.py --check passes.\n- report.html auto-merged cleanly; no code changes beyond the merge.\n- Tests (PR's own files): test_builder_multi_publish_browser, test_builder_publish_selected_browser, test_drawer_review_browser, test_publish_button_design_browser: 49 passed.\n- CI on new head: all pass (linux 1/2/3, windows, ACL verification, tooling, installer) except tracker-link, which fails only because task state is not yet Review."
         },
         "pr": 850,
-        "queued_at": "2026-10-20T11:34:45+00:00",
+        "queued_at": "2026-10-22T06:02:18+00:00",
         "review_report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -54034,9 +54020,7 @@
           "actor": "Coordinator-M1011A",
           "session": "coord-m1011a-20261015",
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
-        },
-        "rework": true,
-        "rework_claim": "c918fcae2f5740298d4aba9f6f60e8cc"
+        }
       },
       "844": {
         "implementers": [
@@ -64679,7 +64663,8 @@
     "review_queue": [
       1054,
       710,
-      1069
+      1069,
+      845
     ],
     "review": null,
     "history": [
@@ -114410,6 +114395,13 @@
         "pr": 951,
         "lane": "f1c4ba1b3c404a878d67d49158f82eea",
         "actor": "Reviewer-AC1022144"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-22T06:02:18+00:00",
+        "issue": 845,
+        "pr": 850,
+        "actor": "Worker-W1022845"
       }
     ],
     "policy": {
