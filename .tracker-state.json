@@ -49092,6 +49092,18 @@
         "state": "implementing",
         "started_at": "2026-10-22T06:33:25+00:00",
         "from_status": "status:todo"
+      },
+      "1079": {
+        "actor": "Worker-V7Q2R8",
+        "session": "root_acl2079_20261022",
+        "coordinator": "Coordinator-R6M9H2",
+        "branch": "codex/acl-2079-isolated-process-support",
+        "worktree": "/Users/dmitry.o/Documents/ChatGPT/ACL/tmp/acl-2079-isolated-process-support",
+        "id": "29e42e6faab249c2b95487060017881c",
+        "issue": 1079,
+        "state": "implementing",
+        "started_at": "2026-10-22T06:41:29+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -58471,9 +58483,13 @@
           {
             "actor": "Worker-V7Q2R8",
             "session": "root_acl2079_20261022"
+          },
+          {
+            "actor": "Worker-V7Q2R8",
+            "session": "root_acl2079_20261022"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-V7Q2R8",
         "coordinator": "Coordinator-R6M9H2",
         "handoff": {
@@ -58493,20 +58509,14 @@
         "pr": 1080,
         "queued_at": "2026-10-21T23:55:33+00:00",
         "review_report": "Return only ACL-2079/PR1080 to its original author/branch. Actual main is now3bc8d9739a82ce8db0ddb67a832ea159bf40ed36, while the genuine current approval of source2c71d1bde0ee190b1123c4dcd1936b8d19d555b3 was bound to e8bf31f8921ec6a8f79c824f39c1fc3beff2f359. The selected task-context compatibility policy is absent, so preserve the conservative ordinary author-return/current-source review route. Include all accepted new main product/config/docs/test files unchanged, update only the author report's current baseline, preserve ACL choices/owners and obtain fresh proof/review/applicable required CI. This is neither a new feature requirement nor a failure of the earlier all16 passing checks; preserve that original review/check history. Existing foreign integration1085/intake and all its members, original ACL2069 scope and pending product requests remain untouched. No product publication, optional policy activation or direct source merge is requested.",
-        "reviewer": "Reviewer-H8K4N7",
         "return_operation": {
           "id": "bce7014618a346d8b1452f47787fc45c",
           "actor": "Coordinator-R6M9H2",
           "session": "coord_acl2079_20261022",
           "report": "Return only ACL-2079/PR1080 to its original author/branch. Actual main is now3bc8d9739a82ce8db0ddb67a832ea159bf40ed36, while the genuine current approval of source2c71d1bde0ee190b1123c4dcd1936b8d19d555b3 was bound to e8bf31f8921ec6a8f79c824f39c1fc3beff2f359. The selected task-context compatibility policy is absent, so preserve the conservative ordinary author-return/current-source review route. Include all accepted new main product/config/docs/test files unchanged, update only the author report's current baseline, preserve ACL choices/owners and obtain fresh proof/review/applicable required CI. This is neither a new feature requirement nor a failure of the earlier all16 passing checks; preserve that original review/check history. Existing foreign integration1085/intake and all its members, original ACL2069 scope and pending product requests remain untouched. No product publication, optional policy activation or direct source merge is requested."
         },
-        "return": {
-          "id": "bce7014618a346d8b1452f47787fc45c",
-          "actor": "Coordinator-R6M9H2",
-          "session": "coord_acl2079_20261022",
-          "report": "Return only ACL-2079/PR1080 to its original author/branch. Actual main is now3bc8d9739a82ce8db0ddb67a832ea159bf40ed36, while the genuine current approval of source2c71d1bde0ee190b1123c4dcd1936b8d19d555b3 was bound to e8bf31f8921ec6a8f79c824f39c1fc3beff2f359. The selected task-context compatibility policy is absent, so preserve the conservative ordinary author-return/current-source review route. Include all accepted new main product/config/docs/test files unchanged, update only the author report's current baseline, preserve ACL choices/owners and obtain fresh proof/review/applicable required CI. This is neither a new feature requirement nor a failure of the earlier all16 passing checks; preserve that original review/check history. Existing foreign integration1085/intake and all its members, original ACL2069 scope and pending product requests remain untouched. No product publication, optional policy activation or direct source merge is requested."
-        },
-        "rework": true
+        "rework": true,
+        "rework_claim": "29e42e6faab249c2b95487060017881c"
       }
     },
     "actors": {
@@ -115221,6 +115231,13 @@
           "report": "Return only ACL-2079/PR1080 to its original author/branch. Actual main is now3bc8d9739a82ce8db0ddb67a832ea159bf40ed36, while the genuine current approval of source2c71d1bde0ee190b1123c4dcd1936b8d19d555b3 was bound to e8bf31f8921ec6a8f79c824f39c1fc3beff2f359. The selected task-context compatibility policy is absent, so preserve the conservative ordinary author-return/current-source review route. Include all accepted new main product/config/docs/test files unchanged, update only the author report's current baseline, preserve ACL choices/owners and obtain fresh proof/review/applicable required CI. This is neither a new feature requirement nor a failure of the earlier all16 passing checks; preserve that original review/check history. Existing foreign integration1085/intake and all its members, original ACL2069 scope and pending product requests remain untouched. No product publication, optional policy activation or direct source merge is requested."
         },
         "batch_id": null
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-22T06:41:29+00:00",
+        "issue": 1079,
+        "claim": "29e42e6faab249c2b95487060017881c",
+        "actor": "Worker-V7Q2R8"
       }
     ],
     "policy": {
