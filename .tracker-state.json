@@ -46989,6 +46989,73 @@
           }
         },
         "recorded_at": "2026-10-22T04:11:28+00:00"
+      },
+      "50de16a3aac241f4a08a1c0e4406e44e": {
+        "evidence": {
+          "kind": "post-main-acceptance",
+          "report": "Retained independent integration Reviewer-AH1022B85/run_ah1022_b85 verified the four unchecked acceptance lines of Issue #1028 (ACL-2028) on merged main 515689dee625bdae3241e2ab4064fd18fa5dac53 (merge of PR1085 head ab2226aa, tree d62d77fd identical to the reviewed batch tree) in a fresh detached worktree. Issues #827 (ACL-1827), #73 (ACL-144), #53 (ACL-402) and #845 (ACL-1845) have no unchecked lines. fold_changelog.py --check on this tree: valid: ACL-106, ACL-144, ACL-1827, ACL-1840, ACL-1845, ACL-2028, ACL-2037, ACL-2052, ACL-2053, ACL-402. Combined PR CI on ab2226aa attempt 1, no reruns, no reused jobs: CI 39734485973, Windows installer 39734486101, descriptor 39734486220, Tracker linkage 39734486221 all success. Main push runs on 515689de: Windows installer 39738083195 and Delivery setup 39738083006 success; CI 39738082965 was still in progress at acceptance time (same tree as the tested PR). Limitation: ACL-2028 evidence is an offline fake-Meta snapshot, not a live account.",
+          "batch_id": "50de16a3aac241f4a08a1c0e4406e44e",
+          "pr": 1085,
+          "merge_sha": "515689dee625bdae3241e2ab4064fd18fa5dac53",
+          "head_sha": "ab2226aa3c0a22ad71fe842bcfb7709dbe399b8c",
+          "tree_sha": "d62d77fd8bd51aeb2e0314da394883436209be0e",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            827,
+            73,
+            1028,
+            53,
+            845
+          ],
+          "source_heads": [
+            "b0308976ddef2b3c6a9b6c36d5c58e46c4ead831",
+            "e01e6a30a2ee9b8f22452493d249f25f2336afa1",
+            "3c8dbf8eaba4cad54e216c1bef4a7bd79338e755",
+            "8cc6ce8ccb4b19c5205450abe2caa7438d67a738",
+            "98546e1abdb7218720abcd84a22db311ef968058"
+          ],
+          "issue_scopes": {
+            "827": "fdf30ddff65f891825fc8a270531da766faed723eadbc1aa4b976e58374d588c",
+            "73": "3a25372ae9c718cc8f08a1c2cf0a72178f1d6ee782f7356fba460f6033aa2db0",
+            "1028": "58b0b37224a22a2d7c5d5b192a01c1149b7d1fc9e003144935930fa9ae1dbc80",
+            "53": "e422537de9fdf02be347310b1d1b6a4ad717569d42ac5e4380170ffe2e257df9",
+            "845": "9c7c2106bea898283bcc702c2c771bee801df7835d57d9916bdef93032e9e44a"
+          },
+          "reviewer": "Reviewer-AH1022B85",
+          "review_session": "run_ah1022_b85",
+          "execution_lane": "6ce6294652d74de3a0ea514b37fd6080",
+          "coordinator": "Coordinator-I1021A",
+          "coordinator_session": "run_i1021a_1021",
+          "criteria": {
+            "1028": [
+              {
+                "line": 13,
+                "criterion": "- [ ] A committed test runs the actual `publish_api.check_plan` against a fake Meta that denies the `/search` read and, separately, the `/campaigns` read with the error10 fixture.",
+                "result": "passed",
+                "evidence": "Merged main 515689de (merge of PR1085 head ab2226aa, tree d62d77fd identical to the reviewed batch tree), fresh detached worktree, Windows Python 3.13: tests/test_acl1886_plan_check_snapshot.py together with neighbours test_acl1886_graph_error_context.py and test_acl1761_plan_check.py: 56 passed. The committed file tests/test_acl1886_plan_check_snapshot.py calls the real src.web.publish_api.check_plan (GraphClient -> Creator) over an in-memory DeniedMeta(FakeMeta) whose single denied GET returns the anonymized error10 fixture (test_acl1886_graph_error_context.denied, from fb_api_permission_denied_2026_10_13.json); one test denies the /search read, a separate test denies the /campaigns read."
+              },
+              {
+                "line": 14,
+                "criterion": "- [ ] The public result carries the denied operation (`operation=search` / `operation=campaigns`), every result has success and publishable false, and the fake records zero writes; the read client reports zero writes and no write permission.",
+                "result": "passed",
+                "evidence": "Merged main 515689de (merge of PR1085 head ab2226aa, tree d62d77fd identical to the reviewed batch tree), fresh detached worktree, Windows Python 3.13: tests/test_acl1886_plan_check_snapshot.py together with neighbours test_acl1886_graph_error_context.py and test_acl1761_plan_check.py: 56 passed. Both tests assert the exact public error/audit text ending 'operation=search, search_type=adgeolocation|adlocale]' / 'operation=search]' and 'operation=campaigns]'; every result has dry_run true, success false, publishable false, created/plan empty; the fake records meta.posts == [] and on_ad_posts == []; the opened read client has allow_writes False and writes == 0; socket connect is refused and no network attempt is recorded."
+              },
+              {
+                "line": 15,
+                "criterion": "- [ ] The added context leaks no synthetic account id or request value into the public result.",
+                "result": "passed",
+                "evidence": "Merged main 515689de (merge of PR1085 head ab2226aa, tree d62d77fd identical to the reviewed batch tree), fresh detached worktree, Windows Python 3.13: tests/test_acl1886_plan_check_snapshot.py together with neighbours test_acl1886_graph_error_context.py and test_acl1761_plan_check.py: 56 passed. _assert_read_only asserts the synthetic account id (ACT without act_ prefix) is absent from json.dumps of the whole public result, and the error/audit strings are asserted by exact equality, so no request value (search query, params) is appended beyond the operation/search_type context."
+              },
+              {
+                "line": 16,
+                "criterion": "- [ ] Only affected tests run locally; hosted source checks and independent source review are recorded.",
+                "result": "passed",
+                "evidence": "Source PR1029 head 3c8dbf8e (test file + changelog fragment only): independent source review recorded by Reviewer-AF1022028 / run_af1022_028, lane 6dbdefe1b2fb472a92bc0a82dd1e16bb, verdict approved at 2026-10-22T06:17:16Z (implementer Worker-W1022028, tree 05019de2), reporting only affected tests run locally (2 alone, 177 with neighbours, 56 reversed order). Hosted source checks on exact head 3c8dbf8e: CI run 39730824996 attempt 1 success (linux tests 3.13 shards 1-3, windows tests 3.13, Classify and check project tooling, Process instructions, ACL verification), Windows installer 39730824999 success (build steps skipped by classifier for a test-only change), descriptor 39730825060 and tracker-link 39730825028 success. Combined batch CI on ab2226aa (39734485973 etc.) also green; no local full suite was run."
+              }
+            ]
+          }
+        },
+        "recorded_at": "2026-10-22T07:19:17+00:00"
       }
     },
     "policy_migrations": [
@@ -115335,6 +115402,12 @@
         "issue": 839,
         "claim": "cc1e795aae854220a6851f6191116a1a",
         "actor": "Worker-W1021839"
+      },
+      {
+        "event": "post-main-acceptance-recorded",
+        "at": "2026-10-22T07:19:17+00:00",
+        "batch_id": "50de16a3aac241f4a08a1c0e4406e44e",
+        "pr": 1085
       }
     ],
     "policy": {
