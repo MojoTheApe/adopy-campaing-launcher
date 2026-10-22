@@ -51002,20 +51002,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
-      },
-      "1099": {
-        "actor": "Worker-WO1022099",
-        "session": "run_wo1022_099",
-        "coordinator": "Coordinator-I1021A",
-        "branch": "work/acl-2099-reland-task-context",
-        "worktree": "C:\\acl-2099",
-        "id": "c0a7576ce1344486a5d83ecdfa966609",
-        "issue": 1099,
-        "state": "handoff",
-        "started_at": "2026-10-22T10:58:24+00:00",
-        "from_status": "status:todo",
-        "pr": 1100,
-        "report": "## ACL-2099 handoff (Worker-WO1022099, run_wo1022_099, 2026-10-22)\n\nPR #1100 `work/acl-2099-reland-task-context`, base main 99e53504, head ea898f2c.\n\n### What changed\n\nTask-context schema 1 is selected; activation stays pending. The pinned Master fddcdd0d (1.8.0) `project.upgrade()` was run with the Tracker e71c9829 exporter, and the only new input is `task_context {schema_version:1}`.\n\nSix files changed:\n- From the renderer: template-base.json, delivery.json, tracker/config.json and TRACKER.md.\n- Project-owned: the WORKFLOW.md resolution.\n- The changelog fragment.\n\n### Proof\n\n- Rendering main's inputs reproduces all 92 baseline files byte-for-byte.\n- The selection render changes exactly 4 pristine files; the other 88 are identical.\n- The committed baseline equals the selection render.\n\nThree Windows adapters were needed, each shown to preserve values:\n- CRLF->LF on the exporter output.\n- JSON key order.\n- Keeping the local WORKFLOW.md after the merge-file conflict (\"Resolve explicitly in a project PR\").\n\n### Checks\n\n- Pinned validate (`--allow-draft`): draft valid, the same as main.\n- acl_adoption audit, fold_changelog --check, scan_secrets and check_links: all pass.\n- Local affected tests (9 files: batch, ci_scope, process_instructions, master_adoption, tracker_v2, fold_changelog, ci_workflows, acl_tracker): exit 0.\n- CI: everything is green except tracker-link. It is red only because the task was not yet in Review, so it needs a re-run after this handoff.\n\n### Not done (by design)\n\nNo adopt, migration, delivery or merge. PR #995 is left open. Not self-reviewed; an independent review is required."
       }
     },
     "tasks": {
@@ -60613,9 +60599,25 @@
             "session": "run_wo1022_099"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-WO1022099",
-        "coordinator": "Coordinator-I1021A"
+        "coordinator": "Coordinator-I1021A",
+        "handoff": {
+          "actor": "Worker-WO1022099",
+          "session": "run_wo1022_099",
+          "coordinator": "Coordinator-I1021A",
+          "branch": "work/acl-2099-reland-task-context",
+          "worktree": "C:\\acl-2099",
+          "id": "c0a7576ce1344486a5d83ecdfa966609",
+          "issue": 1099,
+          "state": "handoff",
+          "started_at": "2026-10-22T10:58:24+00:00",
+          "from_status": "status:todo",
+          "pr": 1100,
+          "report": "## ACL-2099 handoff (Worker-WO1022099, run_wo1022_099, 2026-10-22)\n\nPR #1100 `work/acl-2099-reland-task-context`, base main 99e53504, head ea898f2c.\n\n### What changed\n\nTask-context schema 1 is selected; activation stays pending. The pinned Master fddcdd0d (1.8.0) `project.upgrade()` was run with the Tracker e71c9829 exporter, and the only new input is `task_context {schema_version:1}`.\n\nSix files changed:\n- From the renderer: template-base.json, delivery.json, tracker/config.json and TRACKER.md.\n- Project-owned: the WORKFLOW.md resolution.\n- The changelog fragment.\n\n### Proof\n\n- Rendering main's inputs reproduces all 92 baseline files byte-for-byte.\n- The selection render changes exactly 4 pristine files; the other 88 are identical.\n- The committed baseline equals the selection render.\n\nThree Windows adapters were needed, each shown to preserve values:\n- CRLF->LF on the exporter output.\n- JSON key order.\n- Keeping the local WORKFLOW.md after the merge-file conflict (\"Resolve explicitly in a project PR\").\n\n### Checks\n\n- Pinned validate (`--allow-draft`): draft valid, the same as main.\n- acl_adoption audit, fold_changelog --check, scan_secrets and check_links: all pass.\n- Local affected tests (9 files: batch, ci_scope, process_instructions, master_adoption, tracker_v2, fold_changelog, ci_workflows, acl_tracker): exit 0.\n- CI: everything is green except tracker-link. It is red only because the task was not yet in Review, so it needs a re-run after this handoff.\n\n### Not done (by design)\n\nNo adopt, migration, delivery or merge. PR #995 is left open. Not self-reviewed; an independent review is required."
+        },
+        "pr": 1100,
+        "queued_at": "2026-10-22T12:08:59+00:00"
       }
     },
     "actors": {
@@ -66930,7 +66932,8 @@
       710,
       1069,
       1086,
-      1095
+      1095,
+      1099
     ],
     "review": null,
     "history": [
@@ -119331,6 +119334,13 @@
         "issue": 1095,
         "pr": 1096,
         "actor": "Worker-W1022P95"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-22T12:08:59+00:00",
+        "issue": 1099,
+        "pr": 1100,
+        "actor": "Worker-WO1022099"
       }
     ],
     "policy": {
