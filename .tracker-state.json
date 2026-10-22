@@ -6375,6 +6375,27 @@
             ]
           }
         }
+      },
+      "952": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-AI1022708",
+        "review_session": "run_ai1022_708",
+        "execution_lane": "dad01254c81242a98883b0a352943571",
+        "implementer": "Worker-W1022708",
+        "head_sha": "feb776c1a6178831671652b5333f937f6a9de27a",
+        "base_sha": "515689dee625bdae3241e2ab4064fd18fa5dac53",
+        "tree_sha": "a19c2c68a4d28d4c88c0e91aaf6d69be33e0bbab",
+        "report": "Independent source review of ACL-1708 / PR 952 at head feb776c1 (clean merge of main 515689de into the previously reviewed 048fd729). Verified the PR delta vs main (+/- lines of 515689de..feb776c1) is identical to the earlier reviewed 3bc8d973..048fd729 delta, i.e. merge-only with no content change; main brought no new user-visible 'launcher' strings or converter references. Content review of 048fd729 stands: update-apply refusal text 'not started from its desktop shortcut' with test asserting no 'launcher' (any case); account-unreachable text says Adopy Campaign Manager window; scripts/convert_favicon_to_ico.py deleted with no references; shortcut script message fixed; viewport meta harmless; English; fragment valid (fold_changelog.py --check valid). Tests on 048fd729: 17 + 75 passed. All required CI green on feb776c1.",
+        "main_sha": "515689dee625bdae3241e2ab4064fd18fa5dac53",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          708
+        ],
+        "recorded_at": "2026-10-22T07:33:05+00:00",
+        "issue_scopes": {
+          "708": "6b7726dd5b2fd3e4f37b1f1ed4921ba836cab3de1eff62531d7029faa5dce02e"
+        }
       }
     },
     "stage": {
