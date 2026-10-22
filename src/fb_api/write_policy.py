@@ -5,6 +5,11 @@
 проверенного кабинета `act_X` и лишь с ключами из списка ниже. Тот же список
 вшивается в помощник страницы (`token_capture`) — две линии, одна политика.
 
+Отдельная узкая цепочка для форм (ACL-1776, `check_form_create`): ровно
+`POST /{page_id}/leadgen_forms` на Страницу плана, ключи из явного списка,
+`tos_accepted` и любое упоминание условий - никогда, DELETE и прочие рёбра
+Страницы - никогда. С цепочкой `act_X` она не пересекается.
+
 Никогда: DELETE, ACTIVE, `effective_status`/`configured_status`,
 `execution_options`, согласие с условиями, создание форм лидов, запись куда-то,
 кроме `/act_X/<ребро>`.
@@ -72,7 +77,7 @@ class WriteRefused(ValueError):
     """Запись не прошла политику; к Meta ничего не ушло."""
 
 
-def policy_for_page(act: str) -> dict:
+def policy_for_page(act: str, page: str = "") -> dict:
     """Та же политика для помощника страницы (JSON-сериализуемая)."""
     return {
         "act": act,
@@ -85,6 +90,7 @@ def policy_for_page(act: str) -> dict:
         "dof_features": sorted(DOF_FEATURES),
         "lead_form": {"key": LEAD_FORM_KEY, "edge": "adcreatives",
                       "formats": list(LEAD_FORM_FORMATS), "id_re": LEAD_FORM_ID_RE.pattern},
+        "form_create": policy_for_form_create(page),
     }
 
 
@@ -215,6 +221,194 @@ def check(act: str, method: str, path: str, params: dict | None,
     elif want:
         raise WriteRefused(f"write refused: {edge} needs a file in field {want!r}")
     return edge
+
+
+# ───────────────────────── создание формы лидов (ACL-1776) ─────────────────────────
+#
+# Отдельная цепочка: одно ребро Страницы, явный список ключей, никаких условий.
+# Зеркало на странице-помощнике (`token_capture`, функция `checkForm`) читает ту же
+# таблицу из `policy_for_form_create()`.
+
+FORM_EDGE = "leadgen_forms"
+#: Ключи верхнего уровня запроса. `tos_accepted` сюда не попадёт никогда.
+FORM_KEYS = frozenset({"name", "questions", "privacy_policy", "thank_you_page", "context_card",
+                       "question_page_custom_headline", "locale", "follow_up_action_url",
+                       "is_optimized_for_quality", "block_display_for_non_targeted_viewer"})
+#: Булевы ключи верхнего уровня (ACL-2053): только true/false, не строки и не числа.
+FORM_BOOL_KEYS = frozenset({"is_optimized_for_quality", "block_display_for_non_targeted_viewer"})
+#: Ключи, которые Graph читает как JSON (строку разбираем до проверок, как у `act_X`).
+FORM_JSON_KEYS = frozenset({"questions", "privacy_policy", "thank_you_page", "context_card"})
+#: Допустимые ключи вложенных объектов.
+FORM_NESTED: dict[str, list[str]] = {
+    "privacy_policy": ["link_text", "url"],
+    "thank_you_page": ["body", "button_text", "button_type", "title", "website_url"],
+    "context_card": ["button_text", "content", "style", "title"],
+    "question": ["key", "label", "options", "type"],
+    "option": ["key", "value"],
+}
+FORM_QUESTION_TYPES = ("CUSTOM", "EMAIL", "FIRST_NAME", "FULL_NAME", "LAST_NAME", "PHONE")
+#: `NONE` - кнопки нет (нет ссылки на сайт): `button_type` у thank_you_page обязателен
+#: (справочник Meta page/leadgen_forms), для «без ссылки» там предусмотрен `NONE`.
+FORM_BUTTON_TYPES = ("VIEW_WEBSITE", "NONE")
+FORM_CARD_STYLES = ("PARAGRAPH_STYLE",)
+FORM_MAX_QUESTIONS = 15
+FORM_MAX_OPTIONS = 20
+FORM_MAX_TEXT = 1000
+#: Имя формы несёт метку робота и хэш содержания (ключ идемпотентности).
+FORM_NAME_RE = r" · ACL [0-9a-f]{6}$"
+FORM_PAGE_RE = r"^[0-9]{1,25}$"
+FORM_LOCALE_RE = r"^[A-Z]{2}_[A-Z]{2}$"
+FORM_URL_RE = r"^https://[^\s/?#:]+\.[^\s/?#:]+(:\d+)?([/?#]\S*)?$"
+#: Ключи, которых нет нигде и на любой глубине (условия, токены, обходные пути).
+FORM_FORBIDDEN_ANYWHERE = frozenset({"tos_accepted", "leadgen_tos_accepted", "tos", "terms",
+                                     "terms_accepted", "access_token", "method", "_method", "batch",
+                                     "suppress_http_code", "status", "execution_options"})
+
+
+def policy_for_form_create(page: str = "") -> dict:
+    """Таблица цепочки форм для страницы-помощника (JSON-сериализуемая)."""
+    return {
+        "edge": FORM_EDGE, "page": str(page or ""), "keys": sorted(FORM_KEYS), "bool_keys": sorted(FORM_BOOL_KEYS), "json_keys": sorted(FORM_JSON_KEYS),
+        "nested": {k: list(v) for k, v in FORM_NESTED.items()},
+        "question_types": list(FORM_QUESTION_TYPES), "button_types": list(FORM_BUTTON_TYPES),
+        "card_styles": list(FORM_CARD_STYLES), "max_questions": FORM_MAX_QUESTIONS,
+        "max_options": FORM_MAX_OPTIONS, "max_text": FORM_MAX_TEXT,
+        "name_re": FORM_NAME_RE, "page_re": FORM_PAGE_RE, "locale_re": FORM_LOCALE_RE,
+        "url_re": FORM_URL_RE, "forbidden": sorted(FORM_FORBIDDEN_ANYWHERE),
+    }
+
+
+def _form_forbidden_walk(value: Any, where: str) -> None:
+    if isinstance(value, dict):
+        for key, item in value.items():
+            low = str(key).lower()
+            parts = set(re.split(r"[^a-z0-9]+", low))
+            if low in FORM_FORBIDDEN_ANYWHERE or parts & {"tos", "terms"} or "tos_accepted" in low:
+                raise WriteRefused(f"write refused: key {key!r} is not allowed ({where}); "
+                                   "the robot never accepts Lead Ads terms")
+            _form_forbidden_walk(item, where)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            _form_forbidden_walk(item, where)
+
+
+def _form_text(value: Any, what: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise WriteRefused(f"write refused: {what} must be a non-empty string")
+    if len(value) > FORM_MAX_TEXT:
+        raise WriteRefused(f"write refused: {what} is too long")
+    return value
+
+
+def _form_url(value: Any, what: str) -> None:
+    if not (isinstance(value, str) and re.match(FORM_URL_RE, value.strip(), re.I)):
+        raise WriteRefused(f"write refused: {what} must be an https:// URL")
+
+
+def _form_keys(obj: Any, kind: str, what: str) -> dict:
+    if not isinstance(obj, dict):
+        raise WriteRefused(f"write refused: {what} must be an object")
+    extra = sorted(set(obj) - set(FORM_NESTED[kind]))
+    if extra:
+        raise WriteRefused(f"write refused: key {extra[0]!r} is not allowed in {what}")
+    return obj
+
+
+def _check_form_question(q: Any, i: int) -> None:
+    where = f"questions[{i}]"
+    q = _form_keys(q, "question", where)
+    kind = q.get("type")
+    if kind not in FORM_QUESTION_TYPES:
+        raise WriteRefused(f"write refused: {where}.type {kind!r} is not allowed")
+    if kind == "CUSTOM":
+        _form_text(q.get("key"), f"{where}.key")
+        _form_text(q.get("label"), f"{where}.label")
+    elif set(q) != {"type"}:
+        raise WriteRefused(f"write refused: a {kind} question carries only its type")
+    if "options" in q:
+        opts = q["options"]
+        if kind != "CUSTOM" or not isinstance(opts, list) or not (1 <= len(opts) <= FORM_MAX_OPTIONS):
+            raise WriteRefused(f"write refused: {where}.options is not allowed here")
+        for j, o in enumerate(opts):
+            o = _form_keys(o, "option", f"{where}.options[{j}]")
+            _form_text(o.get("key"), f"{where}.options[{j}].key")
+            _form_text(o.get("value"), f"{where}.options[{j}].value")
+
+
+def check_form_create(page_id: str, method: str, path: str, params: dict | None,
+                      files: dict | None = None, pinned_page: str = "") -> str:
+    """Проверить создание формы лидов. Возвращает имя ребра; иначе `WriteRefused`.
+
+    Только `POST /{page_id}/leadgen_forms` ТОЙ Страницы, что в плане; ключи из
+    `FORM_KEYS`; условия Lead Ads и любой другой край Страницы - отказ.
+    """
+    if method != "POST":
+        raise WriteRefused(f"write refused: method {method!r} (only POST; never DELETE)")
+    if not re.match(FORM_PAGE_RE, str(page_id or "")):
+        raise WriteRefused("write refused: the Page of the plan is not set")
+    if not re.match(FORM_PAGE_RE, str(pinned_page or "")):
+        raise WriteRefused("write refused: no Page is pinned for this session; form writes are off")
+    if str(page_id) != str(pinned_page):
+        raise WriteRefused("write refused: the Page is not the Page of the plan")
+    if path != f"/{page_id}/{FORM_EDGE}":
+        raise WriteRefused(f"write refused: path must be /{page_id}/{FORM_EDGE} (no other Page edges)")
+    if files:
+        raise WriteRefused("write refused: a form is created without files")
+    params = dict(params or {})
+    _form_forbidden_walk(params, FORM_EDGE)
+    extra = sorted(set(params) - FORM_KEYS)
+    if extra:
+        raise WriteRefused(f"write refused: key {extra[0]!r} is not allowed on {FORM_EDGE}")
+    for key in ("name", "questions", "locale"):
+        if key not in params:
+            raise WriteRefused(f"write refused: {key} is required")
+    checked = dict(params)
+    for key in FORM_JSON_KEYS & set(params):
+        checked[key] = _parsed(params[key], f"{FORM_EDGE}.{key}")
+    _form_forbidden_walk(checked, FORM_EDGE)
+    name = _form_text(checked["name"], "name")
+    if not re.search(FORM_NAME_RE, name) or len(name) > 200:
+        raise WriteRefused("write refused: the form name must end with the robot label ' · ACL <hash>'")
+    if not re.match(FORM_LOCALE_RE, str(checked["locale"])):
+        raise WriteRefused("write refused: locale must look like EN_US")
+    qs = checked["questions"]
+    if not (isinstance(qs, list) and 1 <= len(qs) <= FORM_MAX_QUESTIONS):
+        raise WriteRefused("write refused: questions must be a list of 1-%d" % FORM_MAX_QUESTIONS)
+    for i, q in enumerate(qs):
+        _check_form_question(q, i)
+    if "question_page_custom_headline" in checked:
+        _form_text(checked["question_page_custom_headline"], "question_page_custom_headline")
+    if "follow_up_action_url" in checked:
+        _form_url(checked["follow_up_action_url"], "follow_up_action_url")
+        if len(checked["follow_up_action_url"]) > FORM_MAX_TEXT:
+            raise WriteRefused("write refused: follow_up_action_url is too long")
+    for key in FORM_BOOL_KEYS & set(checked):
+        if not isinstance(checked[key], bool):
+            raise WriteRefused(f"write refused: {key} must be true or false")
+    if "privacy_policy" in checked:
+        pp = _form_keys(checked["privacy_policy"], "privacy_policy", "privacy_policy")
+        _form_url(pp.get("url"), "privacy_policy.url")
+        _form_text(pp.get("link_text"), "privacy_policy.link_text")
+    if "thank_you_page" in checked:
+        ty = _form_keys(checked["thank_you_page"], "thank_you_page", "thank_you_page")
+        _form_text(ty.get("title"), "thank_you_page.title")
+        if "body" in ty:
+            _form_text(ty["body"], "thank_you_page.body")
+        if "button_type" in ty and ty["button_type"] not in FORM_BUTTON_TYPES:
+            raise WriteRefused("write refused: thank_you_page.button_type is not allowed")
+        if "button_text" in ty:
+            _form_text(ty["button_text"], "thank_you_page.button_text")
+        if "website_url" in ty:
+            _form_url(ty["website_url"], "thank_you_page.website_url")
+    if "context_card" in checked:
+        cc = _form_keys(checked["context_card"], "context_card", "context_card")
+        _form_text(cc.get("title"), "context_card.title")
+        if cc.get("style") not in FORM_CARD_STYLES:
+            raise WriteRefused("write refused: context_card.style is not allowed")
+        content = cc.get("content")
+        if not (isinstance(content, list) and content and all(isinstance(x, str) and x.strip() for x in content)):
+            raise WriteRefused("write refused: context_card.content must be a list of texts")
+    return FORM_EDGE
 
 
 # ───────────────────── правка существующего объекта (ACL-1800) ─────────────────────

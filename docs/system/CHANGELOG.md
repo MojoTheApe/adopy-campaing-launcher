@@ -1,5 +1,27 @@
 # System history
 
+## ACL-2050 — API builder verifies Meta kept manual placements — 2026-10-21
+
+After the API builder creates a campaign, the post-create read-back now also reads the campaign's
+`advantage_state_info` and each ad set's `value_rules_applied`/`value_rule_set_id`. If Meta reports
+`advantage_placement_state=ENABLED`, or the ad set lost the manual platforms/positions or holds a different
+list, Check plan stops with a blocking English error (no auto-fix). A missing `advantage_state_info`
+is not blocking and is flagged `placement_state_verified=false` in the diagnostics. `advantage_audience_state` at campaign level and applied value
+rules are reported as warnings and in `readback.diagnostics` only. Read-only: no new write keys, no value
+rules or account-level exclusion writes. Review fix: the placements check compares platforms, positions and devices
+order-insensitively, so Meta returning the same lists in another order no longer stops Check plan; a genuinely
+different set or automatic placements still stop. A missing `advantage_placement_state` is now also shown as a
+warning ("placement mode was not verified"). Tests: `tests/test_acl2050_placement_readback.py`.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1050).
+
+## ACL-1626 — Account notes: damaged notes file is reported — 2026-10-21
+
+When the account notes file is damaged and set aside, the dashboard now logs a
+warning, returns the set-aside notice in the save response and shows a one-line
+banner on the account map. The backup name has millisecond resolution plus a
+collision counter, so two corruptions in the same moment keep both copies.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/626).
+
 ## ACL-1381 — Consistent Builder ad-text wording — 2026-10-18
 
 Complete the older text-label request while preserving ACL-1769's later numbered
@@ -18,16 +40,27 @@ producer names, triggers, policies and runtime behavior stay intact. This record
 project verification behavior; it does not establish a cost saving or delivery.
 [Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/971).
 
-## RPA: a profile's folder is found by its address - ACL-144
+## RPA: the first of two attach attempts is no longer logged as a verdict - ACL-1165
 
-- `browser._find_mlx_profile_dir` no longer runs `rglob` over every Chrome profile in `~/mlx/profiles`
-  (about 10 s per call, paid on every publish run). It looks up `profiles/{workspace}/{folder_id}/{profile_id}`
-  by name, also accepting `profiles/{workspace}/{profile_id}`, at most two levels under a workspace.
-- There is deliberately no recursive fallback: a profile outside the known layout, a missing root or an
-  unsafe id (empty, `.`, `..`, with a path separator) returns `None` (the callers already treat that as
-  "folder not found"), and only an exact folder name matches, so another profile's folder is never chosen.
-- The dashboard's `account_spend._mlx_profile_dir` now calls the same function instead of keeping a copy.
-- Not changed: `fb_api.profile.find_profile_dir` still scans recursively (separate path, separate task).
+- A failed strict attach attempt now logs "strict attempt found no own CDP port (not final: a lenient attach
+  may be tried next)"; a failed lenient attempt logs a neutral "lenient attempt found no CDP debug port either".
+  Both stay at INFO and no longer contain "attachment unavailable".
+- "attachment unavailable" is logged once, at WARNING, only when every path is exhausted: when DirectCDP
+  refuses to relaunch an open profile that has no CDP port. The message points to opening the profile in
+  the Multilogin Desktop app.
+- Log text only. The relaunch refusal, its error text and the `FB_RPA_ALLOW_UNPROXIED_RELAUNCH` gate are unchanged.
+
+## API publish: no review window when there is nothing to review — ACL-1784 — 2026-10-17
+
+With `fb_backend=api` a finished job keeps the Multilogin profile as a review
+window (holding a queue slot) only when Meta received writes and the readback
+did not confirm them all. A job that wrote nothing (plan or preflight error,
+stop before the first write) or whose every campaign is created and verified
+frees its slot; it stops the profile only if the job started it, never one the
+user opened. The job panel states in English why the window was or was not
+kept. If a profile the job started stays open anyway (Stop, the keep-open
+switch, a dry run, a failed stop), the slot stays taken and the panel says the
+profile is still open. The RPA path is unchanged.
 
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
@@ -38,6 +71,87 @@ installation/update/restart/recovery and data preservation, and emits the native
 receipt only on success. Existing same-candidate mechanism tests and employee
 update behavior are preserved; live rollout and business pilot are not asserted.
 Parent ACL-1923 retains actual activation and publication verification.
+
+## API backend: campaign name gets _2, _3 ... when a different campaign has that name - ACL-1902
+
+- Owner request: instead of blocking when a campaign with the same name already exists (for example a
+  PAUSED leftover of a failed run with other settings), pick a free name automatically.
+- The creator resolves the name before any write, in the publish run and in Check plan, with one function:
+  `NAME`, `NAME_2` ... `NAME_20`. Free -> use; ours and identical -> reuse (resume, no duplicate); ours
+  but different or same name without our tag -> next. Suffix goes on the full name (`X_2` -> `X_2_2`).
+  Ad set and ad names are unchanged; the tag is derived from the chosen name. All 20 taken -> stop
+  before any write with a clear message.
+- Check plan: the preflight rule `existing_diffs` is now a WARNING ("Will be published as 'NAME_2': ...")
+  when a suffix is chosen, an ERROR only when all 20 names are taken.
+- `campaign_name` in results, job progress and draft status stays the builder name (so dots and verdicts
+  keep matching); the chosen name is the new field `published_as`, shown next to the name in the plan and
+  job panels. Statistics and reports in Meta show `NAME_2`; each NAME_k has its own tag (creatives are
+  recreated, a video may be uploaded again); an older partial campaign stays PAUSED, untouched.
+- Safety: a full (200 rows) search is not trusted (exact lookup, else stop); `X_2` reuse requires matching ads; at most 6 own
+  candidates are diffed; names over 400 characters stop (conservative guard). Removed the dead "A publish would stop" block.
+- Reads: one campaigns search on the base name for all candidates, plus the previous diff reads per own
+  candidate. No extra writes.
+
+## API backend: no time limit on file uploads, upload progress on the dashboard - ACL-1899
+
+- Bug (live 2026-10-14): a video upload hit the generic 120 s write timeout, Python stopped waiting
+  (`call_unknown`), one readback 5 s later found nothing and the run stopped, while the page's request
+  could still reach Meta. Owner decision: no time limit for file uploads.
+- File writes (`advideos`, `adimages`) now run as a job in the page helper (`XMLHttpRequest`); Python polls it ~once per second with a short per-poll CDP timeout and no overall
+  deadline. Network, HTTP and Meta errors, a lost page, or Stop end the wait. Writes without a file are
+  unchanged (short timeout). The write policy and the size + SHA-256 check before sending are unchanged.
+- Dashboard: the job panel shows `ad 1: uploading video (180 MB), 1m 20s` (images too), at most once per
+  second. There is no byte progress: a listener on `xhr.upload` makes the browser send a CORS preflight,
+  Graph answers it with `Access-Control-Allow-Origin: *` and no `Allow-Credentials`, and the credentialed
+  request is blocked (live failure on TEST9095: `network`, body never sent). So the helper registers no
+  upload listener; a real percentage comes with chunked upload (ACL-891).
+- Stop during an upload aborts the request in the page, reads back once and stops; a re-run reuses an
+  already uploaded video and never uploads twice.
+- After an unknown upload result the readback is repeated (6 reads with waits of 5, 10, 20, 30, 30, 30 s,
+  about 2 minutes), counted in the per-campaign call budget; other writes keep one readback.
+- Redirects: the old `fetch` used `redirect: 'error'`; XHR follows redirects. The helper aborts the
+  request as soon as the response URL differs from the requested one and reports `redirected`, which
+  counts as an unknown result (reconcile), never as not sent. Residual risk: the browser may already have
+  re-sent the body to the redirect target before the check. Graph hosts do not redirect.
+- Review fixes: up to 3 consecutive poll timeouts are tolerated (never a re-send); Stop during the
+  readback ends the run as cancelled and keeps the write marked unreconciled; Stop during an upload reads
+  back twice (5 s, 20 s) and tells the buyer to wait a few minutes before publishing again; repeated
+  readbacks read at most 3 pages.
+- Stacked on ACL-1776 (depends on the ACL-1761...1776 stack). Chunked upload for files over 200 MB
+  (ACL-891) can reuse the job / progress plumbing.
+
+## Builder: Instant Forms - the robot creates a form from a template (API backend) - ACL-1776
+
+- Owner decision 2026-10-12: the robot MAY create an Instant Form on a Page from a saved template. It
+  never accepts the Lead Ads terms (`tos_accepted` is not allowed anywhere, in either policy layer). A
+  Page that has not accepted the terms stops the campaign before any write with a text that tells the
+  human to accept them in Meta.
+- Forms library: templates live in `form_templates.json` in the machine config folder
+  (`get_local_config_dir()`), not in git. A template has a name, headline, optional intro, contact fields
+  (name / email / phone), up to 5 custom questions (short answer or multiple choice), an https privacy
+  policy URL, thank-you text with an optional https website link, and a locale. The same checks run on
+  the page and on the server.
+- Builder: with Instant Form every ad has "Use existing form" (ACL-1775) or "Create from template" with
+  a "Create and save form" panel (Save and select / Back to ad). Saving only stores the template on the
+  computer. With `ACL_FB_BACKEND=rpa` the template path is disabled with "API backend only"; a stored
+  choice is refused out loud.
+- Creation: `POST /{page_id}/leadgen_forms` runs in its own narrow write-policy chain
+  (`write_policy.check_form_create`, mirrored in the page helper): only that edge on the plan's Page; only
+  the keys name, questions, privacy_policy, thank_you_page, context_card, question_page_custom_headline,
+  locale, follow_up_action_url; nested keys and values are checked; no terms, no DELETE, no other Page
+  edge, no files.
+- Idempotent: the form name is `<template> · ACL <6-hex content hash>`. The Page's forms are searched by
+  the exact name first; an ACTIVE match is reused (also by another campaign), an archived one stops with
+  a clear text. The write happens once, right before the creative that needs the form. A timeout is
+  reconciled by reading the forms list; nothing found means a stop and no blind retry. The created form
+  is read back: ACTIVE, on this Page, questions match.
+- Check plan makes zero writes and says "form will be created: <name>" (or "form found on the Page,
+  reused"). Pre-flight audit: privacy URL present and https, at least one contact field, Lead Ads terms
+  accepted (when readable).
+- Open: whether the captured Ads Manager token may create forms on a Page is only known from a live
+  attempt (`pages_manage_ads`). `/me/permissions` is read as a hint (warning, not a block); a Meta refusal
+  becomes a clear English stop that points to "Use existing form". The robot never asks for or stores
+  another token.
 
 ## Builder: pre-flight audit card that blocks Publish - ACL-1819
 
@@ -176,6 +290,14 @@ a clear refusal.
   filters, so later tests see their own logging behavior. Production redaction and
   the routing-log assertions remain unchanged.
 
+## Countries: a vertical activity line replaces the dot — ACL-1838
+
+- Active country rows show a static 2 px line in the existing accent color at the
+  left, following the owner's selected design option 3. Inactive rows have no marker.
+- The marker occupies no label space and has no separate pointer target. The existing
+  activity predicate, expanded-country highlight, country actions and FTD counts
+  retain their behavior.
+
 ## Media wizard: Crop -> Media loop no longer ends in a false "stuck" stop - ACL-1736
 
 Run 445fa5460ce6 (Facebook_5265, ad 2, library pick): Next on Crop led back to Media, then
@@ -190,6 +312,20 @@ Crop where Next hung and closed the wizard with Close, leaving the ad without me
   ends in the honest `crop_wizard_stuck`, with the exit reason `looped_back`.
 - The wizard telemetry row gets `looped_back_to` (first earlier step the wizard went back to, e.g.
   `Media`), also inside `exit`. No new clicks: only the existing Next on a Crop that is on screen.
+
+## Safe operation context for Graph read failures — ACL-1886
+
+- Two Plan check permission errors showed the same Graph10/OAuthException/HTTP400
+  diagnostics without identifying the failed read. An offline replay reproduced
+  that loss across search, campaign, promoted-page, pixel and form requests.
+- GraphClient now adds only the fixed GET method, a closed operation category and
+  an optional allowlisted search subtype to its existing error details/text.
+  Unknown paths/types cannot echo URLs, queries, names, IDs or request parameters.
+- Existing caller error handling, token/rate/policy stops and request counts stay
+  unchanged. The anonymized error fixture and public-client tests cover safe
+  context and pagination. This diagnostic fix does not explain or resolve the
+  live permission denial, grant access or establish deployment to a dashboard.
+
 ## Window recovery enlarges a window restored below the editor minimum — ACL-1727
 
 - Run 4db2039f760d (Facebook_9403A): a minimised window was restored to its normal size

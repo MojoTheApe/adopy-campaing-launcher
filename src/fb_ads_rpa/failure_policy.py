@@ -42,6 +42,11 @@ WARNING = "warning"
 # Names are the base part, before any ":detail" suffix. Add a new step here in
 # the same commit that starts producing it, otherwise it blocks by default.
 POLICY: dict[str, tuple[str, str]] = {
+    "page_identity": (
+        BLOCKING,
+        "the requested Facebook Page could not be selected and verified in Identity; "
+        "the draft must not be published. Check Identity in Ads Manager before continuing",
+    ),
     "account_blocked": (
         BLOCKING,
         "Meta has restricted this ad account (\"Verification required to advertise\", "
@@ -79,6 +84,13 @@ POLICY: dict[str, tuple[str, str]] = {
         "robot could not reopen it with automation - either the graceful Multilogin stop did "
         "not close the window, or reopening is switched off on this computer; nothing was "
         "killed and no draft was created - " + _profile.MESSAGES[_profile.OPEN_BY_HAND],
+    ),
+    # ACL-1401: лаунчер Multilogin отказал в соединении при запуске профиля.
+    _profile.MLX_NOT_RUNNING: (
+        BLOCKING,
+        "the Multilogin app was not running on this computer (its local launcher refused "
+        "the connection), so the profile could not be opened and no draft was created - "
+        + _profile.MESSAGES[_profile.MLX_NOT_RUNNING],
     ),
     _profile.RESTART_FAILED: (
         BLOCKING,
@@ -304,6 +316,11 @@ PER_AD_POLICY: dict[str, tuple[str, str]] = {
 # of the long `reason()` paragraph. A test fails if a step of POLICY or
 # PER_AD_POLICY has no entry here, so add both in the same commit.
 GUIDE: dict[str, tuple[str, str, str]] = {
+    "page_identity": (
+        "Facebook Page could not be set in Identity",
+        "The Page chosen in the builder could not be selected and verified, so the draft was not published.",
+        "Check the Identity section in Ads Manager, refresh Pages in the builder and publish again.",
+    ),
     "account_blocked": (
         "Ad account restricted by Meta",
         "Meta asks for verification or has disabled this ad account, so nothing more was built.",
@@ -334,6 +351,11 @@ GUIDE: dict[str, tuple[str, str, str]] = {
         "The hand-opened window could not be reopened with automation (Multilogin did not "
         "close it, or reopening is switched off on this computer), so no draft was created.",
         "Close the profile window so Multilogin saves the session, then publish again.",
+    ),
+    _profile.MLX_NOT_RUNNING: (
+        "Multilogin is not running",
+        "The Multilogin app on this computer did not answer, so no profile was opened and no draft was created.",
+        "Start the Multilogin app, then publish again.",
     ),
     _profile.RESTART_FAILED: (
         "Profile restart failed",
