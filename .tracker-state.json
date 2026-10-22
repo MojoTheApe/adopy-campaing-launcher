@@ -6499,6 +6499,31 @@
         "issue_scopes": {
           "1090": "45596e0052dc17bd51275590b235b89d3541549ec5f260b39e5c6b0cad67bf28"
         }
+      },
+      "1097": {
+        "kind": "independent-review",
+        "implementer": "Coordinator-I1021A",
+        "reviewer": "Reviewer-AB1022097",
+        "head_sha": "0e1458fddf5b93cc8215c8c1967b7be0de2ea2c1",
+        "base_sha": "203f8a337b085e421ee66c00589a7401a384b1a3",
+        "tree_sha": "a26813f942ba9831af44f1f9388b6530ade37f42",
+        "verdict": "approved",
+        "report": "Batch PR 1097 (ACL-2090): head tree a26813f9 equals source PR 1093 head e31f9c32 tree; diff vs main 203f8a33 is exactly 5 files (changelog fragment ACL-2090.md, src/creative_variant.py, src/web/templates/report.html, tests/test_acl1819_preflight.py, tests/test_creative_variants.py); base is current main, ahead 4 behind 0; all 16 CI checks green on the batch head incl. tracker-link, linux 3.11/3.13 x3, windows, installer.",
+        "execution_lane": "ba1552f4105c4b73b9342fc09fa070d1",
+        "review_session": "run_ab1022_097",
+        "batch_id": "1882d0ce0aa041b0ba132107a6521dc5",
+        "source_heads": [
+          "e31f9c32687915f8d92f7dd7af7566a503973619"
+        ],
+        "main_sha": "203f8a337b085e421ee66c00589a7401a384b1a3",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          1090
+        ],
+        "recorded_at": "2026-10-22T10:54:39+00:00",
+        "issue_scopes": {
+          "1090": "45596e0052dc17bd51275590b235b89d3541549ec5f260b39e5c6b0cad67bf28"
+        }
       }
     },
     "stage": {
