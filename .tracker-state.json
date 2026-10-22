@@ -49395,9 +49395,11 @@
         "worktree": "C:\\acl-int-w1839",
         "id": "cc1e795aae854220a6851f6191116a1a",
         "issue": 839,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-22T07:17:29+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 843,
+        "report": "ACL-1839 round 3 (PR #843): pure merge of main 515689dee625bdae3241e2ab4064fd18fa5dac53, no content change, no conflicts.\nOld head 16a5bd6d; new head 5a6fafb9fe7045c5bbecccbdd48a6127c48c5c29. Diff vs main unchanged (fragment, 2 templates, 1 test). fold_changelog --check valid.\nCI: linux 1/2/3, windows, process, ACL verification pass; tracker-link failed only on task state before handoff, rerun after."
       }
     },
     "tasks": {
