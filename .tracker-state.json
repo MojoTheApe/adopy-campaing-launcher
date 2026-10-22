@@ -131854,7 +131854,9 @@
         "session": "run_as1022_054",
         "coordinator": "Coordinator-F1021A",
         "started_at": "2026-10-22T12:23:43+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "Content reviewed OK; merge current main only, no content changes requested.\n\nReviewed head 055d69fb against Issue 1054: third team library kind form_templates (sha-checked transact, soft delete + Recently deleted + Restore, local read copy, local-file fallback when the library is not configured), explicit migration of machine-local templates (skips duplicates by name/content, reports skips, keeps the local file), Forms tab (list, New/Edit/Duplicate/Delete, edit dialog states that existing Page forms do not change), builder picker reads the same list, English UI/errors. Invalid entries are kept, never dropped. Touched tests pass on the head: test_acl2054_forms_library, test_acl2054_forms_tab, test_acl1776_create_forms = 157 passed. PR CI green on this head.\nBlocker is only the base: the branch is 167 commits behind main and GitHub reports CONFLICTING. A trial merge of current main (99e53504) conflicts in docs/system/CHANGELOG.md, src/fb_api/form_templates.py and src/web/templates/report.html. form_templates.py is the substantive one: keep both main's changes and the library/restore/duplicate/migrate code; after resolving re-run the three test files above. Re-review the resolved form_templates.py and report.html hunks after the merge.",
+        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
