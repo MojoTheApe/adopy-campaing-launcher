@@ -463,8 +463,28 @@ def _warm_session(account: str, act: str, key: str, profile_id: str, commands: b
         lease.release(stop)
 
 
+def _touch_kept_window(account: str) -> None:
+    """ACL-2113: окно аккаунта использовали — оставленное «для удобства» окно не простаивает."""
+    try:
+        from src.web import publish_jobs
+
+        publish_jobs.touch_kept(account)
+    except Exception:
+        pass
+
+
 @contextmanager
 def _session(account: str, *, commands: bool = False):
+    """Сессия чтения; по её окончании срок простоя оставленного окна идёт с нуля (ACL-2113)."""
+    try:
+        with _open_session(account, commands=commands) as sess:
+            yield sess
+    finally:
+        _touch_kept_window(account)
+
+
+@contextmanager
+def _open_session(account: str, *, commands: bool = False):
     """Профиль → вкладка → клиент. `commands=True` (ACL-1800) — клиент с правом
     ТОЛЬКО на правку существующих объектов (статус/бюджет/ставка)."""
     entry = _as._entry_for(account)
