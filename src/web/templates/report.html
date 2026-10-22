@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" href="/favicon.ico?v=acm" sizes="32x32">
   <link rel="icon" href="/static/logo.svg" type="image/svg+xml">
   {#- ACL-1267: вкладку версии владельца не спутать со сборкой менеджеров. #}
@@ -2128,7 +2129,7 @@
 
     /* Состояние Multilogin внутри формы подключения: строка всегда, поля
        входа — только когда токена нет (ACL-1130). */
-    .amap-ml { flex-basis: 100%; margin-top: 0.35rem; font-size: var(--adopy-text-sm); color: var(--muted); }
+    .amap-ml { flex-basis: 100%; min-width: 0; margin-top: 0.35rem; font-size: var(--adopy-text-sm); color: var(--muted); overflow-wrap: anywhere; }
     .amap-ml-line b { font-weight: 600; }
     .amap-ml-ok { color: var(--good); }
     .amap-ml-off { color: var(--warn, var(--danger)); }
@@ -2394,7 +2395,7 @@
     .amap-add select, .amap-add input {
       font: inherit; font-size: var(--adopy-text-table); padding: 0.18rem 0.35rem;
       border: 1px solid var(--field-border); border-radius: var(--radius-sm);
-      background: var(--field-bg); color: var(--text); max-width: 15rem;
+      background: var(--field-bg); color: var(--text); min-width: 0; max-width: min(15rem, 100%); box-sizing: border-box;
     }
     .amap-msg { font-size: var(--adopy-text-sm); color: var(--muted); margin-left: 0.3rem; }
     .amap-msg.bad { color: var(--bad); }
@@ -2402,6 +2403,7 @@
       flex-basis: 100%; margin-top: 0.4rem; display: flex;
       flex-direction: column; gap: 0.2rem;
     }
+    .amap-hits[hidden] { display: none; }
     .amap-hit {
       display: flex; align-items: center; gap: 0.5rem;
       font-size: var(--adopy-text-table); padding: 0.25rem 0.4rem;
@@ -6289,8 +6291,9 @@ window.cbPreflight = (function () {
   }
 
   /* Имя объявления, как его строит сервер (AdDraft.ad_name): номер креатива из имени
-     файла без расширения (четыре цифры, не размер кадра), вариант-число в начале имени,
-     затем « - текст». Одно и то же имя у «2046 1.jpg» и «2046 1.mp4». */
+     файла без расширения (четыре цифры, не размер кадра), вариант-число в начале
+     или в конце имени (ACL-2090), затем « - текст». Одно и то же имя у «2046 1.jpg»
+     и «2046 1.mp4». */
   function creativeNumber(file) {
     var stem = String(file || '').split(/[\\/]/).pop();
     if (stem.indexOf('.') !== -1) stem = stem.slice(0, stem.lastIndexOf('.'));
@@ -6298,9 +6301,18 @@ window.cbPreflight = (function () {
     var m = /(?<!\d)(\d{4})(?!\d)/.exec(stem);
     return m ? m[1] : '';
   }
+  /* Как src/creative_variant.file_variant: ведущее число, иначе хвостовое (ACL-2090:
+     «2175_ARM22.png» → 22); размер кадра и соотношение сторон в конце — не вариант. */
+  var VARIANT_TAIL_NOISE = /(?:\d{3,4}\s*[x\u0445\xd7]\s*\d{3,4}|(?<!\d)\d{1,2}\s*[x\u0445\xd7:]\s*\d{1,2})[\s_\-]*$/i;
   function fileVariant(file) {
     var base = String(file || '').split(/[\\/]/).pop().trim();
     var m = /^(\d{1,2})(?=[_\-\s])/.exec(base);
+    if (m) return String(parseInt(m[1], 10));
+    var tail = base.indexOf('.') !== -1 ? base.slice(0, base.lastIndexOf('.')) : base;
+    for (var cut = tail.replace(VARIANT_TAIL_NOISE, ''); cut !== tail; cut = tail.replace(VARIANT_TAIL_NOISE, '')) {
+      tail = cut;
+    }
+    m = /(?<!\d)(\d{1,2})$/.exec(tail.replace(/[\s_\-]+$/, ''));
     return m ? String(parseInt(m[1], 10)) : '';
   }
   function adName(file, copy) {
