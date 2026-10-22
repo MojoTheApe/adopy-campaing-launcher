@@ -50380,20 +50380,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
-      },
-      "1090": {
-        "actor": "Worker-B71BCDF8",
-        "session": "b71bcdf8-fe5f-4ed1-b5b2-3d7a47a5be43",
-        "coordinator": "Coordinator-I1021A",
-        "branch": "work/acl-2090-ad-name-trailing-variant",
-        "worktree": "C:\\acl-2090",
-        "id": "cea6ef2c320b435bb155b6fcb9a9342c",
-        "issue": 1090,
-        "state": "handoff",
-        "started_at": "2026-10-22T09:13:34+00:00",
-        "from_status": "status:todo",
-        "pr": 1093,
-        "report": "\ufeff# ACL-2090 handoff\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1093 \u00e2\u20ac\u201d branch `work/acl-2090-ad-name-trailing-variant`, two commits 12779cbe + 9e84133c (escape fix after CI) on main 7224a34c.\n\nDone (all Specifications items):\n1. Trailing variant: `src/creative_variant.file_variant` falls back to a trailing 1\u00e2\u20ac\u201c2 digit number (no digit before it) after stripping frame sizes (`1080x1920`, Cyrillic \u00d1\u2026) and aspect ratios (`1x1`, `4x5`, `9x16`, `9:16`) at the end; a leading variant keeps priority.\n2. Server and builder JS identical: `fileVariant` in `src/web/templates/report.html`; parity table in `tests/test_acl1819_preflight.py` (`--names` node harness) extended.\n3. Reports: `split_ad_title_variant` parses `2175 22 - Text` \u00e2\u20ac\u201d round-trip test. `apply_backfill` uses the same function (intended). Published names are not renamed.\n4. Same file + same text still gives the `ad_names_unique` error (jpg/mp4 duplicate test kept; its expected name is now `2046 1 - Text A`).\n5. Tests: `tests/test_creative_variants.py` (trailing/leading/negative cases, B97 trio \u00e2\u2020\u2019 three names). Affected files locally: 150 passed. Full suite: CI.\n\nChangelog: `docs/system/changelog.d/ACL-2090.md`.\nLive: cherry-picked onto TEST9095z (owner's 9095) for the B97 check; served page contains the change."
       }
     },
     "tasks": {
@@ -59919,9 +59905,25 @@
             "session": "b71bcdf8-fe5f-4ed1-b5b2-3d7a47a5be43"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-B71BCDF8",
-        "coordinator": "Coordinator-I1021A"
+        "coordinator": "Coordinator-I1021A",
+        "handoff": {
+          "actor": "Worker-B71BCDF8",
+          "session": "b71bcdf8-fe5f-4ed1-b5b2-3d7a47a5be43",
+          "coordinator": "Coordinator-I1021A",
+          "branch": "work/acl-2090-ad-name-trailing-variant",
+          "worktree": "C:\\acl-2090",
+          "id": "cea6ef2c320b435bb155b6fcb9a9342c",
+          "issue": 1090,
+          "state": "handoff",
+          "started_at": "2026-10-22T09:13:34+00:00",
+          "from_status": "status:todo",
+          "pr": 1093,
+          "report": "\ufeff# ACL-2090 handoff\n\nPR: https://github.com/MojoTheApe/adopy-campaing-launcher/pull/1093 \u00e2\u20ac\u201d branch `work/acl-2090-ad-name-trailing-variant`, two commits 12779cbe + 9e84133c (escape fix after CI) on main 7224a34c.\n\nDone (all Specifications items):\n1. Trailing variant: `src/creative_variant.file_variant` falls back to a trailing 1\u00e2\u20ac\u201c2 digit number (no digit before it) after stripping frame sizes (`1080x1920`, Cyrillic \u00d1\u2026) and aspect ratios (`1x1`, `4x5`, `9x16`, `9:16`) at the end; a leading variant keeps priority.\n2. Server and builder JS identical: `fileVariant` in `src/web/templates/report.html`; parity table in `tests/test_acl1819_preflight.py` (`--names` node harness) extended.\n3. Reports: `split_ad_title_variant` parses `2175 22 - Text` \u00e2\u20ac\u201d round-trip test. `apply_backfill` uses the same function (intended). Published names are not renamed.\n4. Same file + same text still gives the `ad_names_unique` error (jpg/mp4 duplicate test kept; its expected name is now `2046 1 - Text A`).\n5. Tests: `tests/test_creative_variants.py` (trailing/leading/negative cases, B97 trio \u00e2\u2020\u2019 three names). Affected files locally: 150 passed. Full suite: CI.\n\nChangelog: `docs/system/changelog.d/ACL-2090.md`.\nLive: cherry-picked onto TEST9095z (owner's 9095) for the B97 check; served page contains the change."
+        },
+        "pr": 1093,
+        "queued_at": "2026-10-22T09:39:35+00:00"
       }
     },
     "actors": {
@@ -66183,7 +66185,8 @@
     "review_queue": [
       1054,
       710,
-      1069
+      1069,
+      1090
     ],
     "review": {
       "id": "b20068595ef74302a7522208f5958b70",
@@ -118014,6 +118017,13 @@
           "state": "reviewing",
           "started_at": "2026-10-22T09:23:00+00:00"
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-22T09:39:35+00:00",
+        "issue": 1090,
+        "pr": 1093,
+        "actor": "Worker-B71BCDF8"
       }
     ],
     "policy": {
