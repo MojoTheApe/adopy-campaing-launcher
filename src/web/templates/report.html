@@ -7507,6 +7507,7 @@ window.cbTree = (function () {
           : x.stage === 'queued'
             ? (q.reason === 'profile' ? 'queued — waiting for its Multilogin profile'
                : q.state === 'waiting_review' ? aclEscHtml(cbReviewWait(q)) + cbReviewRelease(q)
+               : q.state === 'waiting_idle' ? aclEscHtml(cbIdleWait(q))
                : q.state === 'waiting_memory' ? 'queued — waiting for memory'
                : 'queued — waiting for a free slot'
                  + (q.ahead === undefined ? '' : ' (' + (q.ahead || 0) + ' ahead)'))
@@ -8193,6 +8194,9 @@ window.cbBuild = (function () {
     var gb = function (mb) { return (Math.max(0, Number(mb) || 0) / 1024).toFixed(1); };
     if (q.hold === 'review_windows') {
       return { state: 'build-wait', sign: '', why: cbReviewWait(q) };
+    }
+    if (q.hold === 'idle_windows') {
+      return { state: 'build-wait', sign: '', why: cbIdleWait(q) };
     }
     if ((q.hold === 'memory_low' || q.hold === 'below_reserve') && q.available_mb != null && q.profile_mb) {
       var reserve = Number(q.reserve_mb) || 0;
@@ -15487,7 +15491,7 @@ function cbPlanHtml(data) {
       + (r.error ? 'var(--bad)' : 'var(--good)') + '">';
     h += '<div><strong>' + aclEscHtml(r.campaign_name || '?') + '</strong>'
       + (r.published_as ? ' → published as <strong>' + aclEscHtml(r.published_as) + '</strong>' : '')
-      + (s ? ' · PAUSED · ' + aclEscHtml(cbPlanMoney(s))
+      + (s ? ' · Campaign PAUSED · ad sets and ads active, start when you turn the campaign on · ' + aclEscHtml(cbPlanMoney(s))
            + (s.existing ? ' · <em>already exists; a publish would reuse it</em>' : '') : '')
       + '</div>';
     if (r.error) h += '<div class="cbd-plan-err" style="color:var(--bad)">✕ ' + aclEscHtml(r.error) + '</div>';
@@ -15682,6 +15686,13 @@ function cbReviewWait(q) {
   if (names.length) return 'waiting: review windows still open for ' + names.join(', ') + ' — close them to continue';
   var n = Math.max(1, parseInt(q && q.kept, 10) || 1);
   return 'waiting: ' + n + ' review window' + (n === 1 ? ' is' : 's are') + ' still open — close them to continue';
+}
+/* ACL-2113: окна, оставленные для удобства, уступают место сами, простояв N минут. */
+function cbIdleWait(q) {
+  var names = (q && q.convenience_accounts) || [];
+  var mins = Math.max(1, Math.round((Number(q && q.idle_close_s) || 600) / 60));
+  return 'waiting: ' + (names.length ? names.join(', ') + (names.length === 1 ? ' is' : ' are') : 'kept windows are')
+    + ' kept open — a window that has been idle for ' + mins + ' min closes by itself to make room';
 }
 /* «Release» у каждого оставленного окна: снять место, не закрывая окно. */
 function cbReviewRelease(q) {
@@ -16482,7 +16493,7 @@ function cbApiMode() { return typeof window !== 'undefined' && window.ACL_FB_BAC
 function cbPublishTarget() { return cbApiMode() ? 'PAUSED campaigns' : 'drafts'; }
 function cbPublishMode() {
   return cbApiMode()
-    ? 'PAUSED — created through the Graph API; nothing is activated, a person turns it on in Ads Manager'
+    ? 'Campaign PAUSED — ad sets and ads are active and start when you turn the campaign on (created through the Graph API)'
     : 'Draft — the RPA leaves a draft in Ads Manager and never clicks Publish in Facebook';
 }
 
@@ -16740,7 +16751,7 @@ function cbApiReadbackHtml(r) {
       + aclEscHtml(JSON.stringify(r.plan, null, 2)) + '</pre></details>';
   }
   if (r.status === 'PAUSED') {
-    h += '<span style="font-weight:600">Status: PAUSED</span> — nothing was activated. ';
+    h += '<span style="font-weight:600">Campaign PAUSED</span> — ad sets and ads are active and start when you turn the campaign on. ';
   }
   var counts = function(o) {
     return Object.keys(o || {}).map(function(k) { return o[k] + ' ' + k; }).join(', ');
@@ -16844,13 +16855,14 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
           : queue.reason === 'profile'
           ? 'queued — waiting for the Multilogin profile (another run is using it)'
           : queue.state === 'waiting_review' ? aclEscHtml(cbReviewWait(queue)) + cbReviewRelease(queue)
+          : queue.state === 'waiting_idle' ? aclEscHtml(cbIdleWait(queue))
           : queue.state === 'waiting_memory' ? 'queued — waiting for memory'
           : 'queued — waiting for a free slot'
             + (queue.ahead === undefined ? '' : ' (' + (queue.ahead || 0) + ' ahead)'))
       : (job.status === 'done'
         ? (jobPublishable
           ? (job.fb_backend === 'api'
-            ? 'created PAUSED via the API — readback matches; a person activates it in Ads Manager'
+            ? 'created via the API — readback matches; campaign PAUSED, ad sets and ads active, they start when you turn the campaign on'
             : 'draft ready — the campaign is in Ads Manager, Publish was not clicked')
           : (job.fb_backend === 'api' && job.dry_run && !hasFatal
             ? 'dry run via the API — nothing was created; see the plan below'

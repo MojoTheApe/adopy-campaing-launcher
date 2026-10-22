@@ -258,6 +258,9 @@ class ApiPublisher:
         self._resolver: TargetingResolver | None = None
         self._entry = None
         self._opened = None
+        #: ACL-2113: окно открыто прошлым заданием и оставлено (мы его взяли без перезапуска) —
+        #: для решений «закрыть/держать» оно наше, как поднятое этим заданием.
+        self.inherited_profile = False
         self.account_label = ""
         self.act = ""
         self.stop: GraphStop | None = None
@@ -272,7 +275,7 @@ class ApiPublisher:
     @property
     def started_profile(self) -> bool:
         """Профиль поднят самим заданием (не пользователем) — ACL-1784."""
-        return bool(getattr(self._opened, "started_now", False))
+        return bool(getattr(self._opened, "started_now", False)) or bool(self.inherited_profile)
 
     @property
     def writes(self) -> int:
@@ -530,10 +533,17 @@ class ApiPublisher:
         if self.dry_run:
             clean = False   # после пробного запуска окно остаётся: настоящий запуск следом
         opened = self._opened
-        if not (opened is not None and getattr(opened, "started_now", False)):
+        ours = (opened is not None and getattr(opened, "started_now", False)) or (
+            opened is not None and self.inherited_profile)
+        if not ours:
             _record("profile_closed_after_job", None, diag={"note": "not_started_by_job"})
             return ""
-        if not clean or other_job_waits or self.cancelled() or _keep_profiles_open():
+        if clean and not other_job_waits and not self.cancelled() and _keep_profiles_open():
+            # ACL-2113: чистая публикация — окно остаётся для байера (его закроет простой
+            # при нехватке места/памяти, либо кнопка Close profile).
+            _record("profile_closed_after_job", None, diag={"note": "kept_convenience"})
+            return "kept"
+        if not clean or other_job_waits or self.cancelled():
             _record("profile_closed_after_job", None, diag={"note": "kept"})
             return ""
         from src.fb_api import stop_log as _stop_log
