@@ -60505,7 +60505,7 @@
             "session": "run_w1022_2086"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1022086",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -60524,7 +60524,8 @@
         },
         "pr": 1088,
         "queued_at": "2026-10-22T11:18:31+00:00",
-        "review_report": "Content reviewed OK on b3203300: merge main 7224a34c only.\n\nRoot cause is real: repaintSoon (120 ms debounce, triggered by the form MutationObserver on cb-slot add/remove) calls paint(), which rebuilds the drawer body via body.innerHTML; box(...).evaluate resolved the node and clicked it in a separate step, so a click on a detached checkbox fires no change. The fix (click_box_now: lookup + b.click() in one page task, no focus move) is genuine; assertions are unchanged, no sleeps/skip/xfail, tests and changelog only. Tick state lives in slot._cbdPick, so a later repaint does not lose it. Local: 30/30 passed on the head (the original did not reproduce locally either, 0/30, so the race is shown by code reading, not by reproduction). Minor nit, not blocking: second import from test_builder_multi_publish_browser could be merged into the existing import. Product note: a real mouse press/release straddling a repaint within 120 ms after a structural change could lose a click; theoretical, not a regression, no finding."
+        "review_report": "Content reviewed OK on b3203300: merge main 7224a34c only.\n\nRoot cause is real: repaintSoon (120 ms debounce, triggered by the form MutationObserver on cb-slot add/remove) calls paint(), which rebuilds the drawer body via body.innerHTML; box(...).evaluate resolved the node and clicked it in a separate step, so a click on a detached checkbox fires no change. The fix (click_box_now: lookup + b.click() in one page task, no focus move) is genuine; assertions are unchanged, no sleeps/skip/xfail, tests and changelog only. Tick state lives in slot._cbdPick, so a later repaint does not lose it. Local: 30/30 passed on the head (the original did not reproduce locally either, 0/30, so the race is shown by code reading, not by reproduction). Minor nit, not blocking: second import from test_builder_multi_publish_browser could be merged into the existing import. Product note: a real mouse press/release straddling a repaint within 120 ms after a structural change could lose a click; theoretical, not a regression, no finding.",
+        "reviewer": "Reviewer-AH1022086B"
       },
       "1090": {
         "implementers": [
@@ -63893,6 +63894,10 @@
       "Reviewer-AS1022095B": {
         "session": "run_as1022_095b",
         "role": "Reviewer"
+      },
+      "Reviewer-AH1022086B": {
+        "session": "run_ah1022_086b",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -66936,7 +66941,6 @@
       1054,
       710,
       1069,
-      1086,
       1099
     ],
     "review": null,
@@ -119352,6 +119356,13 @@
         "pr": 1096,
         "lane": "e975d59246974915839902de5737b603",
         "actor": "Reviewer-AS1022095B"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-22T12:13:06+00:00",
+        "pr": 1088,
+        "lane": "eaf3c821ec9444e38fc25aa9efd73359",
+        "actor": "Reviewer-AH1022086B"
       }
     ],
     "policy": {
@@ -131563,6 +131574,18 @@
         "session": "run_as1022_095b",
         "coordinator": "Coordinator-I1021A",
         "started_at": "2026-10-22T12:09:54+00:00",
+        "state": "reviewing"
+      },
+      "1088": {
+        "id": "eaf3c821ec9444e38fc25aa9efd73359",
+        "pr": 1088,
+        "issues": [
+          1086
+        ],
+        "actor": "Reviewer-AH1022086B",
+        "session": "run_ah1022_086b",
+        "coordinator": "Coordinator-I1021A",
+        "started_at": "2026-10-22T12:13:06+00:00",
         "state": "reviewing"
       }
     },
