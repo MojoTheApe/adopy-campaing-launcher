@@ -1844,9 +1844,9 @@ async def acl_update_apply() -> JSONResponse:
         return JSONResponse(
             {
                 "ok": False,
-                "error": "ACM was not started by its launcher, so nothing would "
-                         "bring it back. Start it from the desktop shortcut and "
-                         "try again.",
+                "error": "ACM was not started from its desktop shortcut, so nothing "
+                         "would bring it back. Start it from the desktop shortcut "
+                         "and try again.",
             },
             status_code=409,
         )
@@ -4140,7 +4140,7 @@ async def account_spend_turn_off(request: Request) -> JSONResponse:
             requester=(os.environ.get("MY_CM_NAME") or "").strip(),
         )
     except Exception:
-        return JSONResponse({"ok": False, "error": "Could not reach the account. Check the launcher window."}, status_code=503)
+        return JSONResponse({"ok": False, "error": "Could not reach the account. Check the Adopy Campaign Manager window."}, status_code=503)
     return JSONResponse({"ok": True, "result": result.to_dict()})
 
 
