@@ -46514,6 +46514,70 @@
           }
         },
         "recorded_at": "2026-10-22T03:05:09+00:00"
+      },
+      "a7a7b69b26194a16b7f5efcef6f8e068": {
+        "evidence": {
+          "kind": "post-main-acceptance",
+          "report": "Retained independent integration Reviewer-AA1022B83/run_aa1022_b83 verified the four unchecked acceptance lines of Issue #840 (ACL-1840) on merged main 3bc8d9739a82ce8db0ddb67a832ea159bf40ed36 (merge of PR1083 head c2f699eb, tree b95f7997) in a fresh detached worktree. Issues #1052 (ACL-2052), #1053 (ACL-2053) and #19 (ACL-106) have no unchecked lines; fold_changelog.py --check on this tree reports valid: ACL-106, ACL-1840, ACL-2037, ACL-2052, ACL-2053. Combined PR CI on head c2f699eb (tree b95f7997), attempt 1, no reruns, no reused jobs: CI 39718111722 success incl. linux tests 3.11 shards 1-3, 3.13 shards 1-3 and windows tests 3.13; Windows installer 39718111759 (build/install/repair/uninstall), descriptor 39718111852, Tracker linkage 39718111765 success. Main push CI on merge 3bc8d973 (tree b95f7997, identical to the tested PR tree): CI 39720227649 attempt 1 success (Classify and check project tooling, Process instructions, ACL verification success; linux/windows test matrices skipped by the same-tree reuse classifier); Windows installer 39720227567 and Delivery setup 39720227568 success. Limitation: layout evidence is real Chromium geometry on the sanitized fixture with main's CSS, not an installed application or a live account.",
+          "batch_id": "a7a7b69b26194a16b7f5efcef6f8e068",
+          "pr": 1083,
+          "merge_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+          "head_sha": "c2f699eb4f93162c8551b0984a0744cccba437a8",
+          "tree_sha": "b95f7997b82ef8b17c75b01bfd2e203b88988314",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            1052,
+            1053,
+            840,
+            19
+          ],
+          "source_heads": [
+            "e237d9351b9c5cb8a6c81d699a5df69fbf9e1ba8",
+            "43b8621259b8c9d813632a175811d8370ea0dd5c",
+            "ea9996538e88e0e53df4a5635f2218e06f099f3f",
+            "4a50cb4c1e399688823dd3b0aedd5aa97b67e66c"
+          ],
+          "issue_scopes": {
+            "1052": "9ec0c2a8ad90f824b35527de9cf47751b33907bd2c0104ad4cf93e9d60afe4ed",
+            "1053": "e43d2aa702e2ebd0edd41e4ea895d2876e6967934d41e4d18f3e638ecd7d3871",
+            "840": "ef493a159bfb31c8be24551b9a4f3d90b60904a49576c51b0b94efdfdf6c5d40",
+            "19": "ce291401dfa6489828ba973eb602b744efb113657552fbfff1bcb7f342232d99"
+          },
+          "reviewer": "Reviewer-AA1022B83",
+          "review_session": "run_aa1022_b83",
+          "execution_lane": "e2ae4011b466404faf30df031e2d59da",
+          "coordinator": "Coordinator-I1021A",
+          "coordinator_session": "run_i1021a_1021",
+          "criteria": {
+            "840": [
+              {
+                "line": 12,
+                "criterion": "- [ ] Explanation, journal summary and expanded journal body share the country card's inner inset.",
+                "result": "passed",
+                "evidence": "Merged main 3bc8d973 (tree b95f7997, identical to reviewed PR1083 tree), detached worktree, real Chromium: tests/test_country_campaign_footer_layout.py 19 passed (18 parametrized cases = widths 1280/1024/320 x themes light/dark x inventory empty/populated/filtered with a 720-char long history entry, plus the baseline control). The fixture's .hc-after/.hc-foot/.hc-hist markup matches main's real _campaign_table.html hc_after() mounted after </table> in _account_map_country.html; main's report.html CSS is applied. In every case .hc-foot, .hc-hist > summary and the expanded .hc-hist-body share x = connection-form padding anchor (.amap-add x + 13.6px, +/-0.5px). Control test_original_preview_reproduces_missing_inset: without the ACL-1840 rule the footer sits at the card edge (inset missing), so the assertion is discriminating."
+              },
+              {
+                "line": 13,
+                "criterion": "- [ ] The disclosure marker and focus outline remain inside the card at desktop and narrow widths.",
+                "result": "passed",
+                "evidence": "Merged main 3bc8d973 (tree b95f7997, identical to reviewed PR1083 tree), detached worktree, real Chromium: tests/test_country_campaign_footer_layout.py 19 passed (18 parametrized cases = widths 1280/1024/320 x themes light/dark x inventory empty/populated/filtered with a 720-char long history entry, plus the baseline control). The fixture's .hc-after/.hc-foot/.hc-hist markup matches main's real _campaign_table.html hc_after() mounted after </table> in _account_map_country.html; main's report.html CSS is applied. In every case at 1280/1024/320 the summary's left edge minus the 2px focus outline and its offset stays right of the card's left edge, all three elements end >= 8px inside the card's right edge, and .hc-after has no horizontal overflow (scrollWidth <= clientWidth). The summary is focused and toggled open with Enter and closed with Space."
+              },
+              {
+                "line": 14,
+                "criterion": "- [ ] Footer has explicit spacing from account rows and the missing-workbook notice below.",
+                "result": "passed",
+                "evidence": "Merged main 3bc8d973 (tree b95f7997, identical to reviewed PR1083 tree), detached worktree, real Chromium: tests/test_country_campaign_footer_layout.py 19 passed (18 parametrized cases = widths 1280/1024/320 x themes light/dark x inventory empty/populated/filtered with a 720-char long history entry, plus the baseline control). The fixture's .hc-after/.hc-foot/.hc-hist markup matches main's real _campaign_table.html hc_after() mounted after </table> in _account_map_country.html; main's report.html CSS is applied. In every case the footer starts >= 8px below the account table's bottom, and the missing-workbook notice (.amap-empty) starts >= 8px below the expanded history body."
+              },
+              {
+                "line": 15,
+                "criterion": "- [ ] Empty inventory, populated inventory, filters and long history entries remain readable in light/dark themes.",
+                "result": "passed",
+                "evidence": "Merged main 3bc8d973 (tree b95f7997, identical to reviewed PR1083 tree), detached worktree, real Chromium: tests/test_country_campaign_footer_layout.py 19 passed (18 parametrized cases = widths 1280/1024/320 x themes light/dark x inventory empty/populated/filtered with a 720-char long history entry, plus the baseline control). The fixture's .hc-after/.hc-foot/.hc-hist markup matches main's real _campaign_table.html hc_after() mounted after </table> in _account_map_country.html; main's report.html CSS is applied. Empty, populated and filtered inventory texts and a long unbroken history entry wrap without horizontal overflow in light and dark at all three widths. Additional contrast measurement on main with adopy-tokens.css + report.html CSS (1280 and 320): light - foot 5.31:1, summary 5.17:1, history body 5.31:1, notice 5.31:1; dark - 7.53, 6.99, 7.53, 7.53:1. All meet WCAG AA 4.5:1."
+              }
+            ]
+          }
+        },
+        "recorded_at": "2026-10-22T04:11:28+00:00"
       }
     },
     "policy_migrations": [
@@ -113489,6 +113553,12 @@
           "state": "reviewing",
           "started_at": "2026-10-22T03:42:34+00:00"
         }
+      },
+      {
+        "event": "post-main-acceptance-recorded",
+        "at": "2026-10-22T04:11:28+00:00",
+        "batch_id": "a7a7b69b26194a16b7f5efcef6f8e068",
+        "pr": 1083
       }
     ],
     "policy": {
