@@ -10,7 +10,12 @@
 `tos_accepted` и любое упоминание условий - никогда, DELETE и прочие рёбра
 Страницы - никогда. С цепочкой `act_X` она не пересекается.
 
-В обычных записях никогда: DELETE, ACTIVE, `effective_status`/`configured_status`,
+ACL-2114: единственное исключение из «только PAUSED» - `status=ACTIVE` у набора объявлений и объявления
+(`adsets`, `ads`), и только когда вызывающий передал `children_active=True`: кампания-родитель
+подтверждена чтением как PAUSED (под паузой кампании ничего не показывается). Кампания, креатив,
+вложенные статусы и любая другая запись с ACTIVE по-прежнему отказ.
+
+В обычных записях никогда: DELETE, ACTIVE (кроме случая выше), `effective_status`/`configured_status`,
 `execution_options`, согласие с условиями, создание форм лидов, запись куда-то,
 кроме `/act_X/<ребро>`.
 
@@ -47,6 +52,10 @@ EDGE_KEYS: dict[str, frozenset[str]] = {
 }
 #: Рёбра, где статус обязателен и равен PAUSED.
 PAUSED_REQUIRED = frozenset({"campaigns", "adsets", "ads"})
+#: ACL-2114: ребра, где ACTIVE допустим при `children_active` (родитель-кампания подтверждена чтением
+#: как PAUSED: созданная этим запуском или найденная с прошлого). Кампания - никогда ACTIVE; прочие записи - тоже.
+CHILD_EDGES = frozenset({"adsets", "ads"})
+ACTIVE = "ACTIVE"
 #: Поле файла (multipart) — только у загрузок.
 FILE_FIELDS = {"adimages": "filename", "advideos": "source"}
 #: Ключи, которых не должно быть нигде, на любой глубине.
@@ -88,6 +97,7 @@ def policy_for_page(act: str, page: str = "") -> dict:
         "act": act,
         "edges": {k: sorted(v) for k, v in EDGE_KEYS.items()},
         "paused_required": sorted(PAUSED_REQUIRED),
+        "child_edges": sorted(CHILD_EDGES),
         "files": dict(FILE_FIELDS),
         "forbidden": sorted(FORBIDDEN_ANYWHERE),
         "json_keys": sorted(JSON_KEYS),
@@ -181,11 +191,16 @@ def _without_lead_form(edge: str, checked: dict, on_ad: bool) -> dict:
 
 
 def check(act: str, method: str, path: str, params: dict | None,
-          files: dict | None = None, *, on_ad: bool = False) -> str:
+          files: dict | None = None, *, on_ad: bool = False, children_active: bool = False) -> str:
     """Проверить запись. Возвращает ребро; иначе `WriteRefused`.
 
     `on_ad` — набор объявлений того же плана создаётся с `destination_type=ON_AD`
     (только тогда креатив может нести `lead_gen_form_id`).
+
+    `children_active` (ACL-2114) — вызывающий подтвердил чтением, что кампания-родитель
+    в статусе PAUSED. Только тогда набор объявлений/объявление (`adsets`, `ads`) может
+    быть создан с `status=ACTIVE`: пока кампания на паузе, ничего не показывается.
+    Кампания всегда PAUSED; вложенные статусы - только PAUSED.
     """
     if method != "POST":
         raise WriteRefused(f"write refused: method {method!r} (only POST; never DELETE)")
@@ -201,9 +216,15 @@ def check(act: str, method: str, path: str, params: dict | None,
     extra = sorted(set(params) - EDGE_KEYS[edge])
     if extra:
         raise WriteRefused(f"write refused: key {extra[0]!r} is not allowed on {edge}")
-    if edge in PAUSED_REQUIRED and params.get("status") != PAUSED:
-        raise WriteRefused(f"write refused: {edge} must be created with status PAUSED")
+    child_active = (children_active is True and edge in CHILD_EDGES
+                    and params.get("status") == ACTIVE)
+    if edge in PAUSED_REQUIRED and params.get("status") != PAUSED and not child_active:
+        raise WriteRefused(f"write refused: {edge} must be created with status PAUSED"
+                           + (" (ACTIVE only for ad sets and ads under a confirmed PAUSED campaign)"
+                              if edge in CHILD_EDGES else ""))
     checked = dict(params)
+    if child_active:
+        checked["status"] = PAUSED  # верхний статус разрешён выше; вложенные проверяет `_walk`
     for key in JSON_KEYS & set(params):
         checked[key] = _parsed(params[key], f"{edge}.{key}")
         if not isinstance(checked[key], (dict, list)):
