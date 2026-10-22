@@ -49038,20 +49038,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
-      },
-      "53": {
-        "actor": "Worker-W1022402",
-        "session": "run_w1022_402",
-        "coordinator": "Coordinator-I1021A",
-        "branch": "work/acl-402-failure-signatures",
-        "worktree": "C:\\acl-int-w402",
-        "id": "1b366d830f8f4afdb35b609fc9a7a628",
-        "issue": 53,
-        "state": "handoff",
-        "started_at": "2026-10-22T05:58:45+00:00",
-        "from_status": "status:todo",
-        "pr": 1032,
-        "report": "# ACL-402 handoff, round 2 (PR #1032)\nFixes the blocking finding: test_markdown_states_it_proposes_no_rule_and_report_includes_it used rows dated 2026-10-19 while acl_telemetry_report.analyse(rows, 7) uses the real date.today(), so it would fail from 2026-10-27.\nFix (test only, no production change): the rows are now dated date.today() - timedelta(days=2); the assertions are unchanged. Commit \"ACL-402: date-independent failure-signature test\", head 8cc6ce8c.\nTests: tests/test_failure_signatures.py 8 passed; also 8 passed with date.today() faked to 2027-03-01 (date patched in src.failure_signatures and the test module).\nCI on new head: all green except tracker-link (task-state only); rerun after this handoff."
       }
     },
     "tasks": {
@@ -57841,7 +57827,7 @@
             "session": "run_w1022_402"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1022402",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -57850,25 +57836,23 @@
           "coordinator": "Coordinator-I1021A",
           "branch": "work/acl-402-failure-signatures",
           "worktree": "C:\\acl-int-w402",
-          "id": "d0995e3dc4634496a01ea49cf942465a",
+          "id": "1b366d830f8f4afdb35b609fc9a7a628",
           "issue": 53,
           "state": "handoff",
-          "started_at": "2026-10-22T05:30:10+00:00",
+          "started_at": "2026-10-22T05:58:45+00:00",
           "from_status": "status:todo",
           "pr": 1032,
-          "report": "# ACL-402 handoff (PR #1032)\n- Returned stale PR brought to current main: merged origin/main (3bc8d973) into work/acl-402-failure-signatures; new head bd013c88 (old 6c46f921).\n- Only conflict: docs/system/CHANGELOG.md; took main's version entirely. Entry moved to docs/system/changelog.d/ACL-402.md (original wording, Task link to #53). `fold_changelog.py --check` valid; diff vs main does not list CHANGELOG.md.\n- Diff vs main: changelog fragment, scripts/acl_telemetry_report.py, src/failure_signatures.py, tests/test_failure_signatures.py. No code changes.\n- Tests: tests/test_failure_signatures.py 8 passed.\n- CI on new head: all green (linux x3, windows, process, installer) except tracker-link, which fails only on task state (not yet in Review); to be rerun after this handoff."
+          "report": "# ACL-402 handoff, round 2 (PR #1032)\nFixes the blocking finding: test_markdown_states_it_proposes_no_rule_and_report_includes_it used rows dated 2026-10-19 while acl_telemetry_report.analyse(rows, 7) uses the real date.today(), so it would fail from 2026-10-27.\nFix (test only, no production change): the rows are now dated date.today() - timedelta(days=2); the assertions are unchanged. Commit \"ACL-402: date-independent failure-signature test\", head 8cc6ce8c.\nTests: tests/test_failure_signatures.py 8 passed; also 8 passed with date.today() faked to 2027-03-01 (date patched in src.failure_signatures and the test module).\nCI on new head: all green except tracker-link (task-state only); rerun after this handoff."
         },
         "pr": 1032,
-        "queued_at": "2026-10-22T05:45:56+00:00",
+        "queued_at": "2026-10-22T06:16:01+00:00",
         "return_operation": {
           "id": "0c36dec13db647b8bc6eed67079db67f",
           "actor": "Coordinator-M1011A",
           "session": "coord-m1011a-20261015",
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
         },
-        "review_report": "Review of ACL-402 PR 1032 head bd013c88 (base main 3bc8d973): RETURN, one blocking finding.\n\nFinding (blocking): tests/test_failure_signatures.py::test_markdown_states_it_proposes_no_rule_and_report_includes_it is a time bomb. It builds rows dated 2026-10-19 and calls acl_telemetry_report.analyse(rows, 7), which uses the real date.today(). It passes today (2026-10-22) but fails from 2026-10-27 (verified: find_repeated with today=2026-10-27 returns 0 signatures, section shows no repeats, the assert on `create` fails). Fix: build the row dates relative to date.today() (or monkeypatch date in failure_signatures), keep the rest unchanged.\n\nChecked OK: merge bd013c88 contains only docs/system/changelog.d/ACL-402.md (original wording + Task link) and CHANGELOG.md equals main (no diff vs 3bc8d973); no hidden hunks in the evil merge. fold_changelog.py --check valid. Diff vs main is 4 files (fragment, report hook, src/failure_signatures.py, tests), in scope; report only, proposes/applies no rule; reason text scrubbed; no ids leaked. Affected tests 66 passed. Required CI green on bd013c88 (linux 1-3, windows, tracker-link, verification, process instructions).",
-        "rework": true,
-        "rework_claim": "1b366d830f8f4afdb35b609fc9a7a628"
+        "review_report": "Review of ACL-402 PR 1032 head bd013c88 (base main 3bc8d973): RETURN, one blocking finding.\n\nFinding (blocking): tests/test_failure_signatures.py::test_markdown_states_it_proposes_no_rule_and_report_includes_it is a time bomb. It builds rows dated 2026-10-19 and calls acl_telemetry_report.analyse(rows, 7), which uses the real date.today(). It passes today (2026-10-22) but fails from 2026-10-27 (verified: find_repeated with today=2026-10-27 returns 0 signatures, section shows no repeats, the assert on `create` fails). Fix: build the row dates relative to date.today() (or monkeypatch date in failure_signatures), keep the rest unchanged.\n\nChecked OK: merge bd013c88 contains only docs/system/changelog.d/ACL-402.md (original wording + Task link) and CHANGELOG.md equals main (no diff vs 3bc8d973); no hidden hunks in the evil merge. fold_changelog.py --check valid. Diff vs main is 4 files (fragment, report hook, src/failure_signatures.py, tests), in scope; report only, proposes/applies no rule; reason text scrubbed; no ids leaked. Affected tests 66 passed. Required CI green on bd013c88 (linux 1-3, windows, tracker-link, verification, process instructions)."
       },
       "230": {
         "implementers": [
@@ -64652,7 +64636,8 @@
     "review_queue": [
       1054,
       710,
-      1069
+      1069,
+      53
     ],
     "review": null,
     "history": [
@@ -114549,6 +114534,13 @@
         "pr": 1029,
         "lane": "6dbdefe1b2fb472a92bc0a82dd1e16bb",
         "actor": "Reviewer-AF1022028"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-22T06:16:01+00:00",
+        "issue": 53,
+        "pr": 1032,
+        "actor": "Worker-W1022402"
       }
     ],
     "policy": {
