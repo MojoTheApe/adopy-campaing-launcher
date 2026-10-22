@@ -50884,6 +50884,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
+      },
+      "1099": {
+        "actor": "Worker-WO1022099",
+        "session": "run_wo1022_099",
+        "coordinator": "Coordinator-I1021A",
+        "branch": "work/acl-2099-reland-task-context",
+        "worktree": "C:\\acl-2099",
+        "id": "c0a7576ce1344486a5d83ecdfa966609",
+        "issue": 1099,
+        "state": "implementing",
+        "started_at": "2026-10-22T10:58:24+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -60465,6 +60477,17 @@
         },
         "pr": 1096,
         "queued_at": "2026-10-22T10:50:54+00:00"
+      },
+      "1099": {
+        "implementers": [
+          {
+            "actor": "Worker-WO1022099",
+            "session": "run_wo1022_099"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-WO1022099",
+        "coordinator": "Coordinator-I1021A"
       }
     },
     "actors": {
@@ -63727,6 +63750,10 @@
       "Reviewer-AB1022097": {
         "session": "run_ab1022_097",
         "role": "Reviewer"
+      },
+      "Worker-WO1022099": {
+        "session": "run_wo1022_099",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -119007,6 +119034,13 @@
         "issue": 1095,
         "pr": 1096,
         "actor": "Worker-W1022P95"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-22T10:58:24+00:00",
+        "issue": 1099,
+        "claim": "c0a7576ce1344486a5d83ecdfa966609",
+        "actor": "Worker-WO1022099"
       }
     ],
     "policy": {
