@@ -48442,20 +48442,6 @@
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
       },
-      "1053": {
-        "actor": "Worker-W1022053",
-        "session": "run_w1022_2053",
-        "coordinator": "Coordinator-I1021A",
-        "branch": "work/acl-2053-form-template-parity",
-        "worktree": "C:\\acl-int-w2053",
-        "id": "3083aafad44443d999d373d4b2961243",
-        "issue": 1053,
-        "state": "handoff",
-        "started_at": "2026-10-22T03:03:52+00:00",
-        "from_status": "status:todo",
-        "pr": 1060,
-        "report": "# ACL-2053 handoff (Worker-W1022053, run_w1022_2053)\n\nStale PR #1060 brought to current main (4582039e). Merge of origin/main into work/acl-2053-form-template-parity had no conflicts.\nChangelog entry moved from docs/system/CHANGELOG.md to the fragment docs/system/changelog.d/ACL-2053.md; CHANGELOG.md is now identical to origin/main. `fold_changelog.py --check` passes (valid: ACL-2037, ACL-2053). Diff vs main no longer lists CHANGELOG.md.\nNo code changes beyond the merge and the fragment move.\nTests (PR files only): test_acl2053_form_parity, test_acl1776_create_forms, test_acl1775_instant_forms, test_acl1775_builder_forms: 264 passed.\nNew head 43b86212. CI on the new head: all green (linux 1/2/3, windows, verification) except tracker-link, which fails only because the task was still \"implementing\" (needs Review state); expected to pass after this handoff and a rerun.\nStill open from the issue: live check on an allowed pilot account needs the owner's OK; cover image and allow_organic_lead intentionally not done (see PR body)."
-      },
       "840": {
         "actor": "Worker-W1021840",
         "session": "run_w1021_1840",
@@ -57596,28 +57582,26 @@
             "session": "run_w1022_2053"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1022053",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
-          "actor": "Worker-F1021W1",
-          "session": "033ad857-forms-2053",
-          "coordinator": "Coordinator-F1021A",
+          "actor": "Worker-W1022053",
+          "session": "run_w1022_2053",
+          "coordinator": "Coordinator-I1021A",
           "branch": "work/acl-2053-form-template-parity",
-          "worktree": "C:\\acl-2053",
-          "id": "b2df83de8be4412eb19e18d805f4e5b3",
+          "worktree": "C:\\acl-int-w2053",
+          "id": "3083aafad44443d999d373d4b2961243",
           "issue": 1053,
           "state": "handoff",
-          "started_at": "2026-10-21T08:19:12+00:00",
-          "from_status": "status:idea",
+          "started_at": "2026-10-22T03:03:52+00:00",
+          "from_status": "status:todo",
           "pr": 1060,
-          "report": "Implemented ACL-2053 in PR #1060 (branch work/acl-2053-form-template-parity, head c272d379). Two pre-handoff read-only reviews; all findings fixed. Affected tests 264 passed locally; full suite in CI. Cover image and allow_organic_lead left out with reasons in the PR. Live check of follow_up_action_url needs owner OK."
+          "report": "# ACL-2053 handoff (Worker-W1022053, run_w1022_2053)\n\nStale PR #1060 brought to current main (4582039e). Merge of origin/main into work/acl-2053-form-template-parity had no conflicts.\nChangelog entry moved from docs/system/CHANGELOG.md to the fragment docs/system/changelog.d/ACL-2053.md; CHANGELOG.md is now identical to origin/main. `fold_changelog.py --check` passes (valid: ACL-2037, ACL-2053). Diff vs main no longer lists CHANGELOG.md.\nNo code changes beyond the merge and the fragment move.\nTests (PR files only): test_acl2053_form_parity, test_acl1776_create_forms, test_acl1775_instant_forms, test_acl1775_builder_forms: 264 passed.\nNew head 43b86212. CI on the new head: all green (linux 1/2/3, windows, verification) except tracker-link, which fails only because the task was still \"implementing\" (needs Review state); expected to pass after this handoff and a rerun.\nStill open from the issue: live check on an allowed pilot account needs the owner's OK; cover image and allow_organic_lead intentionally not done (see PR body)."
         },
         "pr": 1060,
-        "queued_at": "2026-10-21T09:38:42+00:00",
-        "review_report": "stale vs main e8bf31f8; author merges current main and hands off for a fresh review; no content findings",
-        "rework": true,
-        "rework_claim": "3083aafad44443d999d373d4b2961243"
+        "queued_at": "2026-10-22T03:20:35+00:00",
+        "review_report": "stale vs main e8bf31f8; author merges current main and hands off for a fresh review; no content findings"
       },
       "1054": {
         "implementers": [
@@ -64009,7 +63993,8 @@
     "review_queue": [
       1054,
       710,
-      1069
+      1069,
+      1053
     ],
     "review": null,
     "history": [
@@ -112822,6 +112807,13 @@
           ],
           "finished_at": "2026-10-22T03:18:28+00:00"
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-22T03:20:35+00:00",
+        "issue": 1053,
+        "pr": 1060,
+        "actor": "Worker-W1022053"
       }
     ],
     "policy": {
