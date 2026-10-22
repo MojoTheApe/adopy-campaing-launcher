@@ -313,3 +313,39 @@ def test_page_helper_allows_active_children_only_with_the_flag():
     assert out["paused"].get("body") == sent["body"]
     for key in ("set_no_flag", "ad_no_flag", "camp_flag", "nested", "creative", "flag_string"):
         assert out[key].get("error") and "body" not in out[key], (key, out[key])
+
+
+# ── сбой самого чтения-подтверждения ─────────────────────────────────────────────────
+
+class _ConfirmFails(FakeMeta):
+    """Чтение `fields=status` у кампании падает так, как задано; остальное - как у FakeMeta."""
+
+    def __init__(self, how):
+        super().__init__()
+        self.how = how
+
+    def request(self, method, path, params=None):
+        params = params or {}
+        obj = self.objects.get(path.strip("/"))
+        if obj and obj["_kind"] == "campaign" and params.get("fields") == "status":
+            if self.how == "exception":
+                raise RuntimeError("tab crashed")
+            if self.how == "page_failed":
+                from tests.test_acl1761_api_create import g
+                raise g.PageFailed("the page stopped answering")
+            return {"status": 400, "body": {"error": {"code": 100, "message": "(#100) read failed"}}}
+        return super().request(method, path, params)
+
+
+@pytest.mark.parametrize("how", ["graph_error", "page_failed", "exception"])
+def test_failed_confirm_read_writes_no_child(tmp_path, how):
+    meta = _ConfirmFails(how)
+    try:
+        out, _ = _run(meta, _draft(tmp_path, ads=2))
+    except RuntimeError:
+        assert how == "exception"
+        out = None
+    if out is not None:
+        assert out.error and out.stop_kind != ""
+    assert _edges(meta) == ["campaigns"]
+    assert _objs(meta, "adset") == [] and _objs(meta, "ad") == []

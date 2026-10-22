@@ -52,8 +52,8 @@ EDGE_KEYS: dict[str, frozenset[str]] = {
 }
 #: Рёбра, где статус обязателен и равен PAUSED.
 PAUSED_REQUIRED = frozenset({"campaigns", "adsets", "ads"})
-#: ACL-2114: ребра, где ACTIVE допустим при `children_active` (родитель-кампания только что создана
-#: и подтверждена чтением как PAUSED). Кампания - никогда ACTIVE; прочие записи - тоже.
+#: ACL-2114: ребра, где ACTIVE допустим при `children_active` (родитель-кампания подтверждена чтением
+#: как PAUSED: созданная этим запуском или найденная с прошлого). Кампания - никогда ACTIVE; прочие записи - тоже.
 CHILD_EDGES = frozenset({"adsets", "ads"})
 ACTIVE = "ACTIVE"
 #: Поле файла (multipart) — только у загрузок.
