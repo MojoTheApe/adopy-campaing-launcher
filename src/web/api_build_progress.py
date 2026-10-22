@@ -23,11 +23,11 @@ from typing import Any
 # Шаблоны привязаны к концу строки: имя группы или формы стоит внутри строки,
 # и «ad set 'a: found': result unknown — reconciling» не должна засчитаться.
 _AD = re.compile(r"^ad (\d+): (.+)$")
-_AD_SET = re.compile(r"^ad set .+: (created PAUSED, tag kept|found from a previous run)$")
+_AD_SET = re.compile(r"^ad set .+: (created ACTIVE \(campaign PAUSED\), tag kept|found from a previous run)$")
 _FORM = re.compile(r"^form .+: (created|found on the Page, reused)$")
 _AD_DONE = re.compile(r"^(image uploaded|image already in the ad account|video uploaded"
                       r"|video already in the ad account|video processed|creative created"
-                      r"|creative found from a previous run|created PAUSED|found from a previous run)$")
+                      r"|creative found from a previous run|created ACTIVE \(campaign PAUSED\)|found from a previous run)$")
 
 
 def _ad_units(ad: Any) -> int:
@@ -109,7 +109,7 @@ class BuildCounter:
             self._mark(*[key + ("media", i) for i in range(media)])
         elif what.startswith("creative"):     # created / found from a previous run
             self._mark(*[key + ("media", i) for i in range(media)], key + ("creative",))
-        elif what.startswith("created PAUSED"):
+        elif what.startswith("created ACTIVE (campaign PAUSED)"):
             self._mark(*[key + ("media", i) for i in range(media)], key + ("creative",), key + ("ad",))
 
     def view(self) -> dict[str, Any]:

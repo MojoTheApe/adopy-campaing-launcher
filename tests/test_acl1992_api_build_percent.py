@@ -37,10 +37,10 @@ ONE_IMAGE = [
     "preflight: targeting resolved",
     "preflight: creatives read",
     "campaign: created PAUSED, tag kept",
-    "ad set 'S0': created PAUSED, tag kept",
+    "ad set 'S0': created ACTIVE (campaign PAUSED), tag kept",
     "ad 1: image uploaded",
     "ad 1: creative created",
-    "ad 1: created PAUSED",
+    "ad 1: created ACTIVE (campaign PAUSED)",
     "readback: all fields match",
 ]
 
@@ -70,7 +70,7 @@ def test_video_upload_and_processing_are_separate_units():
     assert c.done == 4
     c.feed("ad 1: video processed")
     assert c.done == 5
-    _feed(c, ["ad 1: creative created", "ad 1: created PAUSED", "readback: 1 mismatch(es)"])
+    _feed(c, ["ad 1: creative created", "ad 1: created ACTIVE (campaign PAUSED)", "readback: 1 mismatch(es)"])
     assert c.done == c.total == 8
 
 
@@ -78,8 +78,8 @@ def test_same_ad_number_in_two_ad_sets_counts_twice():
     c = BuildCounter(_plan([_ad(1)], [_ad(1)]))
     _feed(c, ONE_IMAGE[:7])
     first = c.done
-    _feed(c, ["ad set 'S1': created PAUSED, tag kept", "ad 1: image already in the ad account",
-              "ad 1: creative created", "ad 1: created PAUSED", "readback: all fields match"])
+    _feed(c, ["ad set 'S1': created ACTIVE (campaign PAUSED), tag kept", "ad 1: image already in the ad account",
+              "ad 1: creative created", "ad 1: created ACTIVE (campaign PAUSED)", "readback: all fields match"])
     assert c.done == c.total == 11 and c.done - first == 5
 
 
@@ -107,7 +107,7 @@ def test_a_later_stage_implies_the_earlier_ones():
     c = BuildCounter(_plan([_ad(1)]))
     c.feed("campaign: created PAUSED, tag kept")
     assert c.done == 2
-    c.feed("ad 1: created PAUSED")      # строки медиа/креатива не было (например, другой формат)
+    c.feed("ad 1: created ACTIVE (campaign PAUSED)")      # строки медиа/креатива не было (например, другой формат)
     assert c.done == 5
 
 
@@ -232,9 +232,9 @@ def test_every_counted_line_still_exists_in_the_creator():
     иначе молча держало бы процент на 99 при зелёных тестах."""
     src = (Path(__file__).resolve().parents[1] / 'src' / 'fb_api' / 'creator.py').read_text(encoding='utf-8')
     for piece in ['"preflight: creatives read"', '"campaign: created PAUSED, tag kept"',
-                  '"campaign: found from a previous run"', ": created PAUSED, tag kept\"",
+                  '"campaign: found from a previous run"', ": created ACTIVE (campaign PAUSED), tag kept\"",
                   ": found from a previous run\"", ": image uploaded\"", ": image already in the ad account\"",
                   ": video uploaded\"", ": video already in the ad account\"", ": video processed\"",
-                  ": creative created\"", ": creative found from a previous run\"", ": created PAUSED\"",
+                  ": creative created\"", ": creative found from a previous run\"", ": created ACTIVE (campaign PAUSED)\"",
                   '"readback: ']:
         assert piece in src, piece
