@@ -49047,9 +49047,11 @@
         "worktree": "C:\\acl-int-w1845",
         "id": "c918fcae2f5740298d4aba9f6f60e8cc",
         "issue": 845,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-22T05:39:15+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 850,
+        "report": "# ACL-1845 handoff (PR #850)\n\n- Brought branch codex/acl-1845-publish-button-design to current main (3bc8d973) via merge; old head 7cd286ec, new head 98546e1a.\n- Only conflict: docs/system/CHANGELOG.md, resolved by taking main's version entirely.\n- Changelog entry moved to docs/system/changelog.d/ACL-1845.md (original wording, Task link added); fold_changelog.py --check passes.\n- report.html auto-merged cleanly; no code changes beyond the merge.\n- Tests (PR's own files): test_builder_multi_publish_browser, test_builder_publish_selected_browser, test_drawer_review_browser, test_publish_button_design_browser: 49 passed.\n- CI on new head: all pass (linux 1/2/3, windows, ACL verification, tooling, installer) except tracker-link, which fails only because task state is not yet Review."
       },
       "839": {
         "actor": "Worker-W1021839",
