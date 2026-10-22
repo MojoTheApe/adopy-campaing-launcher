@@ -48321,6 +48321,18 @@
         "state": "implementing",
         "started_at": "2026-10-21T23:15:13+00:00",
         "from_status": "status:idea"
+      },
+      "1037": {
+        "actor": "Worker-W1022037",
+        "session": "run_w1022_2037",
+        "coordinator": "Coordinator-I1021A",
+        "branch": "work/acl-2037-changelog-fragments",
+        "worktree": "C:\\acl-int-w2037",
+        "id": "bd2e2e1cbb144072a2fd7024a3e60aa2",
+        "issue": 1037,
+        "state": "implementing",
+        "started_at": "2026-10-22T00:03:19+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -57178,11 +57190,15 @@
           {
             "actor": "Worker-c8f54e83",
             "session": "c8f54e83"
+          },
+          {
+            "actor": "Worker-W1022037",
+            "session": "run_w1022_2037"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-c8f54e83",
-        "coordinator": "Coordinator-M1011A",
+        "state": "implementing",
+        "worker": "Worker-W1022037",
+        "coordinator": "Coordinator-I1021A",
         "handoff": {
           "actor": "Worker-c8f54e83",
           "session": "c8f54e83",
@@ -57199,21 +57215,15 @@
         },
         "pr": 1041,
         "queued_at": "2026-10-20T12:20:42+00:00",
-        "reviewer": "Reviewer-R2037V",
         "return_operation": {
           "id": "2ae82633a6b6469f8009ff3852801cc6",
           "actor": "Coordinator-M1011A",
           "session": "coord-m1011a-20261015",
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
         },
-        "return": {
-          "id": "2ae82633a6b6469f8009ff3852801cc6",
-          "actor": "Coordinator-M1011A",
-          "session": "coord-m1011a-20261015",
-          "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
-        },
         "review_report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21",
-        "rework": true
+        "rework": true,
+        "rework_claim": "bd2e2e1cbb144072a2fd7024a3e60aa2"
       },
       "1038": {
         "implementers": [
@@ -60794,6 +60804,10 @@
       "Reviewer-H8K4N7": {
         "session": "review_acl2079_tt194_20261022",
         "role": "Reviewer"
+      },
+      "Worker-W1022037": {
+        "session": "run_w1022_2037",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -111842,6 +111856,13 @@
         "pr": 1080,
         "lane": "52e9ef09fddd43ef9327f209e2aecc9d",
         "actor": "Reviewer-H8K4N7"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-22T00:03:19+00:00",
+        "issue": 1037,
+        "claim": "bd2e2e1cbb144072a2fd7024a3e60aa2",
+        "actor": "Worker-W1022037"
       }
     ],
     "policy": {
