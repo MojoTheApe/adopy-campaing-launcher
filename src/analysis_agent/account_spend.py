@@ -1011,47 +1011,14 @@ def _logged_out(page, *, deep: bool = False) -> bool:
 
 
 def _mlx_profile_dir(profile_id: str, folder_id: str = "") -> Path | None:
-    """Папка профиля Multilogin — по адресу, а не обходом дерева.
+    """Папка профиля Multilogin — по адресу, без обхода дерева.
 
-    Штатный `_find_mlx_profile_dir` делает `rglob` по всему `~/mlx/profiles`, а
-    там лежат полные каталоги Chrome. Замерено на этой машине: **около десяти
-    секунд на каждый вызов**, и не только на первый. Адресный поиск — 0.001 с,
-    ответ тот же.
-
-    Путь описан в самом слое RPA: `profiles/{ws}/{folder_id}/{profile_id}`.
-    Раскладку проверяем в трёх видах, все — на глубину не больше двух уровней.
-
-    Живёт здесь, а не в `src/fb_ads_rpa`, потому что тот файл принадлежит
-    другому треку. Эти десять секунд платит и каждый прогон публикации —
-    заведено как `acl-144`.
+    Логика живёт в одном месте: `fb_ads_rpa.browser._find_mlx_profile_dir`
+    (ACL-144 — тот же адресный поиск теперь и у прогона публикации).
     """
-    profile_id = (profile_id or "").strip()
-    if not profile_id:
-        return None
-    root = Path(os.environ.get("MLX_HOME", str(Path.home() / "mlx"))) / "profiles"
-    if not root.is_dir():
-        return None
-    folder_id = (folder_id or "").strip()
-    try:
-        for ws in root.iterdir():
-            if not ws.is_dir():
-                continue
-            if folder_id:
-                p = ws / folder_id / profile_id
-                if p.is_dir():
-                    return p
-            p = ws / profile_id
-            if p.is_dir():
-                return p
-            for folder in ws.iterdir():
-                if not folder.is_dir():
-                    continue
-                p = folder / profile_id
-                if p.is_dir():
-                    return p
-    except OSError:
-        return None
-    return None
+    from src.fb_ads_rpa import browser as rpa_browser
+
+    return rpa_browser._find_mlx_profile_dir(profile_id, folder_id)
 
 
 def _dir_spellings(path) -> list[str]:
