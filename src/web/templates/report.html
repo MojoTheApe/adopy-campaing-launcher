@@ -3116,8 +3116,35 @@
       border: 1px solid var(--good); border-radius: var(--radius-sm);
       font: inherit; font-size: var(--adopy-text-sm); font-weight: 700; cursor: pointer;
     }
-    .cbd-publish-all:hover:not([disabled]) { background: var(--good); }
-    .cbd-publish-all[disabled] { opacity: 0.55; cursor: progress; }
+    /* Publication actions share the dashboard primary-action language. */
+    .cb-publish-btn, .cbd-publish-all, #sfc-ok, #sfc-cancel {
+      box-sizing: border-box; min-height: 38px; min-width: 0; max-width: 100%;
+      padding: 8px 14px; border: 1px solid var(--accent);
+      border-radius: 6px; font-family: inherit; font-size: 14px; font-weight: 600; line-height: 1.4;
+      white-space: normal; overflow-wrap: anywhere; text-align: center;
+      background: var(--accent); color: var(--on-accent); cursor: pointer;
+      transition: background-color 150ms var(--ease-out), border-color 150ms var(--ease-out);
+    }
+    .cb-publish-btn:not(:disabled):hover, .cbd-publish-all:not(:disabled):hover,
+    #sfc-ok:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
+    .cb-publish-btn:disabled, .cbd-publish-all:disabled {
+      opacity: 1; background: var(--bg-hover); color: var(--text);
+      border-color: var(--border-strong); box-shadow: none; cursor: not-allowed;
+    }
+    .cb-publish-btn[aria-busy="true"]:not(:disabled), .cbd-publish-all[aria-busy="true"]:not(:disabled) {
+      cursor: progress;
+    }
+    .cb-publish-btn:focus-visible, .cbd-publish-all:focus-visible,
+    #sfc-ok:focus-visible, #sfc-cancel:focus-visible {
+      outline: 2px solid var(--accent); outline-offset: 3px;
+    }
+    #sfc-cancel { background: var(--bg-hover); color: var(--text); border-color: var(--border-strong); }
+    #sfc-cancel:hover { background: var(--accent-soft); }
+    #sfc-ok.sfc-danger { background: var(--bad); color: var(--on-danger); border-color: var(--bad); }
+    .sfc-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
+    @media (prefers-reduced-motion: reduce) {
+      .cb-publish-btn, .cbd-publish-all, #sfc-ok, #sfc-cancel { transition: none; }
+    }
     .cbd-queue {
       margin-bottom: var(--space-xs); max-height: 9rem; overflow-y: auto;
       font-size: var(--adopy-text-sm); line-height: 1.5;
@@ -3202,6 +3229,43 @@
     /* Кнопки формы — в столбик во всю ширину: в ряд они не помещаются. */
     .cbd-host .cb-actions { display: flex; flex-direction: column; gap: var(--space-xs); }
     .cbd-host .cb-actions button { width: 100%; }
+    /* The footer owns the primary action; the open campaign stays secondary. */
+    .cbd-host .cb-actions { flex-direction: row; flex-wrap: wrap; gap: var(--space-sm); }
+    .cbd-host .cb-actions .cb-publish-btn {
+      width: auto; margin: 0; padding: 8px 0; background: transparent;
+      border-color: transparent; color: var(--accent); box-shadow: none;
+    }
+    .cbd-host .cb-actions .cb-publish-btn:not(:disabled):hover {
+      background: transparent; border-color: transparent; text-decoration: underline;
+      box-shadow: none;
+    }
+    .cbd-host .cb-actions .cb-publish-btn:disabled { color: var(--muted); }
+    .cbd-publication {
+      display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-sm);
+      padding-bottom: var(--space-md); margin-bottom: var(--space-sm);
+      border-bottom: 1px solid var(--border);
+    }
+    .cbd-publication-scope { min-width: 0; line-height: 1.4; order: 1; }
+    .cbd-publication-scope strong { display: block; font-size: 14px; }
+    .cbd-publication-scope span { display: block; color: var(--muted); font-size: 12px; }
+    .cbd-publication .cbd-publish-all { margin: 0; order: 2; }
+    .cbd-publication-reason, .cbd-publication .cbd-gate-reason {
+      grid-column: 1 / -1; order: 3; margin: 0;
+      font-size: 12px; line-height: 1.5;
+    }
+    .cbd-publication-reason { color: var(--muted); }
+    .cbd-root .cbd-foot .cbd-publish-all:disabled {
+      background: color-mix(in srgb, var(--accent) 12%, var(--bg-elev));
+      border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+      color: var(--text); opacity: 1; cursor: not-allowed;
+    }
+    .cbd-root[data-expanded="1"] .cbd-publication {
+      grid-template-columns: minmax(0, 1fr) minmax(240px, auto); align-items: center;
+    }
+    .cbd-root[data-expanded="1"] .cbd-host .cb-actions button { width: auto; }
+    @media (max-width: 640px) {
+      .cbd-root[data-expanded="1"] .cbd-publication { grid-template-columns: minmax(0, 1fr); }
+    }
 
     /* На странице страны, пока форма в ящике. */
     .cb-parked-note {
@@ -6517,7 +6581,31 @@ window.cbTree = (function () {
     // ACL-1761: через Graph API создаются кампании на паузе, а не черновики.
     var what = window.ACL_FB_BACKEND === 'api' ? 'PAUSED campaigns' : 'drafts';
     return t.some ? 'Publish selected → ' + what + ' (' + t.send.length + ')'
-                  : 'Publish all → ' + what + ' (' + t.total + ')';
+                  : 'Publish all → ' + what + ' (' + t.open.length + ')';
+  }
+
+  function refreshPublication(t) {
+    var btn = foot.querySelector('.cbd-publish-all');
+    if (!btn) return;
+    btn.textContent = publishLabel(t);
+    var count = t.some ? t.send.length : t.open.length;
+    var excluded = t.on.length ? t.on.length - t.send.length : t.total - t.open.length;
+    var scope = foot.querySelector('.cbd-publication-scope');
+    if (scope) {
+      scope.querySelector('strong').textContent = t.on.length
+        ? t.on.length + (t.on.length === 1 ? ' campaign selected' : ' campaigns selected')
+        : 'All ' + t.total + (t.total === 1 ? ' campaign' : ' campaigns');
+      scope.querySelector('span').textContent = (t.on.length ? 'Checkbox selection' : 'No selection — all campaigns')
+        + (excluded ? ' · ' + excluded + ' already building' : '');
+    }
+    var uncertain = !!(window.CB_QUEUE && window.CB_QUEUE.uncertain);
+    var reason = foot.querySelector('.cbd-publication-reason');
+    if (reason) {
+      reason.textContent = uncertain ? 'The previous run status is unknown. Reload the dashboard before publishing again.'
+        : !count ? 'These campaigns are already being built. Change the selection or wait for a run to finish.' : '';
+      reason.hidden = !reason.textContent;
+    }
+    btn.disabled = uncertain || !count;
   }
 
   /* Отметки, кнопка и «Select all» — на месте, без перерисовки дерева:
@@ -6545,8 +6633,7 @@ window.cbTree = (function () {
       bar.querySelector('.cbd-tick-none').hidden = !t.some;
       bar.querySelector('.cbd-tick-count').textContent = t.on.length ? t.on.length + ' of ' + t.total + ' selected' : '';
     }
-    var btn = foot.querySelector('.cbd-publish-all');
-    if (btn) btn.textContent = publishLabel(t);
+    refreshPublication(t);
     refreshAccountStates();
     refreshAudit();
   }
@@ -6763,8 +6850,10 @@ window.cbTree = (function () {
     var keepTyped = typedOld ? typedOld.value : '';
     var t = ticks();
     var html = (t.total || (window.CB_QUEUE && window.CB_QUEUE.progress)
-        ? '<button type="button" class="cbd-publish-all" data-act="publish-all">'
+        ? '<div class="cbd-publication"><div class="cbd-publication-scope" id="cbd-publication-scope" aria-live="polite"><strong></strong><span></span></div>'
+          + '<button type="button" class="cbd-publish-all" data-act="publish-all" aria-describedby="cbd-publication-scope cbd-publication-reason">'
           + aclEscHtml(publishLabel(t)) + '</button>'
+          + '<div class="cbd-publication-reason" id="cbd-publication-reason" role="status" hidden></div></div>'
           // ACL-1761: план без записей — только при ACL_FB_BACKEND=api.
           + (window.ACL_FB_BACKEND === 'api' && t.total
             ? '<button type="button" class="cbd-add cbd-plan" data-act="check-plan"'
@@ -7089,7 +7178,8 @@ window.cbTree = (function () {
     var note = foot.querySelector('.cbd-gate-reason');
     if (btn) {
       var uncertain = !!(window.CB_QUEUE && window.CB_QUEUE.uncertain);
-      btn.disabled = uncertain || g.blocked;
+      var tg = ticks();
+      btn.disabled = uncertain || g.blocked || !(tg.some ? tg.send.length : tg.open.length);
       btn.title = g.blocked ? g.reason : '';
       if (g.blocked && !note) {
         note = document.createElement('div');
@@ -7282,6 +7372,7 @@ window.cbTree = (function () {
   function showQueue(p) {
     var box = foot.querySelector('.cbd-queue');
     var btn = foot.querySelector('.cbd-publish-all');
+    if (btn && typeof btn.setAttribute === 'function') btn.setAttribute('aria-busy', String(!!(p.live && p.live.length)));
     if (!box) {
       // Сборка вернулась после F5 раньше, чем в ящике появилось, что собирать.
       if (window.CB_QUEUE && window.CB_QUEUE.progress === p) paintFoot();
@@ -7301,7 +7392,13 @@ window.cbTree = (function () {
 
     // ACL-1355: идущая сборка кнопку не держит — остальные аккаунты
     // докладываются в неё; держит только потерянный статус.
-    if (btn) btn.disabled = !!(window.CB_QUEUE && window.CB_QUEUE.uncertain) || !!(window.CB_PF_GATE && window.CB_PF_GATE.blocked);
+    // ACL-1845: ноль доступных кампаний тоже держит кнопку (иначе showQueue
+    // включал её обратно сразу после refreshPublication).
+    if (btn) {
+      var tk = typeof ticks === 'function' ? ticks() : null;
+      btn.disabled = !!(window.CB_QUEUE && window.CB_QUEUE.uncertain) || !!(window.CB_PF_GATE && window.CB_PF_GATE.blocked)
+        || !!(tk && !(tk.some ? tk.send.length : tk.open.length));
+    }
     if (p.done) {
       var ok = (p.report || []).filter(function (r) { return r.state === 'ok'; }).length;
       lines.unshift('<div class="cbd-q-head">Done — ' + ok + ' of ' + p.of + ' accounts</div>');
@@ -8465,12 +8562,9 @@ function _safeConfirm(title, bodyHtml, onConfirm, opts) {
   box.innerHTML =
     '<div style="font-size:var(--adopy-text-body);font-weight:700;color:' + (danger ? 'var(--bad)' : 'var(--accent)') + ';margin-bottom:0.65rem">' + title + '</div>'
     + '<div style="font-size:var(--adopy-text-table);color:var(--text);line-height:1.6;margin-bottom:1rem">' + bodyHtml + '</div>'
-    + '<div style="display:flex;gap:0.55rem;justify-content:flex-end">'
-    + '<button id="sfc-cancel" style="padding:0.32rem 0.85rem;background:var(--bg-hover);border:1px solid var(--border);border-radius:4px;color:var(--text);cursor:pointer;font-size:var(--adopy-text-sm)">Cancel</button>'
-    + '<button id="sfc-ok" style="padding:0.32rem 0.85rem;background:'
-    + (danger ? 'var(--bad)' : 'var(--accent)')
-    + ';border:none;border-radius:4px;color:' + (danger ? 'var(--on-danger)' : 'var(--on-accent)')
-    + ';cursor:pointer;font-size:var(--adopy-text-sm);font-weight:700">' + confirmLabel + '</button>'
+    + '<div class="sfc-actions">'
+    + '<button id="sfc-cancel">Cancel</button>'
+    + '<button id="sfc-ok"' + (danger ? ' class="sfc-danger"' : '') + '>' + confirmLabel + '</button>'
     + '</div>';
 
   overlay.appendChild(box);
@@ -15529,6 +15623,11 @@ function cbNewRun(notify) {
       return { account: e.label, stage: e.live.stage, queue: e.live.queue || null, key: e.key };
     });
     batch.progress = p;
+    // Keep existing enqueue/duplicate guards; busy is informative, not a new lock.
+    document.querySelectorAll('form.open-account-form').forEach(function (form) {
+      var button = form.querySelector('.cb-publish-btn');
+      if (button && typeof button.setAttribute === 'function') button.setAttribute('aria-busy', String(cbAccountBusy(cbFormKey(form))));
+    });
     notify(p);
   }
 
