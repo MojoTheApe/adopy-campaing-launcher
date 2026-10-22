@@ -123833,7 +123833,51 @@
         "session": "run_w1022_052",
         "coordinator": "Coordinator-I1021A",
         "started_at": "2026-10-22T03:17:32+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 1052,
+          "pr": 1057,
+          "branch": "work/acl-2052-meta-rules-value-rules",
+          "head_sha": "e237d9351b9c5cb8a6c81d699a5df69fbf9e1ba8",
+          "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+          "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "9ec0c2a8ad90f824b35527de9cf47751b33907bd2c0104ad4cf93e9d60afe4ed",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-W1022052",
+            "implementer": "Worker-W1022052",
+            "review_session": "run_w1022_052",
+            "execution_lane": "3b4a065dbdae4244b255f6a7ed404a48",
+            "head_sha": "e237d9351b9c5cb8a6c81d699a5df69fbf9e1ba8",
+            "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+            "tree_sha": "ee8251f0db3d7cdfa7d5476963e2c8f62b7329b4",
+            "report": "Independent source review of ACL-2052 / PR #1057 by Reviewer-W1022052 (session run_w1022_052), not the implementer, coordinator or any earlier reviewer.\nScope vs main 4582039e: config/meta_rules/rules.json (+8 entries), config/meta_rules/sources.json (+4 pages), docs/system/changelog.d/ACL-2052.md, src/campaign_bridge/meta_rules.py (new documentation-only kind `fact`, requires non-empty note), tests/test_acl2052_meta_rules_placement.py. Matches Issue #1052 scope; no builder behavior change.\nFacts: value rules limited to LOWEST_COST_WITHOUT_CAP/COST_CAP; attach via value_rule_set_id + value_rules_applied; DECREASE capped at 90 (fact with limits); account_controls placement_exclusions values match the spec and the note states it is the only way to fully exclude Audience Network on new-layout Advantage+ campaigns, audience_controls required, no DELETE; bid_adjustments.retired recorded as kind fact, status deprecated, with note; placement_soft_opt_out up to 5% for Sales/Leads; live fact (status test) that non-Advantage+ Leads via API still accept classic publisher_platforms. All entries non-ga, checked_date 2026-10-21, https source_url, scoped by applies_to.feature.\nLoader: check_job only evaluates ALLOWED_KINDS, text_limit and required_field, so fact is skipped; validate_rules rejects fact without note. publish_preflight consumers unaffected; test proves check_job output identical with/without the new entries for six representative jobs.\nMerge resolution: docs/system/CHANGELOG.md is identical to main; the ACL-2052 entry from 808573c6 moved verbatim to the fragment (diff-verified); fold_changelog.py --check: valid (ACL-2037, ACL-2052). sources.json category announcements is an existing category.\nEnglish user-facing text; Russian code comments per repo rule; no account/ad ids, tokens or URLs with ids.\nLocal tests: test_acl2052_meta_rules_placement, test_acl1781_meta_rules, test_meta_docs_watch_1782 - 49 passed. Required CI on e237d935 all green (run 39714531949 success, installer run, descriptor, tracker-link).\nNon-blocking notes: (1) value_rules.bid_strategy has status limited, so once the builder starts setting feature=value_rules the existing non-ga semantics would block COST_CAP/LOWEST_COST_WITHOUT_CAP - revisit before wiring value rules into the builder; (2) placement_soft_opt_out.spend uses required_field for an optional field, acceptable as feature-scoped; (3) the test selects new entries by checked_date 2026-10-21, fragile if another task adds entries with that date.\nVerdict: approved.",
+            "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              1052
+            ],
+            "recorded_at": "2026-10-22T03:21:44+00:00",
+            "issue_scopes": {
+              "1052": "9ec0c2a8ad90f824b35527de9cf47751b33907bd2c0104ad4cf93e9d60afe4ed"
+            }
+          },
+          "lane": {
+            "id": "3b4a065dbdae4244b255f6a7ed404a48",
+            "pr": 1057,
+            "issues": [
+              1052
+            ],
+            "actor": "Reviewer-W1022052",
+            "session": "run_w1022_052",
+            "coordinator": "Coordinator-I1021A",
+            "started_at": "2026-10-22T03:17:32+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-22T03:22:16+00:00"
+        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
