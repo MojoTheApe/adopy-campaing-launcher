@@ -54,6 +54,13 @@ policy, dependencies and mixed changes keep the normal route:
 
 **Review -> Approved -> a Coordinator's reviewed batch of at most five -> main -> verified delivery.**
 
+For a published canonical shared-support upgrade, the global process/product
+boundary retains this ordinary source/batch admission and every applicable check.
+Only the shared [PROCESS_SUPPORT](PROCESS_SUPPORT.md) proof and genuine independent
+whole-scope/product-isolation review can establish process delivery after main
+without a consumer product-release request. This does not expand the instruction-only
+classifier above or permit unknown/mixed changes to skip product acceptance.
+
 The [temporary selected route](POST_MAIN_DELIVERY.md) was activated on 2026-10-15
 UTC and currently omits Stage. Ordinary sources remain approval-only; only the
 genuine reserved combined batch enters main. The permanent `stage` branch/history is retained

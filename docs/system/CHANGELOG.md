@@ -1,30 +1,26 @@
 # System history
 
-## Publication controls match dashboard primary actions — ACL-1845
+## ACL-2050 — API builder verifies Meta kept manual placements — 2026-10-21
 
-- The footer owns one primary all/selected campaign action; the open campaign's
-  action is secondary. Labels stay at 14 px with a 38 px minimum height and visible
-  keyboard focus. A live scope describes the checkbox selection; the action count
-  excludes accounts already building, matching the existing dispatch guard.
-- Unavailable bulk publication has a soft blue fill, distinguishable border and
-  an explanation. Zero unlocked campaigns disables that action while other accounts
-  remain enqueueable. No selection still means all campaigns and all selected keeps
-  the established all label. Confirmation retains its existing payload semantics.
-- Queue progress exposes `aria-busy` on individual and bulk publishing controls.
-  Existing duplicate explanations and the ability to queue other accounts remain;
-  this visual state adds no lock. Unknown status still uses the existing disable gate.
-  A focused footer select survives checkbox updates without node replacement.
-- Synthetic browser checks cover both themes, the production 360 px drawer and
-  480/720 px width-token compatibility previews, preview invalidation, confirmation,
-  running, queued and lost-status states. Existing selection, retry, Stop and draft-only
-  request tests pass. No live profile, advertising operation or installed-package
-  delivery is asserted by these source checks. Supplemental checks use the newer
-  production Adopy tokens, docked/expanded two-column CSS and sanitized markup;
-  they prove CSS compatibility, not adoption of the newer expanded/API runtime.
-  The preflight gate (`applyGate`) and the queue renderer (`showQueue`) keep the zero-count
-  exclusion, so a queue update cannot re-enable the action when nothing is available.
-  The PAUSED/drafts wording comes from main's ACL-1761 label; this change only switches
-  the count to the campaigns that can actually be sent.
+After the API builder creates a campaign, the post-create read-back now also reads the campaign's
+`advantage_state_info` and each ad set's `value_rules_applied`/`value_rule_set_id`. If Meta reports
+`advantage_placement_state=ENABLED`, or the ad set lost the manual platforms/positions or holds a different
+list, Check plan stops with a blocking English error (no auto-fix). A missing `advantage_state_info`
+is not blocking and is flagged `placement_state_verified=false` in the diagnostics. `advantage_audience_state` at campaign level and applied value
+rules are reported as warnings and in `readback.diagnostics` only. Read-only: no new write keys, no value
+rules or account-level exclusion writes. Review fix: the placements check compares platforms, positions and devices
+order-insensitively, so Meta returning the same lists in another order no longer stops Check plan; a genuinely
+different set or automatic placements still stop. A missing `advantage_placement_state` is now also shown as a
+warning ("placement mode was not verified"). Tests: `tests/test_acl2050_placement_readback.py`.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1050).
+
+## ACL-1626 — Account notes: damaged notes file is reported — 2026-10-21
+
+When the account notes file is damaged and set aside, the dashboard now logs a
+warning, returns the set-aside notice in the save response and shows a one-line
+banner on the account map. The backup name has millisecond resolution plus a
+collision counter, so two corruptions in the same moment keep both copies.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/626).
 
 ## ACL-1381 — Consistent Builder ad-text wording — 2026-10-18
 
@@ -43,6 +39,28 @@ new code head retains candidate verification. Existing aggregate negatives,
 producer names, triggers, policies and runtime behavior stay intact. This records
 project verification behavior; it does not establish a cost saving or delivery.
 [Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/971).
+
+## RPA: the first of two attach attempts is no longer logged as a verdict - ACL-1165
+
+- A failed strict attach attempt now logs "strict attempt found no own CDP port (not final: a lenient attach
+  may be tried next)"; a failed lenient attempt logs a neutral "lenient attempt found no CDP debug port either".
+  Both stay at INFO and no longer contain "attachment unavailable".
+- "attachment unavailable" is logged once, at WARNING, only when every path is exhausted: when DirectCDP
+  refuses to relaunch an open profile that has no CDP port. The message points to opening the profile in
+  the Multilogin Desktop app.
+- Log text only. The relaunch refusal, its error text and the `FB_RPA_ALLOW_UNPROXIED_RELAUNCH` gate are unchanged.
+
+## API publish: no review window when there is nothing to review — ACL-1784 — 2026-10-17
+
+With `fb_backend=api` a finished job keeps the Multilogin profile as a review
+window (holding a queue slot) only when Meta received writes and the readback
+did not confirm them all. A job that wrote nothing (plan or preflight error,
+stop before the first write) or whose every campaign is created and verified
+frees its slot; it stops the profile only if the job started it, never one the
+user opened. The job panel states in English why the window was or was not
+kept. If a profile the job started stays open anyway (Stop, the keep-open
+switch, a dry run, a failed stop), the slot stays taken and the panel says the
+profile is still open. The RPA path is unchanged.
 
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
@@ -272,6 +290,14 @@ a clear refusal.
   filters, so later tests see their own logging behavior. Production redaction and
   the routing-log assertions remain unchanged.
 
+## Countries: a vertical activity line replaces the dot — ACL-1838
+
+- Active country rows show a static 2 px line in the existing accent color at the
+  left, following the owner's selected design option 3. Inactive rows have no marker.
+- The marker occupies no label space and has no separate pointer target. The existing
+  activity predicate, expanded-country highlight, country actions and FTD counts
+  retain their behavior.
+
 ## Media wizard: Crop -> Media loop no longer ends in a false "stuck" stop - ACL-1736
 
 Run 445fa5460ce6 (Facebook_5265, ad 2, library pick): Next on Crop led back to Media, then
@@ -312,7 +338,6 @@ Crop where Next hung and closed the wizard with Close, leaving the ad without me
   scale drop (dpr below 0.85 of before) is undone and not retried.
 - The `window_bounds` diag records `enlarged: true` and `enlarged_to` (the new size). No new
   windows are opened and the window is never moved to another monitor.
-
 ## Campaign open: the AI-guided / Manual chooser counts as Create taken - ACL-1726
 
 - Run 4db2039f760d (Facebook_9403A, 08.10): Create now opens Meta's "Create new campaign" chooser
@@ -389,7 +414,6 @@ names, formulas and number format. Decisions: owner, 2026-10-06 (issue #652).
 - **Ad drills**: the Date column and the dead "+ 🛒" button are gone.
 - **Copy for group** (button and hint under a red account status) is hidden for now; `SHOW_COPY_FOR_GROUP = True` in `app.py` brings it back. Screenshot and status code are unchanged.
 - Python edits (`morning_report.py` trend builder, `app.py`) need a `serve.py` restart.
-
 ## next_to_ad confirms the ad level and names the reason on that step — ACL-1693
 
 Manager laptop LAPTOP-UA006, run 81c1bfbb5456 (07.10, window 1536x730 at dpr 1.25): `next_to_ad`
@@ -478,7 +502,6 @@ so none of the eight pick methods ever ran against an open menu.
   stay open; Website is not offered in the open menu; Conversion location is not on this screen
   (the ad editor was showing, as on Facebook_5265).
 - Review fixes: the script press is one click (two would close a toggle trigger). The keyboard (focus + Enter) opener was dropped entirely: Enter could accept a suggestion in the ad set name field and rename the ad set, so the only openers are the click and the script press, and the name field is blurred first (in the frame that holds it). As a single safety check, the ad set name is read once at the start of the Conversion location step and compared at its end, across all retries; a change stops the step (the recorded flow returns the blocking, never replayed `conversion_website_name_changed`) and says only that the name changed, never the names. "Not on this screen" is returned only when the field is truly absent (a page script failing in every frame is its own read-error reason); "would not stay open" only after both openers pressed and failed; the reason is added to the step's error text, not only telemetry; the step state is per thread.
-
 ## Advantage+ audience on WhatsApp campaigns: a collapsed Age row with a note is opened again — ACL-1638
 
 The classic ad set editor failed the `advantage_plus_audience` step (`still_on`, campaign not published)
@@ -588,7 +611,6 @@ failed campaign ended as do-not-publish. Two new layouts, both in the classic ed
   (`account_controls_row_read_error`), not that Meta does not offer the exclusions.
 - Tests: `tests/test_bench_placements_1629.py` on two scrubbed captures; bench catalogue rows
   added.
-
 ## The same video on several ads gets media on every ad — ACL-1637
 
 06.10, Doc120 (45b9778e65df) and B97 (5f05cf961d37, 152f7df4ef6a): the first ad got the video,
@@ -705,7 +727,6 @@ write their own note about an account.
   the same note in every country; notes survive a report refresh and a dashboard restart.
 - Text is escaped on render and written to the page only as text.
 - The `ready` / `to_do` fields stay in the row data; only their display is removed.
-
 ## Builder creative replacement after a recent refresh — ACL-1651 / PR665
 
 The owner's 2026-10-13 replacement-photo report exposed a missed-search refresh
@@ -1110,7 +1131,6 @@ push. The stage→main promotion alone took about an hour of a task's delivery t
   otherwise it refuses (an API error while proving counts as no proof). It prints which
   run really tested the tree, so the release log links it. Tracker `check-merge` reads only the aggregate required checks
   and `verify-stage` reads no checks, so the pinned Tracker needed no change.
-
 ## A hand-opened profile window is reopened at once, with no conditions — ACL-1562
 
 On 2026-10-04 the "open profile" button for Facebook_9943 answered "The profile is open
@@ -1463,7 +1483,6 @@ the window (ACL-1388/1427). The read paths now use the same path.
   its own profile lock, so other reads are not blocked.
 - Tests: `tests/test_reads_reopen_a_hand_opened_profile.py` (stubbed clock, Win32,
   processes and MLX; no real Multilogin).
-
 ## One Copy for group button: account and status on the screenshot — ACL-1520
 
 Owner decision 2026-10-03: the provider's group gets one paste, not a line and a
@@ -1605,7 +1624,6 @@ and the owner's Publish on Facebook_1443 failed with "Failed to fetch".
   Dismiss frees the account instead; its next Publish reuses that same
   `request_id`, so a submission that did reach the server is not doubled.
   Other accounts may keep publishing while one waits for Retry.
-
 ## A failed read says "Campaigns not read", not "0 campaigns" — ACL-1504
 
 2026-10-02, Facebook_1443: Ads Manager did not open within 90 s, and the account
@@ -1637,7 +1655,6 @@ account has no campaigns".
     (`amapRereadSync`). Before, it stayed grey after Read all until a reload.
   - Bare Meta tokens (`EAA…`) are scrubbed from the technical text too.
   - A not-read attempt for other dates says "not the dates on screen".
-
 ## Parallel profiles start at 3.5 GB each and adapt to measured use — ACL-1424
 
 2026-10-01 four Multilogin profiles used 13.6 GB (about 3.4 GB each) and the laptop
@@ -1868,7 +1885,6 @@ sent by ACL. Healthy and unread statuses show neither.
   Tests check that copying makes no request and stores nothing — only the clipboard.
   After a Read the status cell is rebuilt as one markup string, the same markup as the
   map template (fixes a CI regression in the spend-poll test).
-
 ## Every campaign sends a run summary to Sentry, labelled with the manager — ACL-1447
 
 2026-10-01. Until now only blocking failures reached Sentry; how a run went on a
@@ -1972,7 +1988,6 @@ joining, so a slow worker showed up as `assert None == 0`. The worker now lives 
 `tests/targeting_worker.py` (registry import only), all workers share one 120 s
 deadline and are joined before exit codes are checked; the assertion is unchanged
 (three clean exits, 24 targets). `test_save_waits_out_a_briefly_held_registry` pins the wait.
-
 ## A brief file hold on Windows no longer loses a spend reading — ACL-1466
 
 The spend and status store (`account_spend.json`) was replaced with a bare `os.replace`.
@@ -1981,7 +1996,6 @@ looks at it, and answered `WinError 5`; the Read result was lost. The concurrent
 test caught it ten times since 2026-09-15. The store now replaces through
 `config.paths._replace_when_free`, as the account-links file does since ACL-1216; a hold
 that does not end still raises.
-
 ## Builder: visible Duplicate on ads and campaigns, no repeated buttons — ACL-1459
 
 2026-10-01 the owner sent a screenshot of the builder drawer: duplicating an ad was a
@@ -1992,7 +2006,6 @@ Duplicate campaign" sits inside the campaign card under its ads and, in the draw
 opens the copy for editing, as the old bottom button did. Removed: the slot-header
 icon, the bottom-of-drawer button and, inside the drawer only, the form's "+ Add
 Campaign" (the country page keeps it). Duplication logic is unchanged.
-
 ## Buttons no longer look like input fields — ACL-1455
 
 2026-10-01 the owner noted that small buttons and input fields look the same. The
@@ -2003,7 +2016,6 @@ a soft blue background on hover and a focus ring for the keyboard; delete and er
 states are red, disabled ones grey. Fields keep their frame — the frame now means
 "type here". Primary and other filled buttons are unchanged. One CSS block, both
 themes; no markup changes.
-
 ## Video pairs keep the post file with a warning when the story cannot be placed — ACL-1476
 
 Owner decision 2026-10-01 (Issue #476) after ACL-1426 went live: two post/story pair
@@ -2109,7 +2121,6 @@ and text and stopped ad 3 at `dialog_open`.
   ad at once (`adN_create:dialog_open`). Meta's media picker left over the new ad
   is closed with its own Cancel. `simple_create_more_ads` telemetry gains
   `progress_s`, `dialog.open_s`, `dialog_kind` and `media_picker`.
-
 ## Placements pass when Meta no longer offers a placement, and in the single-screen editor — ACL-1445
 
 2026-10-01 campaigns ended "do not publish: placements" on Doc19 and on the tester's
@@ -2148,7 +2159,6 @@ machine although the placements were right. Three causes, each now a bench test
   accepted. The step opens it and reads the rows back; if it cannot open it, the step
   fails and reports the counts (`placements_summary`). The fixture was rebuilt from the
   screenshot text, as there is no capture.
-
 ## The robot finds Meta's "Add text option" next to the text generation section — ACL-1344
 
 28.09–01.10 the second primary text was not added on most video ads
@@ -2318,7 +2328,6 @@ docs/repository/WORKFLOW.md). Locally on the same laptop: 20 min with 8 workers.
   request instead of sleeping 100–500 ms; a publish log in
   `test_meta_campaign_agent` goes to `tmp_path`, not the repository `output/`.
 - No product code changed; no test is serial-only.
-
 ## A disabled ad account no longer shows as "no warning" — ACL-1391
 
 2026-09-30 the account map showed "no warning" for FacebookDoc20 while Ads Manager

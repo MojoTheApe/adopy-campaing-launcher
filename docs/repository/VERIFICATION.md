@@ -1,9 +1,16 @@
 # Verification policy
 
+Verify process changes separately from product delivery for every profile.
+Instructions and isolated task/workflow tooling need relevant checks and
+independent review. Assess complete immutable inputs, including indirect product,
+build, install and update effects; a directory or label alone is insufficient.
+Testing a build or installer does not authorize publishing an unchanged product.
+Split mixed changes and use only the pinned supported completion proof.
+
 Read the exact [selected shared guide](TRACKER.md), the [ACL support/cutover plan](EARLY_ADOPTION.md) and the guarded operator mapping in [AGENTS.md](../../AGENTS.md).
 Shared contract references retain canonical bodies; `_ACL` documents preserve the original local cutover history and stronger controls.
 
-Follow the [shared verification policy](https://github.com/MojoTheApe/master-repo/blob/6f7e9416e68c66484a3b6c0213eab24847005b8f/docs/verification.md)
+Follow the [shared verification policy](https://github.com/MojoTheApe/master-repo/blob/4f148cbbbc2c9c65a7fdebba9b37551f91566e04/docs/verification.md)
 at this project's exact standard pin. `delivery.json` defines actual product
 commands/required CI names; retain matching Tracker settings, runtime checks and
 local exceptions. These compatible local wording clarifications require no new
@@ -16,7 +23,7 @@ platforms and distinct truthful result names. Fast feedback is intermediate;
 ready handoff and admission need all applicable full coverage. Group related
 corrections into a meaningful ready submission on the owned task branch; retain
 useful intermediate feedback and normal review fixes. Explain manual expensive
-launches or unexpected repeats through existing task/PR/run links. Follow the exact pinned [submission rules](https://github.com/MojoTheApe/master-repo/blob/6f7e9416e68c66484a3b6c0213eab24847005b8f/docs/verification-submission.md).
+launches or unexpected repeats through existing task/PR/run links. Follow the exact pinned [submission rules](https://github.com/MojoTheApe/master-repo/blob/4f148cbbbc2c9c65a7fdebba9b37551f91566e04/docs/verification-submission.md).
 
 Preserve the adopted collector's existing bounded reuse rules. Expand context
 proof only through reviewed compatible support/adoption; the common policy alone
@@ -38,7 +45,7 @@ Preserve stricter adopted limits and inspect an uncertain dispatch before anothe
 request. Shared retry/evidence export does not opt ACL in.
 
 For an authorized standard upgrade, use the
-[coordinated procedure](https://github.com/MojoTheApe/master-repo/blob/6f7e9416e68c66484a3b6c0213eab24847005b8f/docs/workflow-upgrades.md).
+[coordinated procedure](https://github.com/MojoTheApe/master-repo/blob/4f148cbbbc2c9c65a7fdebba9b37551f91566e04/docs/workflow-upgrades.md).
 Only the exact compatible Tracker guide supplies commands. A newer standard/skill
 cannot activate an unimplemented maintenance or evidence collector.
 

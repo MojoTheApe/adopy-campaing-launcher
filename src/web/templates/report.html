@@ -251,6 +251,7 @@
       box-shadow: inset 2px 0 0 var(--good);
     }
     .sidebar-country-btn {
+      position: relative;
       display: block;
       width: 100%;
       text-align: left;
@@ -271,9 +272,12 @@
        доллара, и до него она выглядела бы как закрытая полгода назад. */
     .sidebar-country-btn.live { font-weight: 600; color: var(--text); }
     .sidebar-country-btn.live::before {
-      content: ""; display: inline-block; width: 5px; height: 5px;
-      border-radius: 50%; background: var(--accent); margin-right: 6px;
-      vertical-align: middle;
+      content: "";
+      position: absolute;
+      left: 4px; top: 9px; bottom: 9px; width: 2px;
+      border-radius: 1px;
+      background: var(--accent);
+      pointer-events: none;
     }
     .sidebar-country-btn:focus-visible {
       outline: 2px solid var(--accent);
@@ -1730,6 +1734,19 @@
     .amap-country > summary::-webkit-details-marker { display: none; }
     .amap-country > summary::before { content: '▸'; color: var(--muted); font-size: var(--adopy-text-sm); }
     .amap-country[open] > summary::before { content: '▾'; }
+    /* ACL-1840: the campaign footer mounts beside the account table. Keep
+       its reading line aligned with the workbook notice and connection form. */
+    .amap-country > .hc.hc-after {
+      margin-top: 0;
+      padding: 0.5rem 0.85rem;
+      box-sizing: border-box;
+    }
+    .amap-country > .hc-after .hc-foot { overflow-wrap: anywhere; }
+    .amap-country > .hc-after .hc-hist { margin-top: 0.25rem; }
+    .amap-country > .hc-after .hc-hist > summary {
+      max-width: 100%; overflow-wrap: anywhere;
+    }
+    .amap-country > .hc-after .hc-hist-body { overflow-wrap: anywhere; }
     .amap-sum {
       margin-left: auto; display: flex; flex-wrap: wrap; gap: 1.1rem;
       font-weight: 400; font-size: var(--adopy-text-table); color: var(--muted);
@@ -1944,6 +1961,7 @@
     .amap-note-pop .amap-note-state { color: var(--muted); }
     .amap-note-pop .amap-note-state.bad { color: var(--danger); }
     .amap-note-toast { position: fixed; left: 1rem; bottom: 1rem; z-index: 1000; font-size: var(--adopy-text-table); background: var(--bg-elev); border: 1px solid var(--field-border); border-radius: var(--radius-sm); padding: 0.35rem 0.6rem; box-shadow: var(--adopy-shadow-popover); }
+    .amap-note-aside { position: fixed; left: 1rem; bottom: 3.2rem; z-index: 1000; max-width: 32rem; overflow-wrap: anywhere; font-size: var(--adopy-text-table); background: var(--bg-elev); border: 1px solid var(--danger); border-radius: var(--radius-sm); padding: 0.35rem 0.6rem; box-shadow: var(--adopy-shadow-popover); }
     .amap .amap-x {
       background: none; border: 1px solid var(--field-border);
       color: var(--muted); border-radius: var(--radius-sm);
@@ -2282,6 +2300,12 @@
     .amap-tree-num.spend { color: inherit; }
     /* Числа книги — те же, что в строке аккаунта, и тем же цветом. */
     .amap-tree-num.attr { color: inherit; }
+    /* ACL-1377: «not in workbook» — тихая пометка у уровня строки, тем же
+       приглушённым цветом, что и сам уровень: это пояснение, не тревога. */
+    .amap-tree-nowb {
+      color: var(--muted); font-size: inherit; font-weight: 400;
+      text-transform: none; letter-spacing: 0; white-space: nowrap;
+    }
     /* Колонка Setup у строки аккаунта говорит «готов ли аккаунт», а у строк
        дерева в ней стоит результат Meta. Под одним заголовком — две разные
        вещи (ACL-1275), поэтому результат подписан источником. */
@@ -3521,7 +3545,8 @@
     .cb-fc-label { display: block; margin-top: 0.4rem; font-size: var(--adopy-text-sm); }
     .cb-fc-label .cb-input { display: block; width: 100%; margin-top: 0.15rem; box-sizing: border-box; }
     .cb-fc-opt { opacity: 0.6; }
-    .cb-fc-checks { display: flex; gap: var(--space-md); margin-top: 0.15rem; }
+    .cb-fc-inline { display: block; margin-top: 0.3rem; font-size: var(--adopy-text-sm); }
+    .cb-fc-checks { display: flex; flex-wrap: wrap; gap: var(--space-md); margin-top: 0.15rem; }
     .cb-fc-q { display: grid; gap: 0.2rem; margin: 0.25rem 0; }
     .cb-fc-actions { display: flex; gap: var(--space-sm); margin-top: 0.5rem; }
     .cb-fc-msg { color: var(--danger, #b3261e); }
@@ -4102,6 +4127,17 @@ async function dashRefresh(ev) {
 {% endif %}
 {% endfor %}
 {% endif %}
+{#- ACL-106: в книге за период строки есть, но не у этого менеджера. Отдельный блок: условие уведомления выше не трогаем. -#}
+{% if report.countries and book_covers_period.value and period_owner and period_owner.kind == 'manager' %}
+<div class="page-top" id="workbook-period-notice" role="status">
+  <p style="color: var(--muted)" data-empty-owner="manager">
+    No rows for {{ period_owner.manager }} in
+    <b>{{ period.date_from or 'the start' }}{% if period.date_to and period.date_to != period.date_from %} → {{ period.date_to }}{% elif not period.date_to %} onward{% endif %}</b>,
+    while the workbook has rows for other managers on these dates. Nothing to review for you here; the file itself is not the problem.
+    Pick another period, or read the spend straight from an account below; the account map stays on this page.
+  </p>
+</div>
+{% endif %}
 {% if not report.countries or not book_covers_period.value %}
 <div class="page-top" id="workbook-period-notice" role="status">
   {% if account_map and not book_covers_period.value %}
@@ -4109,6 +4145,7 @@ async function dashRefresh(ev) {
     {% if account_map.dates %}The workbook has no rows for{% else %}The workbook has no rows with readable dates for{% endif %}
     <b>{% if account_map.date_from %}{{ account_map.date_from }}{% if account_map.date_to and account_map.date_to != account_map.date_from %} → {{ account_map.date_to }}{% elif not account_map.date_to %} onward{% endif %}{% else %}dates through {{ account_map.date_to }}{% endif %}</b>.
     {% if account_map.dates %}It runs to {{ account_map.dates[-1] }}.{% endif %}
+    Nobody has rows for these dates, so the workbook itself may need updating.
     Pick another period, or read the spend straight from an account below.
   </p>
   {% else %}
@@ -5881,8 +5918,12 @@ window.cbLayout = (function () {
   /* ACL-1776: шаблон Instant Form. Зеркало src/fb_api/form_templates.validate:
      те же тексты и потолки; окончательно проверяет сервер при сохранении и при публикации. */
   var FORM_LIMITS = { questions: 5, options: 10, name: 60, headline: 60, intro: 500,
-                      label: 80, option: 60, thanks: 300, linkText: 70 };
-  var CONTACTS = ['name', 'email', 'phone'];
+                      label: 80, option: 60, thanks: 300, linkText: 70, introTitle: 60, followUp: 1000 };
+  var CONTACTS = ['name', 'email', 'phone', 'first_name', 'last_name'];
+  /* ACL-2053: языки Instant Form для Graph; зеркало form_templates.LOCALES (сверяет тест). */
+  var FORM_LOCALES = ['AR_AR', 'CS_CZ', 'DA_DK', 'DE_DE', 'EL_GR', 'EN_GB', 'EN_US', 'ES_ES', 'ES_LA', 'FI_FI', 'FR_FR',
+    'HE_IL', 'HI_IN', 'HU_HU', 'ID_ID', 'IT_IT', 'JA_JP', 'KO_KR', 'NB_NO', 'NL_NL', 'PL_PL', 'PT_BR',
+    'PT_PT', 'RO_RO', 'RU_RU', 'SV_SE', 'TH_TH', 'TR_TR', 'VI_VN', 'ZH_CN', 'ZH_HK', 'ZH_TW'];
 
   function httpsUrl(u) {
     return /^https:\/\/[^\s\/?#:]+\.[^\s\/?#:]+(:\d+)?([\/?#]\S*)?$/i.test(String(u == null ? '' : u).trim());
@@ -5890,7 +5931,8 @@ window.cbLayout = (function () {
 
   function squeeze(v) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); }
 
-  function validateTemplate(t) {
+  /* legacyLocale - язык уже сохранённого шаблона: он допустим, даже если его нет в списке. */
+  function validateTemplate(t, legacyLocale) {
     var e = [], L = FORM_LIMITS;
     t = t || {};
     var name = squeeze(t.name), headline = squeeze(t.headline);
@@ -5899,8 +5941,11 @@ window.cbLayout = (function () {
     if (!headline) e.push('Headline is required');
     else if (headline.length > L.headline) e.push('Headline is longer than ' + L.headline + ' characters');
     if (String(t.intro || '').trim().length > L.intro) e.push('Intro is longer than ' + L.intro + ' characters');
+    if (squeeze(t.intro_title).length > L.introTitle) e.push('Intro title is longer than ' + L.introTitle + ' characters');
     var chosen = (t.contact_fields || []).filter(function (k) { return CONTACTS.indexOf(String(k)) !== -1; });
-    if (!chosen.length) e.push('Choose at least one contact field (name, email or phone)');
+    if (!chosen.length) e.push('Choose at least one contact field (name, first name, last name, email or phone)');
+    if (chosen.indexOf('name') !== -1 && (chosen.indexOf('first_name') !== -1 || chosen.indexOf('last_name') !== -1))
+      e.push('Choose either full name or first and last name, not both');
     var qs = t.questions || [];
     qs.forEach(function (q, i) {
       var n = i + 1, label = squeeze(q && q.label), kind = (q && q.type) || 'short_answer';
@@ -5919,13 +5964,20 @@ window.cbLayout = (function () {
     var url = String(t.privacy_url || '').trim();
     if (!url) e.push('Privacy policy URL is required');
     else if (!httpsUrl(url)) e.push('Privacy policy URL must start with https://');
+    var followUp = String(t.follow_up_action_url || '').trim();
+    if (followUp) {
+      if (!httpsUrl(followUp)) e.push('Follow-up URL must start with https://');
+      else if (followUp.length > L.followUp) e.push('Follow-up URL is longer than ' + L.followUp + ' characters');
+    }
     var thanks = String(t.thank_you_text || '').trim();
-    if (!thanks) e.push('Thank-you screen text is required');
+    if (!thanks) { if (!followUp) e.push('Thank-you screen text is required'); }
     else if (thanks.length > L.thanks) e.push('Thank-you screen text is longer than ' + L.thanks + ' characters');
     var site = String(t.website_url || '').trim();
     if (site && !httpsUrl(site)) e.push('Website link on the thank-you screen must start with https://');
     var locale = squeeze(t.locale).toUpperCase().replace(/-/g, '_') || 'EN_US';
-    if (!/^[A-Z]{2}_[A-Z]{2}$/.test(locale)) e.push('Locale must look like EN_US');
+    if (FORM_LOCALES.indexOf(locale) === -1 && !(legacyLocale && locale === String(legacyLocale).toUpperCase() && /^[A-Z]{2}_[A-Z]{2}$/.test(locale))) e.push('Unknown locale: ' + locale + ' (choose a language from the list)');
+    var ftype = squeeze(t.form_type).toLowerCase() || 'more_volume';
+    if (ftype !== 'more_volume' && ftype !== 'higher_intent') e.push('Form type must be More volume or Higher intent');
     return e;
   }
 
@@ -5955,7 +6007,7 @@ window.cbLayout = (function () {
     LEVELS: LEVELS, LEVEL_LABEL: LEVEL_LABEL, FUTURE: FUTURE, DESTINATIONS: DESTINATIONS,
     destination: destination, formOptions: formOptions, formsStatus: formsStatus,
     validateTemplate: validateTemplate, formSource: formSource, templateOptions: templateOptions,
-    httpsUrl: httpsUrl, FORM_LIMITS: FORM_LIMITS,
+    httpsUrl: httpsUrl, FORM_LIMITS: FORM_LIMITS, FORM_LOCALES: FORM_LOCALES,
     level: level, futureTip: futureTip, futureHtml: futureHtml, effectiveName: effectiveName,
     accountState: accountState, clampAd: clampAd, routes: routes, campMeta: campMeta, parseList: parseList
   };
@@ -7559,7 +7611,7 @@ window.cbTree = (function () {
     ["^(browser_window|drafts_pending|tab_woken|create|objective_|campaign_|daily_budget|leads$|continue$|onboarding_modal$|simple_create$|simple_objective$|simple_adset_section$|next_to_adset$)", "campaign"],
     ["^(adset_|conversion_|website_|further_limit|pick_further_limit|advantage_plus|age_suggestion|audience_|before_audience|languages|locations_open|targeting|placements|account_placement|devices_ios|simple_card$|listbox_left_open$|next_to_ad(_stuck_on_adset)?$|simple_ad_section$)", "adset"],
     ["^(ad_level_summary$|destination_sweep|simple_create_draft$)", "final"],
-    ["^(ad\\d*_|creative_|text_variations_off$|text_generation_off$|simple_create_more_ads$|simple_reentry$|loading_modal_reload$|destination_website_selected$|destination_instant_form_off$)", "ad"]
+    ["^(ad\\d*_|creative_|text_variations_off$|text_generation_off$|simple_create_more_ads$|simple_reentry$|loading_modal_reload$|destination_website_selected$|destination_instant_form_off$|page_identity$)", "ad"]
   ],
   "steps": {
     "ad_copy": [1.0, 6],
@@ -9480,11 +9532,13 @@ function amapFillAttribution(box, objects, data) {
   lines.forEach(function (line, i) {
     var o = line._amapObject;
     if (!o) return;
-    var got = null, why = '', shared = 0;
+    var got = null, why = '', shared = 0, nowb = false;
     /* Ответ может прийти второй раз (перечитали период) — прежняя пометка
        снимается, новая ставится по новому ответу. */
     var oldMark = line.querySelector('.amap-tree-shared');
     if (oldMark) oldMark.remove();
+    var oldNowb = line.querySelector('.amap-tree-nowb');
+    if (oldNowb) oldNowb.remove();
     if (!data || !data.ok) {
       why = (data && data.error) || 'Workbook numbers are not available';
     } else if (o.level === 'ad') {
@@ -9501,7 +9555,16 @@ function amapFillAttribution(box, objects, data) {
       var cn = amapTreeName(o.name);
       if (keys.campCount[cn] > 1) why = 'Two campaigns share this name — the workbook cannot tell them apart';
       else got = amapOwn(data.campaigns, cn);
-      if (!got && !why) why = 'No rows for this campaign in the stats workbook for these dates';
+      if (!got && !why) {
+        why = 'No rows for this campaign in the stats workbook for these dates';
+        /* ACL-1377: у Meta числа есть, а в книге строк нет (прогревочные
+           MaxWarmup на Doc19). Прочерки тогда — не поломка, и это сказано
+           тихой пометкой у уровня строки. */
+        /* «$0.00» и «0» — не числа Meta: такой черновик ничем не отличается
+           от пустого, и пометка ему не нужна. */
+        nowb = /[1-9]/.test(String(o.spend || '') + String(o.results || ''))
+             && Object.keys(data.campaigns || {}).length > 0;  // книга пуста за период — пометка вводит в заблуждение
+      }
     }
     line.querySelectorAll('.amap-tree-num.attr').forEach(function (cell) {
       var v = got ? got[cell.dataset.attr] : null;
@@ -9524,6 +9587,17 @@ function amapFillAttribution(box, objects, data) {
         mark.textContent = 'shared by ' + shared + ' ads';
         mark.title = AMAP_SHARED_TIP;
         kind.appendChild(mark);
+      }
+    }
+    if (nowb) {
+      var nkind = line.querySelector('.amap-tree-kind');
+      if (nkind) {
+        var tag = document.createElement('small');
+        tag.className = 'amap-tree-nowb';
+        tag.textContent = ' · not in workbook';
+        tag.title = 'Meta shows this campaign, but the stats workbook has no rows for it '
+                  + 'for these dates (for example a warm-up campaign). The dashes are not an error.';
+        nkind.appendChild(tag);
       }
     }
   });
@@ -10890,13 +10964,22 @@ async function amapSend(body, msgEl) {
     });
   }
 
+  // Файл заметок был испорчен и отложен в сторону: говорим об этом на странице.
+  var aside = null, asideTimer = null;
+  function notifyAside(msg) {
+    if (!aside) { aside = document.createElement('div'); aside.className = 'amap-note-aside'; aside.setAttribute('role', 'alert'); document.body.appendChild(aside); }
+    aside.textContent = msg; aside.hidden = false;
+    clearTimeout(asideTimer);
+    asideTimer = setTimeout(function () { aside.hidden = true; }, 15000);
+  }
+
   function post(kind, label, text, ifEmpty) {
     var body = { text: text }; body[kind] = label;
     if (ifEmpty) body.if_empty = true;
     return fetch('/api/account-notes', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
     }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok && j.ok, j: j, status: r.status }; }); })
-      .then(function (res) { if (!res.ok) { var e = new Error((res.j && res.j.error) || 'failed'); e.status = res.status; throw e; } return res.j; });
+      .then(function (res) { if (!res.ok) { var e = new Error((res.j && res.j.error) || 'failed'); e.status = res.status; throw e; } if (res.j && res.j.warning) notifyAside(res.j.warning); return res.j; });
   }
 
   function build() {
@@ -13312,7 +13395,10 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       var sel = row.querySelector('.cb-form-select');
       var hid = row.querySelector('input[name$="_form_id"]');
       if (!sel || !hid) return;
-      var entry = window.cbForms[formAccount(row)] || null;
+      var slotEl = row && row.closest ? row.closest('.cb-slot') : null;
+      var pageInput = slotEl ? slotEl.querySelector('input[name$="_page_id"]') : null;
+      var resolvedPage = window.cbResolvedPage ? window.cbResolvedPage(slotEl) : (pageInput ? pageInput.value : '');
+      var entry = window.cbForms[formAccount(row) + '|' + resolvedPage] || null;
       var opts = L.formOptions(entry && entry.forms, hid.value);
       var sig = JSON.stringify([opts, hid.value]);
       if (sel.dataset.sig !== sig) {
@@ -13332,6 +13418,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
 
   /* Место конверсии набора -> что видно и что уходит на сервер. */
   window.cbSyncDestination = function (slot) {
+    if (window.cbSyncPages) window.cbSyncPages(slot);
     var L = window.cbLayout;
     var sel = slot && slot.querySelector ? slot.querySelector('.cb-destination') : null;
     if (!L || !sel) return;
@@ -13397,12 +13484,17 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     var account = row ? formAccount(row) : '';
     var note = row ? row.querySelector('[data-form-note]') : null;
     if (!account || btn.disabled) return;
+    var slotEl = row && row.closest ? row.closest('.cb-slot') : null;
+    var pageInput = slotEl ? slotEl.querySelector('input[name$="_page_id"]') : null;
+    var selectedPage = window.cbResolvedPage ? window.cbResolvedPage(slotEl) : (pageInput ? pageInput.value : '');
+    if (!selectedPage) { if (note) note.textContent = 'Refresh Facebook Pages before loading forms.'; return; }
     btn.disabled = true;
     if (note) note.textContent = 'Reading the forms of the Page from Meta…';
     var body = new FormData();
     body.append('account_label', account);
+    body.append('page_id', selectedPage);
     function done(entry) {
-      window.cbForms[account] = entry;
+      window.cbForms[account + '|' + selectedPage] = entry;
       btn.disabled = false;
       document.querySelectorAll('.cb-slot').forEach(function (s) {
         if (formAccount(s) === account) window.cbFillFormSelects(s);
@@ -13517,9 +13609,13 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     });
     return {
       name: panelValue(panel, '.cb-fc-name'), headline: panelValue(panel, '.cb-fc-headline'),
-      intro: panelValue(panel, '.cb-fc-intro'), contact_fields: contacts, questions: qs,
+      intro: panelValue(panel, '.cb-fc-intro'), intro_title: panelValue(panel, '.cb-fc-intro-title'),
+      contact_fields: contacts, questions: qs,
+      questions_first: !!(panel.querySelector('.cb-fc-questions-first') || {}).checked,
       privacy_url: panelValue(panel, '.cb-fc-privacy'), thank_you_text: panelValue(panel, '.cb-fc-thanks'),
-      website_url: panelValue(panel, '.cb-fc-site'), locale: panelValue(panel, '.cb-fc-locale') || 'EN_US'
+      website_url: panelValue(panel, '.cb-fc-site'), follow_up_action_url: panelValue(panel, '.cb-fc-followup'),
+      form_type: panelValue(panel, '.cb-fc-form-type') || 'more_volume',
+      locale: panelValue(panel, '.cb-fc-locale') || 'EN_US'
     };
   };
 
@@ -13573,18 +13669,26 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<div class="cb-fc-title">Create and save form</div>' +
       '<label class="cb-fc-label">Template name<input type="text" class="cb-input cb-fc-name" maxlength="60" placeholder="Demo form template"></label>' +
       '<label class="cb-fc-label">Headline<input type="text" class="cb-input cb-fc-headline" maxlength="60" placeholder="Get more information"></label>' +
+      '<label class="cb-fc-label">Intro title <span class="cb-fc-opt">(optional, the headline is used if empty)</span><input type="text" class="cb-input cb-fc-intro-title" maxlength="60"></label>' +
       '<label class="cb-fc-label">Intro <span class="cb-fc-opt">(optional)</span><textarea class="cb-input cb-fc-intro" rows="2" maxlength="500"></textarea></label>' +
       '<div class="cb-fc-label">Contact fields<div class="cb-fc-checks">' +
-      '<label><input type="checkbox" class="cb-fc-contact" value="name" checked> Name</label>' +
+      '<label><input type="checkbox" class="cb-fc-contact" value="name" checked> Full name</label>' +
+      '<label><input type="checkbox" class="cb-fc-contact" value="first_name"> First name</label>' +
+      '<label><input type="checkbox" class="cb-fc-contact" value="last_name"> Last name</label>' +
       '<label><input type="checkbox" class="cb-fc-contact" value="email" checked> Email</label>' +
-      '<label><input type="checkbox" class="cb-fc-contact" value="phone"> Phone</label></div></div>' +
+      '<label><input type="checkbox" class="cb-fc-contact" value="phone"> Phone</label></div>' +
+      '<label class="cb-fc-inline"><input type="checkbox" class="cb-fc-questions-first"> Ask the custom questions before the contact fields</label></div>' +
       '<div class="cb-fc-label">Custom questions <span class="cb-fc-opt">(up to 5)</span>' +
       '<div class="cb-fc-questions"></div>' +
       '<button type="button" class="cb-form-refresh" onclick="cbFormQuestionAdd(this)">+ Add question</button></div>' +
       '<label class="cb-fc-label">Privacy policy URL<input type="text" class="cb-input cb-fc-privacy" placeholder="https://example.com/privacy"></label>' +
       '<label class="cb-fc-label">Completion screen<textarea class="cb-input cb-fc-thanks" rows="2" maxlength="300" placeholder="Thank you. We will contact you."></textarea></label>' +
       '<label class="cb-fc-label">Website link on the completion screen <span class="cb-fc-opt">(optional, https)</span><input type="text" class="cb-input cb-fc-site"></label>' +
-      '<label class="cb-fc-label">Locale<input type="text" class="cb-input cb-fc-locale" value="EN_US" maxlength="5"></label>' +
+      '<label class="cb-fc-label">Follow-up URL <span class="cb-fc-opt">(optional, https; where the lead goes after submitting. Without a completion screen text the screen is skipped)</span><input type="text" class="cb-input cb-fc-followup" placeholder="https://example.com/thanks"></label>' +
+      '<label class="cb-fc-label">Form type<select class="cb-input cb-select cb-fc-form-type">' +
+      '<option value="more_volume" selected>More volume</option><option value="higher_intent">Higher intent</option></select></label>' +
+      '<label class="cb-fc-label">Locale <span class="cb-fc-opt">(language of the built-in Meta labels)</span><select class="cb-input cb-select cb-fc-locale">' +
+      ((window.cbLayout && window.cbLayout.FORM_LOCALES) || ['EN_US']).map(function (l) { return '<option value="' + l + '"' + (l === 'EN_US' ? ' selected' : '') + '>' + l + '</option>'; }).join('') + '</select></label>' +
       '<div class="cb-fc-actions">' +
       '<button type="button" class="cb-form-refresh cb-fc-save" onclick="cbFormCreateSave(this)">Save and select</button>' +
       '<button type="button" class="cb-form-refresh" onclick="cbFormCreateClose(this)">&larr; Back to ad</button></div>' +
@@ -13838,7 +13942,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     // Пропускаются только те, у которых своя логика: имя собирается само,
     // счётчик объявлений ставится при их копировании, а таргетинг и ОС уже
     // скопированы выше вместе со своим видимым текстом.
-    var SKIP_FIELDS = { name: 1, ad_count: 1, targeting: 1, os: 1 };
+    var SKIP_FIELDS = { name: 1, ad_count: 1, targeting: 1, os: 1, page_id: 1 };
     var prefix = 'camp_' + srcIdx + '_';
     srcSlot.querySelectorAll('[name^="' + prefix + '"]').forEach(function(srcInput) {
       var field = srcInput.name.slice(prefix.length);
@@ -13999,6 +14103,11 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       /* Бюджет — на кампании (CBO): выбор ABO/CBO владелец снял. */
       '<span class="cb-label">Campaign budget ($/day)</span>' +
       '<input type="number" name="camp_' + idx + '_budget" class="cb-input cb-input-sm" value="" min="1" step="1" placeholder="50" title="Daily budget of the whole campaign">' +
+      '<span class="cb-label">Facebook Page</span>' +
+      '<div class="cb-page-choice"><input type="hidden" name="camp_' + idx + '_page_id" value="">' +
+      '<select class="cb-input cb-page-select" aria-label="Facebook Page" onfocus="cbLoadPages(this.closest(\'.cb-slot\'))" onchange="cbPageChanged(this)"><option value="">Automatic — first available Page of this account</option></select>' +
+      '<div style="font-size:var(--adopy-text-xs);color:var(--muted);overflow-wrap:anywhere" data-page-note role="status"></div>' +
+      '<button type="button" class="cb-page-refresh cb-input" onclick="cbRefreshPages(this.closest(\'.cb-slot\'), true)">Refresh pages</button></div>' +
       '<input type="hidden" name="camp_' + idx + '_name" class="cb-name-hidden" value="">' +
       '</div>' +
       /* Дублирование кампании живёт в её карточке (ACL-1459). */
@@ -15116,9 +15225,11 @@ function cbPlanHtml(data) {
       h += '<div class="cbd-plan-warn" style="color:#b45309">⚠ ' + aclEscHtml(w) + '</div>';
     });
     if (s) {
+      if ((s.manual_required || []).length) h += '<div class="cbd-plan-manual" style="color:var(--warn)"><strong>Manual completion required</strong>: '
+        + s.manual_required.map(aclEscHtml).join(' ') + '</div>';
       var allForms = (s.ad_sets || []).length && (s.ad_sets || []).every(function (x) { return x.destination === 'Instant Form'; });
       h += '<div class="cbd-plan-meta" style="font-size:var(--adopy-text-sm);color:var(--muted)">page '
-        + aclEscHtml(s.page_id || '—') + (s.page_source ? ' (' + aclEscHtml(s.page_source) + ')' : '')
+        + (s.page_name ? aclEscHtml(s.page_name) + ' · ' : '') + aclEscHtml(s.page_id || '—') + (s.page_source ? ' (' + aclEscHtml(s.page_source) + ')' : '')
         + (allForms ? '' : ' · pixel ' + aclEscHtml(s.pixel_id || '—') + (s.pixel_source ? ' (' + aclEscHtml(s.pixel_source) + ')' : ''))
         + ' · ' + aclEscHtml(s.objective || '') + '</div>';
       (s.ad_sets || []).forEach(function (a) {
@@ -15141,6 +15252,8 @@ function cbPlanHtml(data) {
             + ' · CTA ' + aclEscHtml(ad.cta) + '</li>';
         });
         h += '</ol>';
+        if (a.ads_not_created) h += '<div class="cbd-plan-manual">Ads will not be created ('
+          + aclEscHtml(String(a.pending_ad_count || 0)) + ' kept in the builder). Add a Page and ads manually, or retry after Page access is restored.</div>';
       });
     }
     h += '</div>';
@@ -16486,7 +16599,8 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
                     || (r.publishable !== true && r.success);
       var warningOnly = r.publishable === true
                         && !!(r.warnings && r.warnings.length);
-      var icon = !r.success ? '❌' : (blocked ? '❌' : (warningOnly ? '⚠️' : '✅'));
+      var manual = r.success && r.manual_required && r.manual_required.length && !(r.blocking_failures || []).length;
+      var icon = manual ? '⚠️' : (!r.success ? '❌' : (blocked ? '❌' : (warningOnly ? '⚠️' : '✅')));
       html += '<div class="cb-status-row">';
       html += '<span class="cb-status-icon">' + icon + '</span>';
       html += '<span class="cb-status-name">' + aclEscHtml(r.campaign_name || '?')
@@ -16496,6 +16610,8 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
       }
       html += '</div>';
       if (r.backend === 'api') html += cbApiReadbackHtml(r);
+      if (manual) html += '<div class="cb-status-err" style="color:var(--warn);border-color:var(--warn)">Manual completion required: '
+        + r.manual_required.map(aclEscHtml).join(' ') + '</div>';
       if (r.error) {
         // Green is reserved for a finished, publishable draft — an
         // informational note such as the dry-run message. Anything blocking
@@ -18403,6 +18519,7 @@ window.cwWorkbench = (function () {
 })();
 </script>
 {#- ACL-1812: состояние тёплых профилей в строках аккаунтов; всё остальное рисует сам файл. -#}
+<script src="/static/account_pages.js"></script>
 <script src="/static/warm_sessions.js"></script>
 </body>
 </html>
