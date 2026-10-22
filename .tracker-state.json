@@ -50362,6 +50362,18 @@
         "state": "implementing",
         "started_at": "2026-10-22T08:38:53+00:00",
         "from_status": "status:todo"
+      },
+      "839": {
+        "actor": "Worker-W1021839",
+        "session": "run_w1021_1839",
+        "coordinator": "Coordinator-I1021A",
+        "branch": "codex/acl-1839-connection-panel-layout",
+        "worktree": "C:\\acl-int-w1839",
+        "id": "91854d98a2d44e668cf0504270340513",
+        "issue": 839,
+        "state": "implementing",
+        "started_at": "2026-10-22T08:44:29+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -55109,9 +55121,13 @@
           {
             "actor": "Worker-W1021839",
             "session": "run_w1021_1839"
+          },
+          {
+            "actor": "Worker-W1021839",
+            "session": "run_w1021_1839"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-W1021839",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -55142,14 +55158,8 @@
           "session": "run_i1021a_1021",
           "report": "Approval is stale against current main 7224a34c (ACL-2079 batch merged). Author: merge current main (no content change), CI, hand off for a merge-only re-review."
         },
-        "reviewer": "Reviewer-AG1021839",
-        "return": {
-          "id": "ef3627e748ad4935bf6819631cdc9427",
-          "actor": "Coordinator-I1021A",
-          "session": "run_i1021a_1021",
-          "report": "Approval is stale against current main 7224a34c (ACL-2079 batch merged). Author: merge current main (no content change), CI, hand off for a merge-only re-review."
-        },
-        "rework": true
+        "rework": true,
+        "rework_claim": "91854d98a2d44e668cf0504270340513"
       },
       "840": {
         "implementers": [
@@ -117611,6 +117621,13 @@
         "issue": 1086,
         "pr": 1088,
         "actor": "Worker-W1022086"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-22T08:44:29+00:00",
+        "issue": 839,
+        "claim": "91854d98a2d44e668cf0504270340513",
+        "actor": "Worker-W1021839"
       }
     ],
     "policy": {
