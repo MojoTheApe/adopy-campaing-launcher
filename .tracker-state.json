@@ -57811,7 +57811,7 @@
             "session": "run_a1021_142w"
           }
         ],
-        "state": "approved",
+        "state": "returning_approval",
         "worker": "Worker-A1021142",
         "coordinator": "Coordinator-A1021A",
         "handoff": {
@@ -57836,7 +57836,19 @@
           "at": "2026-10-17T16:30:39.578109+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-A1021142"
+        "reviewer": "Reviewer-A1021142",
+        "return_operation": {
+          "id": "ae94f85c2d5343e1a43a2ef3173b6edf",
+          "actor": "Coordinator-A1021A",
+          "session": "run_a1021_a1021",
+          "report": "Stale vs main 515689de; author merges current main + changelog fragment, fresh review"
+        },
+        "return": {
+          "id": "ae94f85c2d5343e1a43a2ef3173b6edf",
+          "actor": "Coordinator-A1021A",
+          "session": "run_a1021_a1021",
+          "report": "Stale vs main 515689de; author merges current main + changelog fragment, fresh review"
+        }
       },
       "69": {
         "implementers": [],
@@ -62381,6 +62393,10 @@
       "Reviewer-AI1022708": {
         "session": "run_ai1022_708",
         "role": "Reviewer"
+      },
+      "Coordinator-A1021A": {
+        "session": "run_a1021_a1021",
+        "role": "Coordinator"
       }
     },
     "completed": {
