@@ -112257,6 +112257,117 @@
           "started_at": "2026-10-22T01:05:12+00:00",
           "ineligible": {}
         }
+      },
+      {
+        "event": "batch-frozen",
+        "at": "2026-10-22T01:05:48+00:00",
+        "batch": {
+          "id": "0499c60dda4c47e595333eecb0cffb64",
+          "actor": "Coordinator-I1021A",
+          "session": "run_i1021a_1021",
+          "state": "assembling",
+          "issues": [
+            1078,
+            1037
+          ],
+          "members": [
+            {
+              "issue": 1078,
+              "pr": 1081,
+              "branch": "work/acl-2078-test-state-reset",
+              "head_sha": "ccbaf636cc1ee544d2441472422d1a4ede539094",
+              "base_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+              "main_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "6d8d2d53bbfc9b619f71658aca44763b74b4c51d1a38458b72391464c8704dc2",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-S1022078",
+                "review_session": "run_s1022_078",
+                "execution_lane": "acc68878688d4a73995d525b479c19fd",
+                "implementer": "Worker-F1022B",
+                "head_sha": "ccbaf636cc1ee544d2441472422d1a4ede539094",
+                "base_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+                "tree_sha": "023d7852622db01f0e4418a55cdf5453fae4a62d",
+                "issues": [
+                  1078
+                ],
+                "report": "ACL-2078 / PR1081 independent source review (Reviewer-S1022078, run_s1022_078). Verdict: approved.\n\nHead ccbaf636 = 8205e756 (clean merge of main e8bf31f8 into the previously reviewed dbe945ee; the PR diff vs main is byte-identical to the dbe945ee diff vs 64e73a1e, index lines aside) + ccbaf636 (review nit: _restore returns early when the registered name is absent from the module instead of setattr-creating it). Base = current main e8bf31f8; main delta 64e73a1e..e8bf31f8 does not touch meta_dom/crop_step/run_telemetry/conftest.\n\nScope: test-only (tests/conftest.py, tests/rpa_module_state.py, tests/test_rpa_module_state_is_reset_between_tests.py). No product code, no weakened assertions, no xfail/skip.\n\nCorrectness: every MUTABLE initial value equals the meta_dom import-time literal (also enforced by the AST test); threading.local __dict__.clear() equals a fresh thread (no module-level tls attribute initialisation; reads use getattr defaults or are re-set by crop_step.set_plan); run_telemetry.clear_current_run() resets the ContextVar used to key _failed_uploads. Containers restored in place, so `from meta_dom import X` aliases stay valid.\n\nReproduction: on 64e73a1e b97 + test_additional_ad_without_creative_has_no_text.py fails (ad2_creative_upload:library_has_no_copy). On ccbaf636: b97 + additional_ad + new regression file + media_attachment_identity = 57 passed.\nMutation checks: old conftest -> test_2 fails; unregistered container -> registry test fails; stale registry name -> now fails the registry test (and the others) after the nit fix.\n\nGuard design accepted: CI runs --dist loadfile, so test_1/test_2 stay ordered in one worker; a future PR adding a module-level dict/set/list to meta_dom/crop_step must register it in MUTABLE or CONSTANTS with a clear failure message \u2014 intended, cheap cost on the RPA track.\n\nCI on ccbaf636: 16 checks, all SUCCESS except the two installer-build jobs SKIPPED by the installer classifier (no installer inputs changed); mergeState CLEAN.",
+                "main_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "recorded_at": "2026-10-22T01:03:05+00:00",
+                "issue_scopes": {
+                  "1078": "6d8d2d53bbfc9b619f71658aca44763b74b4c51d1a38458b72391464c8704dc2"
+                }
+              },
+              "lane": {
+                "id": "acc68878688d4a73995d525b479c19fd",
+                "pr": 1081,
+                "issues": [
+                  1078
+                ],
+                "actor": "Reviewer-S1022078",
+                "session": "run_s1022_078",
+                "coordinator": "Coordinator-I1021A",
+                "started_at": "2026-10-22T00:59:29+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-22T01:03:29+00:00"
+            },
+            {
+              "issue": 1037,
+              "pr": 1041,
+              "branch": "work/acl-2037-changelog-fragments",
+              "head_sha": "d2a7d62c645a3f91c73f786663f249c93c175368",
+              "base_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+              "main_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "63ab9afd123776df93881b7fc0d961bb5eb25318e4fedcec40fd69af6b75223f",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-U1022037",
+                "review_session": "run_u1022_037",
+                "execution_lane": "fff789b0c1c345c493671a85863bd7f7",
+                "implementer": "Worker-W1022037",
+                "head_sha": "d2a7d62c645a3f91c73f786663f249c93c175368",
+                "base_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+                "tree_sha": "7900f89bd47285b23c87912f219f47c071dc1309",
+                "report": "Independent source review of ACL-2037 / PR #1041 (head d2a7d62c = clean merge of main e8bf31f8 into 7ff672a3, base main e8bf31f8, tree 7900f89b) by Reviewer-U1022037 (run_u1022_037), a separate run, not the implementer Worker-W1022037 and not Coordinator-I1021A. Scope vs main: exactly 6 files (scripts/fold_changelog.py, tests/test_fold_changelog_2037.py, docs/system/changelog.d/README.md, docs/system/changelog.d/ACL-2037.md, docs/system/PROJECT.md, docs/system/ROUTINE_SENTRY_PROMPT.md), 234+/2-; matches Issue #1037 specs. Script: validates every fragment (name ACL-N[-suffix].md, first-line heading '## ACL-N \u2014 Title \u2014 YYYY-MM-DD', number equals file name) before any write, so one bad fragment leaves CHANGELOG and all fragments untouched; README.md skipped; orders fragments newest first by (date, number) and inserts them directly under '# System history', rest of CHANGELOG preserved byte-for-byte (verified on a copy of the real 118-entry CHANGELOG); rerun is idempotent (second fold: no fragments, file unchanged); partial-failure rerun does not duplicate (exact-text containment check) while a follow-up entry for an already listed task is kept; --check returns before any write; BOM/CRLF input read correctly and output written as LF, consistent with .gitattributes eol=lf; missing CHANGELOG / bad header / directory named *.md give exit 1 with a message, fragments kept. Docs: PROJECT.md and the Sentry routine prompt were the only places stating the CHANGELOG rule (git grep); both now point to fragments; acl_ci_scope treats changelog.d/*.md as documentation; no script or workflow requires a CHANGELOG.md edit. ACL-2046 (#1046, batch integration folds fragments) is not required for 2037 to be usable: authors can write fragments immediately and the conflict source disappears; until 2046 fragments only accumulate in changelog.d (no data loss) and CHANGELOG.md is stale, and README's 'batch integration or release folds' is a promise 2046 documents. Tests at head: tests/test_fold_changelog_2037.py 14 passed; fold_changelog.py --check on the tree: valid ACL-2037. Non-blocking findings (recommended to fold into ACL-2046): (1) low: 'fold_changelog.py --help' raises UnicodeEncodeError when PYTHONUTF8 is not set and the console code page is non-Cyrillic (reproduced with cp850/cp437/ascii; this host defaults to cp1252/cp850; cp1251/cp866 are fine) because the argparse description is the Russian docstring line; fold/--check stdout is ASCII and errors go to stderr (backslashreplace), so the working path is unaffected and agent guides set PYTHONUTF8=1; fix is two lines via scripts/_console.use_utf8() as other scripts do. (2) --check does not validate the CHANGELOG.md header, so --check can pass and fold still fail on a damaged header. (3) Non-.md files or wrongly-extended files in changelog.d are silently ignored. Required CI on d2a7d62c (pull_request runs 39697415120/39697415136/39697415247/39697415128): linux shards 1-3, windows tests, ACL verification, tooling, process instructions, installer classify/verification, descriptor and tracker-link all pass; build/install jobs skipped by the installer classifier (no installer inputs).",
+                "main_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  1037
+                ],
+                "recorded_at": "2026-10-22T00:24:58+00:00",
+                "issue_scopes": {
+                  "1037": "63ab9afd123776df93881b7fc0d961bb5eb25318e4fedcec40fd69af6b75223f"
+                }
+              },
+              "lane": {
+                "id": "fff789b0c1c345c493671a85863bd7f7",
+                "pr": 1041,
+                "issues": [
+                  1037
+                ],
+                "actor": "Reviewer-U1022037",
+                "session": "run_u1022_037",
+                "coordinator": "Coordinator-I1021A",
+                "started_at": "2026-10-22T00:18:39+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-22T00:25:21+00:00"
+            }
+          ],
+          "main_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+          "branch": "codex/batch-0499c60dda4c47e595333eecb0cffb64",
+          "intake": "115f316ec7af4637aefee8e5d701b492",
+          "started_at": "2026-10-22T01:05:48+00:00",
+          "pr": null,
+          "entered_stage": false,
+          "history": []
+        }
       }
     ],
     "policy": {
@@ -123102,7 +123213,113 @@
         "sources_closed": true
       }
     },
-    "integration": null,
+    "integration": {
+      "id": "0499c60dda4c47e595333eecb0cffb64",
+      "actor": "Coordinator-I1021A",
+      "session": "run_i1021a_1021",
+      "state": "assembling",
+      "issues": [
+        1078,
+        1037
+      ],
+      "members": [
+        {
+          "issue": 1078,
+          "pr": 1081,
+          "branch": "work/acl-2078-test-state-reset",
+          "head_sha": "ccbaf636cc1ee544d2441472422d1a4ede539094",
+          "base_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+          "main_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "6d8d2d53bbfc9b619f71658aca44763b74b4c51d1a38458b72391464c8704dc2",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-S1022078",
+            "review_session": "run_s1022_078",
+            "execution_lane": "acc68878688d4a73995d525b479c19fd",
+            "implementer": "Worker-F1022B",
+            "head_sha": "ccbaf636cc1ee544d2441472422d1a4ede539094",
+            "base_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+            "tree_sha": "023d7852622db01f0e4418a55cdf5453fae4a62d",
+            "issues": [
+              1078
+            ],
+            "report": "ACL-2078 / PR1081 independent source review (Reviewer-S1022078, run_s1022_078). Verdict: approved.\n\nHead ccbaf636 = 8205e756 (clean merge of main e8bf31f8 into the previously reviewed dbe945ee; the PR diff vs main is byte-identical to the dbe945ee diff vs 64e73a1e, index lines aside) + ccbaf636 (review nit: _restore returns early when the registered name is absent from the module instead of setattr-creating it). Base = current main e8bf31f8; main delta 64e73a1e..e8bf31f8 does not touch meta_dom/crop_step/run_telemetry/conftest.\n\nScope: test-only (tests/conftest.py, tests/rpa_module_state.py, tests/test_rpa_module_state_is_reset_between_tests.py). No product code, no weakened assertions, no xfail/skip.\n\nCorrectness: every MUTABLE initial value equals the meta_dom import-time literal (also enforced by the AST test); threading.local __dict__.clear() equals a fresh thread (no module-level tls attribute initialisation; reads use getattr defaults or are re-set by crop_step.set_plan); run_telemetry.clear_current_run() resets the ContextVar used to key _failed_uploads. Containers restored in place, so `from meta_dom import X` aliases stay valid.\n\nReproduction: on 64e73a1e b97 + test_additional_ad_without_creative_has_no_text.py fails (ad2_creative_upload:library_has_no_copy). On ccbaf636: b97 + additional_ad + new regression file + media_attachment_identity = 57 passed.\nMutation checks: old conftest -> test_2 fails; unregistered container -> registry test fails; stale registry name -> now fails the registry test (and the others) after the nit fix.\n\nGuard design accepted: CI runs --dist loadfile, so test_1/test_2 stay ordered in one worker; a future PR adding a module-level dict/set/list to meta_dom/crop_step must register it in MUTABLE or CONSTANTS with a clear failure message \u2014 intended, cheap cost on the RPA track.\n\nCI on ccbaf636: 16 checks, all SUCCESS except the two installer-build jobs SKIPPED by the installer classifier (no installer inputs changed); mergeState CLEAN.",
+            "main_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "recorded_at": "2026-10-22T01:03:05+00:00",
+            "issue_scopes": {
+              "1078": "6d8d2d53bbfc9b619f71658aca44763b74b4c51d1a38458b72391464c8704dc2"
+            }
+          },
+          "lane": {
+            "id": "acc68878688d4a73995d525b479c19fd",
+            "pr": 1081,
+            "issues": [
+              1078
+            ],
+            "actor": "Reviewer-S1022078",
+            "session": "run_s1022_078",
+            "coordinator": "Coordinator-I1021A",
+            "started_at": "2026-10-22T00:59:29+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-22T01:03:29+00:00"
+        },
+        {
+          "issue": 1037,
+          "pr": 1041,
+          "branch": "work/acl-2037-changelog-fragments",
+          "head_sha": "d2a7d62c645a3f91c73f786663f249c93c175368",
+          "base_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+          "main_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "63ab9afd123776df93881b7fc0d961bb5eb25318e4fedcec40fd69af6b75223f",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-U1022037",
+            "review_session": "run_u1022_037",
+            "execution_lane": "fff789b0c1c345c493671a85863bd7f7",
+            "implementer": "Worker-W1022037",
+            "head_sha": "d2a7d62c645a3f91c73f786663f249c93c175368",
+            "base_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+            "tree_sha": "7900f89bd47285b23c87912f219f47c071dc1309",
+            "report": "Independent source review of ACL-2037 / PR #1041 (head d2a7d62c = clean merge of main e8bf31f8 into 7ff672a3, base main e8bf31f8, tree 7900f89b) by Reviewer-U1022037 (run_u1022_037), a separate run, not the implementer Worker-W1022037 and not Coordinator-I1021A. Scope vs main: exactly 6 files (scripts/fold_changelog.py, tests/test_fold_changelog_2037.py, docs/system/changelog.d/README.md, docs/system/changelog.d/ACL-2037.md, docs/system/PROJECT.md, docs/system/ROUTINE_SENTRY_PROMPT.md), 234+/2-; matches Issue #1037 specs. Script: validates every fragment (name ACL-N[-suffix].md, first-line heading '## ACL-N \u2014 Title \u2014 YYYY-MM-DD', number equals file name) before any write, so one bad fragment leaves CHANGELOG and all fragments untouched; README.md skipped; orders fragments newest first by (date, number) and inserts them directly under '# System history', rest of CHANGELOG preserved byte-for-byte (verified on a copy of the real 118-entry CHANGELOG); rerun is idempotent (second fold: no fragments, file unchanged); partial-failure rerun does not duplicate (exact-text containment check) while a follow-up entry for an already listed task is kept; --check returns before any write; BOM/CRLF input read correctly and output written as LF, consistent with .gitattributes eol=lf; missing CHANGELOG / bad header / directory named *.md give exit 1 with a message, fragments kept. Docs: PROJECT.md and the Sentry routine prompt were the only places stating the CHANGELOG rule (git grep); both now point to fragments; acl_ci_scope treats changelog.d/*.md as documentation; no script or workflow requires a CHANGELOG.md edit. ACL-2046 (#1046, batch integration folds fragments) is not required for 2037 to be usable: authors can write fragments immediately and the conflict source disappears; until 2046 fragments only accumulate in changelog.d (no data loss) and CHANGELOG.md is stale, and README's 'batch integration or release folds' is a promise 2046 documents. Tests at head: tests/test_fold_changelog_2037.py 14 passed; fold_changelog.py --check on the tree: valid ACL-2037. Non-blocking findings (recommended to fold into ACL-2046): (1) low: 'fold_changelog.py --help' raises UnicodeEncodeError when PYTHONUTF8 is not set and the console code page is non-Cyrillic (reproduced with cp850/cp437/ascii; this host defaults to cp1252/cp850; cp1251/cp866 are fine) because the argparse description is the Russian docstring line; fold/--check stdout is ASCII and errors go to stderr (backslashreplace), so the working path is unaffected and agent guides set PYTHONUTF8=1; fix is two lines via scripts/_console.use_utf8() as other scripts do. (2) --check does not validate the CHANGELOG.md header, so --check can pass and fold still fail on a damaged header. (3) Non-.md files or wrongly-extended files in changelog.d are silently ignored. Required CI on d2a7d62c (pull_request runs 39697415120/39697415136/39697415247/39697415128): linux shards 1-3, windows tests, ACL verification, tooling, process instructions, installer classify/verification, descriptor and tracker-link all pass; build/install jobs skipped by the installer classifier (no installer inputs).",
+            "main_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              1037
+            ],
+            "recorded_at": "2026-10-22T00:24:58+00:00",
+            "issue_scopes": {
+              "1037": "63ab9afd123776df93881b7fc0d961bb5eb25318e4fedcec40fd69af6b75223f"
+            }
+          },
+          "lane": {
+            "id": "fff789b0c1c345c493671a85863bd7f7",
+            "pr": 1041,
+            "issues": [
+              1037
+            ],
+            "actor": "Reviewer-U1022037",
+            "session": "run_u1022_037",
+            "coordinator": "Coordinator-I1021A",
+            "started_at": "2026-10-22T00:18:39+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-22T00:25:21+00:00"
+        }
+      ],
+      "main_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+      "branch": "codex/batch-0499c60dda4c47e595333eecb0cffb64",
+      "intake": "115f316ec7af4637aefee8e5d701b492",
+      "started_at": "2026-10-22T01:05:48+00:00",
+      "pr": null,
+      "entered_stage": false,
+      "history": []
+    },
     "intake": {
       "id": "115f316ec7af4637aefee8e5d701b492",
       "actor": "Coordinator-I1021A",
