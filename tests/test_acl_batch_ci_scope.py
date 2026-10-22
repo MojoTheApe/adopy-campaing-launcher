@@ -174,3 +174,58 @@ def test_no_stage_drift_never_reduces_checks(candidate):
     data = json.loads(path.read_text()); data["workflow"]["staging"] = False
     path.write_text(json.dumps(data))
     assert select(root, "pull_request", event(head))["reason"] == "classification-unavailable-run-full"
+
+
+# ACL-2107: a combined batch PR always selects the full matrix and never borrows jobs.
+def _with_body(payload, body):
+    payload["pull_request"]["body"] = body
+    return payload
+
+
+@pytest.mark.parametrize("path", ["docs/note.md", "tests/test_x.py", "app.py"])
+def test_batch_branch_selects_full_matrix_for_any_change(candidate, path):
+    root, _, change, event = candidate
+    result = select(root, "pull_request", event(change(path), "codex/batch-" + "a" * 32, "main"))
+    assert result["windows"] and result["linux"] and result["python"] == ["3.11", "3.13"]
+
+
+@pytest.mark.parametrize("branch", ["codex/acl-1748-example", "work/acl-2107-x", "unknown"])
+def test_tracker_batch_line_in_body_selects_full_matrix(candidate, branch):
+    root, _, change, event = candidate
+    payload = _with_body(event(change("tests/test_x.py"), branch, "main"),
+                         "Tracker issues: ACL-1\r\nTracker batch: " + "c" * 32 + "\r\n")
+    result = select(root, "pull_request", payload)
+    assert result["windows"] and result["linux"] and result["python"] == ["3.11", "3.13"]
+
+
+def test_batch_is_full_even_without_explicit_execution_policy(candidate):
+    root, _, change, event = candidate
+    (root / "delivery.json").unlink()
+    (root / "tracker/config.json").write_text(json.dumps({"project": {"id_prefix": "ACL"}}))
+    result = select(root, "pull_request", event(change("tests/test_x.py"), "codex/batch-" + "a" * 32, "main"))
+    assert result["windows"] and result["linux"] and result["python"] == ["3.11", "3.13"]
+
+
+def test_test_only_source_pr_still_skips_python_3_11(candidate):
+    root, _, change, event = candidate
+    payload = _with_body(event(change("tests/test_x.py")), "Tracker issues: ACL-1\nmention of Tracker batch: in prose\n")
+    assert select(root, "pull_request", payload)["python"] == ["3.13"]
+
+
+def test_batch_pr_decision_never_reuses_other_runs(candidate, monkeypatch):
+    from scripts import acl_ci_scope as scope
+    root, _, change, event = candidate
+    calls = []
+
+    def api(path):
+        calls.append(path)
+        raise AssertionError("a batch run must not look for reusable runs")
+    head = change("tests/test_x.py")
+    result = scope.decide(root, "pull_request", event(head, "codex/batch-" + "a" * 32, "main"),
+                          repo="o/r", api=api)
+    assert not calls and "reused_from" not in result and "reuse" not in result
+    assert result["linux"] and result["windows"] and result["python"] == ["3.11", "3.13"]
+    # A source PR still goes through the ACL-1649 reuse lookup (the failing fake makes it run full).
+    calls.clear()
+    source = scope.decide(root, "pull_request", event(head), repo="o/r", api=api)
+    assert calls and source["reuse"] == "lookup-failed-run-full" and source["python"] == ["3.13"]
