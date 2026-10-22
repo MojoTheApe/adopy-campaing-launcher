@@ -93,3 +93,48 @@ delivery; do not deploy writers ahead of its supporting reader. Consumer pins,
 ownership, capacities, history and explicit product-release requests stay intact.
 
 Companion: [MR-68](https://github.com/MojoTheApe/master-repo/issues/68).
+
+## Isolated manual verification tooling (TT-194)
+
+The additive `isolated_verification: [1]` capability does not broaden instruction
+schema1 or canonical-support v1. `process-support PR_NUMBER` can inspect a second
+bounded candidate: exactly one added manual workflow plus repository instruction Markdown
+and `tests/**/test_*.py`. Every other immutable Git entry, including product,
+dependencies, scripts, packaging, existing delivery/publication workflows and
+selected configuration, must be unchanged. Editing an existing workflow is outside
+this initial bounded contract. Unsupported
+YAML, automatic triggers, permission overrides, reusable job workflows, self-hosted
+runners and masked job failures are refused by the conservative grammar.
+
+This structure is **eligibility, not semantic proof**. A separate actual assessor
+must review the complete original Issue and immutable diff, indirect imports,
+packaging/build/install/update inputs, scripts, secrets, external calls and actual
+side effects. Their `process_support` assessment uses the printed exact proof and
+issue scope, with meaningful `report` and `product_isolation` evidence. A workflow
+path, read token or successful empty job cannot replace that assessment.
+
+After normal source review, source/batch/Stage/main admission, `merged` recording
+and any original unchecked-criterion acceptance, use the same command with
+`--evidence-file FILE` to preview, then `--apply` to record the actual result. The
+JSON has kind `independent-process-verification`, the actual new `reviewer`, the
+retained review's `implementer`, a `report`, the exact `process_support` assessment,
+and `workflow_run: {"id": RUN_ID, "attempt": ATTEMPT}`. This is a supplementary
+delivery assessment, not source ownership or a new historical approval.
+
+The recorder revalidates the genuine singleton main receipt and its original
+scope/review/acceptance, current main inclusion and successful official native
+workflow_dispatch attempt. Repository, workflow path/blob, admitted merge and tree,
+and all expected successful job names/heads must match. Superseded attempts,
+partial/skipped jobs and different successful workflows do not count. Only the
+original pending outcome can transition: its full receipt is retained in history;
+source reviews, claims, lanes and acceptance records are unchanged. Retry verifies
+the same proof and is idempotent. Every genuine publication request in live,
+completed or frozen history retains its product delivery; old receipts are never
+automatically reclassified. The safe public projection reports process completion
+without exposing private assessor/report/run details.
+
+Publish the compatible reader/writers and exact reviewed Tracker/Master pair
+before a consumer's separately reviewed support adoption and first new receipt.
+Older readers conservatively leave the new proof unfinished. This additive receipt
+changes no capacity, optional policy selection, workflow phase or private-state
+protocol, and creates no release controller or consumer product publication.
