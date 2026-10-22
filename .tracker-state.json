@@ -57595,7 +57595,7 @@
             "session": "run_f1022b"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-F1022B",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -57614,7 +57614,9 @@
         },
         "pr": 1081,
         "queued_at": "2026-10-22T00:04:31+00:00",
-        "reviewer": "Reviewer-S1022078"
+        "reviewer": "Reviewer-S1022078",
+        "review_report": "# ACL-2078 source review return (Reviewer-S1022078 / run_s1022_078)\n\nStale vs main e8bf31f8 \u2014 author merges main; content reviewed OK, will re-verify delta.\n\nReviewed head dbe945ee on base 64e73a1e. No content findings:\n- Test-only: tests/conftest.py, tests/rpa_module_state.py, tests/test_rpa_module_state_is_reset_between_tests.py. No product code, no assertion weakening, no xfail/skip.\n- Every MUTABLE initial value matches meta_dom import-time literals; thread-local __dict__.clear() matches a fresh thread (no module-level tls attribute initialisation; reads use getattr defaults or are set by set_plan); clear_current_run() resets the ContextVar.\n- Reproduced: on 64e73a1e `b97 + test_additional_ad_without_creative_has_no_text.py` fails (ad2_creative_upload:library_has_no_copy); on dbe945ee the same pair plus media_attachment_identity and the new file pass (57 passed).\n- Mutation checks: old conftest -> test_2 fails; unregistered container -> registry test fails; stale registry name -> source-value test fails.\n- Guard design acceptable: CI uses --dist loadfile so test_1/test_2 stay in one worker in order; future PRs adding a module-level dict/set/list to meta_dom/crop_step must register it (clear message). Non-blocking nit: reset() setattr's a missing MUTABLE name onto the module, so the \"stale names\" half of the registry assertion is masked; the AST source test still catches it.\n- Main delta 64e73a1e..e8bf31f8 does not touch meta_dom/crop_step/run_telemetry/conftest.",
+        "rework": true
       },
       "1079": {
         "implementers": [
@@ -112042,6 +112044,24 @@
           "report": "stale vs main e8bf31f8; author merges current main and hands off for a fresh review; no content findings",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-22T00:12:38+00:00",
+        "review": {
+          "id": "eeb314be3d074616b11dac5a811a3773",
+          "pr": 1081,
+          "issues": [
+            1078
+          ],
+          "actor": "Reviewer-S1022078",
+          "session": "run_s1022_078",
+          "coordinator": "Coordinator-I1021A",
+          "started_at": "2026-10-22T00:08:15+00:00",
+          "state": "returning",
+          "report": "# ACL-2078 source review return (Reviewer-S1022078 / run_s1022_078)\n\nStale vs main e8bf31f8 \u2014 author merges main; content reviewed OK, will re-verify delta.\n\nReviewed head dbe945ee on base 64e73a1e. No content findings:\n- Test-only: tests/conftest.py, tests/rpa_module_state.py, tests/test_rpa_module_state_is_reset_between_tests.py. No product code, no assertion weakening, no xfail/skip.\n- Every MUTABLE initial value matches meta_dom import-time literals; thread-local __dict__.clear() matches a fresh thread (no module-level tls attribute initialisation; reads use getattr defaults or are set by set_plan); clear_current_run() resets the ContextVar.\n- Reproduced: on 64e73a1e `b97 + test_additional_ad_without_creative_has_no_text.py` fails (ad2_creative_upload:library_has_no_copy); on dbe945ee the same pair plus media_attachment_identity and the new file pass (57 passed).\n- Mutation checks: old conftest -> test_2 fails; unregistered container -> registry test fails; stale registry name -> source-value test fails.\n- Guard design acceptable: CI uses --dist loadfile so test_1/test_2 stay in one worker in order; future PRs adding a module-level dict/set/list to meta_dom/crop_step must register it (clear message). Non-blocking nit: reset() setattr's a missing MUTABLE name onto the module, so the \"stale names\" half of the registry assertion is masked; the AST source test still catches it.\n- Main delta 64e73a1e..e8bf31f8 does not touch meta_dom/crop_step/run_telemetry/conftest.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -122817,22 +122837,7 @@
       "started_at": "2026-10-21T22:44:20+00:00",
       "ineligible": {}
     },
-    "source_reviews": {
-      "1081": {
-        "id": "eeb314be3d074616b11dac5a811a3773",
-        "pr": 1081,
-        "issues": [
-          1078
-        ],
-        "actor": "Reviewer-S1022078",
-        "session": "run_s1022_078",
-        "coordinator": "Coordinator-I1021A",
-        "started_at": "2026-10-22T00:08:15+00:00",
-        "state": "returning",
-        "report": "# ACL-2078 source review return (Reviewer-S1022078 / run_s1022_078)\n\nStale vs main e8bf31f8 \u2014 author merges main; content reviewed OK, will re-verify delta.\n\nReviewed head dbe945ee on base 64e73a1e. No content findings:\n- Test-only: tests/conftest.py, tests/rpa_module_state.py, tests/test_rpa_module_state_is_reset_between_tests.py. No product code, no assertion weakening, no xfail/skip.\n- Every MUTABLE initial value matches meta_dom import-time literals; thread-local __dict__.clear() matches a fresh thread (no module-level tls attribute initialisation; reads use getattr defaults or are set by set_plan); clear_current_run() resets the ContextVar.\n- Reproduced: on 64e73a1e `b97 + test_additional_ad_without_creative_has_no_text.py` fails (ad2_creative_upload:library_has_no_copy); on dbe945ee the same pair plus media_attachment_identity and the new file pass (57 passed).\n- Mutation checks: old conftest -> test_2 fails; unregistered container -> registry test fails; stale registry name -> source-value test fails.\n- Guard design acceptable: CI uses --dist loadfile so test_1/test_2 stay in one worker in order; future PRs adding a module-level dict/set/list to meta_dom/crop_step must register it (clear message). Non-blocking nit: reset() setattr's a missing MUTABLE name onto the module, so the \"stale names\" half of the registry assertion is masked; the AST source test still catches it.\n- Main delta 64e73a1e..e8bf31f8 does not touch meta_dom/crop_step/run_telemetry/conftest.",
-        "keep_lane": false
-      }
-    },
+    "source_reviews": {},
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
   },
   "maintenance_history": [
