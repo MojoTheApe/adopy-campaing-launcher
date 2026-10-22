@@ -5557,21 +5557,21 @@
       },
       "850": {
         "kind": "independent-review",
+        "implementer": "Worker-W1022845",
+        "reviewer": "Reviewer-AE1022845",
+        "execution_lane": "a538405bb7644d53a5f15fb286a97cf8",
+        "review_session": "run_ae1022_845",
+        "head_sha": "98546e1abdb7218720abcd84a22db311ef968058",
+        "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+        "tree_sha": "b549298e6251f6f245cf1b85bcb57dc9bdc53609",
         "verdict": "approved",
-        "reviewer": "Reviewer-R1845V",
-        "review_session": "reviewer-r1845v-20261020",
-        "execution_lane": "766eb6ba60734c0ca9270121d9c239e3",
-        "implementer": "Worker-L1845",
-        "head_sha": "7cd286ec6d8fde7bf9ecf510d7b23fe3fbb617ec",
-        "base_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-        "tree_sha": "1db5d2621c1ca725c27805e5a52f5fe8b638c5d7",
+        "report": "ACL-1845 / PR850 source review: diff vs main 3bc8d973 touches only report.html (publication button CSS/markup/JS), 3 adjusted browser tests, new test_publish_button_design_browser.py and the changelog fragment; merge-base equals main so no other template hunks are lost; CHANGELOG identical to main; fold_changelog --check valid; UI strings English, no ids, no hardcoded dates; 137 affected tests passed locally (13 files); required CI green on this head.",
+        "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
         "issues": [
           845
         ],
-        "report": "Reviewed the full diff work/main..HEAD (6 files; CHANGELOG, report.html, 4 browser tests) at head 7cd286ec against main 259ae7f1. The merge with main kept main's ACL-1761 PAUSED/drafts label (only the count switches to t.open.length), main's pre-flight gate (applyGate/CB_PF_GATE) and drafts footer; the branch is not stacked on other unmerged tasks (log work/main..HEAD holds only ACL-1845 commits and merges of main). The PR makes the footer button the single primary publication action in a new .cbd-publication block with a live scope line (checkbox selection or all, excluding accounts already building) and a count that equals what is dispatched (t.send / t.open); the open campaign's action is restyled as a secondary link; unavailable state is a pale-blue disabled style with a visible reason; zero eligible campaigns or unknown queue state disable the button in refreshPublication, applyGate and showQueue; refreshTicks always calls refreshAudit->applyGate after refreshPublication so the pre-flight block is never overridden and there is no second path around the gate; aria-busy is informative only and guarded for stub buttons; confirmation dialog moved from inline styles to theme-token classes with payload semantics unchanged; all colors use design tokens in both themes, focus-visible and reduced-motion are handled, labels are English. No acceptance criterion is deferred (the CHANGELOG states the newer expanded runtime adoption is a separate upstream dependency, consistent with the Issue). Tests run locally: test_publish_button_design_browser, test_acl1826_mlx_session_lost, test_builder_publish_selected_browser, test_drawer_review_browser 74 passed; test_builder_multi_publish_browser 12 passed. Hosted CI on the head is fully green (linux 1-3, windows, ACL verification, installer verification, tracker-link, descriptor). Non-blocking nits: the CHANGELOG diff adds stray blank lines before unrelated headings (merge artifact); the typeof ticks guard in showQueue exists only for a test harness. No live checks claimed.",
-        "main_sha": "259ae7f1283a0a0acab40354b6b97d55162c91b5",
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "recorded_at": "2026-10-20T14:18:10+00:00",
+        "recorded_at": "2026-10-22T06:24:58+00:00",
         "issue_scopes": {
           "845": "9c7c2106bea898283bcc702c2c771bee801df7835d57d9916bdef93032e9e44a"
         }
