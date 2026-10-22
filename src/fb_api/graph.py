@@ -461,8 +461,8 @@ class GraphClient:
 
     # -- одна запись (ACL-1761)
     def post(self, path: str, params: dict | None = None, *, files: dict | None = None,
-             filename: str = "", on_ad: bool = False, form_page: str = "",
-             progress: Callable[[float], None] | None = None,
+             filename: str = "", on_ad: bool = False, children_active: bool = False,
+             form_page: str = "", progress: Callable[[float], None] | None = None,
              cancelled: Callable[[], bool] | None = None) -> dict:
         """POST ровно один раз. Никаких повторов, пересъёмки токена и т.п.
 
@@ -486,6 +486,9 @@ class GraphClient:
         try:
             # `on_ad` (ACL-1775) передаём, только когда он есть: прежние транспорты его не знают.
             extra = {"on_ad": True} if on_ad else {}
+            # ACL-2114: ACTIVE у набора/объявления под подтверждённой PAUSED кампанией; иначе ключа нет.
+            if children_active:
+                extra["children_active"] = True
             # ACL-1776: создание формы Страницы - своя цепочка политики, Страница плана.
             if form_page:
                 extra["form_page"] = str(form_page)

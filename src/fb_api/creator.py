@@ -11,7 +11,7 @@
 2. Загрузка медиа: картинка — `/act_X/adimages` (сначала ищем по md5: хэш
    картинки у Meta — её md5), видео — `/act_X/advideos` с ограниченным
    ожиданием обработки.
-3. Кампания → группа(ы) → креатив → объявление, всё PAUSED.
+3. Кампания (PAUSED) → группа(ы) → креатив → объявление (ACTIVE под кампанией на паузе, ACL-2114).
 4. Сверка чтением, поле за полем; расхождение — в отчёт, ничего не включается.
 5. Повторный запуск ничего не создаёт: у каждого объекта детерминированное
    имя и метка `acl-<tag>` (adlabels); перед созданием ищем существующий.
@@ -40,6 +40,12 @@ from src.fb_api.graph import GraphClient, GraphError, GraphStop, WritesBlocked, 
 log = logging.getLogger(__name__)
 
 PAUSED = "PAUSED"
+#: ACL-2114: наборы и объявления создаются ACTIVE под кампанией на паузе - показа нет, пока человек
+#: не включит кампанию. Только после чтения, подтвердившего PAUSED у кампании (`_confirm_campaign_paused`).
+ACTIVE = "ACTIVE"
+CHILD_STATUS = ACTIVE
+#: Что человек читает в плане, в «Check plan» и в итоге (ACL-2114).
+STATUS_NOTE = "Campaign PAUSED — ad sets and ads are active and start when you turn the campaign on"
 OBJECTIVE = "OUTCOME_LEADS"
 OPTIMIZATION_GOAL = "OFFSITE_CONVERSIONS"
 BILLING_EVENT = "IMPRESSIONS"
@@ -433,7 +439,7 @@ def _apply_pages(facts: AccountFacts, merged: "_pg.MergedPages") -> None:
     facts.page_sources = {r["id"]: r["source"] for r in merged.rows}
 
 
-MANUAL_PAGE_NOTICE = ("No Facebook Page is available. Only the campaign and ad sets will be created PAUSED; "
+MANUAL_PAGE_NOTICE = ("No Facebook Page is available. Only the campaign (PAUSED) and ad sets (active under it) will be created; "
                       "ads will not be created. Add a Page and ads in Ads Manager, or refresh Pages and retry "
                       "to complete the same campaign.")
 
@@ -686,6 +692,8 @@ class Outcome:
     #: Что показать человеку списком (ACL-1437): title/impact/action/severity/raw.
     problems: list = field(default_factory=list)
     manual_required: list[str] = field(default_factory=list)
+    #: ACL-2114: чтением подтверждено, что кампания PAUSED, - только тогда пишутся ACTIVE дети.
+    campaign_confirmed_paused: bool = False
 
     @property
     def mismatches(self) -> list[dict]:
@@ -776,7 +784,7 @@ class CampaignCreator:
 
     def _write(self, out: Outcome, what: str, path: str, params: dict, find: Callable[[], str | None],
                *, files: dict | None = None, filename: str = "", id_of=lambda b: b.get("id"),
-               on_ad: bool = False, form_page: str = "",
+               on_ad: bool = False, children_active: bool = False, form_page: str = "",
                upload: tuple[int, str] | None = None) -> str:
         """Одна запись; неизвестный результат — сверка `find()` чтением.
 
@@ -790,6 +798,8 @@ class CampaignCreator:
             extra: dict[str, Any] = {}
             if on_ad:
                 extra["on_ad"] = True
+            if children_active:
+                extra["children_active"] = True
             if form_page:
                 extra["form_page"] = form_page
             if upload and files:
@@ -981,12 +991,32 @@ class CampaignCreator:
         rows = self._children(parent_id, edge, "id,name,status,adlabels{name}")
         return next((r for r in rows if str(r.get("name") or "").strip() == name), None)
 
+    def _confirm_campaign_paused(self, out: Outcome, plan: CampaignPlan) -> bool:
+        """ACL-2114: перед ПЕРВОЙ записью набора/объявления - чтение: кампания точно PAUSED.
+
+        Иначе стоп без записи: ACTIVE-дочерний объект под не-паузной кампанией начал бы
+        тратить деньги. Подтверждение одно на запуск; найденные (reused) объекты сюда не
+        попадают - их статус мы не пишем.
+        """
+        if out.campaign_confirmed_paused:
+            return True
+        row = self.client.get(f"/{out.campaign_id}", {"fields": "status"})
+        got = row.get("status")
+        if got != PAUSED:
+            raise CreationStopped(
+                f"The campaign {plan.name!r} is not confirmed PAUSED (Meta reports {got or 'no status'}). "
+                "Stopped before creating any ad set or ad, which would start delivering. "
+                "Nothing else was written; check the campaign in Ads Manager.",
+                created=out.created, kind="campaign_not_paused")
+        out.campaign_confirmed_paused = True
+        return True
+
     def _verify_label(self, out: Outcome, what: str, object_id: str, label: str) -> None:
         """Метка на созданном объекте; нет — стоп до следующей записи (ревью B1b)."""
         row = self.client.get(f"/{object_id}", {"fields": "adlabels{name}"})
         if label not in _labels(row):
             raise CreationStopped(
-                f"{what} was created (PAUSED) but Meta did not keep the ACL tag ({label}) on it. "
+                f"{what} was created but Meta did not keep the ACL tag ({label}) on it. "
                 "Stopped before any further write so a re-run cannot duplicate anything. "
                 "Check it in Ads Manager.", created=out.created, kind="label_missing")
 
@@ -1095,12 +1125,12 @@ class CampaignCreator:
     def adset_params(self, plan: CampaignPlan, ad_set: AdSetPlan, campaign_id: str, targeting: dict) -> dict:
         if ad_set.instant:
             # Instant Form (ACL-1775): показ в самой форме, цель — лиды, объект — Страница, без пикселя.
-            return {"name": ad_set.name, "campaign_id": campaign_id, "status": PAUSED,
+            return {"name": ad_set.name, "campaign_id": campaign_id, "status": CHILD_STATUS,
                     "optimization_goal": OPTIMIZATION_GOAL_FORM, "billing_event": BILLING_EVENT,
                     "destination_type": DESTINATION_ON_AD,
                     "promoted_object": {"page_id": plan.page_id},
                     "targeting": targeting, "adlabels": [{"name": plan.label}]}
-        return {"name": ad_set.name, "campaign_id": campaign_id, "status": PAUSED,
+        return {"name": ad_set.name, "campaign_id": campaign_id, "status": CHILD_STATUS,
                 "optimization_goal": OPTIMIZATION_GOAL, "billing_event": BILLING_EVENT,
                 "destination_type": DESTINATION,
                 "promoted_object": {"pixel_id": plan.pixel_id, "custom_event_type": CUSTOM_EVENT},
@@ -1158,7 +1188,7 @@ class CampaignCreator:
         return checks
 
     def _adset_checks(self, plan: CampaignPlan, ad_set: AdSetPlan, targeting: dict, row: dict,
-                      campaign_id: str) -> list[dict]:
+                      campaign_id: str, *, reused: bool = False) -> list[dict]:
         obj = f"ad set {ad_set.name}"
         checks: list[dict] = []
 
@@ -1166,7 +1196,7 @@ class CampaignCreator:
             self._mk_check(checks, obj, f, e, a)
 
         check("name", ad_set.name, row.get("name"))
-        check("status", PAUSED, row.get("status"))
+        check("status", _child_status_expected(row.get("status"), reused), row.get("status"))
         check("campaign_id", campaign_id, str(row.get("campaign_id") or ""))
         check("tag", plan.label, plan.label if plan.label in _labels(row) else "")
         po = row.get("promoted_object") or {}
@@ -1230,7 +1260,7 @@ class CampaignCreator:
             if not hit:
                 continue
             row = self.client.get(f"/{hit['id']}", {"fields": ADSET_FIELDS})
-            diffs = _describe_diffs(self._adset_checks(plan, ad_set, targeting, row, campaign_id))
+            diffs = _describe_diffs(self._adset_checks(plan, ad_set, targeting, row, campaign_id, reused=True))
             if diffs:
                 found.append({"object": f"ad set {ad_set.name!r}", "kind": "adset", "differences": diffs})
         return found
@@ -1450,7 +1480,9 @@ class CampaignCreator:
 
         def ok(edge: str, params: dict, what: str, on_ad: bool = False) -> None:
             try:
-                _wp.check(plan.act, "POST", f"/{plan.act}/{edge}", params, on_ad=on_ad)
+                # ACL-2114: ACTIVE у набора/объявления проверяется как при записи (кампания будет PAUSED).
+                _wp.check(plan.act, "POST", f"/{plan.act}/{edge}", params, on_ad=on_ad,
+                          children_active=edge in _wp.CHILD_EDGES)
             except _wp.WriteRefused as exc:
                 raise PlanError(f"{what}: {exc}") from exc
 
@@ -1480,7 +1512,7 @@ class CampaignCreator:
                                    "adlabels": [{"name": plan.label}]}, f"ad {ad.index} creative",
                    on_ad=ad_set.instant)
                 ok("ads", {"name": ad.name, "adset_id": "0", "creative": {"creative_id": "0"},
-                           "status": PAUSED, "adlabels": [{"name": plan.label}]}, f"ad {ad.index}")
+                           "status": CHILD_STATUS, "adlabels": [{"name": plan.label}]}, f"ad {ad.index}")
 
     def meta_rule_jobs(self, plan: CampaignPlan, targetings: list[dict]) -> list[tuple[str, dict]]:
         """По заданию на объявление - ровно те значения, что уйдут в POST (ACL-1805)."""
@@ -1559,7 +1591,7 @@ class CampaignCreator:
                     media = ({"video_id": "<uploaded video>", "thumb": "<video thumbnail>"} if ad.kind == "video"
                              else {"image_hash": "<uploaded image>"})
                     ad = self._planned(ad, "<form to be created>")
-                    ads.append({"name": ad.name, "status": PAUSED, "format": ad.kind,
+                    ads.append({"name": ad.name, "status": CHILD_STATUS, "format": ad.kind,
                                 "file": Path(ad.path).name, "bytes": len(data),
                                 "library_name": (video_title(plan.tag, data) if ad.kind == "video"
                                                  else image_name(ad.path, data)),
@@ -1619,7 +1651,7 @@ class CampaignCreator:
             interests = [[i.get("name") or i.get("id") for bucket in g.values() if isinstance(bucket, list)
                           for i in bucket] for g in (t.get("flexible_spec") or [])]
             sets.append({
-                "name": ad_set.name, "status": PAUSED,
+                "name": ad_set.name, "status": CHILD_STATUS,
                 "countries": list((t.get("geo_locations") or {}).get("countries") or []),
                 "language": plan.language, "locales": list(t.get("locales") or []),
                 "age": f"{ad_set.age_min}-{ad_set.age_max}",
@@ -1629,7 +1661,7 @@ class CampaignCreator:
                 "creative_enhancements": "off: " + ", ".join(CREATIVE_FEATURES_OPT_OUT),
                 "optimization": f"{OPTIMIZATION_GOAL} · {CUSTOM_EVENT} on the website pixel",
                 "ads": [{
-                    "index": ad.index, "name": ad.name, "status": PAUSED, "format": ad.kind,
+                    "index": ad.index, "name": ad.name, "status": CHILD_STATUS, "format": ad.kind,
                     "file": Path(ad.path).name, "bytes": len(files.get(ad.path, b"")),
                     "headline": ad.title, "primary_text": ad.body, "description": ad.description,
                     "link": plan.link, "cta": CTA_TYPE,
@@ -1656,7 +1688,8 @@ class CampaignCreator:
                             item["form_note"] = (f"form will be created: {step.form_name}" if step.action == "create"
                                                  else f"form found on the Page, reused: {step.form_name}")
         summary = {
-            "campaign": plan.name, "status": PAUSED, "objective": OBJECTIVE,
+            "campaign": plan.name, "status": PAUSED, "children_status": CHILD_STATUS,
+            "status_note": STATUS_NOTE, "objective": OBJECTIVE,
             "daily_budget": plan.daily_budget, "currency": self.facts.currency,
             "budget_minor": budget_minor(plan.daily_budget, self.facts.currency),
             "page_id": plan.page_id, "pixel_id": plan.pixel_id,
@@ -1721,10 +1754,11 @@ class CampaignCreator:
                 adset_id = self._write(
                     out, f"ad set {ad_set.name!r}", f"/{plan.act}/adsets",
                     self.adset_params(plan, ad_set, out.campaign_id, targeting),
-                    lambda: (self._find_child(out.campaign_id, "adsets", ad_set.name) or {}).get("id"))
+                    lambda: (self._find_child(out.campaign_id, "adsets", ad_set.name) or {}).get("id"),
+                    children_active=self._confirm_campaign_paused(out, plan))
                 out.created.setdefault("adsets", []).append(adset_id)
                 self._verify_label(out, f"The ad set {ad_set.name!r}", adset_id, plan.label)
-                self._step(out, f"ad set {ad_set.name!r}: created PAUSED, tag kept")
+                self._step(out, f"ad set {ad_set.name!r}: created ACTIVE (campaign PAUSED), tag kept")
             out.adset_ids.append(adset_id)
 
             if needs_manual_page(plan):
@@ -1772,8 +1806,9 @@ class CampaignCreator:
                 ad_id = self._write(
                     out, f"ad {ad.index}", f"/{plan.act}/ads",
                     {"name": ad.name, "adset_id": adset_id, "creative": {"creative_id": creative_id},
-                     "status": PAUSED, "adlabels": [{"name": plan.label}]},
-                    lambda: (self._find_child(adset_id, "ads", ad.name) or {}).get("id"))
+                     "status": CHILD_STATUS, "adlabels": [{"name": plan.label}]},
+                    lambda: (self._find_child(adset_id, "ads", ad.name) or {}).get("id"),
+                    children_active=self._confirm_campaign_paused(out, plan))
                 out.ad_ids.append(ad_id)
                 out.created.setdefault("ads", []).append(ad_id)
                 rec.update({"ad_id": ad_id, "creative_id": creative_id})
@@ -1781,7 +1816,7 @@ class CampaignCreator:
                 if not ad_label_checked:
                     self._verify_label(out, f"The ad {ad.index}", ad_id, plan.label)
                     ad_label_checked = True
-                self._step(out, f"ad {ad.index}: created PAUSED")
+                self._step(out, f"ad {ad.index}: created ACTIVE (campaign PAUSED)")
 
         # 4. Сверка.
         out.readback = self.readback(plan, out, targetings, files)
@@ -1835,7 +1870,8 @@ class CampaignCreator:
         for ad_set, adset_id, targeting in zip(plan.ad_sets, out.adset_ids, targetings):
             obj = f"ad set {ad_set.name}"
             row = self.client.get(f"/{adset_id}", {"fields": ADSET_FIELDS})
-            checks += self._adset_checks(plan, ad_set, targeting, row, out.campaign_id)
+            checks += self._adset_checks(plan, ad_set, targeting, row, out.campaign_id,
+                                         reused=adset_id in (out.reused.get("adsets") or []))
             if row.get("value_rules_applied") or row.get("value_rule_set_id"):
                 diag["adsets_with_value_rules"] += 1
                 out.warnings.append(f"Meta applied bid value rules to {obj}; the builder did not set them.")
@@ -1864,7 +1900,8 @@ class CampaignCreator:
                 got = rows[0]
                 if rec.get("ad_id"):
                     check(aobj, "ad_id", rec["ad_id"], str(got.get("id") or ""))
-                check(aobj, "status", PAUSED, got.get("status"))
+                check(aobj, "status", _child_status_expected(got.get("status"), bool(rec.get("reused"))),
+                      got.get("status"))
                 check(aobj, "adset_id", adset_id, str(got.get("adset_id") or ""))
                 tag(aobj, got)
                 creative = got.get("creative") or {}
@@ -2022,6 +2059,16 @@ def _flex_ids(spec: Any) -> list[list[str]]:
 def _not_read(expected: Any, actual: Any) -> bool:
     """Meta поле не вернула (None), хотя от него что-то ждали → в отчёте «Not read»."""
     return actual is None and expected not in (None, "", [])
+
+
+def _child_status_expected(actual: Any, reused: bool) -> str:
+    """Ожидаемый `status` набора/объявления (ACL-2114): созданные этим запуском - ACTIVE.
+
+    Найденные с прошлого запуска мы не трогали: ACTIVE и PAUSED оба верны (прошлые запуски
+    создавали их PAUSED). `effective_status` не сверяем: под кампанией на паузе он
+    CAMPAIGN_PAUSED - это ожидаемо, а не расхождение.
+    """
+    return actual if reused and actual in (ACTIVE, PAUSED) else CHILD_STATUS
 
 
 def _same(expected: Any, actual: Any) -> bool:

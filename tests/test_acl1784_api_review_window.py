@@ -271,7 +271,7 @@ def test_real_finish_job_leaves_the_profile_open_when_the_keep_open_switch_is_se
         real_publisher, monkeypatch):
     monkeypatch.setattr(publish_api, "_keep_profiles_open", lambda: True)
     pub = real_publisher()
-    assert pub.finish_job("A", clean=True) == ""
+    assert pub.finish_job("A", clean=True) == "kept"      # ACL-2113: намеренно оставлено
     assert real_publisher.stops == []
 
 
