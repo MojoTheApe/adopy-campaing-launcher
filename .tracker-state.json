@@ -49051,20 +49051,6 @@
         "started_at": "2026-10-22T05:46:47+00:00",
         "from_status": "status:todo"
       },
-      "1028": {
-        "actor": "Worker-W1022028",
-        "session": "run_w1022_2028",
-        "coordinator": "Coordinator-I1021A",
-        "branch": "work/acl-2028-plan-check-snapshot",
-        "worktree": "C:\\acl-int-w2028",
-        "id": "d9377053d1834cd19a0f08fc524558d7",
-        "issue": 1028,
-        "state": "handoff",
-        "started_at": "2026-10-22T05:52:39+00:00",
-        "from_status": "status:todo",
-        "pr": 1029,
-        "report": "# ACL-2028 handoff\nPR #1029 brought to current main (ea7a1556, merge clean, no conflicts). Head ee7388ed -> 3c8dbf8e.\n- Added docs/system/changelog.d/ACL-2028.md (PR had no CHANGELOG entry); fold_changelog.py --check passes.\n- Tests: tests/test_acl1886_plan_check_snapshot.py - 2 passed locally.\n- CI on new head: all green (linux 1/2/3, windows, process, installer); tracker-link failed only on task state (\"move it to Review\"), expected before handoff."
-      },
       "53": {
         "actor": "Worker-W1022402",
         "session": "run_w1022_402",
@@ -57818,34 +57804,32 @@
             "session": "run_w1022_2028"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1022028",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
-          "actor": "Worker-W2028",
-          "session": "local_e4968c7b",
-          "coordinator": "Coordinator-M1011A",
+          "actor": "Worker-W1022028",
+          "session": "run_w1022_2028",
+          "coordinator": "Coordinator-I1021A",
           "branch": "work/acl-2028-plan-check-snapshot",
-          "worktree": "C:\\acl-2028",
-          "id": "d39e620929ae44ff87ea9933bbbc1a4f",
+          "worktree": "C:\\acl-int-w2028",
+          "id": "d9377053d1834cd19a0f08fc524558d7",
           "issue": 1028,
           "state": "handoff",
-          "started_at": "2026-10-20T05:51:46+00:00",
-          "from_status": "status:idea",
+          "started_at": "2026-10-22T05:52:39+00:00",
+          "from_status": "status:todo",
           "pr": 1029,
-          "report": "## Handoff ACL-2028 \u2192 independent source review\n\nPR #1029, head ee7388ed, base work/main c6150160. Tests only: new `tests/test_acl1886_plan_check_snapshot.py`.\n\nCommits the durable proof for ACL-1886 criterion 5: actual `publish_api.check_plan` over in-memory FakeMeta with the anonymized error10 fixture on `/search` and `/campaigns`. Asserts exact public error text with `operation=\u2026`, success/publishable false, zero writes, read-only client, sockets patched to fail, no synthetic account id in the result.\n\nLocal checks (affected only): 3 modules, 56 passed; secret scanner clean. Full suite left to hosted CI.\n\nReviewer focus: assertions are exact snapshots of current main behavior (audit status for failed lookups is `unknown`, not `error`); no production change; determinism (no clock/network/real profiles)."
+          "report": "# ACL-2028 handoff\nPR #1029 brought to current main (ea7a1556, merge clean, no conflicts). Head ee7388ed -> 3c8dbf8e.\n- Added docs/system/changelog.d/ACL-2028.md (PR had no CHANGELOG entry); fold_changelog.py --check passes.\n- Tests: tests/test_acl1886_plan_check_snapshot.py - 2 passed locally.\n- CI on new head: all green (linux 1/2/3, windows, process, installer); tracker-link failed only on task state (\"move it to Review\"), expected before handoff."
         },
         "pr": 1029,
-        "queued_at": "2026-10-20T05:56:04+00:00",
+        "queued_at": "2026-10-22T06:08:43+00:00",
         "return_operation": {
           "id": "07136684a8744ae797a344d7adada477",
           "actor": "Coordinator-M1011A",
           "session": "coord-m1011a-20261015",
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
         },
-        "review_report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21",
-        "rework": true,
-        "rework_claim": "d9377053d1834cd19a0f08fc524558d7"
+        "review_report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
       },
       "318": {
         "implementers": [],
@@ -64666,7 +64650,8 @@
       1054,
       710,
       1069,
-      845
+      845,
+      1028
     ],
     "review": null,
     "history": [
@@ -114528,6 +114513,13 @@
             "approved_at": "2026-10-22T06:06:47+00:00"
           }
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-22T06:08:43+00:00",
+        "issue": 1028,
+        "pr": 1029,
+        "actor": "Worker-W1022028"
       }
     ],
     "policy": {
