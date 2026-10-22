@@ -6171,6 +6171,27 @@
             ]
           }
         }
+      },
+      "1081": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-S1022078",
+        "review_session": "run_s1022_078",
+        "execution_lane": "acc68878688d4a73995d525b479c19fd",
+        "implementer": "Worker-F1022B",
+        "head_sha": "ccbaf636cc1ee544d2441472422d1a4ede539094",
+        "base_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+        "tree_sha": "023d7852622db01f0e4418a55cdf5453fae4a62d",
+        "issues": [
+          1078
+        ],
+        "report": "ACL-2078 / PR1081 independent source review (Reviewer-S1022078, run_s1022_078). Verdict: approved.\n\nHead ccbaf636 = 8205e756 (clean merge of main e8bf31f8 into the previously reviewed dbe945ee; the PR diff vs main is byte-identical to the dbe945ee diff vs 64e73a1e, index lines aside) + ccbaf636 (review nit: _restore returns early when the registered name is absent from the module instead of setattr-creating it). Base = current main e8bf31f8; main delta 64e73a1e..e8bf31f8 does not touch meta_dom/crop_step/run_telemetry/conftest.\n\nScope: test-only (tests/conftest.py, tests/rpa_module_state.py, tests/test_rpa_module_state_is_reset_between_tests.py). No product code, no weakened assertions, no xfail/skip.\n\nCorrectness: every MUTABLE initial value equals the meta_dom import-time literal (also enforced by the AST test); threading.local __dict__.clear() equals a fresh thread (no module-level tls attribute initialisation; reads use getattr defaults or are re-set by crop_step.set_plan); run_telemetry.clear_current_run() resets the ContextVar used to key _failed_uploads. Containers restored in place, so `from meta_dom import X` aliases stay valid.\n\nReproduction: on 64e73a1e b97 + test_additional_ad_without_creative_has_no_text.py fails (ad2_creative_upload:library_has_no_copy). On ccbaf636: b97 + additional_ad + new regression file + media_attachment_identity = 57 passed.\nMutation checks: old conftest -> test_2 fails; unregistered container -> registry test fails; stale registry name -> now fails the registry test (and the others) after the nit fix.\n\nGuard design accepted: CI runs --dist loadfile, so test_1/test_2 stay ordered in one worker; a future PR adding a module-level dict/set/list to meta_dom/crop_step must register it in MUTABLE or CONSTANTS with a clear failure message \u2014 intended, cheap cost on the RPA track.\n\nCI on ccbaf636: 16 checks, all SUCCESS except the two installer-build jobs SKIPPED by the installer classifier (no installer inputs changed); mergeState CLEAN.",
+        "main_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "recorded_at": "2026-10-22T01:03:05+00:00",
+        "issue_scopes": {
+          "1078": "6d8d2d53bbfc9b619f71658aca44763b74b4c51d1a38458b72391464c8704dc2"
+        }
       }
     },
     "stage": {
