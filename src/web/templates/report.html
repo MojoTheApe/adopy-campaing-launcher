@@ -251,6 +251,7 @@
       box-shadow: inset 2px 0 0 var(--good);
     }
     .sidebar-country-btn {
+      position: relative;
       display: block;
       width: 100%;
       text-align: left;
@@ -271,9 +272,12 @@
        доллара, и до него она выглядела бы как закрытая полгода назад. */
     .sidebar-country-btn.live { font-weight: 600; color: var(--text); }
     .sidebar-country-btn.live::before {
-      content: ""; display: inline-block; width: 5px; height: 5px;
-      border-radius: 50%; background: var(--accent); margin-right: 6px;
-      vertical-align: middle;
+      content: "";
+      position: absolute;
+      left: 4px; top: 9px; bottom: 9px; width: 2px;
+      border-radius: 1px;
+      background: var(--accent);
+      pointer-events: none;
     }
     .sidebar-country-btn:focus-visible {
       outline: 2px solid var(--accent);
@@ -1730,6 +1734,19 @@
     .amap-country > summary::-webkit-details-marker { display: none; }
     .amap-country > summary::before { content: '▸'; color: var(--muted); font-size: var(--adopy-text-sm); }
     .amap-country[open] > summary::before { content: '▾'; }
+    /* ACL-1840: the campaign footer mounts beside the account table. Keep
+       its reading line aligned with the workbook notice and connection form. */
+    .amap-country > .hc.hc-after {
+      margin-top: 0;
+      padding: 0.5rem 0.85rem;
+      box-sizing: border-box;
+    }
+    .amap-country > .hc-after .hc-foot { overflow-wrap: anywhere; }
+    .amap-country > .hc-after .hc-hist { margin-top: 0.25rem; }
+    .amap-country > .hc-after .hc-hist > summary {
+      max-width: 100%; overflow-wrap: anywhere;
+    }
+    .amap-country > .hc-after .hc-hist-body { overflow-wrap: anywhere; }
     .amap-sum {
       margin-left: auto; display: flex; flex-wrap: wrap; gap: 1.1rem;
       font-weight: 400; font-size: var(--adopy-text-table); color: var(--muted);
@@ -3465,7 +3482,8 @@
     .cb-fc-label { display: block; margin-top: 0.4rem; font-size: var(--adopy-text-sm); }
     .cb-fc-label .cb-input { display: block; width: 100%; margin-top: 0.15rem; box-sizing: border-box; }
     .cb-fc-opt { opacity: 0.6; }
-    .cb-fc-checks { display: flex; gap: var(--space-md); margin-top: 0.15rem; }
+    .cb-fc-inline { display: block; margin-top: 0.3rem; font-size: var(--adopy-text-sm); }
+    .cb-fc-checks { display: flex; flex-wrap: wrap; gap: var(--space-md); margin-top: 0.15rem; }
     .cb-fc-q { display: grid; gap: 0.2rem; margin: 0.25rem 0; }
     .cb-fc-actions { display: flex; gap: var(--space-sm); margin-top: 0.5rem; }
     .cb-fc-msg { color: var(--danger, #b3261e); }
@@ -4046,6 +4064,17 @@ async function dashRefresh(ev) {
 {% endif %}
 {% endfor %}
 {% endif %}
+{#- ACL-106: в книге за период строки есть, но не у этого менеджера. Отдельный блок: условие уведомления выше не трогаем. -#}
+{% if report.countries and book_covers_period.value and period_owner and period_owner.kind == 'manager' %}
+<div class="page-top" id="workbook-period-notice" role="status">
+  <p style="color: var(--muted)" data-empty-owner="manager">
+    No rows for {{ period_owner.manager }} in
+    <b>{{ period.date_from or 'the start' }}{% if period.date_to and period.date_to != period.date_from %} → {{ period.date_to }}{% elif not period.date_to %} onward{% endif %}</b>,
+    while the workbook has rows for other managers on these dates. Nothing to review for you here; the file itself is not the problem.
+    Pick another period, or read the spend straight from an account below; the account map stays on this page.
+  </p>
+</div>
+{% endif %}
 {% if not report.countries or not book_covers_period.value %}
 <div class="page-top" id="workbook-period-notice" role="status">
   {% if account_map and not book_covers_period.value %}
@@ -4053,6 +4082,7 @@ async function dashRefresh(ev) {
     {% if account_map.dates %}The workbook has no rows for{% else %}The workbook has no rows with readable dates for{% endif %}
     <b>{% if account_map.date_from %}{{ account_map.date_from }}{% if account_map.date_to and account_map.date_to != account_map.date_from %} → {{ account_map.date_to }}{% elif not account_map.date_to %} onward{% endif %}{% else %}dates through {{ account_map.date_to }}{% endif %}</b>.
     {% if account_map.dates %}It runs to {{ account_map.dates[-1] }}.{% endif %}
+    Nobody has rows for these dates, so the workbook itself may need updating.
     Pick another period, or read the spend straight from an account below.
   </p>
   {% else %}
@@ -5825,8 +5855,12 @@ window.cbLayout = (function () {
   /* ACL-1776: шаблон Instant Form. Зеркало src/fb_api/form_templates.validate:
      те же тексты и потолки; окончательно проверяет сервер при сохранении и при публикации. */
   var FORM_LIMITS = { questions: 5, options: 10, name: 60, headline: 60, intro: 500,
-                      label: 80, option: 60, thanks: 300, linkText: 70 };
-  var CONTACTS = ['name', 'email', 'phone'];
+                      label: 80, option: 60, thanks: 300, linkText: 70, introTitle: 60, followUp: 1000 };
+  var CONTACTS = ['name', 'email', 'phone', 'first_name', 'last_name'];
+  /* ACL-2053: языки Instant Form для Graph; зеркало form_templates.LOCALES (сверяет тест). */
+  var FORM_LOCALES = ['AR_AR', 'CS_CZ', 'DA_DK', 'DE_DE', 'EL_GR', 'EN_GB', 'EN_US', 'ES_ES', 'ES_LA', 'FI_FI', 'FR_FR',
+    'HE_IL', 'HI_IN', 'HU_HU', 'ID_ID', 'IT_IT', 'JA_JP', 'KO_KR', 'NB_NO', 'NL_NL', 'PL_PL', 'PT_BR',
+    'PT_PT', 'RO_RO', 'RU_RU', 'SV_SE', 'TH_TH', 'TR_TR', 'VI_VN', 'ZH_CN', 'ZH_HK', 'ZH_TW'];
 
   function httpsUrl(u) {
     return /^https:\/\/[^\s\/?#:]+\.[^\s\/?#:]+(:\d+)?([\/?#]\S*)?$/i.test(String(u == null ? '' : u).trim());
@@ -5834,7 +5868,8 @@ window.cbLayout = (function () {
 
   function squeeze(v) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); }
 
-  function validateTemplate(t) {
+  /* legacyLocale - язык уже сохранённого шаблона: он допустим, даже если его нет в списке. */
+  function validateTemplate(t, legacyLocale) {
     var e = [], L = FORM_LIMITS;
     t = t || {};
     var name = squeeze(t.name), headline = squeeze(t.headline);
@@ -5843,8 +5878,11 @@ window.cbLayout = (function () {
     if (!headline) e.push('Headline is required');
     else if (headline.length > L.headline) e.push('Headline is longer than ' + L.headline + ' characters');
     if (String(t.intro || '').trim().length > L.intro) e.push('Intro is longer than ' + L.intro + ' characters');
+    if (squeeze(t.intro_title).length > L.introTitle) e.push('Intro title is longer than ' + L.introTitle + ' characters');
     var chosen = (t.contact_fields || []).filter(function (k) { return CONTACTS.indexOf(String(k)) !== -1; });
-    if (!chosen.length) e.push('Choose at least one contact field (name, email or phone)');
+    if (!chosen.length) e.push('Choose at least one contact field (name, first name, last name, email or phone)');
+    if (chosen.indexOf('name') !== -1 && (chosen.indexOf('first_name') !== -1 || chosen.indexOf('last_name') !== -1))
+      e.push('Choose either full name or first and last name, not both');
     var qs = t.questions || [];
     qs.forEach(function (q, i) {
       var n = i + 1, label = squeeze(q && q.label), kind = (q && q.type) || 'short_answer';
@@ -5863,13 +5901,20 @@ window.cbLayout = (function () {
     var url = String(t.privacy_url || '').trim();
     if (!url) e.push('Privacy policy URL is required');
     else if (!httpsUrl(url)) e.push('Privacy policy URL must start with https://');
+    var followUp = String(t.follow_up_action_url || '').trim();
+    if (followUp) {
+      if (!httpsUrl(followUp)) e.push('Follow-up URL must start with https://');
+      else if (followUp.length > L.followUp) e.push('Follow-up URL is longer than ' + L.followUp + ' characters');
+    }
     var thanks = String(t.thank_you_text || '').trim();
-    if (!thanks) e.push('Thank-you screen text is required');
+    if (!thanks) { if (!followUp) e.push('Thank-you screen text is required'); }
     else if (thanks.length > L.thanks) e.push('Thank-you screen text is longer than ' + L.thanks + ' characters');
     var site = String(t.website_url || '').trim();
     if (site && !httpsUrl(site)) e.push('Website link on the thank-you screen must start with https://');
     var locale = squeeze(t.locale).toUpperCase().replace(/-/g, '_') || 'EN_US';
-    if (!/^[A-Z]{2}_[A-Z]{2}$/.test(locale)) e.push('Locale must look like EN_US');
+    if (FORM_LOCALES.indexOf(locale) === -1 && !(legacyLocale && locale === String(legacyLocale).toUpperCase() && /^[A-Z]{2}_[A-Z]{2}$/.test(locale))) e.push('Unknown locale: ' + locale + ' (choose a language from the list)');
+    var ftype = squeeze(t.form_type).toLowerCase() || 'more_volume';
+    if (ftype !== 'more_volume' && ftype !== 'higher_intent') e.push('Form type must be More volume or Higher intent');
     return e;
   }
 
@@ -5899,7 +5944,7 @@ window.cbLayout = (function () {
     LEVELS: LEVELS, LEVEL_LABEL: LEVEL_LABEL, FUTURE: FUTURE, DESTINATIONS: DESTINATIONS,
     destination: destination, formOptions: formOptions, formsStatus: formsStatus,
     validateTemplate: validateTemplate, formSource: formSource, templateOptions: templateOptions,
-    httpsUrl: httpsUrl, FORM_LIMITS: FORM_LIMITS,
+    httpsUrl: httpsUrl, FORM_LIMITS: FORM_LIMITS, FORM_LOCALES: FORM_LOCALES,
     level: level, futureTip: futureTip, futureHtml: futureHtml, effectiveName: effectiveName,
     accountState: accountState, clampAd: clampAd, routes: routes, campMeta: campMeta, parseList: parseList
   };
@@ -13471,9 +13516,13 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     });
     return {
       name: panelValue(panel, '.cb-fc-name'), headline: panelValue(panel, '.cb-fc-headline'),
-      intro: panelValue(panel, '.cb-fc-intro'), contact_fields: contacts, questions: qs,
+      intro: panelValue(panel, '.cb-fc-intro'), intro_title: panelValue(panel, '.cb-fc-intro-title'),
+      contact_fields: contacts, questions: qs,
+      questions_first: !!(panel.querySelector('.cb-fc-questions-first') || {}).checked,
       privacy_url: panelValue(panel, '.cb-fc-privacy'), thank_you_text: panelValue(panel, '.cb-fc-thanks'),
-      website_url: panelValue(panel, '.cb-fc-site'), locale: panelValue(panel, '.cb-fc-locale') || 'EN_US'
+      website_url: panelValue(panel, '.cb-fc-site'), follow_up_action_url: panelValue(panel, '.cb-fc-followup'),
+      form_type: panelValue(panel, '.cb-fc-form-type') || 'more_volume',
+      locale: panelValue(panel, '.cb-fc-locale') || 'EN_US'
     };
   };
 
@@ -13527,18 +13576,26 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<div class="cb-fc-title">Create and save form</div>' +
       '<label class="cb-fc-label">Template name<input type="text" class="cb-input cb-fc-name" maxlength="60" placeholder="Demo form template"></label>' +
       '<label class="cb-fc-label">Headline<input type="text" class="cb-input cb-fc-headline" maxlength="60" placeholder="Get more information"></label>' +
+      '<label class="cb-fc-label">Intro title <span class="cb-fc-opt">(optional, the headline is used if empty)</span><input type="text" class="cb-input cb-fc-intro-title" maxlength="60"></label>' +
       '<label class="cb-fc-label">Intro <span class="cb-fc-opt">(optional)</span><textarea class="cb-input cb-fc-intro" rows="2" maxlength="500"></textarea></label>' +
       '<div class="cb-fc-label">Contact fields<div class="cb-fc-checks">' +
-      '<label><input type="checkbox" class="cb-fc-contact" value="name" checked> Name</label>' +
+      '<label><input type="checkbox" class="cb-fc-contact" value="name" checked> Full name</label>' +
+      '<label><input type="checkbox" class="cb-fc-contact" value="first_name"> First name</label>' +
+      '<label><input type="checkbox" class="cb-fc-contact" value="last_name"> Last name</label>' +
       '<label><input type="checkbox" class="cb-fc-contact" value="email" checked> Email</label>' +
-      '<label><input type="checkbox" class="cb-fc-contact" value="phone"> Phone</label></div></div>' +
+      '<label><input type="checkbox" class="cb-fc-contact" value="phone"> Phone</label></div>' +
+      '<label class="cb-fc-inline"><input type="checkbox" class="cb-fc-questions-first"> Ask the custom questions before the contact fields</label></div>' +
       '<div class="cb-fc-label">Custom questions <span class="cb-fc-opt">(up to 5)</span>' +
       '<div class="cb-fc-questions"></div>' +
       '<button type="button" class="cb-form-refresh" onclick="cbFormQuestionAdd(this)">+ Add question</button></div>' +
       '<label class="cb-fc-label">Privacy policy URL<input type="text" class="cb-input cb-fc-privacy" placeholder="https://example.com/privacy"></label>' +
       '<label class="cb-fc-label">Completion screen<textarea class="cb-input cb-fc-thanks" rows="2" maxlength="300" placeholder="Thank you. We will contact you."></textarea></label>' +
       '<label class="cb-fc-label">Website link on the completion screen <span class="cb-fc-opt">(optional, https)</span><input type="text" class="cb-input cb-fc-site"></label>' +
-      '<label class="cb-fc-label">Locale<input type="text" class="cb-input cb-fc-locale" value="EN_US" maxlength="5"></label>' +
+      '<label class="cb-fc-label">Follow-up URL <span class="cb-fc-opt">(optional, https; where the lead goes after submitting. Without a completion screen text the screen is skipped)</span><input type="text" class="cb-input cb-fc-followup" placeholder="https://example.com/thanks"></label>' +
+      '<label class="cb-fc-label">Form type<select class="cb-input cb-select cb-fc-form-type">' +
+      '<option value="more_volume" selected>More volume</option><option value="higher_intent">Higher intent</option></select></label>' +
+      '<label class="cb-fc-label">Locale <span class="cb-fc-opt">(language of the built-in Meta labels)</span><select class="cb-input cb-select cb-fc-locale">' +
+      ((window.cbLayout && window.cbLayout.FORM_LOCALES) || ['EN_US']).map(function (l) { return '<option value="' + l + '"' + (l === 'EN_US' ? ' selected' : '') + '>' + l + '</option>'; }).join('') + '</select></label>' +
       '<div class="cb-fc-actions">' +
       '<button type="button" class="cb-form-refresh cb-fc-save" onclick="cbFormCreateSave(this)">Save and select</button>' +
       '<button type="button" class="cb-form-refresh" onclick="cbFormCreateClose(this)">&larr; Back to ad</button></div>' +
