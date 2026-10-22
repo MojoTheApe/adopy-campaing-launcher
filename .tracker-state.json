@@ -61095,6 +61095,10 @@
       "Reviewer-Z1022106": {
         "session": "run_z1022_106",
         "role": "Reviewer"
+      },
+      "Reviewer-AA1022B83": {
+        "session": "run_aa1022_b83",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -64066,7 +64070,22 @@
       710,
       1069
     ],
-    "review": null,
+    "review": {
+      "id": "e2ae4011b466404faf30df031e2d59da",
+      "batch_id": "a7a7b69b26194a16b7f5efcef6f8e068",
+      "pr": 1083,
+      "issues": [
+        1052,
+        1053,
+        840,
+        19
+      ],
+      "actor": "Reviewer-AA1022B83",
+      "session": "run_aa1022_b83",
+      "coordinator": "Coordinator-I1021A",
+      "state": "reviewing",
+      "started_at": "2026-10-22T03:42:34+00:00"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -113416,6 +113435,26 @@
             "requested_at": "2026-10-22T03:39:20+00:00"
           }
         }
+      },
+      {
+        "event": "batch-review-acquired",
+        "at": "2026-10-22T03:42:34+00:00",
+        "review": {
+          "id": "e2ae4011b466404faf30df031e2d59da",
+          "batch_id": "a7a7b69b26194a16b7f5efcef6f8e068",
+          "pr": 1083,
+          "issues": [
+            1052,
+            1053,
+            840,
+            19
+          ],
+          "actor": "Reviewer-AA1022B83",
+          "session": "run_aa1022_b83",
+          "coordinator": "Coordinator-I1021A",
+          "state": "reviewing",
+          "started_at": "2026-10-22T03:42:34+00:00"
+        }
       }
     ],
     "policy": {
@@ -124568,7 +124607,7 @@
       "id": "a7a7b69b26194a16b7f5efcef6f8e068",
       "actor": "Coordinator-I1021A",
       "session": "run_i1021a_1021",
-      "state": "assembling",
+      "state": "reviewing",
       "issues": [
         1052,
         1053,
@@ -124757,7 +124796,7 @@
       "branch": "codex/batch-a7a7b69b26194a16b7f5efcef6f8e068",
       "intake": "31b59e53f0ab4d4abe31ecc92425019f",
       "started_at": "2026-10-22T03:39:20+00:00",
-      "pr": null,
+      "pr": 1083,
       "entered_stage": false,
       "history": [],
       "delivery_request": {
