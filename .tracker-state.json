@@ -49727,6 +49727,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
+      },
+      "1086": {
+        "actor": "Worker-W1022086",
+        "session": "run_w1022_2086",
+        "coordinator": "Coordinator-I1021A",
+        "branch": "work/acl-2086-publish-button-focus-test",
+        "worktree": "C:\\acl-int-w2086",
+        "id": "e7c8b3bf3bf94e16a746ff4871e23b52",
+        "issue": 1086,
+        "state": "implementing",
+        "started_at": "2026-10-22T07:56:26+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -59207,6 +59219,17 @@
           "report": "Return only ACL-2079/PR1080 to its original author/branch. Actual main is now3bc8d9739a82ce8db0ddb67a832ea159bf40ed36, while the genuine current approval of source2c71d1bde0ee190b1123c4dcd1936b8d19d555b3 was bound to e8bf31f8921ec6a8f79c824f39c1fc3beff2f359. The selected task-context compatibility policy is absent, so preserve the conservative ordinary author-return/current-source review route. Include all accepted new main product/config/docs/test files unchanged, update only the author report's current baseline, preserve ACL choices/owners and obtain fresh proof/review/applicable required CI. This is neither a new feature requirement nor a failure of the earlier all16 passing checks; preserve that original review/check history. Existing foreign integration1085/intake and all its members, original ACL2069 scope and pending product requests remain untouched. No product publication, optional policy activation or direct source merge is requested."
         },
         "reviewer": "Reviewer-H8K4N7"
+      },
+      "1086": {
+        "implementers": [
+          {
+            "actor": "Worker-W1022086",
+            "session": "run_w1022_2086"
+          }
+        ],
+        "state": "implementing",
+        "worker": "Worker-W1022086",
+        "coordinator": "Coordinator-I1021A"
       }
     },
     "actors": {
@@ -62437,6 +62460,10 @@
       "Coordinator-A1021A": {
         "session": "run_a1021_a1021",
         "role": "Coordinator"
+      },
+      "Worker-W1022086": {
+        "session": "run_w1022_2086",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -116742,6 +116769,13 @@
           "report": "Stale vs main 515689de; author merges current main + changelog fragment, fresh review"
         },
         "batch_id": null
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-22T07:56:26+00:00",
+        "issue": 1086,
+        "claim": "e7c8b3bf3bf94e16a746ff4871e23b52",
+        "actor": "Worker-W1022086"
       }
     ],
     "policy": {
