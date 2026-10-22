@@ -15399,7 +15399,7 @@ window.cbPublishAll = function (onProgress, picked, onlyKeys) {
 
   var parts = cbPublishConfirmParts({
     verb: cbApiMode() ? 'Publish' : 'Build',
-    targetText: cbApiMode() ? 'campaigns PAUSED' : 'drafts only, nothing is published in Facebook',
+    targetText: cbApiMode() ? 'campaign PAUSED, ad sets and ads active' : 'drafts only, nothing is published in Facebook',
     accounts: forms.map(function (f) {
       var picked = only ? cbPickedIn(f, only) : Array.prototype.slice.call(f.querySelectorAll('.cb-slot'));
       return { name: cbFormTitle(f), camps: picked.map(cbSlotTitle) };

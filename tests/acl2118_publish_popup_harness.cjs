@@ -49,10 +49,10 @@ function model(accountsCount, perAccount, extra) {
   for (let a = 0; a < accountsCount; a++) {
     accounts.push({ name: 'Acc' + a, camps: Array.from({ length: perAccount }, (_, i) => 'C' + a + '_' + i) });
   }
-  return Object.assign({ accounts, targetText: 'campaigns PAUSED', modeHtml: '<b>PAUSED</b>' }, extra || {});
+  return Object.assign({ accounts, targetText: 'campaign PAUSED, ad sets and ads active', modeHtml: '<b>PAUSED</b>' }, extra || {});
 }
 let p = cbPublishConfirmParts(model(4, 2));
-assert.ok(/Publish <strong>8<\/strong> campaigns on <strong>4<\/strong> accounts — campaigns PAUSED/.test(p.lead), p.lead);
+assert.ok(/Publish <strong>8<\/strong> campaigns on <strong>4<\/strong> accounts — campaign PAUSED, ad sets and ads active/.test(p.lead), p.lead);
 assert.equal((p.body.match(/<details class="pc-acc/g) || []).length, 4, '8 кампаний (> 6) — аккаунты свёрнуты');
 
 p = cbPublishConfirmParts(model(2, 3));

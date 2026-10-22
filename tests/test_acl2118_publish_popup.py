@@ -45,8 +45,8 @@ SHOW = """([accounts, perAccount, many]) => {
     label: 'Text visible in full (up to 125)', hint: "after 125 characters the text is folded behind 'See more'", campaign: c })));
   if (many) accs.forEach(a => items.push({ level: 'warn', rule: 'link_tracking', label: 'Tracking parameters in the link',
     hint: 'the link has no ?key=value parameters: clicks may not be attributed', campaign: a.camps[0] }));
-  const parts = cbPublishConfirmParts({ verb: 'Publish', targetText: 'campaigns PAUSED', accounts: accs,
-    modeHtml: '<b>PAUSED</b> created through the Graph API; nothing is activated, a person turns it on in Ads Manager',
+  const parts = cbPublishConfirmParts({ verb: 'Publish', targetText: 'campaign PAUSED, ad sets and ads active', accounts: accs,
+    modeHtml: '<b>Campaign PAUSED</b> — ad sets and ads are active and start when you turn the campaign on (created through the Graph API)',
     noticesHtml: '<div class="pc-notes"><div class="pc-h">Pre-flight warnings (they do not block)</div>'
       + cbNoticesHtml(cbGroupNotices(items)) + '</div>' });
   window.__confirmed = 0;
@@ -90,7 +90,9 @@ def test_the_popup_fits_the_screen_with_fixed_header_and_buttons(browser, size, 
         # Повторные замечания — одна строка на правило, свёрнутая.
         assert p.locator("details.pc-note").count() == (2 if shape[2] else 1)
         assert p.locator("details.pc-note[open]").count() == 0
-        assert "Publish 8 campaigns on 4 accounts" in p.locator(".sfc-lead").inner_text() or shape[0] != 4
+        lead = p.locator(".sfc-lead").inner_text()
+        assert "campaign PAUSED, ad sets and ads active" in lead, lead   # ACL-2114 wording
+        assert "Publish 8 campaigns on 4 accounts" in lead or shape[0] != 4
         # Аккаунты свернуты при > 6 кампаниях; «Publish» остаётся на месте.
         assert p.locator("details.pc-acc").count() == shape[0]
         p.locator("#sfc-ok").click()
