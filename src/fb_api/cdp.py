@@ -34,6 +34,7 @@ Websocket-клиент не пишем второй раз: берём `RawCdp` 
 from __future__ import annotations
 
 import json
+import time
 import urllib.parse
 import urllib.request
 from typing import Any, Callable
@@ -100,12 +101,47 @@ class PageTab:
 
     @classmethod
     def open(cls, cdp_url: str, *, connect: Callable[..., Any] | None = None,
-             call_s: float = CALL_S) -> "PageTab":
-        """Подключиться к браузеру профиля и открыть в нём свою пустую вкладку."""
+             call_s: float | None = None) -> "PageTab":
+        """Подключиться к браузеру профиля и открыть в нём свою пустую вкладку.
+
+        Холодный старт (TEST9095y, 9403A: `Page.enable` не ответил за 10 с):
+        профиль, который мы только что подняли (`launch.mark_started`), на первые
+        вызовы — подключение, вкладка, `Page.enable`, снятие троттлинга —
+        получает `ACL_CDP_COLD_START_S` (40 с). Дальше у вкладки обычные сроки
+        (`CALL_S`), а отметка порта снимается после первой удачной вкладки.
+        """
+        from src.fb_api import launch as _launch
+
+        since = _launch.cold_since(cdp_url) if call_s is None else None
+        cold = since is not None
+        if call_s is None:
+            call_s = _launch.cold_start_s() if cold else CALL_S
+        timings: dict = {}
+        step = "connect"
+        began = time.monotonic()
         try:
-            cdp = (connect or RawCdp.connect)(cdp_url, timeout=call_s)
-        except TimeoutError as exc:
-            raise CdpTimeout(f"connect: the browser did not answer within {call_s:.0f} s") from exc
+            try:
+                cdp = (connect or RawCdp.connect)(cdp_url, timeout=call_s)
+            except TimeoutError as exc:
+                raise CdpTimeout(f"connect: the browser did not answer within {call_s:.0f} s") from exc
+            timings["connect_s"] = time.monotonic() - began
+            step = "tab"
+            tab = cls._open_on(cdp, cdp_url, call_s, timings, began)
+        except BaseException as exc:
+            if cold:
+                failed = str(exc).split(":", 1)[0] if isinstance(exc, CdpTimeout) else step
+                _launch.record_cold_open(ok=False, since_start_s=since, budget_s=call_s,
+                                         timings={**timings, "total_s": time.monotonic() - began},
+                                         step=failed)
+            raise
+        if cold:
+            _launch.record_cold_open(ok=True, since_start_s=since, budget_s=call_s,
+                                     timings={**timings, "total_s": time.monotonic() - began})
+            _launch.forget(cdp_url)
+        return tab
+
+    @classmethod
+    def _open_on(cls, cdp: Any, cdp_url: str, call_s: float, timings: dict, began: float) -> "PageTab":
         target_id = ""
         try:
             # Ровно как Playwright (`crBrowser`: {url:"about:blank", browserContextId}),
@@ -134,15 +170,16 @@ class PageTab:
             # же, на НАШЕЙ сессии. Если цель не на паузе, команда — пустая. Это не
             # Runtime.enable: домен Runtime не включается.
             try:
-                tab.call("Runtime.runIfWaitingForDebugger")
+                tab.call("Runtime.runIfWaitingForDebugger", timeout=call_s)
             except CdpTimeout:
                 raise
             except CdpError:
                 pass
             # Runtime.enable не зовём: Runtime.evaluate работает и без него, а
             # включённый домен Runtime — известный признак автоматизации.
-            tab.call("Page.enable")
-            tab.throttle = tab.keep_active()
+            tab.call("Page.enable", timeout=call_s)
+            timings["enable_s"] = time.monotonic() - began
+            tab.throttle = tab.keep_active(timeout=call_s)
             return tab
         except BaseException:
             if target_id:
@@ -188,18 +225,18 @@ class PageTab:
             raise CdpError("the tab is closed")
         return _call(self._cdp, method, params, session_id=self.session_id, timeout=timeout)
 
-    def keep_active(self) -> dict:
+    def keep_active(self, *, timeout: float = CALL_S) -> dict:
         """Снять троттлинг фона на НАШЕЙ сессии, не показывая окно (как робот, ACL-1402)."""
         status = {"focus": False, "lifecycle": False}
         try:
-            self.call("Emulation.setFocusEmulationEnabled", {"enabled": True})
+            self.call("Emulation.setFocusEmulationEnabled", {"enabled": True}, timeout=timeout)
             status["focus"] = True
         except CdpTimeout:
             raise
         except Exception:
             pass
         try:
-            self.call("Page.setWebLifecycleState", {"state": "active"})
+            self.call("Page.setWebLifecycleState", {"state": "active"}, timeout=timeout)
             status["lifecycle"] = True
         except CdpTimeout:
             raise
