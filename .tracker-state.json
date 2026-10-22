@@ -60381,7 +60381,7 @@
             "session": "b71bcdf8-fe5f-4ed1-b5b2-3d7a47a5be43"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-B71BCDF8",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -60400,7 +60400,8 @@
         },
         "pr": 1093,
         "queued_at": "2026-10-22T10:11:40+00:00",
-        "review_report": "Content reviewed OK (head 9e84133c, base 7224a34c): trailing variant, leading priority, frame sizes (incl. Cyrillic u0445) and 4-digit tails never a variant; server and JS tables identical; local tests and CI green. Main moved to 203f8a33: merge current main only, no content changes requested."
+        "review_report": "Content reviewed OK (head 9e84133c, base 7224a34c): trailing variant, leading priority, frame sizes (incl. Cyrillic u0445) and 4-digit tails never a variant; server and JS tables identical; local tests and CI green. Main moved to 203f8a33: merge current main only, no content changes requested.",
+        "reviewer": "Reviewer-AS1022090B"
       },
       "1095": {
         "implementers": [
@@ -63666,6 +63667,10 @@
       "Worker-W1022P95": {
         "session": "local_5577ad27-093e-4daa-be2e-a81fc75eabcc",
         "role": "Worker"
+      },
+      "Reviewer-AS1022090B": {
+        "session": "run_as1022_090b",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -66695,8 +66700,7 @@
     "review_queue": [
       1054,
       710,
-      1069,
-      1090
+      1069
     ],
     "review": null,
     "history": [
@@ -118741,6 +118745,13 @@
         "issue": 1095,
         "claim": "18668e25e1ae4058913c6b4db1bb9550",
         "actor": "Worker-W1022P95"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-22T10:26:29+00:00",
+        "pr": 1093,
+        "lane": "a0e75cee3fd84a83a9d5fedbe7062c93",
+        "actor": "Reviewer-AS1022090B"
       }
     ],
     "policy": {
@@ -130802,7 +130813,20 @@
       "started_at": "2026-10-22T09:16:44+00:00",
       "ineligible": {}
     },
-    "source_reviews": {},
+    "source_reviews": {
+      "1093": {
+        "id": "a0e75cee3fd84a83a9d5fedbe7062c93",
+        "pr": 1093,
+        "issues": [
+          1090
+        ],
+        "actor": "Reviewer-AS1022090B",
+        "session": "run_as1022_090b",
+        "coordinator": "Coordinator-I1021A",
+        "started_at": "2026-10-22T10:26:29+00:00",
+        "state": "reviewing"
+      }
+    },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
   },
   "maintenance_history": [
