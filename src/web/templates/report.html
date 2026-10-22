@@ -15481,6 +15481,7 @@ function cbPlanHtml(data) {
       var allForms = (s.ad_sets || []).length && (s.ad_sets || []).every(function (x) { return x.destination === 'Instant Form'; });
       h += '<div class="cbd-plan-meta" style="font-size:var(--adopy-text-sm);color:var(--muted)">page '
         + (s.page_name ? aclEscHtml(s.page_name) + ' · ' : '') + aclEscHtml(s.page_id || '—') + (s.page_source ? ' (' + aclEscHtml(s.page_source) + ')' : '')
+        + (s.page_origin ? ' · from ' + aclEscHtml(s.page_origin) : '')
         + (allForms ? '' : ' · pixel ' + aclEscHtml(s.pixel_id || '—') + (s.pixel_source ? ' (' + aclEscHtml(s.pixel_source) + ')' : ''))
         + ' · ' + aclEscHtml(s.objective || '') + '</div>';
       (s.ad_sets || []).forEach(function (a) {

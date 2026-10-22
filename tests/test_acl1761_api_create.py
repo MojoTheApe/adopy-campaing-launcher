@@ -475,6 +475,8 @@ class FakeMeta:
         parts = path.strip("/").split("/")
         if path == "/me/adaccounts":
             return {"data": [{"account_id": ACT[4:], "account_status": 1}]}
+        if path == "/me/accounts":
+            return {"data": []}      # ACL-2105: у профиля своих Страниц нет
         if path == "/search":
             t = params["type"]
             if t == "adgeolocation":
