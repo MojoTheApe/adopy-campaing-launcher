@@ -45,6 +45,32 @@ def test_file_variant():
     assert cv.file_variant("coffee.mp4") == ""
 
 
+# ACL-2090: вариант в конце имени («2175_ARM22.png»), ведущий — в приоритете.
+@pytest.mark.parametrize("name,variant", [
+    ("2175_ARM22.png", "22"), ("2175_ARM21.png", "21"), ("2175_ARM16.png", "16"),
+    ("2175_ADN3.png", "3"), ("2403_story_3.mp4", "3"), ("2175_ARM07.png", "7"),
+    ("2175_ARM22_1080x1920.png", "22"), ("2175_ARM22_1080" + chr(0x445) + "1920_9x16.png", "22"),
+    ("2046 1.jpg", "1"),
+    ("1_es_2408_post.mp4", "1"), ("1_workers_1962_ar_facebook_1080x1080.jpg", "1"),
+    ("12_2175_ARM22.png", "12"),
+    ("2175_post_1x1.png", ""), ("2175_post_4x5.jpg", ""), ("2175_post_9x16.mp4", ""),
+    ("2175_post_9:16.mp4", ""), ("2175_square_1080x1080.jpg", ""), ("cac-2285.png", ""),
+    ("2403x1080_3011.png", ""), ("1328 - 26s.mp4", ""), ("2175_ARM_story.png", ""),
+    ("2175_ARM22_Story.png", ""), ("coffee.mp4", ""),
+])
+def test_file_variant_from_the_end_of_the_name(name, variant):
+    assert cv.file_variant(name) == variant
+
+
+def test_b97_ads_with_the_variant_at_the_end_get_different_names():
+    names = [AdDraft(creative_filename=f, copy_name="Text1").ad_name()
+             for f in ("2175_ARM22.png", "2175_ARM21.png", "2175_ARM16.png")]
+    assert names == ["2175 22 - Text1", "2175 21 - Text1", "2175 16 - Text1"]
+    # Отчёты разбирают новые имена так же, как «2046 1 - Text6».
+    assert [split_ad_title_variant(n) for n in names] == [
+        ("2175", "22", "Text1"), ("2175", "21", "Text1"), ("2175", "16", "Text1")]
+
+
 # --- split_ad_title ---------------------------------------------------------
 
 @pytest.mark.parametrize("title,expected", [
