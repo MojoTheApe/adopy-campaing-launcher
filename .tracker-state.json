@@ -6241,6 +6241,27 @@
         "issue_scopes": {
           "1052": "9ec0c2a8ad90f824b35527de9cf47751b33907bd2c0104ad4cf93e9d60afe4ed"
         }
+      },
+      "846": {
+        "kind": "independent-review",
+        "implementer": "Worker-W1021840",
+        "reviewer": "Reviewer-Y1022840",
+        "review_session": "run_y1022_840",
+        "execution_lane": "1e3db9b89027465b917b4edfbbd2a3bc",
+        "head_sha": "ea9996538e88e0e53df4a5635f2218e06f099f3f",
+        "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+        "tree_sha": "87c2cd6b10986395f4f719849f31b4c37a03da5a",
+        "verdict": "approved",
+        "report": "ACL-1840 / PR846 source review at head ea999653 vs main 4582039e (4 files). report.html: scoped rule '.amap-country > .hc.hc-after' (specificity beats base .hc margin-top) sets padding .5rem .85rem = amap-add inset, margin-top 0, overflow-wrap on foot/history; theme-neutral (no colors). Selector matches the real mount in _account_map_country.html (section.hc.hc-after directly after the table inside the country details). Fixture is sanitized synthetic English markup mirroring the real component CSS; test uses real Chromium at 1280/1024/320 x light/dark x empty/populated/filtered: asserts x alignment to connection-form inset, right bound, spacing >=8 above/below, no horizontal overflow, focus outline within card, keyboard Enter/Space disclosure, plus a baseline test reproducing the missing inset. tests/test_country_campaign_footer_layout.py: 19 passed locally. Changelog fragment docs/system/changelog.d/ACL-1840.md: valid per fold_changelog.py --check (valid: ACL-1840, ACL-2037); heading date 2026-10-22 is acceptable because the fragment format requires a YYYY-MM-DD date and the old entry had none; docs/system/CHANGELOG.md unchanged vs main. English only, no leaked ids/tokens (the preview commit hash is a public provenance reference). Required CI on ea999653 all green (classify, descriptor, tracker-link, process instructions, linux 1-3, windows, installer verification, ACL verification). PR base equals current main 4582039e. No findings.",
+        "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          840
+        ],
+        "recorded_at": "2026-10-22T03:29:31+00:00",
+        "issue_scopes": {
+          "840": "ef493a159bfb31c8be24551b9a4f3d90b60904a49576c51b0b94efdfdf6c5d40"
+        }
       }
     },
     "stage": {
