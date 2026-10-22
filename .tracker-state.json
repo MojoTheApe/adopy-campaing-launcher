@@ -49059,6 +49059,18 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
+      },
+      "53": {
+        "actor": "Worker-W1022402",
+        "session": "run_w1022_402",
+        "coordinator": "Coordinator-I1021A",
+        "branch": "work/acl-402-failure-signatures",
+        "worktree": "C:\\acl-int-w402",
+        "id": "d0995e3dc4634496a01ea49cf942465a",
+        "issue": 53,
+        "state": "implementing",
+        "started_at": "2026-10-22T05:30:10+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -57847,11 +57859,15 @@
           {
             "actor": "Worker-L453",
             "session": "run_l4_53"
+          },
+          {
+            "actor": "Worker-W1022402",
+            "session": "run_w1022_402"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-L453",
-        "coordinator": "Coordinator-M1011A",
+        "state": "implementing",
+        "worker": "Worker-W1022402",
+        "coordinator": "Coordinator-I1021A",
         "handoff": {
           "actor": "Worker-L453",
           "session": "run_l4_53",
@@ -57868,21 +57884,15 @@
         },
         "pr": 1032,
         "queued_at": "2026-10-20T09:45:38+00:00",
-        "reviewer": "Reviewer-R402W",
         "return_operation": {
           "id": "0c36dec13db647b8bc6eed67079db67f",
           "actor": "Coordinator-M1011A",
           "session": "coord-m1011a-20261015",
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
         },
-        "return": {
-          "id": "0c36dec13db647b8bc6eed67079db67f",
-          "actor": "Coordinator-M1011A",
-          "session": "coord-m1011a-20261015",
-          "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
-        },
         "review_report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21",
-        "rework": true
+        "rework": true,
+        "rework_claim": "d0995e3dc4634496a01ea49cf942465a"
       },
       "230": {
         "implementers": [
@@ -61637,6 +61647,10 @@
       "Reviewer-AA1022B83": {
         "session": "run_aa1022_b83",
         "role": "Reviewer"
+      },
+      "Worker-W1022402": {
+        "session": "run_w1022_402",
+        "role": "Worker"
       }
     },
     "completed": {
@@ -114244,6 +114258,13 @@
         "event": "included-sources-closed",
         "at": "2026-10-22T04:23:40+00:00",
         "batch_id": "a7a7b69b26194a16b7f5efcef6f8e068"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-22T05:30:10+00:00",
+        "issue": 53,
+        "claim": "d0995e3dc4634496a01ea49cf942465a",
+        "actor": "Worker-W1022402"
       }
     ],
     "policy": {
