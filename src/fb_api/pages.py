@@ -15,7 +15,22 @@ SOURCE_ACCOUNT = "ad account"
 SOURCE_PROFILE = "profile"
 
 #: Права на Странице, с которыми можно рекламировать (полный доступ включает рекламу).
-ADVERTISE_TASKS = frozenset({"ADVERTISE", "MANAGE"})
+ADVERTISE_TASKS = frozenset({"ADVERTISE", "MANAGE", "FULL_CONTROL"})
+#: Страницы нового формата отдают те же права с префиксом PROFILE_PLUS_ (ACL-2110).
+TASK_PREFIX = "PROFILE_PLUS_"
+
+
+def normalized_tasks(tasks: Any) -> set[str]:
+    """Права Страницы без префикса нового формата: `PROFILE_PLUS_X` считается как `X`."""
+    if not isinstance(tasks, (list, tuple, set, frozenset)):
+        return set()
+    names = {str(t).strip().upper() for t in tasks}
+    return names | {n[len(TASK_PREFIX):] for n in names if n.startswith(TASK_PREFIX)}
+
+
+def has_advertise_rights(tasks: Any) -> bool:
+    """Есть ли право рекламировать (классические и PROFILE_PLUS_ имена; неизвестные игнорируются)."""
+    return bool(ADVERTISE_TASKS & normalized_tasks(tasks))
 
 
 @dataclass
@@ -51,8 +66,7 @@ def profile_rows(client: Any, *, max_pages: int = 3) -> tuple[list[dict], bool]:
     rows = client.get_all(path, {"fields": "id,name,tasks", "limit": 100}, max_pages=max_pages)
     keep = []
     for row in rows:
-        tasks = row.get("tasks")
-        if isinstance(tasks, list) and ADVERTISE_TASKS & {str(t).upper() for t in tasks}:
+        if has_advertise_rights(row.get("tasks")):
             keep.append(row)
     return keep, path in (getattr(client, "truncated", None) or [])
 
