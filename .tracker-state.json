@@ -54136,7 +54136,7 @@
             "session": "run_w1021_1839"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1021839",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -54166,7 +54166,8 @@
           "actor": "Coordinator-I1021A",
           "session": "run_i1021a_1021",
           "report": "Approval is stale against current main 515689de (light batch #1085 merged). Author: merge current main (no content change), CI, hand off for a merge-only re-review."
-        }
+        },
+        "reviewer": "Reviewer-AG1021839"
       },
       "840": {
         "implementers": [
@@ -65042,8 +65043,7 @@
     "review_queue": [
       1054,
       710,
-      1069,
-      839
+      1069
     ],
     "review": null,
     "history": [
@@ -116133,6 +116133,13 @@
           "started_at": "2026-10-22T07:36:02+00:00",
           "ineligible": {}
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-22T07:37:39+00:00",
+        "pr": 843,
+        "lane": "979a95715a9b48138b2be99ac0b692e0",
+        "actor": "Reviewer-AG1021839"
       }
     ],
     "policy": {
@@ -128080,7 +128087,20 @@
       "started_at": "2026-10-22T07:36:02+00:00",
       "ineligible": {}
     },
-    "source_reviews": {},
+    "source_reviews": {
+      "843": {
+        "id": "979a95715a9b48138b2be99ac0b692e0",
+        "pr": 843,
+        "issues": [
+          839
+        ],
+        "actor": "Reviewer-AG1021839",
+        "session": "run_ag1021_839",
+        "coordinator": "Coordinator-I1021A",
+        "started_at": "2026-10-22T07:37:39+00:00",
+        "state": "reviewing"
+      }
+    },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
   },
   "maintenance_history": [
