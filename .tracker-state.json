@@ -55086,7 +55086,7 @@
             "session": "run_w1021_106"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-W1021106",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -55105,7 +55105,7 @@
         },
         "pr": 955,
         "queued_at": "2026-10-21T22:42:18+00:00",
-        "review_report": "Approval is stale against current main 64e73a1e (after ACL-2073 #1075 and ACL-2071 #1076 merged). Author: merge current main into the original branch without changing content (resolve only CHANGELOG append conflicts by keeping both entries), re-run checks, hand off, and get a fresh independent source approval for batch 2b (--deliver).",
+        "review_report": "stale vs main e8bf31f8; author merges current main and hands off for a fresh review; no content findings",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578063+00:00",
@@ -55117,7 +55117,8 @@
           "session": "run_i1021a_1021",
           "report": "Approval is stale against current main 64e73a1e (after ACL-2073 #1075 and ACL-2071 #1076 merged). Author: merge current main into the original branch without changing content (resolve only CHANGELOG append conflicts by keeping both entries), re-run checks, hand off, and get a fresh independent source approval for batch 2b (--deliver)."
         },
-        "reviewer": "Reviewer-R1022106"
+        "reviewer": "Reviewer-R1022106",
+        "rework": true
       },
       "29": {
         "implementers": [
@@ -111874,6 +111875,24 @@
         "pr": 955,
         "lane": "eee1c7a617ef444781f141ce50987709",
         "actor": "Reviewer-R1022106"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-22T00:07:48+00:00",
+        "review": {
+          "id": "eee1c7a617ef444781f141ce50987709",
+          "pr": 955,
+          "issues": [
+            19
+          ],
+          "actor": "Reviewer-R1022106",
+          "session": "run_r1022_106",
+          "coordinator": "Coordinator-I1021A",
+          "started_at": "2026-10-22T00:06:55+00:00",
+          "state": "returning",
+          "report": "stale vs main e8bf31f8; author merges current main and hands off for a fresh review; no content findings",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -122604,20 +122623,6 @@
         "coordinator": "Coordinator-R6M9H2",
         "started_at": "2026-10-21T23:58:33+00:00",
         "state": "reviewing"
-      },
-      "955": {
-        "id": "eee1c7a617ef444781f141ce50987709",
-        "pr": 955,
-        "issues": [
-          19
-        ],
-        "actor": "Reviewer-R1022106",
-        "session": "run_r1022_106",
-        "coordinator": "Coordinator-I1021A",
-        "started_at": "2026-10-22T00:06:55+00:00",
-        "state": "returning",
-        "report": "stale vs main e8bf31f8; author merges current main and hands off for a fresh review; no content findings",
-        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
