@@ -213,11 +213,16 @@ class CampaignPlan:
 
 
 def _interest_groups(raw: str) -> list[list[str]]:
-    """«a, b [AND] c» → [["a","b"],["c"]] — то же деление, что у RPA."""
+    """«a, b [AND] c» → [["a","b"],["c"]] — то же деление, что у RPA.
+
+    ACL-1933: « or » и « and » внутри группы = запятая («A or B» → два интереса, без
+    подтверждения разбиения). Разделитель групп [AND] в скобках не затрагивается.
+    """
     import re
 
     groups = []
     for chunk in re.split(r"\[AND\]|\|", raw or "", flags=re.IGNORECASE):
+        chunk = re.sub(r"\s+(?:or|and)\s+", ",", chunk, flags=re.IGNORECASE)
         terms = [t.strip() for t in chunk.split(",") if t.strip()]
         if terms:
             groups.append(terms)

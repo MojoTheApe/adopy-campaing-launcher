@@ -415,18 +415,14 @@ def test_preflight_pending_confirmation_is_an_error_with_a_confirm_action(tmp_pa
     assert out.targeting and out.targeting[0]["state"] == "pending"
 
 
-def test_preflight_split_needs_confirm_then_passes(tmp_path):
-    store = _store(tmp_path)
+def test_preflight_or_text_is_two_terms_and_passes_without_a_confirm(tmp_path):
+    # ACL-1933: « or » в тексте таргетинга = запятая, разбиение подтверждать не нужно.
     meta = TargetMeta(valid={"plus500": ("Plus500", "32")},
                       typed={("adworkemployer", "Alpari Group"): [{"id": "31", "name": "Alpari Group"}]})
-    out, got = _audit(meta, tmp_path, "Alpari Group or Plus500", store)
-    assert got["interests_confirmed"]["status"] == "error" and got["interests_confirmed"]["action"] == "confirm"
-    cand = out.targeting[0]["suggested"]
-    store.put("Alpari Group or Plus500", id=cand["id"], type=cand["type"], name=cand["name"], picks=cand["picks"])
-    out, got = _audit(meta, tmp_path, "Alpari Group or Plus500", store)
+    out, got = _audit(meta, tmp_path, "Alpari Group or Plus500", _store(tmp_path))
     assert out.error == "" and got["interests_confirmed"]["status"] == "ok"
-    flex = out.plan["ad_sets"][0]["targeting"]["flexible_spec"] if "targeting" in out.plan["ad_sets"][0] else None
-    assert flex is None or flex[0].keys() == {"work_employers", "interests"}
+    assert [t["term"] for t in out.targeting] == ["Alpari Group", "Plus500"]
+    assert all(t["state"] == "exact" for t in out.targeting)
 
 
 def test_preflight_passes_after_confirmation(tmp_path):
