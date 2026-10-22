@@ -6304,6 +6304,40 @@
         "issue_scopes": {
           "1053": "e43d2aa702e2ebd0edd41e4ea895d2876e6967934d41e4d18f3e638ecd7d3871"
         }
+      },
+      "1083": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "implementer": "Coordinator-I1021A",
+        "reviewer": "Reviewer-AA1022B83",
+        "review_session": "run_aa1022_b83",
+        "execution_lane": "e2ae4011b466404faf30df031e2d59da",
+        "batch_id": "a7a7b69b26194a16b7f5efcef6f8e068",
+        "source_heads": [
+          "e237d9351b9c5cb8a6c81d699a5df69fbf9e1ba8",
+          "43b8621259b8c9d813632a175811d8370ea0dd5c",
+          "ea9996538e88e0e53df4a5635f2218e06f099f3f",
+          "4a50cb4c1e399688823dd3b0aedd5aa97b67e66c"
+        ],
+        "head_sha": "c2f699eb4f93162c8551b0984a0744cccba437a8",
+        "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+        "tree_sha": "b95f7997b82ef8b17c75b01bfd2e203b88988314",
+        "report": "Independent integration review of batch a7a7b69b26194a16b7f5efcef6f8e068, PR1083 head c2f699eb tree b95f7997 against main 4582039e. Reviewer run Reviewer-AA1022B83/run_aa1022_b83 is distinct from Coordinator-I1021A, Workers W1022052/W1022053/W1021840/W1021106 and source Reviewers W1022052/X1022053/Y1022840/Z1022106; it implemented no member.\nComposition: first-parent chain is main 4582039e + exactly four merge commits in frozen order: 2d8245cf (2nd parent e237d935, ACL-2052 #1057), ad603412 (43b86212, ACL-2053 #1060), 0c1e3983 (ea999653, ACL-1840 #846), c2f699eb (4a50cb4c, ACL-106 #955). git show --remerge-diff is empty for all four. main 4582039e is an ancestor of every source tip; all four source PRs are open at their frozen heads. PR body has exactly 'Tracker issues: ACL-2052, ACL-2053, ACL-1840, ACL-106' and 'Tracker batch: a7a7b69b26194a16b7f5efcef6f8e068'. Delivery request stored on the integration claim: state requested, workflow .github/workflows/complete-delivery.yml, job 'Verify published Windows package', issues 1052/1053/840/19, requested 2026-10-22T03:39:20Z by Coordinator-I1021A.\nFinal tree vs union of source diffs: 22 files (+1304/-47) = exactly the union of the four source file sets. The only shared file is src/web/templates/report.html (2053, 1840, 106); every other combined blob equals its source blob. report.html hunks are disjoint: 1840 adds .amap-country > .hc-after CSS; 2053 adds .cb-fc-inline/.cb-fc-checks wrap, FORM_LOCALES/limits/validateTemplate(legacyLocale) and the form-create panel fields; 106 adds a period-owner notice block plus one sentence in the existing workbook notice. The two #workbook-period-notice blocks are mutually exclusive (countries and book covers period and owner kind manager vs not countries or not covering), so no duplicate id renders.\nInteractions: ACL-2052 adds feature-gated registry rules (applies_to.feature value_rules/account_controls/placement_soft_opt_out/...) and a documentation-only kind 'fact' that check_job never evaluates; current jobs carry no such feature, so preflight output is unchanged. It touches no form path. ACL-2053's write_policy (FIRST_NAME/LAST_NAME types, two bool keys with type check, follow_up_action_url length cap), token_capture helper mirror and creator lenient_locale for saved templates are independent of meta_rules. No collision.\nUI text: all new user-facing strings (form panel labels, validation messages, period-owner notice, WriteRefused messages) are English; Russian appears only in code comments/docstrings. No ad account, page, profile ids, tokens or e-mails in added lines; the 2053 Graph fixture is sanitized. fold_changelog.py --check on the combined tree: 'valid: ACL-106, ACL-1840, ACL-2037, ACL-2052, ACL-2053'; the four member fragments are present.\nLocal checks on this tree (Windows, Python 3.13): affected tests of all four members and their neighbours - test_acl2052_meta_rules_placement, test_acl1781_meta_rules, test_meta_docs_watch_1782, test_acl2053_form_parity, test_acl1776_create_forms, test_acl1775_instant_forms, test_acl1756_fb_api, test_acl1756_page_helper_node, test_acl1760_api_read, test_acl1761_api_create/hang_logout/parity, test_acl1800_campaign_commands, test_acl1812_warm_sessions, test_acl1899_upload_progress, test_country_campaign_footer_layout (browser), test_empty_period_owner, test_sidebar_without_workbook, test_fold_changelog_2037: 1062 passed, 0 skipped. Combined report.html render/browser tests (account map view, accounts tab, country notes, home campaigns browser, builder from links, connect in empty country, country refresh review, drawer review browser, one connect button, period picker, read fallback, account tree, country read, web drill, web form endpoints): 264 passed, 1 skipped. No local full suite.\nCombined CI on head c2f699eb, attempt 1, no reruns; scope classifier reported reuse 'no-proven-full-run' (no reused jobs): CI 39718111722 success (linux tests 3.11 shards 1-3, 3.13 shards 1-3, windows tests 3.13, Classify and check project tooling, Process instructions, ACL verification); Windows installer 39718111759 success (Classify installer changes, Verify build inputs, Build install repair and uninstall, Installer verification); Delivery setup/descriptor 39718111852 success; Tracker linkage 39718111765 success.\nNon-blocking: none found. Issue #840 unchecked acceptance lines remain for post-merge acceptance; #1052, #1053, #19 have none.",
+        "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          1052,
+          1053,
+          840,
+          19
+        ],
+        "recorded_at": "2026-10-22T03:56:42+00:00",
+        "issue_scopes": {
+          "1052": "9ec0c2a8ad90f824b35527de9cf47751b33907bd2c0104ad4cf93e9d60afe4ed",
+          "1053": "e43d2aa702e2ebd0edd41e4ea895d2876e6967934d41e4d18f3e638ecd7d3871",
+          "840": "ef493a159bfb31c8be24551b9a4f3d90b60904a49576c51b0b94efdfdf6c5d40",
+          "19": "ce291401dfa6489828ba973eb602b744efb113657552fbfff1bcb7f342232d99"
+        }
       }
     },
     "stage": {
