@@ -37,6 +37,9 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   the account map before their first spend. Inactive countries have no marker;
   the expanded-country background remains a separate selection indication.
 - `src/analysis_agent`: statistics workbook reading, reports and reconciliation.
+  The dashboard tells an empty chosen period apart by owner (ACL-106): no workbook rows for
+  anyone (the file may need updating) versus rows for other managers but none for the
+  selected manager (nothing to review); the account map stays available in both.
 - `src/campaign_bridge`, `src/upload_agent`: campaign input/output preparation.
 - `src/fb_ads_rpa`, `src/meta_campaign_agent`: Ads Manager interactions, verified
   profile identity, draft preparation, queues and browser lifecycle. ACL-1250/#247
