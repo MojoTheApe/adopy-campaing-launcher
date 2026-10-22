@@ -130845,7 +130845,51 @@
         "session": "run_as1022_090b",
         "coordinator": "Coordinator-I1021A",
         "started_at": "2026-10-22T10:26:29+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 1090,
+          "pr": 1093,
+          "branch": "work/acl-2090-ad-name-trailing-variant",
+          "head_sha": "e31f9c32687915f8d92f7dd7af7566a503973619",
+          "base_sha": "203f8a337b085e421ee66c00589a7401a384b1a3",
+          "main_sha": "203f8a337b085e421ee66c00589a7401a384b1a3",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "45596e0052dc17bd51275590b235b89d3541549ec5f260b39e5c6b0cad67bf28",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-AS1022090B",
+            "implementer": "Worker-B71BCDF8",
+            "head_sha": "e31f9c32687915f8d92f7dd7af7566a503973619",
+            "base_sha": "203f8a337b085e421ee66c00589a7401a384b1a3",
+            "tree_sha": "a26813f942ba9831af44f1f9388b6530ade37f42",
+            "execution_lane": "a0e75cee3fd84a83a9d5fedbe7062c93",
+            "review_session": "run_as1022_090b",
+            "report": "Re-review of ACL-2090 (PR #1093, Issue #1090) at head e31f9c32 after a main-only merge.\nVerdict: approved.\n- Head e31f9c32687915f8d92f7dd7af7566a503973619; merge base = current main 203f8a337b085e421ee66c00589a7401a384b1a3 (behind_by 0, ahead 3).\n- Delta 9e84133c..e31f9c32 touches only files that came from main (ACL-1708 / ACL-1839: changelog fragments, requirements-dev.txt, convert_favicon_to_ico.py, install_dashboard_shortcut.ps1, web/app.py, _account_map_add.html, report.html hunk from main, two main tests). No change to creative_variant.py, the feature tests or the feature hunk.\n- PR diff vs main is the same 5 files, +72/-7: ACL-2090.md, src/creative_variant.py, src/web/templates/report.html, tests/test_acl1819_preflight.py, tests/test_creative_variants.py.\n- CI on e31f9c32: linux tests 1/2/3, windows tests, ACL verification, process instructions, tooling, installer verification, descriptor all pass; installer build skipped as expected. tracker-link fails only because the task was in a returned state; it is a tracker-state check, not code.\nContent approval of 9e84133c by Reviewer-AM1022090 carries over unchanged.",
+            "main_sha": "203f8a337b085e421ee66c00589a7401a384b1a3",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              1090
+            ],
+            "recorded_at": "2026-10-22T10:31:44+00:00",
+            "issue_scopes": {
+              "1090": "45596e0052dc17bd51275590b235b89d3541549ec5f260b39e5c6b0cad67bf28"
+            }
+          },
+          "lane": {
+            "id": "a0e75cee3fd84a83a9d5fedbe7062c93",
+            "pr": 1093,
+            "issues": [
+              1090
+            ],
+            "actor": "Reviewer-AS1022090B",
+            "session": "run_as1022_090b",
+            "coordinator": "Coordinator-I1021A",
+            "started_at": "2026-10-22T10:26:29+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-22T10:34:27+00:00"
+        }
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
