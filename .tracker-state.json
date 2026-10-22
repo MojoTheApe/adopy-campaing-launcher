@@ -48255,9 +48255,11 @@
         "worktree": "C:\\acl-statefix",
         "id": "372042032ab947fba55ae26fe0097610",
         "issue": 1078,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-22T00:14:10+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 1081,
+        "report": "## ACL-2078 rework handoff (Worker-F1022B, run_f1022b, 2026-10-22)\n\nPR #1081, head ccbaf636cc1ee544d2441472422d1a4ede539094. Merged main e8bf31f8 (merge 8205e756, clean, no force); main delta does not touch meta_dom/crop_step/run_telemetry/conftest, guard test unchanged (no new module containers). Fixed reviewer nit: `_restore` now skips a MUTABLE name missing from the module instead of creating it (verified: stale name no longer created). No other findings.\n\nLocal: new test + failing pair 41 passed; pair reversed 36 passed; b97 paired with each of 48 state-touching test files: all passed. CI on ccbaf636: all linux (3.11/3.13 x3) and windows shards green; installer build jobs skipped (no installer changes); tracker-link pending this handoff."
       }
     },
     "tasks": {
