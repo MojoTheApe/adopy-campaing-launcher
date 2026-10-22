@@ -57576,7 +57576,7 @@
             "session": "run_w1022_2053"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1022053",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -57595,7 +57595,8 @@
         },
         "pr": 1060,
         "queued_at": "2026-10-22T03:20:35+00:00",
-        "review_report": "stale vs main e8bf31f8; author merges current main and hands off for a fresh review; no content findings"
+        "review_report": "stale vs main e8bf31f8; author merges current main and hands off for a fresh review; no content findings",
+        "reviewer": "Reviewer-X1022053"
       },
       "1054": {
         "implementers": [
@@ -61022,6 +61023,10 @@
       "Reviewer-Y1022840": {
         "session": "run_y1022_840",
         "role": "Reviewer"
+      },
+      "Reviewer-X1022053": {
+        "session": "run_x1022_053",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -63992,7 +63997,6 @@
       1054,
       710,
       1069,
-      1053,
       19
     ],
     "review": null,
@@ -112896,6 +112900,13 @@
         "pr": 846,
         "lane": "1e3db9b89027465b917b4edfbbd2a3bc",
         "actor": "Reviewer-Y1022840"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-22T03:27:43+00:00",
+        "pr": 1060,
+        "lane": "54f9ef9d3ffd4107bd7a2fd7e5e6a7be",
+        "actor": "Reviewer-X1022053"
       }
     ],
     "policy": {
@@ -123938,6 +123949,18 @@
         "session": "run_y1022_840",
         "coordinator": "Coordinator-I1021A",
         "started_at": "2026-10-22T03:26:41+00:00",
+        "state": "reviewing"
+      },
+      "1060": {
+        "id": "54f9ef9d3ffd4107bd7a2fd7e5e6a7be",
+        "pr": 1060,
+        "issues": [
+          1053
+        ],
+        "actor": "Reviewer-X1022053",
+        "session": "run_x1022_053",
+        "coordinator": "Coordinator-I1021A",
+        "started_at": "2026-10-22T03:27:43+00:00",
         "state": "reviewing"
       }
     },
