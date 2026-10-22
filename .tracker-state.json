@@ -48471,9 +48471,11 @@
         "worktree": "C:\\acl-int-w1840",
         "id": "7e44ab259ea446668b3a8d77a24b5b40",
         "issue": 840,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-22T03:07:55+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 846,
+        "report": "ACL-1840 round 4: refresh of approval baseline + changelog fragment.\n- Previous head: fb579d4ad7fbf40bb45bad6d4c42a7729ff3fa13\n- New head: ea9996538e88e0e53df4a5635f2218e06f099f3f (merge of origin/main 4582039e2e0418e23df19de131165e83e4d312d6, then fragment commit).\n- Conflict: docs/system/CHANGELOG.md only; took main's version entirely.\n- Fragment: docs/system/changelog.d/ACL-1840.md (entry moved from CHANGELOG.md, same text). fold_changelog.py --check: valid: ACL-1840, ACL-2037. Diff vs main does not list CHANGELOG.md (4 files: fragment, report.html, fixture, test).\n- Tests: tests/test_country_campaign_footer_layout.py 19 passed.\n- CI: linux 1/2/3, windows, installer, process, tooling pass; tracker-link failed only on task state (implementing) before handoff, rerun once after handoff."
       },
       "19": {
         "actor": "Worker-W1021106",
