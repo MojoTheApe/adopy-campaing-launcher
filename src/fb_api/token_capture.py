@@ -24,9 +24,13 @@
 
 Токен НИКОГДА не возвращается в Python: ни значением, ни в исключении, ни в
 логе. Python видит только `has_token: true/false` и откуда он взят. Помощник
-принимает только GET, без `method`/`_method`/`batch`/`suppress_http_code`/
+принимает обычные чтения GET без `method`/`_method`/`batch`/`suppress_http_code`/
 `access_token` в параметрах, и не идёт по перенаправлениям. Python проверяет то
 же до вызова.
+
+ACL-2105: отдельный validatePage строит только фиксированный no-creation creative
+с validate_only для закреплённого кабинета. Он не включает обычные POST; токен и
+параметры выбора validate_only остаются внутри того же защищённого помощника.
 
 Переснять токен (ошибка 190) — перезагрузить вкладку: новый документ, новый
 отдельный мир, нового помощника Python создаёт заново (`InPageGraph.reacquire`).
@@ -71,6 +75,8 @@ _HELPER_JS = r"""
   // ACL-1761: политика записи (null — только чтение). Вшита при установке,
   // страница её не видит и не меняет.
   const WRITE = __WRITE__;
+  // ACL-2105: separate no-creation capability, pinned to the navigated account.
+  const VALIDATE_ACT = __VALIDATE_ACT__;
   const g = (typeof globalThis !== 'undefined') ? globalThis : self;
   if (g[NAME]) return;
 
@@ -275,7 +281,7 @@ _HELPER_JS = r"""
   // write_policy.check_form_create). Возвращает null (можно) или короткую причину.
   function checkForm(spec) {
     const F = WRITE && WRITE.form_create;
-    if (!F) return 'form_policy';
+    if (!F || !Array.isArray(F.bool_keys)) return 'form_policy';
     const m = new RegExp('^/([0-9]{1,25})/' + F.edge + '$').exec(String(spec.path || ''));
     if (!m) return 'form_path';
     // Страница закреплена на сессию (WRITE.form_create.page), а не берётся у вызывающего.
@@ -327,7 +333,8 @@ _HELPER_JS = r"""
       }
     }
     if ('question_page_custom_headline' in c && !txt(c.question_page_custom_headline)) return 'form_headline';
-    if ('follow_up_action_url' in c && !url(c.follow_up_action_url)) return 'form_url';
+    if ('follow_up_action_url' in c && (!url(c.follow_up_action_url) || c.follow_up_action_url.length > F.max_text)) return 'form_url';
+    for (const k of F.bool_keys) if (k in c && typeof c[k] !== 'boolean') return 'form_bool';
     if ('privacy_policy' in c) {
       const p = c.privacy_policy;
       if (!only(p, 'privacy_policy') || !url(p.url) || !txt(p.link_text)) return 'form_privacy';
@@ -592,7 +599,11 @@ _HELPER_JS = r"""
     text = clean(text);
     let parsed;
     try { parsed = JSON.parse(text); } catch (e) { parsed = { non_json: text.slice(0, 300) }; }
-    return { status: resp.status, body: parsed, headers: {}, endpoint: endpoint };
+    const headers = {};
+    for (const name of HEADERS) {
+      try { const v = resp.headers.get(name); if (v) headers[name] = clean(v); } catch (e) {}
+    }
+    return { status: resp.status, body: parsed, headers: headers, endpoint: endpoint };
   }
 
   async function call(spec) {
@@ -645,20 +656,40 @@ _HELPER_JS = r"""
     return { status: resp.status, body: body, headers: headers, endpoint: endpoint };
   }
 
+  async function validatePage(spec) {
+    const refused = (why) => ({ error: 'validation_refused', why: why });
+    if (retired) return { error: 'retired' };
+    if (!VALIDATE_ACT || !/^act_[0-9]{5,}$/.test(VALIDATE_ACT)) return refused('account');
+    if (!spec || Object.keys(spec).some((k) => !['page_id', 'link', 'host', 'credentials'].includes(k))) return refused('key');
+    if (typeof spec.page_id !== 'string' || !/^[0-9]{1,25}$/.test(spec.page_id)) return refused('page');
+    const link = spec.link || 'https://www.facebook.com/';
+    if (typeof link !== 'string' || link.length > 2048 || /[\s\x00-\x1f]/.test(link)) return refused('link');
+    let url;
+    try { url = new URL(link); } catch (e) { return refused('link'); }
+    if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password) return refused('link');
+    const params = { name: 'ACL Page access validation',
+      object_story_spec: { page_id: spec.page_id, link_data: { link: link } },
+      execution_options: ['validate_only'] };
+    // Fixed edge/option; no files, object creation, forms or caller-supplied params.
+    return post('/' + VALIDATE_ACT + '/adcreatives', params, null, null, spec, {}, null);
+  }
+
   function probe() { scanFast(); scanHtml(); return state(); }
   function retire() { retired = true; token = null; return true; }
 
   g[NAME] = Object.freeze({ call: call, state: state, probe: probe, retire: retire,
+                          validatePage: validatePage,
                           stage: stage, unstage: unstage,
                           startCall: startCall, poll: poll, abort: abort });
 })();
 """
 
 
-def helper_source(name: str, write_policy: dict | None = None) -> str:
+def helper_source(name: str, write_policy: dict | None = None, validation_act: str | None = None) -> str:
     """Исходник помощника. `write_policy` — только у создателя кампаний (ACL-1761)."""
     return (_HELPER_JS.replace("__NAME__", json.dumps(name))
-            .replace("__WRITE__", json.dumps(write_policy) if write_policy else "null"))
+            .replace("__WRITE__", json.dumps(write_policy) if write_policy else "null")
+            .replace("__VALIDATE_ACT__", json.dumps(validation_act)))
 
 
 def ads_manager_url(act_id: str) -> str:
@@ -692,6 +723,7 @@ class InPageGraph:
         self.object_updates = bool(allow_object_updates)
         self.allow_writes = bool(allow_writes) or self.object_updates
         self.write_act = None
+        self.validation_act: str | None = None
         self.write_page: str | None = None
         self._write_policy: dict | None = None
         if self.allow_writes:
@@ -701,6 +733,8 @@ class InPageGraph:
             if not m:
                 raise ValueError("allow_writes needs the verified act_<id>")
             self.write_act = str(write_act)
+            if not self.object_updates:
+                self.validation_act = self.write_act
             if write_page and not re.fullmatch(r"[0-9]{1,25}", str(write_page)):
                 raise ValueError("write_page must be the numeric Page id of the plan")
             self.write_page = str(write_page) if write_page else None
@@ -794,7 +828,7 @@ class InPageGraph:
                 self._injected = False
             if not self._injected:
                 # Повторный вызов безвреден: помощник сам выходит, если уже стоит.
-                self.tab.evaluate_in(self._ctx, helper_source(self.name, self._write_policy), timeout=10.0)
+                self.tab.evaluate_in(self._ctx, helper_source(self.name, self._write_policy, self.validation_act), timeout=10.0)
                 self._injected = True
             return self._ctx
 
@@ -835,6 +869,9 @@ class InPageGraph:
         """Открыть Ads Manager кабинета в своей вкладке. Одна загрузка, ни одного клика."""
         with self._timeouts_as_stops():
             self.tab.navigate(ads_manager_url(act_id), timeout=timeout)
+        act = "act_" + act_digits(act_id)
+        self.validation_act = (act if not self.object_updates and re.fullmatch(r"act_[0-9]{5,}", act)
+                               and (not self.write_act or self.write_act == act) else None)
         self._reset_world()
 
     def start(self, act_id: str, *, timeout: float = 90.0) -> dict:
@@ -929,6 +966,24 @@ class InPageGraph:
         return got if isinstance(got, dict) else {"error": "bad_reply"}
 
     # -- запись (ACL-1761)
+    def validate_page(self, act: str, page_id: str, link: str = "", *, timeout: float = 60.0) -> dict:
+        """One account-bound creative validate_only call; never enables ordinary writes."""
+        from src.fb_api.page_validation import params
+
+        checked = params(act, page_id, link)
+        if act != self.validation_act or self.object_updates:
+            raise ValueError("Page validation is not bound to this ad account")
+        self._ready_for_call()
+        ctx = self._ensure()
+        spec = {"page_id": page_id, "link": checked["object_story_spec"]["link_data"]["link"],
+                "host": self.graph_host, "credentials": self.credentials}
+        expr = f"globalThis[{json.dumps(self.name)}].validatePage({json.dumps(spec)})"
+        try:
+            got = strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout))
+        except (CdpTimeout, StaleContextError, PageError, CdpError, TimeoutError):
+            return {"error": "validation_unknown"}
+        return got if isinstance(got, dict) else {"error": "validation_unknown"}
+
     #: Размер куска файла, который кладётся в помощник за один вызов CDP.
     STAGE_CHUNK = 768 * 1024
 

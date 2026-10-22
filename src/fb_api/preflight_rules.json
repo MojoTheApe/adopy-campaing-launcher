@@ -40,7 +40,7 @@
         "level": "campaign",
         "sel": ""
       },
-      "hint": "choose a Page that belongs to this ad account on the Accounts page (page_id)",
+      "hint": "choose a Facebook Page in this campaign or use Automatic; Refresh pages to retry loading",
       "id": "page_ok",
       "label": "Facebook Page",
       "severity": "error",

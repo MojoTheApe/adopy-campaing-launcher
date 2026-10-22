@@ -32,7 +32,14 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   ACL-1381 keeps ACL-1769's numbered primary-text fields and separately displayed
   headline. Builder search/help and empty/error messages call the shared library
   entries ad texts; internal copy/copy2 fields and submission behavior are unchanged.
+  Countries with the existing live activity state show a static 2 px blue vertical
+  line at the left of their sidebar row (ACL-1838), including countries opened in
+  the account map before their first spend. Inactive countries have no marker;
+  the expanded-country background remains a separate selection indication.
 - `src/analysis_agent`: statistics workbook reading, reports and reconciliation.
+  The dashboard tells an empty chosen period apart by owner (ACL-106): no workbook rows for
+  anyone (the file may need updating) versus rows for other managers but none for the
+  selected manager (nothing to review); the account map stays available in both.
 - `src/campaign_bridge`, `src/upload_agent`: campaign input/output preparation.
 - `src/fb_ads_rpa`, `src/meta_campaign_agent`: Ads Manager interactions, verified
   profile identity, draft preparation, queues and browser lifecycle. ACL-1250/#247
@@ -133,6 +140,33 @@ permission denial or change access, retry, token, pagination or stop rules.
 Callers that replace the exception text with a generic message still need their
 own integration; this boundary alone does not update those messages.
 
+## Profile Page fallback and no-creation proof
+
+ACL-2105 merges ad-account Pages with the profile's own ADVERTISE/MANAGE Pages
+when the account list is empty or omits an explicit choice. Account Pages retain
+priority; picker, plan/result and Instant Forms retain each Page's origin.
+
+Before any objects, uploads or forms are created with a profile Page, both Check
+plan and the real run require one `validate_only` creative for the selected account,
+Page and link. The isolated helper binds its account to navigation (or the verified
+creation account), constructs the fixed parameters itself, and leaves ordinary
+write permissions closed in read sessions. Explicit successful Meta validation
+without an error/object ID is required. Unknown, unsupported and refused responses
+stop with the Page and reason. Proof is reused only within the current operation;
+the actual run checks again after an earlier plan check. Existing call budgets,
+usage/stop guards and unknown-write fences still apply.
+
+The official Meta SDK at `efd8423a2e595ea8d4c04eb824ce113f2f1d68cd` supports
+[creative execution options](https://github.com/facebook/facebook-python-business-sdk/blob/efd8423a2e595ea8d4c04eb824ce113f2f1d68cd/facebook_business/adobjects/adaccount.py),
+[`validate_only`](https://github.com/facebook/facebook-python-business-sdk/blob/efd8423a2e595ea8d4c04eb824ce113f2f1d68cd/facebook_business/adobjects/adcreative.py),
+[Page/link story fields](https://github.com/facebook/facebook-python-business-sdk/blob/efd8423a2e595ea8d4c04eb824ce113f2f1d68cd/facebook_business/adobjects/adcreativeobjectstoryspec.py)
+and [link data](https://github.com/facebook/facebook-python-business-sdk/blob/efd8423a2e595ea8d4c04eb824ce113f2f1d68cd/facebook_business/adobjects/adcreativelinkdata.py).
+These fields do not guarantee the minimal link creative is accepted for every
+Page/plan without uploaded media. Such a refusal blocks creation; there are no
+extra asset reads or fallback writes. This is Page/account usability evidence,
+not a full media/content/ad-review guarantee. Tests use synthetic transports and
+the actual helper offline; no live Meta or profile pilot has been performed.
+
 ## CI feedback and admission
 
 The existing `Classify and check project tooling` result supplies bounded tooling
@@ -147,7 +181,8 @@ retry policy or employee installation is changed by documenting this plan.
 
 Describe implemented behavior and limitations here when changing the system. Preserve
 plans under original specs, label them as plans, and record what/why and ticket/PR
-links in CHANGELOG.md. Process-only changes belong in ../repository/CHANGELOG.md.
+links in a per-task fragment `changelog.d/ACL-NNNN.md` (folded into CHANGELOG.md by
+`scripts/fold_changelog.py`; see changelog.d/README.md). Process-only changes belong in ../repository/CHANGELOG.md.
 
 Repository instructions have a separately prepared direct-main route described in
 [PROCESS_INSTRUCTIONS.md](../repository/PROCESS_INSTRUCTIONS_ACL.md). Eligibility uses
@@ -176,3 +211,26 @@ Videos up to 200 MB still go up in one request. A video from 200 MB up to 1536 M
 - Pre-flight `media_limits`: video limit 1536 MB, message "file is larger than 1536 MB".
 - Documentation evidence (developers.facebook.com, 2026-10-14). Certain (Ad Account `advideos` reference): chunked upload parameters `upload_phase` (start, transfer, finish, cancel), `file_size`, `upload_session_id`, `start_offset`, `end_offset`, `video_file_chunk`; return fields `upload_session_id`, `start_offset`, `end_offset`, `video_id`, `success`. Not stated in the pages we could fetch: chunk size rules, file size limit, error shape for a wrong offset.
 - Needs a live check on an authorized test account (Doc120, PAUSED only): that `start` returns `video_id` and the first range; the range size Meta returns (if it is smaller than 8 MB, more calls than estimated are needed); that a chunk with the profile's token and multipart works in one page request; that a wrong offset is refused with the expected offset in `error_data` (otherwise resume falls back to stopping); that `finish` accepts `title`/`name` and the title appears in the library; that a 250 MB and a 1 GB file process and pass the readback; the profile's memory during the 1 GB upload; Meta's real maximum size for this edge (we assume the 4 GB the task states and cap at 1536 MB).
+
+### ACL-1880 — campaign-local Facebook Page selection (2026-10-13)
+
+The builder reads available Page names and IDs through `/api/account-pages`, using the existing read-only profile session and profile lock. New campaign cards start with Automatic; duplicates copy other settings but reset Page selection. The first Page in the destination account's returned order is shown and resolved before creation. Explicit campaign choices never write the account map. Legacy non-builder drafts retain map fallback.
+
+Loading failures and confirmed empty lists are distinct and support Refresh pages. A truncated discovery result is refused. API preflight still validates an explicit Page's membership, and its existing creative readback validates the resulting identity. Instant Form caches are keyed by the resolved Page ID, including in Automatic mode.
+
+RPA resolves the selection before campaign creation and passes the ID and unique display name to the recorded flow. Every ad verifies Identity; failure is non-retryable and not publishable. The existing sanitized `tests/fixtures/ads_manager/simple_create_2026_09_27.html` supplies regression coverage for the captured collapsed Identity summary. Picker interaction has offline native/custom-control tests; a live alternate-Page picker pilot has not been performed. Unrecognized or ambiguous controls fail closed. Other RPA engines are refused for builder Page selections until they implement Identity verification.
+
+Verification uses synthetic accounts and mocked browser/API transports only. The isolated local dashboard preview is not a production deployment or a stage/main merge.
+# ACL-1880: manual completion when the automatic Page list is empty
+
+Owner revised the acceptance on 2026-10-13: use the first available Page; if none
+is available, allow preparation for manual completion. In the API website path,
+a confirmed empty list and no explicit Page now produces a warning. The worker
+creates only a PAUSED campaign and its PAUSED ad sets, with readback of those
+objects. It does not upload media or create creatives/ads without a Page. Results
+carry `manual_required` and remain non-publishable. The operator adds Page/ads in
+Ads Manager or retries after Page access is restored; normal identity labels
+reuse the same campaign/ad sets. The original builder retains the ad inputs.
+Instant Forms and an explicitly unavailable Page still block, as do failed Page
+reads. The RPA path retains its existing Identity requirements. This supersedes
+the earlier requirement that every empty Page list blocks all preparation.
