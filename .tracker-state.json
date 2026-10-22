@@ -117821,6 +117821,133 @@
           "started_at": "2026-10-22T09:16:44+00:00",
           "ineligible": {}
         }
+      },
+      {
+        "event": "batch-frozen",
+        "at": "2026-10-22T09:18:17+00:00",
+        "batch": {
+          "id": "dc549f7afbaa4443967dbec603cc95c7",
+          "actor": "Coordinator-I1021A",
+          "session": "run_i1021a_1021",
+          "state": "assembling",
+          "issues": [
+            708,
+            839
+          ],
+          "members": [
+            {
+              "issue": 708,
+              "pr": 952,
+              "branch": "codex/acl-1708-rebrand-leftovers",
+              "head_sha": "09bae735f46ca5126dda954ef8536a00ff214dfe",
+              "base_sha": "7224a34c17d1e81e1c4ed0dcafa387d349a37176",
+              "main_sha": "7224a34c17d1e81e1c4ed0dcafa387d349a37176",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "6b7726dd5b2fd3e4f37b1f1ed4921ba836cab3de1eff62531d7029faa5dce02e",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-AI1022708",
+                "review_session": "run_ai1022_708",
+                "execution_lane": "08d9d73ba94049ae8a9c92370539b031",
+                "implementer": "Worker-W1022708",
+                "head_sha": "09bae735f46ca5126dda954ef8536a00ff214dfe",
+                "base_sha": "7224a34c17d1e81e1c4ed0dcafa387d349a37176",
+                "tree_sha": "275b24a6d7e5c5371fa9d70103ad8c057ea7d69b",
+                "report": "Independent source review of ACL-1708 / PR 952 at head 09bae735 (clean merge of main 7224a34c into the previously approved feb776c1). Verified the PR delta vs main (7224a34c..09bae735) is identical in +/- lines to the earlier reviewed delta (515689de..feb776c1): merge-only, no content change; main added no new user-visible 'launcher' strings or converter references. Earlier content review stands (refusal text 'not started from its desktop shortcut' with no-launcher test, account-unreachable text, converter deleted without references, shortcut message, viewport meta, English, fragment valid). All 16 required CI checks pass on this head.",
+                "main_sha": "7224a34c17d1e81e1c4ed0dcafa387d349a37176",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  708
+                ],
+                "recorded_at": "2026-10-22T09:10:19+00:00",
+                "issue_scopes": {
+                  "708": "6b7726dd5b2fd3e4f37b1f1ed4921ba836cab3de1eff62531d7029faa5dce02e"
+                }
+              },
+              "lane": {
+                "id": "08d9d73ba94049ae8a9c92370539b031",
+                "pr": 952,
+                "issues": [
+                  708
+                ],
+                "actor": "Reviewer-AI1022708",
+                "session": "run_ai1022_708",
+                "coordinator": "Coordinator-I1021A",
+                "started_at": "2026-10-22T09:07:57+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-22T09:11:26+00:00"
+            },
+            {
+              "issue": 839,
+              "pr": 843,
+              "branch": "codex/acl-1839-connection-panel-layout",
+              "head_sha": "5a1fc49cc6f351cb52698e50a52e54bb9c8a50e7",
+              "base_sha": "7224a34c17d1e81e1c4ed0dcafa387d349a37176",
+              "main_sha": "7224a34c17d1e81e1c4ed0dcafa387d349a37176",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "61a8a6d1b11eb11ae8c76520e1447683670fdbb31e61059e754e07b8aac66c97",
+              "review": {
+                "kind": "independent-review",
+                "implementer": "Worker-W1021839",
+                "reviewer": "Reviewer-AG1021839",
+                "head_sha": "5a1fc49cc6f351cb52698e50a52e54bb9c8a50e7",
+                "base_sha": "7224a34c17d1e81e1c4ed0dcafa387d349a37176",
+                "tree_sha": "7379168c1923525de9a9ceb9c96233a5d24a774e",
+                "verdict": "approved",
+                "execution_lane": "6dd22de9c73e429c80d384d8559668a2",
+                "review_session": "run_ag1021_839",
+                "report": "ACL-1839 re-review of PR 843 head 5a1fc49c against main 7224a34c. Delta from approved 5a6fafb9 is merge-only: git patch-id of the PR diff vs main is identical (79c2c556) to the earlier approved heads; same 4 files. Earlier full review stands. Required CI green on 5a1fc49c incl. linux shards 1-3, windows, tracker-link.",
+                "main_sha": "7224a34c17d1e81e1c4ed0dcafa387d349a37176",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  839
+                ],
+                "recorded_at": "2026-10-22T09:04:03+00:00",
+                "issue_scopes": {
+                  "839": "61a8a6d1b11eb11ae8c76520e1447683670fdbb31e61059e754e07b8aac66c97"
+                }
+              },
+              "lane": {
+                "id": "6dd22de9c73e429c80d384d8559668a2",
+                "pr": 843,
+                "issues": [
+                  839
+                ],
+                "actor": "Reviewer-AG1021839",
+                "session": "run_ag1021_839",
+                "coordinator": "Coordinator-I1021A",
+                "started_at": "2026-10-22T09:02:31+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-22T09:05:06+00:00"
+            }
+          ],
+          "main_sha": "7224a34c17d1e81e1c4ed0dcafa387d349a37176",
+          "branch": "codex/batch-dc549f7afbaa4443967dbec603cc95c7",
+          "intake": "fed6de012f4c4b48a6fbd252e688dc1b",
+          "started_at": "2026-10-22T09:18:17+00:00",
+          "pr": null,
+          "entered_stage": false,
+          "history": [],
+          "delivery_request": {
+            "schema_version": 1,
+            "state": "requested",
+            "batch_id": "dc549f7afbaa4443967dbec603cc95c7",
+            "issues": [
+              708,
+              839
+            ],
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "target": "ACL stable Windows installer and update channel",
+            "workflow": ".github/workflows/complete-delivery.yml",
+            "job": "Verify published Windows package",
+            "actor": "Coordinator-I1021A",
+            "session": "run_i1021a_1021",
+            "requested_at": "2026-10-22T09:18:17+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -129722,7 +129849,129 @@
         "finished_at": "2026-10-22T08:35:34+00:00"
       }
     },
-    "integration": null,
+    "integration": {
+      "id": "dc549f7afbaa4443967dbec603cc95c7",
+      "actor": "Coordinator-I1021A",
+      "session": "run_i1021a_1021",
+      "state": "assembling",
+      "issues": [
+        708,
+        839
+      ],
+      "members": [
+        {
+          "issue": 708,
+          "pr": 952,
+          "branch": "codex/acl-1708-rebrand-leftovers",
+          "head_sha": "09bae735f46ca5126dda954ef8536a00ff214dfe",
+          "base_sha": "7224a34c17d1e81e1c4ed0dcafa387d349a37176",
+          "main_sha": "7224a34c17d1e81e1c4ed0dcafa387d349a37176",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "6b7726dd5b2fd3e4f37b1f1ed4921ba836cab3de1eff62531d7029faa5dce02e",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-AI1022708",
+            "review_session": "run_ai1022_708",
+            "execution_lane": "08d9d73ba94049ae8a9c92370539b031",
+            "implementer": "Worker-W1022708",
+            "head_sha": "09bae735f46ca5126dda954ef8536a00ff214dfe",
+            "base_sha": "7224a34c17d1e81e1c4ed0dcafa387d349a37176",
+            "tree_sha": "275b24a6d7e5c5371fa9d70103ad8c057ea7d69b",
+            "report": "Independent source review of ACL-1708 / PR 952 at head 09bae735 (clean merge of main 7224a34c into the previously approved feb776c1). Verified the PR delta vs main (7224a34c..09bae735) is identical in +/- lines to the earlier reviewed delta (515689de..feb776c1): merge-only, no content change; main added no new user-visible 'launcher' strings or converter references. Earlier content review stands (refusal text 'not started from its desktop shortcut' with no-launcher test, account-unreachable text, converter deleted without references, shortcut message, viewport meta, English, fragment valid). All 16 required CI checks pass on this head.",
+            "main_sha": "7224a34c17d1e81e1c4ed0dcafa387d349a37176",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              708
+            ],
+            "recorded_at": "2026-10-22T09:10:19+00:00",
+            "issue_scopes": {
+              "708": "6b7726dd5b2fd3e4f37b1f1ed4921ba836cab3de1eff62531d7029faa5dce02e"
+            }
+          },
+          "lane": {
+            "id": "08d9d73ba94049ae8a9c92370539b031",
+            "pr": 952,
+            "issues": [
+              708
+            ],
+            "actor": "Reviewer-AI1022708",
+            "session": "run_ai1022_708",
+            "coordinator": "Coordinator-I1021A",
+            "started_at": "2026-10-22T09:07:57+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-22T09:11:26+00:00"
+        },
+        {
+          "issue": 839,
+          "pr": 843,
+          "branch": "codex/acl-1839-connection-panel-layout",
+          "head_sha": "5a1fc49cc6f351cb52698e50a52e54bb9c8a50e7",
+          "base_sha": "7224a34c17d1e81e1c4ed0dcafa387d349a37176",
+          "main_sha": "7224a34c17d1e81e1c4ed0dcafa387d349a37176",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "61a8a6d1b11eb11ae8c76520e1447683670fdbb31e61059e754e07b8aac66c97",
+          "review": {
+            "kind": "independent-review",
+            "implementer": "Worker-W1021839",
+            "reviewer": "Reviewer-AG1021839",
+            "head_sha": "5a1fc49cc6f351cb52698e50a52e54bb9c8a50e7",
+            "base_sha": "7224a34c17d1e81e1c4ed0dcafa387d349a37176",
+            "tree_sha": "7379168c1923525de9a9ceb9c96233a5d24a774e",
+            "verdict": "approved",
+            "execution_lane": "6dd22de9c73e429c80d384d8559668a2",
+            "review_session": "run_ag1021_839",
+            "report": "ACL-1839 re-review of PR 843 head 5a1fc49c against main 7224a34c. Delta from approved 5a6fafb9 is merge-only: git patch-id of the PR diff vs main is identical (79c2c556) to the earlier approved heads; same 4 files. Earlier full review stands. Required CI green on 5a1fc49c incl. linux shards 1-3, windows, tracker-link.",
+            "main_sha": "7224a34c17d1e81e1c4ed0dcafa387d349a37176",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              839
+            ],
+            "recorded_at": "2026-10-22T09:04:03+00:00",
+            "issue_scopes": {
+              "839": "61a8a6d1b11eb11ae8c76520e1447683670fdbb31e61059e754e07b8aac66c97"
+            }
+          },
+          "lane": {
+            "id": "6dd22de9c73e429c80d384d8559668a2",
+            "pr": 843,
+            "issues": [
+              839
+            ],
+            "actor": "Reviewer-AG1021839",
+            "session": "run_ag1021_839",
+            "coordinator": "Coordinator-I1021A",
+            "started_at": "2026-10-22T09:02:31+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-22T09:05:06+00:00"
+        }
+      ],
+      "main_sha": "7224a34c17d1e81e1c4ed0dcafa387d349a37176",
+      "branch": "codex/batch-dc549f7afbaa4443967dbec603cc95c7",
+      "intake": "fed6de012f4c4b48a6fbd252e688dc1b",
+      "started_at": "2026-10-22T09:18:17+00:00",
+      "pr": null,
+      "entered_stage": false,
+      "history": [],
+      "delivery_request": {
+        "schema_version": 1,
+        "state": "requested",
+        "batch_id": "dc549f7afbaa4443967dbec603cc95c7",
+        "issues": [
+          708,
+          839
+        ],
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "target": "ACL stable Windows installer and update channel",
+        "workflow": ".github/workflows/complete-delivery.yml",
+        "job": "Verify published Windows package",
+        "actor": "Coordinator-I1021A",
+        "session": "run_i1021a_1021",
+        "requested_at": "2026-10-22T09:18:17+00:00"
+      }
+    },
     "intake": {
       "id": "fed6de012f4c4b48a6fbd252e688dc1b",
       "actor": "Coordinator-I1021A",
