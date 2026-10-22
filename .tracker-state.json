@@ -57080,7 +57080,7 @@
             "session": "run_a1021_558w"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-A1021558",
         "coordinator": "Coordinator-A1021A",
         "handoff": {
@@ -57099,7 +57099,7 @@
         },
         "pr": 963,
         "queued_at": "2026-10-21T11:53:23+00:00",
-        "review_report": "# ACL-1558 source review: returned for one fix (head d120b75c)\n\nReviewer-A1021558. I reviewed the full scope against main ea41acbf. HEAD contains main. The merge 31a5a167 conflicted only in CHANGELOG, and both sides are kept. The diff touches 5 files: run_telemetry.py, fb_api/telemetry.py, CHANGELOG and two tests. No scope creep. All test values are synthetic. The secrets scan is clean.\n\n## The scrubber is correct\n- Bare `EAA\u2026` token becomes `<token>`. Keyed forms keep `<hidden>`. Words like `EAABshort`, `XEAAB\u2026` and `the EAAs` are left alone.\n- `user:pass@host[:port]` becomes `<user>:<hidden>@host[:port]`. This also works after `http://` and `socks5://`, for IPv4 and `[IPv6]`, and for passwords that contain `@`, `:` or `/`. Paths, `mailto:`/`email:`, `16:9@2x`, `https://user@host` and `git@github.com:org/repo` are not touched.\n- In `scrub_diag`, dict keys that are `act_` ids, 6+ digit ids, emails or integer ids are scrubbed. On collisions `put_unique` keeps both entries. The real `acl_sentry._before_send` path is tested. The Run summary attachment goes through `scrub_diag` too. The fb_api `scrub_value` uses the same `clean_key`.\n- Backtracking: I ran my own adversarial probes at about 100 KB each: slash/at mixes, 63-char label runs, many word starts with 240-char passwords, port-lookahead runs, bracket starts, 255/255 user/password runs, and email-key runs. Each finished in under 0.08 s for both `scrub` and `scrub_key`. At 1 MB the time grows linearly (0.065 s to 0.67 s). There is no catastrophic backtracking.\n- Local tests: 477 of 478 pass in the 1558, no-hang, every-shape, fb_api 1756, run_telemetry, run-summary attachment, sentry snapshot and test_platform files. The one failure is the finding below.\n\n## BLOCKING: the new CI platform rule on main fails (CI windows tests + \"Classify and check project tooling\" + \"Process instructions\" are red)\n`tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis` flags:\n    test_acl1558_scrubber_shapes.py:88 [backslash-path] r\"saved to C:\\Users\\demo@corp\\out.txt\",\nThe same failure appears in CI run 39592451242 (tooling job: 1 failed / 728 passed; windows tests: 1 failed / 326 passed). The \"Process instructions\" job fails only because it requires the tooling job.\nFix (test-only, no behaviour change): this line is data for the scrubber, not a Windows API. Add the waiver comment the rule asks for on that exact line, for example:\n    r\"saved to C:\\Users\\demo@corp\\out.txt\",  # linux-ok: scrubber input string, not a real path\nThen re-run tests/test_acl_test_platform.py and tests/test_acl1558_scrubber_shapes.py locally. Do not mark the whole file windows_only, because the scrubber must stay covered on Linux.\n\n## Non-blocking notes (no change required)\n- Over-scrubbing that errs toward privacy: `Error:foo@example.com` and `12:30@home.example.com` become `<user>:<hidden>@\u2026`. A date-like dict key `20261021` becomes `<id>`. All acceptable.\n- tracker-link run 39592451226 is the stale pre-queue run. The fix push will trigger a new one.\n\nNo owner live check needed (scrubber code only). I keep the lane and will review the fix delta.",
+        "review_report": "Stale vs main 515689de; author merges current main + changelog fragment, fresh review",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578089+00:00",
@@ -57117,7 +57117,8 @@
           "actor": "Coordinator-A1021A",
           "session": "run_a1021_a1021",
           "report": "Stale vs main 515689de; author merges current main + changelog fragment, fresh review"
-        }
+        },
+        "rework": true
       },
       "380": {
         "implementers": [
@@ -116704,6 +116705,18 @@
           "report": "Stale vs main 515689de; author merges current main + changelog fragment, fresh review"
         },
         "batch_id": null
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-22T07:54:12+00:00",
+        "issue": 558,
+        "operation": {
+          "id": "3430165863394028b8831328a0a554ad",
+          "actor": "Coordinator-A1021A",
+          "session": "run_a1021_a1021",
+          "report": "Stale vs main 515689de; author merges current main + changelog fragment, fresh review"
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -120872,52 +120885,6 @@
           "keep_lane": true
         },
         "approved_at": "2026-10-21T11:25:09+00:00"
-      },
-      "558": {
-        "issue": 558,
-        "pr": 963,
-        "branch": "work/acl-1558-scrubber-shapes",
-        "head_sha": "00016495a87c0f6783b6ed0d70d250bc1b737015",
-        "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-        "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "scope": "59cee4a7bc79b8f2e03b6a1489e01dc79d07358171007b65077d58fef3df549c",
-        "review": {
-          "kind": "independent-review",
-          "verdict": "approved",
-          "reviewer": "Reviewer-A1021558",
-          "implementer": "Worker-A1021558",
-          "head_sha": "00016495a87c0f6783b6ed0d70d250bc1b737015",
-          "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-          "tree_sha": "fe9b3fff82393baa52b7079663d805c98b5e6efc",
-          "execution_lane": "ef4d9e1456394d828e9b91eeb10b3ea8",
-          "review_session": "run_a1021_558r",
-          "report": "ACL-1558 independent source review: approved at 00016495 (base main ea41acbf).\nScope (full diff vs main, 5 files): src/fb_ads_rpa/run_telemetry.py, src/fb_api/telemetry.py, docs/system/CHANGELOG.md, tests/test_acl1558_scrubber_shapes.py, tests/test_the_scrubber_never_hangs_on_a_cut_secret.py. No scope creep.\nFix delta since my return at d120b75c: one `# linux-ok: scrubber input string, not a real path` comment on the backslash-path test string at line 88. It satisfies the main CI rule test_no_unmarked_test_file_uses_windows_only_apis, and the file stays on Linux CI. Merge 31a5a167 conflicted only in CHANGELOG, and both sides are kept.\nChecked against every acceptance criterion:\n(1) A bare EAA token becomes <token>; keyed forms keep <hidden>; words that only start like a token are left alone.\n(2) user:pass@host[:port] becomes <user>:<hidden>@host[:port], also after http:// and socks5://, for IPv4 and [IPv6], with @ : / inside the password. The host and port stay visible. Paths, mailto:, email:, 16:9@2x, https://user@host and git@ URLs are not touched.\n(3) Dict keys holding act_ ids, 6+ digit ids, emails or integer ids are scrubbed in scrub_diag, so also in Sentry contexts via the tested acl_sentry._before_send path and in the Run summary attachment. Collisions keep both entries. fb_api scrub_value shares clean_key.\n(4) No regression; the no-hang test is green.\nBacktracking: my own adversarial probes of about 100 KB each all ran in under 0.08 s, and time grew linearly up to 1 MB.\nTests run locally: before the fix, 477 of 478 passed across the scrubber, no-hang, every-shape, fb_api 1756, run_telemetry, run-summary attachment, sentry snapshot and test_platform files; the only failure was the line-88 rule. After the fix, the test_platform, 1558 and no-hang files pass.\nHygiene: the secrets scan is clean; all values are synthetic; the PR body has exactly one Tracker issues line and no closing keywords.\nNon-blocking notes: a few cases are over-scrubbed on the privacy side (Error:foo@example.com, 12:30@host.tld, a date-like key 20261021 becomes <id>).\nNo owner live check needed (scrubber code only).",
-          "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "issues": [
-            558
-          ],
-          "recorded_at": "2026-10-21T12:00:32+00:00",
-          "issue_scopes": {
-            "558": "59cee4a7bc79b8f2e03b6a1489e01dc79d07358171007b65077d58fef3df549c"
-          }
-        },
-        "lane": {
-          "id": "ef4d9e1456394d828e9b91eeb10b3ea8",
-          "pr": 963,
-          "issues": [
-            558
-          ],
-          "actor": "Reviewer-A1021558",
-          "session": "run_a1021_558r",
-          "coordinator": "Coordinator-A1021A",
-          "started_at": "2026-10-21T11:53:28+00:00",
-          "state": "reviewing",
-          "report": "# ACL-1558 source review: returned for one fix (head d120b75c)\n\nReviewer-A1021558. I reviewed the full scope against main ea41acbf. HEAD contains main. The merge 31a5a167 conflicted only in CHANGELOG, and both sides are kept. The diff touches 5 files: run_telemetry.py, fb_api/telemetry.py, CHANGELOG and two tests. No scope creep. All test values are synthetic. The secrets scan is clean.\n\n## The scrubber is correct\n- Bare `EAA\u2026` token becomes `<token>`. Keyed forms keep `<hidden>`. Words like `EAABshort`, `XEAAB\u2026` and `the EAAs` are left alone.\n- `user:pass@host[:port]` becomes `<user>:<hidden>@host[:port]`. This also works after `http://` and `socks5://`, for IPv4 and `[IPv6]`, and for passwords that contain `@`, `:` or `/`. Paths, `mailto:`/`email:`, `16:9@2x`, `https://user@host` and `git@github.com:org/repo` are not touched.\n- In `scrub_diag`, dict keys that are `act_` ids, 6+ digit ids, emails or integer ids are scrubbed. On collisions `put_unique` keeps both entries. The real `acl_sentry._before_send` path is tested. The Run summary attachment goes through `scrub_diag` too. The fb_api `scrub_value` uses the same `clean_key`.\n- Backtracking: I ran my own adversarial probes at about 100 KB each: slash/at mixes, 63-char label runs, many word starts with 240-char passwords, port-lookahead runs, bracket starts, 255/255 user/password runs, and email-key runs. Each finished in under 0.08 s for both `scrub` and `scrub_key`. At 1 MB the time grows linearly (0.065 s to 0.67 s). There is no catastrophic backtracking.\n- Local tests: 477 of 478 pass in the 1558, no-hang, every-shape, fb_api 1756, run_telemetry, run-summary attachment, sentry snapshot and test_platform files. The one failure is the finding below.\n\n## BLOCKING: the new CI platform rule on main fails (CI windows tests + \"Classify and check project tooling\" + \"Process instructions\" are red)\n`tests/test_acl_test_platform.py::test_no_unmarked_test_file_uses_windows_only_apis` flags:\n    test_acl1558_scrubber_shapes.py:88 [backslash-path] r\"saved to C:\\Users\\demo@corp\\out.txt\",\nThe same failure appears in CI run 39592451242 (tooling job: 1 failed / 728 passed; windows tests: 1 failed / 326 passed). The \"Process instructions\" job fails only because it requires the tooling job.\nFix (test-only, no behaviour change): this line is data for the scrubber, not a Windows API. Add the waiver comment the rule asks for on that exact line, for example:\n    r\"saved to C:\\Users\\demo@corp\\out.txt\",  # linux-ok: scrubber input string, not a real path\nThen re-run tests/test_acl_test_platform.py and tests/test_acl1558_scrubber_shapes.py locally. Do not mark the whole file windows_only, because the scrubber must stay covered on Linux.\n\n## Non-blocking notes (no change required)\n- Over-scrubbing that errs toward privacy: `Error:foo@example.com` and `12:30@home.example.com` become `<user>:<hidden>@\u2026`. A date-like dict key `20261021` becomes `<id>`. All acceptable.\n- tracker-link run 39592451226 is the stale pre-queue run. The fix push will trigger a new one.\n\nNo owner live check needed (scrubber code only). I keep the lane and will review the fix delta.",
-          "keep_lane": true
-        },
-        "approved_at": "2026-10-21T12:15:00+00:00"
       },
       "668": {
         "issue": 668,
