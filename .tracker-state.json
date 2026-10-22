@@ -49374,9 +49374,11 @@
         "worktree": "C:\\acl-int-w1708",
         "id": "feae9b38db77409aac34529e207f0425",
         "issue": 708,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-22T07:13:23+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 952,
+        "report": "# ACL-1708 handoff (PR #952, head feb776c1 (main re-merged, no content change))\n\nStrings changed (user-visible):\n1. src/web/app.py, POST /acl/update/apply refusal: \"ACM was not started by its launcher, so nothing would bring it back. Start it from the desktop shortcut and try again.\" -> \"ACM was not started from its desktop shortcut, so nothing would bring it back. Start it from the desktop shortcut and try again.\"\n2. (from PR, already on branch) account_spend_turn_off error: \"Check the launcher window.\" -> \"Check the Adopy Campaign Manager window.\"\n\nNot changed on purpose: internal identifiers, comments, file names (launcher.py, SUPERVISED env, \"launcher\" in code comments / acl_update docstrings), and Multilogin's own \"local launcher\" term in src/fb_ads_rpa/failure_policy.py robot failure text (third-party product wording, not ACM's launcher).\n\nOther PR content: scripts/convert_favicon_to_ico.py deleted, install_dashboard_shortcut.ps1 message updated, requirements-dev.txt comment, report.html viewport meta.\n\nTests: tests/test_web_acl_update.py (11 passed) - refusal test now asserts \"desktop shortcut\" in the message and \"launcher\" not in it (case-insensitive).\nFragment: docs/system/changelog.d/ACL-1708.md; docs/system/CHANGELOG.md equals origin/main; fold_changelog.py --check valid.\nCI on 048fd729: all green except tracker-link (task not yet in Review; to be rerun after handoff)."
       },
       "839": {
         "actor": "Worker-W1021839",
