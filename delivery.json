@@ -66,8 +66,8 @@
   },
   "standard": {
     "repository": "https://github.com/MojoTheApe/master-repo",
-    "revision": "6f7e9416e68c66484a3b6c0213eab24847005b8f",
-    "version": "1.5.3"
+    "revision": "4f148cbbbc2c9c65a7fdebba9b37551f91566e04",
+    "version": "1.7.2"
   },
   "checks": [
     "python scripts/acl_scan_secrets.py",
@@ -81,7 +81,7 @@
     "repository": "MojoTheApe/task-tracker",
     "verification": "Existing acl board verified server-side on 2026-09-21 after Task Tracker PR #64 deployment 0dadc889e18b027c8ca98b888407d492848f2f19: 160 identities, seven columns, 74 bounded historical completions, all six fresh snapshots, preserved authentication and restricted HTTP access. Browser verification excluded by owner. See docs/repository/ADOPTION.md and ACL-1248.",
     "registration": "verified",
-    "revision": "be87599d1b5e625058bbddc33c35bda86687b5bf",
+    "revision": "3d32586d72e4621f70d56d35f1e199a19fa13b00",
     "workspace_id": "acl"
   },
   "completion": "verified-stable-package",

@@ -352,6 +352,7 @@ class AccountFacts:
     currency: str
     pages: list[str]
     pixels: list[str]
+    page_names: dict[str, str] = field(default_factory=dict)
 
 
 def preflight_account(client: GraphClient, act: str) -> AccountFacts:
@@ -371,11 +372,23 @@ def preflight_account(client: GraphClient, act: str) -> AccountFacts:
     got = str(acc.get("account_id") or "").strip()
     if got and got != digits:
         raise PlanError("Graph API answered for a different ad account. Nothing was created.")
-    pages = client.get_all(f"/{act}/promote_pages", {"fields": "id,name", "limit": 100}, max_pages=2)
+    pages = client.get_all(f"/{act}/promote_pages", {"fields": "id,name", "limit": 100}, max_pages=5)
+    if f"/{act}/promote_pages" in getattr(client, "truncated", []):
+        raise PlanError("Facebook Pages could not be fully loaded. Refresh pages before running the campaign.")
     pixels = client.get_all(f"/{act}/adspixels", {"fields": "id,name", "limit": 50}, max_pages=1)
     return AccountFacts(act=act, currency=str(acc.get("currency") or "").upper(),
+                        page_names={str(p["id"]): str(p.get("name") or p["id"]) for p in pages if p.get("id")},
                         pages=[str(p.get("id")) for p in pages if p.get("id")],
                         pixels=[str(p.get("id")) for p in pixels if p.get("id")])
+
+
+MANUAL_PAGE_NOTICE = ("No Facebook Page is available. Only the campaign and ad sets will be created PAUSED; "
+                      "ads will not be created. Add a Page and ads in Ads Manager, or refresh Pages and retry "
+                      "to complete the same campaign.")
+
+
+def needs_manual_page(plan: CampaignPlan) -> bool:
+    return not plan.page_id and plan.page_source == "manual completion"
 
 
 def resolve_page(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
@@ -386,14 +399,17 @@ def resolve_page(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
         if plan.page_id not in facts.pages:
             src = plan.page_source or "draft"
             raise PlanError(f"The page from the {src} ({plan.page_id}) is not among the pages "
-                            f"this ad account can advertise from ({len(facts.pages)} found).")
-    elif len(facts.pages) == 1:
+                            f"this ad account can advertise from ({len(facts.pages)} found). "
+                            "This account cannot advertise using that Page. Refresh pages and choose again.")
+    elif facts.pages:
         plan.page_id = facts.pages[0]
         plan.page_source = "account default"
-        notes.append("page_id was empty in the account map; the only page of the ad account is used")
+        notes.append("Automatic Facebook Page: the first available page of this ad account is used")
     else:
-        raise PlanError(f"page_id is empty in the account map and the ad account has "
-                        f"{len(facts.pages)} pages; set page_id")
+        if any(s.instant for s in getattr(plan, 'ad_sets', [])):
+            raise PlanError("Instant Forms require a Facebook Page. Refresh pages or choose a website destination.")
+        plan.page_source = "manual completion"
+        notes.append(MANUAL_PAGE_NOTICE)
     return notes
 
 
@@ -609,6 +625,7 @@ class Outcome:
     plan: dict = field(default_factory=dict)
     #: Pre-flight audit (ACL-1819): вердикты серверных правил; пусто, если аудит не шёл.
     audit: list = field(default_factory=list)
+    manual_required: list[str] = field(default_factory=list)
 
     @property
     def mismatches(self) -> list[dict]:
@@ -1073,6 +1090,11 @@ class CampaignCreator:
         check("daily_budget", str(want["daily_budget"]), str(camp.get("daily_budget") or ""))
         check("bid_strategy", BID_STRATEGY, camp.get("bid_strategy"))
         check("tag", plan.label, plan.label if plan.label in _labels(camp) else "")
+        # ACL-2050: новый макет Advantage+ - Meta может молча включить автоплощадки. Поле не вернули
+        # (старый API / нет прав) - не блокируем, а отмечаем в диагностике; ENABLED - блокирует.
+        state = _advantage_info(camp).get("advantage_placement_state")
+        if state is not None:
+            check("advantage_placement_state", "DISABLED", state)
         return checks
 
     def _adset_checks(self, plan: CampaignPlan, ad_set: AdSetPlan, targeting: dict, row: dict,
@@ -1122,6 +1144,13 @@ class CampaignCreator:
         check("instagram_positions", targeting.get("instagram_positions") or [],
               t.get("instagram_positions") or [])
         check("devices", targeting.get("device_platforms") or [], t.get("device_platforms") or [])
+        # ACL-2050: одна понятная строка, если Meta не сохранила ручные площадки (автоплощадки/другой список).
+        # Порядок списков не важен (как в проверках выше): сводка нужна, только если набор реально отличается.
+        want_pl, got_pl = placements_text(targeting), placements_text(t)
+        if targeting.get("publisher_platforms") and any(
+                not _same(targeting.get(k) or [], t.get(k) or [])
+                for k in ("publisher_platforms", "facebook_positions", "instagram_positions", "device_platforms")):
+            check("placements_summary", want_pl, got_pl)
         return checks
 
     # -- найденные кампания и группы против плана (до любой записи под ними)
@@ -1349,6 +1378,8 @@ class CampaignCreator:
                         raise PlanError(f"form {tpl['name']!r}: {exc}") from exc
         for ad_set, targeting in zip(plan.ad_sets, targetings):
             ok("adsets", self.adset_params(plan, ad_set, "0", targeting), f"ad set {ad_set.name!r}")
+            if needs_manual_page(plan):
+                continue  # No creative/ad write is planned until a Page is available.
             for ad in ad_set.ads:
                 ad = self._planned(ad, FORM_ID_PLACEHOLDER)
                 media = ({"video_id": "0", "thumb": "https://example.invalid/t.jpg"} if ad.kind == "video"
@@ -1386,7 +1417,7 @@ class CampaignCreator:
             sets = []
             for ad_set, targeting in zip(plan.ad_sets, targetings):
                 ads = []
-                for ad in ad_set.ads:
+                for ad in ([] if needs_manual_page(plan) else ad_set.ads):
                     data = files[ad.path]
                     media = ({"video_id": "<uploaded video>", "thumb": "<video thumbnail>"} if ad.kind == "video"
                              else {"image_hash": "<uploaded image>"})
@@ -1499,6 +1530,14 @@ class CampaignCreator:
         if self._form_steps:
             # Только у планов с шаблонами форм: сайтовый план не меняется ни байтом (ACL-1775).
             summary["forms"] = [st.as_dict() for st in self._form_steps.values()]
+        if needs_manual_page(plan):
+            summary["manual_required"] = [MANUAL_PAGE_NOTICE]
+            for row in summary["ad_sets"]:
+                row["ads_not_created"] = True
+                row["pending_ad_count"] = len(row["ads"])
+                row["ads"] = []
+        if self.facts.page_names.get(plan.page_id, plan.page_id) != plan.page_id:
+            summary["page_name"] = self.facts.page_names[plan.page_id]
         return summary
 
     def _run(self, plan: CampaignPlan, out: Outcome) -> None:
@@ -1544,6 +1583,9 @@ class CampaignCreator:
                 self._verify_label(out, f"The ad set {ad_set.name!r}", adset_id, plan.label)
                 self._step(out, f"ad set {ad_set.name!r}: created PAUSED, tag kept")
             out.adset_ids.append(adset_id)
+
+            if needs_manual_page(plan):
+                continue
 
             have = {str(r.get("name") or "").strip(): str(r["id"])
                     for r in self._children(adset_id, "ads", "id,name")}
@@ -1600,6 +1642,9 @@ class CampaignCreator:
 
         # 4. Сверка.
         out.readback = self.readback(plan, out, targetings, files)
+        if needs_manual_page(plan):
+            out.manual_required = [MANUAL_PAGE_NOTICE]
+            self._step(out, "Manual completion required: add a Facebook Page and ads in Ads Manager")
         n = len(out.mismatches)
         self._step(out, "readback: all fields match" if not n else f"readback: {n} mismatch(es)")
 
@@ -1626,6 +1671,19 @@ class CampaignCreator:
 
         camp = self.client.get(f"/{out.campaign_id}", {"fields": CAMPAIGN_FIELDS})
         checks += self._campaign_checks(plan, camp)
+        # ACL-2050: диагностика (не блокирует): что Meta сказала про автоаудиторию и правила ставок.
+        info = _advantage_info(camp)
+        diag: dict[str, Any] = {"advantage_state": info.get("advantage_state"),
+                                "advantage_placement_state": info.get("advantage_placement_state"),
+                                "advantage_audience_state": info.get("advantage_audience_state"),
+                                "adsets_with_value_rules": 0}
+        diag["placement_state_verified"] = bool(info.get("advantage_placement_state"))
+        if not diag["placement_state_verified"]:
+            out.warnings.append("Meta did not return advantage_placement_state; placement mode was not verified "
+                                "(check in Ads Manager).")
+        if info.get("advantage_audience_state") == "ENABLED":
+            out.warnings.append("Meta reports advantage_audience_state=ENABLED at campaign level; the ad sets "
+                                "were sent with Advantage+ audience off (verify in Ads Manager).")
 
         # ACL-1775: форма принадлежит Странице - читаем список форм ещё раз, уже после записи.
         page_forms = (_forms.read_page_forms(self.client, plan.page_id)
@@ -1635,6 +1693,12 @@ class CampaignCreator:
             obj = f"ad set {ad_set.name}"
             row = self.client.get(f"/{adset_id}", {"fields": ADSET_FIELDS})
             checks += self._adset_checks(plan, ad_set, targeting, row, out.campaign_id)
+            if row.get("value_rules_applied") or row.get("value_rule_set_id"):
+                diag["adsets_with_value_rules"] += 1
+                out.warnings.append(f"Meta applied bid value rules to {obj}; the builder did not set them.")
+
+            if needs_manual_page(plan):
+                continue  # Readback covers only the objects this run promised to create.
 
             ads = self.client.get_all(f"/{adset_id}/ads", {
                 "fields": "id,name,status,adset_id,adlabels{name},"
@@ -1718,15 +1782,19 @@ class CampaignCreator:
             for aobj, ad, h in image_ads:
                 check(aobj, "image_file", image_name(ad.path, files[ad.path]), names.get(h, ""))
         mismatches = [c for c in checks if not c["ok"]]
-        return {"ok": not mismatches, "checked": len(checks), "checks": checks, "mismatches": mismatches}
+        return {"ok": not mismatches, "checked": len(checks), "checks": checks, "mismatches": mismatches,
+                "diagnostics": diag}
 
 
-CAMPAIGN_FIELDS = "name,objective,status,daily_budget,bid_strategy,adlabels{name}"
+# ACL-2050: advantage_state_info и value_rules_* - только чтение, для сверки площадок после записи.
+CAMPAIGN_FIELDS = ("name,objective,status,daily_budget,bid_strategy,adlabels{name},"
+                   "advantage_state_info{advantage_state,advantage_placement_state,advantage_audience_state}")
 ADSET_FIELDS = ("name,status,campaign_id,optimization_goal,billing_event,destination_type,"
-                "promoted_object,targeting,start_time,end_time,adlabels{name}")
+                "promoted_object,targeting,start_time,end_time,adlabels{name},"
+                "value_rules_applied,value_rule_set_id")
 _PLACEMENT_FIELDS = ("publisher_platforms", "facebook_positions", "instagram_positions", "devices")
 #: Не показываем как «отличие от билдера»: имя и метку доказал поиск, остальное — сверка после записи.
-_SKIP_DIFF = {"name", "tag", "campaign_id", "schedule"}
+_SKIP_DIFF = {"name", "tag", "campaign_id", "schedule", "placements_summary"}
 _FIELD_TITLES = {"geo": "countries", "age_min": "minimum age", "age_max": "maximum age",
                  "languages": "languages", "detailed_targeting": "detailed targeting",
                  "os": "operating system", "pixel": "pixel", "conversion_event": "conversion event",
@@ -1734,6 +1802,11 @@ _FIELD_TITLES = {"geo": "countries", "age_min": "minimum age", "age_max": "maxim
                  "destination_type": "destination", "daily_budget": "daily budget",
                  "promoted_page": "Page of the ad set",
                  "bid_strategy": "bid strategy"}
+
+
+def _advantage_info(camp: dict) -> dict:
+    info = camp.get("advantage_state_info")
+    return info if isinstance(info, dict) else {}
 
 
 def _show(value: Any) -> str:
