@@ -51026,6 +51026,18 @@
         "state": "implementing",
         "started_at": "2026-10-22T11:03:28+00:00",
         "from_status": "status:todo"
+      },
+      "1095": {
+        "actor": "Worker-W1022P95",
+        "session": "local_5577ad27-093e-4daa-be2e-a81fc75eabcc",
+        "coordinator": "Coordinator-I1021A",
+        "branch": "work/acl-2095-parallel-profile-launch",
+        "worktree": "C:\\acl-2095",
+        "id": "ec8ae8479124485f904b087391941877",
+        "issue": 1095,
+        "state": "implementing",
+        "started_at": "2026-10-22T11:15:47+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -60591,9 +60603,13 @@
           {
             "actor": "Worker-W1022P95",
             "session": "local_5577ad27-093e-4daa-be2e-a81fc75eabcc"
+          },
+          {
+            "actor": "Worker-W1022P95",
+            "session": "local_5577ad27-093e-4daa-be2e-a81fc75eabcc"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-W1022P95",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -60612,9 +60628,9 @@
         },
         "pr": 1096,
         "queued_at": "2026-10-22T10:50:54+00:00",
-        "reviewer": "Reviewer-AO1022095",
         "review_report": "ACL-2095 independent review \u2014 PR #1096, head c51fc41f60ba67c63f46eb1b1b3c2e3f2297adf9 (tree c48e4da38a592058fef090fc6b2010ad70ecf6fe), base 203f8a337b085e421ee66c00589a7401a384b1a3.\n\nVerdict: content OK. Return for ONE reason only: merge current main only. main moved to 99e5350465ab57b4ec2080105550d51a189a9903 (PR #1097, ACL-2090: report.html builder regex + tests). git merge-tree shows a clean merge. Do not change anything else; push the merge, let CI run, hand off again.\n\nNo blocking defects found. Checked against Issue #1095 items 1-8 (8d is ACL-2098):\n- Shared gate: Check plan runs through account_spend_api._session -> _open_gated -> publish_jobs._slots (same queue as reads/publish/warm); slot released on every exception path; StartPacer slot released in finally; no lock-order inversion (slot queue -> pacer).\n- Paced MLX starts: StartPacer (ACL_MLX_PARALLEL_STARTS=1, gap 3 s only for a queued start).\n- 10053/10054: exactly one delayed retry; profile that came up anyway is adopted (no second start); timeouts, coded MLX errors (session loss, proxy auth) never retried.\n- Cold budget only for a port we just started; cleared after the first successful tab.\n- Proxy probe: neutral URL before the first Facebook navigation, one retry after 12 s on ERR_INVALID_AUTH_CREDENTIALS, second failure final, warm final.\n- Ready = /json/version answers (ProxyHandler({}), localhost only).\n- Stop waits for our settling start (bounded by the start budget), then waits <=30 s for the process to exit; stop listeners forget warm session and cold/ready marks; survivor-of-stop = \"closing\"; stale MLX \"running\" right after our stop refused.\n- No plain-browser fallback added; no Facebook request through an unready proxy on the probe path; checkpoint/logout/Meta stops untouched; UI text English; changelog fragment valid (fold_changelog.py --check).\n\nNon-blocking notes (no action needed for this task):\n- N1: if the probe fails for a non-auth reason (probe host blocked/DNS) or ACL_PROXY_PROBE_URL=off, the first Facebook navigation itself is the one that may hit ERR_INVALID_AUTH_CREDENTIALS (rejected by the proxy, never reaches Facebook) and is retried once \u2014 matches item 5.\n- N2: a probe CdpTimeout (slow ipify) is not caught and fails the action; consider treating a probe timeout like a non-auth probe failure later.\n- N3: after a 10053 retry, a 409 without a port, or \"still starting\" after adoption wait, leaves a starting browser nobody closes \u2014 orphan cleanup is ACL-2098.\n- N4: item 4 ceiling not measured live (telemetry fb_api_mlx_start/fb_api_cold_open in place, ceiling configurable); owner measurement remains.\n- N5: no direct test of the stop_profile_on_request wiring (settle -> stop -> wait_gone); helpers are tested.\n\nLocal tests on c51fc41f (Windows, py3.13): test_acl2095_parallel_profile_launch + 15 affected fb_api/read/plan/warm/MLX suites: 739 passed; plus 19 shard-3 profile/slot suites: 225 passed (one local-only import error in test_read_fallback unrelated: _design_tokens path). CI on head: all test jobs green (linux 1/2/3, windows, ACL verification); tracker-link red only because the task status is not Review.",
-        "rework": true
+        "rework": true,
+        "rework_claim": "ec8ae8479124485f904b087391941877"
       },
       "1099": {
         "implementers": [
@@ -119318,6 +119334,13 @@
           "report": "ACL-2095 independent review \u2014 PR #1096, head c51fc41f60ba67c63f46eb1b1b3c2e3f2297adf9 (tree c48e4da38a592058fef090fc6b2010ad70ecf6fe), base 203f8a337b085e421ee66c00589a7401a384b1a3.\n\nVerdict: content OK. Return for ONE reason only: merge current main only. main moved to 99e5350465ab57b4ec2080105550d51a189a9903 (PR #1097, ACL-2090: report.html builder regex + tests). git merge-tree shows a clean merge. Do not change anything else; push the merge, let CI run, hand off again.\n\nNo blocking defects found. Checked against Issue #1095 items 1-8 (8d is ACL-2098):\n- Shared gate: Check plan runs through account_spend_api._session -> _open_gated -> publish_jobs._slots (same queue as reads/publish/warm); slot released on every exception path; StartPacer slot released in finally; no lock-order inversion (slot queue -> pacer).\n- Paced MLX starts: StartPacer (ACL_MLX_PARALLEL_STARTS=1, gap 3 s only for a queued start).\n- 10053/10054: exactly one delayed retry; profile that came up anyway is adopted (no second start); timeouts, coded MLX errors (session loss, proxy auth) never retried.\n- Cold budget only for a port we just started; cleared after the first successful tab.\n- Proxy probe: neutral URL before the first Facebook navigation, one retry after 12 s on ERR_INVALID_AUTH_CREDENTIALS, second failure final, warm final.\n- Ready = /json/version answers (ProxyHandler({}), localhost only).\n- Stop waits for our settling start (bounded by the start budget), then waits <=30 s for the process to exit; stop listeners forget warm session and cold/ready marks; survivor-of-stop = \"closing\"; stale MLX \"running\" right after our stop refused.\n- No plain-browser fallback added; no Facebook request through an unready proxy on the probe path; checkpoint/logout/Meta stops untouched; UI text English; changelog fragment valid (fold_changelog.py --check).\n\nNon-blocking notes (no action needed for this task):\n- N1: if the probe fails for a non-auth reason (probe host blocked/DNS) or ACL_PROXY_PROBE_URL=off, the first Facebook navigation itself is the one that may hit ERR_INVALID_AUTH_CREDENTIALS (rejected by the proxy, never reaches Facebook) and is retried once \u2014 matches item 5.\n- N2: a probe CdpTimeout (slow ipify) is not caught and fails the action; consider treating a probe timeout like a non-auth probe failure later.\n- N3: after a 10053 retry, a 409 without a port, or \"still starting\" after adoption wait, leaves a starting browser nobody closes \u2014 orphan cleanup is ACL-2098.\n- N4: item 4 ceiling not measured live (telemetry fb_api_mlx_start/fb_api_cold_open in place, ceiling configurable); owner measurement remains.\n- N5: no direct test of the stop_profile_on_request wiring (settle -> stop -> wait_gone); helpers are tested.\n\nLocal tests on c51fc41f (Windows, py3.13): test_acl2095_parallel_profile_launch + 15 affected fb_api/read/plan/warm/MLX suites: 739 passed; plus 19 shard-3 profile/slot suites: 225 passed (one local-only import error in test_read_fallback unrelated: _design_tokens path). CI on head: all test jobs green (linux 1/2/3, windows, ACL verification); tracker-link red only because the task status is not Review.",
           "keep_lane": false
         }
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-22T11:15:47+00:00",
+        "issue": 1095,
+        "claim": "ec8ae8479124485f904b087391941877",
+        "actor": "Worker-W1022P95"
       }
     ],
     "policy": {
