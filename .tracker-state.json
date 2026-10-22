@@ -6547,6 +6547,27 @@
         "issue_scopes": {
           "1095": "e69405c7bd0882868fc17db86486c863f48d2d9ff5c7122b50840ebefd6b8125"
         }
+      },
+      "1088": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-AH1022086B",
+        "review_session": "run_ah1022_086b",
+        "execution_lane": "eaf3c821ec9444e38fc25aa9efd73359",
+        "implementer": "Worker-W1022086",
+        "head_sha": "9d953b935857a31bd967f744f28b657bd200c2d9",
+        "base_sha": "99e5350465ab57b4ec2080105550d51a189a9903",
+        "tree_sha": "cc788163074f5d2e56b69719c8d92ab418623853",
+        "report": "Merge-only re-review of ACL-2086 PR #1088 (Issue #1086). Previously approved content at b3203300 (reviewed by Reviewer-AJ1022086); new head 9d953b93 is a clean merge of main 99e53504 with no content change. Checks: head 9d953b93 verified; compare main...head behind_by 0, merge-base = main 99e53504; PR diff vs main touches only tests/test_publish_button_design_browser.py and docs/system/changelog.d/ACL-2086.md; test file blob 7ba73913 and changelog blob 88a94bce identical at b3203300 and 9d953b93, and the diff vs main is byte-identical. CI on 9d953b93: ACL verification, tracker-link, Process instructions, Installer verification, descriptor, classifiers, linux tests (3.13 shards 1-3), windows tests (3.13) all success; Build/Verify build inputs skipped (scope rule). Verdict: approved, merge-only; no new findings.",
+        "main_sha": "99e5350465ab57b4ec2080105550d51a189a9903",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          1086
+        ],
+        "recorded_at": "2026-10-22T12:17:56+00:00",
+        "issue_scopes": {
+          "1086": "26b6b4dc8f066999de43d064e159013333174c9ff4c707ad150522ff7c9b79a5"
+        }
       }
     },
     "stage": {
