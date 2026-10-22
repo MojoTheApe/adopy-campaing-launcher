@@ -57066,7 +57066,7 @@
             "session": "run_w1022_1708"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-W1022708",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -57085,7 +57085,7 @@
         },
         "pr": 952,
         "queued_at": "2026-10-22T07:28:24+00:00",
-        "review_report": "ACL-1708 / PR 952, head 048fd729: content review passed (no findings). All required CI is green and affected tests pass.\n\nBlocker: main advanced from 3bc8d973 to 515689de (PR 1085) while the review was being recorded. record-review now refuses with \"Source review must use the current main baseline\", and batch approve refuses with \"does not match the frozen baseline\".\n\nNeeded from the author: merge current origin/main into the branch (merge-tree with 515689de is clean; app.py and report.html overlap without conflict), push, re-run checks, hand off, then request a new review. Do not change content otherwise.\n\nOptional non-blocking: Install ACL.bat line 113 (\"Close the ACL launcher\") and install_dashboard_shortcut.ps1 (\"Dashboard launcher not found\" / \"Launcher:\") still say launcher; they are outside the dashboard acceptance.",
+        "review_report": "Approval is stale against current main 7224a34c (ACL-2079 batch merged). Author: merge current main (no content change), CI, hand off for a merge-only re-review.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578060+00:00",
@@ -57103,7 +57103,8 @@
           "actor": "Coordinator-I1021A",
           "session": "run_i1021a_1021",
           "report": "Approval is stale against current main 7224a34c (ACL-2079 batch merged). Author: merge current main (no content change), CI, hand off for a merge-only re-review."
-        }
+        },
+        "rework": true
       },
       "73": {
         "implementers": [
@@ -117550,6 +117551,18 @@
           ],
           "finished_at": "2026-10-22T08:35:34+00:00"
         }
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-22T08:37:44+00:00",
+        "issue": 708,
+        "operation": {
+          "id": "0e607be4b2814e9fa56e068b81f8e2d6",
+          "actor": "Coordinator-I1021A",
+          "session": "run_i1021a_1021",
+          "report": "Approval is stale against current main 7224a34c (ACL-2079 batch merged). Author: merge current main (no content change), CI, hand off for a merge-only re-review."
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -122491,50 +122504,6 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-22T07:27:39+00:00"
-      },
-      "708": {
-        "issue": 708,
-        "pr": 952,
-        "branch": "codex/acl-1708-rebrand-leftovers",
-        "head_sha": "feb776c1a6178831671652b5333f937f6a9de27a",
-        "base_sha": "515689dee625bdae3241e2ab4064fd18fa5dac53",
-        "main_sha": "515689dee625bdae3241e2ab4064fd18fa5dac53",
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "scope": "6b7726dd5b2fd3e4f37b1f1ed4921ba836cab3de1eff62531d7029faa5dce02e",
-        "review": {
-          "kind": "independent-review",
-          "verdict": "approved",
-          "reviewer": "Reviewer-AI1022708",
-          "review_session": "run_ai1022_708",
-          "execution_lane": "dad01254c81242a98883b0a352943571",
-          "implementer": "Worker-W1022708",
-          "head_sha": "feb776c1a6178831671652b5333f937f6a9de27a",
-          "base_sha": "515689dee625bdae3241e2ab4064fd18fa5dac53",
-          "tree_sha": "a19c2c68a4d28d4c88c0e91aaf6d69be33e0bbab",
-          "report": "Independent source review of ACL-1708 / PR 952 at head feb776c1 (clean merge of main 515689de into the previously reviewed 048fd729). Verified the PR delta vs main (+/- lines of 515689de..feb776c1) is identical to the earlier reviewed 3bc8d973..048fd729 delta, i.e. merge-only with no content change; main brought no new user-visible 'launcher' strings or converter references. Content review of 048fd729 stands: update-apply refusal text 'not started from its desktop shortcut' with test asserting no 'launcher' (any case); account-unreachable text says Adopy Campaign Manager window; scripts/convert_favicon_to_ico.py deleted with no references; shortcut script message fixed; viewport meta harmless; English; fragment valid (fold_changelog.py --check valid). Tests on 048fd729: 17 + 75 passed. All required CI green on feb776c1.",
-          "main_sha": "515689dee625bdae3241e2ab4064fd18fa5dac53",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "issues": [
-            708
-          ],
-          "recorded_at": "2026-10-22T07:33:05+00:00",
-          "issue_scopes": {
-            "708": "6b7726dd5b2fd3e4f37b1f1ed4921ba836cab3de1eff62531d7029faa5dce02e"
-          }
-        },
-        "lane": {
-          "id": "dad01254c81242a98883b0a352943571",
-          "pr": 952,
-          "issues": [
-            708
-          ],
-          "actor": "Reviewer-AI1022708",
-          "session": "run_ai1022_708",
-          "coordinator": "Coordinator-I1021A",
-          "started_at": "2026-10-22T07:31:34+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-22T07:34:32+00:00"
       },
       "839": {
         "issue": 839,
