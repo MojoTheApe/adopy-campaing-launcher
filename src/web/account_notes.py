@@ -17,9 +17,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import threading
-import time
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 
 from config.paths import get_account_notes_path, _atomic_write, machine_file_lock
@@ -30,6 +31,7 @@ MAX_NOTE_LEN = 10_000
 MAX_LABEL_LEN = 300
 
 _lock = threading.RLock()
+log = logging.getLogger(__name__)
 
 
 @contextmanager
@@ -107,14 +109,30 @@ def load_countries() -> dict[str, str]:
     return _load_all()[1]
 
 
-def _load_strict() -> tuple[dict[str, str], dict[str, str]]:
+def _backup_path(path: Path) -> Path:
+    """Имя копии испорченного файла: время с миллисекундами; если такое имя
+    всё же занято (две порчи в одну миллисекунду), добавляется счётчик, чтобы
+    ни одна копия не затёрла другую."""
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:-3]
+    backup = path.with_name(f"{path.name}.corrupt-{stamp}")
+    n = 1
+    while backup.exists():
+        n += 1
+        backup = path.with_name(f"{path.name}.corrupt-{stamp}-{n}")
+    return backup
+
+
+def _load_strict(report: dict | None = None) -> tuple[dict[str, str], dict[str, str]]:
     """Чтение для записи: ничего не теряет молча.
 
     Нет файла — пусто. Файл есть, но не читается (OSError) — отказ: запись
     поверх стёрла бы все остальные заметки. Файл испорчен — откладываем его
     в `account_notes.json.corrupt-<время>` и начинаем с пустого. Ключа
     `countries` может не быть (файл ACL-1620) — тогда страны пусты. Ключи стран
-    приводятся к канонической форме, так что запись заодно мигрирует файл."""
+    приводятся к канонической форме, так что запись заодно мигрирует файл.
+
+    report — необязательный словарь: если файл отложен в сторону, туда пишется
+    `set_aside` = путь копии (так вызывающий может сказать об этом пользователю)."""
     path = Path(get_account_notes_path())
     try:
         raw = path.read_text(encoding="utf-8")
@@ -126,8 +144,11 @@ def _load_strict() -> tuple[dict[str, str], dict[str, str]]:
                 or not isinstance(data.get("countries", {}), dict)):
             raise ValueError("bad shape")
     except ValueError:
-        backup = path.with_name(f"{path.name}.corrupt-{time.strftime('%Y%m%d-%H%M%S')}")
+        backup = _backup_path(path)
         path.replace(backup)
+        log.warning("Notes file %s was damaged; a copy was kept at %s", path, backup)
+        if report is not None:
+            report["set_aside"] = str(backup)
         return {}, {}
     return _clean(data["notes"]), _canon_countries(_clean(data.get("countries")))
 
@@ -142,7 +163,8 @@ def get(account: str) -> str:
     return load().get(account, "")
 
 
-def set_note(account: str, text: str, kind: str = "account", if_empty: bool = False) -> dict[str, str]:
+def set_note(account: str, text: str, kind: str = "account", if_empty: bool = False,
+             report: dict | None = None) -> dict[str, str]:
     """Сохранить заметку; пустой текст удаляет её. Отдаёт заметки того же вида.
 
     kind: "account" или "country" (страна — по каноническому ключу). Подпись —
@@ -150,7 +172,8 @@ def set_note(account: str, text: str, kind: str = "account", if_empty: bool = Fa
     строк и пробелы внутри — часть заметки. if_empty — записать, только если
     заметки сейчас нет (так работает Undo: он не затирает свежий текст);
     иначе NoteChanged. ValueError — подпись пуста или слишком длинна, текст
-    длиннее потолка или неизвестный вид.
+    длиннее потолка или неизвестный вид. report — см. _load_strict: если
+    испорченный файл отложен, в нём окажется `set_aside` (путь копии).
     """
     if kind not in ("account", "country"):
         raise ValueError("unknown note kind")
@@ -161,7 +184,7 @@ def set_note(account: str, text: str, kind: str = "account", if_empty: bool = Fa
         raise ValueError(f"note is longer than {MAX_NOTE_LEN} characters")
     key = country_key(label) if kind == "country" else label
     with _transaction():
-        notes, countries = _load_strict()
+        notes, countries = _load_strict(report)
         target = notes if kind == "account" else countries
         if if_empty and target.get(key, "").strip():
             raise NoteChanged(key)

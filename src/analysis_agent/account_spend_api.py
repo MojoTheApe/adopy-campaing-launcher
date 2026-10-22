@@ -293,7 +293,8 @@ class _Session:
 
 # Точки подмены в тестах: настоящий браузер здесь не нужен.
 def _probe_local(profile_id: str) -> tuple[str, int | None]:
-    return _fb_profile.local_debug_port(profile_id, profile_dir=_fb_profile.find_profile_dir(profile_id))
+    # Браузер, переживший нашу недавнюю остановку, — "closing": к его порту не цепляемся.
+    return _fb_profile.probe_local(profile_id)
 
 
 def _open_profile(profile_id: str, folder_id: str, instance: str):

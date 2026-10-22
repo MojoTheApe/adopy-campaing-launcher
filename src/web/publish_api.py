@@ -102,7 +102,8 @@ def _make_graph(tab, act: str, *, writes: bool = True):
     from src.fb_api.token_capture import InPageGraph
 
     if not writes:
-        # Пробный запуск: помощник без политики записи — POST невозможен вовсе.
+        # Пробный запуск: обычные записи закрыты. Отдельный account-bound
+        # validate-only creative может подтвердить Page, не создавая объектов.
         return InPageGraph(tab)
     return InPageGraph(tab, allow_writes=True, write_act=act)
 
@@ -211,7 +212,8 @@ def result_dict(outcome: Outcome, *, error: str = "") -> dict[str, Any]:
         "backend": "api",
         "status": "PAUSED" if created else "",
         "success": success,
-        "publishable": success and readback_ok and not blocking,
+        "publishable": success and readback_ok and not blocking and not outcome.manual_required,
+        "manual_required": list(outcome.manual_required),
         "warnings": list(outcome.warnings),
         "blocking_failures": blocking,
         # Текстовая отрисовка панели (список проблем RPA здесь не нужен).
@@ -262,6 +264,16 @@ class ApiPublisher:
 
     def cancelled(self) -> bool:
         return self.cancel_event.is_set()
+
+    @property
+    def started_profile(self) -> bool:
+        """Профиль поднят самим заданием (не пользователем) — ACL-1784."""
+        return bool(getattr(self._opened, "started_now", False))
+
+    @property
+    def writes(self) -> int:
+        """Сколько записей ушло в Meta за задание, включая с неизвестным итогом (ACL-1784)."""
+        return int(getattr(self._client, "writes", 0) or 0) if self._client is not None else 0
 
     def build_drafts(self, slots, *, account_label: str, country: str, **_ignored) -> list[Any]:
         return build_drafts(slots, account_label=account_label, country=country)
@@ -519,7 +531,8 @@ class ApiPublisher:
 # публикации, а путём чтения ACL-1760 (`account_spend_api._session`): тот же
 # замок профиля для чтений, место по памяти только если профиль закрыт,
 # закрывается только поднятое этим чтением, вкладка и клиент — без права
-# записи (помощник с WRITE=null, `GraphClient(allow_writes=False)`).
+# записи (помощник с WRITE=null, `GraphClient(allow_writes=False)`). Page профиля
+# дополнительно требует один отдельный validate-only creative, без создания объектов.
 
 #: Потолок вызовов на предпроверку кабинета внутри «Check plan».
 PLAN_PREFLIGHT_MAX_CALLS = 12
