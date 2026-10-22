@@ -6301,7 +6301,7 @@ window.cbPreflight = (function () {
   }
   /* Как src/creative_variant.file_variant: ведущее число, иначе хвостовое (ACL-2090:
      «2175_ARM22.png» → 22); размер кадра и соотношение сторон в конце — не вариант. */
-  var VARIANT_TAIL_NOISE = /(?:\d{3,4}\s*[xх\xd7]\s*\d{3,4}|(?<!\d)\d{1,2}\s*[xх\xd7:]\s*\d{1,2})[\s_\-]*$/i;
+  var VARIANT_TAIL_NOISE = /(?:\d{3,4}\s*[x\u0445\xd7]\s*\d{3,4}|(?<!\d)\d{1,2}\s*[x\u0445\xd7:]\s*\d{1,2})[\s_\-]*$/i;
   function fileVariant(file) {
     var base = String(file || '').split(/[\\/]/).pop().trim();
     var m = /^(\d{1,2})(?=[_\-\s])/.exec(base);
