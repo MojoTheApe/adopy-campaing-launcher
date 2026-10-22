@@ -6525,6 +6525,27 @@
         "issue_scopes": {
           "1090": "45596e0052dc17bd51275590b235b89d3541549ec5f260b39e5c6b0cad67bf28"
         }
+      },
+      "1096": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "reviewer": "Reviewer-AS1022095B",
+        "review_session": "run_as1022_095b",
+        "execution_lane": "e975d59246974915839902de5737b603",
+        "implementer": "Worker-W1022P95",
+        "head_sha": "1d6750a0a40cf6ea885f14e17d0851343508f155",
+        "base_sha": "99e5350465ab57b4ec2080105550d51a189a9903",
+        "tree_sha": "ae2bbb1ab472b5ee29285c1f01e83f52400fa5a6",
+        "report": "Re-review at 1d6750a0. Merge base equals current main 99e53504; merge commit 2649316c has no conflict-resolution content (git show --cc empty), its files are exactly main's changes. N2 commit: CdpTimeout on the neutral probe skips the probe; the first Facebook navigation then keeps the existing single retry on an auth error (no extra unauthenticated request: a proxy auth failure is an immediate navigation error, a hang is not auth), a proxy auth error stays final (re-raised after retry). Respects Issue items 5 and 7. N5 test asserts order settle -> MLX stop (allow_kill=False) -> wait_gone with no sleeps; N2 test raises a timeout and asserts the URL sequence. 40 tests in tests/test_acl2095_parallel_profile_launch.py pass locally; CI all green (linux 1/2/3, windows, tracker-link after one rerun for task status).",
+        "main_sha": "99e5350465ab57b4ec2080105550d51a189a9903",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          1095
+        ],
+        "recorded_at": "2026-10-22T12:13:44+00:00",
+        "issue_scopes": {
+          "1095": "e69405c7bd0882868fc17db86486c863f48d2d9ff5c7122b50840ebefd6b8125"
+        }
       }
     },
     "stage": {
