@@ -43763,7 +43763,7 @@
             "tree_sha": "431eadaca7f2a7b322405e435db5c0b47f81512f"
           }
         ],
-        "state": "pending",
+        "state": "verified",
         "recorded_at": "2026-10-22T09:53:58+00:00",
         "scope": "6b7726dd5b2fd3e4f37b1f1ed4921ba836cab3de1eff62531d7029faa5dce02e",
         "scope_provenance": {
@@ -43789,6 +43789,74 @@
               "tree_sha": "275b24a6d7e5c5371fa9d70103ad8c057ea7d69b"
             }
           ]
+        },
+        "history": [
+          {
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "sources": [
+              {
+                "pr": 1094,
+                "merge_sha": "203f8a337b085e421ee66c00589a7401a384b1a3",
+                "tree_sha": "431eadaca7f2a7b322405e435db5c0b47f81512f"
+              }
+            ],
+            "state": "pending",
+            "recorded_at": "2026-10-22T09:53:58+00:00",
+            "scope": "6b7726dd5b2fd3e4f37b1f1ed4921ba836cab3de1eff62531d7029faa5dce02e",
+            "scope_provenance": {
+              "schema_version": 1,
+              "repository": "MojoTheApe/adopy-campaing-launcher",
+              "issue": 708,
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "target": "ACL stable Windows installer and update channel",
+              "sources": [
+                {
+                  "pr": 1094,
+                  "merge_sha": "203f8a337b085e421ee66c00589a7401a384b1a3",
+                  "tree_sha": "431eadaca7f2a7b322405e435db5c0b47f81512f"
+                }
+              ],
+              "accepted_by": [
+                {
+                  "kind": "batch-member",
+                  "batch_id": "dc549f7afbaa4443967dbec603cc95c7",
+                  "pr": 1094,
+                  "head_sha": "09bae735f46ca5126dda954ef8536a00ff214dfe",
+                  "base_sha": "7224a34c17d1e81e1c4ed0dcafa387d349a37176",
+                  "tree_sha": "275b24a6d7e5c5371fa9d70103ad8c057ea7d69b"
+                }
+              ]
+            }
+          }
+        ],
+        "verification": {
+          "kind": "delivery-verification",
+          "result": "passed",
+          "target": "ACL stable Windows installer and update channel",
+          "merge_shas": [
+            "203f8a337b085e421ee66c00589a7401a384b1a3"
+          ],
+          "checks": [
+            "Published manifest, configured updater trust, installer SHA-256 and size verified",
+            "Previous actual package installs and starts with isolated data",
+            "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
+            "Updated installed application restarts with preserved machine/workspace/creative data",
+            "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts",
+            "Recovered application restarts and synthetic data remains byte-identical"
+          ],
+          "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/39759566038; https://github.com/MojoTheApe/acl-releases/releases/tag/acl-release-2026-10-22.1094",
+          "release": {
+            "tag": "acl-release-2026-10-22.1094",
+            "repository": "MojoTheApe/acl-releases",
+            "installer_sha256": "de822932b232d0995ddfb5c568ec5616a3fc02b890bbe759ad388cac5dac8da7"
+          }
+        },
+        "verified_at": "2026-10-22T10:10:39+00:00",
+        "native_delivery": {
+          "run": 39759566038,
+          "job": 119763571799,
+          "workflow": ".github/workflows/complete-delivery.yml",
+          "authorization_sha256": "528d44bb563f86764b3bee2d582d6a3f3b37796ac4f1b4a906ed0d59f88346bd"
         }
       },
       "839": {
@@ -43800,7 +43868,7 @@
             "tree_sha": "431eadaca7f2a7b322405e435db5c0b47f81512f"
           }
         ],
-        "state": "pending",
+        "state": "verified",
         "recorded_at": "2026-10-22T09:53:59+00:00",
         "scope": "61a8a6d1b11eb11ae8c76520e1447683670fdbb31e61059e754e07b8aac66c97",
         "scope_provenance": {
@@ -43826,6 +43894,74 @@
               "tree_sha": "7379168c1923525de9a9ceb9c96233a5d24a774e"
             }
           ]
+        },
+        "history": [
+          {
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "sources": [
+              {
+                "pr": 1094,
+                "merge_sha": "203f8a337b085e421ee66c00589a7401a384b1a3",
+                "tree_sha": "431eadaca7f2a7b322405e435db5c0b47f81512f"
+              }
+            ],
+            "state": "pending",
+            "recorded_at": "2026-10-22T09:53:59+00:00",
+            "scope": "61a8a6d1b11eb11ae8c76520e1447683670fdbb31e61059e754e07b8aac66c97",
+            "scope_provenance": {
+              "schema_version": 1,
+              "repository": "MojoTheApe/adopy-campaing-launcher",
+              "issue": 839,
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "target": "ACL stable Windows installer and update channel",
+              "sources": [
+                {
+                  "pr": 1094,
+                  "merge_sha": "203f8a337b085e421ee66c00589a7401a384b1a3",
+                  "tree_sha": "431eadaca7f2a7b322405e435db5c0b47f81512f"
+                }
+              ],
+              "accepted_by": [
+                {
+                  "kind": "batch-member",
+                  "batch_id": "dc549f7afbaa4443967dbec603cc95c7",
+                  "pr": 1094,
+                  "head_sha": "5a1fc49cc6f351cb52698e50a52e54bb9c8a50e7",
+                  "base_sha": "7224a34c17d1e81e1c4ed0dcafa387d349a37176",
+                  "tree_sha": "7379168c1923525de9a9ceb9c96233a5d24a774e"
+                }
+              ]
+            }
+          }
+        ],
+        "verification": {
+          "kind": "delivery-verification",
+          "result": "passed",
+          "target": "ACL stable Windows installer and update channel",
+          "merge_shas": [
+            "203f8a337b085e421ee66c00589a7401a384b1a3"
+          ],
+          "checks": [
+            "Published manifest, configured updater trust, installer SHA-256 and size verified",
+            "Previous actual package installs and starts with isolated data",
+            "Frozen helper runs the new installer and starts the new version; pointer and all shortcuts advance",
+            "Updated installed application restarts with preserved machine/workspace/creative data",
+            "After an installer/expected-version mismatch, helper restores and starts the previous version and restores all pointers/shortcuts",
+            "Recovered application restarts and synthetic data remains byte-identical"
+          ],
+          "report": "https://github.com/MojoTheApe/adopy-campaing-launcher/actions/runs/39759566038; https://github.com/MojoTheApe/acl-releases/releases/tag/acl-release-2026-10-22.1094",
+          "release": {
+            "tag": "acl-release-2026-10-22.1094",
+            "repository": "MojoTheApe/acl-releases",
+            "installer_sha256": "de822932b232d0995ddfb5c568ec5616a3fc02b890bbe759ad388cac5dac8da7"
+          }
+        },
+        "verified_at": "2026-10-22T10:10:39+00:00",
+        "native_delivery": {
+          "run": 39759566038,
+          "job": 119763571799,
+          "workflow": ".github/workflows/complete-delivery.yml",
+          "authorization_sha256": "528d44bb563f86764b3bee2d582d6a3f3b37796ac4f1b4a906ed0d59f88346bd"
         }
       }
     },
