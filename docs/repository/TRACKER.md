@@ -123,6 +123,28 @@ Only the reserved combined batch PR enters `main`. There is no Stage column, Sta
 `verify-stage` requirement in this selected route. Preserve every actual review,
 composition and CI gate; never manufacture Stage proof. Approved and frozen batch admission remain required.
 
+## Selected task context
+
+Before `work`/`start`, use `task-context assess TASK_ID --actor Worker-ID --session
+ACTUAL_RUN` for the current identity, then record concrete code, decisions,
+related-work and dependency assessments with `--evidence-file readiness.json
+--apply`. Use that same real Worker/session. Changed requirements/main or a new
+owner needs current readiness; an unchanged same-owner resume can retain it.
+
+Only the exact paired terminal `tracker-journal:start` / `tracker-journal:end`
+block is excluded from new `v2:` requirements scope. Markers are exact standalone
+lines; no criteria, `needs:` dependencies or `Blocked:` records belong there, and
+nothing but whitespace follows it. Ordinary History headings are not a journal;
+old unprefixed hashes keep their conservative whole-body meaning.
+
+An unchanged Approved source after forward main changes can retain original
+head/tree/source checks/review through actual independent `task-context
+review-acquire`, `review-record` and `review-release` ownership. Assess semantic
+main changes and dependencies; disjoint paths alone are insufficient. Actual
+conflicts, source edits or changed requirements return to the author, followed by
+fresh checks/handoff/review. Frozen batches still need combined review, composition,
+current admission and every real target check. Read [task context](TASK_CONTEXT.md).
+
 ## Deliver the process separately from the product
 
 This rule applies regardless of installation/deployment profile. Instructions and
