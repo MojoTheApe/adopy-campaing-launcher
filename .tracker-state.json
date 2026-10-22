@@ -55111,7 +55111,7 @@
             "session": "run_w1021_1839"
           }
         ],
-        "state": "approved",
+        "state": "returning_approval",
         "worker": "Worker-W1021839",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -55137,12 +55137,18 @@
           "remote_process_stopped_verified": false
         },
         "return_operation": {
-          "id": "d7f6a4abd9e2445ba052e706e2103d32",
+          "id": "ef3627e748ad4935bf6819631cdc9427",
           "actor": "Coordinator-I1021A",
           "session": "run_i1021a_1021",
-          "report": "Approval is stale against current main 515689de (light batch #1085 merged). Author: merge current main (no content change), CI, hand off for a merge-only re-review."
+          "report": "Approval is stale against current main 7224a34c (ACL-2079 batch merged). Author: merge current main (no content change), CI, hand off for a merge-only re-review."
         },
-        "reviewer": "Reviewer-AG1021839"
+        "reviewer": "Reviewer-AG1021839",
+        "return": {
+          "id": "ef3627e748ad4935bf6819631cdc9427",
+          "actor": "Coordinator-I1021A",
+          "session": "run_i1021a_1021",
+          "report": "Approval is stale against current main 7224a34c (ACL-2079 batch merged). Author: merge current main (no content change), CI, hand off for a merge-only re-review."
+        }
       },
       "840": {
         "implementers": [
