@@ -1,5 +1,5 @@
 """ACL-402: повторяющиеся отказы сводятся в сигнатуры, правил не предлагают."""
-from datetime import date
+from datetime import date, timedelta
 
 from scripts import acl_telemetry_report
 from src import failure_signatures as fs
@@ -48,7 +48,9 @@ def test_reason_is_scrubbed_of_secrets_and_ids():
 
 
 def test_markdown_states_it_proposes_no_rule_and_report_includes_it():
-    rows = [_row("A"), _row("B", run="r2")]
+    # analyse() uses the real date.today(), so the rows must be dated relative to it.
+    day = (date.today() - timedelta(days=2)).isoformat()
+    rows = [_row("A", day=day), _row("B", day=day, run="r2")]
     a = acl_telemetry_report.analyse(rows, 7)
     text = acl_telemetry_report.render(a, "тест")
     assert "Повторяющиеся отказы" in text and "Автоматически ничего не применяется" in text
