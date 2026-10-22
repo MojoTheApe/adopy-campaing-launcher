@@ -48247,20 +48247,6 @@
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
       },
-      "1037": {
-        "actor": "Worker-W1022037",
-        "session": "run_w1022_2037",
-        "coordinator": "Coordinator-I1021A",
-        "branch": "work/acl-2037-changelog-fragments",
-        "worktree": "C:\\acl-int-w2037",
-        "id": "bd2e2e1cbb144072a2fd7024a3e60aa2",
-        "issue": 1037,
-        "state": "handoff",
-        "started_at": "2026-10-22T00:03:19+00:00",
-        "from_status": "status:todo",
-        "pr": 1041,
-        "report": "# ACL-2037 handoff (refresh only)\n\nStale approval refresh of PR #1041. No content change by this worker.\n- Merged origin/main (e8bf31f8) into work/acl-2037-changelog-fragments; old head 7ff672a3, new head d2a7d62c. No conflicts.\n- Diff vs origin/main is only the task's 6 files (PROJECT.md, ROUTINE_SENTRY_PROMPT.md, changelog.d/ACL-2037.md, changelog.d/README.md, scripts/fold_changelog.py, tests/test_fold_changelog_2037.py).\n- tests/test_fold_changelog_2037.py: 14 passed locally.\n- scripts/fold_changelog.py --check against the tree: \"valid: ACL-2037\" (read-only, nothing written). Note: --help needs PYTHONUTF8=1 on a cp1251 Windows console (Cyrillic help text), pre-existing, not changed.\n- CI on new head: all pass (windows, linux 1/2/3, process, tooling, installer); tracker-link failed only because task was not yet in Review before handoff; rerun after handoff."
-      },
       "1078": {
         "actor": "Worker-F1022B",
         "session": "run_f1022b",
@@ -57139,34 +57125,32 @@
             "session": "run_w1022_2037"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1022037",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
-          "actor": "Worker-c8f54e83",
-          "session": "c8f54e83",
-          "coordinator": "Coordinator-M1011A",
+          "actor": "Worker-W1022037",
+          "session": "run_w1022_2037",
+          "coordinator": "Coordinator-I1021A",
           "branch": "work/acl-2037-changelog-fragments",
-          "worktree": "C:\\acl-changelog-fragments",
-          "id": "fb617ab8681d4b529cbe186bde2c8b0c",
+          "worktree": "C:\\acl-int-w2037",
+          "id": "bd2e2e1cbb144072a2fd7024a3e60aa2",
           "issue": 1037,
           "state": "handoff",
-          "started_at": "2026-10-20T11:52:01+00:00",
-          "from_status": "status:idea",
+          "started_at": "2026-10-22T00:03:19+00:00",
+          "from_status": "status:todo",
           "pr": 1041,
-          "report": "Per-task CHANGELOG fragments (docs/system/changelog.d/ACL-NNNN.md) plus scripts/fold_changelog.py; docs updated. Tests: tests/test_fold_changelog_2037.py (14 passed), tests/test_acl_ci_scope.py passed. Read-only Opus review done, findings applied. Not folded by batch integration yet (open question for owner)."
+          "report": "# ACL-2037 handoff (refresh only)\n\nStale approval refresh of PR #1041. No content change by this worker.\n- Merged origin/main (e8bf31f8) into work/acl-2037-changelog-fragments; old head 7ff672a3, new head d2a7d62c. No conflicts.\n- Diff vs origin/main is only the task's 6 files (PROJECT.md, ROUTINE_SENTRY_PROMPT.md, changelog.d/ACL-2037.md, changelog.d/README.md, scripts/fold_changelog.py, tests/test_fold_changelog_2037.py).\n- tests/test_fold_changelog_2037.py: 14 passed locally.\n- scripts/fold_changelog.py --check against the tree: \"valid: ACL-2037\" (read-only, nothing written). Note: --help needs PYTHONUTF8=1 on a cp1251 Windows console (Cyrillic help text), pre-existing, not changed.\n- CI on new head: all pass (windows, linux 1/2/3, process, tooling, installer); tracker-link failed only because task was not yet in Review before handoff; rerun after handoff."
         },
         "pr": 1041,
-        "queued_at": "2026-10-20T12:20:42+00:00",
+        "queued_at": "2026-10-22T00:16:14+00:00",
         "return_operation": {
           "id": "2ae82633a6b6469f8009ff3852801cc6",
           "actor": "Coordinator-M1011A",
           "session": "coord-m1011a-20261015",
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
         },
-        "review_report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21",
-        "rework": true,
-        "rework_claim": "bd2e2e1cbb144072a2fd7024a3e60aa2"
+        "review_report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
       },
       "1038": {
         "implementers": [
@@ -63753,7 +63737,8 @@
     "review_queue": [
       1054,
       710,
-      1069
+      1069,
+      1037
     ],
     "review": null,
     "history": [
@@ -112087,6 +112072,13 @@
         "issue": 1078,
         "claim": "372042032ab947fba55ae26fe0097610",
         "actor": "Worker-F1022B"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-22T00:16:14+00:00",
+        "issue": 1037,
+        "pr": 1041,
+        "actor": "Worker-W1022037"
       }
     ],
     "policy": {
