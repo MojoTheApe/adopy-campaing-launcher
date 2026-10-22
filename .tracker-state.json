@@ -53595,7 +53595,7 @@
             "session": "run_w1021_1840"
           }
         ],
-        "state": "approved",
+        "state": "merged",
         "worker": "Worker-W1021840",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -53626,7 +53626,8 @@
           "session": "run_i1021a_1021",
           "report": "Approval is stale against current main 64e73a1e (after ACL-2073 #1075 and ACL-2071 #1076 merged). Author: merge current main into the original branch without changing content (resolve only CHANGELOG append conflicts by keeping both entries), re-run checks, hand off, and get a fresh independent source approval for batch 2b (--deliver)."
         },
-        "reviewer": "Reviewer-Y1022840"
+        "reviewer": "Reviewer-Y1022840",
+        "batch_id": "a7a7b69b26194a16b7f5efcef6f8e068"
       },
       "841": {
         "implementers": [
@@ -55601,7 +55602,7 @@
             "session": "run_w1021_106"
           }
         ],
-        "state": "approved",
+        "state": "merged",
         "worker": "Worker-W1021106",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -55632,7 +55633,8 @@
           "session": "run_i1021a_1021",
           "report": "Approval is stale against current main 64e73a1e (after ACL-2073 #1075 and ACL-2071 #1076 merged). Author: merge current main into the original branch without changing content (resolve only CHANGELOG append conflicts by keeping both entries), re-run checks, hand off, and get a fresh independent source approval for batch 2b (--deliver)."
         },
-        "reviewer": "Reviewer-Z1022106"
+        "reviewer": "Reviewer-Z1022106",
+        "batch_id": "a7a7b69b26194a16b7f5efcef6f8e068"
       },
       "29": {
         "implementers": [
@@ -57869,7 +57871,7 @@
             "session": "run_w1022_2052"
           }
         ],
-        "state": "approved",
+        "state": "merged",
         "worker": "Worker-W1022052",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -57889,7 +57891,8 @@
         "pr": 1057,
         "queued_at": "2026-10-22T03:13:22+00:00",
         "review_report": "stale vs main e8bf31f8; author merges current main and hands off for a fresh review; no content findings",
-        "reviewer": "Reviewer-W1022052"
+        "reviewer": "Reviewer-W1022052",
+        "batch_id": "a7a7b69b26194a16b7f5efcef6f8e068"
       },
       "1053": {
         "implementers": [
@@ -57902,7 +57905,7 @@
             "session": "run_w1022_2053"
           }
         ],
-        "state": "approved",
+        "state": "merged",
         "worker": "Worker-W1022053",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -57922,7 +57925,8 @@
         "pr": 1060,
         "queued_at": "2026-10-22T03:20:35+00:00",
         "review_report": "stale vs main e8bf31f8; author merges current main and hands off for a fresh review; no content findings",
-        "reviewer": "Reviewer-X1022053"
+        "reviewer": "Reviewer-X1022053",
+        "batch_id": "a7a7b69b26194a16b7f5efcef6f8e068"
       },
       "1054": {
         "implementers": [
@@ -64325,6 +64329,22 @@
         "coordinator": "Coordinator-I1021A",
         "state": "reviewing",
         "started_at": "2026-10-22T01:08:16+00:00"
+      },
+      "1083": {
+        "id": "e2ae4011b466404faf30df031e2d59da",
+        "batch_id": "a7a7b69b26194a16b7f5efcef6f8e068",
+        "pr": 1083,
+        "issues": [
+          1052,
+          1053,
+          840,
+          19
+        ],
+        "actor": "Reviewer-AA1022B83",
+        "session": "run_aa1022_b83",
+        "coordinator": "Coordinator-I1021A",
+        "state": "reviewing",
+        "started_at": "2026-10-22T03:42:34+00:00"
       }
     },
     "review_queue": [
@@ -64332,22 +64352,7 @@
       710,
       1069
     ],
-    "review": {
-      "id": "e2ae4011b466404faf30df031e2d59da",
-      "batch_id": "a7a7b69b26194a16b7f5efcef6f8e068",
-      "pr": 1083,
-      "issues": [
-        1052,
-        1053,
-        840,
-        19
-      ],
-      "actor": "Reviewer-AA1022B83",
-      "session": "run_aa1022_b83",
-      "coordinator": "Coordinator-I1021A",
-      "state": "reviewing",
-      "started_at": "2026-10-22T03:42:34+00:00"
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -113723,6 +113728,245 @@
         "at": "2026-10-22T04:11:28+00:00",
         "batch_id": "a7a7b69b26194a16b7f5efcef6f8e068",
         "pr": 1083
+      },
+      {
+        "event": "batch-integrated",
+        "at": "2026-10-22T04:19:17+00:00",
+        "batch": {
+          "id": "a7a7b69b26194a16b7f5efcef6f8e068",
+          "actor": "Coordinator-I1021A",
+          "session": "run_i1021a_1021",
+          "state": "merged",
+          "issues": [
+            1052,
+            1053,
+            840,
+            19
+          ],
+          "members": [
+            {
+              "issue": 1052,
+              "pr": 1057,
+              "branch": "work/acl-2052-meta-rules-value-rules",
+              "head_sha": "e237d9351b9c5cb8a6c81d699a5df69fbf9e1ba8",
+              "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+              "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "9ec0c2a8ad90f824b35527de9cf47751b33907bd2c0104ad4cf93e9d60afe4ed",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-W1022052",
+                "implementer": "Worker-W1022052",
+                "review_session": "run_w1022_052",
+                "execution_lane": "3b4a065dbdae4244b255f6a7ed404a48",
+                "head_sha": "e237d9351b9c5cb8a6c81d699a5df69fbf9e1ba8",
+                "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+                "tree_sha": "ee8251f0db3d7cdfa7d5476963e2c8f62b7329b4",
+                "report": "Independent source review of ACL-2052 / PR #1057 by Reviewer-W1022052 (session run_w1022_052), not the implementer, coordinator or any earlier reviewer.\nScope vs main 4582039e: config/meta_rules/rules.json (+8 entries), config/meta_rules/sources.json (+4 pages), docs/system/changelog.d/ACL-2052.md, src/campaign_bridge/meta_rules.py (new documentation-only kind `fact`, requires non-empty note), tests/test_acl2052_meta_rules_placement.py. Matches Issue #1052 scope; no builder behavior change.\nFacts: value rules limited to LOWEST_COST_WITHOUT_CAP/COST_CAP; attach via value_rule_set_id + value_rules_applied; DECREASE capped at 90 (fact with limits); account_controls placement_exclusions values match the spec and the note states it is the only way to fully exclude Audience Network on new-layout Advantage+ campaigns, audience_controls required, no DELETE; bid_adjustments.retired recorded as kind fact, status deprecated, with note; placement_soft_opt_out up to 5% for Sales/Leads; live fact (status test) that non-Advantage+ Leads via API still accept classic publisher_platforms. All entries non-ga, checked_date 2026-10-21, https source_url, scoped by applies_to.feature.\nLoader: check_job only evaluates ALLOWED_KINDS, text_limit and required_field, so fact is skipped; validate_rules rejects fact without note. publish_preflight consumers unaffected; test proves check_job output identical with/without the new entries for six representative jobs.\nMerge resolution: docs/system/CHANGELOG.md is identical to main; the ACL-2052 entry from 808573c6 moved verbatim to the fragment (diff-verified); fold_changelog.py --check: valid (ACL-2037, ACL-2052). sources.json category announcements is an existing category.\nEnglish user-facing text; Russian code comments per repo rule; no account/ad ids, tokens or URLs with ids.\nLocal tests: test_acl2052_meta_rules_placement, test_acl1781_meta_rules, test_meta_docs_watch_1782 - 49 passed. Required CI on e237d935 all green (run 39714531949 success, installer run, descriptor, tracker-link).\nNon-blocking notes: (1) value_rules.bid_strategy has status limited, so once the builder starts setting feature=value_rules the existing non-ga semantics would block COST_CAP/LOWEST_COST_WITHOUT_CAP - revisit before wiring value rules into the builder; (2) placement_soft_opt_out.spend uses required_field for an optional field, acceptable as feature-scoped; (3) the test selects new entries by checked_date 2026-10-21, fragile if another task adds entries with that date.\nVerdict: approved.",
+                "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  1052
+                ],
+                "recorded_at": "2026-10-22T03:21:44+00:00",
+                "issue_scopes": {
+                  "1052": "9ec0c2a8ad90f824b35527de9cf47751b33907bd2c0104ad4cf93e9d60afe4ed"
+                }
+              },
+              "lane": {
+                "id": "3b4a065dbdae4244b255f6a7ed404a48",
+                "pr": 1057,
+                "issues": [
+                  1052
+                ],
+                "actor": "Reviewer-W1022052",
+                "session": "run_w1022_052",
+                "coordinator": "Coordinator-I1021A",
+                "started_at": "2026-10-22T03:17:32+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-22T03:22:16+00:00"
+            },
+            {
+              "issue": 1053,
+              "pr": 1060,
+              "branch": "work/acl-2053-form-template-parity",
+              "head_sha": "43b8621259b8c9d813632a175811d8370ea0dd5c",
+              "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+              "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "e43d2aa702e2ebd0edd41e4ea895d2876e6967934d41e4d18f3e638ecd7d3871",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-X1022053",
+                "implementer": "Worker-W1022053",
+                "head_sha": "43b8621259b8c9d813632a175811d8370ea0dd5c",
+                "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+                "tree_sha": "78d5d084a3a3df985bc8132b4daf0e73c6ad4423",
+                "execution_lane": "54f9ef9d3ffd4107bd7a2fd7e5e6a7be",
+                "review_session": "run_x1022_053",
+                "report": "# ACL-2053 / PR #1060 independent source review (Reviewer-X1022053, run_x1022_053)\n\nHead 43b8621259b8c9d813632a175811d8370ea0dd5c, base main 4582039e2e0418e23df19de131165e83e4d312d6 (merge-base = main), tree 78d5d084a3a3df985bc8132b4daf0e73c6ad4423. Reviewed in a fresh detached worktree, full diff vs main (10 files) against the Issue Description, Specifications and acceptance criteria.\n\nVerdict: APPROVED.\n\nSpec coverage:\n- First/last name: CONTACT_TYPES adds first_name/last_name (FIRST_NAME/LAST_NAME), full name kept; full name together with first/last refused (Python + JS mirror). Order: author order when first/last chosen, legacy canonical order otherwise (hash stable).\n- Custom multiple choice: shape CUSTOM + options[{key,value}] unchanged; questions_first selects custom-before-contacts; stored only when true.\n- Intro title: optional intro_title (<=60), falls back to headline. Cover image: documented skip; verified against the Graph Page/leadgen_forms reference - cover_photo is a file upload (pages_manage_posts) or cover_photo_id; closed policy forbids files. Accepted.\n- follow_up_action_url: https-only, <=1000, in validator, JS mirror, write_policy and in-page helper; thank-you text optional only with a follow-up URL (thank_you_page then omitted; body is optional per Graph reference).\n- Settings: is_optimized_for_quality from form_type (default More volume = false), block_display_for_non_targeted_viewer=true on every form; bool-type checks in Python and helper (helper refuses when bool_keys table missing). allow_organic_lead not sent: verified the create reference lists only deprecated allow_organic_lead_retrieval (\"will not be considered\") and recommends block_display_for_non_targeted_viewer; documented deviation, accepted.\n- Locale: select of the 32 Graph create locales (list matches the reference exactly), default EN_US; legacy saved locales (any XX_YY) still load/publish (lenient path in _read, plan_from_draft, and save of an unchanged saved locale).\n- Write policy stays closed: only is_optimized_for_quality, block_display_for_non_targeted_viewer (FORM_KEYS) and FIRST_NAME/LAST_NAME question types added; tos/terms forbidden walk unchanged; tests cover valid/invalid/tos.\n- Legacy JSON: golden test - same clean template, same form name hash (\u00b7 ACL 192c3c), same body except the two new required settings; reused-by-name forms keep their old settings (CHANGELOG).\n- Fixture: sanitized D71 form, all ids replaced by <ID>, page \"Example Page\", URLs example.com. Contains the buyer's ad copy text (no ids/secrets) - allowed by the spec.\n- UI texts and errors English. Fragment docs/system/changelog.d/ACL-2053.md; CHANGELOG.md equals main; fold_changelog.py --check: valid ACL-2037, ACL-2053.\n\nTests run locally (affected only): test_acl2053_form_parity, test_acl1776_create_forms, test_acl1775_instant_forms, test_acl1775_builder_forms: 264 passed.\nCI on 43b86212: CI (linux 1/2/3, windows, ACL verification, tooling, process instructions), Windows installer, descriptor, tracker-link - all success.\n\nNon-blocking notes: validateTemplate(t, legacyLocale) second argument is unused by callers (panel only creates new templates) - harmless. Not verified live: follow_up_action_url without a thank-you page, FIRST_NAME/LAST_NAME acceptance and the new settings on create - separate owner-approved pilot-account step after main (create one form and read it back); not done by this review.\n",
+                "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  1053
+                ],
+                "recorded_at": "2026-10-22T03:33:00+00:00",
+                "issue_scopes": {
+                  "1053": "e43d2aa702e2ebd0edd41e4ea895d2876e6967934d41e4d18f3e638ecd7d3871"
+                }
+              },
+              "lane": {
+                "id": "54f9ef9d3ffd4107bd7a2fd7e5e6a7be",
+                "pr": 1060,
+                "issues": [
+                  1053
+                ],
+                "actor": "Reviewer-X1022053",
+                "session": "run_x1022_053",
+                "coordinator": "Coordinator-I1021A",
+                "started_at": "2026-10-22T03:27:43+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-22T03:33:26+00:00"
+            },
+            {
+              "issue": 840,
+              "pr": 846,
+              "branch": "codex/acl-1840-country-footer-inset",
+              "head_sha": "ea9996538e88e0e53df4a5635f2218e06f099f3f",
+              "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+              "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "ef493a159bfb31c8be24551b9a4f3d90b60904a49576c51b0b94efdfdf6c5d40",
+              "review": {
+                "kind": "independent-review",
+                "implementer": "Worker-W1021840",
+                "reviewer": "Reviewer-Y1022840",
+                "review_session": "run_y1022_840",
+                "execution_lane": "1e3db9b89027465b917b4edfbbd2a3bc",
+                "head_sha": "ea9996538e88e0e53df4a5635f2218e06f099f3f",
+                "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+                "tree_sha": "87c2cd6b10986395f4f719849f31b4c37a03da5a",
+                "verdict": "approved",
+                "report": "ACL-1840 / PR846 source review at head ea999653 vs main 4582039e (4 files). report.html: scoped rule '.amap-country > .hc.hc-after' (specificity beats base .hc margin-top) sets padding .5rem .85rem = amap-add inset, margin-top 0, overflow-wrap on foot/history; theme-neutral (no colors). Selector matches the real mount in _account_map_country.html (section.hc.hc-after directly after the table inside the country details). Fixture is sanitized synthetic English markup mirroring the real component CSS; test uses real Chromium at 1280/1024/320 x light/dark x empty/populated/filtered: asserts x alignment to connection-form inset, right bound, spacing >=8 above/below, no horizontal overflow, focus outline within card, keyboard Enter/Space disclosure, plus a baseline test reproducing the missing inset. tests/test_country_campaign_footer_layout.py: 19 passed locally. Changelog fragment docs/system/changelog.d/ACL-1840.md: valid per fold_changelog.py --check (valid: ACL-1840, ACL-2037); heading date 2026-10-22 is acceptable because the fragment format requires a YYYY-MM-DD date and the old entry had none; docs/system/CHANGELOG.md unchanged vs main. English only, no leaked ids/tokens (the preview commit hash is a public provenance reference). Required CI on ea999653 all green (classify, descriptor, tracker-link, process instructions, linux 1-3, windows, installer verification, ACL verification). PR base equals current main 4582039e. No findings.",
+                "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  840
+                ],
+                "recorded_at": "2026-10-22T03:29:31+00:00",
+                "issue_scopes": {
+                  "840": "ef493a159bfb31c8be24551b9a4f3d90b60904a49576c51b0b94efdfdf6c5d40"
+                }
+              },
+              "lane": {
+                "id": "1e3db9b89027465b917b4edfbbd2a3bc",
+                "pr": 846,
+                "issues": [
+                  840
+                ],
+                "actor": "Reviewer-Y1022840",
+                "session": "run_y1022_840",
+                "coordinator": "Coordinator-I1021A",
+                "started_at": "2026-10-22T03:26:41+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-22T03:29:54+00:00"
+            },
+            {
+              "issue": 19,
+              "pr": 955,
+              "branch": "codex/acl-106-empty-period-owner",
+              "head_sha": "4a50cb4c1e399688823dd3b0aedd5aa97b67e66c",
+              "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+              "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "ce291401dfa6489828ba973eb602b744efb113657552fbfff1bcb7f342232d99",
+              "review": {
+                "kind": "independent-review",
+                "implementer": "Worker-W1021106",
+                "reviewer": "Reviewer-Z1022106",
+                "head_sha": "4a50cb4c1e399688823dd3b0aedd5aa97b67e66c",
+                "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+                "tree_sha": "4fe26415b644eea5ea42b74d617b525b07324f0d",
+                "verdict": "approved",
+                "report": "ACL-106 PR955 source review: _period_owner derives from cached period report (no frame rescan); None for no rows/no manager/no period/own rows; blank/nan CM rows ignored; whole-workbook case keeps existing notice plus 'may need updating'; manager case is a separate block mutually exclusive with the existing notice; auto-merged app.py/report.html regions match main (diff vs main limited to ACL-106 hunks); English UI text; 10 new tests plus sidebar tests pass (23 passed); fold_changelog --check valid; no ids leaked; all required CI green on 4a50cb4c.",
+                "execution_lane": "b3b955fadb144c60aa40952ea5659df9",
+                "review_session": "run_z1022_106",
+                "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  19
+                ],
+                "recorded_at": "2026-10-22T03:31:24+00:00",
+                "issue_scopes": {
+                  "19": "ce291401dfa6489828ba973eb602b744efb113657552fbfff1bcb7f342232d99"
+                }
+              },
+              "lane": {
+                "id": "b3b955fadb144c60aa40952ea5659df9",
+                "pr": 955,
+                "issues": [
+                  19
+                ],
+                "actor": "Reviewer-Z1022106",
+                "session": "run_z1022_106",
+                "coordinator": "Coordinator-I1021A",
+                "started_at": "2026-10-22T03:29:01+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-22T03:31:49+00:00"
+            }
+          ],
+          "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+          "branch": "codex/batch-a7a7b69b26194a16b7f5efcef6f8e068",
+          "intake": "31b59e53f0ab4d4abe31ecc92425019f",
+          "started_at": "2026-10-22T03:39:20+00:00",
+          "pr": 1083,
+          "entered_stage": false,
+          "history": [],
+          "delivery_request": {
+            "schema_version": 1,
+            "state": "requested",
+            "batch_id": "a7a7b69b26194a16b7f5efcef6f8e068",
+            "issues": [
+              1052,
+              1053,
+              840,
+              19
+            ],
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "target": "ACL stable Windows installer and update channel",
+            "workflow": ".github/workflows/complete-delivery.yml",
+            "job": "Verify published Windows package",
+            "actor": "Coordinator-I1021A",
+            "session": "run_i1021a_1021",
+            "requested_at": "2026-10-22T03:39:20+00:00"
+          },
+          "review": {
+            "id": "e2ae4011b466404faf30df031e2d59da",
+            "batch_id": "a7a7b69b26194a16b7f5efcef6f8e068",
+            "pr": 1083,
+            "issues": [
+              1052,
+              1053,
+              840,
+              19
+            ],
+            "actor": "Reviewer-AA1022B83",
+            "session": "run_aa1022_b83",
+            "coordinator": "Coordinator-I1021A",
+            "state": "reviewing",
+            "started_at": "2026-10-22T03:42:34+00:00"
+          },
+          "main_prs": [
+            1083
+          ],
+          "finished_at": "2026-10-22T04:19:17+00:00"
+        }
       }
     ],
     "policy": {
@@ -124869,241 +125113,259 @@
         "finished_at": "2026-10-22T03:18:28+00:00",
         "closing_sources": false,
         "sources_closed": true
-      }
-    },
-    "integration": {
-      "id": "a7a7b69b26194a16b7f5efcef6f8e068",
-      "actor": "Coordinator-I1021A",
-      "session": "run_i1021a_1021",
-      "state": "reviewing",
-      "issues": [
-        1052,
-        1053,
-        840,
-        19
-      ],
-      "members": [
-        {
-          "issue": 1052,
-          "pr": 1057,
-          "branch": "work/acl-2052-meta-rules-value-rules",
-          "head_sha": "e237d9351b9c5cb8a6c81d699a5df69fbf9e1ba8",
-          "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
-          "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "9ec0c2a8ad90f824b35527de9cf47751b33907bd2c0104ad4cf93e9d60afe4ed",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-W1022052",
-            "implementer": "Worker-W1022052",
-            "review_session": "run_w1022_052",
-            "execution_lane": "3b4a065dbdae4244b255f6a7ed404a48",
-            "head_sha": "e237d9351b9c5cb8a6c81d699a5df69fbf9e1ba8",
-            "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
-            "tree_sha": "ee8251f0db3d7cdfa7d5476963e2c8f62b7329b4",
-            "report": "Independent source review of ACL-2052 / PR #1057 by Reviewer-W1022052 (session run_w1022_052), not the implementer, coordinator or any earlier reviewer.\nScope vs main 4582039e: config/meta_rules/rules.json (+8 entries), config/meta_rules/sources.json (+4 pages), docs/system/changelog.d/ACL-2052.md, src/campaign_bridge/meta_rules.py (new documentation-only kind `fact`, requires non-empty note), tests/test_acl2052_meta_rules_placement.py. Matches Issue #1052 scope; no builder behavior change.\nFacts: value rules limited to LOWEST_COST_WITHOUT_CAP/COST_CAP; attach via value_rule_set_id + value_rules_applied; DECREASE capped at 90 (fact with limits); account_controls placement_exclusions values match the spec and the note states it is the only way to fully exclude Audience Network on new-layout Advantage+ campaigns, audience_controls required, no DELETE; bid_adjustments.retired recorded as kind fact, status deprecated, with note; placement_soft_opt_out up to 5% for Sales/Leads; live fact (status test) that non-Advantage+ Leads via API still accept classic publisher_platforms. All entries non-ga, checked_date 2026-10-21, https source_url, scoped by applies_to.feature.\nLoader: check_job only evaluates ALLOWED_KINDS, text_limit and required_field, so fact is skipped; validate_rules rejects fact without note. publish_preflight consumers unaffected; test proves check_job output identical with/without the new entries for six representative jobs.\nMerge resolution: docs/system/CHANGELOG.md is identical to main; the ACL-2052 entry from 808573c6 moved verbatim to the fragment (diff-verified); fold_changelog.py --check: valid (ACL-2037, ACL-2052). sources.json category announcements is an existing category.\nEnglish user-facing text; Russian code comments per repo rule; no account/ad ids, tokens or URLs with ids.\nLocal tests: test_acl2052_meta_rules_placement, test_acl1781_meta_rules, test_meta_docs_watch_1782 - 49 passed. Required CI on e237d935 all green (run 39714531949 success, installer run, descriptor, tracker-link).\nNon-blocking notes: (1) value_rules.bid_strategy has status limited, so once the builder starts setting feature=value_rules the existing non-ga semantics would block COST_CAP/LOWEST_COST_WITHOUT_CAP - revisit before wiring value rules into the builder; (2) placement_soft_opt_out.spend uses required_field for an optional field, acceptable as feature-scoped; (3) the test selects new entries by checked_date 2026-10-21, fragile if another task adds entries with that date.\nVerdict: approved.",
-            "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              1052
-            ],
-            "recorded_at": "2026-10-22T03:21:44+00:00",
-            "issue_scopes": {
-              "1052": "9ec0c2a8ad90f824b35527de9cf47751b33907bd2c0104ad4cf93e9d60afe4ed"
-            }
-          },
-          "lane": {
-            "id": "3b4a065dbdae4244b255f6a7ed404a48",
-            "pr": 1057,
-            "issues": [
-              1052
-            ],
-            "actor": "Reviewer-W1022052",
-            "session": "run_w1022_052",
-            "coordinator": "Coordinator-I1021A",
-            "started_at": "2026-10-22T03:17:32+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-22T03:22:16+00:00"
-        },
-        {
-          "issue": 1053,
-          "pr": 1060,
-          "branch": "work/acl-2053-form-template-parity",
-          "head_sha": "43b8621259b8c9d813632a175811d8370ea0dd5c",
-          "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
-          "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "e43d2aa702e2ebd0edd41e4ea895d2876e6967934d41e4d18f3e638ecd7d3871",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-X1022053",
-            "implementer": "Worker-W1022053",
-            "head_sha": "43b8621259b8c9d813632a175811d8370ea0dd5c",
-            "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
-            "tree_sha": "78d5d084a3a3df985bc8132b4daf0e73c6ad4423",
-            "execution_lane": "54f9ef9d3ffd4107bd7a2fd7e5e6a7be",
-            "review_session": "run_x1022_053",
-            "report": "# ACL-2053 / PR #1060 independent source review (Reviewer-X1022053, run_x1022_053)\n\nHead 43b8621259b8c9d813632a175811d8370ea0dd5c, base main 4582039e2e0418e23df19de131165e83e4d312d6 (merge-base = main), tree 78d5d084a3a3df985bc8132b4daf0e73c6ad4423. Reviewed in a fresh detached worktree, full diff vs main (10 files) against the Issue Description, Specifications and acceptance criteria.\n\nVerdict: APPROVED.\n\nSpec coverage:\n- First/last name: CONTACT_TYPES adds first_name/last_name (FIRST_NAME/LAST_NAME), full name kept; full name together with first/last refused (Python + JS mirror). Order: author order when first/last chosen, legacy canonical order otherwise (hash stable).\n- Custom multiple choice: shape CUSTOM + options[{key,value}] unchanged; questions_first selects custom-before-contacts; stored only when true.\n- Intro title: optional intro_title (<=60), falls back to headline. Cover image: documented skip; verified against the Graph Page/leadgen_forms reference - cover_photo is a file upload (pages_manage_posts) or cover_photo_id; closed policy forbids files. Accepted.\n- follow_up_action_url: https-only, <=1000, in validator, JS mirror, write_policy and in-page helper; thank-you text optional only with a follow-up URL (thank_you_page then omitted; body is optional per Graph reference).\n- Settings: is_optimized_for_quality from form_type (default More volume = false), block_display_for_non_targeted_viewer=true on every form; bool-type checks in Python and helper (helper refuses when bool_keys table missing). allow_organic_lead not sent: verified the create reference lists only deprecated allow_organic_lead_retrieval (\"will not be considered\") and recommends block_display_for_non_targeted_viewer; documented deviation, accepted.\n- Locale: select of the 32 Graph create locales (list matches the reference exactly), default EN_US; legacy saved locales (any XX_YY) still load/publish (lenient path in _read, plan_from_draft, and save of an unchanged saved locale).\n- Write policy stays closed: only is_optimized_for_quality, block_display_for_non_targeted_viewer (FORM_KEYS) and FIRST_NAME/LAST_NAME question types added; tos/terms forbidden walk unchanged; tests cover valid/invalid/tos.\n- Legacy JSON: golden test - same clean template, same form name hash (\u00b7 ACL 192c3c), same body except the two new required settings; reused-by-name forms keep their old settings (CHANGELOG).\n- Fixture: sanitized D71 form, all ids replaced by <ID>, page \"Example Page\", URLs example.com. Contains the buyer's ad copy text (no ids/secrets) - allowed by the spec.\n- UI texts and errors English. Fragment docs/system/changelog.d/ACL-2053.md; CHANGELOG.md equals main; fold_changelog.py --check: valid ACL-2037, ACL-2053.\n\nTests run locally (affected only): test_acl2053_form_parity, test_acl1776_create_forms, test_acl1775_instant_forms, test_acl1775_builder_forms: 264 passed.\nCI on 43b86212: CI (linux 1/2/3, windows, ACL verification, tooling, process instructions), Windows installer, descriptor, tracker-link - all success.\n\nNon-blocking notes: validateTemplate(t, legacyLocale) second argument is unused by callers (panel only creates new templates) - harmless. Not verified live: follow_up_action_url without a thank-you page, FIRST_NAME/LAST_NAME acceptance and the new settings on create - separate owner-approved pilot-account step after main (create one form and read it back); not done by this review.\n",
-            "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              1053
-            ],
-            "recorded_at": "2026-10-22T03:33:00+00:00",
-            "issue_scopes": {
-              "1053": "e43d2aa702e2ebd0edd41e4ea895d2876e6967934d41e4d18f3e638ecd7d3871"
-            }
-          },
-          "lane": {
-            "id": "54f9ef9d3ffd4107bd7a2fd7e5e6a7be",
-            "pr": 1060,
-            "issues": [
-              1053
-            ],
-            "actor": "Reviewer-X1022053",
-            "session": "run_x1022_053",
-            "coordinator": "Coordinator-I1021A",
-            "started_at": "2026-10-22T03:27:43+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-22T03:33:26+00:00"
-        },
-        {
-          "issue": 840,
-          "pr": 846,
-          "branch": "codex/acl-1840-country-footer-inset",
-          "head_sha": "ea9996538e88e0e53df4a5635f2218e06f099f3f",
-          "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
-          "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "ef493a159bfb31c8be24551b9a4f3d90b60904a49576c51b0b94efdfdf6c5d40",
-          "review": {
-            "kind": "independent-review",
-            "implementer": "Worker-W1021840",
-            "reviewer": "Reviewer-Y1022840",
-            "review_session": "run_y1022_840",
-            "execution_lane": "1e3db9b89027465b917b4edfbbd2a3bc",
-            "head_sha": "ea9996538e88e0e53df4a5635f2218e06f099f3f",
-            "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
-            "tree_sha": "87c2cd6b10986395f4f719849f31b4c37a03da5a",
-            "verdict": "approved",
-            "report": "ACL-1840 / PR846 source review at head ea999653 vs main 4582039e (4 files). report.html: scoped rule '.amap-country > .hc.hc-after' (specificity beats base .hc margin-top) sets padding .5rem .85rem = amap-add inset, margin-top 0, overflow-wrap on foot/history; theme-neutral (no colors). Selector matches the real mount in _account_map_country.html (section.hc.hc-after directly after the table inside the country details). Fixture is sanitized synthetic English markup mirroring the real component CSS; test uses real Chromium at 1280/1024/320 x light/dark x empty/populated/filtered: asserts x alignment to connection-form inset, right bound, spacing >=8 above/below, no horizontal overflow, focus outline within card, keyboard Enter/Space disclosure, plus a baseline test reproducing the missing inset. tests/test_country_campaign_footer_layout.py: 19 passed locally. Changelog fragment docs/system/changelog.d/ACL-1840.md: valid per fold_changelog.py --check (valid: ACL-1840, ACL-2037); heading date 2026-10-22 is acceptable because the fragment format requires a YYYY-MM-DD date and the old entry had none; docs/system/CHANGELOG.md unchanged vs main. English only, no leaked ids/tokens (the preview commit hash is a public provenance reference). Required CI on ea999653 all green (classify, descriptor, tracker-link, process instructions, linux 1-3, windows, installer verification, ACL verification). PR base equals current main 4582039e. No findings.",
-            "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              840
-            ],
-            "recorded_at": "2026-10-22T03:29:31+00:00",
-            "issue_scopes": {
-              "840": "ef493a159bfb31c8be24551b9a4f3d90b60904a49576c51b0b94efdfdf6c5d40"
-            }
-          },
-          "lane": {
-            "id": "1e3db9b89027465b917b4edfbbd2a3bc",
-            "pr": 846,
-            "issues": [
-              840
-            ],
-            "actor": "Reviewer-Y1022840",
-            "session": "run_y1022_840",
-            "coordinator": "Coordinator-I1021A",
-            "started_at": "2026-10-22T03:26:41+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-22T03:29:54+00:00"
-        },
-        {
-          "issue": 19,
-          "pr": 955,
-          "branch": "codex/acl-106-empty-period-owner",
-          "head_sha": "4a50cb4c1e399688823dd3b0aedd5aa97b67e66c",
-          "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
-          "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "ce291401dfa6489828ba973eb602b744efb113657552fbfff1bcb7f342232d99",
-          "review": {
-            "kind": "independent-review",
-            "implementer": "Worker-W1021106",
-            "reviewer": "Reviewer-Z1022106",
-            "head_sha": "4a50cb4c1e399688823dd3b0aedd5aa97b67e66c",
-            "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
-            "tree_sha": "4fe26415b644eea5ea42b74d617b525b07324f0d",
-            "verdict": "approved",
-            "report": "ACL-106 PR955 source review: _period_owner derives from cached period report (no frame rescan); None for no rows/no manager/no period/own rows; blank/nan CM rows ignored; whole-workbook case keeps existing notice plus 'may need updating'; manager case is a separate block mutually exclusive with the existing notice; auto-merged app.py/report.html regions match main (diff vs main limited to ACL-106 hunks); English UI text; 10 new tests plus sidebar tests pass (23 passed); fold_changelog --check valid; no ids leaked; all required CI green on 4a50cb4c.",
-            "execution_lane": "b3b955fadb144c60aa40952ea5659df9",
-            "review_session": "run_z1022_106",
-            "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              19
-            ],
-            "recorded_at": "2026-10-22T03:31:24+00:00",
-            "issue_scopes": {
-              "19": "ce291401dfa6489828ba973eb602b744efb113657552fbfff1bcb7f342232d99"
-            }
-          },
-          "lane": {
-            "id": "b3b955fadb144c60aa40952ea5659df9",
-            "pr": 955,
-            "issues": [
-              19
-            ],
-            "actor": "Reviewer-Z1022106",
-            "session": "run_z1022_106",
-            "coordinator": "Coordinator-I1021A",
-            "started_at": "2026-10-22T03:29:01+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-22T03:31:49+00:00"
-        }
-      ],
-      "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
-      "branch": "codex/batch-a7a7b69b26194a16b7f5efcef6f8e068",
-      "intake": "31b59e53f0ab4d4abe31ecc92425019f",
-      "started_at": "2026-10-22T03:39:20+00:00",
-      "pr": 1083,
-      "entered_stage": false,
-      "history": [],
-      "delivery_request": {
-        "schema_version": 1,
-        "state": "requested",
-        "batch_id": "a7a7b69b26194a16b7f5efcef6f8e068",
+      },
+      "a7a7b69b26194a16b7f5efcef6f8e068": {
+        "id": "a7a7b69b26194a16b7f5efcef6f8e068",
+        "actor": "Coordinator-I1021A",
+        "session": "run_i1021a_1021",
+        "state": "merged",
         "issues": [
           1052,
           1053,
           840,
           19
         ],
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "target": "ACL stable Windows installer and update channel",
-        "workflow": ".github/workflows/complete-delivery.yml",
-        "job": "Verify published Windows package",
-        "actor": "Coordinator-I1021A",
-        "session": "run_i1021a_1021",
-        "requested_at": "2026-10-22T03:39:20+00:00"
+        "members": [
+          {
+            "issue": 1052,
+            "pr": 1057,
+            "branch": "work/acl-2052-meta-rules-value-rules",
+            "head_sha": "e237d9351b9c5cb8a6c81d699a5df69fbf9e1ba8",
+            "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+            "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "9ec0c2a8ad90f824b35527de9cf47751b33907bd2c0104ad4cf93e9d60afe4ed",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-W1022052",
+              "implementer": "Worker-W1022052",
+              "review_session": "run_w1022_052",
+              "execution_lane": "3b4a065dbdae4244b255f6a7ed404a48",
+              "head_sha": "e237d9351b9c5cb8a6c81d699a5df69fbf9e1ba8",
+              "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+              "tree_sha": "ee8251f0db3d7cdfa7d5476963e2c8f62b7329b4",
+              "report": "Independent source review of ACL-2052 / PR #1057 by Reviewer-W1022052 (session run_w1022_052), not the implementer, coordinator or any earlier reviewer.\nScope vs main 4582039e: config/meta_rules/rules.json (+8 entries), config/meta_rules/sources.json (+4 pages), docs/system/changelog.d/ACL-2052.md, src/campaign_bridge/meta_rules.py (new documentation-only kind `fact`, requires non-empty note), tests/test_acl2052_meta_rules_placement.py. Matches Issue #1052 scope; no builder behavior change.\nFacts: value rules limited to LOWEST_COST_WITHOUT_CAP/COST_CAP; attach via value_rule_set_id + value_rules_applied; DECREASE capped at 90 (fact with limits); account_controls placement_exclusions values match the spec and the note states it is the only way to fully exclude Audience Network on new-layout Advantage+ campaigns, audience_controls required, no DELETE; bid_adjustments.retired recorded as kind fact, status deprecated, with note; placement_soft_opt_out up to 5% for Sales/Leads; live fact (status test) that non-Advantage+ Leads via API still accept classic publisher_platforms. All entries non-ga, checked_date 2026-10-21, https source_url, scoped by applies_to.feature.\nLoader: check_job only evaluates ALLOWED_KINDS, text_limit and required_field, so fact is skipped; validate_rules rejects fact without note. publish_preflight consumers unaffected; test proves check_job output identical with/without the new entries for six representative jobs.\nMerge resolution: docs/system/CHANGELOG.md is identical to main; the ACL-2052 entry from 808573c6 moved verbatim to the fragment (diff-verified); fold_changelog.py --check: valid (ACL-2037, ACL-2052). sources.json category announcements is an existing category.\nEnglish user-facing text; Russian code comments per repo rule; no account/ad ids, tokens or URLs with ids.\nLocal tests: test_acl2052_meta_rules_placement, test_acl1781_meta_rules, test_meta_docs_watch_1782 - 49 passed. Required CI on e237d935 all green (run 39714531949 success, installer run, descriptor, tracker-link).\nNon-blocking notes: (1) value_rules.bid_strategy has status limited, so once the builder starts setting feature=value_rules the existing non-ga semantics would block COST_CAP/LOWEST_COST_WITHOUT_CAP - revisit before wiring value rules into the builder; (2) placement_soft_opt_out.spend uses required_field for an optional field, acceptable as feature-scoped; (3) the test selects new entries by checked_date 2026-10-21, fragile if another task adds entries with that date.\nVerdict: approved.",
+              "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                1052
+              ],
+              "recorded_at": "2026-10-22T03:21:44+00:00",
+              "issue_scopes": {
+                "1052": "9ec0c2a8ad90f824b35527de9cf47751b33907bd2c0104ad4cf93e9d60afe4ed"
+              }
+            },
+            "lane": {
+              "id": "3b4a065dbdae4244b255f6a7ed404a48",
+              "pr": 1057,
+              "issues": [
+                1052
+              ],
+              "actor": "Reviewer-W1022052",
+              "session": "run_w1022_052",
+              "coordinator": "Coordinator-I1021A",
+              "started_at": "2026-10-22T03:17:32+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-22T03:22:16+00:00"
+          },
+          {
+            "issue": 1053,
+            "pr": 1060,
+            "branch": "work/acl-2053-form-template-parity",
+            "head_sha": "43b8621259b8c9d813632a175811d8370ea0dd5c",
+            "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+            "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "e43d2aa702e2ebd0edd41e4ea895d2876e6967934d41e4d18f3e638ecd7d3871",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-X1022053",
+              "implementer": "Worker-W1022053",
+              "head_sha": "43b8621259b8c9d813632a175811d8370ea0dd5c",
+              "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+              "tree_sha": "78d5d084a3a3df985bc8132b4daf0e73c6ad4423",
+              "execution_lane": "54f9ef9d3ffd4107bd7a2fd7e5e6a7be",
+              "review_session": "run_x1022_053",
+              "report": "# ACL-2053 / PR #1060 independent source review (Reviewer-X1022053, run_x1022_053)\n\nHead 43b8621259b8c9d813632a175811d8370ea0dd5c, base main 4582039e2e0418e23df19de131165e83e4d312d6 (merge-base = main), tree 78d5d084a3a3df985bc8132b4daf0e73c6ad4423. Reviewed in a fresh detached worktree, full diff vs main (10 files) against the Issue Description, Specifications and acceptance criteria.\n\nVerdict: APPROVED.\n\nSpec coverage:\n- First/last name: CONTACT_TYPES adds first_name/last_name (FIRST_NAME/LAST_NAME), full name kept; full name together with first/last refused (Python + JS mirror). Order: author order when first/last chosen, legacy canonical order otherwise (hash stable).\n- Custom multiple choice: shape CUSTOM + options[{key,value}] unchanged; questions_first selects custom-before-contacts; stored only when true.\n- Intro title: optional intro_title (<=60), falls back to headline. Cover image: documented skip; verified against the Graph Page/leadgen_forms reference - cover_photo is a file upload (pages_manage_posts) or cover_photo_id; closed policy forbids files. Accepted.\n- follow_up_action_url: https-only, <=1000, in validator, JS mirror, write_policy and in-page helper; thank-you text optional only with a follow-up URL (thank_you_page then omitted; body is optional per Graph reference).\n- Settings: is_optimized_for_quality from form_type (default More volume = false), block_display_for_non_targeted_viewer=true on every form; bool-type checks in Python and helper (helper refuses when bool_keys table missing). allow_organic_lead not sent: verified the create reference lists only deprecated allow_organic_lead_retrieval (\"will not be considered\") and recommends block_display_for_non_targeted_viewer; documented deviation, accepted.\n- Locale: select of the 32 Graph create locales (list matches the reference exactly), default EN_US; legacy saved locales (any XX_YY) still load/publish (lenient path in _read, plan_from_draft, and save of an unchanged saved locale).\n- Write policy stays closed: only is_optimized_for_quality, block_display_for_non_targeted_viewer (FORM_KEYS) and FIRST_NAME/LAST_NAME question types added; tos/terms forbidden walk unchanged; tests cover valid/invalid/tos.\n- Legacy JSON: golden test - same clean template, same form name hash (\u00b7 ACL 192c3c), same body except the two new required settings; reused-by-name forms keep their old settings (CHANGELOG).\n- Fixture: sanitized D71 form, all ids replaced by <ID>, page \"Example Page\", URLs example.com. Contains the buyer's ad copy text (no ids/secrets) - allowed by the spec.\n- UI texts and errors English. Fragment docs/system/changelog.d/ACL-2053.md; CHANGELOG.md equals main; fold_changelog.py --check: valid ACL-2037, ACL-2053.\n\nTests run locally (affected only): test_acl2053_form_parity, test_acl1776_create_forms, test_acl1775_instant_forms, test_acl1775_builder_forms: 264 passed.\nCI on 43b86212: CI (linux 1/2/3, windows, ACL verification, tooling, process instructions), Windows installer, descriptor, tracker-link - all success.\n\nNon-blocking notes: validateTemplate(t, legacyLocale) second argument is unused by callers (panel only creates new templates) - harmless. Not verified live: follow_up_action_url without a thank-you page, FIRST_NAME/LAST_NAME acceptance and the new settings on create - separate owner-approved pilot-account step after main (create one form and read it back); not done by this review.\n",
+              "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                1053
+              ],
+              "recorded_at": "2026-10-22T03:33:00+00:00",
+              "issue_scopes": {
+                "1053": "e43d2aa702e2ebd0edd41e4ea895d2876e6967934d41e4d18f3e638ecd7d3871"
+              }
+            },
+            "lane": {
+              "id": "54f9ef9d3ffd4107bd7a2fd7e5e6a7be",
+              "pr": 1060,
+              "issues": [
+                1053
+              ],
+              "actor": "Reviewer-X1022053",
+              "session": "run_x1022_053",
+              "coordinator": "Coordinator-I1021A",
+              "started_at": "2026-10-22T03:27:43+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-22T03:33:26+00:00"
+          },
+          {
+            "issue": 840,
+            "pr": 846,
+            "branch": "codex/acl-1840-country-footer-inset",
+            "head_sha": "ea9996538e88e0e53df4a5635f2218e06f099f3f",
+            "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+            "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "ef493a159bfb31c8be24551b9a4f3d90b60904a49576c51b0b94efdfdf6c5d40",
+            "review": {
+              "kind": "independent-review",
+              "implementer": "Worker-W1021840",
+              "reviewer": "Reviewer-Y1022840",
+              "review_session": "run_y1022_840",
+              "execution_lane": "1e3db9b89027465b917b4edfbbd2a3bc",
+              "head_sha": "ea9996538e88e0e53df4a5635f2218e06f099f3f",
+              "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+              "tree_sha": "87c2cd6b10986395f4f719849f31b4c37a03da5a",
+              "verdict": "approved",
+              "report": "ACL-1840 / PR846 source review at head ea999653 vs main 4582039e (4 files). report.html: scoped rule '.amap-country > .hc.hc-after' (specificity beats base .hc margin-top) sets padding .5rem .85rem = amap-add inset, margin-top 0, overflow-wrap on foot/history; theme-neutral (no colors). Selector matches the real mount in _account_map_country.html (section.hc.hc-after directly after the table inside the country details). Fixture is sanitized synthetic English markup mirroring the real component CSS; test uses real Chromium at 1280/1024/320 x light/dark x empty/populated/filtered: asserts x alignment to connection-form inset, right bound, spacing >=8 above/below, no horizontal overflow, focus outline within card, keyboard Enter/Space disclosure, plus a baseline test reproducing the missing inset. tests/test_country_campaign_footer_layout.py: 19 passed locally. Changelog fragment docs/system/changelog.d/ACL-1840.md: valid per fold_changelog.py --check (valid: ACL-1840, ACL-2037); heading date 2026-10-22 is acceptable because the fragment format requires a YYYY-MM-DD date and the old entry had none; docs/system/CHANGELOG.md unchanged vs main. English only, no leaked ids/tokens (the preview commit hash is a public provenance reference). Required CI on ea999653 all green (classify, descriptor, tracker-link, process instructions, linux 1-3, windows, installer verification, ACL verification). PR base equals current main 4582039e. No findings.",
+              "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                840
+              ],
+              "recorded_at": "2026-10-22T03:29:31+00:00",
+              "issue_scopes": {
+                "840": "ef493a159bfb31c8be24551b9a4f3d90b60904a49576c51b0b94efdfdf6c5d40"
+              }
+            },
+            "lane": {
+              "id": "1e3db9b89027465b917b4edfbbd2a3bc",
+              "pr": 846,
+              "issues": [
+                840
+              ],
+              "actor": "Reviewer-Y1022840",
+              "session": "run_y1022_840",
+              "coordinator": "Coordinator-I1021A",
+              "started_at": "2026-10-22T03:26:41+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-22T03:29:54+00:00"
+          },
+          {
+            "issue": 19,
+            "pr": 955,
+            "branch": "codex/acl-106-empty-period-owner",
+            "head_sha": "4a50cb4c1e399688823dd3b0aedd5aa97b67e66c",
+            "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+            "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "ce291401dfa6489828ba973eb602b744efb113657552fbfff1bcb7f342232d99",
+            "review": {
+              "kind": "independent-review",
+              "implementer": "Worker-W1021106",
+              "reviewer": "Reviewer-Z1022106",
+              "head_sha": "4a50cb4c1e399688823dd3b0aedd5aa97b67e66c",
+              "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+              "tree_sha": "4fe26415b644eea5ea42b74d617b525b07324f0d",
+              "verdict": "approved",
+              "report": "ACL-106 PR955 source review: _period_owner derives from cached period report (no frame rescan); None for no rows/no manager/no period/own rows; blank/nan CM rows ignored; whole-workbook case keeps existing notice plus 'may need updating'; manager case is a separate block mutually exclusive with the existing notice; auto-merged app.py/report.html regions match main (diff vs main limited to ACL-106 hunks); English UI text; 10 new tests plus sidebar tests pass (23 passed); fold_changelog --check valid; no ids leaked; all required CI green on 4a50cb4c.",
+              "execution_lane": "b3b955fadb144c60aa40952ea5659df9",
+              "review_session": "run_z1022_106",
+              "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                19
+              ],
+              "recorded_at": "2026-10-22T03:31:24+00:00",
+              "issue_scopes": {
+                "19": "ce291401dfa6489828ba973eb602b744efb113657552fbfff1bcb7f342232d99"
+              }
+            },
+            "lane": {
+              "id": "b3b955fadb144c60aa40952ea5659df9",
+              "pr": 955,
+              "issues": [
+                19
+              ],
+              "actor": "Reviewer-Z1022106",
+              "session": "run_z1022_106",
+              "coordinator": "Coordinator-I1021A",
+              "started_at": "2026-10-22T03:29:01+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-22T03:31:49+00:00"
+          }
+        ],
+        "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+        "branch": "codex/batch-a7a7b69b26194a16b7f5efcef6f8e068",
+        "intake": "31b59e53f0ab4d4abe31ecc92425019f",
+        "started_at": "2026-10-22T03:39:20+00:00",
+        "pr": 1083,
+        "entered_stage": false,
+        "history": [],
+        "delivery_request": {
+          "schema_version": 1,
+          "state": "requested",
+          "batch_id": "a7a7b69b26194a16b7f5efcef6f8e068",
+          "issues": [
+            1052,
+            1053,
+            840,
+            19
+          ],
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "target": "ACL stable Windows installer and update channel",
+          "workflow": ".github/workflows/complete-delivery.yml",
+          "job": "Verify published Windows package",
+          "actor": "Coordinator-I1021A",
+          "session": "run_i1021a_1021",
+          "requested_at": "2026-10-22T03:39:20+00:00"
+        },
+        "review": {
+          "id": "e2ae4011b466404faf30df031e2d59da",
+          "batch_id": "a7a7b69b26194a16b7f5efcef6f8e068",
+          "pr": 1083,
+          "issues": [
+            1052,
+            1053,
+            840,
+            19
+          ],
+          "actor": "Reviewer-AA1022B83",
+          "session": "run_aa1022_b83",
+          "coordinator": "Coordinator-I1021A",
+          "state": "reviewing",
+          "started_at": "2026-10-22T03:42:34+00:00"
+        },
+        "main_prs": [
+          1083
+        ],
+        "finished_at": "2026-10-22T04:19:17+00:00"
       }
     },
+    "integration": null,
     "intake": {
       "id": "31b59e53f0ab4d4abe31ecc92425019f",
       "actor": "Coordinator-I1021A",
       "session": "run_i1021a_1021",
-      "state": "running",
+      "state": "finished",
       "issues": [
         1052,
         1053,
         840,
         19
       ],
-      "remaining": [
-        1052,
-        1053,
-        840,
-        19
+      "remaining": [],
+      "batches": [
+        "a7a7b69b26194a16b7f5efcef6f8e068"
       ],
-      "batches": [],
       "started_at": "2026-10-22T03:38:28+00:00",
       "ineligible": {}
     },
