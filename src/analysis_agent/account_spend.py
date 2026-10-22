@@ -982,13 +982,22 @@ def _close_if_still_pending(opened: _ReadOpen) -> None:
 
 
 def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False,
-                    grace_s: float | None = None) -> None:
+                    grace_s: float | None = None, convenience: bool = False) -> None:
     """После чтения: закрыть то, что чтение запустило (сразу или после паузы).
 
     `grace_s` (ACL-2117) — свой срок вместо `CLOSE_GRACE_S`: Check plan держит окно, пока
     человек решает про Publish; если его не взяли, оно закроется по сроку, как и раньше.
     """
     if not opened.started:
+        return
+    if keep_for_next and convenience and opened.slot_id:
+        # ACL-2117 + ACL-2113: keep-open включён — окно Check plan становится «удобным» оставленным
+        # окном: Publish берёт его место (`_reuse_kept`), а простой и вытеснение решает очередь
+        # (LRU, `ACL_KEPT_IDLE_CLOSE_MIN`). Своего таймера нет.
+        try:
+            _slot_queue().keep(opened.slot_id, opened.account, kind="convenience")
+        except Exception:
+            log.exception("Could not mark the kept window of %s", opened.account)
         return
     grace = CLOSE_GRACE_S if grace_s is None else float(grace_s)
     if keep_for_next and grace > 0 and opened.profile_id:

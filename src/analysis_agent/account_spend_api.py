@@ -301,6 +301,8 @@ class _Session:
     keep_next: bool = False
     #: ACL-2117: сколько секунд держать такое окно (вместо `CLOSE_GRACE_S`); None — обычно.
     keep_grace_s: float | None = None
+    #: ACL-2117: keep-open включён — окно остаётся «удобным» kept-окном без своего таймера.
+    keep_convenience: bool = False
 
 
 # Точки подмены в тестах: настоящий браузер здесь не нужен.
@@ -603,7 +605,8 @@ def _open_session(account: str, *, commands: bool = False):
         # остановкой (и при отказе тоже) или ждёт `CLOSE_GRACE_S` под страны.
         try:
             _as._finish_started(held, keep_for_next=bool(sess and sess.keep_next),
-                                grace_s=(sess.keep_grace_s if sess else None))
+                                grace_s=(sess.keep_grace_s if sess else None),
+                                convenience=bool(sess and sess.keep_convenience))
         except Exception:
             log.exception("Could not finish the profile the read started (%s)", account)
 

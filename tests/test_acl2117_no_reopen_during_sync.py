@@ -305,12 +305,12 @@ def test_publish_takes_the_window_check_plan_kept_without_waiting(monkeypatch):
     _as._PENDING_CLOSE.clear()
 
 
-def test_an_unused_kept_window_closes_when_the_term_ends_and_frees_its_slot(monkeypatch):
+def test_with_keep_open_off_an_unused_kept_window_closes_when_the_term_ends_and_frees_its_slot(monkeypatch):
     slots, timers = _slots_world(monkeypatch)
     assert slots.acquire("read-api:Acc:2", PID, share_profile=True)
     opened = _as._ReadOpen("Acc", started=True, profile_id=PID, slot_id="read-api:Acc:2",
                            entry=SimpleNamespace(profile_id=PID), grants_seen=slots.grants(PID))
-    _as._finish_started(opened, keep_for_next=True, grace_s=600.0)
+    _as._finish_started(opened, keep_for_next=True, grace_s=600.0, convenience=False)   # keep-open off
     stopped = []
     from src.fb_ads_rpa import browser as rpa_browser
     monkeypatch.setattr(rpa_browser, "stop_profile_on_request", lambda entry, label: stopped.append(label))
@@ -419,3 +419,47 @@ def test_open_gated_waits_for_the_sync_before_it_queues(world, monkeypatch):
     api._open_gated(entry, "Acc", _as._ReadOpen("Acc"))
     assert order and order[0][1] - 1000.0 >= 180          # queued only after the pause
     assert stop_log.SYNC_WAIT_MESSAGE in notes
+
+
+# --- ACL-2113 composition: keep-open on -> the window is a convenience kept window -------
+
+def test_check_plan_window_is_convenience_when_keep_open_is_on_and_timed_when_off(monkeypatch):
+    monkeypatch.delenv("FB_RPA_KEEP_PROFILES_OPEN", raising=False)
+    assert _plan(monkeypatch, [_draft()]).keep_convenience is True
+    monkeypatch.setenv("FB_RPA_KEEP_PROFILES_OPEN", "0")
+    sess = _plan(monkeypatch, [_draft()])
+    assert sess.keep_next is True and sess.keep_convenience is False and sess.keep_grace_s == 600.0
+
+
+def test_with_keep_open_on_the_plan_window_is_convenience_has_no_timer_and_is_lru_evictable(monkeypatch):
+    import dataclasses
+
+    from src.web import profile_slots as ps
+
+    now = [1000.0]
+    closed = []
+    settings = dataclasses.replace(ps.load_settings({}), warmup_s=0, ceiling=1, kept_idle_close_s=600.0)
+    slots = ps.ProfileSlots(
+        memory=lambda: ps.MemoryReading(total_mb=128 * 1024, available_mb=120 * 1024),
+        settings=lambda: settings, clock=lambda: now[0], tick_s=0.02,
+        usage=ps.ProfileUsage(lambda profiles: {p: 3584 for p in profiles}, clock=lambda: now[0],
+                              background=False),
+        evictor=lambda job_id, label, profile, idle_s=0.0: closed.append((label, profile)) or True)
+    monkeypatch.setattr(_as, "_slot_queue", lambda: slots)
+    timers = []
+    monkeypatch.setattr(threading, "Timer", lambda *a, **k: timers.append(a) or SimpleNamespace(
+        start=lambda: None, daemon=False))
+    _as._PENDING_CLOSE.clear()
+    assert slots.acquire("read-api:Acc:3", PID, share_profile=True)
+    opened = _as._ReadOpen("Acc", started=True, profile_id=PID, slot_id="read-api:Acc:3")
+    _as._finish_started(opened, keep_for_next=True, grace_s=600.0, convenience=True)
+    assert timers == [] and not _as._PENDING_CLOSE
+    (row,) = slots.snapshot()["running"]
+    assert row["kept"] is True and row["kept_kind"] == ps.KEPT_CONVENIENCE
+    now[0] += 601                                   # idle past the limit: another account needs the room
+    got = []
+    t = threading.Thread(target=lambda: got.append(slots.acquire("job-2", "P-OTHER")))
+    t.daemon = True
+    t.start()
+    t.join(5)
+    assert got and got[0] and closed == [("Acc", PID)]

@@ -596,11 +596,15 @@ def _plan_in_read_session(account_label: str, drafts: list[Any]) -> list[dict[st
             raise AssertionError("Check plan must not write")
         # ACL-2117: проверенный план обычно сразу публикуют. Окно, которое подняла проверка,
         # держим `plan_keep_open_s()` — Publish подхватит его без второго старта (и без
-        # остановки → переоткрытия во время сохранения профиля MLX). Не взяли — закроется по сроку.
+        # остановки → переоткрытия во время сохранения профиля MLX). Не взяли — закроется по сроку
+        # (keep-open выключен) или уступит место по простою (keep-open включён).
         # Только после чистого прохода: остановка Meta/логаут/потолок вызовов окно не держат.
         if (client.stopped is None and any(not d.errors for d in drafts)
                 and plan_keep_open_s() > 0):
             sess.keep_next, sess.keep_grace_s = True, plan_keep_open_s()
+            # Keep-open включён (по умолчанию после ACL-2113): окно — «удобное» kept-окно, им
+            # управляет вытеснение по простою; таймер `plan_keep_open_s()` — только при выключенном.
+            sess.keep_convenience = _keep_profiles_open()
     return results
 
 
