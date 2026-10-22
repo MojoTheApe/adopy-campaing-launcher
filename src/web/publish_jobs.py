@@ -1075,8 +1075,17 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
             if job is not None and not job.get("abandoned"):
                 job["progress"] = str(text)[:200]
 
+    def units(name: str, view: dict) -> None:
+        # ACL-1992: процент сборки — по созданным объектам; новый словарь на
+        # каждую запись, опрос читает копию без замка на разбор.
+        with _jobs_lock:
+            job = _jobs.get(job_id)
+            if job is not None and not job.get("abandoned"):
+                job["units"] = {**(job.get("units") or {}), str(name): dict(view)}
+
     # Ревью M3: dry_run — предпроверка и план без единой записи (клиент без права записи).
     publisher = publish_api.ApiPublisher(progress=progress, dry_run=dry_run)
+    publisher.units = units
     with _jobs_lock:
         # ACL-2113: окно, оставленное прошлым заданием, — наше: закрывать/держать его
         # решаем так же, как окно, поднятое этим заданием.
