@@ -1,16 +1,64 @@
 # ACL early adoption: released support, then separate owned selections
 
-## Current instruction pin
+## Current instruction pin: ACL-2079 candidate
 
-[ACL-2011](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1011)
-selects published Master 1.5.3
-`6f7e9416e68c66484a3b6c0213eab24847005b8f` for common instructions. Tracker 3.7.1
-`be87599d1b5e625058bbddc33c35bda86687b5bf`, the support introduced by ACL-1987,
+[ACL-2079](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1079)
+selects published Master1.8.0
+`fddcdd0d60db2e14cce0a53e6af23e12356c3bc7` and Tracker3.10.0
+`e71c9829247e60d79031dbb1bb038896fcedf4cc` for compatible shared support.
+The exact upstream main checks, immutable Python3.9 pair and canonical skill
+mirror/catalog passed. Ordinary source approval, frozen integration, independent
+combined review and actual main checks still apply to this consumer candidate.
+Use the actual current-main pinned ACL adapter for ownership and admission;
+the candidate cannot authorize itself. Compatible deployed readers must precede
+new isolated receipt writers. Source/skill publication is not ACL adoption.
+
+Tracker config, non-pin descriptor choices, ACL operator/adoption safeguards,
+capacities, original scopes/history and genuine publication requests remain
+unchanged. Canonical process_support1 and instruction schema1 are retained;
+isolated_verification1 supplies a separate bounded supplemental outcome only
+after all original admission/acceptance and actual independent isolation/run
+evidence. It neither activates an optional policy nor publishes an unchanged
+installer. ACL-2071 completion and ACL-2069's original owner/scope remain separate.
+See [current boundary evidence](PROCESS_SUPPORT_ACL.md).
+
+## Earlier ACL-2026 instruction pin: 2026-10-20 history
+
+[ACL-2026](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1026)
+selects published Master 1.7.2
+`4f148cbbbc2c9c65a7fdebba9b37551f91566e04` for common instructions. Tracker 3.9.2
+`3d32586d72e4621f70d56d35f1e199a19fa13b00` retains the support introduced by ACL-1987
+and the shared [executor activity contract](EXECUTOR_ACTIVITY.md), and adds
+canonical [process-support completion](PROCESS_SUPPORT.md), explicit phase-preserving
+[Pause/Resume support](TASK_PAUSE.md), and shared lifecycle/correction guidance. Existing
 activated choices, local checks and package completion remain unchanged.
-This source update still requires its ordinary independent source review, batch,
-main checks and verified package receipt. A source branch is not delivered.
+The prior ACL-2011 instruction-pin adoption remains in the dated process history.
+This source update still requires ordinary independent source review, frozen
+batch, combined review and main checks. The latest owner amendment separates
+its proven isolated process outcome from consumer package delivery; retain exact
+canonical proof and independent whole-scope/product-isolation review. Product
+changes, explicit publication scope and optional-policy selections keep their
+actual package requirements. A source branch alone is not process completion.
 Use the actual current-main pinned ACL adapter for current ownership and delivery;
 the old operative866 instructions below describe ACL-1987's original source path.
+
+## Pause readiness and live boundary
+
+The cumulative ACL-2026 source supplies compatible commands and the complete
+portable helper closure. It does not activate outer8, resume a stopped agent,
+stop foreign owners, select a new optional policy or publish an ACL product.
+The published shared service reader and all actual writers/adapters/CI recorders
+must be verified at compatible exact revisions, with recovery and genuine current
+ownership evidence. The Coordinator records that private readiness inventory.
+
+Only the actual maintained idle reservation may preview/apply `pause activate`
+and resume its same maintenance owner after every real owner, frozen intake,
+integration, legacy timer and pending effect is reconciled through supported
+operations. Existing ownership or unknown writer readiness leaves activation
+pending. Preserve the complete incumbent1..7 guard bundle and never downgrade
+outer8 after pause history. See the canonical [commands](TASK_PAUSE.md).
+Until real activation is verified, use the existing pre-activation stop/reclaim
+procedure; do not present its To Do move as phase-preserving Pause.
 
 ## Retained ACL-1987 support scope
 
@@ -44,6 +92,7 @@ use the guarded ACL adapter as mapped in [AGENTS.md](../../AGENTS.md).
 | Execution v3, five Workers/five source reviews/batch five | Yes | Existing activated choice, preserved; no repeat migration |
 | No Stage, permanent stage retained | Yes | Existing activated choice, preserved |
 | Process instructions schema1 | Yes | Existing activated choice and exact checks, preserved |
+| Isolated manual verification completion | isolated_verification1, published Tracker3.10.0 | ACL-2079 candidate only; requires deployed reader, admitted main adoption and original independent acceptance/isolation/run evidence |
 | Readiness, terminal journal, Approved compatibility | Context1, plus separately selected modern Context2 | Absent; the initial pilot retains Context1 rather than importing modern defaults |
 | Accepted-scope completion | Completion1 | Absent; no completion-state transition here |
 | Bounded full retry and accounting | Retry1 and independent read-only report | Retry absent; retained accounting works without state/engine activation |

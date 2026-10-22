@@ -10,9 +10,14 @@
 `tos_accepted` и любое упоминание условий - никогда, DELETE и прочие рёбра
 Страницы - никогда. С цепочкой `act_X` она не пересекается.
 
-Никогда: DELETE, ACTIVE, `effective_status`/`configured_status`,
+В обычных записях никогда: DELETE, ACTIVE, `effective_status`/`configured_status`,
 `execution_options`, согласие с условиями, создание форм лидов, запись куда-то,
 кроме `/act_X/<ребро>`.
+
+ACL-2105: отдельный `page_validation`/`InPageGraph.validate_page` не создаёт объектов:
+он сам строит фиксированный creative с `validate_only` для закреплённого кабинета.
+Этот запрос не проходит через обычную `check`; запрет `execution_options` ниже
+сохранён для всех обычных записей и их параметров.
 
 Единственное исключение для форм (ACL-1775): `lead_gen_form_id` ссылается на
 УЖЕ СУЩЕСТВУЮЩУЮ форму Страницы и допустим ровно в одном месте — креатив
@@ -232,7 +237,10 @@ def check(act: str, method: str, path: str, params: dict | None,
 FORM_EDGE = "leadgen_forms"
 #: Ключи верхнего уровня запроса. `tos_accepted` сюда не попадёт никогда.
 FORM_KEYS = frozenset({"name", "questions", "privacy_policy", "thank_you_page", "context_card",
-                       "question_page_custom_headline", "locale", "follow_up_action_url"})
+                       "question_page_custom_headline", "locale", "follow_up_action_url",
+                       "is_optimized_for_quality", "block_display_for_non_targeted_viewer"})
+#: Булевы ключи верхнего уровня (ACL-2053): только true/false, не строки и не числа.
+FORM_BOOL_KEYS = frozenset({"is_optimized_for_quality", "block_display_for_non_targeted_viewer"})
 #: Ключи, которые Graph читает как JSON (строку разбираем до проверок, как у `act_X`).
 FORM_JSON_KEYS = frozenset({"questions", "privacy_policy", "thank_you_page", "context_card"})
 #: Допустимые ключи вложенных объектов.
@@ -243,7 +251,7 @@ FORM_NESTED: dict[str, list[str]] = {
     "question": ["key", "label", "options", "type"],
     "option": ["key", "value"],
 }
-FORM_QUESTION_TYPES = ("CUSTOM", "EMAIL", "FULL_NAME", "PHONE")
+FORM_QUESTION_TYPES = ("CUSTOM", "EMAIL", "FIRST_NAME", "FULL_NAME", "LAST_NAME", "PHONE")
 #: `NONE` - кнопки нет (нет ссылки на сайт): `button_type` у thank_you_page обязателен
 #: (справочник Meta page/leadgen_forms), для «без ссылки» там предусмотрен `NONE`.
 FORM_BUTTON_TYPES = ("VIEW_WEBSITE", "NONE")
@@ -265,7 +273,7 @@ FORM_FORBIDDEN_ANYWHERE = frozenset({"tos_accepted", "leadgen_tos_accepted", "to
 def policy_for_form_create(page: str = "") -> dict:
     """Таблица цепочки форм для страницы-помощника (JSON-сериализуемая)."""
     return {
-        "edge": FORM_EDGE, "page": str(page or ""), "keys": sorted(FORM_KEYS), "json_keys": sorted(FORM_JSON_KEYS),
+        "edge": FORM_EDGE, "page": str(page or ""), "keys": sorted(FORM_KEYS), "bool_keys": sorted(FORM_BOOL_KEYS), "json_keys": sorted(FORM_JSON_KEYS),
         "nested": {k: list(v) for k, v in FORM_NESTED.items()},
         "question_types": list(FORM_QUESTION_TYPES), "button_types": list(FORM_BUTTON_TYPES),
         "card_styles": list(FORM_CARD_STYLES), "max_questions": FORM_MAX_QUESTIONS,
@@ -377,6 +385,11 @@ def check_form_create(page_id: str, method: str, path: str, params: dict | None,
         _form_text(checked["question_page_custom_headline"], "question_page_custom_headline")
     if "follow_up_action_url" in checked:
         _form_url(checked["follow_up_action_url"], "follow_up_action_url")
+        if len(checked["follow_up_action_url"]) > FORM_MAX_TEXT:
+            raise WriteRefused("write refused: follow_up_action_url is too long")
+    for key in FORM_BOOL_KEYS & set(checked):
+        if not isinstance(checked[key], bool):
+            raise WriteRefused(f"write refused: {key} must be true or false")
     if "privacy_policy" in checked:
         pp = _form_keys(checked["privacy_policy"], "privacy_policy", "privacy_policy")
         _form_url(pp.get("url"), "privacy_policy.url")

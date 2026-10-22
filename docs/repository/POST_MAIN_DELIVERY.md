@@ -168,6 +168,24 @@ partial retries and writes only the missing receipt;
 it does not rebuild or reinstall. Missing/expired evidence stays pending. No private Tracker checkout or additional broad secret is needed.
 Do not claim every employee updated or that isolated tests prove live business use.
 
+## Manual acceptance of a published tag
+
+`verify-published-tag.yml` (ACL-2071) is a manual `workflow_dispatch` with required
+`tag` and `previous_tag` inputs. It runs the identical "Verify published Windows package" steps for an
+already published stable release outside an authorized batch. Its resolve job reads the
+channel's latest release through the same updater trust path and refuses any tag that
+is not the latest stable publication, or whose signed manifest names a previous release
+other than `previous_tag` (the harness's update baseline). It builds the request from
+that signed manifest
+(commit, tree, configured delivery target, no batch tasks), then checks out the
+manifest commit for the Windows run. The run uploads the same
+`acl-delivery-evidence-RUN-ATTEMPT` and logs artifacts.
+
+The workflow never resolves or authorizes a delivery request, publishes, or writes
+tracker state. An operator may pass its `evidence.json` to `record-delivery
+--evidence-file` for the tasks that release actually contains. It shares the
+`acl-stable-delivery` concurrency group, so it never overlaps a publication.
+
 ## Guarded activation and return to Stage
 
 1. Finish source ACL-1924 under the OLD reviewed stage/main policy, preserving its
