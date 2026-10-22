@@ -5415,12 +5415,54 @@ async def api_page_forms(request: Request) -> JSONResponse:
 
 
 @app.get("/api/form-templates")
-def api_form_templates_list() -> JSONResponse:
-    """ACL-1776: шаблоны Instant Form из локальной библиотеки (в Meta не ходит)."""
+def api_form_templates_list(force: bool = False) -> JSONResponse:
+    """ACL-1776/2054: шаблоны Instant Form из общей библиотеки (в Meta не ходит).
+
+    `templates` - годные к публикации (выбор в билдере); `rows` - все записи для
+    вкладки Forms, в том числе invalid; `deleted`, `library`, `migration` - для неё же.
+    `force` перечитывает библиотеку: вкладка открывается с ним, билдер - без.
+    """
     from src.fb_api import form_templates
 
-    return JSONResponse({"ok": True, "templates": form_templates.load(),
+    try:
+        view = form_templates.listing(force=force)
+    except form_templates.TemplateError as exc:
+        return JSONResponse({"ok": False, "errors": exc.errors}, status_code=503)
+    except OSError:
+        return JSONResponse({"ok": False, "errors": ["The form template library could not be read on this computer. Try again."]},
+                            status_code=503)
+    valid = {r["id"]: r["template"] for r in view["rows"] if not r["invalid"]}
+    return JSONResponse({"ok": True, "templates": sorted(valid.values(), key=lambda t: t["name"].casefold()),
+                         "rows": view["rows"], "deleted": view["deleted"], "library": view["library"],
+                         "migration": view["migration"],
                          "limits": {"questions": form_templates.MAX_QUESTIONS}})
+
+
+def _form_templates_failure(exc) -> JSONResponse:
+    from src.fb_api import form_templates
+
+    code = 503 if isinstance(exc, form_templates.LibraryUnavailable) else (
+        409 if isinstance(exc, form_templates.TemplateConflict) else 400)
+    return JSONResponse({"ok": False, "errors": exc.errors}, status_code=code)
+
+
+async def _form_templates_call(request: Request, fn):
+    """Общий каркас действий над шаблоном: тело -> id -> вызов в потоке -> ответ."""
+    from src.fb_api import form_templates
+
+    try:
+        raw = await request.json()
+    except ValueError:
+        raw = {}
+    tid = str((raw or {}).get("id") or "") if isinstance(raw, dict) else ""
+    try:
+        out = await asyncio.to_thread(fn, tid)
+    except form_templates.TemplateError as exc:
+        return _form_templates_failure(exc)
+    except OSError:
+        return JSONResponse({"ok": False, "errors": ["The template could not be saved on this computer"]},
+                            status_code=500)
+    return JSONResponse({"ok": True, **out})
 
 
 @app.post("/api/form-templates")
@@ -5435,7 +5477,7 @@ async def api_form_templates_save(request: Request) -> JSONResponse:
     try:
         saved = await asyncio.to_thread(form_templates.save, raw)
     except form_templates.TemplateError as exc:
-        return JSONResponse({"ok": False, "errors": exc.errors}, status_code=400)
+        return _form_templates_failure(exc)
     except OSError:
         return JSONResponse({"ok": False, "errors": ["The template could not be saved on this computer"]},
                             status_code=500)
@@ -5444,15 +5486,36 @@ async def api_form_templates_save(request: Request) -> JSONResponse:
 
 @app.post("/api/form-templates/delete")
 async def api_form_templates_delete(request: Request) -> JSONResponse:
-    """ACL-1776: убрать шаблон из библиотеки. Формы на Страницах не трогаются никогда."""
+    """ACL-1776/2054: убрать шаблон в Recently deleted. Формы на Страницах не трогаются никогда."""
     from src.fb_api import form_templates
 
-    try:
-        raw = await request.json()
-    except ValueError:
-        raw = {}
-    removed = await asyncio.to_thread(form_templates.delete, str((raw or {}).get("id") or ""))
-    return JSONResponse({"ok": removed})
+    resp = await _form_templates_call(request, lambda tid: {"removed": form_templates.delete(tid)})
+    body = json.loads(resp.body)
+    if resp.status_code == 200:
+        return JSONResponse({"ok": bool(body.get("removed"))})
+    return resp
+
+
+@app.post("/api/form-templates/restore")
+async def api_form_templates_restore(request: Request) -> JSONResponse:
+    from src.fb_api import form_templates
+
+    return await _form_templates_call(request, lambda tid: {"template": form_templates.restore(tid)})
+
+
+@app.post("/api/form-templates/duplicate")
+async def api_form_templates_duplicate(request: Request) -> JSONResponse:
+    from src.fb_api import form_templates
+
+    return await _form_templates_call(request, lambda tid: {"template": form_templates.duplicate(tid)})
+
+
+@app.post("/api/form-templates/migrate")
+async def api_form_templates_migrate(request: Request) -> JSONResponse:
+    """ACL-2054: загрузить локальные шаблоны машины в общую библиотеку (явное действие)."""
+    from src.fb_api import form_templates
+
+    return await _form_templates_call(request, lambda _tid: form_templates.migrate_local())
 
 
 @app.post("/preview-publish")

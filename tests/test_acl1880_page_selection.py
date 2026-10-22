@@ -47,7 +47,7 @@ def test_page_discovery_preserves_order_names_and_rejects_truncation():
     client = SimpleNamespace(get_all=lambda *a, **k: [
         {'id': '456', 'name': 'First'}, {'id': '123', 'name': 'Second'}, {'id': '456', 'name': 'Duplicate'}], truncated=[])
     assert pages_from_client(client, 'act_1234567890') == [
-        {'id': '456', 'name': 'First'}, {'id': '123', 'name': 'Second'}]
+        {'id': '456', 'name': 'First', 'source': 'ad account'}, {'id': '123', 'name': 'Second', 'source': 'ad account'}]
     client.truncated = ['/act_1234567890/promote_pages']
     with pytest.raises(ValueError, match='incomplete'):
         pages_from_client(client, 'act_1234567890')

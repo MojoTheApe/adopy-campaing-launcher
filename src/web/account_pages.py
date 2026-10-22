@@ -58,17 +58,18 @@ def remember_pages(account: str, result: dict, *, now: float | None = None) -> N
             pass
 
 
-def pages_from_client(client: Any, act: str) -> list[dict[str, str]]:
-    path = f"/{act}/promote_pages"
-    rows = client.get_all(path, {"fields": "id,name", "limit": 100}, max_pages=5)
-    if path in getattr(client, "truncated", []):
+def pages_from_client(client: Any, act: str, *, counts: dict | None = None) -> list[dict[str, str]]:
+    """Страницы кабинета, затем Страницы профиля с правом рекламы (ACL-2105); у каждой `source`."""
+    from src.fb_api import pages as _pg
+
+    started = time.monotonic()
+    merged = _pg.read_merged(client, act, always_profile=True)
+    if merged.account_truncated or merged.truncated:
         raise ValueError("The Facebook Page list is incomplete. Refresh pages before choosing.")
-    pages = {}
-    for row in rows:
-        pid = str(row.get("id") or "").strip()
-        if pid.isdigit():
-            pages.setdefault(pid, {"id": pid, "name": str(row.get("name") or pid)})
-    return list(pages.values())
+    _pg.record_counts(merged, where="refresh_pages", started=started)
+    if counts is not None:
+        counts.update(merged.counts())
+    return merged.rows
 
 
 def resolve_selection(pages: list[dict[str, str]], selected: str = "") -> dict[str, str]:
@@ -90,8 +91,9 @@ def _read_in_session(account: str) -> dict:
         if sess.client.allow_writes:
             raise AssertionError("Page discovery must be read-only")
         sess.client.reset_budget(8)
-        pages = pages_from_client(sess.client, sess.act)
-        return {"ok": True, "state": "ready" if pages else "empty", "pages": pages,
+        counts: dict = {}
+        pages = pages_from_client(sess.client, sess.act, counts=counts)
+        return {"ok": True, "state": "ready" if pages else "empty", "pages": pages, "sources": counts,
                 "act": sess.act, "account": account, "message": "" if pages else
                 "No Page is available for this account. With Automatic, the Graph API backend creates only "
                 "the website campaign and ad sets PAUSED (add a Page and ads in Ads Manager), and the RPA "

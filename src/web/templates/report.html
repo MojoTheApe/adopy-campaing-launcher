@@ -367,6 +367,10 @@
     .at-body.at-open { -webkit-line-clamp: unset; display: block; }
     .at-desc { color: var(--muted); font-size: var(--adopy-text-body); }
     .at-dup { color: var(--danger); }
+    /* Forms (ACL-2054): карточки как у Ad titles; битая запись подсвечена, но на месте. */
+    .fm-invalid { border-color: var(--danger); }
+    .fm-errors { color: var(--danger); font-size: var(--adopy-text-body); }
+    .fm-q { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.4rem; align-items: flex-start; }
     h2.view-title {
       font-size: var(--adopy-text-title);
       font-weight: var(--adopy-weight-semibold);
@@ -4295,6 +4299,7 @@ async function dashRefresh(ev) {
   <button type="button" class="sidebar-link" data-view="targets"><svg class="sb-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg><span>Target library</span></button>
   <button type="button" class="sidebar-link" data-view="ad-texts"><svg class="sb-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14M12 5v14M9 19h6"/></svg><span>Ad titles</span></button>
   <button type="button" class="sidebar-link" data-view="accounts"><svg class="sb-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3v5M15 3v5M6 8h12v4a6 6 0 01-12 0zM12 18v3"/></svg><span>Accounts</span></button>
+  <button type="button" class="sidebar-link" data-view="forms"><svg class="sb-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/></svg><span>Forms</span></button>
 
   <div class="sidebar-label sb-head"><span>Countries</span><span title="FTDs: yours / everyone's in the selected period">You / all FTDs</span></div>
   <label class="sb-find"><svg class="sb-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M16 16l4 4"/></svg>
@@ -4562,6 +4567,71 @@ async function dashRefresh(ev) {
 
   <div id="at-list">Loading…</div>
   <div id="at-deleted"></div>
+</div>
+
+<div id="view-forms" class="view-panel">
+  <h2 class="view-title">Forms <span class="hint">Instant Form templates</span></h2>
+  <p style="color:var(--muted);max-width:70ch">
+    One library of lead form templates for the whole team. New, Edit, Duplicate, Delete and Restore are
+    saved to the team library straight away, and every manager sees them the next time this tab or the
+    builder opens. The robot creates the form on the Page when an ad that uses a template is published.
+  </p>
+  <div id="fm-status" style="font-size:var(--adopy-text-body);max-width:70ch"></div>
+
+  <div id="fm-migrate" hidden style="margin:1rem 0;padding:0.9rem 1rem;border:1px solid var(--border);border-radius:6px;max-width:80ch;background:var(--bg-elev)"></div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center;margin:0.8rem 0">
+    <button type="button" id="fm-new-btn" class="btn">New</button>
+    {# Сюда встанет «Import from Page» (фаза 2, после ACL-2053): он читает формы Страницы
+       через /api/page-forms и открывает редактор с готовым шаблоном. #}
+    <span id="fm-import-slot"></span>
+    <button type="button" id="fm-refresh-btn" class="btn">Refresh</button>
+    <input id="fm-search" type="search" placeholder="Search templates…" style="flex:1 1 16rem;max-width:26rem">
+    <span id="fm-count" style="color:var(--muted);font-size:var(--adopy-text-body)"></span>
+  </div>
+
+  <div id="fm-editor" hidden style="margin:1rem 0;padding:0.9rem 1rem;border:1px solid var(--border);border-radius:6px;max-width:80ch;background:var(--bg-elev)">
+    <div id="fm-editor-title" style="font-weight:600;margin-bottom:0.4rem">New template</div>
+    <div style="color:var(--muted);font-size:var(--adopy-text-body);margin-bottom:0.6rem">
+      Editing a template does not change forms already created on Pages: Meta forms cannot be edited.
+      The next publish that uses this template creates a new form (its name ends with “· ACL” and a new code).
+    </div>
+    <div id="fm-invalid-note" class="fm-errors" hidden></div>
+    <div style="display:flex;flex-wrap:wrap;gap:0.6rem">
+      <label style="flex:2 1 16rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Template name</div>
+        <input id="fm-name" type="text" maxlength="60" placeholder="Demo form template" style="width:100%"></label>
+      <label style="flex:2 1 16rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Headline</div>
+        <input id="fm-headline" type="text" maxlength="60" placeholder="Get more information" style="width:100%"></label>
+      <label style="flex:0 0 7rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Locale</div>
+        <input id="fm-locale" type="text" maxlength="5" value="EN_US" style="width:100%"></label>
+    </div>
+    <label style="display:block;margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Intro (optional)</div>
+      <textarea id="fm-intro" rows="2" maxlength="500" style="width:100%;font-family:inherit"></textarea></label>
+    <div style="margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Contact fields</div>
+      <label><input type="checkbox" id="fm-c-name" checked> Full name</label>
+      <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-first_name"> First name</label>
+      <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-last_name"> Last name</label>
+      <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-email" checked> Email</label>
+      <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-phone"> Phone</label></div>
+    <div style="margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Custom questions (up to 5)</div>
+      <div id="fm-questions"></div>
+      <button type="button" id="fm-add-q-btn" class="btn">+ Add question</button></div>
+    <label style="display:block;margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Privacy policy URL</div>
+      <input id="fm-privacy" type="text" placeholder="https://example.com/privacy" style="width:100%"></label>
+    <label style="display:block;margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Completion screen text</div>
+      <textarea id="fm-thanks" rows="2" maxlength="300" placeholder="Thank you. We will contact you." style="width:100%;font-family:inherit"></textarea></label>
+    <label style="display:block;margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Website link on the completion screen (optional, https)</div>
+      <input id="fm-site" type="text" style="width:100%"></label>
+    <div style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center;margin-top:0.8rem">
+      <button type="button" id="fm-save-btn" class="btn">Save</button>
+      <button type="button" id="fm-cancel-btn" class="btn">Cancel</button>
+      <span id="fm-editor-msg" style="font-size:var(--adopy-text-body)"></span>
+    </div>
+  </div>
+
+  <div id="fm-msg" style="font-size:var(--adopy-text-body);margin:0.4rem 0"></div>
+  <div id="fm-list">Loading…</div>
+  <div id="fm-deleted"></div>
 </div>
 
 <div id="view-home" class="view-panel active">
@@ -8282,7 +8352,7 @@ function aclCountryBuilder(country) {
   function parseHash(hash) {
     if (!hash || hash.charAt(0) !== '#') return { view: 'home' };
     if (hash === '#home') return { view: 'home' };
-    if (['targets', 'ad-texts', 'accounts'].indexOf(hash.slice(1)) !== -1) return { view: hash.slice(1) };
+    if (['targets', 'ad-texts', 'forms', 'accounts'].indexOf(hash.slice(1)) !== -1) return { view: hash.slice(1) };
     var m = hash.match(/^#country-([a-z0-9-]+)-([a-z0-9-]+)$/);
     if (m) return { view: 'country-' + m[1] + '-' + m[2], country: m[1] };
     return { view: 'home' };
@@ -13826,7 +13896,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     if (errors.length) { msg.textContent = errors.join('. ') + '.'; return; }
     if (btn.disabled) return;
     btn.disabled = true;
-    msg.textContent = 'Saving the template on this computer…';
+    msg.textContent = 'Saving the template to the team library…';
     var row = btn.closest('.cb-ad-row');
     function fail(text) { btn.disabled = false; msg.textContent = text; }
     fetch('/api/form-templates', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -13874,7 +13944,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<button type="button" class="cb-form-refresh cb-fc-save" onclick="cbFormCreateSave(this)">Save and select</button>' +
       '<button type="button" class="cb-form-refresh" onclick="cbFormCreateClose(this)">&larr; Back to ad</button></div>' +
       '<div class="cb-form-note cb-fc-msg" data-fc-msg role="alert"></div>' +
-      '<div class="cb-form-note">Saving only stores the template on this computer. The robot creates the form on the Page when you publish; it never accepts the Lead Ads terms.</div>' +
+      '<div class="cb-form-note">Saving only stores the template in the team library (on this computer if the library is not connected). The robot creates the form on the Page when you publish; it never accepts the Lead Ads terms.</div>' +
       '</div>';
   }
 
@@ -13936,7 +14006,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       '<div class="cb-form-templatebox" hidden>' +
       '<div class="cb-form-line">' +
       '<select class="cb-input cb-select cb-form-template-select" onchange="cbFormTemplateChosen(this)" aria-label="Form template"></select>' +
-      '<button type="button" class="cb-form-refresh" onclick="cbFormCreateOpen(this)" title="Write a new form template and save it on this computer">Create and save form</button>' +
+      '<button type="button" class="cb-form-refresh" onclick="cbFormCreateOpen(this)" title="Write a new form template and save it to the team library">Create and save form</button>' +
       '</div>' +
       '<input type="hidden" name="' + pfx + 'form_template" value="" disabled>' +
       '<div class="cb-form-note" data-template-note></div>' +
@@ -15411,6 +15481,7 @@ function cbPlanHtml(data) {
       var allForms = (s.ad_sets || []).length && (s.ad_sets || []).every(function (x) { return x.destination === 'Instant Form'; });
       h += '<div class="cbd-plan-meta" style="font-size:var(--adopy-text-sm);color:var(--muted)">page '
         + (s.page_name ? aclEscHtml(s.page_name) + ' · ' : '') + aclEscHtml(s.page_id || '—') + (s.page_source ? ' (' + aclEscHtml(s.page_source) + ')' : '')
+        + (s.page_origin ? ' · from ' + aclEscHtml(s.page_origin) : '')
         + (allForms ? '' : ' · pixel ' + aclEscHtml(s.pixel_id || '—') + (s.pixel_source ? ' (' + aclEscHtml(s.pixel_source) + ')' : ''))
         + ' · ' + aclEscHtml(s.objective || '') + '</div>';
       (s.ad_sets || []).forEach(function (a) {
@@ -18212,6 +18283,285 @@ function aclPickerSearch(inst, text) {
   if ((location.hash || '').indexOf('ad-texts') !== -1) document.addEventListener('DOMContentLoaded', function () { load(false); });
   document.addEventListener('acl:viewchange', function(e) {
     if (e.detail && e.detail.view === 'ad-texts') load(false);
+  });
+})();
+</script>
+
+<script>
+// ── Forms: общая библиотека шаблонов Instant Form (ACL-2054) ─────────────
+// Отдельный блок скрипта, как у Ad titles и таргетов: проверки вырезают свой код от
+// метки до ближайшего закрывающего тега. Проверка шаблона — window.cbLayout.validateTemplate
+// (зеркало form_templates.validate); окончательно проверяет сервер.
+(function () {
+  var rows = [], deleted = [], editing = null, questions = [], pending = false, scope = 'team';
+  var contactKeys = ['name', 'first_name', 'last_name', 'email', 'phone'];
+  function el(id) { return document.getElementById(id); }
+  function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function say(text, error) { el('fm-msg').textContent = text || ''; el('fm-msg').style.color = error ? 'var(--danger)' : 'var(--muted)'; }
+  function editorSay(text, error) { el('fm-editor-msg').textContent = text || ''; el('fm-editor-msg').style.color = error ? 'var(--danger)' : 'var(--muted)'; }
+  function busy(value) {
+    pending = value;
+    document.querySelectorAll('#view-forms button, #fm-editor input, #fm-editor textarea').forEach(function (b) { b.disabled = value; });
+  }
+  function errorText(d, fallback) { return (d && d.errors && d.errors.length ? d.errors.join('. ') + '.' : '') || (d && d.error) || fallback; }
+
+  function libraryState(lib) {
+    lib = lib || {};
+    if (!lib.connected) return ['The team library is not connected on this machine. Templates stay on this computer.', true];
+    if (!lib.ok) return ['The team library is unreachable: ' + (lib.error || 'unknown error')
+      + (lib.synced_at ? ' Showing the copy from ' + lib.synced_at + '.' : '')
+      + ' Changes cannot be saved until it is back.', true];
+    return ['Team library' + (lib.synced_at ? ' · refreshed ' + lib.synced_at : ''), false];
+  }
+
+  function render() {
+    var needle = (el('fm-search').value || '').trim().toLowerCase();
+    var shown = rows.filter(function (r) { return !needle || String(r.name).toLowerCase().indexOf(needle) !== -1; });
+    el('fm-count').textContent = shown.length === rows.length ? rows.length + ' templates' : shown.length + ' of ' + rows.length + ' templates';
+    if (!rows.length) { el('fm-list').innerHTML = '<p style="color:var(--muted)">No templates yet. Create the first one with New.</p>'; return; }
+    if (!shown.length) { el('fm-list').innerHTML = '<p style="color:var(--muted)">Nothing matches.</p>'; return; }
+    el('fm-list').innerHTML = shown.map(function (r) {
+      var by = r.author ? esc(r.author) : '—';
+      var actions = r.id
+        ? '<button type="button" class="btn" data-fm-edit="' + esc(r.id) + '">Edit</button>'
+          + (r.invalid ? '' : '<button type="button" class="btn" data-fm-dup="' + esc(r.id) + '">Duplicate</button>')
+          + '<button type="button" class="btn" data-fm-del="' + esc(r.id) + '">Delete</button>'
+        : '';
+      return '<div class="at-card' + (r.invalid ? ' fm-invalid' : '') + '">'
+        + '<div class="at-name">' + esc(r.name)
+        + '<span class="at-badge">' + esc(r.locale) + '</span>'
+        + (r.invalid ? '<span class="at-badge fm-invalid-badge" style="color:var(--danger);border-color:var(--danger)">invalid</span>' : '')
+        + '</div>'
+        + '<div class="at-actions">' + actions + '</div>'
+        + '<div class="at-desc">' + esc(r.summary) + '</div>'
+        + '<div class="at-desc">' + by + (r.changed_at ? ' · ' + esc(r.changed_at) : '') + '</div>'
+        + (r.invalid ? '<div class="fm-errors">' + (r.errors || []).map(esc).join('. ')
+          + '. Kept in the library, but not offered in the builder until it is fixed.</div>' : '')
+        + '</div>';
+    }).join('');
+  }
+
+  function renderDeleted() {
+    el('fm-deleted').innerHTML = !deleted.length ? '' : '<details style="margin-top:1rem"><summary>Recently deleted (' + deleted.length + ')</summary>'
+      + deleted.map(function (d) {
+        return '<div class="at-card"><div class="at-name">' + esc(d.name)
+          + '<span class="at-badge">removed by ' + esc(d.deleted_by || '—') + (d.deleted_at ? ', ' + esc(d.deleted_at) : '') + '</span></div>'
+          + '<div class="at-actions"><button type="button" class="btn" data-fm-restore="' + esc(d.id) + '">Restore</button></div>'
+          + '<div class="at-desc">' + esc(d.summary) + '</div></div>';
+      }).join('') + '</details>';
+  }
+
+  function renderMigration(m) {
+    var box = el('fm-migrate');
+    m = m || {};
+    var notes = (m.skipped || []).filter(function (s) { return !/^Already in/.test(s.reason); });
+    var html = '';
+    if (m.available && m.uploadable > 0) {
+      html += '<div>' + m.uploadable + ' template' + (m.uploadable === 1 ? '' : 's') + ' saved on this computer '
+        + (m.uploadable === 1 ? 'is' : 'are') + ' not in the team library yet. The local file stays on this computer after the upload.</div>'
+        + '<button type="button" id="fm-migrate-btn" class="btn" style="margin-top:0.5rem">Upload ' + m.uploadable
+        + ' local template' + (m.uploadable === 1 ? '' : 's') + ' to the team library</button>';
+    }
+    if (m.available && notes.length) {
+      html += '<details style="margin-top:0.5rem"><summary>Local templates that will not be uploaded (' + notes.length + ')</summary>'
+        + notes.map(function (s) { return '<div class="at-desc">' + esc(s.name) + ' — ' + esc(s.reason) + '</div>'; }).join('') + '</details>';
+    }
+    box.innerHTML = html;
+    box.hidden = !html;
+  }
+
+  async function load(keepMessage) {
+    if (pending) return;
+    busy(true);
+    try {
+      var r = await fetch('/api/form-templates?force=true');
+      var d = await r.json();
+      if (!r.ok || !d.ok) throw new Error(errorText(d, 'Could not load'));
+      rows = d.rows || []; deleted = d.deleted || [];
+      scope = d.library && d.library.connected ? 'team' : 'local';
+      document.dispatchEvent(new CustomEvent('acl:formtemplateschange', {detail: {templates: d.templates || []}}));
+      // Выбор шаблона в билдере берёт свежий список, не дожидаясь перезагрузки страницы.
+      window.cbFormTemplates = d.templates || [];
+      window.cbFormTemplatesLoaded = true;
+      if (typeof window.cbFillTemplateSelects === 'function') {
+        document.querySelectorAll('.cb-slot').forEach(function (sl) { window.cbFillTemplateSelects(sl); });
+      }
+      render(); renderDeleted(); renderMigration(d.migration);
+      var state = libraryState(d.library);
+      el('fm-status').textContent = state[0];
+      el('fm-status').style.color = state[1] ? 'var(--danger)' : 'var(--muted)';
+      if (!keepMessage) say('');
+    } catch (e) { say(e.message || String(e), true); el('fm-list').textContent = ''; }
+    finally { busy(false); }
+  }
+
+  async function post(url, body) {
+    var r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+    var d = await r.json();
+    if (!r.ok || d.ok === false) throw new Error(errorText(d, 'Could not save'));
+    return d;
+  }
+
+  /* Действие над списком: послать, сказать итог, перечитать. */
+  async function act(url, body, done) {
+    if (pending) return;
+    busy(true); say('Saving…');
+    var ok = false;
+    try { var d = await post(url, body); ok = true; say(typeof done === 'function' ? done(d) : done); }
+    catch (e) { say(e.message || String(e), true); }
+    finally { busy(false); }
+    if (ok) await load(true);
+  }
+
+  // ── редактор ──
+  function questionsHtml() {
+    el('fm-questions').innerHTML = questions.map(function (q, i) {
+      var multi = q.type === 'multiple_choice';
+      return '<div class="fm-q">'
+        + '<input type="text" maxlength="80" placeholder="Question text" data-fm-q="' + i + '" data-fm-f="label" value="' + esc(q.label) + '" style="flex:2 1 14rem">'
+        + '<select data-fm-q="' + i + '" data-fm-f="type"><option value="short_answer"' + (multi ? '' : ' selected') + '>Short answer</option>'
+        + '<option value="multiple_choice"' + (multi ? ' selected' : '') + '>Multiple choice</option></select>'
+        + (multi ? '<textarea rows="3" placeholder="One option per line (at least 2)" data-fm-q="' + i + '" data-fm-f="options" style="flex:1 1 12rem">'
+          + esc((q.options || []).join('\n')) + '</textarea>' : '')
+        + '<button type="button" class="btn" data-fm-qdel="' + i + '">Remove</button></div>';
+    }).join('');
+  }
+
+  function fillEditor(tpl, title, invalidErrors) {
+    tpl = tpl || {};
+    el('fm-name').value = tpl.name || '';
+    el('fm-headline').value = tpl.headline || '';
+    el('fm-intro').value = tpl.intro || '';
+    el('fm-locale').value = tpl.locale || 'EN_US';
+    el('fm-privacy').value = tpl.privacy_url || '';
+    el('fm-thanks').value = tpl.thank_you_text || '';
+    el('fm-site').value = tpl.website_url || '';
+    var contacts = tpl.contact_fields || ['name', 'email'];
+    contactKeys.forEach(function (k) { el('fm-c-' + k).checked = contacts.indexOf(k) !== -1; });
+    questions = (tpl.questions || []).map(function (q) {
+      return {label: q.label || '', type: q.type || 'short_answer', options: (q.options || []).slice()};
+    });
+    questionsHtml();
+    el('fm-editor-title').textContent = title;
+    var note = el('fm-invalid-note');
+    note.hidden = !(invalidErrors && invalidErrors.length);
+    note.textContent = note.hidden ? '' : 'This template does not pass validation: ' + invalidErrors.join('. ') + '. Fix it and save.';
+    editorSay('');
+    el('fm-editor').hidden = false;
+    el('fm-editor').scrollIntoView({block: 'nearest'});
+  }
+
+  function closeEditor() { editing = null; el('fm-editor').hidden = true; }
+
+  function collect() {
+    // Поля, которых в редакторе нет (их добавит будущая версия шаблона), едут дальше как были.
+    var base = Object.assign({}, editing && editing.template ? editing.template : {});
+    // Preserve the saved question order; append newly selected fields in control order.
+    var contacts = (base.contact_fields || []).filter(function (k) {
+      return contactKeys.indexOf(k) !== -1 && el('fm-c-' + k).checked;
+    });
+    contactKeys.forEach(function (k) {
+      if (el('fm-c-' + k).checked && contacts.indexOf(k) === -1) contacts.push(k);
+    });
+    return Object.assign(base, {
+      id: editing && editing.id ? editing.id : '',
+      _expected_revision: editing ? editing.revision : undefined,
+      name: el('fm-name').value, headline: el('fm-headline').value, intro: el('fm-intro').value,
+      contact_fields: contacts,
+      questions: questions.map(function (q) {
+        var item = {label: q.label, type: q.type};
+        if (q.type === 'multiple_choice') item.options = q.options;
+        return item;
+      }),
+      privacy_url: el('fm-privacy').value, thank_you_text: el('fm-thanks').value,
+      website_url: el('fm-site').value, locale: el('fm-locale').value || 'EN_US'
+    });
+  }
+
+  async function saveEditor() {
+    if (pending) return;
+    var tpl = collect();
+    var layout = window.cbLayout;
+    var legacyLocale = editing && editing.template ? editing.template.locale : null;
+    var errors = layout && layout.validateTemplate ? layout.validateTemplate(tpl, legacyLocale) : [];
+    if (errors.length) { editorSay(errors.join('. ') + '.', true); return; }
+    busy(true); editorSay('Saving…');
+    var ok = false;
+    try {
+      await post('/api/form-templates', tpl);
+      ok = true;
+      say(scope === 'local' ? 'Saved on this computer only.' : 'Saved. Everyone gets the change; forms already on Pages stay as they are.');
+      closeEditor();
+    } catch (e) { editorSay(e.message || String(e), true); }
+    finally { busy(false); }
+    if (ok) await load(true);
+  }
+
+  function rowById(id) { return rows.find(function (r) { return r.id === id; }); }
+
+  document.addEventListener('click', function (ev) {
+    var t = ev.target;
+    if (!t || !t.getAttribute || pending) return;
+    if (t.id === 'fm-new-btn') { editing = null; fillEditor(null, 'New template'); return; }
+    if (t.id === 'fm-refresh-btn') { load(false); return; }
+    if (t.id === 'fm-cancel-btn') { closeEditor(); return; }
+    if (t.id === 'fm-save-btn') { saveEditor(); return; }
+    if (t.id === 'fm-add-q-btn') {
+      var max = (window.cbLayout && window.cbLayout.FORM_LIMITS && window.cbLayout.FORM_LIMITS.questions) || 5;
+      if (questions.length >= max) { editorSay('At most ' + max + ' custom questions', true); return; }
+      questions.push({label: '', type: 'short_answer', options: []}); questionsHtml(); return;
+    }
+    if (t.id === 'fm-migrate-btn') {
+      act('/api/form-templates/migrate', {}, function (d) {
+        var skipped = d.skipped || [];
+        return 'Uploaded ' + d.uploaded + ' local template' + (d.uploaded === 1 ? '' : 's') + ' to the team library.'
+          + (skipped.length ? ' Skipped ' + skipped.length + ': ' + skipped.map(function (s) { return s.name + ' (' + s.reason + ')'; }).join('; ') + '.' : '');
+      });
+      return;
+    }
+    var id = t.getAttribute('data-fm-edit');
+    if (id) {
+      var r = rowById(id);
+      if (r) { editing = r; fillEditor(r.template, 'Edit template', r.invalid ? r.errors : null); }
+      return;
+    }
+    id = t.getAttribute('data-fm-dup');
+    if (id) { act('/api/form-templates/duplicate', {id: id}, function (d) { return 'Duplicated as “' + d.template.name + '”.'; }); return; }
+    id = t.getAttribute('data-fm-del');
+    if (id) {
+      var row = rowById(id);
+      var where = scope === 'local' ? 'from this computer' : 'for the whole team';
+      if (confirm('Delete «' + (row ? row.name : id) + '» ' + where + '? It stays in Recently deleted and can be restored. Forms already created on Pages are not touched.')) {
+        act('/api/form-templates/delete', {id: id}, 'Deleted. It is in Recently deleted if you need it back.');
+      }
+      return;
+    }
+    id = t.getAttribute('data-fm-restore');
+    if (id) { act('/api/form-templates/restore', {id: id}, 'Restored.'); return; }
+    var qi = t.getAttribute('data-fm-qdel');
+    if (qi) { questions.splice(Number(qi), 1); questionsHtml(); return; }
+    if (t.getAttribute('data-view') === 'forms') load(false);
+  });
+  // Вопросы живут в массиве: ввод обновляет его, а не читает DOM при сохранении.
+  function questionInput(ev) {
+    var t = ev.target;
+    if (!t || !t.getAttribute) return;
+    var i = t.getAttribute('data-fm-q');
+    if (i === null || i === undefined) return;
+    var q = questions[Number(i)], f = t.getAttribute('data-fm-f');
+    if (!q) return;
+    if (f === 'options') q.options = String(t.value || '').split('\n');
+    else if (f === 'type') { q.type = t.value; questionsHtml(); }
+    else q[f] = t.value;
+  }
+  document.addEventListener('input', function (ev) {
+    if (ev.target && ev.target.id === 'fm-search') { render(); return; }
+    questionInput(ev);
+  });
+  document.addEventListener('change', questionInput);
+  if ((location.hash || '').indexOf('forms') !== -1) document.addEventListener('DOMContentLoaded', function () { load(false); });
+  document.addEventListener('acl:viewchange', function (e) {
+    if (e.detail && e.detail.view === 'forms') load(false);
   });
 })();
 </script>

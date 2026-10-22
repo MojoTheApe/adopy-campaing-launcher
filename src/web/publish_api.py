@@ -102,7 +102,8 @@ def _make_graph(tab, act: str, *, writes: bool = True):
     from src.fb_api.token_capture import InPageGraph
 
     if not writes:
-        # Пробный запуск: помощник без политики записи — POST невозможен вовсе.
+        # Пробный запуск: обычные записи закрыты. Отдельный account-bound
+        # validate-only creative может подтвердить Page, не создавая объектов.
         return InPageGraph(tab)
     return InPageGraph(tab, allow_writes=True, write_act=act)
 
@@ -530,7 +531,8 @@ class ApiPublisher:
 # публикации, а путём чтения ACL-1760 (`account_spend_api._session`): тот же
 # замок профиля для чтений, место по памяти только если профиль закрыт,
 # закрывается только поднятое этим чтением, вкладка и клиент — без права
-# записи (помощник с WRITE=null, `GraphClient(allow_writes=False)`).
+# записи (помощник с WRITE=null, `GraphClient(allow_writes=False)`). Page профиля
+# дополнительно требует один отдельный validate-only creative, без создания объектов.
 
 #: Потолок вызовов на предпроверку кабинета внутри «Check plan».
 PLAN_PREFLIGHT_MAX_CALLS = 12
