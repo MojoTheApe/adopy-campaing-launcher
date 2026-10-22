@@ -50677,9 +50677,11 @@
         "worktree": "C:\\acl-2090",
         "id": "4de81b684d1645b7a1dc87d87ce67f2f",
         "issue": 1090,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-22T10:09:11+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 1093,
+        "report": "\ufeff# ACL-2090 re-handoff\n\nReviewer-AM1022090 approved content at 9e84133c and returned for a main merge only. Merged origin/main 203f8a33 (no conflicts, no content changes): head e31f9c32. PR diff vs main unchanged (same 5 files, +72/-7). Touched tests: test_creative_variants, test_acl1819_preflight, test_screens_are_in_english - 140 passed."
       }
     },
     "tasks": {
