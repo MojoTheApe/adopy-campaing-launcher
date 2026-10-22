@@ -388,6 +388,8 @@ class _NavCdp(_Cdp):
         if method == "Page.navigate":
             self.urls.append(params["url"])
             err = self.errors.pop(0) if self.errors else ""
+            if isinstance(err, BaseException):
+                raise err
             return {"frameId": "F", **({"errorText": err} if err else {})}
         return super().call(method, params, session_id=session_id, timeout=timeout)
 
@@ -506,3 +508,26 @@ def test_wait_for_the_stopped_process_is_bounded():
     assert not prof.wait_gone("P1", timeout_s=30, probe=lambda pid: ("port", 61000),
                               sleep=clock.sleep, clock=clock)
     assert 30 <= clock.t <= 31
+
+
+def test_a_probe_that_times_out_does_not_fail_the_action():
+    # Ревью N2: проба не ответила в срок — она не решает, Facebook открывается как обычно.
+    tab, cdp, slept = _nav_tab([TimeoutError("slow probe"), ""])
+    tab.navigate(FB)
+    assert cdp.urls == [launch.DEFAULT_PROXY_PROBE_URL, FB] and slept == []
+
+
+def test_stop_on_request_settles_the_start_then_stops_then_waits_for_the_process(monkeypatch):
+    # Ревью N5: вся цепочка остановки — порядок «устоялся → stop MLX → процесс ушёл».
+    from src.fb_ads_rpa import browser as br
+
+    calls = []
+    monkeypatch.setattr(br, "_find_mlx_profile_dir", lambda pid: None)
+    monkeypatch.setattr(launch, "wait_start_settled", lambda pid: calls.append(("settle", pid)) or "ready")
+    monkeypatch.setattr(br.MultiloginAttachOnlyProvider, "_stop_profile",
+                        lambda self, entry, label, pid, udd, allow_kill=True:
+                        calls.append(("stop", pid, allow_kill)))
+    monkeypatch.setattr(prof, "wait_gone", lambda pid: calls.append(("gone", pid)) or True)
+    entry = SimpleNamespace(profile_id="P1", folder_id="F", multilogin_instance="A")
+    assert br.stop_profile_on_request(entry, "ACC") == "closed"
+    assert calls == [("settle", "P1"), ("stop", "P1", False), ("gone", "P1")]

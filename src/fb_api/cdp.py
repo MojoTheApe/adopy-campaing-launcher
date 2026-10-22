@@ -333,6 +333,8 @@ class PageTab:
         if probe:
             try:
                 self._navigate_once(probe, min(timeout, 30.0))
+            except CdpTimeout:
+                probe = ""                # проба не ответила в срок — не решает, идём дальше
             except PageError as exc:
                 if not _launch.is_proxy_auth_error(str(exc)):
                     probe = ""            # проба не про вход в прокси — не решает
@@ -341,6 +343,8 @@ class PageTab:
                     self._sleep(_launch.PROXY_RETRY_S)
                     try:
                         self._navigate_once(probe, min(timeout, 30.0))
+                    except CdpTimeout:
+                        probe = ""
                     except PageError as again:
                         _launch._record({"event": "fb_api_proxy_probe", "ok": False, "retried": True,
                                          "took_s": round(time.monotonic() - began, 1)})
