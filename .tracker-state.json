@@ -61708,6 +61708,10 @@
       "Worker-W1022708": {
         "session": "run_w1022_1708",
         "role": "Worker"
+      },
+      "Reviewer-AH1022B85": {
+        "session": "run_ah1022_b85",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -64695,7 +64699,23 @@
       710,
       1069
     ],
-    "review": null,
+    "review": {
+      "id": "6ce6294652d74de3a0ea514b37fd6080",
+      "batch_id": "50de16a3aac241f4a08a1c0e4406e44e",
+      "pr": 1085,
+      "issues": [
+        827,
+        73,
+        1028,
+        53,
+        845
+      ],
+      "actor": "Reviewer-AH1022B85",
+      "session": "run_ah1022_b85",
+      "coordinator": "Coordinator-I1021A",
+      "state": "reviewing",
+      "started_at": "2026-10-22T06:34:57+00:00"
+    },
     "history": [
       {
         "event": "policy-adopted",
@@ -115151,6 +115171,27 @@
         "issue": 708,
         "claim": "083d4e707cd0483881b8ec78b55a701b",
         "actor": "Worker-W1022708"
+      },
+      {
+        "event": "batch-review-acquired",
+        "at": "2026-10-22T06:34:57+00:00",
+        "review": {
+          "id": "6ce6294652d74de3a0ea514b37fd6080",
+          "batch_id": "50de16a3aac241f4a08a1c0e4406e44e",
+          "pr": 1085,
+          "issues": [
+            827,
+            73,
+            1028,
+            53,
+            845
+          ],
+          "actor": "Reviewer-AH1022B85",
+          "session": "run_ah1022_b85",
+          "coordinator": "Coordinator-I1021A",
+          "state": "reviewing",
+          "started_at": "2026-10-22T06:34:57+00:00"
+        }
       }
     ],
     "policy": {
@@ -126804,7 +126845,7 @@
       "id": "50de16a3aac241f4a08a1c0e4406e44e",
       "actor": "Coordinator-I1021A",
       "session": "run_i1021a_1021",
-      "state": "assembling",
+      "state": "reviewing",
       "issues": [
         827,
         73,
@@ -127038,7 +127079,7 @@
       "branch": "codex/batch-50de16a3aac241f4a08a1c0e4406e44e",
       "intake": "61e2af9783f04a28800e7957be113508",
       "started_at": "2026-10-22T06:30:20+00:00",
-      "pr": null,
+      "pr": 1085,
       "entered_stage": false,
       "history": [],
       "delivery_request": {
