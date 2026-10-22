@@ -48246,20 +48246,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
-      },
-      "1078": {
-        "actor": "Worker-F1022B",
-        "session": "run_f1022b",
-        "coordinator": "Coordinator-I1021A",
-        "branch": "work/acl-2078-test-state-reset",
-        "worktree": "C:\\acl-statefix",
-        "id": "372042032ab947fba55ae26fe0097610",
-        "issue": 1078,
-        "state": "handoff",
-        "started_at": "2026-10-22T00:14:10+00:00",
-        "from_status": "status:todo",
-        "pr": 1081,
-        "report": "## ACL-2078 rework handoff (Worker-F1022B, run_f1022b, 2026-10-22)\n\nPR #1081, head ccbaf636cc1ee544d2441472422d1a4ede539094. Merged main e8bf31f8 (merge 8205e756, clean, no force); main delta does not touch meta_dom/crop_step/run_telemetry/conftest, guard test unchanged (no new module containers). Fixed reviewer nit: `_restore` now skips a MUTABLE name missing from the module instead of creating it (verified: stale name no longer created). No other findings.\n\nLocal: new test + failing pair 41 passed; pair reversed 36 passed; b97 paired with each of 48 state-touching test files: all passed. CI on ccbaf636: all linux (3.11/3.13 x3) and windows shards green; installer build jobs skipped (no installer changes); tracker-link pending this handoff."
       }
     },
     "tasks": {
@@ -57600,7 +57586,7 @@
             "session": "run_f1022b"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-F1022B",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -57609,19 +57595,17 @@
           "coordinator": "Coordinator-I1021A",
           "branch": "work/acl-2078-test-state-reset",
           "worktree": "C:\\acl-statefix",
-          "id": "01814458fc0b4ed0aa0f93e9ee981aa3",
+          "id": "372042032ab947fba55ae26fe0097610",
           "issue": 1078,
           "state": "handoff",
-          "started_at": "2026-10-21T23:15:13+00:00",
-          "from_status": "status:idea",
+          "started_at": "2026-10-22T00:14:10+00:00",
+          "from_status": "status:todo",
           "pr": 1081,
-          "report": "## ACL-2078 handoff (Worker-F1022B, run_f1022b, 2026-10-22)\n\nPR #1081 `work/acl-2078-test-state-reset`, base main 64e73a1e, head dbe945ee. Test-only change: `tests/conftest.py`, new `tests/rpa_module_state.py`, new `tests/test_rpa_module_state_is_reset_between_tests.py`.\n\nState reset before and after every test (already-imported modules only):\n- every module-level `threading.local` in `meta_dom` (`_upload_diag_tls`, `_media_refusal_tls`, `_creative_tls`, `_upload_why_tls`, `_flow_budget`, `_conv_tls`, `_LAST_OPEN`, `_OPEN_BUDGET`, `_create_tls`, `_reload_block`, `_crop_warning_tls`) and `crop_step._tls`;\n- `meta_dom` containers restored to import values: `_LAST_UPLOAD_DIAG`, `_UNSTUCK_RELOADED`, `_STALL_EVIDENCE_TAKEN`, `_OTHER_REVIEW_ERRORS_SEEN`, `_reuse_state`, `_failed_uploads`, `_uploaded_ok`, `_last_destination`, `_ADOPTED_SHELL_IDS`;\n- public helpers `crop_step.set_plan(None)`, `run_telemetry.clear_current_run()`.\n\nLocal checks: failing pair 1 failed/35 passed before, 36 passed after in both orders; new regression test 5 passed (fails on the old fixture); b97 paired with each of 48 state-touching test files: all passed. Full suite: CI only. Not self-reviewed; independent review required."
+          "report": "## ACL-2078 rework handoff (Worker-F1022B, run_f1022b, 2026-10-22)\n\nPR #1081, head ccbaf636cc1ee544d2441472422d1a4ede539094. Merged main e8bf31f8 (merge 8205e756, clean, no force); main delta does not touch meta_dom/crop_step/run_telemetry/conftest, guard test unchanged (no new module containers). Fixed reviewer nit: `_restore` now skips a MUTABLE name missing from the module instead of creating it (verified: stale name no longer created). No other findings.\n\nLocal: new test + failing pair 41 passed; pair reversed 36 passed; b97 paired with each of 48 state-touching test files: all passed. CI on ccbaf636: all linux (3.11/3.13 x3) and windows shards green; installer build jobs skipped (no installer changes); tracker-link pending this handoff."
         },
         "pr": 1081,
-        "queued_at": "2026-10-22T00:04:31+00:00",
-        "review_report": "# ACL-2078 source review return (Reviewer-S1022078 / run_s1022_078)\n\nStale vs main e8bf31f8 \u2014 author merges main; content reviewed OK, will re-verify delta.\n\nReviewed head dbe945ee on base 64e73a1e. No content findings:\n- Test-only: tests/conftest.py, tests/rpa_module_state.py, tests/test_rpa_module_state_is_reset_between_tests.py. No product code, no assertion weakening, no xfail/skip.\n- Every MUTABLE initial value matches meta_dom import-time literals; thread-local __dict__.clear() matches a fresh thread (no module-level tls attribute initialisation; reads use getattr defaults or are set by set_plan); clear_current_run() resets the ContextVar.\n- Reproduced: on 64e73a1e `b97 + test_additional_ad_without_creative_has_no_text.py` fails (ad2_creative_upload:library_has_no_copy); on dbe945ee the same pair plus media_attachment_identity and the new file pass (57 passed).\n- Mutation checks: old conftest -> test_2 fails; unregistered container -> registry test fails; stale registry name -> source-value test fails.\n- Guard design acceptable: CI uses --dist loadfile so test_1/test_2 stay in one worker in order; future PRs adding a module-level dict/set/list to meta_dom/crop_step must register it (clear message). Non-blocking nit: reset() setattr's a missing MUTABLE name onto the module, so the \"stale names\" half of the registry assertion is masked; the AST source test still catches it.\n- Main delta 64e73a1e..e8bf31f8 does not touch meta_dom/crop_step/run_telemetry/conftest.",
-        "rework": true,
-        "rework_claim": "372042032ab947fba55ae26fe0097610"
+        "queued_at": "2026-10-22T00:57:47+00:00",
+        "review_report": "# ACL-2078 source review return (Reviewer-S1022078 / run_s1022_078)\n\nStale vs main e8bf31f8 \u2014 author merges main; content reviewed OK, will re-verify delta.\n\nReviewed head dbe945ee on base 64e73a1e. No content findings:\n- Test-only: tests/conftest.py, tests/rpa_module_state.py, tests/test_rpa_module_state_is_reset_between_tests.py. No product code, no assertion weakening, no xfail/skip.\n- Every MUTABLE initial value matches meta_dom import-time literals; thread-local __dict__.clear() matches a fresh thread (no module-level tls attribute initialisation; reads use getattr defaults or are set by set_plan); clear_current_run() resets the ContextVar.\n- Reproduced: on 64e73a1e `b97 + test_additional_ad_without_creative_has_no_text.py` fails (ad2_creative_upload:library_has_no_copy); on dbe945ee the same pair plus media_attachment_identity and the new file pass (57 passed).\n- Mutation checks: old conftest -> test_2 fails; unregistered container -> registry test fails; stale registry name -> source-value test fails.\n- Guard design acceptable: CI uses --dist loadfile so test_1/test_2 stay in one worker in order; future PRs adding a module-level dict/set/list to meta_dom/crop_step must register it (clear message). Non-blocking nit: reset() setattr's a missing MUTABLE name onto the module, so the \"stale names\" half of the registry assertion is masked; the AST source test still catches it.\n- Main delta 64e73a1e..e8bf31f8 does not touch meta_dom/crop_step/run_telemetry/conftest."
       },
       "1079": {
         "implementers": [
@@ -63744,7 +63728,8 @@
     "review_queue": [
       1054,
       710,
-      1069
+      1069,
+      1078
     ],
     "review": null,
     "history": [
@@ -112154,6 +112139,13 @@
             "approved_at": "2026-10-22T00:25:21+00:00"
           }
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-22T00:57:47+00:00",
+        "issue": 1078,
+        "pr": 1081,
+        "actor": "Worker-F1022B"
       }
     ],
     "policy": {
