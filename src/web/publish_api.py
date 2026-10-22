@@ -310,7 +310,9 @@ class ApiPublisher:
         from src.fb_api import mlx_session as _mlx
 
         try:
-            with _mlx.scope(account=account_label):
+            from src.fb_api import stop_log as _stop_log
+
+            with _mlx.scope(account=account_label), _stop_log.cancel_scope(self.cancelled):
                 self._opened = _open_profile(profile_id, (getattr(entry, "folder_id", "") or "").strip(),
                                              (getattr(entry, "multilogin_instance", "") or "A").strip() or "A")
         except _fb_profile.ProfileError as exc:
@@ -573,11 +575,6 @@ def _plan_in_read_session(account_label: str, drafts: list[Any]) -> list[dict[st
         except PlanError as exc:
             raise ApiPublishError(f"{account_label}: {exc}", code="account") from exc
         pub._resolver = TargetingResolver(client)
-        # ACL-2117: проверенный план обычно сразу публикуют. Окно, которое подняла проверка,
-        # держим `plan_keep_open_s()` — Publish подхватит его без второго старта (и без
-        # остановки → переоткрытия во время сохранения профиля MLX). Не взяли — закроется по сроку.
-        if any(not d.errors for d in drafts) and plan_keep_open_s() > 0:
-            sess.keep_next, sess.keep_grace_s = True, plan_keep_open_s()
         for draft in drafts:
             if draft.errors:
                 out = Outcome(campaign_name=str(draft.name), warnings=list(draft.warnings or []))
@@ -587,6 +584,13 @@ def _plan_in_read_session(account_label: str, drafts: list[Any]) -> list[dict[st
             results.append(pub.publish_draft(draft))
         if client.writes:
             raise AssertionError("Check plan must not write")
+        # ACL-2117: проверенный план обычно сразу публикуют. Окно, которое подняла проверка,
+        # держим `plan_keep_open_s()` — Publish подхватит его без второго старта (и без
+        # остановки → переоткрытия во время сохранения профиля MLX). Не взяли — закроется по сроку.
+        # Только после чистого прохода: остановка Meta/логаут/потолок вызовов окно не держат.
+        if (client.stopped is None and any(not d.errors for d in drafts)
+                and plan_keep_open_s() > 0):
+            sess.keep_next, sess.keep_grace_s = True, plan_keep_open_s()
     return results
 
 

@@ -18,6 +18,7 @@ import os
 import threading
 import time
 from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Callable
 
@@ -31,7 +32,22 @@ DEFAULT_RESTART_COOLDOWN_S = 180.0
 RESTART_MAX_WAIT_ENV = "ACL_PROFILE_RESTART_MAX_WAIT_S"
 #: Что видит человек, пока профиль досохраняется в облако MLX.
 SYNC_WAIT_MESSAGE = "Waiting for the profile to finish saving (cloud sync)"
-RESTART_POLL_S = 5.0
+RESTART_POLL_S = 1.0
+#: Текст, когда ждавшее действие отменили (Stop): ничего не запущено.
+CANCELLED_TEXT = "Stopped while waiting for the profile to finish saving (cloud sync). Nothing was started."
+
+#: Отмена текущего действия (Stop у Publish), если вызывающий не передал `cancelled` явно.
+_CANCEL: "ContextVar[Callable[[], bool] | None]" = ContextVar("acl_stop_log_cancel", default=None)
+
+
+@contextmanager
+def cancel_scope(cancelled: Callable[[], bool] | None):
+    """Внутри блока ожидание паузы после остановки прерывается, когда `cancelled()` истинно."""
+    token = _CANCEL.set(cancelled)
+    try:
+        yield
+    finally:
+        _CANCEL.reset(token)
 
 _STALE_LOCK_S = 10.0
 _LOCK_WAIT_S = 5.0
@@ -232,6 +248,7 @@ def wait_or_refusal(profile_id: str, log_: StopLog | None = None, *,
     if left <= 0 or left > restart_max_wait_s():
         return why
     nap = sleep or _sleep
+    cancelled = cancelled or _CANCEL.get()
     began = stops._wall()
     stop_at = stops.last_stop(pid)
     waited_for = left
@@ -240,7 +257,7 @@ def wait_or_refusal(profile_id: str, log_: StopLog | None = None, *,
         if left <= 0:
             break
         if cancelled is not None and cancelled():
-            return refusal(pid, stops)
+            return CANCELLED_TEXT
         if on_wait is not None:
             try:
                 on_wait(SYNC_WAIT_MESSAGE)

@@ -109,7 +109,7 @@ def test_a_wait_longer_than_the_cap_still_refuses(world, monkeypatch):
 def test_a_cancelled_wait_gives_the_refusal_back(world):
     world.log.record(PID)
     why = stop_log.wait_or_refusal(PID, cancelled=lambda: True)
-    assert "wait about" in why
+    assert why == stop_log.CANCELLED_TEXT
 
 
 def test_mlx_remembering_the_old_port_is_asked_again_after_the_wait(world, monkeypatch):
@@ -187,7 +187,7 @@ def test_the_stop_event_carries_stop_and_exit_times(world):
 
 # --- item 1: Check plan keeps the window for the Publish that follows -------------------
 
-def _plan(monkeypatch, drafts):
+def _plan(monkeypatch, drafts, stopped=None):
     from src.analysis_agent import account_spend_api as _api
     from src.web import publish_api
 
@@ -200,6 +200,7 @@ def _plan(monkeypatch, drafts):
 
     sess = SimpleNamespace(client=SimpleNamespace(allow_writes=False, writes=0, reset_budget=lambda n: None),
                            act="act_1", account="Acc", notes={}, keep_next=False, keep_grace_s=None)
+    sess.client.stopped = stopped
 
     @contextmanager
     def session(account):
@@ -250,3 +251,171 @@ def test_the_kept_window_closes_by_its_own_term_not_the_short_grace(monkeypatch)
     _as._finish_started(opened, keep_for_next=True)
     assert timers == [600.0, _as.CLOSE_GRACE_S]
     _as._PENDING_CLOSE.clear()
+
+
+def test_check_plan_does_not_hold_the_window_after_a_meta_stop(monkeypatch):
+    sess = _plan(monkeypatch, [_draft()], stopped=RuntimeError("stop"))
+    assert sess.keep_next is False and sess.keep_grace_s is None
+
+
+# --- review round: the kept read slot must not block Publish ----------------------------
+
+def _slots_world(monkeypatch):
+    from src.web import profile_slots as ps
+
+    def plenty():
+        return ps.MemoryReading(total_mb=64 * 1024, available_mb=48 * 1024)
+
+    slots = ps.ProfileSlots(memory=plenty)
+    monkeypatch.setattr(_as, "_slot_queue", lambda: slots)
+    timers = []
+
+    class _T:
+        def __init__(self, interval, fn, args=()):
+            timers.append((interval, fn, args))
+            self.daemon = False
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(threading, "Timer", _T)
+    _as._PENDING_CLOSE.clear()
+    return slots, timers
+
+
+def test_publish_takes_the_window_check_plan_kept_without_waiting(monkeypatch):
+    slots, timers = _slots_world(monkeypatch)
+    assert slots.acquire("read-api:Acc:1", PID, share_profile=True)
+    opened = _as._ReadOpen("Acc", started=True, profile_id=PID, slot_id="read-api:Acc:1")
+    _as._finish_started(opened, keep_for_next=True, grace_s=600.0)
+    got = []
+    t = threading.Thread(target=lambda: got.append(slots.acquire("job-1", PID, cancelled=lambda: False)))
+    t.daemon = True
+    t.start()
+    t.join(5)
+    assert got and got[0] and got[0]["shared"] is False, "Publish waited behind the read slot"
+    # the late timer sees the Publish and leaves the window alone
+    stopped = []
+    from src.fb_ads_rpa import browser as rpa_browser
+    monkeypatch.setattr(rpa_browser, "stop_profile_on_request", lambda *a, **k: stopped.append(1))
+    interval, fn, args = timers[0]
+    assert interval == 600.0
+    fn(*args)
+    assert stopped == []
+    _as._PENDING_CLOSE.clear()
+
+
+def test_an_unused_kept_window_closes_when_the_term_ends_and_frees_its_slot(monkeypatch):
+    slots, timers = _slots_world(monkeypatch)
+    assert slots.acquire("read-api:Acc:2", PID, share_profile=True)
+    opened = _as._ReadOpen("Acc", started=True, profile_id=PID, slot_id="read-api:Acc:2",
+                           entry=SimpleNamespace(profile_id=PID), grants_seen=slots.grants(PID))
+    _as._finish_started(opened, keep_for_next=True, grace_s=600.0)
+    stopped = []
+    from src.fb_ads_rpa import browser as rpa_browser
+    monkeypatch.setattr(rpa_browser, "stop_profile_on_request", lambda entry, label: stopped.append(label))
+    monkeypatch.setattr(stop_log, "record_stop", lambda pid: None)
+    interval, fn, args = timers[0]
+    fn(*args)
+    assert stopped == ["Acc"]
+    assert slots.snapshot()["running"] == []
+    _as._PENDING_CLOSE.clear()
+
+
+# --- review round: Publish waits OUTSIDE the queue, and Stop cancels the wait -----------
+
+def test_publish_waits_for_the_sync_before_it_takes_a_slot_and_stop_cancels(world, monkeypatch):
+    from src.web import publish_jobs as pj
+
+    monkeypatch.setattr(pj, "_fb_backend", lambda: "api")
+    monkeypatch.setattr(_as, "_entry_for", lambda label: SimpleNamespace(profile_id=PID))
+    monkeypatch.setattr(prof, "probe_local", lambda pid: ("none", None))
+    world.log.record(PID)
+    cancelled = {"v": False}
+    monkeypatch.setattr(pj, "_is_cancelled", lambda job_id: cancelled["v"])
+    pj._jobs["j1"] = {"job_id": "j1", "status": "queued"}
+    orig = world.clock.sleep
+
+    def sleeping(seconds):
+        orig(seconds)
+        if len(world.clock.slept) == 3:
+            cancelled["v"] = True
+
+    monkeypatch.setattr(stop_log, "_sleep", sleeping)
+    try:
+        assert pj._wait_for_profile_sync("j1", "Acc") is False        # Stop during the pause
+        assert len(world.clock.slept) == 3 and "queue" not in pj._jobs["j1"]
+        cancelled["v"] = False
+        assert pj._wait_for_profile_sync("j1", "Acc") is True          # waits it out, then goes on
+        assert world.clock.now - 1000.0 >= 180
+    finally:
+        pj._jobs.pop("j1", None)
+
+
+def test_publish_does_not_wait_when_the_profile_is_open_or_never_stopped(world, monkeypatch):
+    from src.web import publish_jobs as pj
+
+    monkeypatch.setattr(pj, "_fb_backend", lambda: "api")
+    monkeypatch.setattr(_as, "_entry_for", lambda label: SimpleNamespace(profile_id=PID))
+    monkeypatch.setattr(prof, "probe_local", lambda pid: ("port", 63405))
+    world.log.record(PID)
+    assert pj._wait_for_profile_sync("j2", "Acc") is True and world.clock.slept == []
+    monkeypatch.setattr(prof, "probe_local", lambda pid: ("none", None))
+    world.log._path = world.log.file().with_name("other.json")        # never stopped
+    assert pj._wait_for_profile_sync("j2", "Acc") is True and world.clock.slept == []
+
+
+def test_stop_during_the_pause_inside_open_profile_starts_nothing(world):
+    world.log.record(PID)
+    launcher = _Launcher()
+    with stop_log.cancel_scope(lambda: len(world.clock.slept) >= 2):
+        with pytest.raises(prof.ProfileError) as err:
+            _open(launcher, clock=world.clock)
+    assert err.value.code == "cancelled" and launcher.calls == 0
+    assert "Nothing was started" in str(err.value)
+
+
+# --- review round: the wait in the read paths -------------------------------------------
+
+def test_start_closed_waits_for_the_sync_then_goes_on(world, monkeypatch):
+    from src.fb_ads_rpa import browser as rpa_browser
+
+    notes = []
+    monkeypatch.setattr(_as, "_set_wait_note", lambda account, note: notes.append(note))
+    called = []
+
+    class _Provider:
+        def open(self, *a, **k):
+            called.append(1)
+            raise RuntimeError("stop here")
+
+    monkeypatch.setattr(rpa_browser, "get_browser_provider", lambda name: _Provider())
+    monkeypatch.setattr(_as, "_slot_queue", lambda: SimpleNamespace(
+        acquire=lambda *a, **k: {"shared": False}, release=lambda *a: None))
+    world.log.record(PID)
+    entry = SimpleNamespace(profile_id=PID, multilogin_instance="A")
+    with pytest.raises(_as.ProfileNotAttachable) as err:
+        _as._start_closed(entry, "Acc", _as._ReadOpen("Acc"))
+    assert called == [1] and getattr(err.value, "code", "") != "restart_cooldown"
+    assert stop_log.SYNC_WAIT_MESSAGE in notes
+    assert world.clock.now - 1000.0 >= 180
+
+
+def test_open_gated_waits_for_the_sync_before_it_queues(world, monkeypatch):
+    from src.analysis_agent import account_spend_api as api
+
+    notes = []
+    monkeypatch.setattr(_as, "_set_wait_note", lambda account, note: notes.append(note))
+    monkeypatch.setattr(api, "_probe_local", lambda pid: ("none", None))
+    order = []
+    monkeypatch.setattr(_as, "_slot_queue", lambda: SimpleNamespace(
+        acquire=lambda *a, **k: order.append(("acquire", world.clock.now)) or {"shared": False},
+        release=lambda *a: None, grants=lambda pid: 0))
+    monkeypatch.setattr(api, "_open_profile",
+                        lambda pid, folder, instance: SimpleNamespace(started_now=False))
+    monkeypatch.setattr(_as, "_take_over_pending", lambda pid, held: None)
+    world.log.record(PID)
+    entry = SimpleNamespace(profile_id=PID, folder_id="F1", multilogin_instance="A")
+    api._open_gated(entry, "Acc", _as._ReadOpen("Acc"))
+    assert order and order[0][1] - 1000.0 >= 180          # queued only after the pause
+    assert stop_log.SYNC_WAIT_MESSAGE in notes

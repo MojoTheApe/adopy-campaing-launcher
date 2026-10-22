@@ -302,6 +302,12 @@ def _wait_for_sync(profile_id: str, on_wait: Callable[[str], None] | None, sleep
                                      sleep=None if sleep is time.sleep else sleep)
 
 
+def _sync_error(why: str) -> ProfileError:
+    from src.fb_api import stop_log as _stop_log
+
+    return ProfileError(why, code="cancelled" if why == _stop_log.CANCELLED_TEXT else "restart_cooldown")
+
+
 def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
                  on_wait: Callable[[str], None] | None = None,
                  launcher_factory: Callable[[str], Any] | None = None,
@@ -354,7 +360,7 @@ def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
         if why:
             # Остановили сами и недавно, а процесса на машине нет: MLX помнит
             # старый порт. К нему не цепляемся (TEST9095y, B97: CdpTimeout connect).
-            raise ProfileError(why, code="restart_cooldown")
+            raise _sync_error(why)
         if had_pause:
             # Ждали: старый ответ MLX про порт устарел — спрашиваем заново.
             state, port = running_state(launcher, profile_id)
@@ -373,7 +379,7 @@ def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
 
     why = _wait_for_sync(profile_id, on_wait, sleep)
     if why:
-        raise ProfileError(why, code="restart_cooldown")
+        raise _sync_error(why)
 
     # ACL-1826: пачка уже знает, что общая сессия слота потеряна, — не стучимся в MLX зря.
     from src.fb_api import mlx_session as _mlx
