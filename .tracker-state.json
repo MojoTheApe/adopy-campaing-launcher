@@ -48377,6 +48377,18 @@
         "state": "implementing",
         "started_at": "2026-10-22T03:03:52+00:00",
         "from_status": "status:todo"
+      },
+      "840": {
+        "actor": "Worker-W1021840",
+        "session": "run_w1021_1840",
+        "coordinator": "Coordinator-I1021A",
+        "branch": "codex/acl-1840-country-footer-inset",
+        "worktree": "C:\\acl-int-w1840",
+        "id": "7e44ab259ea446668b3a8d77a24b5b40",
+        "issue": 840,
+        "state": "implementing",
+        "started_at": "2026-10-22T03:07:55+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -53179,9 +53191,13 @@
           {
             "actor": "Worker-W1021840",
             "session": "run_w1021_1840"
+          },
+          {
+            "actor": "Worker-W1021840",
+            "session": "run_w1021_1840"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-W1021840",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -53212,8 +53228,8 @@
           "session": "run_i1021a_1021",
           "report": "Approval is stale against current main 64e73a1e (after ACL-2073 #1075 and ACL-2071 #1076 merged). Author: merge current main into the original branch without changing content (resolve only CHANGELOG append conflicts by keeping both entries), re-run checks, hand off, and get a fresh independent source approval for batch 2b (--deliver)."
         },
-        "reviewer": "Reviewer-R10221840",
-        "rework": true
+        "rework": true,
+        "rework_claim": "7e44ab259ea446668b3a8d77a24b5b40"
       },
       "841": {
         "implementers": [
@@ -112549,6 +112565,13 @@
         "at": "2026-10-22T03:05:09+00:00",
         "batch_id": "0499c60dda4c47e595333eecb0cffb64",
         "pr": 1082
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-22T03:07:55+00:00",
+        "issue": 840,
+        "claim": "7e44ab259ea446668b3a8d77a24b5b40",
+        "actor": "Worker-W1021840"
       }
     ],
     "policy": {
