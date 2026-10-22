@@ -55756,7 +55756,7 @@
             "session": "run_w1022_1708"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-W1022708",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -55775,7 +55775,7 @@
         },
         "pr": 952,
         "queued_at": "2026-10-22T06:51:55+00:00",
-        "review_report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21",
+        "review_report": "ACL-1708 / PR 952, head 048fd729: content review passed (no findings). All required CI is green and affected tests pass.\n\nBlocker: main advanced from 3bc8d973 to 515689de (PR 1085) while the review was being recorded. record-review now refuses with \"Source review must use the current main baseline\", and batch approve refuses with \"does not match the frozen baseline\".\n\nNeeded from the author: merge current origin/main into the branch (merge-tree with 515689de is clean; app.py and report.html overlap without conflict), push, re-run checks, hand off, then request a new review. Do not change content otherwise.\n\nOptional non-blocking: Install ACL.bat line 113 (\"Close the ACL launcher\") and install_dashboard_shortcut.ps1 (\"Dashboard launcher not found\" / \"Launcher:\") still say launcher; they are outside the dashboard acceptance.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578060+00:00",
@@ -55787,7 +55787,8 @@
           "session": "coord-m1011a-20261015",
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
         },
-        "reviewer": "Reviewer-AI1022708"
+        "reviewer": "Reviewer-AI1022708",
+        "rework": true
       },
       "73": {
         "implementers": [
@@ -115256,6 +115257,24 @@
         "issue": 1079,
         "claim": "54b0b6e5657f447c82eef2cd8068417f",
         "actor": "Worker-V7Q2R8"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-22T07:11:17+00:00",
+        "review": {
+          "id": "67a34bfbf7bd4d8293c7d4a5781ff416",
+          "pr": 952,
+          "issues": [
+            708
+          ],
+          "actor": "Reviewer-AI1022708",
+          "session": "run_ai1022_708",
+          "coordinator": "Coordinator-I1021A",
+          "started_at": "2026-10-22T06:55:18+00:00",
+          "state": "returning",
+          "report": "ACL-1708 / PR 952, head 048fd729: content review passed (no findings). All required CI is green and affected tests pass.\n\nBlocker: main advanced from 3bc8d973 to 515689de (PR 1085) while the review was being recorded. record-review now refuses with \"Source review must use the current main baseline\", and batch approve refuses with \"does not match the frozen baseline\".\n\nNeeded from the author: merge current origin/main into the branch (merge-tree with 515689de is clean; app.py and report.html overlap without conflict), push, re-run checks, hand off, then request a new review. Do not change content otherwise.\n\nOptional non-blocking: Install ACL.bat line 113 (\"Close the ACL launcher\") and install_dashboard_shortcut.ps1 (\"Dashboard launcher not found\" / \"Launcher:\") still say launcher; they are outside the dashboard acceptance.",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -127120,22 +127139,7 @@
       "started_at": "2026-10-22T06:29:13+00:00",
       "ineligible": {}
     },
-    "source_reviews": {
-      "952": {
-        "id": "67a34bfbf7bd4d8293c7d4a5781ff416",
-        "pr": 952,
-        "issues": [
-          708
-        ],
-        "actor": "Reviewer-AI1022708",
-        "session": "run_ai1022_708",
-        "coordinator": "Coordinator-I1021A",
-        "started_at": "2026-10-22T06:55:18+00:00",
-        "state": "returning",
-        "report": "ACL-1708 / PR 952, head 048fd729: content review passed (no findings). All required CI is green and affected tests pass.\n\nBlocker: main advanced from 3bc8d973 to 515689de (PR 1085) while the review was being recorded. record-review now refuses with \"Source review must use the current main baseline\", and batch approve refuses with \"does not match the frozen baseline\".\n\nNeeded from the author: merge current origin/main into the branch (merge-tree with 515689de is clean; app.py and report.html overlap without conflict), push, re-run checks, hand off, then request a new review. Do not change content otherwise.\n\nOptional non-blocking: Install ACL.bat line 113 (\"Close the ACL launcher\") and install_dashboard_shortcut.ps1 (\"Dashboard launcher not found\" / \"Launcher:\") still say launcher; they are outside the dashboard acceptance.",
-        "keep_lane": false
-      }
-    },
+    "source_reviews": {},
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
   },
   "maintenance_history": [
