@@ -48307,6 +48307,18 @@
         "state": "implementing",
         "started_at": "2026-10-22T02:59:59+00:00",
         "from_status": "status:todo"
+      },
+      "1053": {
+        "actor": "Worker-W1022053",
+        "session": "run_w1022_2053",
+        "coordinator": "Coordinator-I1021A",
+        "branch": "work/acl-2053-form-template-parity",
+        "worktree": "C:\\acl-int-w2053",
+        "id": "3083aafad44443d999d373d4b2961243",
+        "issue": 1053,
+        "state": "implementing",
+        "started_at": "2026-10-22T03:03:52+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -57410,11 +57422,15 @@
           {
             "actor": "Worker-F1021W1",
             "session": "033ad857-forms-2053"
+          },
+          {
+            "actor": "Worker-W1022053",
+            "session": "run_w1022_2053"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-F1021W1",
-        "coordinator": "Coordinator-F1021A",
+        "state": "implementing",
+        "worker": "Worker-W1022053",
+        "coordinator": "Coordinator-I1021A",
         "handoff": {
           "actor": "Worker-F1021W1",
           "session": "033ad857-forms-2053",
@@ -57431,9 +57447,9 @@
         },
         "pr": 1060,
         "queued_at": "2026-10-21T09:38:42+00:00",
-        "reviewer": "Reviewer-R10222053",
         "review_report": "stale vs main e8bf31f8; author merges current main and hands off for a fresh review; no content findings",
-        "rework": true
+        "rework": true,
+        "rework_claim": "3083aafad44443d999d373d4b2961243"
       },
       "1054": {
         "implementers": [
@@ -60846,6 +60862,10 @@
       },
       "Worker-W1022052": {
         "session": "run_w1022_2052",
+        "role": "Worker"
+      },
+      "Worker-W1022053": {
+        "session": "run_w1022_2053",
         "role": "Worker"
       }
     },
@@ -112458,6 +112478,13 @@
         "issue": 1052,
         "claim": "e992f46bf9884c06a2ec2d92b3ae9b10",
         "actor": "Worker-W1022052"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-22T03:03:52+00:00",
+        "issue": 1053,
+        "claim": "3083aafad44443d999d373d4b2961243",
+        "actor": "Worker-W1022053"
       }
     ],
     "policy": {
