@@ -45,18 +45,24 @@ def profile_key_for(account_label: str) -> str:
     return profile or label
 
 
-#: ACL-1444: машинный выключатель — `1` держит открытыми все окна профилей,
-#: как до ACL-1444 (чистое задание профиль не закрывает).
+#: ACL-1444: машинный выключатель окон профилей. ACL-2113: по умолчанию окно
+#: ОСТАЁТСЯ открытым (байер работает в нём дальше); `0`/`false`/`no`/`off`
+#: возвращает прежнее поведение ACL-1444 — чистое задание закрывает профиль.
 ENV_KEEP_PROFILES_OPEN = "FB_RPA_KEEP_PROFILES_OPEN"
+_KEEP_OFF_VALUES = ("0", "false", "no", "off")
 
 #: Строка в панели задания, когда робот закрыл профиль сам.
 PROFILE_CLOSED_NOTICE = "Closed the profile — all campaigns are ready"
 
 
 def keep_profiles_open() -> bool:
-    """Выключатель ACL-1444 из окружения (машинный `.env`), читается при каждом задании."""
-    return str(os.environ.get(ENV_KEEP_PROFILES_OPEN, "") or "").strip().lower() in (
-        "1", "true", "yes", "on")
+    """Оставлять ли окно открытым после чистого задания (ACL-2113: да, если не выключено).
+
+    Читается из окружения (машинный `.env`) при каждом задании. Пусто или любое
+    значение, кроме `0/false/no/off`, — оставлять.
+    """
+    raw = str(os.environ.get(ENV_KEEP_PROFILES_OPEN, "") or "").strip().lower()
+    return raw not in _KEEP_OFF_VALUES
 
 
 def _on_campaign_list(url: str) -> bool:
@@ -442,9 +448,7 @@ class RpaPublisher:
         entry, conn = self._entry, self._conn
         provider = self._provider
         outcome = ""
-        if keep_profiles_open():
-            outcome = "kept_switch"
-        elif not clean:
+        if not clean:
             outcome = "kept_problem"
         elif self._cancelled:
             outcome = "kept_cancelled"
@@ -459,7 +463,18 @@ class RpaPublisher:
                 saved = False
             if not saved:
                 outcome = "kept_unsaved"
+            elif keep_profiles_open():
+                # ACL-2113: «оставлено для удобства» — только после тех же проверок, что и
+                # закрытие: чистое, не отменено, черновик сохранён, окно — робота.
+                owns = getattr(provider, "robot_owns_profile", None)
+                try:
+                    mine = True if not callable(owns) else bool(owns(entry))
+                except Exception:
+                    mine = False
+                outcome = "kept_switch" if mine else "hand_opened"
         self.close()
+        if outcome == "kept_switch" and self._cancelled:
+            outcome = "kept_cancelled"
         if not outcome and self._cancelled:
             # Stop нажали, пока ждали автосохранения (ревью PR #446, F2).
             outcome = "kept_cancelled"

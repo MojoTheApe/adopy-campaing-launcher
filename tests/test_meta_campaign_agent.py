@@ -183,8 +183,12 @@ def test_acl1783_default_graph_version_is_v26(monkeypatch):
     monkeypatch.setenv("META_ACCESS_TOKEN", "t")
     monkeypatch.delenv("META_GRAPH_API_VERSION", raising=False)
     assert meta_client_from_env().base_url.endswith("/v26.0")
-    monkeypatch.setenv("META_GRAPH_API_VERSION", "v25.0")
-    assert meta_client_from_env().base_url.endswith("/v25.0")
+    monkeypatch.setenv("META_GRAPH_API_VERSION", "v25.0")  # older than meta.json: ignored
+    assert meta_client_from_env().base_url.endswith("/v26.0")
+    monkeypatch.setenv("META_GRAPH_API_VERSION", "v22.0")  # the stale pin: ignored
+    assert meta_client_from_env().base_url.endswith("/v26.0")
+    monkeypatch.setenv("META_GRAPH_API_VERSION", "v27.0")  # explicitly newer: wins
+    assert meta_client_from_env().base_url.endswith("/v27.0")
 
 
 def test_acl1783_payloads_have_no_v26_removed_fields():

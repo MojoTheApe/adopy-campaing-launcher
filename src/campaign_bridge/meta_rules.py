@@ -172,6 +172,35 @@ def load_rules(directory: str | Path | None = None) -> RuleSet:
     return RuleSet(meta=meta, rules=tuple(rules))
 
 
+_VERSION_RE = re.compile(r"^v(\d+)\.(\d+)$")
+
+
+def _version_key(version: Any) -> tuple[int, int] | None:
+    m = _VERSION_RE.match(str(version or "").strip().lower())
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def graph_api_version(env_override: str | None = None, directory: str | Path | None = None) -> str:
+    """Graph API version: `api_version_current` from meta.json is the single source (ACL-2123).
+
+    An env override wins only when it is a well-formed version strictly newer than
+    the registry's; an equal, older (e.g. the stale v22.0 pin) or malformed value
+    is ignored.
+    """
+    base = Path(directory) if directory else RULES_DIR
+    try:
+        meta = json.loads((base / "meta.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        raise MetaRulesError(f"cannot read Meta rules registry in {base}: {e}") from None
+    validate_meta(meta)
+    current = str(meta["api_version_current"]).strip()
+    override = (env_override or "").strip().lower()
+    new, cur = _version_key(override), _version_key(current)
+    if new is not None and cur is not None and new > cur:
+        return override
+    return current
+
+
 # ── Чтение значений из задания ──────────────────────────────────────────
 
 def _dig(obj: Any, path: str) -> Any:
