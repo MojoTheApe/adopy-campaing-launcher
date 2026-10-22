@@ -49039,20 +49039,6 @@
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
       },
-      "839": {
-        "actor": "Worker-W1021839",
-        "session": "run_w1021_1839",
-        "coordinator": "Coordinator-I1021A",
-        "branch": "codex/acl-1839-connection-panel-layout",
-        "worktree": "C:\\acl-int-w1839",
-        "id": "26acff1d5bad40cfb5e459809c442000",
-        "issue": 839,
-        "state": "handoff",
-        "started_at": "2026-10-22T05:46:47+00:00",
-        "from_status": "status:todo",
-        "pr": 843,
-        "report": "ACL-1839 round 2 (PR #843), no code change.\n- Previous head 2f82fe86; new head 16a5bd6ddb720a2058f487d1e1387907af0c1837; merged main 3bc8d9739a82ce8db0ddb67a832ea159bf40ed36.\n- Conflict: docs/system/CHANGELOG.md only; took main's version. Entry moved to docs/system/changelog.d/ACL-1839.md; fold_changelog.py --check passes.\n- Diff vs main: changelog fragment, _account_map_add.html, report.html, tests/test_account_connection_layout.py.\n- Local: test_account_connection_layout.py + test_media_attachment_identity.py -> 34 passed.\n- CI: linux shards 1/2/3 pass (shard 3 incl. test_media_attachment_identity), windows, process, ACL verification pass. tracker-link failed only because task was not in Review (\"move it to Review before a ready PR\"); rerun after handoff."
-      },
       "53": {
         "actor": "Worker-W1022402",
         "session": "run_w1022_402",
@@ -53808,7 +53794,7 @@
             "session": "run_w1021_1839"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1021839",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -53817,16 +53803,16 @@
           "coordinator": "Coordinator-I1021A",
           "branch": "codex/acl-1839-connection-panel-layout",
           "worktree": "C:\\acl-int-w1839",
-          "id": "a8c9a23a34284556afa14c9b377b2b6e",
+          "id": "26acff1d5bad40cfb5e459809c442000",
           "issue": 839,
           "state": "handoff",
-          "started_at": "2026-10-21T13:40:24+00:00",
+          "started_at": "2026-10-22T05:46:47+00:00",
           "from_status": "status:todo",
           "pr": 843,
-          "report": "ACL-1839 refresh of PR #843 (no content change).\n- Old head: 608486600db51b357dd49038119caae58fe527bf\n- New head: 2f82fe8679bc5b2acccc7a188cc5a43180cbb960 (merge of origin/main 0ea237b0e4ceededbfd0683dff9e57c20059a115)\n- Only conflict: docs/system/CHANGELOG.md (both entries kept: ACL-1839 then ACL-1626). Base is main.\n- Diff vs main: CHANGELOG.md, _account_map_add.html, report.html, tests/test_account_connection_layout.py only.\n- Tests: py -m pytest tests/test_account_connection_layout.py -> 18 passed.\n- CI on new head: all checks pass (tracker-link, linux tests 1-3, windows tests, process instructions, ACL verification)."
+          "report": "ACL-1839 round 2 (PR #843), no code change.\n- Previous head 2f82fe86; new head 16a5bd6ddb720a2058f487d1e1387907af0c1837; merged main 3bc8d9739a82ce8db0ddb67a832ea159bf40ed36.\n- Conflict: docs/system/CHANGELOG.md only; took main's version. Entry moved to docs/system/changelog.d/ACL-1839.md; fold_changelog.py --check passes.\n- Diff vs main: changelog fragment, _account_map_add.html, report.html, tests/test_account_connection_layout.py.\n- Local: test_account_connection_layout.py + test_media_attachment_identity.py -> 34 passed.\n- CI: linux shards 1/2/3 pass (shard 3 incl. test_media_attachment_identity), windows, process, ACL verification pass. tracker-link failed only because task was not in Review (\"move it to Review before a ready PR\"); rerun after handoff."
         },
         "pr": 843,
-        "queued_at": "2026-10-21T13:46:11+00:00",
+        "queued_at": "2026-10-22T06:09:27+00:00",
         "review_report": "Content approved on 2f82fe86, but the required check ACL verification fails deterministically (2/2 runs): tests/test_media_attachment_identity.py::test_the_picked_tile_and_the_ad_show_the_same_thumbnail[False] 'dirty' == 'attached'. It passes on main+ACL-1165, so this is likely an ACL-1839 x main interaction. The author must investigate and fix, then get a fresh review.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -53838,9 +53824,7 @@
           "actor": "Coordinator-M1011A",
           "session": "coord-m1011a-20261015",
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
-        },
-        "rework": true,
-        "rework_claim": "26acff1d5bad40cfb5e459809c442000"
+        }
       },
       "840": {
         "implementers": [
@@ -64653,7 +64637,8 @@
       710,
       1069,
       845,
-      1028
+      1028,
+      839
     ],
     "review": null,
     "history": [
@@ -114522,6 +114507,13 @@
         "issue": 1028,
         "pr": 1029,
         "actor": "Worker-W1022028"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-22T06:09:27+00:00",
+        "issue": 839,
+        "pr": 843,
+        "actor": "Worker-W1021839"
       }
     ],
     "policy": {
