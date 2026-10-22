@@ -85,6 +85,10 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   detached update helper. `src/web/release_updates.py` offers verified release updates.
 - `config/paths.py`: machine-specific paths. User configuration, account maps and
   credentials belong outside Git, normally under `%LOCALAPPDATA%/ACL`.
+- `scripts/meta_docs_watch.py`: documentation digests use the shared Obsidian
+  folder resolver (`ACL_OBSIDIAN_DIR`, then real/legacy locations). Missing
+  default or requested vaults warn on stderr; `--vault` overrides the folder,
+  `--no-obsidian` disables note output, and dry-run writes nothing (ACL-2101).
 
 Read [distribution boundaries](../DISTRIBUTION.md), [product/design context](../../PRODUCT.md),
 [design guidance](../../DESIGN.md) and existing specs for subsystem details.
