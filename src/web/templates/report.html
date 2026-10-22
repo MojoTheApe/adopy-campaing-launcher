@@ -15250,12 +15250,9 @@ function cbPublishConfirmParts(m) {
     if (!a.camps.length) return '<div class="pc-acc">' + head + '</div>';
     // «Demo: имя1, имя2» читается подряд и в раскрытом виде, и для скринридера.
     return collapse
-      ? '<details class="pc-acc cb-selected-list"><summary>' + head + '</summary><div class="pc-chips">' + chips + '</div></details>'
-      : '<div class="pc-acc cb-selected-list"><strong>' + esc(a.name) + '</strong>: ' + chips + '</div>';
+      ? '<details class="pc-acc"><summary>' + head + '</summary><div class="pc-chips">' + chips + '</div></details>'
+      : '<div class="pc-acc"><strong>' + esc(a.name) + '</strong>: ' + chips + '</div>';
   }).join('');
-  if (m.skipped && m.skipped.length) {
-    left += '<div class="pc-skipped">Already being built, skipped: ' + esc(m.skipped.join(', ')) + '</div>';
-  }
 
   var right = (m.noticesHtml || '')
     + '<div class="pc-help">Keep the screen unlocked while the build runs '
@@ -15266,7 +15263,9 @@ function cbPublishConfirmParts(m) {
       + 'Do not lock the screen while the build runs — creative uploads stall on a locked screen.')
     + '">ⓘ</span></div>';
 
-  var body = '<div class="pc-cols"><div class="pc-left"><div class="pc-h">Accounts and campaigns</div>' + left
+  var body = '<div class="pc-cols"><div class="pc-left"><div class="pc-h">Accounts and campaigns</div><div class="cb-selected-list">' + left + '</div>'
+    + (m.skipped && m.skipped.length
+      ? '<div class="pc-skipped">Already being built, skipped: ' + esc(m.skipped.join(', ')) + '</div>' : '')
     + '</div><div class="pc-right"><div class="pc-h">Notices</div>' + right + '</div></div>';
   return { lead: lead, body: body };
 }

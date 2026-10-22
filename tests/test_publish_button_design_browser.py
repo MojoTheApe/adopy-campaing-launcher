@@ -146,7 +146,7 @@ def test_scope_and_all_count_exclude_running_accounts_and_match_submission(ui):
     expect(p.locator('.cbd-publication-scope')).to_contain_text('All 3 campaigns')
     expect(p.locator('.cbd-publication-scope')).to_contain_text('2 already building')
     bulk.click()
-    expect(p.locator('#safe-confirm-modal')).to_contain_text('Accounts: 1')
+    expect(p.locator('#safe-confirm-modal')).to_contain_text('on 1 account')
     p.locator('#sfc-ok').click()
     wait_posts(state, 2, p)
     assert state['posts'][1]['account_label'] == 'Other'
