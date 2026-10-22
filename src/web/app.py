@@ -1819,9 +1819,9 @@ async def acl_update_apply() -> JSONResponse:
         return JSONResponse(
             {
                 "ok": False,
-                "error": "ACM was not started by its launcher, so nothing would "
-                         "bring it back. Start it from the desktop shortcut and "
-                         "try again.",
+                "error": "ACM was not started from its desktop shortcut, so nothing "
+                         "would bring it back. Start it from the desktop shortcut "
+                         "and try again.",
             },
             status_code=409,
         )
