@@ -65,3 +65,45 @@ def test_other_pins_are_left_alone(machine):
     machine.write_text("META_GRAPH_API_VERSION=v27.0\nFB_RPA_ENGINE=recorded_flow\n", encoding="utf-8")
     assert paths.migrate_legacy_env() == ""
     assert "v27.0" in machine.read_text(encoding="utf-8")
+
+
+def _migrate(machine, raw: bytes):
+    machine.write_bytes(raw)
+    return paths.migrate_legacy_env(), machine.read_bytes()
+
+
+def test_crlf_and_bom_survive_byte_for_byte(machine):
+    raw = b"\xef\xbb\xbfMETA_ACCESS_TOKEN=abc\r\nMETA_GRAPH_API_VERSION=v22.0\r\nFB_RPA_ENGINE=recorded_flow\r\n"
+    note, out = _migrate(machine, raw)
+    assert "cleared" in note
+    assert out == raw.replace(b"v22.0", b"")
+
+
+def test_quoted_pin_and_inline_comment(machine):
+    raw = b'FB_RPA_ENGINE=recorded_flow\nMETA_GRAPH_API_VERSION="v22.0"  # old\nX=1\n'
+    note, out = _migrate(machine, raw)
+    assert "cleared" in note
+    assert out == b'FB_RPA_ENGINE=recorded_flow\nMETA_GRAPH_API_VERSION=  # old\nX=1\n'
+
+
+def test_cp1251_file_keeps_its_bytes(machine):
+    raw = "FB_RPA_ENGINE=recorded_flow\r\n# комментарий\r\nMETA_GRAPH_API_VERSION=v22.0\r\n".encode("cp1251")
+    note, out = _migrate(machine, raw)
+    assert "cleared" in note
+    assert out == raw.replace(b"v22.0", b"")
+
+
+def test_unreadable_file_is_skipped_with_a_log(machine, monkeypatch):
+    machine.write_bytes(b"FB_RPA_ENGINE=recorded_flow\nMETA_GRAPH_API_VERSION=v22.0\n")
+    real = Path.read_bytes
+
+    def boom(self):
+        if self == machine:
+            raise PermissionError("locked")
+        return real(self)
+
+    monkeypatch.setattr(Path, "read_bytes", boom)
+    note = paths._clear_stale_graph_pin(machine)
+    assert "skipped" in note and "PermissionError" in note
+    monkeypatch.undo()
+    assert b"v22.0" in machine.read_bytes()
