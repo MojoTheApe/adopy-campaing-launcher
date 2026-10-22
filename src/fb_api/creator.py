@@ -304,7 +304,8 @@ def plan_from_draft(draft: Any, template_loader: Callable[[str], dict | None] | 
                 if tpl is None:
                     problems.append(f"Ad {i}: the form template was not found in the Forms library")
                 else:
-                    clean, errs = _ft.validate(tpl)
+                    # Сохранённый шаблон: язык вне закрытого списка допустим (ACL-2053).
+                    clean, errs = _ft.validate(tpl, lenient_locale=True)
                     if errs:
                         problems.append(f"Ad {i}: form template {clean.get('name') or template_id!r} is not valid: "
                                         + "; ".join(errs))
