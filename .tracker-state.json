@@ -49071,6 +49071,18 @@
         "state": "implementing",
         "started_at": "2026-10-22T05:30:10+00:00",
         "from_status": "status:todo"
+      },
+      "73": {
+        "actor": "Worker-W1022144",
+        "session": "run_w1022_144",
+        "coordinator": "Coordinator-I1021A",
+        "branch": "codex/acl-144-direct-profile-dir",
+        "worktree": "C:\\acl-int-w144",
+        "id": "d082d53b3fd640059bb2646b487c91e8",
+        "issue": 73,
+        "state": "implementing",
+        "started_at": "2026-10-22T05:33:06+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -55813,11 +55825,15 @@
           {
             "actor": "Worker-W144D",
             "session": "w144d-20261019"
+          },
+          {
+            "actor": "Worker-W1022144",
+            "session": "run_w1022_144"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-W144D",
-        "coordinator": "Coordinator-C1016A",
+        "state": "implementing",
+        "worker": "Worker-W1022144",
+        "coordinator": "Coordinator-I1021A",
         "handoff": {
           "actor": "Worker-W144D",
           "session": "w144d-20261019",
@@ -55840,20 +55856,14 @@
           "at": "2026-10-17T16:30:39.578062+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-R144X",
         "return_operation": {
           "id": "0ca1820a06ff42fc9b02f8c67c673763",
           "actor": "Coordinator-C1016A",
           "session": "c7e3da-20261016",
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
         },
-        "return": {
-          "id": "0ca1820a06ff42fc9b02f8c67c673763",
-          "actor": "Coordinator-C1016A",
-          "session": "c7e3da-20261016",
-          "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
-        },
-        "rework": true
+        "rework": true,
+        "rework_claim": "d082d53b3fd640059bb2646b487c91e8"
       },
       "19": {
         "implementers": [
@@ -61650,6 +61660,10 @@
       },
       "Worker-W1022402": {
         "session": "run_w1022_402",
+        "role": "Worker"
+      },
+      "Worker-W1022144": {
+        "session": "run_w1022_144",
         "role": "Worker"
       }
     },
@@ -114265,6 +114279,13 @@
         "issue": 53,
         "claim": "d0995e3dc4634496a01ea49cf942465a",
         "actor": "Worker-W1022402"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-22T05:33:07+00:00",
+        "issue": 73,
+        "claim": "d082d53b3fd640059bb2646b487c91e8",
+        "actor": "Worker-W1022144"
       }
     ],
     "policy": {
