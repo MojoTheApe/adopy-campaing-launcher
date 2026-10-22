@@ -49083,6 +49083,18 @@
         "state": "implementing",
         "started_at": "2026-10-22T05:46:47+00:00",
         "from_status": "status:todo"
+      },
+      "1028": {
+        "actor": "Worker-W1022028",
+        "session": "run_w1022_2028",
+        "coordinator": "Coordinator-I1021A",
+        "branch": "work/acl-2028-plan-check-snapshot",
+        "worktree": "C:\\acl-int-w2028",
+        "id": "d9377053d1834cd19a0f08fc524558d7",
+        "issue": 1028,
+        "state": "implementing",
+        "started_at": "2026-10-22T05:52:39+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -57819,11 +57831,15 @@
           {
             "actor": "Worker-W2028",
             "session": "local_e4968c7b"
+          },
+          {
+            "actor": "Worker-W1022028",
+            "session": "run_w1022_2028"
           }
         ],
-        "state": "changes_requested",
-        "worker": "Worker-W2028",
-        "coordinator": "Coordinator-M1011A",
+        "state": "implementing",
+        "worker": "Worker-W1022028",
+        "coordinator": "Coordinator-I1021A",
         "handoff": {
           "actor": "Worker-W2028",
           "session": "local_e4968c7b",
@@ -57840,21 +57856,15 @@
         },
         "pr": 1029,
         "queued_at": "2026-10-20T05:56:04+00:00",
-        "reviewer": "Reviewer-R2028",
         "return_operation": {
           "id": "07136684a8744ae797a344d7adada477",
           "actor": "Coordinator-M1011A",
           "session": "coord-m1011a-20261015",
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
         },
-        "return": {
-          "id": "07136684a8744ae797a344d7adada477",
-          "actor": "Coordinator-M1011A",
-          "session": "coord-m1011a-20261015",
-          "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
-        },
         "review_report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21",
-        "rework": true
+        "rework": true,
+        "rework_claim": "d9377053d1834cd19a0f08fc524558d7"
       },
       "318": {
         "implementers": [],
@@ -61666,6 +61676,10 @@
       },
       "Worker-W1022845": {
         "session": "run_w1022_1845",
+        "role": "Worker"
+      },
+      "Worker-W1022028": {
+        "session": "run_w1022_2028",
         "role": "Worker"
       }
     },
@@ -114333,6 +114347,13 @@
         "issue": 827,
         "pr": 829,
         "actor": "Worker-W1022827"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-22T05:52:39+00:00",
+        "issue": 1028,
+        "claim": "d9377053d1834cd19a0f08fc524558d7",
+        "actor": "Worker-W1022028"
       }
     ],
     "policy": {
