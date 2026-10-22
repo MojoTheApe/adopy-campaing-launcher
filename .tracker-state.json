@@ -58462,7 +58462,7 @@
             "session": "root_acl2079_20261022"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-V7Q2R8",
         "coordinator": "Coordinator-R6M9H2",
         "handoff": {
@@ -58487,7 +58487,8 @@
           "actor": "Coordinator-R6M9H2",
           "session": "coord_acl2079_20261022",
           "report": "Return only ACL-2079/PR1080 to its original author/branch. Actual main is now3bc8d9739a82ce8db0ddb67a832ea159bf40ed36, while the genuine current approval of source2c71d1bde0ee190b1123c4dcd1936b8d19d555b3 was bound to e8bf31f8921ec6a8f79c824f39c1fc3beff2f359. The selected task-context compatibility policy is absent, so preserve the conservative ordinary author-return/current-source review route. Include all accepted new main product/config/docs/test files unchanged, update only the author report's current baseline, preserve ACL choices/owners and obtain fresh proof/review/applicable required CI. This is neither a new feature requirement nor a failure of the earlier all16 passing checks; preserve that original review/check history. Existing foreign integration1085/intake and all its members, original ACL2069 scope and pending product requests remain untouched. No product publication, optional policy activation or direct source merge is requested."
-        }
+        },
+        "reviewer": "Reviewer-H8K4N7"
       }
     },
     "actors": {
@@ -64699,8 +64700,7 @@
     "review_queue": [
       1054,
       710,
-      1069,
-      1079
+      1069
     ],
     "review": {
       "id": "6ce6294652d74de3a0ea514b37fd6080",
@@ -115311,6 +115311,13 @@
         "issue": 1079,
         "pr": 1080,
         "actor": "Worker-V7Q2R8"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-22T07:16:32+00:00",
+        "pr": 1080,
+        "lane": "0ed97445d6484f44b9827b8d24986df8",
+        "actor": "Reviewer-H8K4N7"
       }
     ],
     "policy": {
@@ -127131,7 +127138,20 @@
       "started_at": "2026-10-22T06:29:13+00:00",
       "ineligible": {}
     },
-    "source_reviews": {},
+    "source_reviews": {
+      "1080": {
+        "id": "0ed97445d6484f44b9827b8d24986df8",
+        "pr": 1080,
+        "issues": [
+          1079
+        ],
+        "actor": "Reviewer-H8K4N7",
+        "session": "review_acl2079_tt194_20261022",
+        "coordinator": "Coordinator-R6M9H2",
+        "started_at": "2026-10-22T07:16:32+00:00",
+        "state": "reviewing"
+      }
+    },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
   },
   "maintenance_history": [
