@@ -57881,7 +57881,7 @@
             "session": "run_w1022_402"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1022402",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -57906,7 +57906,8 @@
           "session": "coord-m1011a-20261015",
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
         },
-        "review_report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
+        "review_report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21",
+        "reviewer": "Reviewer-AB1022402"
       },
       "230": {
         "implementers": [
@@ -61681,6 +61682,10 @@
       "Worker-W1022028": {
         "session": "run_w1022_2028",
         "role": "Worker"
+      },
+      "Reviewer-AB1022402": {
+        "session": "run_ab1022_402",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -64667,7 +64672,6 @@
       1054,
       710,
       1069,
-      53,
       73,
       827
     ],
@@ -114354,6 +114358,13 @@
         "issue": 1028,
         "claim": "d9377053d1834cd19a0f08fc524558d7",
         "actor": "Worker-W1022028"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-22T05:55:28+00:00",
+        "pr": 1032,
+        "lane": "86c7d7788eb34c6288a22b3c72fd48d3",
+        "actor": "Reviewer-AB1022402"
       }
     ],
     "policy": {
@@ -125758,7 +125769,20 @@
       "started_at": "2026-10-22T03:38:28+00:00",
       "ineligible": {}
     },
-    "source_reviews": {},
+    "source_reviews": {
+      "1032": {
+        "id": "86c7d7788eb34c6288a22b3c72fd48d3",
+        "pr": 1032,
+        "issues": [
+          53
+        ],
+        "actor": "Reviewer-AB1022402",
+        "session": "run_ab1022_402",
+        "coordinator": "Coordinator-I1021A",
+        "started_at": "2026-10-22T05:55:28+00:00",
+        "state": "reviewing"
+      }
+    },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
   },
   "maintenance_history": [
