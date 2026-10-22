@@ -55276,7 +55276,7 @@
             "session": "run_w1021_106"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1021106",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -55306,7 +55306,8 @@
           "actor": "Coordinator-I1021A",
           "session": "run_i1021a_1021",
           "report": "Approval is stale against current main 64e73a1e (after ACL-2073 #1075 and ACL-2071 #1076 merged). Author: merge current main into the original branch without changing content (resolve only CHANGELOG append conflicts by keeping both entries), re-run checks, hand off, and get a fresh independent source approval for batch 2b (--deliver)."
-        }
+        },
+        "reviewer": "Reviewer-Z1022106"
       },
       "29": {
         "implementers": [
@@ -61027,6 +61028,10 @@
       "Reviewer-X1022053": {
         "session": "run_x1022_053",
         "role": "Reviewer"
+      },
+      "Reviewer-Z1022106": {
+        "session": "run_z1022_106",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -63996,8 +64001,7 @@
     "review_queue": [
       1054,
       710,
-      1069,
-      19
+      1069
     ],
     "review": null,
     "history": [
@@ -112907,6 +112911,13 @@
         "pr": 1060,
         "lane": "54f9ef9d3ffd4107bd7a2fd7e5e6a7be",
         "actor": "Reviewer-X1022053"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-22T03:29:01+00:00",
+        "pr": 955,
+        "lane": "b3b955fadb144c60aa40952ea5659df9",
+        "actor": "Reviewer-Z1022106"
       }
     ],
     "policy": {
@@ -123961,6 +123972,18 @@
         "session": "run_x1022_053",
         "coordinator": "Coordinator-I1021A",
         "started_at": "2026-10-22T03:27:43+00:00",
+        "state": "reviewing"
+      },
+      "955": {
+        "id": "b3b955fadb144c60aa40952ea5659df9",
+        "pr": 955,
+        "issues": [
+          19
+        ],
+        "actor": "Reviewer-Z1022106",
+        "session": "run_z1022_106",
+        "coordinator": "Coordinator-I1021A",
+        "started_at": "2026-10-22T03:29:01+00:00",
         "state": "reviewing"
       }
     },
