@@ -53776,7 +53776,7 @@
             "session": "run_w1022_1827"
           }
         ],
-        "state": "approved",
+        "state": "merged",
         "worker": "Worker-W1022827",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -53807,7 +53807,8 @@
           "session": "coord_c0930a_1009",
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
         },
-        "reviewer": "Reviewer-AD1022827"
+        "reviewer": "Reviewer-AD1022827",
+        "batch_id": "50de16a3aac241f4a08a1c0e4406e44e"
       },
       "771": {
         "implementers": [
@@ -54297,7 +54298,7 @@
             "session": "run_w1022_1845"
           }
         ],
-        "state": "approved",
+        "state": "merged",
         "worker": "Worker-W1022845",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -54328,7 +54329,8 @@
           "session": "coord-m1011a-20261015",
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
         },
-        "reviewer": "Reviewer-AE1022845"
+        "reviewer": "Reviewer-AE1022845",
+        "batch_id": "50de16a3aac241f4a08a1c0e4406e44e"
       },
       "844": {
         "implementers": [
@@ -56127,7 +56129,7 @@
             "session": "run_w1022_144"
           }
         ],
-        "state": "approved",
+        "state": "merged",
         "worker": "Worker-W1022144",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -56158,7 +56160,8 @@
           "session": "c7e3da-20261016",
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
         },
-        "reviewer": "Reviewer-AC1022144"
+        "reviewer": "Reviewer-AC1022144",
+        "batch_id": "50de16a3aac241f4a08a1c0e4406e44e"
       },
       "19": {
         "implementers": [
@@ -58124,7 +58127,7 @@
             "session": "run_w1022_2028"
           }
         ],
-        "state": "approved",
+        "state": "merged",
         "worker": "Worker-W1022028",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -58150,7 +58153,8 @@
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
         },
         "review_report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21",
-        "reviewer": "Reviewer-AF1022028"
+        "reviewer": "Reviewer-AF1022028",
+        "batch_id": "50de16a3aac241f4a08a1c0e4406e44e"
       },
       "318": {
         "implementers": [],
@@ -58171,7 +58175,7 @@
             "session": "run_w1022_402"
           }
         ],
-        "state": "approved",
+        "state": "merged",
         "worker": "Worker-W1022402",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -58197,7 +58201,8 @@
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
         },
         "review_report": "Review of ACL-402 PR 1032 head bd013c88 (base main 3bc8d973): RETURN, one blocking finding.\n\nFinding (blocking): tests/test_failure_signatures.py::test_markdown_states_it_proposes_no_rule_and_report_includes_it is a time bomb. It builds rows dated 2026-10-19 and calls acl_telemetry_report.analyse(rows, 7), which uses the real date.today(). It passes today (2026-10-22) but fails from 2026-10-27 (verified: find_repeated with today=2026-10-27 returns 0 signatures, section shows no repeats, the assert on `create` fails). Fix: build the row dates relative to date.today() (or monkeypatch date in failure_signatures), keep the rest unchanged.\n\nChecked OK: merge bd013c88 contains only docs/system/changelog.d/ACL-402.md (original wording + Task link) and CHANGELOG.md equals main (no diff vs 3bc8d973); no hidden hunks in the evil merge. fold_changelog.py --check valid. Diff vs main is 4 files (fragment, report hook, src/failure_signatures.py, tests), in scope; report only, proposes/applies no rule; reason text scrubbed; no ids leaked. Affected tests 66 passed. Required CI green on bd013c88 (linux 1-3, windows, tracker-link, verification, process instructions).",
-        "reviewer": "Reviewer-AB1022402"
+        "reviewer": "Reviewer-AB1022402",
+        "batch_id": "50de16a3aac241f4a08a1c0e4406e44e"
       },
       "230": {
         "implementers": [
@@ -65006,6 +65011,23 @@
         "coordinator": "Coordinator-I1021A",
         "state": "reviewing",
         "started_at": "2026-10-22T03:42:34+00:00"
+      },
+      "1085": {
+        "id": "6ce6294652d74de3a0ea514b37fd6080",
+        "batch_id": "50de16a3aac241f4a08a1c0e4406e44e",
+        "pr": 1085,
+        "issues": [
+          827,
+          73,
+          1028,
+          53,
+          845
+        ],
+        "actor": "Reviewer-AH1022B85",
+        "session": "run_ah1022_b85",
+        "coordinator": "Coordinator-I1021A",
+        "state": "reviewing",
+        "started_at": "2026-10-22T06:34:57+00:00"
       }
     },
     "review_queue": [
@@ -65014,23 +65036,7 @@
       1069,
       708
     ],
-    "review": {
-      "id": "6ce6294652d74de3a0ea514b37fd6080",
-      "batch_id": "50de16a3aac241f4a08a1c0e4406e44e",
-      "pr": 1085,
-      "issues": [
-        827,
-        73,
-        1028,
-        53,
-        845
-      ],
-      "actor": "Reviewer-AH1022B85",
-      "session": "run_ah1022_b85",
-      "coordinator": "Coordinator-I1021A",
-      "state": "reviewing",
-      "started_at": "2026-10-22T06:34:57+00:00"
-    },
+    "review": null,
     "history": [
       {
         "event": "policy-adopted",
@@ -115650,6 +115656,292 @@
         "issue": 708,
         "pr": 952,
         "actor": "Worker-W1022708"
+      },
+      {
+        "event": "batch-integrated",
+        "at": "2026-10-22T07:28:49+00:00",
+        "batch": {
+          "id": "50de16a3aac241f4a08a1c0e4406e44e",
+          "actor": "Coordinator-I1021A",
+          "session": "run_i1021a_1021",
+          "state": "merged",
+          "issues": [
+            827,
+            73,
+            1028,
+            53,
+            845
+          ],
+          "members": [
+            {
+              "issue": 827,
+              "pr": 829,
+              "branch": "codex/acl-1827-design-parity-shell",
+              "head_sha": "b0308976ddef2b3c6a9b6c36d5c58e46c4ead831",
+              "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+              "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "fdf30ddff65f891825fc8a270531da766faed723eadbc1aa4b976e58374d588c",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-AD1022827",
+                "review_session": "run_ad1022_827",
+                "execution_lane": "c57e1bb60f264098ad601162c5daca52",
+                "implementer": "Worker-W1022827",
+                "head_sha": "b0308976ddef2b3c6a9b6c36d5c58e46c4ead831",
+                "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+                "tree_sha": "2f08f9077bfba14831002b1c410b870df5f78ba5",
+                "report": "Reviewed ACL-1827 (PR829) head b0308976 vs main 3bc8d973: merge-base equals main so the merge is clean and adds no UI regression; diff = country_workbench (compare_cohorts extracted and shared with you_vs_others; home_you_vs_others/home_kpi_tiles), app.py (home_kpis, sidebar FTD counters, read-only GET /robot-health/summary), robot_health.popover_context, report.html (shell-1827 style/script, six KPI tiles above Account map, no-emoji sidebar, Target library label only, Find country, asset sub-rows, Robot health popover with real href fallback), 2 test files. Spec items met; English UI; no ids leaked. Prototype vs built screenshot pairs checked: placement matches, deferred items disclosed in PR. Changelog fragment ACL-1827.md accurate; fold_changelog.py --check valid. Tests shell_parity + shell_browser: 32 passed. Required CI all green on b0308976.",
+                "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  827
+                ],
+                "recorded_at": "2026-10-22T06:03:33+00:00",
+                "issue_scopes": {
+                  "827": "fdf30ddff65f891825fc8a270531da766faed723eadbc1aa4b976e58374d588c"
+                }
+              },
+              "lane": {
+                "id": "c57e1bb60f264098ad601162c5daca52",
+                "pr": 829,
+                "issues": [
+                  827
+                ],
+                "actor": "Reviewer-AD1022827",
+                "session": "run_ad1022_827",
+                "coordinator": "Coordinator-I1021A",
+                "started_at": "2026-10-22T05:58:11+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-22T06:04:11+00:00"
+            },
+            {
+              "issue": 73,
+              "pr": 951,
+              "branch": "codex/acl-144-direct-profile-dir",
+              "head_sha": "e01e6a30a2ee9b8f22452493d249f25f2336afa1",
+              "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+              "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "3a25372ae9c718cc8f08a1c2cf0a72178f1d6ee782f7356fba460f6033aa2db0",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-AC1022144",
+                "implementer": "Worker-W1022144",
+                "review_session": "run_ac1022_144",
+                "execution_lane": "f1c4ba1b3c404a878d67d49158f82eea",
+                "head_sha": "e01e6a30a2ee9b8f22452493d249f25f2336afa1",
+                "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+                "tree_sha": "f5729264321d192e8720e988a9cabadee6718fc7",
+                "report": "Independent source review of ACL-144 / Issue #73 / PR #951 by Reviewer-AC1022144 (session run_ac1022_144), not the implementer Worker-W1022144, coordinator Coordinator-I1021A or any earlier ACL-144 reviewer.\nScope vs main 3bc8d973: src/fb_ads_rpa/browser.py (_find_mlx_profile_dir only), src/analysis_agent/account_spend.py (_mlx_profile_dir now delegates), tests/test_a_profile_folder_is_found_by_address.py (new), docs/system/changelog.d/ACL-144.md. Matches the Issue: the ~10 s rglob over ~/mlx/profiles is replaced by name lookups profiles/{ws}/{folder_id}/{profile_id}, profiles/{ws}/{profile_id}, profiles/{ws}/*/{profile_id}; no recursion.\nCorrectness: no cache is introduced, so there is nothing to invalidate - every call re-reads the disk, so moved/recreated profiles resolve fresh. Exact-name match only; a known folder_id is checked across all workspaces first; files are not accepted as profile dirs; empty/'.'/'..'/ids with a forward or back slash return None; OSError -> None. This removes the old risk of rglob matching a same-named directory inside another profile's Chrome content. Same layout was already used in production by the dashboard copy in account_spend (now deduplicated). Windows: pathlib joins, separator rejection covers both slashes.\nRPA behaviour: callers (DirectCDP/attach-only/campaign_open restart/close/_stop, recorders) are unchanged; they still pass profile_id only and handle None exactly as before (raise 'directory not found' or udd=''); robot-profile marking and checking use the same function so stay consistent. Opening still goes through Multilogin API/DirectCDP; no new plain-browser path, PlaywrightProfile fallback gating untouched, proxy handling untouched. main's newer ACL-1165 attach logging and ACL-1403 CDP retry code are not touched by the diff.\nMerge e01e6a30: --remerge-diff shows only docs/system/CHANGELOG.md (conflict resolved to main exactly; ACL-144 entry moved verbatim to the fragment). git diff main..head on CHANGELOG is empty. fold_changelog.py --check: valid (ACL-106, ACL-144, ACL-1840, ACL-2037, ACL-2052, ACL-2053).\nTests meaningful: Path.rglob/glob/os.walk patched to raise, so any scan fails the test; deep decoy p-1 under Default/Cache, exact-name decoys, folder_id precedence, file-not-dir, too-deep layout, missing root, unsafe ids, dashboard delegation. No real ids, usernames or user paths in the diff.\nLocal tests on the head (18 files: new test, test_browser_relaunch_gate, test_account_spend and every test that patches _find_mlx_profile_dir/_mlx_profile_dir): 481 passed. Required CI on e01e6a30 all green: run 39728774637 (ACL verification, linux 1-3, windows, tooling, process instructions), installer run 39728774465, descriptor 39728774262, tracker-link 39728774373.\nNon-blocking notes: (1) folder_id is not sanitized like profile_id (a '..' folder_id could escape a workspace) - it comes from MLX metadata and the old account_spend copy behaved the same; (2) a legacy layout profiles/{profile_id} directly under the root, which rglob used to find, is no longer found - not the known MLX X layout; (3) fb_api.profile.find_profile_dir still scans recursively, out of scope as stated.\nVerdict: approved.",
+                "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  73
+                ],
+                "recorded_at": "2026-10-22T06:06:07+00:00",
+                "issue_scopes": {
+                  "73": "3a25372ae9c718cc8f08a1c2cf0a72178f1d6ee782f7356fba460f6033aa2db0"
+                }
+              },
+              "lane": {
+                "id": "f1c4ba1b3c404a878d67d49158f82eea",
+                "pr": 951,
+                "issues": [
+                  73
+                ],
+                "actor": "Reviewer-AC1022144",
+                "session": "run_ac1022_144",
+                "coordinator": "Coordinator-I1021A",
+                "started_at": "2026-10-22T06:00:21+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-22T06:06:47+00:00"
+            },
+            {
+              "issue": 1028,
+              "pr": 1029,
+              "branch": "work/acl-2028-plan-check-snapshot",
+              "head_sha": "3c8dbf8eaba4cad54e216c1bef4a7bd79338e755",
+              "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+              "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "58b0b37224a22a2d7c5d5b192a01c1149b7d1fc9e003144935930fa9ae1dbc80",
+              "review": {
+                "kind": "independent-review",
+                "implementer": "Worker-W1022028",
+                "reviewer": "Reviewer-AF1022028",
+                "head_sha": "3c8dbf8eaba4cad54e216c1bef4a7bd79338e755",
+                "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+                "tree_sha": "05019de2040d2c834f7d57b3e54d7840449b69ab",
+                "verdict": "approved",
+                "review_session": "run_af1022_028",
+                "execution_lane": "6dbdefe1b2fb472a92bc0a82dd1e16bb",
+                "report": "Test-only diff vs main 3bc8d973: tests/test_acl1886_plan_check_snapshot.py + docs/system/changelog.d/ACL-2028.md. Snapshot runs real publish_api.check_plan over in-memory FakeMeta with the anonymized permission-denied fixture; asserts denied op names in public result, success/publishable false, zero writes, zero sockets, synthetic account id absent. No dates, machine paths or real ids/tokens. 2 tests pass alone, 177 pass with neighbours (1761 plan_check/api_create, 1886 graph_error_context), 56 in reversed order. fold_changelog.py --check valid. Fragment wording accurate. Required CI on 3c8dbf8e all green (linux 1-3, windows, descriptor, tracker-link, tooling).",
+                "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  1028
+                ],
+                "recorded_at": "2026-10-22T06:17:16+00:00",
+                "issue_scopes": {
+                  "1028": "58b0b37224a22a2d7c5d5b192a01c1149b7d1fc9e003144935930fa9ae1dbc80"
+                }
+              },
+              "lane": {
+                "id": "6dbdefe1b2fb472a92bc0a82dd1e16bb",
+                "pr": 1029,
+                "issues": [
+                  1028
+                ],
+                "actor": "Reviewer-AF1022028",
+                "session": "run_af1022_028",
+                "coordinator": "Coordinator-I1021A",
+                "started_at": "2026-10-22T06:14:27+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-22T06:18:05+00:00"
+            },
+            {
+              "issue": 53,
+              "pr": 1032,
+              "branch": "work/acl-402-failure-signatures",
+              "head_sha": "8cc6ce8ccb4b19c5205450abe2caa7438d67a738",
+              "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+              "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "e422537de9fdf02be347310b1d1b6a4ad717569d42ac5e4380170ffe2e257df9",
+              "review": {
+                "kind": "independent-review",
+                "verdict": "approved",
+                "reviewer": "Reviewer-AB1022402",
+                "implementer": "Worker-W1022402",
+                "review_session": "run_ab1022_402",
+                "execution_lane": "05d8e196f04a4598b4f3b1163c40c00b",
+                "head_sha": "8cc6ce8ccb4b19c5205450abe2caa7438d67a738",
+                "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+                "tree_sha": "0854554db68fccb30fff3ebf9498a4a228255046",
+                "report": "Independent source review of ACL-402 (Issue 53, PR 1032), head 8cc6ce8c on main 3bc8d973. Verdict: approved. Merge bd013c88 evil-merge check: only docs/system/changelog.d/ACL-402.md (original wording + Task link) added; CHANGELOG.md identical to main; nothing hidden. fold_changelog.py --check valid. Prior blocking finding (test dependent on real date.today) fixed in 8cc6ce8c: only tests/test_failure_signatures.py changed (+4/-2, rows dated today-2d, assertions unchanged); verified passing with the clock faked to 2027-03-01. Scope: fragment, report hook in acl_telemetry_report.py, src/failure_signatures.py, tests; report only, no rule proposed/applied, reasons scrubbed, no leaked ids, English fragment (Russian text only in the Obsidian telemetry markdown report, consistent with existing report). tests/test_failure_signatures.py 8 passed, plus run_telemetry and telemetry_says_why suites 66 passed. Required CI green on 8cc6ce8c (linux 1-3, windows, tracker-link, ACL verification, process instructions, installer, descriptor).",
+                "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  53
+                ],
+                "recorded_at": "2026-10-22T06:22:25+00:00",
+                "issue_scopes": {
+                  "53": "e422537de9fdf02be347310b1d1b6a4ad717569d42ac5e4380170ffe2e257df9"
+                }
+              },
+              "lane": {
+                "id": "05d8e196f04a4598b4f3b1163c40c00b",
+                "pr": 1032,
+                "issues": [
+                  53
+                ],
+                "actor": "Reviewer-AB1022402",
+                "session": "run_ab1022_402",
+                "coordinator": "Coordinator-I1021A",
+                "started_at": "2026-10-22T06:19:57+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-22T06:22:57+00:00"
+            },
+            {
+              "issue": 845,
+              "pr": 850,
+              "branch": "codex/acl-1845-publish-button-design",
+              "head_sha": "98546e1abdb7218720abcd84a22db311ef968058",
+              "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+              "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "scope": "9c7c2106bea898283bcc702c2c771bee801df7835d57d9916bdef93032e9e44a",
+              "review": {
+                "kind": "independent-review",
+                "implementer": "Worker-W1022845",
+                "reviewer": "Reviewer-AE1022845",
+                "execution_lane": "a538405bb7644d53a5f15fb286a97cf8",
+                "review_session": "run_ae1022_845",
+                "head_sha": "98546e1abdb7218720abcd84a22db311ef968058",
+                "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+                "tree_sha": "b549298e6251f6f245cf1b85bcb57dc9bdc53609",
+                "verdict": "approved",
+                "report": "ACL-1845 / PR850 source review: diff vs main 3bc8d973 touches only report.html (publication button CSS/markup/JS), 3 adjusted browser tests, new test_publish_button_design_browser.py and the changelog fragment; merge-base equals main so no other template hunks are lost; CHANGELOG identical to main; fold_changelog --check valid; UI strings English, no ids, no hardcoded dates; 137 affected tests passed locally (13 files); required CI green on this head.",
+                "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+                "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+                "issues": [
+                  845
+                ],
+                "recorded_at": "2026-10-22T06:24:58+00:00",
+                "issue_scopes": {
+                  "845": "9c7c2106bea898283bcc702c2c771bee801df7835d57d9916bdef93032e9e44a"
+                }
+              },
+              "lane": {
+                "id": "a538405bb7644d53a5f15fb286a97cf8",
+                "pr": 850,
+                "issues": [
+                  845
+                ],
+                "actor": "Reviewer-AE1022845",
+                "session": "run_ae1022_845",
+                "coordinator": "Coordinator-I1021A",
+                "started_at": "2026-10-22T06:10:51+00:00",
+                "state": "reviewing"
+              },
+              "approved_at": "2026-10-22T06:25:21+00:00"
+            }
+          ],
+          "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+          "branch": "codex/batch-50de16a3aac241f4a08a1c0e4406e44e",
+          "intake": "61e2af9783f04a28800e7957be113508",
+          "started_at": "2026-10-22T06:30:20+00:00",
+          "pr": 1085,
+          "entered_stage": false,
+          "history": [],
+          "delivery_request": {
+            "schema_version": 1,
+            "state": "requested",
+            "batch_id": "50de16a3aac241f4a08a1c0e4406e44e",
+            "issues": [
+              827,
+              73,
+              1028,
+              53,
+              845
+            ],
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "target": "ACL stable Windows installer and update channel",
+            "workflow": ".github/workflows/complete-delivery.yml",
+            "job": "Verify published Windows package",
+            "actor": "Coordinator-I1021A",
+            "session": "run_i1021a_1021",
+            "requested_at": "2026-10-22T06:30:20+00:00"
+          },
+          "review": {
+            "id": "6ce6294652d74de3a0ea514b37fd6080",
+            "batch_id": "50de16a3aac241f4a08a1c0e4406e44e",
+            "pr": 1085,
+            "issues": [
+              827,
+              73,
+              1028,
+              53,
+              845
+            ],
+            "actor": "Reviewer-AH1022B85",
+            "session": "run_ah1022_b85",
+            "coordinator": "Coordinator-I1021A",
+            "state": "reviewing",
+            "started_at": "2026-10-22T06:34:57+00:00"
+          },
+          "main_prs": [
+            1085
+          ],
+          "finished_at": "2026-10-22T07:28:49+00:00"
+        }
       }
     ],
     "policy": {
@@ -127184,253 +127476,12 @@
         "finished_at": "2026-10-22T04:19:17+00:00",
         "closing_sources": false,
         "sources_closed": true
-      }
-    },
-    "integration": {
-      "id": "50de16a3aac241f4a08a1c0e4406e44e",
-      "actor": "Coordinator-I1021A",
-      "session": "run_i1021a_1021",
-      "state": "reviewing",
-      "issues": [
-        827,
-        73,
-        1028,
-        53,
-        845
-      ],
-      "members": [
-        {
-          "issue": 827,
-          "pr": 829,
-          "branch": "codex/acl-1827-design-parity-shell",
-          "head_sha": "b0308976ddef2b3c6a9b6c36d5c58e46c4ead831",
-          "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
-          "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "fdf30ddff65f891825fc8a270531da766faed723eadbc1aa4b976e58374d588c",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-AD1022827",
-            "review_session": "run_ad1022_827",
-            "execution_lane": "c57e1bb60f264098ad601162c5daca52",
-            "implementer": "Worker-W1022827",
-            "head_sha": "b0308976ddef2b3c6a9b6c36d5c58e46c4ead831",
-            "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
-            "tree_sha": "2f08f9077bfba14831002b1c410b870df5f78ba5",
-            "report": "Reviewed ACL-1827 (PR829) head b0308976 vs main 3bc8d973: merge-base equals main so the merge is clean and adds no UI regression; diff = country_workbench (compare_cohorts extracted and shared with you_vs_others; home_you_vs_others/home_kpi_tiles), app.py (home_kpis, sidebar FTD counters, read-only GET /robot-health/summary), robot_health.popover_context, report.html (shell-1827 style/script, six KPI tiles above Account map, no-emoji sidebar, Target library label only, Find country, asset sub-rows, Robot health popover with real href fallback), 2 test files. Spec items met; English UI; no ids leaked. Prototype vs built screenshot pairs checked: placement matches, deferred items disclosed in PR. Changelog fragment ACL-1827.md accurate; fold_changelog.py --check valid. Tests shell_parity + shell_browser: 32 passed. Required CI all green on b0308976.",
-            "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              827
-            ],
-            "recorded_at": "2026-10-22T06:03:33+00:00",
-            "issue_scopes": {
-              "827": "fdf30ddff65f891825fc8a270531da766faed723eadbc1aa4b976e58374d588c"
-            }
-          },
-          "lane": {
-            "id": "c57e1bb60f264098ad601162c5daca52",
-            "pr": 829,
-            "issues": [
-              827
-            ],
-            "actor": "Reviewer-AD1022827",
-            "session": "run_ad1022_827",
-            "coordinator": "Coordinator-I1021A",
-            "started_at": "2026-10-22T05:58:11+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-22T06:04:11+00:00"
-        },
-        {
-          "issue": 73,
-          "pr": 951,
-          "branch": "codex/acl-144-direct-profile-dir",
-          "head_sha": "e01e6a30a2ee9b8f22452493d249f25f2336afa1",
-          "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
-          "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "3a25372ae9c718cc8f08a1c2cf0a72178f1d6ee782f7356fba460f6033aa2db0",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-AC1022144",
-            "implementer": "Worker-W1022144",
-            "review_session": "run_ac1022_144",
-            "execution_lane": "f1c4ba1b3c404a878d67d49158f82eea",
-            "head_sha": "e01e6a30a2ee9b8f22452493d249f25f2336afa1",
-            "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
-            "tree_sha": "f5729264321d192e8720e988a9cabadee6718fc7",
-            "report": "Independent source review of ACL-144 / Issue #73 / PR #951 by Reviewer-AC1022144 (session run_ac1022_144), not the implementer Worker-W1022144, coordinator Coordinator-I1021A or any earlier ACL-144 reviewer.\nScope vs main 3bc8d973: src/fb_ads_rpa/browser.py (_find_mlx_profile_dir only), src/analysis_agent/account_spend.py (_mlx_profile_dir now delegates), tests/test_a_profile_folder_is_found_by_address.py (new), docs/system/changelog.d/ACL-144.md. Matches the Issue: the ~10 s rglob over ~/mlx/profiles is replaced by name lookups profiles/{ws}/{folder_id}/{profile_id}, profiles/{ws}/{profile_id}, profiles/{ws}/*/{profile_id}; no recursion.\nCorrectness: no cache is introduced, so there is nothing to invalidate - every call re-reads the disk, so moved/recreated profiles resolve fresh. Exact-name match only; a known folder_id is checked across all workspaces first; files are not accepted as profile dirs; empty/'.'/'..'/ids with a forward or back slash return None; OSError -> None. This removes the old risk of rglob matching a same-named directory inside another profile's Chrome content. Same layout was already used in production by the dashboard copy in account_spend (now deduplicated). Windows: pathlib joins, separator rejection covers both slashes.\nRPA behaviour: callers (DirectCDP/attach-only/campaign_open restart/close/_stop, recorders) are unchanged; they still pass profile_id only and handle None exactly as before (raise 'directory not found' or udd=''); robot-profile marking and checking use the same function so stay consistent. Opening still goes through Multilogin API/DirectCDP; no new plain-browser path, PlaywrightProfile fallback gating untouched, proxy handling untouched. main's newer ACL-1165 attach logging and ACL-1403 CDP retry code are not touched by the diff.\nMerge e01e6a30: --remerge-diff shows only docs/system/CHANGELOG.md (conflict resolved to main exactly; ACL-144 entry moved verbatim to the fragment). git diff main..head on CHANGELOG is empty. fold_changelog.py --check: valid (ACL-106, ACL-144, ACL-1840, ACL-2037, ACL-2052, ACL-2053).\nTests meaningful: Path.rglob/glob/os.walk patched to raise, so any scan fails the test; deep decoy p-1 under Default/Cache, exact-name decoys, folder_id precedence, file-not-dir, too-deep layout, missing root, unsafe ids, dashboard delegation. No real ids, usernames or user paths in the diff.\nLocal tests on the head (18 files: new test, test_browser_relaunch_gate, test_account_spend and every test that patches _find_mlx_profile_dir/_mlx_profile_dir): 481 passed. Required CI on e01e6a30 all green: run 39728774637 (ACL verification, linux 1-3, windows, tooling, process instructions), installer run 39728774465, descriptor 39728774262, tracker-link 39728774373.\nNon-blocking notes: (1) folder_id is not sanitized like profile_id (a '..' folder_id could escape a workspace) - it comes from MLX metadata and the old account_spend copy behaved the same; (2) a legacy layout profiles/{profile_id} directly under the root, which rglob used to find, is no longer found - not the known MLX X layout; (3) fb_api.profile.find_profile_dir still scans recursively, out of scope as stated.\nVerdict: approved.",
-            "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              73
-            ],
-            "recorded_at": "2026-10-22T06:06:07+00:00",
-            "issue_scopes": {
-              "73": "3a25372ae9c718cc8f08a1c2cf0a72178f1d6ee782f7356fba460f6033aa2db0"
-            }
-          },
-          "lane": {
-            "id": "f1c4ba1b3c404a878d67d49158f82eea",
-            "pr": 951,
-            "issues": [
-              73
-            ],
-            "actor": "Reviewer-AC1022144",
-            "session": "run_ac1022_144",
-            "coordinator": "Coordinator-I1021A",
-            "started_at": "2026-10-22T06:00:21+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-22T06:06:47+00:00"
-        },
-        {
-          "issue": 1028,
-          "pr": 1029,
-          "branch": "work/acl-2028-plan-check-snapshot",
-          "head_sha": "3c8dbf8eaba4cad54e216c1bef4a7bd79338e755",
-          "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
-          "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "58b0b37224a22a2d7c5d5b192a01c1149b7d1fc9e003144935930fa9ae1dbc80",
-          "review": {
-            "kind": "independent-review",
-            "implementer": "Worker-W1022028",
-            "reviewer": "Reviewer-AF1022028",
-            "head_sha": "3c8dbf8eaba4cad54e216c1bef4a7bd79338e755",
-            "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
-            "tree_sha": "05019de2040d2c834f7d57b3e54d7840449b69ab",
-            "verdict": "approved",
-            "review_session": "run_af1022_028",
-            "execution_lane": "6dbdefe1b2fb472a92bc0a82dd1e16bb",
-            "report": "Test-only diff vs main 3bc8d973: tests/test_acl1886_plan_check_snapshot.py + docs/system/changelog.d/ACL-2028.md. Snapshot runs real publish_api.check_plan over in-memory FakeMeta with the anonymized permission-denied fixture; asserts denied op names in public result, success/publishable false, zero writes, zero sockets, synthetic account id absent. No dates, machine paths or real ids/tokens. 2 tests pass alone, 177 pass with neighbours (1761 plan_check/api_create, 1886 graph_error_context), 56 in reversed order. fold_changelog.py --check valid. Fragment wording accurate. Required CI on 3c8dbf8e all green (linux 1-3, windows, descriptor, tracker-link, tooling).",
-            "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              1028
-            ],
-            "recorded_at": "2026-10-22T06:17:16+00:00",
-            "issue_scopes": {
-              "1028": "58b0b37224a22a2d7c5d5b192a01c1149b7d1fc9e003144935930fa9ae1dbc80"
-            }
-          },
-          "lane": {
-            "id": "6dbdefe1b2fb472a92bc0a82dd1e16bb",
-            "pr": 1029,
-            "issues": [
-              1028
-            ],
-            "actor": "Reviewer-AF1022028",
-            "session": "run_af1022_028",
-            "coordinator": "Coordinator-I1021A",
-            "started_at": "2026-10-22T06:14:27+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-22T06:18:05+00:00"
-        },
-        {
-          "issue": 53,
-          "pr": 1032,
-          "branch": "work/acl-402-failure-signatures",
-          "head_sha": "8cc6ce8ccb4b19c5205450abe2caa7438d67a738",
-          "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
-          "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "e422537de9fdf02be347310b1d1b6a4ad717569d42ac5e4380170ffe2e257df9",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-AB1022402",
-            "implementer": "Worker-W1022402",
-            "review_session": "run_ab1022_402",
-            "execution_lane": "05d8e196f04a4598b4f3b1163c40c00b",
-            "head_sha": "8cc6ce8ccb4b19c5205450abe2caa7438d67a738",
-            "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
-            "tree_sha": "0854554db68fccb30fff3ebf9498a4a228255046",
-            "report": "Independent source review of ACL-402 (Issue 53, PR 1032), head 8cc6ce8c on main 3bc8d973. Verdict: approved. Merge bd013c88 evil-merge check: only docs/system/changelog.d/ACL-402.md (original wording + Task link) added; CHANGELOG.md identical to main; nothing hidden. fold_changelog.py --check valid. Prior blocking finding (test dependent on real date.today) fixed in 8cc6ce8c: only tests/test_failure_signatures.py changed (+4/-2, rows dated today-2d, assertions unchanged); verified passing with the clock faked to 2027-03-01. Scope: fragment, report hook in acl_telemetry_report.py, src/failure_signatures.py, tests; report only, no rule proposed/applied, reasons scrubbed, no leaked ids, English fragment (Russian text only in the Obsidian telemetry markdown report, consistent with existing report). tests/test_failure_signatures.py 8 passed, plus run_telemetry and telemetry_says_why suites 66 passed. Required CI green on 8cc6ce8c (linux 1-3, windows, tracker-link, ACL verification, process instructions, installer, descriptor).",
-            "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              53
-            ],
-            "recorded_at": "2026-10-22T06:22:25+00:00",
-            "issue_scopes": {
-              "53": "e422537de9fdf02be347310b1d1b6a4ad717569d42ac5e4380170ffe2e257df9"
-            }
-          },
-          "lane": {
-            "id": "05d8e196f04a4598b4f3b1163c40c00b",
-            "pr": 1032,
-            "issues": [
-              53
-            ],
-            "actor": "Reviewer-AB1022402",
-            "session": "run_ab1022_402",
-            "coordinator": "Coordinator-I1021A",
-            "started_at": "2026-10-22T06:19:57+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-22T06:22:57+00:00"
-        },
-        {
-          "issue": 845,
-          "pr": 850,
-          "branch": "codex/acl-1845-publish-button-design",
-          "head_sha": "98546e1abdb7218720abcd84a22db311ef968058",
-          "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
-          "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "9c7c2106bea898283bcc702c2c771bee801df7835d57d9916bdef93032e9e44a",
-          "review": {
-            "kind": "independent-review",
-            "implementer": "Worker-W1022845",
-            "reviewer": "Reviewer-AE1022845",
-            "execution_lane": "a538405bb7644d53a5f15fb286a97cf8",
-            "review_session": "run_ae1022_845",
-            "head_sha": "98546e1abdb7218720abcd84a22db311ef968058",
-            "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
-            "tree_sha": "b549298e6251f6f245cf1b85bcb57dc9bdc53609",
-            "verdict": "approved",
-            "report": "ACL-1845 / PR850 source review: diff vs main 3bc8d973 touches only report.html (publication button CSS/markup/JS), 3 adjusted browser tests, new test_publish_button_design_browser.py and the changelog fragment; merge-base equals main so no other template hunks are lost; CHANGELOG identical to main; fold_changelog --check valid; UI strings English, no ids, no hardcoded dates; 137 affected tests passed locally (13 files); required CI green on this head.",
-            "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              845
-            ],
-            "recorded_at": "2026-10-22T06:24:58+00:00",
-            "issue_scopes": {
-              "845": "9c7c2106bea898283bcc702c2c771bee801df7835d57d9916bdef93032e9e44a"
-            }
-          },
-          "lane": {
-            "id": "a538405bb7644d53a5f15fb286a97cf8",
-            "pr": 850,
-            "issues": [
-              845
-            ],
-            "actor": "Reviewer-AE1022845",
-            "session": "run_ae1022_845",
-            "coordinator": "Coordinator-I1021A",
-            "started_at": "2026-10-22T06:10:51+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-22T06:25:21+00:00"
-        }
-      ],
-      "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
-      "branch": "codex/batch-50de16a3aac241f4a08a1c0e4406e44e",
-      "intake": "61e2af9783f04a28800e7957be113508",
-      "started_at": "2026-10-22T06:30:20+00:00",
-      "pr": 1085,
-      "entered_stage": false,
-      "history": [],
-      "delivery_request": {
-        "schema_version": 1,
-        "state": "requested",
-        "batch_id": "50de16a3aac241f4a08a1c0e4406e44e",
+      },
+      "50de16a3aac241f4a08a1c0e4406e44e": {
+        "id": "50de16a3aac241f4a08a1c0e4406e44e",
+        "actor": "Coordinator-I1021A",
+        "session": "run_i1021a_1021",
+        "state": "merged",
         "issues": [
           827,
           73,
@@ -127438,20 +127489,283 @@
           53,
           845
         ],
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "target": "ACL stable Windows installer and update channel",
-        "workflow": ".github/workflows/complete-delivery.yml",
-        "job": "Verify published Windows package",
-        "actor": "Coordinator-I1021A",
-        "session": "run_i1021a_1021",
-        "requested_at": "2026-10-22T06:30:20+00:00"
+        "members": [
+          {
+            "issue": 827,
+            "pr": 829,
+            "branch": "codex/acl-1827-design-parity-shell",
+            "head_sha": "b0308976ddef2b3c6a9b6c36d5c58e46c4ead831",
+            "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+            "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "fdf30ddff65f891825fc8a270531da766faed723eadbc1aa4b976e58374d588c",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-AD1022827",
+              "review_session": "run_ad1022_827",
+              "execution_lane": "c57e1bb60f264098ad601162c5daca52",
+              "implementer": "Worker-W1022827",
+              "head_sha": "b0308976ddef2b3c6a9b6c36d5c58e46c4ead831",
+              "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+              "tree_sha": "2f08f9077bfba14831002b1c410b870df5f78ba5",
+              "report": "Reviewed ACL-1827 (PR829) head b0308976 vs main 3bc8d973: merge-base equals main so the merge is clean and adds no UI regression; diff = country_workbench (compare_cohorts extracted and shared with you_vs_others; home_you_vs_others/home_kpi_tiles), app.py (home_kpis, sidebar FTD counters, read-only GET /robot-health/summary), robot_health.popover_context, report.html (shell-1827 style/script, six KPI tiles above Account map, no-emoji sidebar, Target library label only, Find country, asset sub-rows, Robot health popover with real href fallback), 2 test files. Spec items met; English UI; no ids leaked. Prototype vs built screenshot pairs checked: placement matches, deferred items disclosed in PR. Changelog fragment ACL-1827.md accurate; fold_changelog.py --check valid. Tests shell_parity + shell_browser: 32 passed. Required CI all green on b0308976.",
+              "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                827
+              ],
+              "recorded_at": "2026-10-22T06:03:33+00:00",
+              "issue_scopes": {
+                "827": "fdf30ddff65f891825fc8a270531da766faed723eadbc1aa4b976e58374d588c"
+              }
+            },
+            "lane": {
+              "id": "c57e1bb60f264098ad601162c5daca52",
+              "pr": 829,
+              "issues": [
+                827
+              ],
+              "actor": "Reviewer-AD1022827",
+              "session": "run_ad1022_827",
+              "coordinator": "Coordinator-I1021A",
+              "started_at": "2026-10-22T05:58:11+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-22T06:04:11+00:00"
+          },
+          {
+            "issue": 73,
+            "pr": 951,
+            "branch": "codex/acl-144-direct-profile-dir",
+            "head_sha": "e01e6a30a2ee9b8f22452493d249f25f2336afa1",
+            "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+            "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "3a25372ae9c718cc8f08a1c2cf0a72178f1d6ee782f7356fba460f6033aa2db0",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-AC1022144",
+              "implementer": "Worker-W1022144",
+              "review_session": "run_ac1022_144",
+              "execution_lane": "f1c4ba1b3c404a878d67d49158f82eea",
+              "head_sha": "e01e6a30a2ee9b8f22452493d249f25f2336afa1",
+              "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+              "tree_sha": "f5729264321d192e8720e988a9cabadee6718fc7",
+              "report": "Independent source review of ACL-144 / Issue #73 / PR #951 by Reviewer-AC1022144 (session run_ac1022_144), not the implementer Worker-W1022144, coordinator Coordinator-I1021A or any earlier ACL-144 reviewer.\nScope vs main 3bc8d973: src/fb_ads_rpa/browser.py (_find_mlx_profile_dir only), src/analysis_agent/account_spend.py (_mlx_profile_dir now delegates), tests/test_a_profile_folder_is_found_by_address.py (new), docs/system/changelog.d/ACL-144.md. Matches the Issue: the ~10 s rglob over ~/mlx/profiles is replaced by name lookups profiles/{ws}/{folder_id}/{profile_id}, profiles/{ws}/{profile_id}, profiles/{ws}/*/{profile_id}; no recursion.\nCorrectness: no cache is introduced, so there is nothing to invalidate - every call re-reads the disk, so moved/recreated profiles resolve fresh. Exact-name match only; a known folder_id is checked across all workspaces first; files are not accepted as profile dirs; empty/'.'/'..'/ids with a forward or back slash return None; OSError -> None. This removes the old risk of rglob matching a same-named directory inside another profile's Chrome content. Same layout was already used in production by the dashboard copy in account_spend (now deduplicated). Windows: pathlib joins, separator rejection covers both slashes.\nRPA behaviour: callers (DirectCDP/attach-only/campaign_open restart/close/_stop, recorders) are unchanged; they still pass profile_id only and handle None exactly as before (raise 'directory not found' or udd=''); robot-profile marking and checking use the same function so stay consistent. Opening still goes through Multilogin API/DirectCDP; no new plain-browser path, PlaywrightProfile fallback gating untouched, proxy handling untouched. main's newer ACL-1165 attach logging and ACL-1403 CDP retry code are not touched by the diff.\nMerge e01e6a30: --remerge-diff shows only docs/system/CHANGELOG.md (conflict resolved to main exactly; ACL-144 entry moved verbatim to the fragment). git diff main..head on CHANGELOG is empty. fold_changelog.py --check: valid (ACL-106, ACL-144, ACL-1840, ACL-2037, ACL-2052, ACL-2053).\nTests meaningful: Path.rglob/glob/os.walk patched to raise, so any scan fails the test; deep decoy p-1 under Default/Cache, exact-name decoys, folder_id precedence, file-not-dir, too-deep layout, missing root, unsafe ids, dashboard delegation. No real ids, usernames or user paths in the diff.\nLocal tests on the head (18 files: new test, test_browser_relaunch_gate, test_account_spend and every test that patches _find_mlx_profile_dir/_mlx_profile_dir): 481 passed. Required CI on e01e6a30 all green: run 39728774637 (ACL verification, linux 1-3, windows, tooling, process instructions), installer run 39728774465, descriptor 39728774262, tracker-link 39728774373.\nNon-blocking notes: (1) folder_id is not sanitized like profile_id (a '..' folder_id could escape a workspace) - it comes from MLX metadata and the old account_spend copy behaved the same; (2) a legacy layout profiles/{profile_id} directly under the root, which rglob used to find, is no longer found - not the known MLX X layout; (3) fb_api.profile.find_profile_dir still scans recursively, out of scope as stated.\nVerdict: approved.",
+              "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                73
+              ],
+              "recorded_at": "2026-10-22T06:06:07+00:00",
+              "issue_scopes": {
+                "73": "3a25372ae9c718cc8f08a1c2cf0a72178f1d6ee782f7356fba460f6033aa2db0"
+              }
+            },
+            "lane": {
+              "id": "f1c4ba1b3c404a878d67d49158f82eea",
+              "pr": 951,
+              "issues": [
+                73
+              ],
+              "actor": "Reviewer-AC1022144",
+              "session": "run_ac1022_144",
+              "coordinator": "Coordinator-I1021A",
+              "started_at": "2026-10-22T06:00:21+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-22T06:06:47+00:00"
+          },
+          {
+            "issue": 1028,
+            "pr": 1029,
+            "branch": "work/acl-2028-plan-check-snapshot",
+            "head_sha": "3c8dbf8eaba4cad54e216c1bef4a7bd79338e755",
+            "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+            "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "58b0b37224a22a2d7c5d5b192a01c1149b7d1fc9e003144935930fa9ae1dbc80",
+            "review": {
+              "kind": "independent-review",
+              "implementer": "Worker-W1022028",
+              "reviewer": "Reviewer-AF1022028",
+              "head_sha": "3c8dbf8eaba4cad54e216c1bef4a7bd79338e755",
+              "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+              "tree_sha": "05019de2040d2c834f7d57b3e54d7840449b69ab",
+              "verdict": "approved",
+              "review_session": "run_af1022_028",
+              "execution_lane": "6dbdefe1b2fb472a92bc0a82dd1e16bb",
+              "report": "Test-only diff vs main 3bc8d973: tests/test_acl1886_plan_check_snapshot.py + docs/system/changelog.d/ACL-2028.md. Snapshot runs real publish_api.check_plan over in-memory FakeMeta with the anonymized permission-denied fixture; asserts denied op names in public result, success/publishable false, zero writes, zero sockets, synthetic account id absent. No dates, machine paths or real ids/tokens. 2 tests pass alone, 177 pass with neighbours (1761 plan_check/api_create, 1886 graph_error_context), 56 in reversed order. fold_changelog.py --check valid. Fragment wording accurate. Required CI on 3c8dbf8e all green (linux 1-3, windows, descriptor, tracker-link, tooling).",
+              "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                1028
+              ],
+              "recorded_at": "2026-10-22T06:17:16+00:00",
+              "issue_scopes": {
+                "1028": "58b0b37224a22a2d7c5d5b192a01c1149b7d1fc9e003144935930fa9ae1dbc80"
+              }
+            },
+            "lane": {
+              "id": "6dbdefe1b2fb472a92bc0a82dd1e16bb",
+              "pr": 1029,
+              "issues": [
+                1028
+              ],
+              "actor": "Reviewer-AF1022028",
+              "session": "run_af1022_028",
+              "coordinator": "Coordinator-I1021A",
+              "started_at": "2026-10-22T06:14:27+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-22T06:18:05+00:00"
+          },
+          {
+            "issue": 53,
+            "pr": 1032,
+            "branch": "work/acl-402-failure-signatures",
+            "head_sha": "8cc6ce8ccb4b19c5205450abe2caa7438d67a738",
+            "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+            "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "e422537de9fdf02be347310b1d1b6a4ad717569d42ac5e4380170ffe2e257df9",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-AB1022402",
+              "implementer": "Worker-W1022402",
+              "review_session": "run_ab1022_402",
+              "execution_lane": "05d8e196f04a4598b4f3b1163c40c00b",
+              "head_sha": "8cc6ce8ccb4b19c5205450abe2caa7438d67a738",
+              "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+              "tree_sha": "0854554db68fccb30fff3ebf9498a4a228255046",
+              "report": "Independent source review of ACL-402 (Issue 53, PR 1032), head 8cc6ce8c on main 3bc8d973. Verdict: approved. Merge bd013c88 evil-merge check: only docs/system/changelog.d/ACL-402.md (original wording + Task link) added; CHANGELOG.md identical to main; nothing hidden. fold_changelog.py --check valid. Prior blocking finding (test dependent on real date.today) fixed in 8cc6ce8c: only tests/test_failure_signatures.py changed (+4/-2, rows dated today-2d, assertions unchanged); verified passing with the clock faked to 2027-03-01. Scope: fragment, report hook in acl_telemetry_report.py, src/failure_signatures.py, tests; report only, no rule proposed/applied, reasons scrubbed, no leaked ids, English fragment (Russian text only in the Obsidian telemetry markdown report, consistent with existing report). tests/test_failure_signatures.py 8 passed, plus run_telemetry and telemetry_says_why suites 66 passed. Required CI green on 8cc6ce8c (linux 1-3, windows, tracker-link, ACL verification, process instructions, installer, descriptor).",
+              "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                53
+              ],
+              "recorded_at": "2026-10-22T06:22:25+00:00",
+              "issue_scopes": {
+                "53": "e422537de9fdf02be347310b1d1b6a4ad717569d42ac5e4380170ffe2e257df9"
+              }
+            },
+            "lane": {
+              "id": "05d8e196f04a4598b4f3b1163c40c00b",
+              "pr": 1032,
+              "issues": [
+                53
+              ],
+              "actor": "Reviewer-AB1022402",
+              "session": "run_ab1022_402",
+              "coordinator": "Coordinator-I1021A",
+              "started_at": "2026-10-22T06:19:57+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-22T06:22:57+00:00"
+          },
+          {
+            "issue": 845,
+            "pr": 850,
+            "branch": "codex/acl-1845-publish-button-design",
+            "head_sha": "98546e1abdb7218720abcd84a22db311ef968058",
+            "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+            "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "9c7c2106bea898283bcc702c2c771bee801df7835d57d9916bdef93032e9e44a",
+            "review": {
+              "kind": "independent-review",
+              "implementer": "Worker-W1022845",
+              "reviewer": "Reviewer-AE1022845",
+              "execution_lane": "a538405bb7644d53a5f15fb286a97cf8",
+              "review_session": "run_ae1022_845",
+              "head_sha": "98546e1abdb7218720abcd84a22db311ef968058",
+              "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+              "tree_sha": "b549298e6251f6f245cf1b85bcb57dc9bdc53609",
+              "verdict": "approved",
+              "report": "ACL-1845 / PR850 source review: diff vs main 3bc8d973 touches only report.html (publication button CSS/markup/JS), 3 adjusted browser tests, new test_publish_button_design_browser.py and the changelog fragment; merge-base equals main so no other template hunks are lost; CHANGELOG identical to main; fold_changelog --check valid; UI strings English, no ids, no hardcoded dates; 137 affected tests passed locally (13 files); required CI green on this head.",
+              "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                845
+              ],
+              "recorded_at": "2026-10-22T06:24:58+00:00",
+              "issue_scopes": {
+                "845": "9c7c2106bea898283bcc702c2c771bee801df7835d57d9916bdef93032e9e44a"
+              }
+            },
+            "lane": {
+              "id": "a538405bb7644d53a5f15fb286a97cf8",
+              "pr": 850,
+              "issues": [
+                845
+              ],
+              "actor": "Reviewer-AE1022845",
+              "session": "run_ae1022_845",
+              "coordinator": "Coordinator-I1021A",
+              "started_at": "2026-10-22T06:10:51+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-22T06:25:21+00:00"
+          }
+        ],
+        "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+        "branch": "codex/batch-50de16a3aac241f4a08a1c0e4406e44e",
+        "intake": "61e2af9783f04a28800e7957be113508",
+        "started_at": "2026-10-22T06:30:20+00:00",
+        "pr": 1085,
+        "entered_stage": false,
+        "history": [],
+        "delivery_request": {
+          "schema_version": 1,
+          "state": "requested",
+          "batch_id": "50de16a3aac241f4a08a1c0e4406e44e",
+          "issues": [
+            827,
+            73,
+            1028,
+            53,
+            845
+          ],
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "target": "ACL stable Windows installer and update channel",
+          "workflow": ".github/workflows/complete-delivery.yml",
+          "job": "Verify published Windows package",
+          "actor": "Coordinator-I1021A",
+          "session": "run_i1021a_1021",
+          "requested_at": "2026-10-22T06:30:20+00:00"
+        },
+        "review": {
+          "id": "6ce6294652d74de3a0ea514b37fd6080",
+          "batch_id": "50de16a3aac241f4a08a1c0e4406e44e",
+          "pr": 1085,
+          "issues": [
+            827,
+            73,
+            1028,
+            53,
+            845
+          ],
+          "actor": "Reviewer-AH1022B85",
+          "session": "run_ah1022_b85",
+          "coordinator": "Coordinator-I1021A",
+          "state": "reviewing",
+          "started_at": "2026-10-22T06:34:57+00:00"
+        },
+        "main_prs": [
+          1085
+        ],
+        "finished_at": "2026-10-22T07:28:49+00:00"
       }
     },
+    "integration": null,
     "intake": {
       "id": "61e2af9783f04a28800e7957be113508",
       "actor": "Coordinator-I1021A",
       "session": "run_i1021a_1021",
-      "state": "running",
+      "state": "finished",
       "issues": [
         827,
         73,
@@ -127459,14 +127773,10 @@
         53,
         845
       ],
-      "remaining": [
-        827,
-        73,
-        1028,
-        53,
-        845
+      "remaining": [],
+      "batches": [
+        "50de16a3aac241f4a08a1c0e4406e44e"
       ],
-      "batches": [],
       "started_at": "2026-10-22T06:29:13+00:00",
       "ineligible": {}
     },
