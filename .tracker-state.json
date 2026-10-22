@@ -57125,7 +57125,7 @@
             "session": "run_w1022_2037"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1022037",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -57150,7 +57150,8 @@
           "session": "coord-m1011a-20261015",
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
         },
-        "review_report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
+        "review_report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21",
+        "reviewer": "Reviewer-U1022037"
       },
       "1038": {
         "implementers": [
@@ -60782,6 +60783,10 @@
       "Reviewer-R10222053": {
         "session": "run_r1022_2053",
         "role": "Reviewer"
+      },
+      "Reviewer-U1022037": {
+        "session": "run_u1022_037",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -63737,8 +63742,7 @@
     "review_queue": [
       1054,
       710,
-      1069,
-      1037
+      1069
     ],
     "review": null,
     "history": [
@@ -112079,6 +112083,13 @@
         "issue": 1037,
         "pr": 1041,
         "actor": "Worker-W1022037"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-22T00:18:39+00:00",
+        "pr": 1041,
+        "lane": "fff789b0c1c345c493671a85863bd7f7",
+        "actor": "Reviewer-U1022037"
       }
     ],
     "policy": {
@@ -122854,7 +122865,20 @@
       "started_at": "2026-10-21T22:44:20+00:00",
       "ineligible": {}
     },
-    "source_reviews": {},
+    "source_reviews": {
+      "1041": {
+        "id": "fff789b0c1c345c493671a85863bd7f7",
+        "pr": 1041,
+        "issues": [
+          1037
+        ],
+        "actor": "Reviewer-U1022037",
+        "session": "run_u1022_037",
+        "coordinator": "Coordinator-I1021A",
+        "started_at": "2026-10-22T00:18:39+00:00",
+        "state": "reviewing"
+      }
+    },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
   },
   "maintenance_history": [
