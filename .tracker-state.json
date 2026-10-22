@@ -57532,7 +57532,7 @@
             "session": "run_a1021_403w"
           }
         ],
-        "state": "returning_approval",
+        "state": "changes_requested",
         "worker": "Worker-A1021403",
         "coordinator": "Coordinator-A1021A",
         "handoff": {
@@ -57551,7 +57551,7 @@
         },
         "pr": 973,
         "queued_at": "2026-10-21T11:48:35+00:00",
-        "review_report": "Owner explicitly reserved ACL execution capacity for the 14-task workflow handoff on 17 October 2026. Other unfinished work is administratively paused, not completed. Old reservations are revoked; remote processes were not verified stopped. Resume unrelated work only after an explicit owner instruction. Operation: owner-acl-exclusive-workflow-20261017-01",
+        "review_report": "Stale vs main 515689de; author merges current main + changelog fragment, fresh review",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
           "at": "2026-10-17T16:30:39.578100+00:00",
@@ -57569,7 +57569,8 @@
           "actor": "Coordinator-A1021A",
           "session": "run_a1021_a1021",
           "report": "Stale vs main 515689de; author merges current main + changelog fragment, fresh review"
-        }
+        },
+        "rework": true
       },
       "202": {
         "implementers": [
@@ -116679,6 +116680,18 @@
           "report": "Stale vs main 515689de; author merges current main + changelog fragment, fresh review"
         },
         "batch_id": null
+      },
+      {
+        "event": "approval-returned",
+        "at": "2026-10-22T07:53:18+00:00",
+        "issue": 403,
+        "operation": {
+          "id": "1dbf1012a99f4a368a5526227aeb9476",
+          "actor": "Coordinator-A1021A",
+          "session": "run_a1021_a1021",
+          "report": "Stale vs main 515689de; author merges current main + changelog fragment, fresh review"
+        },
+        "batch_id": null
       }
     ],
     "policy": {
@@ -120847,50 +120860,6 @@
           "keep_lane": true
         },
         "approved_at": "2026-10-21T11:25:09+00:00"
-      },
-      "403": {
-        "issue": 403,
-        "pr": 973,
-        "branch": "work/acl-1403-cdp-refused-after-start",
-        "head_sha": "c0e31a58535884b984bcac6f3509ff7c0c266085",
-        "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-        "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "scope": "79942f16908c0b764f0a00264d25581261294a973c1654c7af182bc7657f940a",
-        "review": {
-          "kind": "independent-review",
-          "verdict": "approved",
-          "reviewer": "Reviewer-A1021403",
-          "implementer": "Worker-A1021403",
-          "head_sha": "c0e31a58535884b984bcac6f3509ff7c0c266085",
-          "base_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-          "tree_sha": "c2c3267fbfb91448b588c5b739141973e8d24edc",
-          "execution_lane": "522ef87e05b24b61941dfd706eeed09c",
-          "review_session": "run_a1021_403r",
-          "report": "ACL-1403 / PR #973 independent source review at head c0e31a58 (merge of main ea41acbf into 14577a43). Verdict: approved.\n\nScope vs main (7 files, +185/-6): browser.py (_connect_started waits on a refused CDP port 1+2+3+3 s, honours Stop, then raises ProfileStop(profile_cdp_refused); non-refused errors are re-raised untouched), profile_trouble.py (CDP_REFUSED code + English buyer message, so it joins ACCOUNT_STOPS), failure_policy.py (BLOCKING + GUIDE entry), retry_policy.py (BLOCKING_REVIEW_STEPS), config/sentry_triage_map.json (known row -> ACL-1403), acl_sentry.py (cdp-refused reason kind placed before generic 'refused'; report_job_exception sets machine tags explicitly), new offline test file. No unrelated files.\n\nMerge c0e31a58 (git show --cc): both real conflicts (retry_policy BLOCKING_REVIEW_STEPS, sentry_triage_map known rows) keep both sides - ACL-1401 multilogin_not_running and ACL-1403 profile_cdp_refused. Auto-merged acl_sentry/failure_policy/profile_trouble checked semantically against ACL-1401: entries are disjoint; the cdp-refused reason strings do not overlap mlx-not-running; in rpa_publisher._ensure_browser ProfileStop is re-raised before launcher_unreachable(), so a CDP refusal is never renamed to multilogin_not_running, and launcher (45001) refusals come from requests ConnectionError in _start_via_mlx_api, not from connect_over_cdp, so they never enter the new CDP retry. HEAD contains current main.\n\nAcceptance criteria:\n1. Cause - the worker reported it as not established; I established it from this machine's log (C:\\acl-live-0930 serve-live.log, comp38339): the job's 'Connected via MLX automation CDP ... port 64534' line is at 15:50:56 local (= 12:50:56 UTC, the Sentry event), with no later start for that profile, and at 23:14-23:21 the same profile was found still running and reused on the same CDP port 64534. So the port was not stale and the browser did not crash at start: the profile came up on the announced port after the connect attempt - a start-up race. The bounded wait-for-port retry is the right fix for it; the named stop covers the residual cases.\n2. Named profile stop with buyer-readable English text, bounded retry, offline tests - met (tests cover persistent refusal -> stop after exactly the configured waits, race succeeds on a later try, other errors not retried/renamed, Stop ends the wait, registration in all policies/triage, machine tag).\n3. machine tag on job exceptions - met (explicit scope tags; test).\n\nTests run locally (affected only, -n 2): the new test, job_exception tagging, failure_policy, sentry_triage, run summaries/campaign-failure Sentry tests, publish_stops_when_multilogin_is_not_running (ACL-1401), profile reopen/hand-opened/logged-out/open-profile/browser_profile/stopped-profile tests, recorded_retry_contract, test_acl_test_platform (new CI platform rules; the new test is platform-neutral, no windows-only APIs) - 282 passed. No leaked tokens/account ids/emails/personal paths in diff or PR text (machine name and port are already in the Issue and in main's tests).\n\nNon-blocking notes: (a) in _reopen_hand_opened the CDP refusal is caught by the generic handler and reported as profile_restart_failed (with the refusal in the detail) - acceptable, the text is still correct. (b) Stop pressed during the port wait raises the CDP_REFUSED stop rather than a cancellation; the job is being stopped anyway. (c) No docs/system/CHANGELOG.md entry (the sibling ACL-1401 also has none); worth adding in a later docs pass.\n\nLive check: none required for the source review; confirmation that the race is absorbed will come from the next real occurrence (Sentry/serve log) - owner live check optional, no live runs performed.\n",
-          "main_sha": "ea41acbf960f53cdd0486c50dda491ec3981dfcf",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "issues": [
-            403
-          ],
-          "recorded_at": "2026-10-21T12:05:00+00:00",
-          "issue_scopes": {
-            "403": "79942f16908c0b764f0a00264d25581261294a973c1654c7af182bc7657f940a"
-          }
-        },
-        "lane": {
-          "id": "522ef87e05b24b61941dfd706eeed09c",
-          "pr": 973,
-          "issues": [
-            403
-          ],
-          "actor": "Reviewer-A1021403",
-          "session": "run_a1021_403r",
-          "coordinator": "Coordinator-A1021A",
-          "started_at": "2026-10-21T12:03:05+00:00",
-          "state": "reviewing"
-        },
-        "approved_at": "2026-10-21T12:12:19+00:00"
       },
       "558": {
         "issue": 558,
