@@ -122820,7 +122820,9 @@
         "session": "run_r1022_2053",
         "coordinator": "Coordinator-I1021A",
         "started_at": "2026-10-22T00:10:28+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "stale vs main e8bf31f8; author merges current main and hands off for a fresh review; no content findings",
+        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
