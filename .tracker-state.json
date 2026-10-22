@@ -57360,7 +57360,7 @@
             "session": "033ad857-forms-2053"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-F1021W1",
         "coordinator": "Coordinator-F1021A",
         "handoff": {
@@ -57378,7 +57378,8 @@
           "report": "Implemented ACL-2053 in PR #1060 (branch work/acl-2053-form-template-parity, head c272d379). Two pre-handoff read-only reviews; all findings fixed. Affected tests 264 passed locally; full suite in CI. Cover image and allow_organic_lead left out with reasons in the PR. Live check of follow_up_action_url needs owner OK."
         },
         "pr": 1060,
-        "queued_at": "2026-10-21T09:38:42+00:00"
+        "queued_at": "2026-10-21T09:38:42+00:00",
+        "reviewer": "Reviewer-R10222053"
       },
       "1054": {
         "implementers": [
@@ -60771,6 +60772,10 @@
       "Reviewer-R10222052": {
         "session": "run_r1022_2052",
         "role": "Reviewer"
+      },
+      "Reviewer-R10222053": {
+        "session": "run_r1022_2053",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -63724,7 +63729,6 @@
       }
     },
     "review_queue": [
-      1053,
       1054,
       710,
       1069
@@ -112011,6 +112015,13 @@
             "approved_at": "2026-10-22T00:09:35+00:00"
           }
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-22T00:10:28+00:00",
+        "pr": 1060,
+        "lane": "3bc1b91abeae45e6ba44aa66fe509007",
+        "actor": "Reviewer-R10222053"
       }
     ],
     "policy": {
@@ -122797,6 +122808,18 @@
         "session": "run_s1022_078",
         "coordinator": "Coordinator-I1021A",
         "started_at": "2026-10-22T00:08:15+00:00",
+        "state": "reviewing"
+      },
+      "1060": {
+        "id": "3bc1b91abeae45e6ba44aa66fe509007",
+        "pr": 1060,
+        "issues": [
+          1053
+        ],
+        "actor": "Reviewer-R10222053",
+        "session": "run_r1022_2053",
+        "coordinator": "Coordinator-I1021A",
+        "started_at": "2026-10-22T00:10:28+00:00",
         "state": "reviewing"
       }
     },
