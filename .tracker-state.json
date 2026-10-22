@@ -57360,7 +57360,7 @@
             "session": "033ad857-forms-2053"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-F1021W1",
         "coordinator": "Coordinator-F1021A",
         "handoff": {
@@ -57379,7 +57379,9 @@
         },
         "pr": 1060,
         "queued_at": "2026-10-21T09:38:42+00:00",
-        "reviewer": "Reviewer-R10222053"
+        "reviewer": "Reviewer-R10222053",
+        "review_report": "stale vs main e8bf31f8; author merges current main and hands off for a fresh review; no content findings",
+        "rework": true
       },
       "1054": {
         "implementers": [
@@ -112022,6 +112024,24 @@
         "pr": 1060,
         "lane": "3bc1b91abeae45e6ba44aa66fe509007",
         "actor": "Reviewer-R10222053"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-22T00:11:02+00:00",
+        "review": {
+          "id": "3bc1b91abeae45e6ba44aa66fe509007",
+          "pr": 1060,
+          "issues": [
+            1053
+          ],
+          "actor": "Reviewer-R10222053",
+          "session": "run_r1022_2053",
+          "coordinator": "Coordinator-I1021A",
+          "started_at": "2026-10-22T00:10:28+00:00",
+          "state": "returning",
+          "report": "stale vs main e8bf31f8; author merges current main and hands off for a fresh review; no content findings",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -122809,20 +122829,6 @@
         "coordinator": "Coordinator-I1021A",
         "started_at": "2026-10-22T00:08:15+00:00",
         "state": "reviewing"
-      },
-      "1060": {
-        "id": "3bc1b91abeae45e6ba44aa66fe509007",
-        "pr": 1060,
-        "issues": [
-          1053
-        ],
-        "actor": "Reviewer-R10222053",
-        "session": "run_r1022_2053",
-        "coordinator": "Coordinator-I1021A",
-        "started_at": "2026-10-22T00:10:28+00:00",
-        "state": "returning",
-        "report": "stale vs main e8bf31f8; author merges current main and hands off for a fresh review; no content findings",
-        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
