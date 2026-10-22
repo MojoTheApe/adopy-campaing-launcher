@@ -6192,6 +6192,34 @@
         "issue_scopes": {
           "1078": "6d8d2d53bbfc9b619f71658aca44763b74b4c51d1a38458b72391464c8704dc2"
         }
+      },
+      "1082": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "implementer": "Coordinator-I1021A",
+        "reviewer": "Reviewer-V1022B82",
+        "review_session": "run_v1022_b82",
+        "execution_lane": "9d03f45ca4924033a6e8b7a5f506d396",
+        "batch_id": "0499c60dda4c47e595333eecb0cffb64",
+        "source_heads": [
+          "ccbaf636cc1ee544d2441472422d1a4ede539094",
+          "d2a7d62c645a3f91c73f786663f249c93c175368"
+        ],
+        "head_sha": "7fe52398ef2bb995f4675237da9533259308d76e",
+        "base_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+        "tree_sha": "ac6cc114c4c258a6c884d40dfce1e454c36174d3",
+        "report": "Independent integration review of batch 0499c60dda4c47e595333eecb0cffb64, PR1082 head 7fe52398 tree ac6cc114 against main e8bf31f8. Reviewer run Reviewer-V1022B82/run_v1022_b82 is distinct from Coordinator-I1021A, Workers F1022B/W1022037 and source Reviewers S1022078/U1022037; it implemented no member.\nComposition: first-parent chain is main e8bf31f8 + exactly two merge commits in frozen order: 63cc6920 (second parent ccbaf636, ACL-2078, open source #1081 head) and 7fe52398 (second parent d2a7d62c, ACL-2037, open source #1041 head). git show --remerge-diff is empty for both. main e8bf31f8 is an ancestor of both source tips. PR body has exactly 'Tracker issues: ACL-2078, ACL-2037' and 'Tracker batch: 0499c60dda4c47e595333eecb0cffb64'; no delivery request, which is correct: the combined scope is tests (tests/conftest.py, tests/rpa_module_state.py, two new test files), one tooling script (scripts/fold_changelog.py) and docs (PROJECT.md, ROUTINE_SENTRY_PROMPT.md, changelog.d/README.md and the ACL-2037 fragment); no product/runtime/installer file.\nFinal tree vs union of source diffs: 9 files (+459/-13). Source file sets are disjoint; every combined blob equals its source blob (3 from ccbaf636, 6 from d2a7d62c); git merge-tree --write-tree ccbaf636 d2a7d62c yields exactly ac6cc114.\nInteractions: none in code. ACL-2078 adds no changelog entry and does not touch docs/system/CHANGELOG.md; the fragment convention starts with ACL-2037 itself, so no fragment is required for 2078. fold_changelog.py --check on the combined tree: 'valid: ACL-2037'. test_fold_changelog_2037 works on tmp_path except the committed-fragments check, which passes with only ACL-2037.md present. The new ACL-2078 autouse fixture resets only already imported meta_dom/crop_step/run_telemetry and cannot affect the fold_changelog tests.\nContent: ACL-2078 replaces the partial ACL-2073 reset with tests/rpa_module_state.reset(): clears every module-level threading.local of meta_dom (11) and crop_step (_tls) for the current thread, restores 9 registered meta_dom containers in place, crop.set_plan(None), run_telemetry.clear_current_run(); missing names are not recreated. Regression test dirties every piece then checks the next test is clean, checks reset() alone, and fails on unregistered/stale container names and on initial values diverging from the module source. ACL-2037 script validates name/heading format, folds newest first, is idempotent by full-text comparison, handles BOM/CRLF, writes LF.\nLocal checks on this tree: b97 pair tests/test_bench_b97_picker_and_crop_1007.py + tests/test_additional_ad_without_creative_has_no_text.py 36 passed in both orders (same pair on main e8bf31f8: 1 failed test_an_ad_whose_creative_failed_gets_no_text_attempt, 35 passed - reproduces the defect); test_rpa_module_state_is_reset_between_tests + test_fold_changelog_2037 + test_media_attachment_identity 35 passed. No local full suite.\nCombined CI on head 7fe52398, attempt 1, no reruns, no reused jobs: CI 39703751054 success (linux tests 3.11 shards 1-3, 3.13 shards 1-3, windows tests 3.13, Classify and check project tooling, Process instructions, ACL verification); Windows installer 39703751058 success (Classify installer changes, Verify build inputs, Build install repair and uninstall, Installer verification); Delivery setup/descriptor 39703751052 success; Tracker linkage 39703751082 success.\nNon-blocking: the thread-local reset clears only the main test thread, which is where pytest runs these tests; worker threads spawned by tests keep their own locals until they exit.",
+        "main_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          1078,
+          1037
+        ],
+        "recorded_at": "2026-10-22T01:24:47+00:00",
+        "issue_scopes": {
+          "1078": "6d8d2d53bbfc9b619f71658aca44763b74b4c51d1a38458b72391464c8704dc2",
+          "1037": "63ab9afd123776df93881b7fc0d961bb5eb25318e4fedcec40fd69af6b75223f"
+        }
       }
     },
     "stage": {
