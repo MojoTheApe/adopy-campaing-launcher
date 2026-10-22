@@ -3,6 +3,7 @@
 // (зеркало form_templates.validate), как в form_templates_harness.cjs.
 const fs = require('fs'), vm = require('vm'), assert = require('assert');
 const html = fs.readFileSync(process.argv[2], 'utf8');
+const scenario = process.argv[3] || 'default';
 
 const MARK = '// ── Forms: общая библиотека шаблонов Instant Form (ACL-2054) ──';
 const start = html.indexOf(MARK);
@@ -19,6 +20,16 @@ const VALID = {
   privacy_url: 'https://example.com/privacy', thank_you_text: 'Thank you.', website_url: '',
   locale: 'EN_US', future_field: 'keep me',
 };
+if (scenario === 'contacts') {
+  Object.assign(VALID, {
+    contact_fields: ['email', 'last_name', 'phone', 'first_name'],
+    intro_title: 'Existing intro title', questions_first: true,
+    follow_up_action_url: 'https://example.com/followup', form_type: 'higher_intent',
+    privacy_link_text: 'Existing policy label', thank_you_title: 'Existing thank you title',
+    button_text: 'Existing button label',
+  });
+}
+if (scenario === 'legacy-locale') VALID.locale = 'UK_UA';
 const rows = [
   {id: 'aaaaaaaaaaaa', name: 'Demo <"form">', locale: 'EN_US', summary: 'Name, Email · 1 question',
    author: 'Anna', changed_at: '2026-10-21 10:00:00 UTC', revision: 'revision-opened-by-anna', invalid: false, errors: [], template: VALID},
@@ -81,6 +92,88 @@ const lastPost = () => requests.filter(r => r.body).pop();
   await flush();
   const list = () => get('fm-list').innerHTML;
   assert(requests[0].url.includes('force=true'), 'вкладка должна перечитывать библиотеку');
+
+
+  if (scenario === 'contacts') {
+    // Both no-op and headline-only saves preserve each supported split-name field
+    // and the original effective order, rather than reconstructing checkbox order.
+    click('', {'data-fm-edit': VALID.id});
+    for (const k of VALID.contact_fields) assert(get('fm-c-' + k).checked, 'Missing selected contact ' + k);
+    assert.equal(get('fm-c-name').checked, false);
+    click('fm-save-btn'); await flush();
+    assert.deepEqual(lastPost().body.contact_fields, VALID.contact_fields, 'No-op edit rewrote contacts');
+    click('', {'data-fm-edit': VALID.id});
+    type('fm-headline', 'Only the headline changed');
+    click('fm-save-btn'); await flush();
+    assert.deepEqual(lastPost().body.contact_fields, VALID.contact_fields, 'Headline edit rewrote contacts');
+    assert.equal(lastPost().body._expected_revision, 'revision-opened-by-anna');
+    for (const k of ['intro_title', 'questions_first', 'follow_up_action_url', 'form_type',
+                     'privacy_link_text', 'thank_you_title', 'button_text', 'future_field']) {
+      assert.deepEqual(lastPost().body[k], VALID[k], 'Lost retained field ' + k);
+    }
+    // Full name plus split names still fails validation before any write.
+    click('', {'data-fm-edit': VALID.id});
+    get('fm-c-name').checked = true;
+    let n = requests.filter(r => r.body).length;
+    click('fm-save-btn'); await flush();
+    assert.equal(requests.filter(r => r.body).length, n);
+    assert(get('fm-editor-msg').textContent.includes('either full name or first and last name'));
+    // Intentional removal and addition work; retained contacts keep their order.
+    get('fm-c-name').checked = false;
+    get('fm-c-email').checked = false;
+    get('fm-c-phone').checked = false;
+    click('fm-save-btn'); await flush();
+    assert.deepEqual(lastPost().body.contact_fields, ['last_name', 'first_name']);
+    click('', {'data-fm-edit': VALID.id});
+    get('fm-c-first_name').checked = false;
+    get('fm-c-last_name').checked = false;
+    get('fm-c-name').checked = true;
+    click('fm-save-btn'); await flush();
+    assert.deepEqual(lastPost().body.contact_fields, ['email', 'phone', 'name']);
+    click('fm-new-btn');
+    assert(get('fm-c-name').checked && get('fm-c-email').checked);
+    assert(!get('fm-c-first_name').checked && !get('fm-c-last_name').checked && !get('fm-c-phone').checked);
+    return;
+  }
+
+  if (scenario === 'legacy-locale') {
+    // Only the originally saved locale is compatible; no broader input waiver.
+    click('', {'data-fm-edit': VALID.id});
+    type('fm-headline', 'Legacy headline edit');
+    click('fm-save-btn'); await flush();
+    assert(lastPost(), 'Saved legacy locale was blocked: ' + get('fm-editor-msg').textContent);
+    assert.equal(lastPost().body.locale, 'UK_UA');
+    assert.equal(lastPost().body._expected_revision, 'revision-opened-by-anna');
+    click('', {'data-fm-edit': VALID.id});
+    type('fm-locale', 'ZZ_ZZ');
+    let n = requests.filter(r => r.body).length;
+    click('fm-save-btn'); await flush();
+    assert.equal(requests.filter(r => r.body).length, n, 'Changed unsupported locale was submitted');
+    assert(get('fm-editor-msg').textContent.includes('Unknown locale: ZZ_ZZ'));
+    // The same saved-locale edit also works without a connected team library.
+    library = {connected: false, ok: true};
+    click('fm-refresh-btn'); await flush();
+    click('', {'data-fm-edit': VALID.id});
+    click('fm-save-btn'); await flush();
+    assert.equal(requests.filter(r => r.body).length, n + 1);
+    assert(get('fm-msg').textContent.includes('on this computer only'));
+    // New has no inherited legacy context, even after editing a legacy template.
+    click('fm-new-btn');
+    for (const [id, value] of Object.entries({
+      'fm-name': 'New template', 'fm-headline': VALID.headline,
+      'fm-privacy': VALID.privacy_url, 'fm-thanks': VALID.thank_you_text, 'fm-locale': 'UK_UA',
+    })) type(id, value);
+    n = requests.filter(r => r.body).length;
+    click('fm-save-btn'); await flush();
+    assert.equal(requests.filter(r => r.body).length, n, 'New unsupported locale was submitted');
+    assert(get('fm-editor-msg').textContent.includes('Unknown locale: UK_UA'));
+    type('fm-locale', 'EN_US');
+    click('fm-save-btn'); await flush();
+    assert.equal(requests.filter(r => r.body).length, n + 1);
+    assert.equal(lastPost().body.locale, 'EN_US');
+    assert(!('_expected_revision' in lastPost().body));
+    return;
+  }
 
   // Список: имя, автор, время, язык, состав; имя экранировано.
   assert(!list().includes('<"form">'), 'имя попало в разметку сырым: ' + list().slice(0, 200));

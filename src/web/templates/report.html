@@ -4608,7 +4608,9 @@ async function dashRefresh(ev) {
     <label style="display:block;margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Intro (optional)</div>
       <textarea id="fm-intro" rows="2" maxlength="500" style="width:100%;font-family:inherit"></textarea></label>
     <div style="margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Contact fields</div>
-      <label><input type="checkbox" id="fm-c-name" checked> Name</label>
+      <label><input type="checkbox" id="fm-c-name" checked> Full name</label>
+      <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-first_name"> First name</label>
+      <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-last_name"> Last name</label>
       <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-email" checked> Email</label>
       <label style="margin-left:0.8rem"><input type="checkbox" id="fm-c-phone"> Phone</label></div>
     <div style="margin-top:0.6rem"><div style="font-size:var(--adopy-text-sm);color:var(--muted)">Custom questions (up to 5)</div>
@@ -18291,6 +18293,7 @@ function aclPickerSearch(inst, text) {
 // (зеркало form_templates.validate); окончательно проверяет сервер.
 (function () {
   var rows = [], deleted = [], editing = null, questions = [], pending = false, scope = 'team';
+  var contactKeys = ['name', 'first_name', 'last_name', 'email', 'phone'];
   function el(id) { return document.getElementById(id); }
   function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function say(text, error) { el('fm-msg').textContent = text || ''; el('fm-msg').style.color = error ? 'var(--danger)' : 'var(--muted)'; }
@@ -18433,7 +18436,7 @@ function aclPickerSearch(inst, text) {
     el('fm-thanks').value = tpl.thank_you_text || '';
     el('fm-site').value = tpl.website_url || '';
     var contacts = tpl.contact_fields || ['name', 'email'];
-    ['name', 'email', 'phone'].forEach(function (k) { el('fm-c-' + k).checked = contacts.indexOf(k) !== -1; });
+    contactKeys.forEach(function (k) { el('fm-c-' + k).checked = contacts.indexOf(k) !== -1; });
     questions = (tpl.questions || []).map(function (q) {
       return {label: q.label || '', type: q.type || 'short_answer', options: (q.options || []).slice()};
     });
@@ -18452,7 +18455,13 @@ function aclPickerSearch(inst, text) {
   function collect() {
     // Поля, которых в редакторе нет (их добавит будущая версия шаблона), едут дальше как были.
     var base = Object.assign({}, editing && editing.template ? editing.template : {});
-    var contacts = ['name', 'email', 'phone'].filter(function (k) { return el('fm-c-' + k).checked; });
+    // Preserve the saved question order; append newly selected fields in control order.
+    var contacts = (base.contact_fields || []).filter(function (k) {
+      return contactKeys.indexOf(k) !== -1 && el('fm-c-' + k).checked;
+    });
+    contactKeys.forEach(function (k) {
+      if (el('fm-c-' + k).checked && contacts.indexOf(k) === -1) contacts.push(k);
+    });
     return Object.assign(base, {
       id: editing && editing.id ? editing.id : '',
       _expected_revision: editing ? editing.revision : undefined,
@@ -18472,7 +18481,8 @@ function aclPickerSearch(inst, text) {
     if (pending) return;
     var tpl = collect();
     var layout = window.cbLayout;
-    var errors = layout && layout.validateTemplate ? layout.validateTemplate(tpl) : [];
+    var legacyLocale = editing && editing.template ? editing.template.locale : null;
+    var errors = layout && layout.validateTemplate ? layout.validateTemplate(tpl, legacyLocale) : [];
     if (errors.length) { editorSay(errors.join('. ') + '.', true); return; }
     busy(true); editorSay('Saving…');
     var ok = false;
