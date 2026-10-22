@@ -24,7 +24,7 @@ def test_spec_bundles_the_registry_directory():
 
 
 def test_bundle_test_and_smoke_check_the_registry():
-    ps1 = (ROOT / "packaging/windows/test_bundle.ps1").read_text(encoding="utf-8")
+    ps1 = (ROOT / "packaging/windows/test_bundle.ps1").read_text(encoding="utf-8")  # linux-ok: reads the packaging script as data
     for name in ("meta.json", "rules.json", "sources.json"):
         assert f'"{name}"' in ps1
     assert "_internal/config/meta_rules/" in ps1
