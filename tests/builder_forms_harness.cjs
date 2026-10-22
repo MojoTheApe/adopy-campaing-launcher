@@ -160,7 +160,7 @@ assert.equal(t.note.hidden, false);
 // Повторная синхронизация ничего не пишет (форму слушает наблюдатель дерева).
 setBackend('api');
 t = build({ dest: 'instant_form', formIds: ['7000001'] });
-W.cbForms.Acc = { ok: true, forms: forms, message: '' };
+W.cbForms['Acc|'] = { ok: true, forms: forms, message: '' };
 W.cbSyncDestination(t.slot);
 const firstSig = t.rows[0]._.picker.dataset.sig;
 let writes = 0;
@@ -173,7 +173,7 @@ assert.equal(t.rows[0]._.picker.dataset.sig, firstSig);
 
 // Список: пригодные формы, выбранная выбрана, подпись про число форм.
 t = build({ dest: 'instant_form', formIds: ['7000003'] });
-W.cbForms.Acc = { ok: true, forms: forms, message: '' };
+W.cbForms['Acc|'] = { ok: true, forms: forms, message: '' };
 W.cbSyncDestination(t.slot);
 const picker = t.rows[0]._.picker;
 const ids = (picker.innerHTML.match(/value="([^"]*)"/g) || []).map((x) => x.slice(7, -1));
@@ -194,18 +194,19 @@ const fetched = [];
 sandbox.FormData = function FormData() { this.d = {}; this.append = (k, v) => { this.d[k] = v; }; };
 sandbox.document = { querySelectorAll: (s) => (s === '.cb-slot' ? [t.slot] : []) };
 sandbox.fetch = (url, init) => {
-  fetched.push({ url, account: init.body.d.account_label, method: init.method });
+  fetched.push({ url, account: init.body.d.account_label, method: init.method, page: init.body.d.page_id });
   return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, state: 'ok', forms: [forms[0]], message: '' }) });
 };
+W.cbResolvedPage = () => '111';   // ACL-1880: формы читаются только для разрешённой Страницы
 const btn = el({ closest: (s) => (s === '.cb-ad-row' ? row0 : null) });
 W.cbRefreshForms(btn);
 assert.equal(btn.disabled, true, 'кнопку можно нажать второй раз, пока идёт чтение');
 W.cbRefreshForms(btn);
 assert.equal(fetched.length, 1, 'второе нажатие во время чтения дало второй вызов');
 setTimeout(() => {
-  assert.deepEqual(fetched, [{ url: '/api/page-forms', account: 'Acc', method: 'POST' }]);
+  assert.deepEqual(fetched, [{ url: '/api/page-forms', account: 'Acc', method: 'POST', page: '111' }]);
   assert.equal(btn.disabled, false);
-  assert.equal(W.cbForms.Acc.forms.length, 1);
+  assert.equal(W.cbForms['Acc|111'].forms.length, 1);
   assert.equal(row0._.fnote.textContent, '1 form of the Page');
   // Сбой сети - подпись, а не немой отказ.
   sandbox.fetch = () => Promise.reject(new Error('down'));

@@ -89,6 +89,21 @@ class StopLog:
         self._path = path
         self._wall = wall
         self._tlock = threading.Lock()
+        #: Кому сказать об остановке (параллельные запуски): тёплый реестр забывает
+        #: порт и вкладку, холодная отметка порта снимается — следующий заход
+        #: поднимает профиль заново через MLX, а не цепляется к мёртвому порту.
+        self._listeners: list[Callable[[str], None]] = []
+
+    def on_stop(self, listener: Callable[[str], None]) -> None:
+        if listener not in self._listeners:
+            self._listeners.append(listener)
+
+    def _notify(self, profile_id: str) -> None:
+        for listener in list(self._listeners):
+            try:
+                listener(profile_id)
+            except Exception:  # noqa: BLE001 — запись остановки не роняет слушатель
+                log.exception("A profile-stop listener failed")
 
     def file(self) -> Path:
         path = self._path() if callable(self._path) else self._path
@@ -125,10 +140,18 @@ class StopLog:
                     atomic_write(path, data)
             except OSError:
                 log.exception("Could not record a profile stop")
+        self._notify(pid)
 
     def last_stop(self, profile_id: str) -> float | None:
         with self._tlock:
             return self._read().get((profile_id or "").strip())
+
+    def recent_stop_at(self, profile_id: str) -> float | None:
+        """Время остановки (эпоха), если пауза после неё ещё идёт; иначе None."""
+        last = self.last_stop(profile_id)
+        if last is None or last + restart_cooldown_s() <= self._wall():
+            return None
+        return last
 
     def restart_wait_s(self, profile_id: str) -> float:
         last = self.last_stop(profile_id)
