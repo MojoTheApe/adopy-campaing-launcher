@@ -53995,7 +53995,7 @@
             "session": "run_w1022_1845"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-W1022845",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -114714,6 +114714,68 @@
             "approved_at": "2026-10-22T06:22:57+00:00"
           }
         }
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-22T06:25:54+00:00",
+        "issue": 845,
+        "pr": 850,
+        "review": {
+          "id": "a538405bb7644d53a5f15fb286a97cf8",
+          "pr": 850,
+          "issues": [
+            845
+          ],
+          "actor": "Reviewer-AE1022845",
+          "session": "run_ae1022_845",
+          "coordinator": "Coordinator-I1021A",
+          "started_at": "2026-10-22T06:10:51+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 845,
+            "pr": 850,
+            "branch": "codex/acl-1845-publish-button-design",
+            "head_sha": "98546e1abdb7218720abcd84a22db311ef968058",
+            "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+            "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "9c7c2106bea898283bcc702c2c771bee801df7835d57d9916bdef93032e9e44a",
+            "review": {
+              "kind": "independent-review",
+              "implementer": "Worker-W1022845",
+              "reviewer": "Reviewer-AE1022845",
+              "execution_lane": "a538405bb7644d53a5f15fb286a97cf8",
+              "review_session": "run_ae1022_845",
+              "head_sha": "98546e1abdb7218720abcd84a22db311ef968058",
+              "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+              "tree_sha": "b549298e6251f6f245cf1b85bcb57dc9bdc53609",
+              "verdict": "approved",
+              "report": "ACL-1845 / PR850 source review: diff vs main 3bc8d973 touches only report.html (publication button CSS/markup/JS), 3 adjusted browser tests, new test_publish_button_design_browser.py and the changelog fragment; merge-base equals main so no other template hunks are lost; CHANGELOG identical to main; fold_changelog --check valid; UI strings English, no ids, no hardcoded dates; 137 affected tests passed locally (13 files); required CI green on this head.",
+              "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                845
+              ],
+              "recorded_at": "2026-10-22T06:24:58+00:00",
+              "issue_scopes": {
+                "845": "9c7c2106bea898283bcc702c2c771bee801df7835d57d9916bdef93032e9e44a"
+              }
+            },
+            "lane": {
+              "id": "a538405bb7644d53a5f15fb286a97cf8",
+              "pr": 850,
+              "issues": [
+                845
+              ],
+              "actor": "Reviewer-AE1022845",
+              "session": "run_ae1022_845",
+              "coordinator": "Coordinator-I1021A",
+              "started_at": "2026-10-22T06:10:51+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-22T06:25:21+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -119791,6 +119853,50 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-22T06:22:57+00:00"
+      },
+      "845": {
+        "issue": 845,
+        "pr": 850,
+        "branch": "codex/acl-1845-publish-button-design",
+        "head_sha": "98546e1abdb7218720abcd84a22db311ef968058",
+        "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+        "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "9c7c2106bea898283bcc702c2c771bee801df7835d57d9916bdef93032e9e44a",
+        "review": {
+          "kind": "independent-review",
+          "implementer": "Worker-W1022845",
+          "reviewer": "Reviewer-AE1022845",
+          "execution_lane": "a538405bb7644d53a5f15fb286a97cf8",
+          "review_session": "run_ae1022_845",
+          "head_sha": "98546e1abdb7218720abcd84a22db311ef968058",
+          "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+          "tree_sha": "b549298e6251f6f245cf1b85bcb57dc9bdc53609",
+          "verdict": "approved",
+          "report": "ACL-1845 / PR850 source review: diff vs main 3bc8d973 touches only report.html (publication button CSS/markup/JS), 3 adjusted browser tests, new test_publish_button_design_browser.py and the changelog fragment; merge-base equals main so no other template hunks are lost; CHANGELOG identical to main; fold_changelog --check valid; UI strings English, no ids, no hardcoded dates; 137 affected tests passed locally (13 files); required CI green on this head.",
+          "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            845
+          ],
+          "recorded_at": "2026-10-22T06:24:58+00:00",
+          "issue_scopes": {
+            "845": "9c7c2106bea898283bcc702c2c771bee801df7835d57d9916bdef93032e9e44a"
+          }
+        },
+        "lane": {
+          "id": "a538405bb7644d53a5f15fb286a97cf8",
+          "pr": 850,
+          "issues": [
+            845
+          ],
+          "actor": "Reviewer-AE1022845",
+          "session": "run_ae1022_845",
+          "coordinator": "Coordinator-I1021A",
+          "started_at": "2026-10-22T06:10:51+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-22T06:25:21+00:00"
       }
     },
     "batches": {
@@ -126295,62 +126401,6 @@
       "ineligible": {}
     },
     "source_reviews": {
-      "850": {
-        "id": "a538405bb7644d53a5f15fb286a97cf8",
-        "pr": 850,
-        "issues": [
-          845
-        ],
-        "actor": "Reviewer-AE1022845",
-        "session": "run_ae1022_845",
-        "coordinator": "Coordinator-I1021A",
-        "started_at": "2026-10-22T06:10:51+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 845,
-          "pr": 850,
-          "branch": "codex/acl-1845-publish-button-design",
-          "head_sha": "98546e1abdb7218720abcd84a22db311ef968058",
-          "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
-          "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "9c7c2106bea898283bcc702c2c771bee801df7835d57d9916bdef93032e9e44a",
-          "review": {
-            "kind": "independent-review",
-            "implementer": "Worker-W1022845",
-            "reviewer": "Reviewer-AE1022845",
-            "execution_lane": "a538405bb7644d53a5f15fb286a97cf8",
-            "review_session": "run_ae1022_845",
-            "head_sha": "98546e1abdb7218720abcd84a22db311ef968058",
-            "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
-            "tree_sha": "b549298e6251f6f245cf1b85bcb57dc9bdc53609",
-            "verdict": "approved",
-            "report": "ACL-1845 / PR850 source review: diff vs main 3bc8d973 touches only report.html (publication button CSS/markup/JS), 3 adjusted browser tests, new test_publish_button_design_browser.py and the changelog fragment; merge-base equals main so no other template hunks are lost; CHANGELOG identical to main; fold_changelog --check valid; UI strings English, no ids, no hardcoded dates; 137 affected tests passed locally (13 files); required CI green on this head.",
-            "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              845
-            ],
-            "recorded_at": "2026-10-22T06:24:58+00:00",
-            "issue_scopes": {
-              "845": "9c7c2106bea898283bcc702c2c771bee801df7835d57d9916bdef93032e9e44a"
-            }
-          },
-          "lane": {
-            "id": "a538405bb7644d53a5f15fb286a97cf8",
-            "pr": 850,
-            "issues": [
-              845
-            ],
-            "actor": "Reviewer-AE1022845",
-            "session": "run_ae1022_845",
-            "coordinator": "Coordinator-I1021A",
-            "started_at": "2026-10-22T06:10:51+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-22T06:25:21+00:00"
-        }
-      },
       "843": {
         "id": "d565f33ca2e940368f431ab20c07c5e4",
         "pr": 843,
