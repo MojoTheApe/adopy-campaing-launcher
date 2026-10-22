@@ -60593,7 +60593,7 @@
             "session": "local_5577ad27-093e-4daa-be2e-a81fc75eabcc"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1022P95",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -60611,7 +60611,8 @@
           "report": "ACL-2095 handoff \u2014 PR #1096, head c51fc41f, branch work/acl-2095-parallel-profile-launch.\n\nChecks: tests/test_acl2095_parallel_profile_launch.py (38) plus affected suites green locally (test_acl1756_fb_api, test_acl1760_api_read, test_acl1761_plan_check, test_acl1761_hang_logout, test_acl1761_api_create, test_acl1784_api_review_window, test_acl1812_warm_sessions, test_acl1826_mlx_session_lost, test_acl1886_plan_check_snapshot, test_acl1800_account_tree, test_reads_open_a_closed_profile, test_a_finished_clean_profile_closes_itself). Full suite: CI.\n\nResults: items 1-3, 5-7 and 8a-c. Shared slot gate already covered Check plan (verified in 9095y log); added paced MLX starts (ACL_MLX_PARALLEL_STARTS=1, gap 3 s), one retry on 10053/10054 with adoption of a profile that came up, cold CDP budget 40 s (first tab only), survivor-of-stop = closing, stop listeners clear warm/cold state, \"Waiting for a free profile slot\" in Check plan, proxy readiness probe + one retry on ERR_INVALID_AUTH_CREDENTIALS on the first cold navigation, ready = /json/version, settle-before-stop, wait for process exit after stop. Telemetry: fb_api_mlx_start, fb_api_cold_open, fb_api_proxy_probe, fb_api_stop_gone.\n\nRemaining risks: item 4 ceiling not measured live (default ACL_MAX_PROFILES=2 kept; telemetry ready for owner runs). Probe page api.ipify.org is a third-party request from the profile IP (configurable/off). Stop path can now wait up to start budget + 30 s. Item 8(d) split to ACL-2098. TEST9095za (C:\\acl-test-9095za) built with both commits, not yet on 9095 pending owner OK for restart."
         },
         "pr": 1096,
-        "queued_at": "2026-10-22T10:50:54+00:00"
+        "queued_at": "2026-10-22T10:50:54+00:00",
+        "reviewer": "Reviewer-AO1022095"
       },
       "1099": {
         "implementers": [
@@ -63889,6 +63890,10 @@
       "Worker-WO1022099": {
         "session": "run_wo1022_099",
         "role": "Worker"
+      },
+      "Reviewer-AO1022095": {
+        "session": "run_ao1022_095",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -66931,8 +66936,7 @@
     "review_queue": [
       1054,
       710,
-      1069,
-      1095
+      1069
     ],
     "review": null,
     "history": [
@@ -119287,6 +119291,13 @@
         "issue": 1086,
         "claim": "31318a5996e44bfbadc7fe84ea0d2c6a",
         "actor": "Worker-W1022086"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-22T11:12:22+00:00",
+        "pr": 1096,
+        "lane": "e3b3c7cfb8184b24ace6e5f25df8a663",
+        "actor": "Reviewer-AO1022095"
       }
     ],
     "policy": {
@@ -131487,7 +131498,20 @@
       "started_at": "2026-10-22T10:37:11+00:00",
       "ineligible": {}
     },
-    "source_reviews": {},
+    "source_reviews": {
+      "1096": {
+        "id": "e3b3c7cfb8184b24ace6e5f25df8a663",
+        "pr": 1096,
+        "issues": [
+          1095
+        ],
+        "actor": "Reviewer-AO1022095",
+        "session": "run_ao1022_095",
+        "coordinator": "Coordinator-I1021A",
+        "started_at": "2026-10-22T11:12:22+00:00",
+        "state": "reviewing"
+      }
+    },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
   },
   "maintenance_history": [
