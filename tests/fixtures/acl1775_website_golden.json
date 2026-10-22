@@ -31,7 +31,7 @@
       "format": "image",
       "library_name": "acl-4470b1b036851337.png",
       "name": "1000 - Text0",
-      "status": "PAUSED"
+      "status": "ACTIVE"
      },
      {
       "bytes": 10,
@@ -55,7 +55,7 @@
       "format": "video",
       "library_name": "acl-6902d60c5a04-74c4b9a63186",
       "name": "1001 - Text1",
-      "status": "PAUSED"
+      "status": "ACTIVE"
      }
     ],
     "billing_event": "IMPRESSIONS",
@@ -67,7 +67,7 @@
      "custom_event_type": "LEAD",
      "pixel_id": "222"
     },
-    "status": "PAUSED",
+    "status": "ACTIVE",
     "targeting": {
      "age_max": 55,
      "age_min": 25,
@@ -148,7 +148,7 @@
        "link": "https://example.invalid/l",
        "name": "1000 - Text0",
        "primary_text": "Body 0",
-       "status": "PAUSED"
+       "status": "ACTIVE"
       },
       {
        "bytes": 10,
@@ -161,7 +161,7 @@
        "link": "https://example.invalid/l",
        "name": "1001 - Text1",
        "primary_text": "Body 1",
-       "status": "PAUSED"
+       "status": "ACTIVE"
       }
      ],
      "age": "25-55",
@@ -183,11 +183,12 @@
      "optimization": "OFFSITE_CONVERSIONS · LEAD on the website pixel",
      "os": "All",
      "placements": "manual: Facebook Feed, Facebook Stories, Facebook Reels, Facebook in-stream reels, Instagram feed, Instagram Stories, Instagram Reels · devices mobile/desktop",
-     "status": "PAUSED"
+     "status": "ACTIVE"
     }
    ],
    "budget_minor": 2000,
    "campaign": "MX Leads 1",
+   "children_status": "ACTIVE",
    "currency": "USD",
    "daily_budget": 20.0,
    "existing": false,
@@ -198,6 +199,7 @@
    "pixel_id": "222",
    "pixel_source": "account default",
    "status": "PAUSED",
+   "status_note": "Campaign PAUSED — ad sets and ads are active and start when you turn the campaign on",
    "tag": "acl-6902d60c5a04"
   }
  },
@@ -237,7 +239,7 @@
      "custom_event_type": "LEAD",
      "pixel_id": "222"
     },
-    "status": "PAUSED",
+    "status": "ACTIVE",
     "targeting": {
      "age_max": 55,
      "age_min": 25,
@@ -339,7 +341,7 @@
      "creative_id": "103"
     },
     "name": "1000 - Text0",
-    "status": "PAUSED"
+    "status": "ACTIVE"
    }
   ],
   [
@@ -396,7 +398,7 @@
      "creative_id": "106"
     },
     "name": "1001 - Text1",
-    "status": "PAUSED"
+    "status": "ACTIVE"
    }
   ]
  ],
@@ -458,8 +460,8 @@
    "ok": true
   },
   {
-   "actual": "PAUSED",
-   "expected": "PAUSED",
+   "actual": "ACTIVE",
+   "expected": "ACTIVE",
    "field": "status",
    "not_read": false,
    "object": "ad set MX Leads 1",
@@ -674,8 +676,8 @@
    "ok": true
   },
   {
-   "actual": "PAUSED",
-   "expected": "PAUSED",
+   "actual": "ACTIVE",
+   "expected": "ACTIVE",
    "field": "status",
    "not_read": false,
    "object": "ad 1 (1000 - Text0)",
@@ -810,8 +812,8 @@
    "ok": true
   },
   {
-   "actual": "PAUSED",
-   "expected": "PAUSED",
+   "actual": "ACTIVE",
+   "expected": "ACTIVE",
    "field": "status",
    "not_read": false,
    "object": "ad 2 (1001 - Text1)",
@@ -934,14 +936,14 @@
   "preflight: targeting resolved",
   "preflight: creatives read",
   "campaign: created PAUSED, tag kept",
-  "ad set 'MX Leads 1': created PAUSED, tag kept",
+  "ad set 'MX Leads 1': created ACTIVE (campaign PAUSED), tag kept",
   "ad 1: image uploaded",
   "ad 1: creative created",
-  "ad 1: created PAUSED",
+  "ad 1: created ACTIVE (campaign PAUSED)",
   "ad 2: video uploaded",
   "ad 2: video processed",
   "ad 2: creative created",
-  "ad 2: created PAUSED",
+  "ad 2: created ACTIVE (campaign PAUSED)",
   "readback: all fields match"
  ]
 }

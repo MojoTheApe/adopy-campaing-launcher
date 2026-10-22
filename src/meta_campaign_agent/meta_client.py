@@ -9,8 +9,9 @@ import requests
 
 
 # Версия Marketing API по умолчанию (ACL-1783). v22.0 уже не в списке поддерживаемых,
-# v24.0 снят с поддержки 2026-10-06. Переопределяется env META_GRAPH_API_VERSION;
-# позже значение будет читаться из реестра правил Meta (config/meta_rules/meta.json).
+# v24.0 снят с поддержки 2026-10-06. Источник версии — config/meta_rules/meta.json
+# (ACL-2123); env META_GRAPH_API_VERSION действует, только если он строго новее.
+# Константа — запасная версия, если реестр не читается.
 DEFAULT_GRAPH_VERSION = "v26.0"
 
 
@@ -199,5 +200,10 @@ def meta_client_from_env(*, proxies: dict[str, str] | None = None) -> MetaClient
     token = (os.environ.get("META_ACCESS_TOKEN") or "").strip()
     if not token:
         raise MetaGraphError("META_ACCESS_TOKEN is not set in .env")
-    version = (os.environ.get("META_GRAPH_API_VERSION") or DEFAULT_GRAPH_VERSION).strip()
+    try:
+        from src.campaign_bridge.meta_rules import graph_api_version
+
+        version = graph_api_version(os.environ.get("META_GRAPH_API_VERSION"))
+    except Exception:
+        version = DEFAULT_GRAPH_VERSION
     return MetaClient(MetaClientConfig(access_token=token, graph_version=version, proxies=proxies))
