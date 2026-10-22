@@ -53473,7 +53473,7 @@
             "session": "run_w1022_1827"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1022827",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -53503,7 +53503,8 @@
           "actor": "Coordinator-C0930A",
           "session": "coord_c0930a_1009",
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
-        }
+        },
+        "reviewer": "Reviewer-AD1022827"
       },
       "771": {
         "implementers": [
@@ -61666,6 +61667,10 @@
       "Reviewer-AB1022402": {
         "session": "run_ab1022_402",
         "role": "Reviewer"
+      },
+      "Reviewer-AD1022827": {
+        "session": "run_ad1022_827",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -64652,8 +64657,7 @@
       1054,
       710,
       1069,
-      73,
-      827
+      73
     ],
     "review": null,
     "history": [
@@ -114363,6 +114367,13 @@
           "report": "Review of ACL-402 PR 1032 head bd013c88 (base main 3bc8d973): RETURN, one blocking finding.\n\nFinding (blocking): tests/test_failure_signatures.py::test_markdown_states_it_proposes_no_rule_and_report_includes_it is a time bomb. It builds rows dated 2026-10-19 and calls acl_telemetry_report.analyse(rows, 7), which uses the real date.today(). It passes today (2026-10-22) but fails from 2026-10-27 (verified: find_repeated with today=2026-10-27 returns 0 signatures, section shows no repeats, the assert on `create` fails). Fix: build the row dates relative to date.today() (or monkeypatch date in failure_signatures), keep the rest unchanged.\n\nChecked OK: merge bd013c88 contains only docs/system/changelog.d/ACL-402.md (original wording + Task link) and CHANGELOG.md equals main (no diff vs 3bc8d973); no hidden hunks in the evil merge. fold_changelog.py --check valid. Diff vs main is 4 files (fragment, report hook, src/failure_signatures.py, tests), in scope; report only, proposes/applies no rule; reason text scrubbed; no ids leaked. Affected tests 66 passed. Required CI green on bd013c88 (linux 1-3, windows, tracker-link, verification, process instructions).",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-22T05:58:11+00:00",
+        "pr": 829,
+        "lane": "c57e1bb60f264098ad601162c5daca52",
+        "actor": "Reviewer-AD1022827"
       }
     ],
     "policy": {
@@ -125767,7 +125778,20 @@
       "started_at": "2026-10-22T03:38:28+00:00",
       "ineligible": {}
     },
-    "source_reviews": {},
+    "source_reviews": {
+      "829": {
+        "id": "c57e1bb60f264098ad601162c5daca52",
+        "pr": 829,
+        "issues": [
+          827
+        ],
+        "actor": "Reviewer-AD1022827",
+        "session": "run_ad1022_827",
+        "coordinator": "Coordinator-I1021A",
+        "started_at": "2026-10-22T05:58:11+00:00",
+        "state": "reviewing"
+      }
+    },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
   },
   "maintenance_history": [
