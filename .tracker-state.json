@@ -4993,27 +4993,6 @@
           "945": "e9ff3ac55ccc43857b7919167fea2b5025620effa5b1a59a0baaa9a01454befc"
         }
       },
-      "952": {
-        "kind": "independent-review",
-        "verdict": "approved",
-        "reviewer": "Reviewer-AI1022708",
-        "review_session": "run_ai1022_708",
-        "execution_lane": "67a34bfbf7bd4d8293c7d4a5781ff416",
-        "implementer": "Worker-W1022708",
-        "head_sha": "048fd7296e14de5ab98fca076905947bb6c6e4de",
-        "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
-        "tree_sha": "1371b08c20ce25419ed6b4777f691d7965b77b9e",
-        "report": "Independent source review of ACL-1708 / PR 952 at head 048fd729 vs main 3bc8d973 (merge-base = main tip). Verified: update-apply refusal text now 'not started from its desktop shortcut' with test asserting no 'launcher' (any case); account-unreachable text says Adopy Campaign Manager window; scripts/convert_favicon_to_ico.py deleted with no remaining references in build/scripts/tests/packaging (only a historical 2026-06 spec doc and the changelog fragment mention it); Pillow stays in requirements-dev (used by tests); shortcut script message points at assets/dashboard.ico; report.html viewport meta identical to loading.html/robot_health.html, harmless; no visible 'launcher' left in templates/static/web messages (only JS comment and launcher.mlx.yt regexes); English text; fragment ACL-1708.md in its own commit and fold_changelog.py --check valid. Ran tests: test_web_acl_update + test_distribution_boundary 17 passed, template/turn_off subset 75 passed. Required CI all green on this head. Non-blocking notes: Multilogin's own 'local launcher' in failure_policy.py (deliberate), and outside the dashboard 'Install ACL.bat' line 113 'Close the ACL launcher', install_dashboard_shortcut.ps1 'Dashboard launcher not found'/'Launcher:' and installer.iss product name 'Adopy Campaign Launcher' remain (outside acceptance scope).",
-        "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
-        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-        "issues": [
-          708
-        ],
-        "recorded_at": "2026-10-22T07:04:46+00:00",
-        "issue_scopes": {
-          "708": "6b7726dd5b2fd3e4f37b1f1ed4921ba836cab3de1eff62531d7029faa5dce02e"
-        }
-      },
       "948": {
         "kind": "independent-review",
         "verdict": "approved",
@@ -127129,7 +127108,9 @@
         "session": "run_ai1022_708",
         "coordinator": "Coordinator-I1021A",
         "started_at": "2026-10-22T06:55:18+00:00",
-        "state": "reviewing"
+        "state": "returning",
+        "report": "ACL-1708 / PR 952, head 048fd729: content review passed (no findings). All required CI is green and affected tests pass.\n\nBlocker: main advanced from 3bc8d973 to 515689de (PR 1085) while the review was being recorded. record-review now refuses with \"Source review must use the current main baseline\", and batch approve refuses with \"does not match the frozen baseline\".\n\nNeeded from the author: merge current origin/main into the branch (merge-tree with 515689de is clean; app.py and report.html overlap without conflict), push, re-run checks, hand off, then request a new review. Do not change content otherwise.\n\nOptional non-blocking: Install ACL.bat line 113 (\"Close the ACL launcher\") and install_dashboard_shortcut.ps1 (\"Dashboard launcher not found\" / \"Launcher:\") still say launcher; they are outside the dashboard acceptance.",
+        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
