@@ -37,6 +37,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import time
 import urllib.parse
 import urllib.request
 
@@ -167,12 +168,39 @@ def run_header_ok(run, repo, workflow, commit, exclude_run_id=None, events=PROVA
                 or not valid_run_url(run.get("html_url"), repo, run["id"]))
 
 
-def candidate_runs(api, repo, workflow, commit, exclude_run_id=None, events=PROVABLE_EVENTS):
-    """Успешные запуски ``workflow`` на ``commit`` (только заголовок, без заданий)."""
+# ACL-2107: список запусков GitHub по head_sha иногда приходит пустым, а commits/<sha>/pulls
+# иногда падает. Релизные ворота повторяют такие запросы с паузой; сам CI (scope) - нет.
+RETRY_ATTEMPTS = 3
+RETRY_PAUSE = 2.0
+
+
+def retrying(api, attempts=None):
+    """Обёртка ``api``: ошибка запроса повторяется с паузой, после последней попытки - исключение."""
+    def call(path):
+        total = max(1, attempts or RETRY_ATTEMPTS)
+        for attempt in range(total):
+            try:
+                return api(path)
+            except Exception:  # noqa: BLE001 - сеть/лимиты GitHub
+                if attempt + 1 >= total:
+                    raise
+                time.sleep(RETRY_PAUSE)
+    return call
+
+
+def candidate_runs(api, repo, workflow, commit, exclude_run_id=None, events=PROVABLE_EVENTS, empty_retries=0):
+    """Успешные запуски ``workflow`` на ``commit`` (только заголовок, без заданий).
+
+    ``empty_retries``: сколько раз повторить, если список пришёл пустым (флак листинга GitHub)."""
     if not SHA.fullmatch(commit or ""):
         return []
     query = urllib.parse.urlencode({"head_sha": commit, "status": "success", "per_page": 20})
     payload = api(f"repos/{repo}/actions/workflows/{workflow}/runs?{query}")
+    for _ in range(empty_retries):
+        if payload.get("workflow_runs"):
+            break
+        time.sleep(RETRY_PAUSE)
+        payload = api(f"repos/{repo}/actions/workflows/{workflow}/runs?{query}")
     return [run for run in payload.get("workflow_runs") or []
             if run_header_ok(run, repo, workflow, commit, exclude_run_id, events)]
 
@@ -220,6 +248,83 @@ def marker_line(tree):
     return f"::notice title={MARKER_TITLE}::tree={tree}"
 
 
+REUSE_TITLE = "acl-reused-runs"
+REUSE_MESSAGE = re.compile(r"runs=(\d+(?:,\d+)*)")
+
+
+def reuse_marker_line(run_urls, repo):
+    """Аннотация scope-задания: id прогонов, чьи задания этот прогон переиспользовал (ACL-2107)."""
+    ids = []
+    for url in run_urls or ():
+        match = re.fullmatch(r"https://github\.com/" + re.escape(repo) + r"/actions/runs/(\d+)", str(url))
+        if match and match[1] not in ids:
+            ids.append(match[1])
+    return f"::notice title={REUSE_TITLE}::runs={','.join(ids)}" if ids else ""
+
+
+def scope_log_run_ids(log, repo, workflow, tree):
+    """Legacy scope stdout supplies candidate IDs, never proof of their successful jobs.
+
+    Read only the classifier's JSON result in its own Actions step, not URLs in
+    tests, comments or unrelated log lines. The caller obtains this log from the
+    recorded main run's successful scope job; every candidate is then re-proven.
+    """
+    found, in_scope = [], False
+    for line in log.splitlines():
+        line = re.sub(r"^\d{4}-\d\d-\d\dT[\d:.]+Z ", "", line)
+        if line.startswith("##[group]Run "):
+            in_scope = line == f"##[group]Run python3 scripts/acl_ci_scope.py --workflow {workflow}"
+        if not in_scope or not line.startswith("{"):
+            continue
+        try:
+            result = json.loads(line)
+        except ValueError:
+            continue
+        if (not isinstance(result, dict) or result.get("tree") != tree
+                or not SHA.fullmatch(str(result.get("commit") or ""))
+                or result.get("reason") not in {"reused-green-full-run-of-same-tree",
+                                               "partly-reused-green-runs-of-same-tree"}):
+            continue
+        urls = result.get("reused_runs", [])
+        if not isinstance(urls, list):
+            continue
+        urls = urls + [result.get("reused_from")]
+        if not all(valid_run_url(url, repo) for url in urls):
+            continue
+        ids = list(dict.fromkeys(int(url.rsplit("/", 1)[1]) for url in urls))
+        if len(ids) > 20:
+            return []
+        found.append(ids)
+    # A normal classifier produces exactly one result. Ambiguous output is not
+    # authoritative; retain the older discovery fallback instead.
+    return found[0] if len(found) == 1 else []
+
+
+def reused_run_ids(api, repo, jobs, workflow, *, logs=None, tree=None):
+    """Candidate IDs from the main scope annotation, or its retained legacy stdout."""
+    rows = jobs.get(SCOPE_JOB.get(workflow)) or []
+    if (len(rows) != 1 or not isinstance(rows[0].get("id"), int)
+            or rows[0].get("status") != "completed" or rows[0].get("conclusion") != "success"):
+        return []
+    found = []
+    try:
+        for note in api(f"repos/{repo}/check-runs/{rows[0]['id']}/annotations?per_page=50") or []:
+            if note.get("title") == REUSE_TITLE:
+                match = REUSE_MESSAGE.fullmatch(str(note.get("message") or "").strip())
+                if match:
+                    found += [int(x) for x in match[1].split(",") if int(x) not in found]
+    except Exception:  # noqa: BLE001 - legacy stdout or head_sha discovery remains available
+        pass
+    if found:
+        return found[:20]
+    if logs is not None and SHA.fullmatch(tree or ""):
+        try:
+            return scope_log_run_ids(logs(rows[0]["id"]), repo, workflow, tree)
+        except Exception:  # noqa: BLE001 - retained logs may have expired; discovery still works
+            pass
+    return []
+
+
 def tested_tree(api, repo, jobs, workflow):
     """Дерево из аннотации scope-задания прогона или None (нет, неоднозначно или ошибка формата)."""
     rows = jobs.get(SCOPE_JOB.get(workflow)) or []
@@ -235,19 +340,21 @@ def tested_tree(api, repo, jobs, workflow):
     return found.pop() if len(found) == 1 else None
 
 
-def verify_pr_heads(root, api, repo, commit, branch=""):
+def verify_pr_heads(root, api, repo, commit, branch="", strict=False):
     """Головы PR, влитых именно коммитом ``commit`` (кандидаты для поиска прогонов ``pull_request``).
 
     Сама голова ничего не доказывает: прогон принимается только с аннотацией о проверенном
     дереве (``tested_tree``). Здесь только привязка «этот PR влит этим коммитом»:
     ``merge_commit_sha`` равен ``commit`` (commits/<sha>/pulls отдаёт и PR, где commit лишь
     один из коммитов), PR влит и из этого же репозитория. Ветка ``branch``, если задана, — база PR.
-    Ошибка API — пустой список."""
+    Ошибка API - пустой список; при ``strict`` (релизные ворота) - исключение, а не «нет PR»."""
     if not SHA.fullmatch(commit or "") or not REPO.fullmatch(repo or ""):
         return []
     try:
         prs = api(f"repos/{repo}/commits/{commit}/pulls?per_page=10")
     except Exception:  # noqa: BLE001 — нет ответа API: без PR-доказательства, остальные источники работают
+        if strict:
+            raise
         return []
     heads = []
     for pr in prs if isinstance(prs, list) else []:
@@ -263,7 +370,7 @@ def verify_pr_heads(root, api, repo, commit, branch=""):
     return heads
 
 
-def collect_pr_heads(root, api, repo, tree, commits=()):
+def collect_pr_heads(root, api, repo, tree, commits=(), strict=False):
     """Головы PR для всех коммитов с деревом ``tree``: сам проверяемый коммит и его двойники.
 
     Цепочка PR -> stage -> main: у коммита stage есть своя голова PR (и у слияния в main —
@@ -273,13 +380,13 @@ def collect_pr_heads(root, api, repo, tree, commits=()):
     for commit in list(commits) + same_tree_commits(root, tree):
         if tree_of(root, commit) != tree:
             continue
-        for head in verify_pr_heads(root, api, repo, commit, ""):
+        for head in verify_pr_heads(root, api, repo, commit, "", strict=strict):
             if head not in heads:
                 heads.append(head)
     return heads
 
 
-def find_coverage(root, api, repo, workflow, tree, exclude_run_id=None, pr_heads=()):
+def find_coverage(root, api, repo, workflow, tree, exclude_run_id=None, pr_heads=(), run_ids=(), empty_retries=0):
     """Какие задания уже прошли на этом дереве: объединение по нескольким прогонам.
 
     -> {"covered": set имён, "runs": [{run_id, run_url, commit, event, branch, jobs}]}.
@@ -305,32 +412,53 @@ def find_coverage(root, api, repo, workflow, tree, exclude_run_id=None, pr_heads
             events.setdefault(head, set()).add("pull_request")
     relevant = set(REQUIRED_JOBS[workflow])
     admission = REQUIRED_JOBS[workflow][-1]
+
+    def accept(run, commit):
+        if any(r["run_id"] == run["id"] for r in runs):
+            return
+        jobs = latest_jobs(api, repo, run)
+        if legacy_layout(jobs, workflow):
+            return
+        if run["event"] == "pull_request" and tested_tree(api, repo, jobs, workflow) != tree:
+            return
+        passed = passed_names(jobs)
+        # Итоговое задание прогона (ACL verification / Installer verification) тоже должно
+        # быть успешным: без него прогон не доказательство, даже если часть заданий зелёная.
+        if admission not in passed:
+            return
+        names = passed & relevant
+        if (names - {admission}) - covered:
+            covered.update(names)
+            runs.append({"run_id": run["id"], "run_url": run["html_url"], "commit": commit, "tree": tree,
+                         "event": run["event"], "branch": run.get("head_branch"), "jobs": sorted(names)})
+
+    # ACL-2107: прогоны, названные самим main-прогоном (reused_runs), берём напрямую по id -
+    # без листинга по head_sha. Проверки те же: заголовок, привязка коммита (дерево git или голова
+    # влитого PR), аннотация дерева для pull_request, задания.
+    for rid in run_ids:
+        if not isinstance(rid, int):
+            continue
+        run = api(f"repos/{repo}/actions/runs/{rid}")
+        commit = (run or {}).get("head_sha")
+        if (run.get("id") == rid and commit in events
+                and run_header_ok(run, repo, workflow, commit, exclude_run_id, events[commit])):
+            accept(run, commit)
+        if relevant <= covered:
+            return {"covered": covered, "runs": runs}
     for commit, allowed in events.items():
-        for run in candidate_runs(api, repo, workflow, commit, exclude_run_id, allowed):
-            jobs = latest_jobs(api, repo, run)
-            if legacy_layout(jobs, workflow):
-                continue
-            if run["event"] == "pull_request" and tested_tree(api, repo, jobs, workflow) != tree:
-                continue
-            passed = passed_names(jobs)
-            # Итоговое задание прогона (ACL verification / Installer verification) тоже должно
-            # быть успешным: без него прогон не доказательство, даже если часть заданий зелёная.
-            if admission not in passed:
-                continue
-            names = passed & relevant
-            if (names - {admission}) - covered:
-                covered |= names
-                runs.append({"run_id": run["id"], "run_url": run["html_url"], "commit": commit, "tree": tree,
-                             "event": run["event"], "branch": run.get("head_branch"), "jobs": sorted(names)})
+        for run in candidate_runs(api, repo, workflow, commit, exclude_run_id, allowed, empty_retries):
+            accept(run, commit)
+            if relevant <= covered:
+                return {"covered": covered, "runs": runs}
     return {"covered": covered, "runs": runs}
 
 
-def find_reuse(root, api, repo, workflow, tree, exclude_run_id=None, pr_heads=()):
+def find_reuse(root, api, repo, workflow, tree, exclude_run_id=None, pr_heads=(), run_ids=(), empty_retries=0):
     """Зелёные прогоны того же дерева, вместе покрывающие ПОЛНЫЙ набор, или None.
 
     Релизные ворота и полный reuse требуют все задания ``REQUIRED_JOBS`` (3.11 + 3.13 +
     Windows). Исключения API/git не глотаются здесь: вызывающий решает «полный прогон»."""
-    coverage = find_coverage(root, api, repo, workflow, tree, exclude_run_id, pr_heads)
+    coverage = find_coverage(root, api, repo, workflow, tree, exclude_run_id, pr_heads, run_ids, empty_retries)
     if not coverage["runs"] or not set(REQUIRED_JOBS[workflow]) <= coverage["covered"]:
         return None
     return dict(coverage["runs"][0], runs=coverage["runs"])

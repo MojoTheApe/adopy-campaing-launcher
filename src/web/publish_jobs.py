@@ -429,13 +429,36 @@ def get_job(job_id: str) -> dict[str, Any] | None:
         return snap
 
 
+def _runs_the_loop_here() -> bool:
+    """True when this thread is the one running the asyncio loop it is marked with."""
+    try:
+        import asyncio.events as _ae
+
+        loop = _ae._get_running_loop()
+    except Exception:
+        return False
+    return (loop is not None and loop.is_running()
+            and getattr(loop, "_thread_id", None) == threading.get_ident())
+
+
 def _clear_inherited_asyncio_loop() -> None:
     """Clear asyncio running-loop marks before sync Playwright in a worker thread.
 
     Also stop any leaked sync Playwright driver from a prior failed CDP attach
     in this thread (that leaves get_running_loop() returning a running loop and
     triggers 'Playwright Sync API inside the asyncio loop' on the next start).
+
+    ACL-1380: never on the thread that actually runs the loop. Clearing the
+    mark there is exactly how the server died on 14.09/22.09/29.09: every next
+    task step fails with «loop … is not the running loop» and /health stops
+    answering while the process stays alive. An inherited mark in a worker
+    points to the server's loop running on ANOTHER thread — that one is ours
+    to clear.
     """
+    if _runs_the_loop_here():
+        logging.getLogger(__name__).error("ACL-1380: refused to clear the asyncio loop mark on the "
+                   "thread that runs it (%s)", threading.current_thread().name)
+        return
     try:
         from src.fb_ads_rpa.browser import _reset_asyncio_running_loop, _stop_thread_playwright
 
@@ -660,7 +683,11 @@ def _run_job_inner(
         # но не оба: брошенный поток, проснувшись, места не трогает.
         if _claim_slot(job_id):
             with _jobs_lock:
-                left_open = not bool((_jobs.get(job_id) or {}).get("profile_closed"))
+                job = _jobs.get(job_id) or {}
+                # ACL-1784: API-задание само решило, что смотреть нечего (`review_window`
+                # False) — место отпускаем, даже если профиль остался открытым.
+                left_open = (not bool(job.get("profile_closed"))
+                             and job.get("review_window") is not False)
             if left_open and _job_ran_in_browser(job_id):
                 _slots.keep(job_id, account_label)
             else:
@@ -1109,9 +1136,17 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
         job_cancel.unbind()
         cancelled = cancelled or _is_cancelled(job_id)
         clean = not cancelled and _job_is_clean(job_id)
-        other = clean and _profile_has_other_job(job_id, account_label)
+        # ACL-1784: окно на проверку нужно, только если запись была и сверка её
+        # не подтвердила. Ничего не записали (план, предпроверка, стоп до первой
+        # записи) — смотреть нечего: профиль закрываем как после чистого.
         try:
-            outcome = publisher.finish_job(account_label, clean=clean, other_job_waits=other)
+            wrote = int(publisher.writes) > 0
+        except Exception:
+            wrote = True
+        settled = clean or not wrote
+        other = settled and _profile_has_other_job(job_id, account_label)
+        try:
+            outcome = publisher.finish_job(account_label, clean=settled, other_job_waits=other)
         except Exception:
             outcome = ""
             publisher.close()
@@ -1120,7 +1155,42 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
                 if not _abandoned(job_id):
                     _jobs[job_id]["profile_closed"] = True
             _append_creative_notice(job_id, publish_api.PROFILE_CLOSED_NOTICE)
+        # Профиль, который поднял сам job, остался открытым (Stop, ACL_KEEP_PROFILES_OPEN,
+        # пробный запуск, сбой остановки): место не отпускаем, иначе очередь поднимет
+        # второй профиль поверх открытого окна (ACL-1603).
+        try:
+            started = bool(publisher.started_profile)
+        except Exception:
+            started = True
+        still_open = outcome != "closed" and started
+        with _jobs_lock:
+            if not _abandoned(job_id):
+                _jobs[job_id]["review_window"] = (not settled) or still_open
+        if outcome != "closed":
+            _append_creative_notice(
+                job_id, _api_review_window_notice(wrote=wrote, clean=clean, still_open=still_open))
         _finish(job_id, cancelled=cancelled)
+
+
+#: ACL-1784: почему окно профиля после API-задания оставлено (или нет) — в панель задания.
+API_NO_WRITE_NOTICE = ("Nothing was written to Meta, so the profile is not kept open "
+                       "for review and its slot is free.")
+API_CLEAN_NOTICE = ("All campaigns were created and verified by readback, so the profile "
+                    "is not kept open for review and its slot is free.")
+API_REVIEW_NOTICE = ("Kept the profile open for review: Meta received writes that the readback "
+                     "did not fully confirm. Check the campaigns, then close the profile.")
+
+
+API_STILL_OPEN_NOTICE = ("The profile this job started is still open, so its slot stays taken. "
+                         "Close the profile to free the slot.")
+
+
+def _api_review_window_notice(*, wrote: bool, clean: bool, still_open: bool = False) -> str:
+    if still_open and (clean or not wrote):
+        return API_STILL_OPEN_NOTICE
+    if not wrote:
+        return API_NO_WRITE_NOTICE
+    return API_CLEAN_NOTICE if clean else API_REVIEW_NOTICE
 
 
 def _add_error(job_id: str, msg: str) -> None:
