@@ -202,7 +202,8 @@ def test_the_name_is_stable_per_content_and_changes_with_content():
 def test_the_library_saves_loads_replaces_and_deletes_locally(tmp_path):
     saved = _saved()
     assert ft.library_path().parent == tmp_path / "acl" and ft.load() == [saved]
-    again = ft.save({**TEMPLATE, "id": saved["id"], "headline": "Changed"})
+    row = ft.listing()["rows"][0]
+    again = ft.save({**TEMPLATE, "id": saved["id"], "headline": "Changed", "_expected_revision": row["revision"]})
     assert again["id"] == saved["id"] and [t["headline"] for t in ft.load()] == ["Changed"]
     with pytest.raises(ft.TemplateError, match="already exists"):
         ft.save(TEMPLATE)

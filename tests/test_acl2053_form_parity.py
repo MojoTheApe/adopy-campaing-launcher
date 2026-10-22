@@ -296,7 +296,9 @@ def test_a_saved_legacy_locale_outside_the_list_keeps_loading_and_its_hash():
 def test_resaving_a_template_keeps_its_own_legacy_locale_but_rejects_it_for_a_new_one():
     ft.library_path().write_text(json.dumps({"templates": [{**TEMPLATE, "id": "0123456789ab", "locale": "UK_UA"}]}),
                                  encoding="utf-8")
-    assert ft.save({**TEMPLATE, "id": "0123456789ab", "locale": "UK_UA", "headline": "New"})["locale"] == "UK_UA"
+    row = ft.listing()["rows"][0]
+    assert ft.save({**TEMPLATE, "id": "0123456789ab", "locale": "UK_UA", "headline": "New",
+                    "_expected_revision": row["revision"]})["locale"] == "UK_UA"
     with pytest.raises(ft.TemplateError):
         ft.save({**TEMPLATE, "name": "Fresh", "locale": "UK_UA"})
     with pytest.raises(ft.TemplateError):

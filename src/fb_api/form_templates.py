@@ -305,6 +305,10 @@ class TemplateError(ValueError):
         self.errors = errors
 
 
+class TemplateConflict(TemplateError):
+    """The editor no longer matches the stored template; no write was made."""
+
+
 class LibraryUnavailable(TemplateError):
     """Общая библиотека недоступна: ничего не сохранено."""
 
@@ -486,6 +490,17 @@ def summary(tpl: dict[str, Any]) -> str:
     return f"{contacts or 'No contact fields'} · " + (f"{n} question{'s' if n != 1 else ''}" if n else "no questions")
 
 
+def _revision(rec: Any) -> str:
+    """Fingerprint the complete stored row, including unknown fields and metadata.
+
+    This is an edit precondition, separate from the publishing content hash.
+    It is computed from the snapshot actually sent to the editor, never from a
+    fresh read during save (which would silently accept an already stale edit).
+    """
+    payload = json.dumps(rec, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def _row(key: str, rec: Any) -> dict[str, Any]:
     clean, errors = validate(rec, lenient_locale=True)
     if not errors and clean["id"] != key:
@@ -498,7 +513,7 @@ def _row(key: str, rec: Any) -> dict[str, Any]:
         "author": str(meta.get("updated_by") or meta.get("added_by") or ""),
         "changed_at": str(meta.get("updated_at") or meta.get("added_at") or ""),
         "added_by": str(meta.get("added_by") or ""), "updated_by": str(meta.get("updated_by") or ""),
-        "invalid": bool(errors), "errors": errors, "template": clean,
+        "invalid": bool(errors), "errors": errors, "template": clean, "revision": _revision(rec),
     }
 
 
@@ -582,7 +597,12 @@ def _stamp(rec: dict[str, Any], was: Any = None) -> dict[str, Any]:
 
 
 def save(raw: Any) -> dict[str, Any]:
-    """Сохранить шаблон (новый - с новым id; с id - заменить). Ошибки - `TemplateError`."""
+    """Save a new template or a revision-bound edit; never overwrite a stale editor.
+
+    Existing ids require `_expected_revision` from that row in `listing()`.
+    The precondition is checked again on every file-SHA retry. It is transport
+    metadata only: neither stored content nor publishing hashes include it.
+    """
     clean, errors = validate(raw)
     if errors and isinstance(raw, dict) and not [e for e in errors if not e.startswith("Unknown locale")]:
         # Язык вне списка допустим лишь тому шаблону, у которого он уже сохранён.
@@ -592,17 +612,27 @@ def save(raw: Any) -> dict[str, Any]:
     if errors:
         raise TemplateError(errors)
 
+    expected = raw.get("_expected_revision") if isinstance(raw, dict) else None
+
     def change(lib):
         tid = clean["id"]
         if tid and tid in lib["deleted"] and tid not in lib["templates"]:
             raise TemplateError(["This template was deleted. Restore it from Recently deleted instead of editing it"])
+        was = lib["templates"].get(tid)
+        if tid in lib["templates"]:
+            if not isinstance(expected, str) or not expected:
+                raise TemplateConflict(["Reopen this template before saving it. Nothing was saved."])
+            if expected != _revision(was):
+                raise TemplateConflict(["This template changed since you opened it. Nothing was saved. "
+                                        "Keep your edits, then reopen the template to compare the latest version."])
+        elif expected:
+            raise TemplateConflict(["This template is no longer available. Nothing was saved. Refresh the Forms tab."])
         if _taken(lib, clean["name"], tid):
             raise TemplateError([f"A template named {clean['name']!r} already exists"])
         if tid not in lib["templates"] and len(lib["templates"]) >= MAX_TEMPLATES:
             raise TemplateError([f"At most {MAX_TEMPLATES} templates"])
         tid = tid or _free_id(lib)
         out = {**clean, "id": tid}
-        was = lib["templates"].get(tid)
         # Поля записи, которых редактор не знает (поле из будущей версии), едут дальше.
         merged = {**(was if isinstance(was, dict) else {}), **out}
         lib["templates"][tid] = _stamp(merged, was)

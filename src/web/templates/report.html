@@ -18455,6 +18455,7 @@ function aclPickerSearch(inst, text) {
     var contacts = ['name', 'email', 'phone'].filter(function (k) { return el('fm-c-' + k).checked; });
     return Object.assign(base, {
       id: editing && editing.id ? editing.id : '',
+      _expected_revision: editing ? editing.revision : undefined,
       name: el('fm-name').value, headline: el('fm-headline').value, intro: el('fm-intro').value,
       contact_fields: contacts,
       questions: questions.map(function (q) {

@@ -5439,7 +5439,10 @@ def api_form_templates_list(force: bool = False) -> JSONResponse:
 
 
 def _form_templates_failure(exc) -> JSONResponse:
-    code = 503 if exc.__class__.__name__ == "LibraryUnavailable" else 400
+    from src.fb_api import form_templates
+
+    code = 503 if isinstance(exc, form_templates.LibraryUnavailable) else (
+        409 if isinstance(exc, form_templates.TemplateConflict) else 400)
     return JSONResponse({"ok": False, "errors": exc.errors}, status_code=code)
 
 

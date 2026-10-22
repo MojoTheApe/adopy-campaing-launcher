@@ -85,7 +85,7 @@ def test_the_author_and_time_are_kept_outside_the_template_content(team):
     saved = ft.save(TEMPLATE)
     assert "added_by" not in saved and "updated_at" not in saved
     on("Boris")
-    other = ft.save({**TEMPLATE, "id": saved["id"], "headline": "Changed"})
+    other = ft.save({**editable(saved["id"]), "headline": "Changed"})
     [row] = ft.listing()["rows"]
     assert row["author"] == "Boris" and row["changed_at"]
     assert row["added_by"] == "Anna" and row["updated_by"] == "Boris"
@@ -99,8 +99,8 @@ def test_an_edit_replaces_by_id_and_a_duplicate_name_is_refused(team):
     first = ft.save(TEMPLATE)
     second = ft.save({**TEMPLATE, "name": "Other"})
     with pytest.raises(ft.TemplateError, match="already exists"):
-        ft.save({**TEMPLATE, "id": second["id"], "name": "demo FORM"})
-    ft.save({**TEMPLATE, "id": first["id"], "headline": "Changed"})
+        ft.save({**editable(second["id"]), "name": "demo FORM"})
+    ft.save({**editable(first["id"]), "headline": "Changed"})
     assert sorted(t["name"] for t in ft.load()) == ["Demo form", "Other"]
     assert ft.get(first["id"])["headline"] == "Changed"
 
@@ -201,7 +201,7 @@ def test_the_next_write_does_not_erase_or_rewrite_an_invalid_entry(team):
     saved = ft.save(TEMPLATE)
     ft.delete(saved["id"])
     ft.restore(saved["id"])
-    ft.save({**TEMPLATE, "id": saved["id"], "headline": "Again"})
+    ft.save({**editable(saved["id"]), "headline": "Again"})
     assert lib_data(backend)["templates"][BROKEN["id"]] == odd
     [good] = ft.load()
     assert good["id"] == saved["id"]
@@ -219,7 +219,7 @@ def test_an_invalid_entry_can_be_fixed_deleted_and_restored(team):
     assert {k: v for k, v in restored.items() if not k.startswith("updated_")} == BROKEN
     with pytest.raises(ft.TemplateError, match="https://"):
         ft.save({**BROKEN})                               # исправление проверяется как обычно
-    fixed = ft.save({**BROKEN, "privacy_url": "https://example.com/privacy"})
+    fixed = ft.save({**editable(BROKEN["id"]), "privacy_url": "https://example.com/privacy"})
     assert fixed["id"] == BROKEN["id"] and ft.get(BROKEN["id"]) == fixed
     assert ft.listing()["rows"][0]["invalid"] is False
 
@@ -458,7 +458,7 @@ def test_mixed_case_ids_still_load_and_stay_editable(team):
     [row] = ft.listing()["rows"]
     assert row["invalid"] is False and row["id"] == "abcdef012345"
     assert ft.get("AbCdEf012345")["name"] == "Demo form"
-    ft.save({**TEMPLATE, "id": "AbCdEf012345", "headline": "Edited"})
+    ft.save({**editable("abcdef012345"), "id": "AbCdEf012345", "headline": "Edited"})
     assert [t["headline"] for t in ft.load()] == ["Edited"]
     assert len(lib_data(backend)["templates"]) == 1
     assert ft.delete("AbCdEf012345") is True
@@ -481,7 +481,7 @@ def test_editing_keeps_fields_the_editor_does_not_know(team):
     data = lib_data(backend)
     data["templates"][saved["id"]]["future_field"] = {"keep": 1}
     put_raw(backend, data["templates"])
-    ft.save({**TEMPLATE, "id": saved["id"], "headline": "Edited"})
+    ft.save({**editable(saved["id"]), "headline": "Edited"})
     assert lib_data(backend)["templates"][saved["id"]]["future_field"] == {"keep": 1}
 
 
@@ -508,7 +508,126 @@ def test_a_library_entry_with_a_legacy_locale_is_usable_and_stays_editable(team)
     [row] = ft.listing()["rows"]
     assert row["invalid"] is False and row["locale"] == "ES_MX"
     assert ft.get("bbbbbbbbbbbb")["locale"] == "ES_MX"
-    ft.save({**rec, "headline": "Edited"})
+    ft.save({**editable(rec["id"]), "headline": "Edited"})
     assert ft.get("bbbbbbbbbbbb")["headline"] == "Edited"
     with pytest.raises(ft.TemplateError):
         ft.save({**TEMPLATE, "name": "New one", "locale": "ES_MX"})
+
+
+# ── Same-template concurrency: the editor's snapshot is authoritative ──────
+
+def editable(template_id):
+    row = next(r for r in ft.listing(force=True)["rows"] if r["id"] == template_id.lower())
+    return {**row["template"], "_expected_revision": row.get("revision", "")}
+
+
+def test_stale_edit_before_first_server_read_is_refused(team):
+    backend, on = team
+    on("Anna")
+    saved = ft.save(TEMPLATE)
+    anna = editable(saved["id"])
+    on("Boris")
+    boris = editable(saved["id"])
+    ft.save({**boris, "intro": "Boris's newer introduction"})
+    commits = list(backend.commits)
+    on("Anna")
+    with pytest.raises(ft.TemplateError, match="changed.*Nothing was saved"):
+        ft.save({**anna, "headline": "Anna's stale headline"})
+    assert lib_data(backend)["templates"][saved["id"]]["intro"] == "Boris's newer introduction"
+    assert backend.commits == commits
+
+
+def test_same_template_sha_race_is_refused_without_overwriting(team):
+    backend, on = team
+    on("Anna")
+    saved = ft.save(TEMPLATE)
+    anna = editable(saved["id"])
+    real_put = backend.put
+    raced = False
+
+    def racing_put(path, text, sha, message):
+        nonlocal raced
+        if not raced:
+            raced = True
+            remote = lib_data(backend)
+            remote["templates"][saved["id"]]["intro"] = "Boris changed this during save"
+            real_put(path, tl._dump(remote), backend.files[path][1], "Boris concurrent edit")
+        return real_put(path, text, sha, message)
+
+    backend.put = racing_put
+    with pytest.raises(ft.TemplateError, match="changed.*Nothing was saved"):
+        ft.save({**anna, "headline": "Anna's headline"})
+    current = lib_data(backend)["templates"][saved["id"]]
+    assert raced and current["intro"] == "Boris changed this during save"
+    assert current["headline"] == TEMPLATE["headline"]
+    assert backend.commits[-1] == "Boris concurrent edit"
+
+
+def test_unrelated_template_sha_race_still_retries_an_edit(team):
+    backend, on = team
+    on("Anna")
+    saved = ft.save(TEMPLATE)
+    anna = editable(saved["id"])
+    real_put = backend.put
+    raced = False
+
+    def racing_put(path, text, sha, message):
+        nonlocal raced
+        if not raced:
+            raced = True
+            remote = lib_data(backend)
+            remote["templates"]["bbbbbbbbbbbb"] = {**TEMPLATE, "id": "bbbbbbbbbbbb", "name": "Boris's form"}
+            real_put(path, tl._dump(remote), backend.files[path][1], "Boris other template")
+        return real_put(path, text, sha, message)
+
+    backend.put = racing_put
+    ft.save({**anna, "headline": "Anna's headline"})
+    current = lib_data(backend)["templates"]
+    assert raced and current[saved["id"]]["headline"] == "Anna's headline"
+    assert current["bbbbbbbbbbbb"]["name"] == "Boris's form"
+
+
+def test_edit_without_editor_revision_is_refused(team):
+    backend, on = team
+    on("Anna")
+    saved = ft.save(TEMPLATE)
+    commits = list(backend.commits)
+    with pytest.raises(ft.TemplateError, match="Reopen.*Nothing was saved"):
+        ft.save({**saved, "headline": "Unversioned edit"})
+    assert backend.commits == commits
+
+
+def test_local_fallback_refuses_a_stale_editor_too(local):
+    saved = ft.save(TEMPLATE)
+    first, second = editable(saved["id"]), editable(saved["id"])
+    ft.save({**second, "intro": "New local introduction"})
+    with pytest.raises(ft.TemplateError, match="changed.*Nothing was saved"):
+        ft.save({**first, "headline": "Old local edit"})
+    assert ft.get(saved["id"])["intro"] == "New local introduction"
+
+
+def test_endpoint_uses_editor_revision_and_preserves_publishing_content(team):
+    from src.web import app as web
+    backend, on = team
+    on("Anna")
+    saved = ft.save(TEMPLATE)
+    listing = json.loads(web.api_form_templates_list(force=True).body)
+    [row] = listing["rows"]
+    stale = {**row["template"], "_expected_revision": row.get("revision", "")}
+    ft.save({**editable(saved["id"]), "intro": "A newer introduction"})
+    response = asyncio.run(web.api_form_templates_save(_Req({**stale, "headline": "Stale"})))
+    assert response.status_code == 409
+    assert "Nothing was saved" in json.loads(response.body)["errors"][0]
+    fresh = json.loads(web.api_form_templates_list(force=True).body)
+    assert fresh["rows"][0]["revision"] != row["revision"]
+    fresh_row = fresh["rows"][0]
+    accepted = asyncio.run(web.api_form_templates_save(_Req({
+        **fresh_row["template"], "_expected_revision": fresh_row["revision"], "headline": "Fresh edit"})))
+    assert accepted.status_code == 200
+    assert ft.get(saved["id"])["headline"] == "Fresh edit"
+    assert ft.get(saved["id"])["intro"] == "A newer introduction"
+    fresh = json.loads(web.api_form_templates_list(force=True).body)
+    assert "_expected_revision" not in fresh["templates"][0]
+    assert "revision" not in fresh["templates"][0]
+    assert "_expected_revision" not in lib_data(backend)["templates"][saved["id"]]
+    assert ft.form_name(ft.get(saved["id"])) == ft.form_name(fresh["templates"][0])

@@ -21,9 +21,9 @@ const VALID = {
 };
 const rows = [
   {id: 'aaaaaaaaaaaa', name: 'Demo <"form">', locale: 'EN_US', summary: 'Name, Email · 1 question',
-   author: 'Anna', changed_at: '2026-10-21 10:00:00 UTC', invalid: false, errors: [], template: VALID},
+   author: 'Anna', changed_at: '2026-10-21 10:00:00 UTC', revision: 'revision-opened-by-anna', invalid: false, errors: [], template: VALID},
   {id: 'bbbbbbbbbbbb', name: 'Broken form', locale: 'EN_US', summary: 'Name · no questions',
-   author: 'Boris', changed_at: '', invalid: true, errors: ['Privacy policy URL must start with https://'],
+   author: 'Boris', changed_at: '', revision: 'broken-row-revision', invalid: true, errors: ['Privacy policy URL must start with https://'],
    template: {id: 'bbbbbbbbbbbb', name: 'Broken form', headline: 'H', privacy_url: 'http://x.example.com',
               thank_you_text: 'T', contact_fields: ['name'], questions: [], locale: 'EN_US'}},
 ];
@@ -34,6 +34,7 @@ const get = id => elements[id] ||= {
   getAttribute() { return null; }, scrollIntoView() {},
 };
 let confirmed = true, saveOk = true;
+let saveError = 'A template named \'X\' already exists';
 let library = {connected: true, ok: true, error: '', synced_at: '2026-10-21 10:05:00 UTC'};
 let migration = {available: true, uploadable: 2, skipped: [
   {name: 'Demo <"form">', reason: 'Already in the team library'},
@@ -54,7 +55,7 @@ const context = {
       return saveOk
         ? {ok: true, json: async () => ({ok: true, template: {name: 'Copy'}, uploaded: 2,
                                          skipped: [{name: 'Old local', reason: 'Invalid template'}]})}
-        : {ok: false, json: async () => ({ok: false, errors: ['A template named \'X\' already exists']})};
+        : {ok: false, json: async () => ({ok: false, errors: [saveError]})};
     }
     requests.push({url, body: null});
     return {ok: true, json: async () => ({
@@ -142,6 +143,7 @@ const lastPost = () => requests.filter(r => r.body).pop();
   const saved = lastPost();
   assert.equal(saved.url, '/api/form-templates');
   assert.equal(saved.body.id, 'aaaaaaaaaaaa');
+  assert.equal(saved.body._expected_revision, 'revision-opened-by-anna');
   assert.equal(saved.body.headline, 'New headline');
   assert.equal(saved.body.questions[0].label, 'Budget?');
   assert.deepEqual(saved.body.questions[0].options, ['Low', 'High']);
@@ -156,6 +158,7 @@ const lastPost = () => requests.filter(r => r.body).pop();
   type('fm-privacy', 'https://example.com/privacy');
   click('fm-save-btn'); await flush();
   assert.equal(lastPost().body.id, 'bbbbbbbbbbbb');
+  assert.equal(lastPost().body._expected_revision, 'broken-row-revision');
   assert.equal(lastPost().body.privacy_url, 'https://example.com/privacy');
 
   // Отказ сервера виден на экране редактора.
@@ -164,6 +167,14 @@ const lastPost = () => requests.filter(r => r.body).pop();
   click('fm-save-btn'); await flush();
   assert(get('fm-editor-msg').textContent.includes('already exists'), get('fm-editor-msg').textContent);
   assert.equal(get('fm-editor').hidden, false, 'при отказе редактор должен остаться открытым');
+  // A concurrency refusal keeps both the unsaved text and the old precondition.
+  saveError = 'This template changed since you opened it. Nothing was saved. Keep your edits, then reopen the template to compare the latest version.';
+  type('fm-headline', 'Keep this unsaved headline');
+  click('fm-save-btn'); await flush();
+  assert(get('fm-editor-msg').textContent.includes('changed since you opened'));
+  assert.equal(get('fm-headline').value, 'Keep this unsaved headline');
+  assert.equal(lastPost().body._expected_revision, 'revision-opened-by-anna');
+  assert.equal(get('fm-editor').hidden, false);
   saveOk = true;
   click('fm-cancel-btn');
   assert.equal(get('fm-editor').hidden, true);
