@@ -49068,9 +49068,11 @@
         "worktree": "C:\\acl-int-w1827",
         "id": "b879fc33228a4141a272b7ab8d700c39",
         "issue": 827,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-22T05:36:12+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 829,
+        "report": "ACL-1827 / PR #829 brought to current main.\n- Merged origin/main (3bc8d973) into codex/acl-1827-design-parity-shell: no conflicts. Old head d69bfa32, new head b0308976.\n- PR had no CHANGELOG edit; added fragment docs/system/changelog.d/ACL-1827.md. fold_changelog.py --check passes.\n- Tests: tests/test_acl1827_shell_browser.py + tests/test_acl1827_shell_parity.py: 32 passed.\n- CI on new head: all pass (linux 1/2/3, windows, process, installer) except tracker-link, which fails only on task state (needs Review); to be rerun after handoff.\nNo UI code was changed by this worker; only the merge and the fragment."
       },
       "845": {
         "actor": "Worker-W1022845",
