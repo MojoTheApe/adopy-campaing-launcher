@@ -57612,7 +57612,7 @@
             "session": "run_f1022b"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-F1022B",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -57630,7 +57630,8 @@
           "report": "## ACL-2078 handoff (Worker-F1022B, run_f1022b, 2026-10-22)\n\nPR #1081 `work/acl-2078-test-state-reset`, base main 64e73a1e, head dbe945ee. Test-only change: `tests/conftest.py`, new `tests/rpa_module_state.py`, new `tests/test_rpa_module_state_is_reset_between_tests.py`.\n\nState reset before and after every test (already-imported modules only):\n- every module-level `threading.local` in `meta_dom` (`_upload_diag_tls`, `_media_refusal_tls`, `_creative_tls`, `_upload_why_tls`, `_flow_budget`, `_conv_tls`, `_LAST_OPEN`, `_OPEN_BUDGET`, `_create_tls`, `_reload_block`, `_crop_warning_tls`) and `crop_step._tls`;\n- `meta_dom` containers restored to import values: `_LAST_UPLOAD_DIAG`, `_UNSTUCK_RELOADED`, `_STALL_EVIDENCE_TAKEN`, `_OTHER_REVIEW_ERRORS_SEEN`, `_reuse_state`, `_failed_uploads`, `_uploaded_ok`, `_last_destination`, `_ADOPTED_SHELL_IDS`;\n- public helpers `crop_step.set_plan(None)`, `run_telemetry.clear_current_run()`.\n\nLocal checks: failing pair 1 failed/35 passed before, 36 passed after in both orders; new regression test 5 passed (fails on the old fixture); b97 paired with each of 48 state-touching test files: all passed. Full suite: CI only. Not self-reviewed; independent review required."
         },
         "pr": 1081,
-        "queued_at": "2026-10-22T00:04:31+00:00"
+        "queued_at": "2026-10-22T00:04:31+00:00",
+        "reviewer": "Reviewer-S1022078"
       },
       "1079": {
         "implementers": [
@@ -60782,6 +60783,10 @@
       "Reviewer-R1022106": {
         "session": "run_r1022_106",
         "role": "Reviewer"
+      },
+      "Reviewer-S1022078": {
+        "session": "run_s1022_078",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -63738,8 +63743,7 @@
       1053,
       1054,
       710,
-      1069,
-      1078
+      1069
     ],
     "review": null,
     "history": [
@@ -111893,6 +111897,13 @@
           "report": "stale vs main e8bf31f8; author merges current main and hands off for a fresh review; no content findings",
           "keep_lane": false
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-22T00:08:15+00:00",
+        "pr": 1081,
+        "lane": "eeb314be3d074616b11dac5a811a3773",
+        "actor": "Reviewer-S1022078"
       }
     ],
     "policy": {
@@ -122622,6 +122633,18 @@
         "session": "review_acl2079_tt194_20261022",
         "coordinator": "Coordinator-R6M9H2",
         "started_at": "2026-10-21T23:58:33+00:00",
+        "state": "reviewing"
+      },
+      "1081": {
+        "id": "eeb314be3d074616b11dac5a811a3773",
+        "pr": 1081,
+        "issues": [
+          1078
+        ],
+        "actor": "Reviewer-S1022078",
+        "session": "run_s1022_078",
+        "coordinator": "Coordinator-I1021A",
+        "started_at": "2026-10-22T00:08:15+00:00",
         "state": "reviewing"
       }
     },
