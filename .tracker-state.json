@@ -57330,7 +57330,7 @@
             "session": "run_p1021_2052"
           }
         ],
-        "state": "reviewing",
+        "state": "changes_requested",
         "worker": "Worker-P10212052",
         "coordinator": "Coordinator-P1021A",
         "handoff": {
@@ -57349,8 +57349,9 @@
         },
         "pr": 1057,
         "queued_at": "2026-10-21T09:44:35+00:00",
-        "review_report": "## Source review ACL-2052 (Reviewer-P10212052) - changes requested\n\nReviewed head `60670a168fd6dfa1d224d1f2ab37d5072bdc53a8` against base main. Tests: `tests/test_acl2052_meta_rules_placement.py tests/test_acl1781_meta_rules.py tests/test_meta_docs_watch_1782.py` - 34 passed.\n\n**OK:** four pages added to `sources.json` (watcher reads them generically; `.md` plain text falls back to whole-document text); all spec facts are present with source_url and checked_date 2026-10-21, none `ga`; CHANGELOG entry follows convention; no account names/ids. `check_job` is unchanged today: `_matches` reads `feature` from the job, no job carries it, so every new entry is dormant. Verified in `src/campaign_bridge/meta_rules.py`.\n\n**Blocking: the machine-readable shape contradicts the facts.** These entries are only safe while no job has a `feature` attribute. A future builder/agent that sets it, or an agent reading the registry, gets wrong rules:\n\n1. `bid_adjustments.retired` - `kind: required_field`, `required: [\"bid_adjustments\"]`. `required_field` ignores status. It means \"this field must be present\", the opposite of the fact (\"retired, do not use, cannot combine with value rules\"). Once matched, `check_job` would *demand* bid_adjustments.\n2. `placements.classic_non_advantage_leads` - `placements_by_objective` with `allowed: [\"publisher_platforms\"]`. `publisher_platforms` is a field name, not a placement value, so any real placement would be flagged. Its `source_url` is the account_controls reference, but the fact comes from a live check that page does not state.\n3. `account_controls.placement_exclusions` - `placements_by_objective` checks the ad set's `placements` field. Account-level exclusions are not ad set placements. If it matched, `facebook`/`instagram` etc. would be rejected as \"not an accepted Meta value\".\n4. `value_rules.decrease_cap` - the 90 cap (the main fact) exists only in `note`. The structured part only says adjust_sign/adjust_value are required. The id promises a cap the data does not encode.\n\n**Requested fix (your choice of form):** add a documentation-only kind to the loader (e.g. `fact`/`constraint`, validated as needing `note`, skipped by `check_job`, with a test proving that). Then put 1-4, and any other entries the builder cannot check yet, under it. Or encode them in shapes whose semantics are true (e.g. a numeric limit kind for the 90 cap). Fix the source for (2): record it as a live check on the account_controls/value-rules context in `note`, or point it at a page that states it. Keep the \"check_job unchanged\" test. Minor, optional: the 2025 blog post may fit `announcements` better than `guide`.",
-        "reviewer": "Reviewer-R10222052"
+        "review_report": "stale vs main e8bf31f8; author merges current main and hands off for a fresh review; no content findings",
+        "reviewer": "Reviewer-R10222052",
+        "rework": true
       },
       "1053": {
         "implementers": [
@@ -111905,6 +111906,24 @@
         },
         "claim": "2e6ce1c4daad4ecd810f17a5c35d8499",
         "reason": "previous reviewer run finished; owner-mandated delivery queue"
+      },
+      {
+        "event": "review-returned",
+        "at": "2026-10-22T00:09:03+00:00",
+        "review": {
+          "id": "2e6ce1c4daad4ecd810f17a5c35d8499",
+          "pr": 1057,
+          "issues": [
+            1052
+          ],
+          "actor": "Reviewer-R10222052",
+          "session": "run_r1022_2052",
+          "coordinator": "Coordinator-I1021A",
+          "started_at": "2026-10-21T09:47:33+00:00",
+          "state": "returning",
+          "report": "stale vs main e8bf31f8; author merges current main and hands off for a fresh review; no content findings",
+          "keep_lane": false
+        }
       }
     ],
     "policy": {
@@ -122635,20 +122654,6 @@
         "coordinator": "Coordinator-I1021A",
         "started_at": "2026-10-22T00:08:15+00:00",
         "state": "reviewing"
-      },
-      "1057": {
-        "id": "2e6ce1c4daad4ecd810f17a5c35d8499",
-        "pr": 1057,
-        "issues": [
-          1052
-        ],
-        "actor": "Reviewer-R10222052",
-        "session": "run_r1022_2052",
-        "coordinator": "Coordinator-I1021A",
-        "started_at": "2026-10-21T09:47:33+00:00",
-        "state": "returning",
-        "report": "stale vs main e8bf31f8; author merges current main and hands off for a fresh review; no content findings",
-        "keep_lane": false
       }
     },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
