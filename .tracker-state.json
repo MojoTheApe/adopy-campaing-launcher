@@ -125817,7 +125817,51 @@
         "session": "run_ad1022_827",
         "coordinator": "Coordinator-I1021A",
         "started_at": "2026-10-22T05:58:11+00:00",
-        "state": "reviewing"
+        "state": "approving",
+        "approval": {
+          "issue": 827,
+          "pr": 829,
+          "branch": "codex/acl-1827-design-parity-shell",
+          "head_sha": "b0308976ddef2b3c6a9b6c36d5c58e46c4ead831",
+          "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+          "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "scope": "fdf30ddff65f891825fc8a270531da766faed723eadbc1aa4b976e58374d588c",
+          "review": {
+            "kind": "independent-review",
+            "verdict": "approved",
+            "reviewer": "Reviewer-AD1022827",
+            "review_session": "run_ad1022_827",
+            "execution_lane": "c57e1bb60f264098ad601162c5daca52",
+            "implementer": "Worker-W1022827",
+            "head_sha": "b0308976ddef2b3c6a9b6c36d5c58e46c4ead831",
+            "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+            "tree_sha": "2f08f9077bfba14831002b1c410b870df5f78ba5",
+            "report": "Reviewed ACL-1827 (PR829) head b0308976 vs main 3bc8d973: merge-base equals main so the merge is clean and adds no UI regression; diff = country_workbench (compare_cohorts extracted and shared with you_vs_others; home_you_vs_others/home_kpi_tiles), app.py (home_kpis, sidebar FTD counters, read-only GET /robot-health/summary), robot_health.popover_context, report.html (shell-1827 style/script, six KPI tiles above Account map, no-emoji sidebar, Target library label only, Find country, asset sub-rows, Robot health popover with real href fallback), 2 test files. Spec items met; English UI; no ids leaked. Prototype vs built screenshot pairs checked: placement matches, deferred items disclosed in PR. Changelog fragment ACL-1827.md accurate; fold_changelog.py --check valid. Tests shell_parity + shell_browser: 32 passed. Required CI all green on b0308976.",
+            "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "issues": [
+              827
+            ],
+            "recorded_at": "2026-10-22T06:03:33+00:00",
+            "issue_scopes": {
+              "827": "fdf30ddff65f891825fc8a270531da766faed723eadbc1aa4b976e58374d588c"
+            }
+          },
+          "lane": {
+            "id": "c57e1bb60f264098ad601162c5daca52",
+            "pr": 829,
+            "issues": [
+              827
+            ],
+            "actor": "Reviewer-AD1022827",
+            "session": "run_ad1022_827",
+            "coordinator": "Coordinator-I1021A",
+            "started_at": "2026-10-22T05:58:11+00:00",
+            "state": "reviewing"
+          },
+          "approved_at": "2026-10-22T06:04:11+00:00"
+        }
       },
       "951": {
         "id": "f1c4ba1b3c404a878d67d49158f82eea",
