@@ -49386,20 +49386,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
-      },
-      "839": {
-        "actor": "Worker-W1021839",
-        "session": "run_w1021_1839",
-        "coordinator": "Coordinator-I1021A",
-        "branch": "codex/acl-1839-connection-panel-layout",
-        "worktree": "C:\\acl-int-w1839",
-        "id": "cc1e795aae854220a6851f6191116a1a",
-        "issue": 839,
-        "state": "handoff",
-        "started_at": "2026-10-22T07:17:29+00:00",
-        "from_status": "status:todo",
-        "pr": 843,
-        "report": "ACL-1839 round 3 (PR #843): pure merge of main 515689dee625bdae3241e2ab4064fd18fa5dac53, no content change, no conflicts.\nOld head 16a5bd6d; new head 5a6fafb9fe7045c5bbecccbdd48a6127c48c5c29. Diff vs main unchanged (fragment, 2 templates, 1 test). fold_changelog --check valid.\nCI: linux 1/2/3, windows, process, ACL verification pass; tracker-link failed only on task state before handoff, rerun after."
       }
     },
     "tasks": {
@@ -54149,7 +54135,7 @@
             "session": "run_w1021_1839"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1021839",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -54158,16 +54144,16 @@
           "coordinator": "Coordinator-I1021A",
           "branch": "codex/acl-1839-connection-panel-layout",
           "worktree": "C:\\acl-int-w1839",
-          "id": "26acff1d5bad40cfb5e459809c442000",
+          "id": "cc1e795aae854220a6851f6191116a1a",
           "issue": 839,
           "state": "handoff",
-          "started_at": "2026-10-22T05:46:47+00:00",
+          "started_at": "2026-10-22T07:17:29+00:00",
           "from_status": "status:todo",
           "pr": 843,
-          "report": "ACL-1839 round 2 (PR #843), no code change.\n- Previous head 2f82fe86; new head 16a5bd6ddb720a2058f487d1e1387907af0c1837; merged main 3bc8d9739a82ce8db0ddb67a832ea159bf40ed36.\n- Conflict: docs/system/CHANGELOG.md only; took main's version. Entry moved to docs/system/changelog.d/ACL-1839.md; fold_changelog.py --check passes.\n- Diff vs main: changelog fragment, _account_map_add.html, report.html, tests/test_account_connection_layout.py.\n- Local: test_account_connection_layout.py + test_media_attachment_identity.py -> 34 passed.\n- CI: linux shards 1/2/3 pass (shard 3 incl. test_media_attachment_identity), windows, process, ACL verification pass. tracker-link failed only because task was not in Review (\"move it to Review before a ready PR\"); rerun after handoff."
+          "report": "ACL-1839 round 3 (PR #843): pure merge of main 515689dee625bdae3241e2ab4064fd18fa5dac53, no content change, no conflicts.\nOld head 16a5bd6d; new head 5a6fafb9fe7045c5bbecccbdd48a6127c48c5c29. Diff vs main unchanged (fragment, 2 templates, 1 test). fold_changelog --check valid.\nCI: linux 1/2/3, windows, process, ACL verification pass; tracker-link failed only on task state before handoff, rerun after."
         },
         "pr": 843,
-        "queued_at": "2026-10-22T06:09:27+00:00",
+        "queued_at": "2026-10-22T07:34:02+00:00",
         "review_report": "Approval is stale against current main 515689de (light batch #1085 merged). Author: merge current main (no content change), CI, hand off for a merge-only re-review.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -54179,9 +54165,7 @@
           "actor": "Coordinator-I1021A",
           "session": "run_i1021a_1021",
           "report": "Approval is stale against current main 515689de (light batch #1085 merged). Author: merge current main (no content change), CI, hand off for a merge-only re-review."
-        },
-        "rework": true,
-        "rework_claim": "cc1e795aae854220a6851f6191116a1a"
+        }
       },
       "840": {
         "implementers": [
@@ -65057,7 +65041,8 @@
     "review_queue": [
       1054,
       710,
-      1069
+      1069,
+      839
     ],
     "review": null,
     "history": [
@@ -116059,6 +116044,13 @@
         "pr": 952,
         "lane": "dad01254c81242a98883b0a352943571",
         "actor": "Reviewer-AI1022708"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-22T07:34:02+00:00",
+        "issue": 839,
+        "pr": 843,
+        "actor": "Worker-W1021839"
       }
     ],
     "policy": {
