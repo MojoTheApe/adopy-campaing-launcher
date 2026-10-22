@@ -48477,6 +48477,18 @@
         "state": "implementing",
         "started_at": "2026-10-22T03:07:55+00:00",
         "from_status": "status:todo"
+      },
+      "19": {
+        "actor": "Worker-W1021106",
+        "session": "run_w1021_106",
+        "coordinator": "Coordinator-I1021A",
+        "branch": "codex/acl-106-empty-period-owner",
+        "worktree": "C:\\acl-int-w106",
+        "id": "0e6f9ab738e44ef685941f52846a6341",
+        "issue": 19,
+        "state": "implementing",
+        "started_at": "2026-10-22T03:11:55+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -55286,9 +55298,13 @@
           {
             "actor": "Worker-W1021106",
             "session": "run_w1021_106"
+          },
+          {
+            "actor": "Worker-W1021106",
+            "session": "run_w1021_106"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-W1021106",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -55319,8 +55335,8 @@
           "session": "run_i1021a_1021",
           "report": "Approval is stale against current main 64e73a1e (after ACL-2073 #1075 and ACL-2071 #1076 merged). Author: merge current main into the original branch without changing content (resolve only CHANGELOG append conflicts by keeping both entries), re-run checks, hand off, and get a fresh independent source approval for batch 2b (--deliver)."
         },
-        "reviewer": "Reviewer-R1022106",
-        "rework": true
+        "rework": true,
+        "rework_claim": "0e6f9ab738e44ef685941f52846a6341"
       },
       "29": {
         "implementers": [
@@ -112660,6 +112676,13 @@
         "issue": 840,
         "claim": "7e44ab259ea446668b3a8d77a24b5b40",
         "actor": "Worker-W1021840"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-22T03:11:55+00:00",
+        "issue": 19,
+        "claim": "0e6f9ab738e44ef685941f52846a6341",
+        "actor": "Worker-W1021106"
       }
     ],
     "policy": {
