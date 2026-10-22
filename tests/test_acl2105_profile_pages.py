@@ -271,3 +271,46 @@ def test_plan_cannot_substitute_an_unverified_ad_account(tmp_path):
     out = creator.run(plan)
     assert out.error and "777" in out.error and "differs" in out.error
     assert not out.campaign_id and not meta.validations and not meta.posts
+
+
+class _Rows:
+    truncated: list = []
+
+    def __init__(self, rows):
+        self._rows = rows
+
+    def get_all(self, path, params=None, max_pages=1):
+        return self._rows
+
+
+def _kept(rows):
+    from src.fb_api import pages as pg
+    return [r["name"] for r in pg.profile_rows(_Rows(rows))[0]]
+
+
+def test_new_page_experience_tasks_count_as_advertise():
+    """ACL-2110: Страница нового формата (PROFILE_PLUS_*) с ADVERTISE принимается как profile."""
+    from src.fb_api import pages as pg
+
+    rows = [{"id": "1", "name": "Obtain markets",
+             "tasks": ["PROFILE_PLUS_MANAGE_LEADS", "profile_plus_advertise", "PROFILE_PLUS_CREATE_CONTENT"]}]
+    assert _kept(rows) == ["Obtain markets"]
+    merged = pg.merge([], pg.profile_rows(_Rows(rows))[0])
+    assert merged == [{"id": "1", "name": "Obtain markets", "source": "profile"}]
+
+
+def test_new_page_experience_without_advertise_is_ignored():
+    rows = [{"id": "2", "name": "Leads only", "tasks": ["PROFILE_PLUS_MANAGE_LEADS"]},
+            {"id": "3", "name": "Unknown", "tasks": ["PROFILE_PLUS_SOMETHING", "WHATEVER"]},
+            {"id": "4", "name": "No tasks"}, {"id": "5", "name": "Bad", "tasks": "ADVERTISE"}]
+    assert _kept(rows) == []
+
+
+def test_full_control_and_manage_imply_advertise_both_namings():
+    rows = [{"id": "1", "name": "A", "tasks": ["FULL_CONTROL"]},
+            {"id": "2", "name": "B", "tasks": ["PROFILE_PLUS_FULL_CONTROL"]},
+            {"id": "3", "name": "C", "tasks": ["PROFILE_PLUS_MANAGE"]},
+            {"id": "4", "name": "D", "tasks": ["MANAGE"]},
+            {"id": "5", "name": "E", "tasks": ["ADVERTISE"]},
+            {"id": "6", "name": "F", "tasks": ["ANALYZE", "CREATE_CONTENT"]}]
+    assert _kept(rows) == ["A", "B", "C", "D", "E"]
