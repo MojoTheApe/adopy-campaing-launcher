@@ -48462,20 +48462,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
-      },
-      "19": {
-        "actor": "Worker-W1021106",
-        "session": "run_w1021_106",
-        "coordinator": "Coordinator-I1021A",
-        "branch": "codex/acl-106-empty-period-owner",
-        "worktree": "C:\\acl-int-w106",
-        "id": "0e6f9ab738e44ef685941f52846a6341",
-        "issue": 19,
-        "state": "handoff",
-        "started_at": "2026-10-22T03:11:55+00:00",
-        "from_status": "status:todo",
-        "pr": 955,
-        "report": "ACL-106 round 3: merged origin/main (4582039e). Old head 7a15c521, new head 4a50cb4c. Only conflict: docs/system/CHANGELOG.md, resolved by taking main's version. Entry moved to docs/system/changelog.d/ACL-106.md; fold_changelog.py --check valid; diff vs main does not list CHANGELOG.md. Tests: tests/test_empty_period_owner.py 10 passed. CI on 4a50cb4c: all pass except tracker-link (task state, pre-handoff); rerun after handoff."
       }
     },
     "tasks": {
@@ -55289,7 +55275,7 @@
             "session": "run_w1021_106"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1021106",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -55298,16 +55284,16 @@
           "coordinator": "Coordinator-I1021A",
           "branch": "codex/acl-106-empty-period-owner",
           "worktree": "C:\\acl-int-w106",
-          "id": "77b2b4182aa84a27bd7c91f51540d51a",
+          "id": "0e6f9ab738e44ef685941f52846a6341",
           "issue": 19,
           "state": "handoff",
-          "started_at": "2026-10-21T22:28:56+00:00",
+          "started_at": "2026-10-22T03:11:55+00:00",
           "from_status": "status:todo",
           "pr": 955,
-          "report": "ACL-106 round 2: merged origin/main (64e73a1e) into codex/acl-106-empty-period-owner. Old head 56aad18d, new head 7a15c521. No conflicts. Diff vs main: the same 5 task files. Tests: tests/test_empty_period_owner.py 10 passed. CI on 7a15c521: all pass except tracker-link (task state, Review not yet set); rerun after handoff."
+          "report": "ACL-106 round 3: merged origin/main (4582039e). Old head 7a15c521, new head 4a50cb4c. Only conflict: docs/system/CHANGELOG.md, resolved by taking main's version. Entry moved to docs/system/changelog.d/ACL-106.md; fold_changelog.py --check valid; diff vs main does not list CHANGELOG.md. Tests: tests/test_empty_period_owner.py 10 passed. CI on 4a50cb4c: all pass except tracker-link (task state, pre-handoff); rerun after handoff."
         },
         "pr": 955,
-        "queued_at": "2026-10-21T22:42:18+00:00",
+        "queued_at": "2026-10-22T03:24:43+00:00",
         "review_report": "stale vs main e8bf31f8; author merges current main and hands off for a fresh review; no content findings",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -55319,9 +55305,7 @@
           "actor": "Coordinator-I1021A",
           "session": "run_i1021a_1021",
           "report": "Approval is stale against current main 64e73a1e (after ACL-2073 #1075 and ACL-2071 #1076 merged). Author: merge current main into the original branch without changing content (resolve only CHANGELOG append conflicts by keeping both entries), re-run checks, hand off, and get a fresh independent source approval for batch 2b (--deliver)."
-        },
-        "rework": true,
-        "rework_claim": "0e6f9ab738e44ef685941f52846a6341"
+        }
       },
       "29": {
         "implementers": [
@@ -64004,7 +63988,8 @@
       710,
       1069,
       1053,
-      840
+      840,
+      19
     ],
     "review": null,
     "history": [
@@ -112893,6 +112878,13 @@
         "issue": 840,
         "pr": 846,
         "actor": "Worker-W1021840"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-22T03:24:43+00:00",
+        "issue": 19,
+        "pr": 955,
+        "actor": "Worker-W1021106"
       }
     ],
     "policy": {
