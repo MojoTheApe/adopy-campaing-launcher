@@ -48463,20 +48463,6 @@
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
       },
-      "840": {
-        "actor": "Worker-W1021840",
-        "session": "run_w1021_1840",
-        "coordinator": "Coordinator-I1021A",
-        "branch": "codex/acl-1840-country-footer-inset",
-        "worktree": "C:\\acl-int-w1840",
-        "id": "7e44ab259ea446668b3a8d77a24b5b40",
-        "issue": 840,
-        "state": "handoff",
-        "started_at": "2026-10-22T03:07:55+00:00",
-        "from_status": "status:todo",
-        "pr": 846,
-        "report": "ACL-1840 round 4: refresh of approval baseline + changelog fragment.\n- Previous head: fb579d4ad7fbf40bb45bad6d4c42a7729ff3fa13\n- New head: ea9996538e88e0e53df4a5635f2218e06f099f3f (merge of origin/main 4582039e2e0418e23df19de131165e83e4d312d6, then fragment commit).\n- Conflict: docs/system/CHANGELOG.md only; took main's version entirely.\n- Fragment: docs/system/changelog.d/ACL-1840.md (entry moved from CHANGELOG.md, same text). fold_changelog.py --check: valid: ACL-1840, ACL-2037. Diff vs main does not list CHANGELOG.md (4 files: fragment, report.html, fixture, test).\n- Tests: tests/test_country_campaign_footer_layout.py 19 passed.\n- CI: linux 1/2/3, windows, installer, process, tooling pass; tracker-link failed only on task state (implementing) before handoff, rerun once after handoff."
-      },
       "19": {
         "actor": "Worker-W1021106",
         "session": "run_w1021_106",
@@ -53296,7 +53282,7 @@
             "session": "run_w1021_1840"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1021840",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -53305,16 +53291,16 @@
           "coordinator": "Coordinator-I1021A",
           "branch": "codex/acl-1840-country-footer-inset",
           "worktree": "C:\\acl-int-w1840",
-          "id": "8ad5a2a58312405e9965218183ced0f2",
+          "id": "7e44ab259ea446668b3a8d77a24b5b40",
           "issue": 840,
           "state": "handoff",
-          "started_at": "2026-10-21T22:17:20+00:00",
+          "started_at": "2026-10-22T03:07:55+00:00",
           "from_status": "status:todo",
           "pr": 846,
-          "report": "ACL-1840 round 3: refresh of approval baseline (no content change).\n- Previous head: 01730a5cca32c3969d847b72fce461bf2a2a1dc2\n- New head: fb579d4ad7fbf40bb45bad6d4c42a7729ff3fa13 (merge of origin/main 64e73a1e151b6611517cd9643dfb911ef54d6832); PR #846 shows this head.\n- Conflicts: none (clean merge). Diff vs main: the 4 task files only, 153 insertions.\n- Tests: the PR's own tests ran green in the previous round (19 passed); this round only merged main, no content change.\n- CI at handoff time: tracker-link failed only because the task was still in implementing state (PR linkage: move to Review); it will be rerun once after handoff. Other jobs (linux 1/2/3, windows, installer) were still running on the new head; results reported separately by the worker."
+          "report": "ACL-1840 round 4: refresh of approval baseline + changelog fragment.\n- Previous head: fb579d4ad7fbf40bb45bad6d4c42a7729ff3fa13\n- New head: ea9996538e88e0e53df4a5635f2218e06f099f3f (merge of origin/main 4582039e2e0418e23df19de131165e83e4d312d6, then fragment commit).\n- Conflict: docs/system/CHANGELOG.md only; took main's version entirely.\n- Fragment: docs/system/changelog.d/ACL-1840.md (entry moved from CHANGELOG.md, same text). fold_changelog.py --check: valid: ACL-1840, ACL-2037. Diff vs main does not list CHANGELOG.md (4 files: fragment, report.html, fixture, test).\n- Tests: tests/test_country_campaign_footer_layout.py 19 passed.\n- CI: linux 1/2/3, windows, installer, process, tooling pass; tracker-link failed only on task state (implementing) before handoff, rerun once after handoff."
         },
         "pr": 846,
-        "queued_at": "2026-10-21T22:19:48+00:00",
+        "queued_at": "2026-10-22T03:23:57+00:00",
         "review_report": "stale vs main e8bf31f8; author merges current main and hands off for a fresh review; no content findings",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -53326,9 +53312,7 @@
           "actor": "Coordinator-I1021A",
           "session": "run_i1021a_1021",
           "report": "Approval is stale against current main 64e73a1e (after ACL-2073 #1075 and ACL-2071 #1076 merged). Author: merge current main into the original branch without changing content (resolve only CHANGELOG append conflicts by keeping both entries), re-run checks, hand off, and get a fresh independent source approval for batch 2b (--deliver)."
-        },
-        "rework": true,
-        "rework_claim": "7e44ab259ea446668b3a8d77a24b5b40"
+        }
       },
       "841": {
         "implementers": [
@@ -64017,7 +64001,8 @@
       1054,
       710,
       1069,
-      1053
+      1053,
+      840
     ],
     "review": null,
     "history": [
@@ -112899,6 +112884,13 @@
             "approved_at": "2026-10-22T03:22:16+00:00"
           }
         }
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-22T03:23:57+00:00",
+        "issue": 840,
+        "pr": 846,
+        "actor": "Worker-W1021840"
       }
     ],
     "policy": {
