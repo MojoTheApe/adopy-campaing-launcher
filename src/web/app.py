@@ -1065,6 +1065,29 @@ def _fallback_spend(live: dict) -> dict[str, dict]:
         return {}
 
 
+def _country_ftds(country: dict):
+    """FTD страны для бокового списка ({'you','all'}) или None; сбой не роняет страницу."""
+    try:
+        from src.analysis_agent.country_workbench import country_ftd_counts
+
+        return country_ftd_counts(country.get("workbench"))
+    except Exception:  # pragma: no cover - счётчик необязателен
+        return None
+
+
+def _home_kpis(report: dict) -> list[dict]:
+    """Шесть плиток «Вы / Другие» для Home (ACL-1827); пусто, если считать не из чего."""
+    try:
+        from src.analysis_agent.country_workbench import home_kpi_tiles, home_you_vs_others
+
+        cmp_ = home_you_vs_others(report.get("countries", []), report.get("my_cm", ""))
+        if not cmp_["countries_used"]:
+            return []
+        return home_kpi_tiles(cmp_)
+    except Exception:  # pragma: no cover - плитки не должны ронять отчёт
+        return []
+
+
 def _sidebar_countries(report: dict, amap: dict) -> list[dict]:
     """Страны для бокового списка: сначала те, где идут деньги.
 
@@ -1088,6 +1111,8 @@ def _sidebar_countries(report: dict, amap: dict) -> list[dict]:
                 "spend": spend,
                 "active": spend > 0 or name.lower() in placed,
                 "in_map": name.lower() in placed,
+                # ACL-1827: счётчик «вы / все» FTD под названием страны.
+                "ftds": _country_ftds(c),
             }
         )
     # Сначала живые — по расходу, потом остальные по алфавиту. Страна,
@@ -2025,6 +2050,8 @@ def _render_report(
             "stage_status": _stage_status(),
             "account_map": _account_map_view,
             "sidebar_countries": _sidebar_countries(report, _account_map_view),
+            # ACL-1827: плитки «Вы / Другие» над картой аккаунтов на Home.
+            "home_kpis": _home_kpis(report),
             "period": {"date_from": date_from, "date_to": date_to, "span": span},
             "period_owner": _period_owner(report),
             "goals": goals_view,
@@ -5125,6 +5152,16 @@ def robot_health_page(n: int = 10) -> HTMLResponse:
                                     _robot_health_current_build(),
                                     _robot_health_logs_dir())
     return HTMLResponse(templates.get_template("robot_health.html").render(**ctx))
+
+
+@app.get("/robot-health/summary")
+def robot_health_summary(n: int = 10) -> JSONResponse:
+    """ACL-1827: данные для всплывающей панели «Robot health» в шапке (только чтение)."""
+    from src.web import robot_health
+    ctx = robot_health.popover_context(_robot_health_output_dir(), n,
+                                       _robot_health_current_build(),
+                                       _robot_health_logs_dir())
+    return JSONResponse(ctx)
 
 
 @app.get("/robot-health/run/{run_id}", response_class=HTMLResponse)
