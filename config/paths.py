@@ -570,6 +570,38 @@ def _read_env_value(path: str | Path, key: str) -> str | None:
         return None
 
 
+_STALE_GRAPH_PIN = re.compile(
+    rb"^(?P<head>[ \t]*(?:export[ \t]+)?META_GRAPH_API_VERSION[ \t]*=[ \t]*)"
+    rb"(?P<q>[\"']?)v22\.0(?P=q)(?P<tail>[ \t]*(?:#[^\r\n]*)?)(?P<eol>\r\n|\n|\r|)$",
+    re.I,
+)
+
+
+def _clear_stale_graph_pin(path: Path) -> str:
+    """Blank a `META_GRAPH_API_VERSION=v22.0` line in place, byte for byte (ACL-2123).
+
+    Only that one line changes: BOM, encoding, line endings, other lines and an
+    inline comment survive. An unreadable file is left alone (never raises);
+    returns a log note or "".
+    """
+    try:
+        lines = Path(path).read_bytes().splitlines(keepends=True)
+        hit = False
+        for n, line in enumerate(lines):
+            m = _STALE_GRAPH_PIN.match(line)
+            if m:
+                lines[n] = m.group("head") + m.group("tail") + m.group("eol")
+                hit = True
+        if not hit:
+            return ""
+        _atomic_write(path, b"".join(lines))
+    except Exception as exc:
+        return f"META_GRAPH_API_VERSION pin check skipped ({type(exc).__name__}); .env left untouched"
+    if os.environ.get("META_GRAPH_API_VERSION", "").strip().lower() == "v22.0":
+        os.environ.pop("META_GRAPH_API_VERSION", None)
+    return "unsupported META_GRAPH_API_VERSION=v22.0 pin cleared; version now comes from meta.json"
+
+
 def migrate_legacy_env(*, create_from_example: bool = False) -> str:
     """Copy checkout `.env` to the machine once, then normalize old defaults."""
     local = Path(get_machine_env_path())
@@ -590,16 +622,17 @@ def migrate_legacy_env(*, create_from_example: bool = False) -> str:
     if local.exists():
         engine = (_read_env_value(local, "FB_RPA_ENGINE") or "").strip().lower()
         if not engine:
-            update_machine_env({"FB_RPA_ENGINE": "recorded_flow"})
-            suffix = "legacy blank RPA engine normalized to recorded_flow"
+            try:
+                update_machine_env({"FB_RPA_ENGINE": "recorded_flow"})
+                suffix = "legacy blank RPA engine normalized to recorded_flow"
+            except (OSError, UnicodeError) as exc:  # e.g. a cp1251 .env: leave it as is
+                suffix = f"RPA engine normalization skipped ({type(exc).__name__}); .env left untouched"
             note = f"{note}; {suffix}" if note else suffix
         # ACL-2123: v22.0 pinned from the old .env.example; the Graph API version
         # now comes from config/meta_rules/meta.json, so the stale pin is cleared.
-        pin = (_read_env_value(local, "META_GRAPH_API_VERSION") or "").strip().lower()
-        if pin == "v22.0":
-            update_machine_env({"META_GRAPH_API_VERSION": ""})
-            suffix = "unsupported META_GRAPH_API_VERSION=v22.0 pin cleared; version now comes from meta.json"
-            note = f"{note}; {suffix}" if note else suffix
+        cleared = _clear_stale_graph_pin(local)
+        if cleared:
+            note = f"{note}; {cleared}" if note else cleared
     return note
 
 
