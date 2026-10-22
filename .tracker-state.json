@@ -50350,20 +50350,6 @@
         "state": "implementing",
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
-      },
-      "839": {
-        "actor": "Worker-W1021839",
-        "session": "run_w1021_1839",
-        "coordinator": "Coordinator-I1021A",
-        "branch": "codex/acl-1839-connection-panel-layout",
-        "worktree": "C:\\acl-int-w1839",
-        "id": "91854d98a2d44e668cf0504270340513",
-        "issue": 839,
-        "state": "handoff",
-        "started_at": "2026-10-22T08:44:29+00:00",
-        "from_status": "status:todo",
-        "pr": 843,
-        "report": "ACL-1839 round 4 (PR #843): pure merge of main 7224a34c17d1e81e1c4ed0dcafa387d349a37176, no conflicts, no content change.\nOld head 5a6fafb9; new head 5a1fc49cc6f351cb52698e50a52e54bb9c8a50e7. Diff vs main unchanged (fragment, 2 templates, 1 test).\nCI: linux 1/2/3, windows, process, ACL verification pass; tracker-link failed only on task state before handoff, rerun after."
       }
     },
     "tasks": {
@@ -55117,7 +55103,7 @@
             "session": "run_w1021_1839"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1021839",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -55126,16 +55112,16 @@
           "coordinator": "Coordinator-I1021A",
           "branch": "codex/acl-1839-connection-panel-layout",
           "worktree": "C:\\acl-int-w1839",
-          "id": "cc1e795aae854220a6851f6191116a1a",
+          "id": "91854d98a2d44e668cf0504270340513",
           "issue": 839,
           "state": "handoff",
-          "started_at": "2026-10-22T07:17:29+00:00",
+          "started_at": "2026-10-22T08:44:29+00:00",
           "from_status": "status:todo",
           "pr": 843,
-          "report": "ACL-1839 round 3 (PR #843): pure merge of main 515689dee625bdae3241e2ab4064fd18fa5dac53, no content change, no conflicts.\nOld head 16a5bd6d; new head 5a6fafb9fe7045c5bbecccbdd48a6127c48c5c29. Diff vs main unchanged (fragment, 2 templates, 1 test). fold_changelog --check valid.\nCI: linux 1/2/3, windows, process, ACL verification pass; tracker-link failed only on task state before handoff, rerun after."
+          "report": "ACL-1839 round 4 (PR #843): pure merge of main 7224a34c17d1e81e1c4ed0dcafa387d349a37176, no conflicts, no content change.\nOld head 5a6fafb9; new head 5a1fc49cc6f351cb52698e50a52e54bb9c8a50e7. Diff vs main unchanged (fragment, 2 templates, 1 test).\nCI: linux 1/2/3, windows, process, ACL verification pass; tracker-link failed only on task state before handoff, rerun after."
         },
         "pr": 843,
-        "queued_at": "2026-10-22T07:34:02+00:00",
+        "queued_at": "2026-10-22T08:57:46+00:00",
         "review_report": "Approval is stale against current main 7224a34c (ACL-2079 batch merged). Author: merge current main (no content change), CI, hand off for a merge-only re-review.",
         "administrative_pause": {
           "operation": "owner-acl-exclusive-workflow-20261017-01",
@@ -55147,9 +55133,7 @@
           "actor": "Coordinator-I1021A",
           "session": "run_i1021a_1021",
           "report": "Approval is stale against current main 7224a34c (ACL-2079 batch merged). Author: merge current main (no content change), CI, hand off for a merge-only re-review."
-        },
-        "rework": true,
-        "rework_claim": "91854d98a2d44e668cf0504270340513"
+        }
       },
       "840": {
         "implementers": [
@@ -66135,7 +66119,8 @@
       1054,
       710,
       1069,
-      708
+      708,
+      839
     ],
     "review": null,
     "history": [
@@ -117635,6 +117620,13 @@
         "pr": 1088,
         "lane": "04bc0508bad84c0a8db65c3f69470b70",
         "actor": "Reviewer-AJ1022086"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-22T08:57:46+00:00",
+        "issue": 839,
+        "pr": 843,
+        "actor": "Worker-W1021839"
       }
     ],
     "policy": {
