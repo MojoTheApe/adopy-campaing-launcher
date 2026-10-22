@@ -46264,6 +46264,64 @@
           }
         },
         "recorded_at": "2026-10-21T22:18:58+00:00"
+      },
+      "0499c60dda4c47e595333eecb0cffb64": {
+        "evidence": {
+          "kind": "post-main-acceptance",
+          "report": "Retained independent integration Reviewer-V1022B82/run_v1022_b82 verified the unchecked acceptance lines of Issue #1078 (ACL-2078) on merged main 4582039e (merge of PR1082 head 7fe52398, tree ac6cc114) in a fresh detached worktree. Issue #1037 (ACL-2037) has no unchecked lines; fold_changelog.py --check on main reports 'valid: ACL-2037'. Combined PR CI on head 7fe52398 (tree ac6cc114), attempt 1, no reruns: CI 39703751054 success incl. linux tests 3.11 shards 1-3, 3.13 shards 1-3 and windows tests 3.13; Windows installer 39703751058, descriptor 39703751052, Tracker linkage 39703751082 success. Main push CI on merge 4582039e (tree ac6cc114, identical to the tested PR tree): run 39714288799 attempt 1 success (Classify and check project tooling, Process instructions, ACL verification success; linux/windows test matrices skipped by the same-tree reuse classifier); Windows installer 39714288817 and Delivery setup 39714288746 success.",
+          "batch_id": "0499c60dda4c47e595333eecb0cffb64",
+          "pr": 1082,
+          "merge_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+          "head_sha": "7fe52398ef2bb995f4675237da9533259308d76e",
+          "tree_sha": "ac6cc114c4c258a6c884d40dfce1e454c36174d3",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            1078,
+            1037
+          ],
+          "source_heads": [
+            "ccbaf636cc1ee544d2441472422d1a4ede539094",
+            "d2a7d62c645a3f91c73f786663f249c93c175368"
+          ],
+          "issue_scopes": {
+            "1078": "6d8d2d53bbfc9b619f71658aca44763b74b4c51d1a38458b72391464c8704dc2",
+            "1037": "63ab9afd123776df93881b7fc0d961bb5eb25318e4fedcec40fd69af6b75223f"
+          },
+          "reviewer": "Reviewer-V1022B82",
+          "review_session": "run_v1022_b82",
+          "execution_lane": "9d03f45ca4924033a6e8b7a5f506d396",
+          "coordinator": "Coordinator-I1021A",
+          "coordinator_session": "run_i1021a_1021",
+          "criteria": {
+            "1078": [
+              {
+                "line": 19,
+                "criterion": "- [ ] The failing pair passes in both orders.",
+                "result": "passed",
+                "evidence": "Merged main 4582039e (tree ac6cc114), detached worktree: pytest tests/test_bench_b97_picker_and_crop_1007.py tests/test_additional_ad_without_creative_has_no_text.py -> 36 passed; reversed order -> 36 passed. Control: same pair with the pre-batch tests/conftest.py from e8bf31f8 -> 1 failed (test_an_ad_whose_creative_failed_gets_no_text_attempt), 35 passed."
+              },
+              {
+                "line": 20,
+                "criterion": "- [ ] The fixture resets every `threading.local` in `meta_dom` and `crop_step` and every mutable module-level state container in `meta_dom` (upload diag/why, creative, conversion, open budget, flow budget, create block, reload block, crop warning, failed/succeeded upload memory, reuse state, last destination, stall/unstuck/review-error memory, adopted shell ids), before and after each test.",
+                "result": "passed",
+                "evidence": "tests/conftest.py autouse fixture _crop_and_media_refusal_state_per_test calls tests/rpa_module_state.reset() before and after yield. reset() clears every module-level threading.local of meta_dom (_upload_diag_tls, _media_refusal_tls, _creative_tls, _upload_why_tls, _flow_budget, _conv_tls, _LAST_OPEN, _OPEN_BUDGET, _create_tls, _reload_block, _crop_warning_tls) and crop_step (_tls) by vars() scan, and restores in place the registered meta_dom containers _LAST_UPLOAD_DIAG, _UNSTUCK_RELOADED, _STALL_EVIDENCE_TAKEN, _OTHER_REVIEW_ERRORS_SEEN, _reuse_state, _failed_uploads, _uploaded_ok, _last_destination, _ADOPTED_SHELL_IDS; plus crop.set_plan(None) and run_telemetry.clear_current_run(). test_registered_initial_values_match_the_module_source passes on main 4582039e."
+              },
+              {
+                "line": 21,
+                "criterion": "- [ ] A regression test sets each piece and verifies the next test starts clean, and fails if a new module-level mutable container appears in these modules without being registered.",
+                "result": "passed",
+                "evidence": "tests/test_rpa_module_state_is_reset_between_tests.py on main 4582039e: 5 passed. With the pre-batch conftest.py from e8bf31f8 it fails test_2_the_next_test_starts_clean (1 failed, 4 passed), so it detects leaked state. Guard: temporarily appending '_ACL2078_UNREGISTERED_PROBE = {}' to src/fb_ads_rpa/meta_dom.py makes test_every_mutable_module_container_is_registered fail ('register in tests/rpa_module_state.py'); file restored, worktree clean."
+              },
+              {
+                "line": 22,
+                "criterion": "- [ ] Affected test files pass locally; PR CI is green on all shards.",
+                "result": "passed",
+                "evidence": "Local on main 4582039e: b97 pair 36 passed both orders; regression test 5 passed; tests/test_media_attachment_identity.py + tests/test_fold_changelog_2037.py 30 passed. Combined PR CI on head 7fe52398 (tree ac6cc114), attempt 1, no reruns: CI 39703751054 success incl. linux tests 3.11 shards 1-3, 3.13 shards 1-3 and windows tests 3.13; Windows installer 39703751058, descriptor 39703751052, Tracker linkage 39703751082 success. Main push CI on merge 4582039e (tree ac6cc114, identical to the tested PR tree): run 39714288799 attempt 1 success (Classify and check project tooling, Process instructions, ACL verification success; linux/windows test matrices skipped by the same-tree reuse classifier); Windows installer 39714288817 and Delivery setup 39714288746 success."
+              }
+            ]
+          }
+        },
+        "recorded_at": "2026-10-22T03:05:09+00:00"
       }
     },
     "policy_migrations": [
@@ -112485,6 +112543,12 @@
         "issue": 1053,
         "claim": "3083aafad44443d999d373d4b2961243",
         "actor": "Worker-W1022053"
+      },
+      {
+        "event": "post-main-acceptance-recorded",
+        "at": "2026-10-22T03:05:09+00:00",
+        "batch_id": "0499c60dda4c47e595333eecb0cffb64",
+        "pr": 1082
       }
     ],
     "policy": {
