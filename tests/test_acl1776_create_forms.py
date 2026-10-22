@@ -84,7 +84,7 @@ class FormsMeta(FormMeta):
             if mode == "lost":
                 return {"error": "call_unknown"}
             return {"status": 200, "body": {"id": fid}}
-        return super().write(path, params, files, filename, on_ad)
+        return super().write(path, params, files, filename, on_ad, **_k)
 
     def _get(self, path, params):
         parts = path.strip("/").split("/")

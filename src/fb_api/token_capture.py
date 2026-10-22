@@ -407,8 +407,12 @@ _HELPER_JS = r"""
     for (const k of Object.keys(params)) {
       if (!KEY_RE.test(String(k)) || keys.indexOf(String(k)) < 0) return refused('key');
     }
-    if (WRITE.paused_required.indexOf(edge) >= 0 && params.status !== 'PAUSED') return refused('status');
+    // ACL-2114: ACTIVE только у набора/объявления и только при children_active (кампания подтверждена PAUSED).
+    const childActive = spec.children_active === true && (WRITE.child_edges || []).indexOf(edge) >= 0
+      && params.status === 'ACTIVE';
+    if (WRITE.paused_required.indexOf(edge) >= 0 && params.status !== 'PAUSED' && !childActive) return refused('status');
     checked = Object.assign({}, params);
+    if (childActive) checked.status = 'PAUSED';
     for (const k of WRITE.json_keys) {
       if (!(k in params)) continue;
       let v = params[k];
@@ -1028,7 +1032,7 @@ class InPageGraph:
 
     def write(self, path: str, params: dict | None = None, *, files: dict | None = None,
               filename: str = "", timeout: float = 120.0, on_ad: bool = False,
-              form_page: str = "", progress: Callable[[float], None] | None = None,
+              children_active: bool = False, form_page: str = "", progress: Callable[[float], None] | None = None,
               cancelled: Callable[[], bool] | None = None) -> dict:
         """POST в разрешённое ребро. РОВНО один раз; сбой после отправки — `call_unknown`.
 
@@ -1057,7 +1061,8 @@ class InPageGraph:
         elif self.object_updates:
             _wp.check_object_update("POST", path, params, files)
         else:
-            _wp.check(self.write_act, "POST", path, params, files, on_ad=on_ad)
+            _wp.check(self.write_act, "POST", path, params, files, on_ad=on_ad,
+                      children_active=children_active)
         spec: dict[str, Any] = {"method": "POST", "path": path, "params": params or {}, "files": {},
                                 "filename": filename, "host": self.graph_host,
                                 "credentials": self.credentials}
@@ -1066,6 +1071,9 @@ class InPageGraph:
         if on_ad:
             # ACL-1775: набор плана ON_AD — вторая линия политики пропустит форму в креативе.
             spec["on_ad"] = True
+        if children_active:
+            # ACL-2114: кампания-родитель подтверждена PAUSED - вторая линия пропустит ACTIVE у набора/объявления.
+            spec["children_active"] = True
         if files:
             (field_name, data), = files.items()
             if not isinstance(data, (bytes, bytearray)):
