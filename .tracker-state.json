@@ -57586,7 +57586,7 @@
             "session": "run_f1022b"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-F1022B",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -57605,7 +57605,8 @@
         },
         "pr": 1081,
         "queued_at": "2026-10-22T00:57:47+00:00",
-        "review_report": "# ACL-2078 source review return (Reviewer-S1022078 / run_s1022_078)\n\nStale vs main e8bf31f8 \u2014 author merges main; content reviewed OK, will re-verify delta.\n\nReviewed head dbe945ee on base 64e73a1e. No content findings:\n- Test-only: tests/conftest.py, tests/rpa_module_state.py, tests/test_rpa_module_state_is_reset_between_tests.py. No product code, no assertion weakening, no xfail/skip.\n- Every MUTABLE initial value matches meta_dom import-time literals; thread-local __dict__.clear() matches a fresh thread (no module-level tls attribute initialisation; reads use getattr defaults or are set by set_plan); clear_current_run() resets the ContextVar.\n- Reproduced: on 64e73a1e `b97 + test_additional_ad_without_creative_has_no_text.py` fails (ad2_creative_upload:library_has_no_copy); on dbe945ee the same pair plus media_attachment_identity and the new file pass (57 passed).\n- Mutation checks: old conftest -> test_2 fails; unregistered container -> registry test fails; stale registry name -> source-value test fails.\n- Guard design acceptable: CI uses --dist loadfile so test_1/test_2 stay in one worker in order; future PRs adding a module-level dict/set/list to meta_dom/crop_step must register it (clear message). Non-blocking nit: reset() setattr's a missing MUTABLE name onto the module, so the \"stale names\" half of the registry assertion is masked; the AST source test still catches it.\n- Main delta 64e73a1e..e8bf31f8 does not touch meta_dom/crop_step/run_telemetry/conftest."
+        "review_report": "# ACL-2078 source review return (Reviewer-S1022078 / run_s1022_078)\n\nStale vs main e8bf31f8 \u2014 author merges main; content reviewed OK, will re-verify delta.\n\nReviewed head dbe945ee on base 64e73a1e. No content findings:\n- Test-only: tests/conftest.py, tests/rpa_module_state.py, tests/test_rpa_module_state_is_reset_between_tests.py. No product code, no assertion weakening, no xfail/skip.\n- Every MUTABLE initial value matches meta_dom import-time literals; thread-local __dict__.clear() matches a fresh thread (no module-level tls attribute initialisation; reads use getattr defaults or are set by set_plan); clear_current_run() resets the ContextVar.\n- Reproduced: on 64e73a1e `b97 + test_additional_ad_without_creative_has_no_text.py` fails (ad2_creative_upload:library_has_no_copy); on dbe945ee the same pair plus media_attachment_identity and the new file pass (57 passed).\n- Mutation checks: old conftest -> test_2 fails; unregistered container -> registry test fails; stale registry name -> source-value test fails.\n- Guard design acceptable: CI uses --dist loadfile so test_1/test_2 stay in one worker in order; future PRs adding a module-level dict/set/list to meta_dom/crop_step must register it (clear message). Non-blocking nit: reset() setattr's a missing MUTABLE name onto the module, so the \"stale names\" half of the registry assertion is masked; the AST source test still catches it.\n- Main delta 64e73a1e..e8bf31f8 does not touch meta_dom/crop_step/run_telemetry/conftest.",
+        "reviewer": "Reviewer-S1022078"
       },
       "1079": {
         "implementers": [
@@ -63728,8 +63729,7 @@
     "review_queue": [
       1054,
       710,
-      1069,
-      1078
+      1069
     ],
     "review": null,
     "history": [
@@ -112146,6 +112146,13 @@
         "issue": 1078,
         "pr": 1081,
         "actor": "Worker-F1022B"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-22T00:59:29+00:00",
+        "pr": 1081,
+        "lane": "acc68878688d4a73995d525b479c19fd",
+        "actor": "Reviewer-S1022078"
       }
     ],
     "policy": {
@@ -122965,7 +122972,20 @@
       "started_at": "2026-10-21T22:44:20+00:00",
       "ineligible": {}
     },
-    "source_reviews": {},
+    "source_reviews": {
+      "1081": {
+        "id": "acc68878688d4a73995d525b479c19fd",
+        "pr": 1081,
+        "issues": [
+          1078
+        ],
+        "actor": "Reviewer-S1022078",
+        "session": "run_s1022_078",
+        "coordinator": "Coordinator-I1021A",
+        "started_at": "2026-10-22T00:59:29+00:00",
+        "state": "reviewing"
+      }
+    },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
   },
   "maintenance_history": [
