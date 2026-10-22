@@ -57624,7 +57624,7 @@
             "session": "root_acl2079_20261022"
           }
         ],
-        "state": "reviewing",
+        "state": "approved",
         "worker": "Worker-V7Q2R8",
         "coordinator": "Coordinator-R6M9H2",
         "handoff": {
@@ -111924,6 +111924,93 @@
           "report": "stale vs main e8bf31f8; author merges current main and hands off for a fresh review; no content findings",
           "keep_lane": false
         }
+      },
+      {
+        "event": "source-approved",
+        "at": "2026-10-22T00:10:05+00:00",
+        "issue": 1079,
+        "pr": 1080,
+        "review": {
+          "id": "52e9ef09fddd43ef9327f209e2aecc9d",
+          "pr": 1080,
+          "issues": [
+            1079
+          ],
+          "actor": "Reviewer-H8K4N7",
+          "session": "review_acl2079_tt194_20261022",
+          "coordinator": "Coordinator-R6M9H2",
+          "started_at": "2026-10-21T23:58:33+00:00",
+          "state": "approving",
+          "approval": {
+            "issue": 1079,
+            "pr": 1080,
+            "branch": "codex/acl-2079-isolated-process-support",
+            "head_sha": "2c71d1bde0ee190b1123c4dcd1936b8d19d555b3",
+            "base_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+            "main_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+            "scope": "142a010f210e112a16dd120aa0ad5d1733f5cacbc06b341e3068e9067559716f",
+            "review": {
+              "kind": "independent-review",
+              "verdict": "approved",
+              "reviewer": "Reviewer-H8K4N7",
+              "review_session": "review_acl2079_tt194_20261022",
+              "execution_lane": "52e9ef09fddd43ef9327f209e2aecc9d",
+              "implementer": "Worker-V7Q2R8",
+              "head_sha": "2c71d1bde0ee190b1123c4dcd1936b8d19d555b3",
+              "base_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+              "tree_sha": "9af89d5bc9c17df277decdda8fe517fd52485722",
+              "report": "Independent exact-head/base whole-scope source review by /root/tt194_review as Reviewer-H8K4N7. No remaining source findings at PR1080 head2c71d1bde0ee190b1123c4dcd1936b8d19d555b3/basee8bf31f8921ec6a8f79c824f39c1fc3beff2f359/tree9af89d5bc9c17df277decdda8fe517fd52485722. Read entire original Issue1079 and related ACL2069/PR1070, all16 changed files, maintained two-conflict upgrade audit, canonical helpers/baseline/published pair, local safeguards and direct/indirect product/build/parser/release-governance effects. Both preliminary navigation findings are fixed without deleting history. Complete immutable canonical proof and semantic isolation assessment attached. Source semantic approval is separate from hosted required-CI admission: current CI is still running; batch approve must wait for actual required success. Combined/main integration, deployed compatible reader, native/public acceptance and separate ACL2071 completion are outstanding original criteria; no Done/publication/employee installation is claimed. No source code edits by reviewer, no foreign owner/batch1077 manipulation, no product --deliver request and no isolated receipt apply. Fresh review includes the complete accepted PR1077 main advancement and all seven inherited product/docs/test files. Those seven files are byte-identical in the refreshed source. No direct or indirect interaction invalidates canonical process isolation. The only support-content change from the earlier reviewed candidate is the six-line truthful current-base/history paragraph. Prior source review/checks remain historical; current exact-head source CI is still required.",
+              "process_support": {
+                "schema_version": 1,
+                "kind": "canonical-process-support",
+                "outcome": "process-only",
+                "proof_sha256": "28e7a7da3ee9e86ac01ddce314df1f057cabf6f8c6310fde315b678fb23f7331",
+                "issue_scopes": {
+                  "1079": "142a010f210e112a16dd120aa0ad5d1733f5cacbc06b341e3068e9067559716f"
+                },
+                "report": "Independent whole-original-Issue1079 assessment by actual non-implementing agent /root/tt194_review under genuine source lane52e9ef09fddd43ef9327f209e2aecc9d. Exact16-file source2c71d1bde0ee190b1123c4dcd1936b8d19d555b3 against maine8bf31f8921ec6a8f79c824f39c1fc3beff2f359 is a complete canonical shared-support upgrade to published Master1.8.0 fddcdd0d60db2e14cce0a53e6af23e12356c3bc7 and Tracker3.10.0 e71c9829247e60d79031dbb1bb038896fcedf4cc. This source implements the requested adoption; original acceptance still requires actual combined/main integration, compatible deployed-reader/current-client/native/public readback and separate ACL2071 evidence. Those future results are not claimed by this source approval. Whole accepted outcome has no product publication requirement: neither this support upgrade nor the original explicitly process-only ACL2071 publishes a new ACL installer. Existing genuine product requests remain binding. ACL2069/PR1070 retains separate scope, ownership and original automatic-replay acceptance; no closure or takeover is inferred.",
+                "product_isolation": {
+                  "result": "isolated",
+                  "evidence": "Native old-pin process-support1080 independently reconstructed complete immutable Git trees, official stable releases, published canonical export closure and pristine baseline; proof 28e7a7da3ee9e86ac01ddce314df1f057cabf6f8c6310fde315b678fb23f7331 covers all16files and exact original scope142a010f210e112a16dd120aa0ad5d1733f5cacbc06b341e3068e9067559716f. All28 separated helper files match authenticated manifest bytes. Only tracker_delivery_policy.py and tracker_process_support.py helper implementations change; both are exact published source already independently reviewed with real tests and Python3.9 pair. Baseline rendering inputs and all non-process baseline entries remain unchanged. Descriptor changes only standard revision/version and Tracker revision; tracker/config.json, guarded adapter, adoption controls, execution3 with5/5/5, Stage-disabled/permanent-stage, IDs/aliases, targets/checks/authorization and optional-policy absence are Git-byte-unchanged. The two genuine merge conflicts were resolved preserving complete ACL workflow/verification text except exact Master pin references; published immutable audit and idempotent maintained retry are inspected. AGENTS and current early-adoption navigation now match the new pair while old ACL2026 history remains preserved. Product source/configuration/packaging/dependencies/runtime/build/update inputs and existing release/complete-delivery workflows are Git-identical. PyInstaller explicit payload and imports do not consume changed governance docs/helpers; unchanged release manifest parser linked_numbers and its globals remain unchanged, as does transitive delivery_policy top-level AST. Reachable release governance does change: existing receipt resolver/recorder can call completion_assessment/summary, which adds validated isolated-process receipt handling; this is a canonical governance change, not an unreachable-code claim or product change. Ordinary product receipt requests/admission/scope/target/checks remain untouched; old canonical process_support1 stays compatible. No executable import side effect, credential distribution, installer/user-data change, publication or native-state migration was introduced. Original candidate historical evidence comprises731tooling tests passed419.76s,5unchanged manifest cases and80navigation/affected tests4.93s. Refreshed exact-source affected suite passed80tests7.15s; scanner/diff checks and upstream clean published no-override pairs passed. Existing hosted source CI remains required before batch approve, combined/main checks remain required later. No isolated supplemental receipt writer runs before actual compatible service deployment and admitted support adoption. Actual main advanced64e73a1e to e8bf31f8 through accepted PR1077. Read the complete seven-file foreign main delta: browser attach diagnostic logging only, Meta readback placement/country reporting, their product regression tests and product docs. All seven are inherited byte-identically; no new product import of the changed governance helpers, payload/build selection or configuration interaction is introduced. Thus product files are unchanged relative to current authoritative main, rather than being falsely represented as unchanged since the older baseline. Entire original Issue1079 requirements and original scope digest were reread after refreshed handoff. The actual original Worker retained its branch/task and handed off under new claimde604ff03d72482290f410e51c760efa. This reviewer independently acquired fresh lane52e9ef09fddd43ef9327f209e2aecc9d after verified handoff; no prior lane/review is reused as current approval."
+                }
+              },
+              "main_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+              "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+              "issues": [
+                1079
+              ],
+              "recorded_at": "2026-10-22T00:01:23+00:00",
+              "issue_scopes": {
+                "1079": "142a010f210e112a16dd120aa0ad5d1733f5cacbc06b341e3068e9067559716f"
+              },
+              "process_support_issues": {
+                "1079": {
+                  "number": 1079,
+                  "title": "Adopt isolated manual verification completion support",
+                  "body": "## Description\n\nAdopt the reviewed shared support that lets an actually verified, isolated manual process task finish without publishing an unchanged ACL installer. Preserve ACL application behavior, its local workflow safeguards and all other developers' ownership/history. Then validate that the adopted native client supports the real ACL-2071 completion; recording its separate supplemental receipt remains tied to the original task and genuine independent assessment.\n\n## Specifications\n\nOwner authorization: complete the process-completion fix end to end, with a compatible shared release and separately reviewed ACL adoption. Use existing schema3 capacity and preserve incumbent claims; no ownership exception or migration is requested. Current published selections are Master1.7.2 at4f148cbbbc2c9c65a7fdebba9b37551f91566e04 and Tracker3.9.2 at3d32586d72e4621f70d56d35f1e199a19fa13b00. Targets are independently reviewed, genuinely published Master1.8.0 at fddcdd0d60db2e14cce0a53e6af23e12356c3bc7 (v1.8.0, release420144866) and Tracker3.10.0 at e71c9829247e60d79031dbb1bb038896fcedf4cc (v3.10.0, release420140493). Actual-main checks and clean immutable no-override portable3.9 pair39691739580 passed.\n\nRelated work: TT194/PR195 and MR77 provide the compatible support. ACL2069/PR1070 belongs to the original developer with its own reserved3.9.4/1.7.3 scope; preserve that source, owner and original acceptance. This task adopts the distinct isolated_verification1 capability and does not silently complete or supersede2069.\n\nScope: use the maintained three-way standard upgrade against actual published official sources; inspect every local conflict. Only canonical separated process support, precise standard/engine pins, generated selected navigation/templates and relevant repository process knowledge may change. Preserve ACL's guarded scripts/acl_task_tracker.py, .workflow/adoption.json, project-specific instructions, schema3 execution with five workers/five source reviewers/batch5, disabled Stage choice, delivery target/checks/authorization, native status/ID/history policies and all state/ownership. Do not activate optional completion/context/retry/pause policies, seize foreign slots, rewrite frozen tasks, add a controller or publish an unchanged product.\n\nAcceptance criteria:\n- [ ] Exact stable Master/Tracker releases, immutable commits and complete trusted export closure are verified; maintained upgrade preserves all local controls and non-pin selections.\n- [ ] Whole product/source/configuration/build/install/update/publication scope is independently assessed; unchanged product installer is not requested for a genuinely canonical process-only support batch. Existing genuine product publication requests remain unchanged.\n- [ ] Required source/main/process/descriptor and relevant shared delivery-tool regressions pass on the exact candidate; current independent source and combined reviews bind complete original scope/proof.\n- [ ] Normal old-pin source approval and frozen integration admission are used under real ownership, when the integration slot is available. Actual main includes the complete reviewed scope without a product delivery request; the existing native completion procedure remains required.\n- [ ] Fresh guarded client and deployed compatible reader validate adopted selections, unchanged incumbent owners/policies/history, and supported ACL2071 preview. Actual ACL2071 supplemental completion is verified separately against its original acceptance and official successful Windows run.\n\nChecks: project descriptor and tracker-link/process admission, affected canonical support/upgrade/guard/delivery-governance regressions, exact immutable diff inspection and actual native/public readback. Full required CI is not waived. Product/runtime verification is required only if actual changes or indirect consumption invalidate the reviewed process-only proof.\n\nHandoff: owner-selected support adoption, not started by Issue creation alone. Actual current main64e73a1e and old pins were reread. Read-only maintained upgrade stopped at two genuine local text conflicts in delivery-check.yml and VERIFICATION.md without writing; resolve explicitly preserving ACL master push/draft validation and stronger verification guidance. Shared service deployment awaits a separate concrete security approval; prepare only under the currently adopted old client. No new isolated receipt writer may activate ahead of the deployed reader. Source owner must verify actual available capacity and real In Progress before edits.\n",
+                  "labels": [
+                    "module:platform",
+                    "type:improvement"
+                  ]
+                }
+              }
+            },
+            "lane": {
+              "id": "52e9ef09fddd43ef9327f209e2aecc9d",
+              "pr": 1080,
+              "issues": [
+                1079
+              ],
+              "actor": "Reviewer-H8K4N7",
+              "session": "review_acl2079_tt194_20261022",
+              "coordinator": "Coordinator-R6M9H2",
+              "started_at": "2026-10-21T23:58:33+00:00",
+              "state": "reviewing"
+            },
+            "approved_at": "2026-10-22T00:09:35+00:00"
+          }
+        }
       }
     ],
     "policy": {
@@ -116492,6 +116579,75 @@
           "state": "reviewing"
         },
         "approved_at": "2026-10-21T22:42:38+00:00"
+      },
+      "1079": {
+        "issue": 1079,
+        "pr": 1080,
+        "branch": "codex/acl-2079-isolated-process-support",
+        "head_sha": "2c71d1bde0ee190b1123c4dcd1936b8d19d555b3",
+        "base_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+        "main_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "scope": "142a010f210e112a16dd120aa0ad5d1733f5cacbc06b341e3068e9067559716f",
+        "review": {
+          "kind": "independent-review",
+          "verdict": "approved",
+          "reviewer": "Reviewer-H8K4N7",
+          "review_session": "review_acl2079_tt194_20261022",
+          "execution_lane": "52e9ef09fddd43ef9327f209e2aecc9d",
+          "implementer": "Worker-V7Q2R8",
+          "head_sha": "2c71d1bde0ee190b1123c4dcd1936b8d19d555b3",
+          "base_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+          "tree_sha": "9af89d5bc9c17df277decdda8fe517fd52485722",
+          "report": "Independent exact-head/base whole-scope source review by /root/tt194_review as Reviewer-H8K4N7. No remaining source findings at PR1080 head2c71d1bde0ee190b1123c4dcd1936b8d19d555b3/basee8bf31f8921ec6a8f79c824f39c1fc3beff2f359/tree9af89d5bc9c17df277decdda8fe517fd52485722. Read entire original Issue1079 and related ACL2069/PR1070, all16 changed files, maintained two-conflict upgrade audit, canonical helpers/baseline/published pair, local safeguards and direct/indirect product/build/parser/release-governance effects. Both preliminary navigation findings are fixed without deleting history. Complete immutable canonical proof and semantic isolation assessment attached. Source semantic approval is separate from hosted required-CI admission: current CI is still running; batch approve must wait for actual required success. Combined/main integration, deployed compatible reader, native/public acceptance and separate ACL2071 completion are outstanding original criteria; no Done/publication/employee installation is claimed. No source code edits by reviewer, no foreign owner/batch1077 manipulation, no product --deliver request and no isolated receipt apply. Fresh review includes the complete accepted PR1077 main advancement and all seven inherited product/docs/test files. Those seven files are byte-identical in the refreshed source. No direct or indirect interaction invalidates canonical process isolation. The only support-content change from the earlier reviewed candidate is the six-line truthful current-base/history paragraph. Prior source review/checks remain historical; current exact-head source CI is still required.",
+          "process_support": {
+            "schema_version": 1,
+            "kind": "canonical-process-support",
+            "outcome": "process-only",
+            "proof_sha256": "28e7a7da3ee9e86ac01ddce314df1f057cabf6f8c6310fde315b678fb23f7331",
+            "issue_scopes": {
+              "1079": "142a010f210e112a16dd120aa0ad5d1733f5cacbc06b341e3068e9067559716f"
+            },
+            "report": "Independent whole-original-Issue1079 assessment by actual non-implementing agent /root/tt194_review under genuine source lane52e9ef09fddd43ef9327f209e2aecc9d. Exact16-file source2c71d1bde0ee190b1123c4dcd1936b8d19d555b3 against maine8bf31f8921ec6a8f79c824f39c1fc3beff2f359 is a complete canonical shared-support upgrade to published Master1.8.0 fddcdd0d60db2e14cce0a53e6af23e12356c3bc7 and Tracker3.10.0 e71c9829247e60d79031dbb1bb038896fcedf4cc. This source implements the requested adoption; original acceptance still requires actual combined/main integration, compatible deployed-reader/current-client/native/public readback and separate ACL2071 evidence. Those future results are not claimed by this source approval. Whole accepted outcome has no product publication requirement: neither this support upgrade nor the original explicitly process-only ACL2071 publishes a new ACL installer. Existing genuine product requests remain binding. ACL2069/PR1070 retains separate scope, ownership and original automatic-replay acceptance; no closure or takeover is inferred.",
+            "product_isolation": {
+              "result": "isolated",
+              "evidence": "Native old-pin process-support1080 independently reconstructed complete immutable Git trees, official stable releases, published canonical export closure and pristine baseline; proof 28e7a7da3ee9e86ac01ddce314df1f057cabf6f8c6310fde315b678fb23f7331 covers all16files and exact original scope142a010f210e112a16dd120aa0ad5d1733f5cacbc06b341e3068e9067559716f. All28 separated helper files match authenticated manifest bytes. Only tracker_delivery_policy.py and tracker_process_support.py helper implementations change; both are exact published source already independently reviewed with real tests and Python3.9 pair. Baseline rendering inputs and all non-process baseline entries remain unchanged. Descriptor changes only standard revision/version and Tracker revision; tracker/config.json, guarded adapter, adoption controls, execution3 with5/5/5, Stage-disabled/permanent-stage, IDs/aliases, targets/checks/authorization and optional-policy absence are Git-byte-unchanged. The two genuine merge conflicts were resolved preserving complete ACL workflow/verification text except exact Master pin references; published immutable audit and idempotent maintained retry are inspected. AGENTS and current early-adoption navigation now match the new pair while old ACL2026 history remains preserved. Product source/configuration/packaging/dependencies/runtime/build/update inputs and existing release/complete-delivery workflows are Git-identical. PyInstaller explicit payload and imports do not consume changed governance docs/helpers; unchanged release manifest parser linked_numbers and its globals remain unchanged, as does transitive delivery_policy top-level AST. Reachable release governance does change: existing receipt resolver/recorder can call completion_assessment/summary, which adds validated isolated-process receipt handling; this is a canonical governance change, not an unreachable-code claim or product change. Ordinary product receipt requests/admission/scope/target/checks remain untouched; old canonical process_support1 stays compatible. No executable import side effect, credential distribution, installer/user-data change, publication or native-state migration was introduced. Original candidate historical evidence comprises731tooling tests passed419.76s,5unchanged manifest cases and80navigation/affected tests4.93s. Refreshed exact-source affected suite passed80tests7.15s; scanner/diff checks and upstream clean published no-override pairs passed. Existing hosted source CI remains required before batch approve, combined/main checks remain required later. No isolated supplemental receipt writer runs before actual compatible service deployment and admitted support adoption. Actual main advanced64e73a1e to e8bf31f8 through accepted PR1077. Read the complete seven-file foreign main delta: browser attach diagnostic logging only, Meta readback placement/country reporting, their product regression tests and product docs. All seven are inherited byte-identically; no new product import of the changed governance helpers, payload/build selection or configuration interaction is introduced. Thus product files are unchanged relative to current authoritative main, rather than being falsely represented as unchanged since the older baseline. Entire original Issue1079 requirements and original scope digest were reread after refreshed handoff. The actual original Worker retained its branch/task and handed off under new claimde604ff03d72482290f410e51c760efa. This reviewer independently acquired fresh lane52e9ef09fddd43ef9327f209e2aecc9d after verified handoff; no prior lane/review is reused as current approval."
+            }
+          },
+          "main_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
+          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+          "issues": [
+            1079
+          ],
+          "recorded_at": "2026-10-22T00:01:23+00:00",
+          "issue_scopes": {
+            "1079": "142a010f210e112a16dd120aa0ad5d1733f5cacbc06b341e3068e9067559716f"
+          },
+          "process_support_issues": {
+            "1079": {
+              "number": 1079,
+              "title": "Adopt isolated manual verification completion support",
+              "body": "## Description\n\nAdopt the reviewed shared support that lets an actually verified, isolated manual process task finish without publishing an unchanged ACL installer. Preserve ACL application behavior, its local workflow safeguards and all other developers' ownership/history. Then validate that the adopted native client supports the real ACL-2071 completion; recording its separate supplemental receipt remains tied to the original task and genuine independent assessment.\n\n## Specifications\n\nOwner authorization: complete the process-completion fix end to end, with a compatible shared release and separately reviewed ACL adoption. Use existing schema3 capacity and preserve incumbent claims; no ownership exception or migration is requested. Current published selections are Master1.7.2 at4f148cbbbc2c9c65a7fdebba9b37551f91566e04 and Tracker3.9.2 at3d32586d72e4621f70d56d35f1e199a19fa13b00. Targets are independently reviewed, genuinely published Master1.8.0 at fddcdd0d60db2e14cce0a53e6af23e12356c3bc7 (v1.8.0, release420144866) and Tracker3.10.0 at e71c9829247e60d79031dbb1bb038896fcedf4cc (v3.10.0, release420140493). Actual-main checks and clean immutable no-override portable3.9 pair39691739580 passed.\n\nRelated work: TT194/PR195 and MR77 provide the compatible support. ACL2069/PR1070 belongs to the original developer with its own reserved3.9.4/1.7.3 scope; preserve that source, owner and original acceptance. This task adopts the distinct isolated_verification1 capability and does not silently complete or supersede2069.\n\nScope: use the maintained three-way standard upgrade against actual published official sources; inspect every local conflict. Only canonical separated process support, precise standard/engine pins, generated selected navigation/templates and relevant repository process knowledge may change. Preserve ACL's guarded scripts/acl_task_tracker.py, .workflow/adoption.json, project-specific instructions, schema3 execution with five workers/five source reviewers/batch5, disabled Stage choice, delivery target/checks/authorization, native status/ID/history policies and all state/ownership. Do not activate optional completion/context/retry/pause policies, seize foreign slots, rewrite frozen tasks, add a controller or publish an unchanged product.\n\nAcceptance criteria:\n- [ ] Exact stable Master/Tracker releases, immutable commits and complete trusted export closure are verified; maintained upgrade preserves all local controls and non-pin selections.\n- [ ] Whole product/source/configuration/build/install/update/publication scope is independently assessed; unchanged product installer is not requested for a genuinely canonical process-only support batch. Existing genuine product publication requests remain unchanged.\n- [ ] Required source/main/process/descriptor and relevant shared delivery-tool regressions pass on the exact candidate; current independent source and combined reviews bind complete original scope/proof.\n- [ ] Normal old-pin source approval and frozen integration admission are used under real ownership, when the integration slot is available. Actual main includes the complete reviewed scope without a product delivery request; the existing native completion procedure remains required.\n- [ ] Fresh guarded client and deployed compatible reader validate adopted selections, unchanged incumbent owners/policies/history, and supported ACL2071 preview. Actual ACL2071 supplemental completion is verified separately against its original acceptance and official successful Windows run.\n\nChecks: project descriptor and tracker-link/process admission, affected canonical support/upgrade/guard/delivery-governance regressions, exact immutable diff inspection and actual native/public readback. Full required CI is not waived. Product/runtime verification is required only if actual changes or indirect consumption invalidate the reviewed process-only proof.\n\nHandoff: owner-selected support adoption, not started by Issue creation alone. Actual current main64e73a1e and old pins were reread. Read-only maintained upgrade stopped at two genuine local text conflicts in delivery-check.yml and VERIFICATION.md without writing; resolve explicitly preserving ACL master push/draft validation and stronger verification guidance. Shared service deployment awaits a separate concrete security approval; prepare only under the currently adopted old client. No new isolated receipt writer may activate ahead of the deployed reader. Source owner must verify actual available capacity and real In Progress before edits.\n",
+              "labels": [
+                "module:platform",
+                "type:improvement"
+              ]
+            }
+          }
+        },
+        "lane": {
+          "id": "52e9ef09fddd43ef9327f209e2aecc9d",
+          "pr": 1080,
+          "issues": [
+            1079
+          ],
+          "actor": "Reviewer-H8K4N7",
+          "session": "review_acl2079_tt194_20261022",
+          "coordinator": "Coordinator-R6M9H2",
+          "started_at": "2026-10-21T23:58:33+00:00",
+          "state": "reviewing"
+        },
+        "approved_at": "2026-10-22T00:09:35+00:00"
       }
     },
     "batches": {
@@ -122631,87 +122787,6 @@
       "ineligible": {}
     },
     "source_reviews": {
-      "1080": {
-        "id": "52e9ef09fddd43ef9327f209e2aecc9d",
-        "pr": 1080,
-        "issues": [
-          1079
-        ],
-        "actor": "Reviewer-H8K4N7",
-        "session": "review_acl2079_tt194_20261022",
-        "coordinator": "Coordinator-R6M9H2",
-        "started_at": "2026-10-21T23:58:33+00:00",
-        "state": "approving",
-        "approval": {
-          "issue": 1079,
-          "pr": 1080,
-          "branch": "codex/acl-2079-isolated-process-support",
-          "head_sha": "2c71d1bde0ee190b1123c4dcd1936b8d19d555b3",
-          "base_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
-          "main_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
-          "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-          "scope": "142a010f210e112a16dd120aa0ad5d1733f5cacbc06b341e3068e9067559716f",
-          "review": {
-            "kind": "independent-review",
-            "verdict": "approved",
-            "reviewer": "Reviewer-H8K4N7",
-            "review_session": "review_acl2079_tt194_20261022",
-            "execution_lane": "52e9ef09fddd43ef9327f209e2aecc9d",
-            "implementer": "Worker-V7Q2R8",
-            "head_sha": "2c71d1bde0ee190b1123c4dcd1936b8d19d555b3",
-            "base_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
-            "tree_sha": "9af89d5bc9c17df277decdda8fe517fd52485722",
-            "report": "Independent exact-head/base whole-scope source review by /root/tt194_review as Reviewer-H8K4N7. No remaining source findings at PR1080 head2c71d1bde0ee190b1123c4dcd1936b8d19d555b3/basee8bf31f8921ec6a8f79c824f39c1fc3beff2f359/tree9af89d5bc9c17df277decdda8fe517fd52485722. Read entire original Issue1079 and related ACL2069/PR1070, all16 changed files, maintained two-conflict upgrade audit, canonical helpers/baseline/published pair, local safeguards and direct/indirect product/build/parser/release-governance effects. Both preliminary navigation findings are fixed without deleting history. Complete immutable canonical proof and semantic isolation assessment attached. Source semantic approval is separate from hosted required-CI admission: current CI is still running; batch approve must wait for actual required success. Combined/main integration, deployed compatible reader, native/public acceptance and separate ACL2071 completion are outstanding original criteria; no Done/publication/employee installation is claimed. No source code edits by reviewer, no foreign owner/batch1077 manipulation, no product --deliver request and no isolated receipt apply. Fresh review includes the complete accepted PR1077 main advancement and all seven inherited product/docs/test files. Those seven files are byte-identical in the refreshed source. No direct or indirect interaction invalidates canonical process isolation. The only support-content change from the earlier reviewed candidate is the six-line truthful current-base/history paragraph. Prior source review/checks remain historical; current exact-head source CI is still required.",
-            "process_support": {
-              "schema_version": 1,
-              "kind": "canonical-process-support",
-              "outcome": "process-only",
-              "proof_sha256": "28e7a7da3ee9e86ac01ddce314df1f057cabf6f8c6310fde315b678fb23f7331",
-              "issue_scopes": {
-                "1079": "142a010f210e112a16dd120aa0ad5d1733f5cacbc06b341e3068e9067559716f"
-              },
-              "report": "Independent whole-original-Issue1079 assessment by actual non-implementing agent /root/tt194_review under genuine source lane52e9ef09fddd43ef9327f209e2aecc9d. Exact16-file source2c71d1bde0ee190b1123c4dcd1936b8d19d555b3 against maine8bf31f8921ec6a8f79c824f39c1fc3beff2f359 is a complete canonical shared-support upgrade to published Master1.8.0 fddcdd0d60db2e14cce0a53e6af23e12356c3bc7 and Tracker3.10.0 e71c9829247e60d79031dbb1bb038896fcedf4cc. This source implements the requested adoption; original acceptance still requires actual combined/main integration, compatible deployed-reader/current-client/native/public readback and separate ACL2071 evidence. Those future results are not claimed by this source approval. Whole accepted outcome has no product publication requirement: neither this support upgrade nor the original explicitly process-only ACL2071 publishes a new ACL installer. Existing genuine product requests remain binding. ACL2069/PR1070 retains separate scope, ownership and original automatic-replay acceptance; no closure or takeover is inferred.",
-              "product_isolation": {
-                "result": "isolated",
-                "evidence": "Native old-pin process-support1080 independently reconstructed complete immutable Git trees, official stable releases, published canonical export closure and pristine baseline; proof 28e7a7da3ee9e86ac01ddce314df1f057cabf6f8c6310fde315b678fb23f7331 covers all16files and exact original scope142a010f210e112a16dd120aa0ad5d1733f5cacbc06b341e3068e9067559716f. All28 separated helper files match authenticated manifest bytes. Only tracker_delivery_policy.py and tracker_process_support.py helper implementations change; both are exact published source already independently reviewed with real tests and Python3.9 pair. Baseline rendering inputs and all non-process baseline entries remain unchanged. Descriptor changes only standard revision/version and Tracker revision; tracker/config.json, guarded adapter, adoption controls, execution3 with5/5/5, Stage-disabled/permanent-stage, IDs/aliases, targets/checks/authorization and optional-policy absence are Git-byte-unchanged. The two genuine merge conflicts were resolved preserving complete ACL workflow/verification text except exact Master pin references; published immutable audit and idempotent maintained retry are inspected. AGENTS and current early-adoption navigation now match the new pair while old ACL2026 history remains preserved. Product source/configuration/packaging/dependencies/runtime/build/update inputs and existing release/complete-delivery workflows are Git-identical. PyInstaller explicit payload and imports do not consume changed governance docs/helpers; unchanged release manifest parser linked_numbers and its globals remain unchanged, as does transitive delivery_policy top-level AST. Reachable release governance does change: existing receipt resolver/recorder can call completion_assessment/summary, which adds validated isolated-process receipt handling; this is a canonical governance change, not an unreachable-code claim or product change. Ordinary product receipt requests/admission/scope/target/checks remain untouched; old canonical process_support1 stays compatible. No executable import side effect, credential distribution, installer/user-data change, publication or native-state migration was introduced. Original candidate historical evidence comprises731tooling tests passed419.76s,5unchanged manifest cases and80navigation/affected tests4.93s. Refreshed exact-source affected suite passed80tests7.15s; scanner/diff checks and upstream clean published no-override pairs passed. Existing hosted source CI remains required before batch approve, combined/main checks remain required later. No isolated supplemental receipt writer runs before actual compatible service deployment and admitted support adoption. Actual main advanced64e73a1e to e8bf31f8 through accepted PR1077. Read the complete seven-file foreign main delta: browser attach diagnostic logging only, Meta readback placement/country reporting, their product regression tests and product docs. All seven are inherited byte-identically; no new product import of the changed governance helpers, payload/build selection or configuration interaction is introduced. Thus product files are unchanged relative to current authoritative main, rather than being falsely represented as unchanged since the older baseline. Entire original Issue1079 requirements and original scope digest were reread after refreshed handoff. The actual original Worker retained its branch/task and handed off under new claimde604ff03d72482290f410e51c760efa. This reviewer independently acquired fresh lane52e9ef09fddd43ef9327f209e2aecc9d after verified handoff; no prior lane/review is reused as current approval."
-              }
-            },
-            "main_sha": "e8bf31f8921ec6a8f79c824f39c1fc3beff2f359",
-            "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
-            "issues": [
-              1079
-            ],
-            "recorded_at": "2026-10-22T00:01:23+00:00",
-            "issue_scopes": {
-              "1079": "142a010f210e112a16dd120aa0ad5d1733f5cacbc06b341e3068e9067559716f"
-            },
-            "process_support_issues": {
-              "1079": {
-                "number": 1079,
-                "title": "Adopt isolated manual verification completion support",
-                "body": "## Description\n\nAdopt the reviewed shared support that lets an actually verified, isolated manual process task finish without publishing an unchanged ACL installer. Preserve ACL application behavior, its local workflow safeguards and all other developers' ownership/history. Then validate that the adopted native client supports the real ACL-2071 completion; recording its separate supplemental receipt remains tied to the original task and genuine independent assessment.\n\n## Specifications\n\nOwner authorization: complete the process-completion fix end to end, with a compatible shared release and separately reviewed ACL adoption. Use existing schema3 capacity and preserve incumbent claims; no ownership exception or migration is requested. Current published selections are Master1.7.2 at4f148cbbbc2c9c65a7fdebba9b37551f91566e04 and Tracker3.9.2 at3d32586d72e4621f70d56d35f1e199a19fa13b00. Targets are independently reviewed, genuinely published Master1.8.0 at fddcdd0d60db2e14cce0a53e6af23e12356c3bc7 (v1.8.0, release420144866) and Tracker3.10.0 at e71c9829247e60d79031dbb1bb038896fcedf4cc (v3.10.0, release420140493). Actual-main checks and clean immutable no-override portable3.9 pair39691739580 passed.\n\nRelated work: TT194/PR195 and MR77 provide the compatible support. ACL2069/PR1070 belongs to the original developer with its own reserved3.9.4/1.7.3 scope; preserve that source, owner and original acceptance. This task adopts the distinct isolated_verification1 capability and does not silently complete or supersede2069.\n\nScope: use the maintained three-way standard upgrade against actual published official sources; inspect every local conflict. Only canonical separated process support, precise standard/engine pins, generated selected navigation/templates and relevant repository process knowledge may change. Preserve ACL's guarded scripts/acl_task_tracker.py, .workflow/adoption.json, project-specific instructions, schema3 execution with five workers/five source reviewers/batch5, disabled Stage choice, delivery target/checks/authorization, native status/ID/history policies and all state/ownership. Do not activate optional completion/context/retry/pause policies, seize foreign slots, rewrite frozen tasks, add a controller or publish an unchanged product.\n\nAcceptance criteria:\n- [ ] Exact stable Master/Tracker releases, immutable commits and complete trusted export closure are verified; maintained upgrade preserves all local controls and non-pin selections.\n- [ ] Whole product/source/configuration/build/install/update/publication scope is independently assessed; unchanged product installer is not requested for a genuinely canonical process-only support batch. Existing genuine product publication requests remain unchanged.\n- [ ] Required source/main/process/descriptor and relevant shared delivery-tool regressions pass on the exact candidate; current independent source and combined reviews bind complete original scope/proof.\n- [ ] Normal old-pin source approval and frozen integration admission are used under real ownership, when the integration slot is available. Actual main includes the complete reviewed scope without a product delivery request; the existing native completion procedure remains required.\n- [ ] Fresh guarded client and deployed compatible reader validate adopted selections, unchanged incumbent owners/policies/history, and supported ACL2071 preview. Actual ACL2071 supplemental completion is verified separately against its original acceptance and official successful Windows run.\n\nChecks: project descriptor and tracker-link/process admission, affected canonical support/upgrade/guard/delivery-governance regressions, exact immutable diff inspection and actual native/public readback. Full required CI is not waived. Product/runtime verification is required only if actual changes or indirect consumption invalidate the reviewed process-only proof.\n\nHandoff: owner-selected support adoption, not started by Issue creation alone. Actual current main64e73a1e and old pins were reread. Read-only maintained upgrade stopped at two genuine local text conflicts in delivery-check.yml and VERIFICATION.md without writing; resolve explicitly preserving ACL master push/draft validation and stronger verification guidance. Shared service deployment awaits a separate concrete security approval; prepare only under the currently adopted old client. No new isolated receipt writer may activate ahead of the deployed reader. Source owner must verify actual available capacity and real In Progress before edits.\n",
-                "labels": [
-                  "module:platform",
-                  "type:improvement"
-                ]
-              }
-            }
-          },
-          "lane": {
-            "id": "52e9ef09fddd43ef9327f209e2aecc9d",
-            "pr": 1080,
-            "issues": [
-              1079
-            ],
-            "actor": "Reviewer-H8K4N7",
-            "session": "review_acl2079_tt194_20261022",
-            "coordinator": "Coordinator-R6M9H2",
-            "started_at": "2026-10-21T23:58:33+00:00",
-            "state": "reviewing"
-          },
-          "approved_at": "2026-10-22T00:09:35+00:00"
-        }
-      },
       "1081": {
         "id": "eeb314be3d074616b11dac5a811a3773",
         "pr": 1081,
