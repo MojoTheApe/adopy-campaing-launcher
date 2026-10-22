@@ -7507,6 +7507,7 @@ window.cbTree = (function () {
           : x.stage === 'queued'
             ? (q.reason === 'profile' ? 'queued — waiting for its Multilogin profile'
                : q.state === 'waiting_review' ? aclEscHtml(cbReviewWait(q)) + cbReviewRelease(q)
+               : q.state === 'waiting_idle' ? aclEscHtml(cbIdleWait(q))
                : q.state === 'waiting_memory' ? 'queued — waiting for memory'
                : 'queued — waiting for a free slot'
                  + (q.ahead === undefined ? '' : ' (' + (q.ahead || 0) + ' ahead)'))
@@ -8176,6 +8177,9 @@ window.cbBuild = (function () {
     var gb = function (mb) { return (Math.max(0, Number(mb) || 0) / 1024).toFixed(1); };
     if (q.hold === 'review_windows') {
       return { state: 'build-wait', sign: '', why: cbReviewWait(q) };
+    }
+    if (q.hold === 'idle_windows') {
+      return { state: 'build-wait', sign: '', why: cbIdleWait(q) };
     }
     if ((q.hold === 'memory_low' || q.hold === 'below_reserve') && q.available_mb != null && q.profile_mb) {
       var reserve = Number(q.reserve_mb) || 0;
@@ -15663,6 +15667,13 @@ function cbReviewWait(q) {
   var n = Math.max(1, parseInt(q && q.kept, 10) || 1);
   return 'waiting: ' + n + ' review window' + (n === 1 ? ' is' : 's are') + ' still open — close them to continue';
 }
+/* ACL-2113: окна, оставленные для удобства, уступают место сами, простояв N минут. */
+function cbIdleWait(q) {
+  var names = (q && q.convenience_accounts) || [];
+  var mins = Math.max(1, Math.round((Number(q && q.idle_close_s) || 600) / 60));
+  return 'waiting: ' + (names.length ? names.join(', ') + (names.length === 1 ? ' is' : ' are') : 'kept windows are')
+    + ' kept open — a window that has been idle for ' + mins + ' min closes by itself to make room';
+}
 /* «Release» у каждого оставленного окна: снять место, не закрывая окно. */
 function cbReviewRelease(q) {
   return ((q && q.kept_accounts) || []).map(function (a) {
@@ -16824,6 +16835,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
           : queue.reason === 'profile'
           ? 'queued — waiting for the Multilogin profile (another run is using it)'
           : queue.state === 'waiting_review' ? aclEscHtml(cbReviewWait(queue)) + cbReviewRelease(queue)
+          : queue.state === 'waiting_idle' ? aclEscHtml(cbIdleWait(queue))
           : queue.state === 'waiting_memory' ? 'queued — waiting for memory'
           : 'queued — waiting for a free slot'
             + (queue.ahead === undefined ? '' : ' (' + (queue.ahead || 0) + ' ahead)'))
