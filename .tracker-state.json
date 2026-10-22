@@ -57080,7 +57080,7 @@
             "session": "run_a1021_558w"
           }
         ],
-        "state": "approved",
+        "state": "returning_approval",
         "worker": "Worker-A1021558",
         "coordinator": "Coordinator-A1021A",
         "handoff": {
@@ -57105,7 +57105,19 @@
           "at": "2026-10-17T16:30:39.578089+00:00",
           "remote_process_stopped_verified": false
         },
-        "reviewer": "Reviewer-A1021558"
+        "reviewer": "Reviewer-A1021558",
+        "return_operation": {
+          "id": "3430165863394028b8831328a0a554ad",
+          "actor": "Coordinator-A1021A",
+          "session": "run_a1021_a1021",
+          "report": "Stale vs main 515689de; author merges current main + changelog fragment, fresh review"
+        },
+        "return": {
+          "id": "3430165863394028b8831328a0a554ad",
+          "actor": "Coordinator-A1021A",
+          "session": "run_a1021_a1021",
+          "report": "Stale vs main 515689de; author merges current main + changelog fragment, fresh review"
+        }
       },
       "380": {
         "implementers": [
