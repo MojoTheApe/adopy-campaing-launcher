@@ -32,6 +32,7 @@ from typing import Any, Callable
 from src.fb_api import form_create as _fc
 from src.fb_api import form_templates as _ft
 from src.fb_api import forms as _forms
+from src.fb_api import pages as _pg
 from src.fb_api.graph import GraphClient, GraphError, GraphStop, WritesBlocked, WriteUnknown, normalize_act
 
 PAUSED = "PAUSED"
@@ -354,6 +355,20 @@ class AccountFacts:
     pages: list[str]
     pixels: list[str]
     page_names: dict[str, str] = field(default_factory=dict)
+    # ACL-2105: откуда Страница ("ad account" / "profile"); профильные дочитываются лениво.
+    page_sources: dict[str, str] = field(default_factory=dict)
+    profile_loader: Callable[["AccountFacts"], None] | None = field(default=None, repr=False, compare=False)
+    profile_loaded: bool = False
+
+    def ensure_profile(self) -> None:
+        """Дочитать Страницы профиля один раз (только чтение). Без загрузчика - ничего."""
+        if self.profile_loaded or self.profile_loader is None:
+            return
+        self.profile_loaded = True
+        self.profile_loader(self)
+
+    def page_source_of(self, page_id: str) -> str:
+        return self.page_sources.get(page_id, _pg.SOURCE_ACCOUNT)
 
 
 def preflight_account(client: GraphClient, act: str) -> AccountFacts:
@@ -373,14 +388,34 @@ def preflight_account(client: GraphClient, act: str) -> AccountFacts:
     got = str(acc.get("account_id") or "").strip()
     if got and got != digits:
         raise PlanError("Graph API answered for a different ad account. Nothing was created.")
-    pages = client.get_all(f"/{act}/promote_pages", {"fields": "id,name", "limit": 100}, max_pages=5)
-    if f"/{act}/promote_pages" in getattr(client, "truncated", []):
+    started = time.monotonic()
+    merged = _pg.read_merged(client, act, always_profile=False)
+    if merged.account_truncated:
         raise PlanError("Facebook Pages could not be fully loaded. Refresh pages before running the campaign.")
     pixels = client.get_all(f"/{act}/adspixels", {"fields": "id,name", "limit": 50}, max_pages=1)
-    return AccountFacts(act=act, currency=str(acc.get("currency") or "").upper(),
-                        page_names={str(p["id"]): str(p.get("name") or p["id"]) for p in pages if p.get("id")},
-                        pages=[str(p.get("id")) for p in pages if p.get("id")],
-                        pixels=[str(p.get("id")) for p in pixels if p.get("id")])
+    facts = AccountFacts(act=act, currency=str(acc.get("currency") or "").upper(),
+                         pixels=[str(p.get("id")) for p in pixels if p.get("id")],
+                         pages=[], page_names={}, page_sources={})
+    _apply_pages(facts, merged)
+    facts.profile_loaded = merged.profile_read
+
+    def load_profile(f: AccountFacts) -> None:
+        # Страница черновика не нашлась среди страниц кабинета: смотрим Страницы профиля.
+        again = _pg.read_merged(client, act, always_profile=True)
+        if again.account_truncated:
+            raise PlanError("Facebook Pages could not be fully loaded. Refresh pages before running the campaign.")
+        _apply_pages(f, again)
+        _pg.record_counts(again, where="creator", started=started)
+
+    facts.profile_loader = load_profile
+    _pg.record_counts(merged, where="creator", started=started)
+    return facts
+
+
+def _apply_pages(facts: AccountFacts, merged: "_pg.MergedPages") -> None:
+    facts.pages = [r["id"] for r in merged.rows]
+    facts.page_names = {r["id"]: r["name"] for r in merged.rows}
+    facts.page_sources = {r["id"]: r["source"] for r in merged.rows}
 
 
 MANUAL_PAGE_NOTICE = ("No Facebook Page is available. Only the campaign and ad sets will be created PAUSED; "
@@ -395,6 +430,10 @@ def needs_manual_page(plan: CampaignPlan) -> bool:
 def resolve_page(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
     """Страница плана: на кабинете и одна определённая. Заметки; ошибки — `PlanError`."""
     notes = []
+    if plan.page_id and plan.page_id not in facts.pages:
+        facts.ensure_profile()      # ACL-2105: возможно, это Страница самого профиля
+    elif not plan.page_id and not facts.pages:
+        facts.ensure_profile()
     if plan.page_id:
         # Принадлежность проверяется и при пустом списке: пустой список — не «можно всё».
         if plan.page_id not in facts.pages:
@@ -405,7 +444,10 @@ def resolve_page(plan: CampaignPlan, facts: AccountFacts) -> list[str]:
     elif facts.pages:
         plan.page_id = facts.pages[0]
         plan.page_source = "account default"
-        notes.append("Automatic Facebook Page: the first available page of this ad account is used")
+        notes.append("Automatic Facebook Page: the first available page of this ad account is used"
+                     if facts.page_source_of(plan.page_id) == _pg.SOURCE_ACCOUNT else
+                     "Automatic Facebook Page: the ad account has no Pages of its own; "
+                     "the first Page of the profile (with advertise rights) is used")
     else:
         if any(s.instant for s in getattr(plan, 'ad_sets', [])):
             raise PlanError("Instant Forms require a Facebook Page. Refresh pages or choose a website destination.")
@@ -1199,9 +1241,28 @@ class CampaignCreator:
             out.error, out.stop_kind = f"Write result unknown: {exc}", "unknown"
         return out
 
+    def check_profile_page(self, plan: CampaignPlan) -> None:
+        """Страница из профиля (не из кабинета) должна пройти проверку пригодности (ACL-2105).
+
+        Одно чтение у Meta на Страницу за жизнь creator'а; записей нет. Отказ - `PlanError` с
+        названием Страницы и причиной, до любой записи.
+        """
+        pid = plan.page_id
+        if not pid or self.facts.page_source_of(pid) != _pg.SOURCE_PROFILE:
+            return
+        cache = self.__dict__.setdefault("_profile_page_checks", {})
+        if pid not in cache:
+            cache[pid] = _pg.check_usable(self.client, pid, self.facts.page_names.get(pid, ""))
+        if cache[pid]:
+            name = self.facts.page_names.get(pid, pid)
+            raise PlanError(f"The Page {name!r} ({pid}) belongs to the profile, not to this ad account, and "
+                            f"cannot be used for ads here: {cache[pid]}. Choose another Page or add this Page "
+                            "to the ad account in Business Manager. Nothing was created.")
+
     def _prepare(self, plan: CampaignPlan, out: Outcome) -> tuple[list[dict], dict[str, bytes]]:
         """Всё, что проверяется до записи: страница, пиксель, таргетинг, файлы."""
         out.warnings += resolve_page_pixel(plan, self.facts)
+        self.check_profile_page(plan)
         targetings = [targeting_for(plan, s, self.resolver) for s in plan.ad_sets]
         self._step(out, "preflight: targeting resolved")
         self._page_forms = None
@@ -1537,6 +1598,9 @@ class CampaignCreator:
                 row["ads_not_created"] = True
                 row["pending_ad_count"] = len(row["ads"])
                 row["ads"] = []
+        if plan.page_id and self.facts.page_source_of(plan.page_id) == _pg.SOURCE_PROFILE:
+            # ACL-2105: только для Страниц профиля, чтобы сайтовый план остался прежним (золотой файл).
+            summary["page_origin"] = _pg.SOURCE_PROFILE
         if self.facts.page_names.get(plan.page_id, plan.page_id) != plan.page_id:
             summary["page_name"] = self.facts.page_names[plan.page_id]
         return summary

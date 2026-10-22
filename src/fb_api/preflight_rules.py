@@ -380,7 +380,7 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
 
     facts = creator.facts
     put("account_active", OK)
-    guarded("page_ok", lambda: (cr.resolve_page(plan, facts),
+    guarded("page_ok", lambda: (cr.resolve_page(plan, facts), creator.check_profile_page(plan),
                                 put("page_ok", WARNING if cr.needs_manual_page(plan) else OK,
                                     cr.MANUAL_PAGE_NOTICE if cr.needs_manual_page(plan) else "")))
     if any(not s.instant for s in plan.ad_sets):
