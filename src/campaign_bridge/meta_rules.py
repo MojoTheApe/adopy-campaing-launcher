@@ -40,7 +40,10 @@ ALLOWED_KINDS: dict[str, str] = {
     "cta_enum": "call_to_action",
     "placements_by_objective": "placements",
 }
-KINDS = tuple(ALLOWED_KINDS) + ("text_limit", "required_field")
+#: `fact` — справочная запись без проверки: факт о Meta, который билдер пока не
+#: умеет проверить (лимиты, снятие с поддержки, живые наблюдения). `check_job`
+#: её не читает; обязательна только пометка `note` с самим фактом.
+KINDS = tuple(ALLOWED_KINDS) + ("text_limit", "required_field", "fact")
 
 #: Как поле называется для человека в сообщении.
 FIELD_LABELS = {
@@ -147,6 +150,9 @@ def validate_rules(rules: Any) -> None:
                 raise MetaRulesError(f"{rid}: text_limit needs a positive int max_len")
             if not isinstance(rule["applies_to"].get("field"), str):
                 raise MetaRulesError(f"{rid}: text_limit needs applies_to.field")
+        elif kind == "fact":
+            if not isinstance(rule.get("note"), str) or not rule["note"].strip():
+                raise MetaRulesError(f"{rid}: kind fact needs a non-empty 'note'")
         elif kind == "required_field":
             req = rule.get("required")
             if not isinstance(req, list) or not req or not all(isinstance(x, str) for x in req):
