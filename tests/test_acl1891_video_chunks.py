@@ -251,10 +251,10 @@ class ChunkMeta(FakeMeta):
         got = sess["received"]
         return {"start_offset": str(got), "end_offset": str(min(got + self.meta_chunk, sess["size"]))}
 
-    def write(self, path, params, files=None, filename="", on_ad=False):
+    def write(self, path, params, files=None, filename="", on_ad=False, children_active=False, **_k):
         if not (path.endswith("/advideos") and "upload_phase" in params):
-            return super().write(path, params, files, filename, on_ad)
-        wp.check(ACT, "POST", path, params, files, on_ad=on_ad)
+            return super().write(path, params, files, filename, on_ad=on_ad, children_active=children_active, **_k)
+        wp.check(ACT, "POST", path, params, files, on_ad=on_ad, children_active=children_active)
         self.posts.append((path, dict(params)))
         phase = params["upload_phase"]
         if phase == "start":
@@ -353,10 +353,15 @@ def test_a_big_video_goes_up_in_chunks_and_everything_stays_paused(small, tmp_pa
     sess = next(iter(meta.sessions.values()))
     assert sess["done"] and sess["sha"].hexdigest() == _sha(f)
     assert len(_video_objects(meta)) == 1 and _video_objects(meta)[0]["title"].startswith("acl-")
+    # ACL-2114: the campaign stays PAUSED; ad sets and ads are ACTIVE under it. Uploads carry no status.
     for path, params in meta.posts:
-        assert "ACTIVE" not in json.dumps(params)
-        if path.rsplit("/", 1)[1] in ("campaigns", "adsets", "ads"):
+        edge = path.rsplit("/", 1)[1]
+        if edge == "campaigns":
             assert params["status"] == "PAUSED"
+        elif edge in ("adsets", "ads"):
+            assert params["status"] == "ACTIVE"
+        else:
+            assert "ACTIVE" not in json.dumps(params)
     # Целым файлом (поле source) в Meta ничего не ушло: только фазы загрузки.
     assert all("upload_phase" in p for path, p in meta.posts if path.endswith("/advideos"))
 
