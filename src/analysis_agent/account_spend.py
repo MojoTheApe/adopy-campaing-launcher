@@ -847,7 +847,8 @@ def _start_closed(entry, account_label: str, opened: _ReadOpen, recheck=None):
 
     profile_id = (getattr(entry, "profile_id", "") or "").strip()
     # ACL-1812 (ревью #813, B1-bis): закрыли недавно — не поднимаем (ACL-1811).
-    why = _stop_log.refusal(profile_id)
+    # ACL-2117: пока MLX досохраняет профиль, чтение ждёт (а не отказывает).
+    why = _stop_log.wait_or_refusal(profile_id, on_wait=lambda text: _set_wait_note(account_label, text))
     if why:
         raise ProfileNotAttachable(why, code="restart_cooldown")
     queue = _slot_queue()
@@ -980,14 +981,20 @@ def _close_if_still_pending(opened: _ReadOpen) -> None:
         _close_started(opened)
 
 
-def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False) -> None:
-    """После чтения: закрыть то, что чтение запустило (сразу или после паузы)."""
+def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False,
+                    grace_s: float | None = None) -> None:
+    """После чтения: закрыть то, что чтение запустило (сразу или после паузы).
+
+    `grace_s` (ACL-2117) — свой срок вместо `CLOSE_GRACE_S`: Check plan держит окно, пока
+    человек решает про Publish; если его не взяли, оно закроется по сроку, как и раньше.
+    """
     if not opened.started:
         return
-    if keep_for_next and CLOSE_GRACE_S > 0 and opened.profile_id:
+    grace = CLOSE_GRACE_S if grace_s is None else float(grace_s)
+    if keep_for_next and grace > 0 and opened.profile_id:
         with _PENDING_LOCK:
             _PENDING_CLOSE[opened.profile_id] = opened
-        timer = threading.Timer(CLOSE_GRACE_S, _close_if_still_pending, args=(opened,))
+        timer = threading.Timer(grace, _close_if_still_pending, args=(opened,))
         timer.daemon = True
         timer.start()
         return

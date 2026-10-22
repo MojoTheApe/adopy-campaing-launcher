@@ -331,6 +331,12 @@ class ApiPublisher:
             # Вкладка не ответила, браузер сказал почему (логин/checkpoint/молчит): стоп, без повторов.
             self._halt(exc)
 
+        try:
+            from src.fb_api import launch as _launch
+
+            _launch.note_graph_session(profile_id, bool(state.get("has_token")), account=account_label)
+        except Exception:  # noqa: BLE001 — телеметрия не роняет публикацию
+            pass
         if state.get("kind") == "checkpoint":
             self._halt(Checkpoint("the profile is on a Facebook checkpoint"))
         if state.get("kind") == "login":
@@ -537,6 +543,19 @@ class ApiPublisher:
 #: Потолок вызовов на предпроверку кабинета внутри «Check plan».
 PLAN_PREFLIGHT_MAX_CALLS = 12
 
+#: ACL-2117: сколько секунд Check plan держит открытым профиль, который сам поднял
+#: (0 — закрывать как раньше, через `CLOSE_GRACE_S`).
+PLAN_KEEP_OPEN_ENV = "ACL_PLAN_KEEP_OPEN_S"
+DEFAULT_PLAN_KEEP_OPEN_S = 600.0
+
+
+def plan_keep_open_s() -> float:
+    try:
+        value = float(str(os.environ.get(PLAN_KEEP_OPEN_ENV, "") or DEFAULT_PLAN_KEEP_OPEN_S).replace(",", "."))
+    except ValueError:
+        value = DEFAULT_PLAN_KEEP_OPEN_S
+    return max(0.0, min(3600.0, value))
+
 
 def _plan_in_read_session(account_label: str, drafts: list[Any]) -> list[dict[str, Any]]:
     from src.analysis_agent import account_spend_api as _api
@@ -554,6 +573,11 @@ def _plan_in_read_session(account_label: str, drafts: list[Any]) -> list[dict[st
         except PlanError as exc:
             raise ApiPublishError(f"{account_label}: {exc}", code="account") from exc
         pub._resolver = TargetingResolver(client)
+        # ACL-2117: проверенный план обычно сразу публикуют. Окно, которое подняла проверка,
+        # держим `plan_keep_open_s()` — Publish подхватит его без второго старта (и без
+        # остановки → переоткрытия во время сохранения профиля MLX). Не взяли — закроется по сроку.
+        if any(not d.errors for d in drafts) and plan_keep_open_s() > 0:
+            sess.keep_next, sess.keep_grace_s = True, plan_keep_open_s()
         for draft in drafts:
             if draft.errors:
                 out = Outcome(campaign_name=str(draft.name), warnings=list(draft.warnings or []))

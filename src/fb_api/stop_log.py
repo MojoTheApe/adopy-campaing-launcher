@@ -26,6 +26,13 @@ log = logging.getLogger(__name__)
 RESTART_COOLDOWN_ENV = "ACL_PROFILE_RESTART_COOLDOWN_S"
 DEFAULT_RESTART_COOLDOWN_S = 180.0
 
+#: ACL-2117: сколько секунд действие готово ЖДАТЬ конца паузы после остановки, а не
+#: отказывать. По умолчанию — вся пауза; `0` — прежнее поведение (сразу отказ).
+RESTART_MAX_WAIT_ENV = "ACL_PROFILE_RESTART_MAX_WAIT_S"
+#: Что видит человек, пока профиль досохраняется в облако MLX.
+SYNC_WAIT_MESSAGE = "Waiting for the profile to finish saving (cloud sync)"
+RESTART_POLL_S = 5.0
+
 _STALE_LOCK_S = 10.0
 _LOCK_WAIT_S = 5.0
 
@@ -35,6 +42,17 @@ def restart_cooldown_s() -> float:
         value = float(str(os.environ.get(RESTART_COOLDOWN_ENV, "") or DEFAULT_RESTART_COOLDOWN_S).replace(",", "."))
     except ValueError:
         value = DEFAULT_RESTART_COOLDOWN_S
+    return max(0.0, min(3600.0, value))
+
+
+def restart_max_wait_s() -> float:
+    raw = os.environ.get(RESTART_MAX_WAIT_ENV, "")
+    if str(raw).strip() == "":
+        return restart_cooldown_s()
+    try:
+        value = float(str(raw).replace(",", "."))
+    except ValueError:
+        return restart_cooldown_s()
     return max(0.0, min(3600.0, value))
 
 
@@ -186,3 +204,65 @@ def refusal(profile_id: str, log_: StopLog | None = None) -> str:
     span = f"{mins} min {secs} s" if mins and secs else (f"{mins} min" if mins else f"{secs} s")
     return (f"This profile was closed {elapsed} s ago \u2014 wait about {span} before opening it again "
             "(protects the account from logouts). Nothing was started.")
+
+
+def _sleep(seconds: float) -> None:      # точка подмены в тестах
+    time.sleep(seconds)
+
+
+def wait_or_refusal(profile_id: str, log_: StopLog | None = None, *,
+                    on_wait: Callable[[str], None] | None = None,
+                    cancelled: Callable[[], bool] | None = None,
+                    sleep: Callable[[float], None] | None = None) -> str:
+    """ACL-2117: подождать конец паузы после остановки; пусто — профиль можно запускать.
+
+    MLX досохраняет профиль в облако уже после остановки, а его API не
+    говорит, закончил ли он (в клиенте launcher такого вызова нет), поэтому
+    ориентир — пауза от ухода процесса (`restart_cooldown_s`). Раньше действие
+    в эту паузу отказывало; теперь оно стоит в очереди и ждёт, если ждать не
+    дольше `restart_max_wait_s()`. Дольше (или отменили) — прежний текст отказа.
+    Профиль, который не останавливали, не ждёт ничего.
+    """
+    pid = (profile_id or "").strip()
+    stops = log_ or _DEFAULT
+    why = refusal(pid, stops)
+    if not why:
+        return ""
+    left = stops.restart_wait_s(pid)
+    if left <= 0 or left > restart_max_wait_s():
+        return why
+    nap = sleep or _sleep
+    began = stops._wall()
+    stop_at = stops.last_stop(pid)
+    waited_for = left
+    for _ in range(int(waited_for / 0.1) + 10):     # страховка от часов, которые не идут
+        left = stops.restart_wait_s(pid)
+        if left <= 0:
+            break
+        if cancelled is not None and cancelled():
+            return refusal(pid, stops)
+        if on_wait is not None:
+            try:
+                on_wait(SYNC_WAIT_MESSAGE)
+            except Exception:  # noqa: BLE001 — строка ожидания не должна ронять запуск
+                log.exception("A profile wait note failed")
+        nap(max(0.1, min(RESTART_POLL_S, left)))
+    else:
+        return refusal(pid, stops)
+    waited = max(0.0, stops._wall() - began)
+    try:
+        from src.fb_api import launch as _launch
+
+        _launch._record({"event": "fb_api_profile_sync_wait", "sync_status": "cooldown",
+                         "cooldown_s": round(restart_cooldown_s(), 1),
+                         "waited_s": round(waited, 1), "planned_s": round(waited_for, 1),
+                         "stop_at": stop_at})
+        _launch.note_waited(pid, stop_at=stop_at, waited_s=waited)
+    except Exception:  # noqa: BLE001
+        pass
+    if on_wait is not None:
+        try:
+            on_wait("")
+        except Exception:  # noqa: BLE001
+            pass
+    return ""
