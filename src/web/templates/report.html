@@ -15559,6 +15559,32 @@ window.cbCheckPlan = function (picked, out, btn) {
   if (btn) btn.disabled = true;
   var parts = new Array(forms.length);
   var left = forms.length;
+  var pending = forms.map(function (x) {
+    return typeof cbFormAccount === 'function' ? cbFormAccount(x.form) : cbFormTitle(x.form);
+  });
+  var waiting = {};
+  function render() {
+    if (out.hidden) return;   // закрыли, пока ждали: не открывать заново
+    var notes = pending.filter(function (a) { return a && waiting[a]; }).map(function (a) {
+      return '<div class="cbd-plan-head">' + aclEscHtml(a) + ': ' + aclEscHtml(waiting[a]) + '</div>';
+    }).join('');
+    out.innerHTML = cbPlanFrame(parts.filter(Boolean).join('')
+      + (left ? '<div class="cbd-plan-head">Still checking ' + left + ' account(s)…</div>' : '') + notes);
+  }
+  /* Ждущие места профиля аккаунты: строка очереди (только память сервера, раз в 2 с). */
+  var waitTimer = setInterval(function () {
+    var still = pending.filter(Boolean);
+    if (!left || !still.length) { clearInterval(waitTimer); return; }
+    fetch('/publish-plan/waiting?' + still.map(function (a) { return 'account=' + encodeURIComponent(a); }).join('&'))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var next = (d && d.waiting) || {};
+        if (JSON.stringify(next) === JSON.stringify(waiting)) return;
+        waiting = next;
+        if (left) render();
+      })
+      .catch(function () {});
+  }, 2000);
   forms.forEach(function (x, i) {
     // ACL-1819: тот же запрос кладёт вердикты в карточку pre-flight audit (cbPreflightRun).
     (window.cbPreflightRun ? window.cbPreflightRun(x.form, x.only)
@@ -15569,11 +15595,11 @@ window.cbCheckPlan = function (picked, out, btn) {
         // ACL-1769: ошибка плана кампании ложится на её поле в редакторе.
         if (typeof cbApplyPlanResults === 'function') cbApplyPlanResults(x.form, data);
         parts[i] = cbPlanHtml(data);
+        pending[i] = '';
         left -= 1;
+        if (!left) clearInterval(waitTimer);
         if (!left && btn) btn.disabled = false;
-        if (out.hidden) return;   // закрыли, пока ждали: не открывать заново
-        out.innerHTML = cbPlanFrame(parts.filter(Boolean).join('')
-          + (left ? '<div class="cbd-plan-head">Still checking ' + left + ' account(s)…</div>' : ''));
+        render();
       });
   });
 };

@@ -5637,6 +5637,21 @@ async def publish_plan(request: Request) -> JSONResponse:
     return JSONResponse(result)
 
 
+@app.get("/publish-plan/waiting")
+async def publish_plan_waiting(request: Request) -> JSONResponse:
+    """Пока Check plan идёт: какие аккаунты ждут свободного места профиля.
+
+    Строка та же, что у Read spend («Waiting for a free profile slot», «Opening …»):
+    её ставит очередь профилей (`account_spend_api._open_gated`). Только память
+    сервера — ни MLX, ни браузера, ни Meta.
+    """
+    from src.analysis_agent import account_spend
+
+    labels = [a.strip() for a in request.query_params.getlist("account") if a.strip()][:50]
+    notes = {label: account_spend.hand_wait_note(label) for label in labels}
+    return JSONResponse({"waiting": {k: v for k, v in notes.items() if v}})
+
+
 # ACL-1800: команды над существующими кампаниями (статус/бюджет/ставка) — только
 # при ACL_FB_BACKEND=api, только по клику человека и с подтверждением превью.
 @app.post("/campaign-commands/preview")
