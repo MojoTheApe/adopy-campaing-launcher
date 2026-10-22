@@ -11,12 +11,15 @@ The earlier ACL-2026 scope, owners, counts and evidence below remain history;
 they are not silently reused as approval of this new task.
 
 Compare the complete new source against actual main
-`e8bf31f8921ec6a8f79c824f39c1fc3beff2f359`. The initial source against64e73a1e
-passed all required native checks, including Linux and Windows installer checks.
-After main advanced through PR1077, the genuine Reviewer returned this source;
-the original Worker reclaimed it and incorporated the seven new main files
-unchanged. That earlier review/check set remains history. The refreshed immutable
-head needs its own current proof, independent review and required native checks.
+`3bc8d9739a82ce8db0ddb67a832ea159bf40ed36`. Initial source3b7253f0 against64e73a1e
+and refreshed source2c71d1bd againste8bf31f8 each passed all16 required native
+checks, including Linux and Windows installer checks. The latter received genuine
+independent source approval. After main advanced through PR1083, the original
+Coordinator returned only this stale approval through the supported command;
+the original Worker reclaimed its same branch and incorporated all30 newly
+accepted main paths unchanged. Earlier review/check sets remain history. This
+refreshed immutable head needs its own current proof, independent review and
+required native checks.
 The maintained renderer/merger stopped
 at two genuine local conflicts. Explicit resolution preserves the descriptor
 workflow's master compatibility push, draft validation, permissions, jobs and
@@ -47,8 +50,11 @@ requests remain pending until their real configured delivery succeeds.
 Canonical process_support1 and instruction schema1 remain unchanged. This support
 upgrade uses normal source approval and a genuine frozen integration batch with
 independent whole-scope product-isolation review; it grants no direct-main route
-and requests no product publication. Shared reader installation must precede
-activation of new isolated receipt writers. ACL-2071's original task, main proof,
+and requests no product publication. The shared reader was actually installed at
+`e71c9829247e60d79031dbb1bb038896fcedf4cc` on2026-10-22 at06:36UTC through the
+maintained installer, with backup, all10 fresh healthy project snapshots and
+authentication/service controls verified. New isolated receipt writers remain
+inactive until actual reviewed adoption on main. ACL-2071's original task, main proof,
 reviewers, acceptance and successful official Windows run39684127119 remain
 separate evidence. Only after actual reader deployment and reviewed adoption may
 the supported supplemental command record its independently assessed process

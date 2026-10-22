@@ -37,6 +37,9 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   the account map before their first spend. Inactive countries have no marker;
   the expanded-country background remains a separate selection indication.
 - `src/analysis_agent`: statistics workbook reading, reports and reconciliation.
+  The dashboard tells an empty chosen period apart by owner (ACL-106): no workbook rows for
+  anyone (the file may need updating) versus rows for other managers but none for the
+  selected manager (nothing to review); the account map stays available in both.
 - `src/campaign_bridge`, `src/upload_agent`: campaign input/output preparation.
 - `src/fb_ads_rpa`, `src/meta_campaign_agent`: Ads Manager interactions, verified
   profile identity, draft preparation, queues and browser lifecycle. ACL-1250/#247
@@ -151,7 +154,8 @@ retry policy or employee installation is changed by documenting this plan.
 
 Describe implemented behavior and limitations here when changing the system. Preserve
 plans under original specs, label them as plans, and record what/why and ticket/PR
-links in CHANGELOG.md. Process-only changes belong in ../repository/CHANGELOG.md.
+links in a per-task fragment `changelog.d/ACL-NNNN.md` (folded into CHANGELOG.md by
+`scripts/fold_changelog.py`; see changelog.d/README.md). Process-only changes belong in ../repository/CHANGELOG.md.
 
 Repository instructions have a separately prepared direct-main route described in
 [PROCESS_INSTRUCTIONS.md](../repository/PROCESS_INSTRUCTIONS_ACL.md). Eligibility uses

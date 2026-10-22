@@ -134,20 +134,21 @@ def _hand_window_reopen_off(monkeypatch):
 # забрал чужой отказ через `_crop_refusal` -> `dirty` вместо `attached` — падение
 # зависело только от того, какие файлы достались шарду 3 CI. Сбрасываются лишь
 # уже импортированные модули: фикстура не тянет Playwright в чужие тесты.
+#
+# ACL-2078 (22.10): сбрасывалась лишь часть состояния — b97 оставлял
+# `_upload_why_tls.why` = `library_has_no_copy`, и
+# `test_additional_ad_without_creative_has_no_text.py` получал
+# `ad2_creative_upload:library_has_no_copy` вместо своей причины. Теперь
+# сбрасываются ВСЕ `threading.local` `meta_dom`/`crop_step`, изменяемые
+# контейнеры уровня модуля и прогон телеметрии главного потока — список и
+# правило «новое состояние вписать туда» в `tests/rpa_module_state.py`.
 @pytest.fixture(autouse=True)
 def _crop_and_media_refusal_state_per_test():
-    def reset():
-        crop = sys.modules.get("src.fb_ads_rpa.crop_step")
-        if crop is not None:
-            crop.set_plan(None)
-        md = sys.modules.get("src.fb_ads_rpa.meta_dom")
-        if md is not None:
-            md._note_media_refused(None)
-            md._reuse_state["counter_missing"] = False
+    from tests import rpa_module_state
 
-    reset()
+    rpa_module_state.reset()
     yield
-    reset()
+    rpa_module_state.reset()
 
 
 # Тесты не закрывают профили Multilogin в конце задания (ACL-1444).

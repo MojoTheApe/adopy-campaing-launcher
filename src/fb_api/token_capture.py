@@ -239,7 +239,7 @@ _HELPER_JS = r"""
   // write_policy.check_form_create). Возвращает null (можно) или короткую причину.
   function checkForm(spec) {
     const F = WRITE && WRITE.form_create;
-    if (!F) return 'form_policy';
+    if (!F || !Array.isArray(F.bool_keys)) return 'form_policy';
     const m = new RegExp('^/([0-9]{1,25})/' + F.edge + '$').exec(String(spec.path || ''));
     if (!m) return 'form_path';
     // Страница закреплена на сессию (WRITE.form_create.page), а не берётся у вызывающего.
@@ -291,7 +291,8 @@ _HELPER_JS = r"""
       }
     }
     if ('question_page_custom_headline' in c && !txt(c.question_page_custom_headline)) return 'form_headline';
-    if ('follow_up_action_url' in c && !url(c.follow_up_action_url)) return 'form_url';
+    if ('follow_up_action_url' in c && (!url(c.follow_up_action_url) || c.follow_up_action_url.length > F.max_text)) return 'form_url';
+    for (const k of F.bool_keys) if (k in c && typeof c[k] !== 'boolean') return 'form_bool';
     if ('privacy_policy' in c) {
       const p = c.privacy_policy;
       if (!only(p, 'privacy_policy') || !url(p.url) || !txt(p.link_text)) return 'form_privacy';
