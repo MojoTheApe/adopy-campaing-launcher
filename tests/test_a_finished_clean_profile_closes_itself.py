@@ -42,8 +42,9 @@ ACCOUNT = "FacebookDQ204 - Test"
 
 @pytest.fixture(autouse=True)
 def _switch_default(monkeypatch):
-    # conftest держит прежнее поведение для всех остальных тестов.
-    monkeypatch.delenv(rp.ENV_KEEP_PROFILES_OPEN, raising=False)
+    # conftest держит окна открытыми для всех остальных тестов; здесь —
+    # прежнее поведение ACL-1444 (выключатель снят явным `0`, ACL-2113).
+    monkeypatch.setenv(rp.ENV_KEEP_PROFILES_OPEN, "0")
 
 
 def _rows(step: str) -> list[dict]:
@@ -208,8 +209,12 @@ def test_the_switch_values(monkeypatch, value):
     assert rp.keep_profiles_open()
 
 
-def test_the_switch_is_off_by_default():
-    assert not rp.keep_profiles_open()
+def test_the_windows_stay_open_by_default_and_zero_turns_that_off(monkeypatch):
+    monkeypatch.delenv(rp.ENV_KEEP_PROFILES_OPEN, raising=False)
+    assert rp.keep_profiles_open()
+    for value in ("0", "false", "no", "off"):
+        monkeypatch.setenv(rp.ENV_KEEP_PROFILES_OPEN, value)
+        assert not rp.keep_profiles_open()
 
 
 def test_the_editor_must_say_all_edits_saved(monkeypatch):
