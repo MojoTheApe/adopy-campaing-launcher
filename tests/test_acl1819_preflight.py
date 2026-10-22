@@ -601,6 +601,10 @@ NAME_CASES = [
     ("1000_img.png", "Text0"), ("coffee.mp4", "Text C"), ("1080x1080-17.png", "Text D"),
     (r"C:\files\2403_square.JPG", "Text E"), ("", "Only text"), ("2046.png", ""), ("", ""),  # linux-ok: Windows path is only data for the name function, which must take the basename of backslash paths too
     ("12_2403.png", "T"), ("2403x1080_3011.png", "T"),
+    # ACL-2090: вариант в конце имени, размеры и соотношения сторон — не вариант.
+    ("2175_ARM22.png", "T"), ("2175_ADN3.png", "T"), ("2175_ARM07_1080x1920.png", "T"),
+    ("2175_post_9x16.mp4", "T"), ("2175_post_9:16.mp4", "T"), ("2175_post_1080х1920.png", "T"),
+    ("12_2175_ARM22.png", "T"), ("2175_ARM22_Story.png", "T"),
 ]
 
 
@@ -614,7 +618,7 @@ def test_the_client_names_ads_exactly_like_the_server():
 
 def test_a_jpg_and_an_mp4_of_the_same_creative_with_the_same_text_are_duplicates():
     names = _harness("--names", [["2046 1.jpg", "Text A"], ["2046 1.mp4", "Text A"]])["names"]
-    assert names[0] == names[1] == "2046 - Text A"
+    assert names[0] == names[1] == "2046 1 - Text A"  # ACL-2090: «1» в конце — вариант
     ads = [{"name": n, "file": f, "form_id": "", "body": "b", "headline": "h", "cta": "LEARN_MORE"}
            for n, f in zip(names, ["2046 1.jpg", "2046 1.mp4"])]
     inp = _with(ads=ads)
