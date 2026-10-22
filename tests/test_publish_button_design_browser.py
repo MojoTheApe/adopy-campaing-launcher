@@ -9,6 +9,7 @@ from test_builder_multi_publish_browser import (  # noqa: F401
     browser, html, ui, add, ready, open_card, publish_one, finish, job_of,
 )
 from test_builder_publish_selected_browser import box, wait_posts
+from test_builder_multi_publish_browser import FORM_JS
 
 
 def appearance(button):
@@ -158,6 +159,26 @@ def test_scope_and_all_count_exclude_running_accounts_and_match_submission(ui):
     assert contrast(style) >= 4.5
 
 
+def click_box_now(page, account, slot=0):
+    """Click the campaign checkbox without moving focus, on the live DOM node.
+
+    `box(...).evaluate(...)` resolves the node first and clicks it a moment later; the
+    drawer's debounced repaint (`repaintSoon`, 120 ms after `ready`) can detach the node
+    in between, and a click on a detached checkbox fires no `change` (ACL-2086). Looking
+    the node up and clicking it inside one page task cannot be interleaved with a repaint.
+    A real Playwright click is not an option here: it would move focus off the select.
+    """
+    clicked = page.evaluate('''([a, i]) => {
+      const f = (''' + FORM_JS + ''')(a);
+      const cid = f.querySelectorAll('.cb-slot')[i].dataset.cbdId;
+      const b = document.querySelector('.cbd-camp[data-camp="' + cid + '"] input[type="checkbox"]');
+      if (!b || !b.isConnected || b.disabled) return false;
+      b.click();
+      return true;
+    }''', [['Demo', 'Other'][account], slot])
+    assert clicked, 'campaign checkbox was not available to click'
+
+
 def test_checkbox_scope_updates_without_replacing_focused_footer_select(ui):
     p, _ = ui
     add(p, 0, count=2)
@@ -165,11 +186,11 @@ def test_checkbox_scope_updates_without_replacing_focused_footer_select(ui):
     select = p.locator('.cbd-pick-country')
     select.focus()
     p.evaluate('window.publishFocusedSelect = document.activeElement')
-    box(p, 0, 0).evaluate('b=>b.click()')
+    click_box_now(p, 0)
     expect(p.locator('.cbd-publication-scope strong')).to_have_text('1 campaign selected')
     expect(p.locator('.cbd-publish-all')).to_have_text('Publish selected → drafts (1)')
     assert p.evaluate('document.activeElement === window.publishFocusedSelect && document.contains(window.publishFocusedSelect)')
-    box(p, 0, 0).evaluate('b=>b.click()')
+    click_box_now(p, 0)
     expect(p.locator('.cbd-publish-all')).to_have_text('Publish all → drafts (2)')
 
 
