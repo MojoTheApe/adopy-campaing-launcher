@@ -56082,7 +56082,7 @@
             "session": "run_w1022_1708"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1022708",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -56112,7 +56112,8 @@
           "actor": "Coordinator-M1011A",
           "session": "coord-m1011a-20261015",
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
-        }
+        },
+        "reviewer": "Reviewer-AI1022708"
       },
       "73": {
         "implementers": [
@@ -65033,8 +65034,7 @@
     "review_queue": [
       1054,
       710,
-      1069,
-      708
+      1069
     ],
     "review": null,
     "history": [
@@ -116029,6 +116029,13 @@
             "approved_at": "2026-10-22T07:27:39+00:00"
           }
         }
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-22T07:31:34+00:00",
+        "pr": 952,
+        "lane": "dad01254c81242a98883b0a352943571",
+        "actor": "Reviewer-AI1022708"
       }
     ],
     "policy": {
@@ -127936,7 +127943,20 @@
       "started_at": "2026-10-22T06:29:13+00:00",
       "ineligible": {}
     },
-    "source_reviews": {},
+    "source_reviews": {
+      "952": {
+        "id": "dad01254c81242a98883b0a352943571",
+        "pr": 952,
+        "issues": [
+          708
+        ],
+        "actor": "Reviewer-AI1022708",
+        "session": "run_ai1022_708",
+        "coordinator": "Coordinator-I1021A",
+        "started_at": "2026-10-22T07:31:34+00:00",
+        "state": "reviewing"
+      }
+    },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
   },
   "maintenance_history": [
