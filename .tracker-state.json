@@ -57560,7 +57560,7 @@
             "session": "run_w1022_2052"
           }
         ],
-        "state": "queued",
+        "state": "reviewing",
         "worker": "Worker-W1022052",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -57579,7 +57579,8 @@
         },
         "pr": 1057,
         "queued_at": "2026-10-22T03:13:22+00:00",
-        "review_report": "stale vs main e8bf31f8; author merges current main and hands off for a fresh review; no content findings"
+        "review_report": "stale vs main e8bf31f8; author merges current main and hands off for a fresh review; no content findings",
+        "reviewer": "Reviewer-W1022052"
       },
       "1053": {
         "implementers": [
@@ -61031,6 +61032,10 @@
       "Worker-W1022053": {
         "session": "run_w1022_2053",
         "role": "Worker"
+      },
+      "Reviewer-W1022052": {
+        "session": "run_w1022_052",
+        "role": "Reviewer"
       }
     },
     "completed": {
@@ -63986,8 +63991,7 @@
     "review_queue": [
       1054,
       710,
-      1069,
-      1052
+      1069
     ],
     "review": {
       "id": "9d03f45ca4924033a6e8b7a5f506d396",
@@ -112677,6 +112681,13 @@
         "issue": 1052,
         "pr": 1057,
         "actor": "Worker-W1022052"
+      },
+      {
+        "event": "review-acquired",
+        "at": "2026-10-22T03:17:32+00:00",
+        "pr": 1057,
+        "lane": "3b4a065dbdae4244b255f6a7ed404a48",
+        "actor": "Reviewer-W1022052"
       }
     ],
     "policy": {
@@ -123646,7 +123657,20 @@
       "started_at": "2026-10-22T01:05:12+00:00",
       "ineligible": {}
     },
-    "source_reviews": {},
+    "source_reviews": {
+      "1057": {
+        "id": "3b4a065dbdae4244b255f6a7ed404a48",
+        "pr": 1057,
+        "issues": [
+          1052
+        ],
+        "actor": "Reviewer-W1022052",
+        "session": "run_w1022_052",
+        "coordinator": "Coordinator-I1021A",
+        "started_at": "2026-10-22T03:17:32+00:00",
+        "state": "reviewing"
+      }
+    },
     "delivery_policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933"
   },
   "maintenance_history": [
