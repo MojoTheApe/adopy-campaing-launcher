@@ -49095,6 +49095,18 @@
         "state": "implementing",
         "started_at": "2026-10-22T05:39:15+00:00",
         "from_status": "status:todo"
+      },
+      "839": {
+        "actor": "Worker-W1021839",
+        "session": "run_w1021_1839",
+        "coordinator": "Coordinator-I1021A",
+        "branch": "codex/acl-1839-connection-panel-layout",
+        "worktree": "C:\\acl-int-w1839",
+        "id": "26acff1d5bad40cfb5e459809c442000",
+        "issue": 839,
+        "state": "implementing",
+        "started_at": "2026-10-22T05:46:47+00:00",
+        "from_status": "status:todo"
       }
     },
     "tasks": {
@@ -53834,9 +53846,13 @@
           {
             "actor": "Worker-W1021839",
             "session": "run_w1021_1839"
+          },
+          {
+            "actor": "Worker-W1021839",
+            "session": "run_w1021_1839"
           }
         ],
-        "state": "changes_requested",
+        "state": "implementing",
         "worker": "Worker-W1021839",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
@@ -53867,8 +53883,8 @@
           "session": "coord-m1011a-20261015",
           "report": "\ufeffStale vs main ea41acbf; author merges current main and gets a fresh review - owner 2026-10-21"
         },
-        "reviewer": "Reviewer-S1021839",
-        "rework": true
+        "rework": true,
+        "rework_claim": "26acff1d5bad40cfb5e459809c442000"
       },
       "840": {
         "implementers": [
@@ -114322,6 +114338,13 @@
         "issue": 53,
         "pr": 1032,
         "actor": "Worker-W1022402"
+      },
+      {
+        "event": "claimed",
+        "at": "2026-10-22T05:46:47+00:00",
+        "issue": 839,
+        "claim": "26acff1d5bad40cfb5e459809c442000",
+        "actor": "Worker-W1021839"
       }
     ],
     "policy": {
