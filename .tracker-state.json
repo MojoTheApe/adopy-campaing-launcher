@@ -124310,7 +124310,8 @@
         "main_prs": [
           1082
         ],
-        "finished_at": "2026-10-22T03:18:28+00:00"
+        "finished_at": "2026-10-22T03:18:28+00:00",
+        "closing_sources": true
       }
     },
     "integration": null,
