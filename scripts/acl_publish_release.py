@@ -67,11 +67,13 @@ def verify_promotion(tag: str, source_repo: str, report=print) -> str:
         api = reuse.retrying(_api)
         heads = reuse.collect_pr_heads(Path.cwd(), api, source_repo, tree, [sha], strict=True)
         # Прогоны, которые main-прогон сам назвал переиспользованными, берём по id напрямую.
-        named = reuse.reused_run_ids(api, source_repo, jobs, "ci.yml")
+        logs = reuse.retrying(lambda job_id: _gh("api", "--allow-escape-sequences",
+                                               f"repos/{source_repo}/actions/jobs/{job_id}/logs"))
+        named = reuse.reused_run_ids(api, source_repo, jobs, "ci.yml", logs=logs, tree=tree)
         # Собственные пройденные задания записанного main-прогона тоже считаются (3.11 после
         # PR в main идёт именно в нём): он push-прогон этого коммита, поэтому не исключается.
         proof = reuse.find_reuse(Path.cwd(), api, source_repo, "ci.yml", tree, pr_heads=heads,
-                                 run_ids=named, empty_retries=2)
+                                 run_ids=named + [run["id"]], empty_retries=2)
     except Exception as error:  # noqa: BLE001 — недоказанный прогон = отказ
         raise ValueError("Recorded main CI reused a run that could not be proven: " + type(error).__name__) from error
     if not proof:

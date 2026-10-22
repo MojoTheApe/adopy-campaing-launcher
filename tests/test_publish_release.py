@@ -436,3 +436,122 @@ def _pr(state):
     return {"number": 7, "merged_at": "2026-10-04T00:00:00Z", "merge_commit_sha": state["main"],
             "head": {"sha": state["stage"], "repo": {"full_name": "test/source"}},
             "base": {"ref": "main", "repo": {"full_name": "test/source"}}}
+
+
+def _without_listing(monkeypatch):
+    ok = pub._gh
+    def gh(*args):
+        if "/workflows/ci.yml/runs?" in args[1]:
+            raise subprocess.CalledProcessError(1, "gh", stderr="listing unavailable")
+        return ok(*args)
+    monkeypatch.setattr(pub, "_gh", gh)
+
+
+def test_complete_named_proof_never_requests_the_run_list(reused_release, monkeypatch):
+    reused_release["annotations"] = [REUSE_NOTE]
+    _without_listing(monkeypatch)
+    assert pub.verify_promotion("acl-release-2026-10-04", "test/source") == reused_release["main"]
+    assert not any("/workflows/" in path for path in reused_release["calls"])
+
+
+def test_named_partial_proof_combines_with_main_jobs_without_listing(reused_release, monkeypatch):
+    reused_release["annotations"] = [REUSE_NOTE]
+    reused_release["stage_jobs"] = one_python_jobs(41)
+    reused_release["main_jobs"] = _only(jobs_of(42), lambda n: "(3.11" in n or n in {"ACL verification", pub.reuse.SCOPE_JOB["ci.yml"]})
+    _without_listing(monkeypatch)
+    lines = []
+    assert pub.verify_promotion("acl-release-2026-10-04", "test/source", report=lines.append) == reused_release["main"]
+    assert "runs https://github.com/test/source/actions/runs/41, https://github.com/test/source/actions/runs/42" in lines[0]
+
+
+def _legacy_scope_log(state, monkeypatch, **overrides):
+    tree = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], text=True).strip()
+    payload = {"reason": "reused-green-full-run-of-same-tree", "tree": tree, "commit": state["stage"],
+               "windows": False, "linux": False, "python": ["3.11", "3.13"],
+               "reused_runs": ["https://github.com/test/source/actions/runs/41"],
+               "reused_from": "https://github.com/test/source/actions/runs/41"}
+    payload.update(overrides)
+    scope_job = next(j for j in state["main_jobs"]["jobs"] if j["name"] == pub.reuse.SCOPE_JOB["ci.yml"])
+    path = f"repos/test/source/actions/jobs/{scope_job['id']}/logs"
+    ok = pub._gh
+    calls = []
+    def gh(*args):
+        if args[-1].endswith("/logs"):
+            calls.append(args[-1])
+            assert args == ("api", "--allow-escape-sequences", path)
+            return ("2026-10-22T15:01:20.000Z ##[group]Run python3 scripts/acl_ci_scope.py --workflow ci.yml\n"
+                    "2026-10-22T15:01:23.123Z " + json.dumps(payload) + "\n"
+                    "2026-10-22T15:01:24.000Z ##[group]Run python3 scripts/acl_scan_secrets.py\n")
+        return ok(*args)
+    monkeypatch.setattr(pub, "_gh", gh)
+    return calls
+
+
+def test_legacy_main_scope_stdout_names_the_direct_run_proof(reused_release, monkeypatch):
+    logs = _legacy_scope_log(reused_release, monkeypatch)
+    _without_listing(monkeypatch)
+    assert pub.verify_promotion("acl-release-2026-10-04", "test/source") == reused_release["main"]
+    assert len(logs) == 1 and "repos/test/source/actions/runs/41" in reused_release["calls"]
+
+
+def test_legacy_stdout_pr_proof_survives_transient_binding_failure(reused_release, monkeypatch):
+    reused_release["stage_run"]["event"] = "pull_request"
+    reused_release["pulls"] = [_pr(reused_release)]
+    tree = subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], text=True).strip()
+    reused_release["annotations"] = [{"title": "acl-tested-tree", "message": "tree=" + tree}]
+    _legacy_scope_log(reused_release, monkeypatch)
+    counters = _flaky(reused_release, monkeypatch, empty_list_always=True, pulls_fail=1)
+    assert pub.verify_promotion("acl-release-2026-10-04", "test/source") == reused_release["main"]
+    assert counters["pulls"] >= 2 and counters["list"] == 0
+
+
+@pytest.mark.parametrize("break_it", [
+    lambda s: s.update(stage_run=dict(s["stage_run"], repository={"full_name": "foreign/repo"})),
+    lambda s: s.update(stage_run=dict(s["stage_run"], path=".github/workflows/other.yml")),
+    lambda s: s.update(stage_run=dict(s["stage_run"], event="schedule")),
+    lambda s: s.update(stage_run=dict(s["stage_run"], head_sha="0" * 40)),
+    lambda s: s.update(stage_run=dict(s["stage_run"], event="pull_request"), pulls=[_pr(s)]),
+    lambda s: s.update(stage_run=dict(s["stage_run"], event="pull_request"),
+                       annotations=[{"title": "acl-tested-tree", "message": "tree=" + "f" * 40}], pulls=[_pr(s)]),
+    lambda s: s.update(stage_jobs=one_python_jobs(41)),
+    lambda s: s.update(stage_jobs=jobs_of(41, "skipped")),
+])
+def test_legacy_scope_ids_still_need_trusted_full_run_proof(reused_release, monkeypatch, break_it):
+    _legacy_scope_log(reused_release, monkeypatch)
+    break_it(reused_release)
+    _flaky(reused_release, monkeypatch, empty_list_always=True)
+    with pytest.raises(ValueError, match="neither ran the full test matrix"):
+        pub.verify_promotion("acl-release-2026-10-04", "test/source")
+
+
+@pytest.mark.parametrize("overrides", [
+    {"tree": "f" * 40}, {"commit": "invalid"}, {"reason": "product"},
+    {"reused_runs": ["https://github.com/foreign/repo/actions/runs/41"]},
+    {"reused_from": "https://github.com/test/source/actions/runs/41?untrusted=true"},
+])
+def test_legacy_scope_payload_does_not_supply_ids_when_invalid(reused_release, monkeypatch, overrides):
+    _legacy_scope_log(reused_release, monkeypatch, **overrides)
+    counters = _flaky(reused_release, monkeypatch, empty_list_always=True)
+    with pytest.raises(ValueError, match="neither ran the full test matrix"):
+        pub.verify_promotion("acl-release-2026-10-04", "test/source")
+    assert "repos/test/source/actions/runs/41" not in reused_release["calls"] and counters["list"] > 0
+
+
+def test_urls_or_json_outside_the_classifier_step_do_not_supply_ids():
+    payload = json.dumps({"tree": "a" * 40, "commit": "b" * 40,
+                          "reason": "reused-green-full-run-of-same-tree",
+                          "reused_from": "https://github.com/test/source/actions/runs/41"})
+    log = ("https://github.com/test/source/actions/runs/41\n" + payload + "\n"
+           "##[group]Run python3 -m pytest tests/\n" + payload)
+    assert pub.reuse.scope_log_run_ids(log, "test/source", "ci.yml", "a" * 40) == []
+
+
+def test_new_annotation_does_not_need_legacy_logs(reused_release, monkeypatch):
+    reused_release["annotations"] = [REUSE_NOTE]
+    ok = pub._gh
+    def gh(*args):
+        assert not args[-1].endswith("/logs")
+        return ok(*args)
+    monkeypatch.setattr(pub, "_gh", gh)
+    _without_listing(monkeypatch)
+    assert pub.verify_promotion("acl-release-2026-10-04", "test/source") == reused_release["main"]

@@ -295,7 +295,12 @@ closed classification.
 Combined batch, actual stage, promotion/main and manual contexts require complete
 applicable checks. A push or PR may reuse successful applicable jobs of the exact
 same Git tree (ACL-1565/1649, `scripts/acl_ci_reuse.py`); the run summary links
-that evidence. Manual runs and uncertainty run in full. Never treat separate
+that evidence. Combined batch PRs run their own full matrix without borrowing jobs.
+Release validation fetches the reused run IDs recorded by the successful main
+scope job (annotation, or its older classifier JSON log), revalidates their exact
+tree, merged-PR binding and jobs, and combines them with main's successful jobs.
+Complete proof returns without a run-list lookup; partial proof retains bounded
+discovery and fail-closed validation. Manual runs and uncertainty run in full. Never treat separate
 source checks as combined-content proof. The private pinned Master
 Action's access must be verified in a real consumer run. Draft descriptor success
 is structural feedback, not activation or live environment evidence.

@@ -262,10 +262,49 @@ def reuse_marker_line(run_urls, repo):
     return f"::notice title={REUSE_TITLE}::runs={','.join(ids)}" if ids else ""
 
 
-def reused_run_ids(api, repo, jobs, workflow):
-    """Id прогонов из аннотации scope-задания прогона; нет аннотации или ошибка - пустой список."""
+def scope_log_run_ids(log, repo, workflow, tree):
+    """Legacy scope stdout supplies candidate IDs, never proof of their successful jobs.
+
+    Read only the classifier's JSON result in its own Actions step, not URLs in
+    tests, comments or unrelated log lines. The caller obtains this log from the
+    recorded main run's successful scope job; every candidate is then re-proven.
+    """
+    found, in_scope = [], False
+    for line in log.splitlines():
+        line = re.sub(r"^\d{4}-\d\d-\d\dT[\d:.]+Z ", "", line)
+        if line.startswith("##[group]Run "):
+            in_scope = line == f"##[group]Run python3 scripts/acl_ci_scope.py --workflow {workflow}"
+        if not in_scope or not line.startswith("{"):
+            continue
+        try:
+            result = json.loads(line)
+        except ValueError:
+            continue
+        if (not isinstance(result, dict) or result.get("tree") != tree
+                or not SHA.fullmatch(str(result.get("commit") or ""))
+                or result.get("reason") not in {"reused-green-full-run-of-same-tree",
+                                               "partly-reused-green-runs-of-same-tree"}):
+            continue
+        urls = result.get("reused_runs", [])
+        if not isinstance(urls, list):
+            continue
+        urls = urls + [result.get("reused_from")]
+        if not all(valid_run_url(url, repo) for url in urls):
+            continue
+        ids = list(dict.fromkeys(int(url.rsplit("/", 1)[1]) for url in urls))
+        if len(ids) > 20:
+            return []
+        found.append(ids)
+    # A normal classifier produces exactly one result. Ambiguous output is not
+    # authoritative; retain the older discovery fallback instead.
+    return found[0] if len(found) == 1 else []
+
+
+def reused_run_ids(api, repo, jobs, workflow, *, logs=None, tree=None):
+    """Candidate IDs from the main scope annotation, or its retained legacy stdout."""
     rows = jobs.get(SCOPE_JOB.get(workflow)) or []
-    if len(rows) != 1 or not isinstance(rows[0].get("id"), int):
+    if (len(rows) != 1 or not isinstance(rows[0].get("id"), int)
+            or rows[0].get("status") != "completed" or rows[0].get("conclusion") != "success"):
         return []
     found = []
     try:
@@ -274,9 +313,16 @@ def reused_run_ids(api, repo, jobs, workflow):
                 match = REUSE_MESSAGE.fullmatch(str(note.get("message") or "").strip())
                 if match:
                     found += [int(x) for x in match[1].split(",") if int(x) not in found]
-    except Exception:  # noqa: BLE001 - запасной источник; без него работает поиск по head_sha
-        return []
-    return found[:20]
+    except Exception:  # noqa: BLE001 - legacy stdout or head_sha discovery remains available
+        pass
+    if found:
+        return found[:20]
+    if logs is not None and SHA.fullmatch(tree or ""):
+        try:
+            return scope_log_run_ids(logs(rows[0]["id"]), repo, workflow, tree)
+        except Exception:  # noqa: BLE001 - retained logs may have expired; discovery still works
+            pass
+    return []
 
 
 def tested_tree(api, repo, jobs, workflow):
@@ -394,11 +440,16 @@ def find_coverage(root, api, repo, workflow, tree, exclude_run_id=None, pr_heads
             continue
         run = api(f"repos/{repo}/actions/runs/{rid}")
         commit = (run or {}).get("head_sha")
-        if commit in events and run_header_ok(run, repo, workflow, commit, exclude_run_id, events[commit]):
+        if (run.get("id") == rid and commit in events
+                and run_header_ok(run, repo, workflow, commit, exclude_run_id, events[commit])):
             accept(run, commit)
+        if relevant <= covered:
+            return {"covered": covered, "runs": runs}
     for commit, allowed in events.items():
         for run in candidate_runs(api, repo, workflow, commit, exclude_run_id, allowed, empty_retries):
             accept(run, commit)
+            if relevant <= covered:
+                return {"covered": covered, "runs": runs}
     return {"covered": covered, "runs": runs}
 
 
