@@ -50351,20 +50351,6 @@
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
       },
-      "1086": {
-        "actor": "Worker-W1022086",
-        "session": "run_w1022_2086",
-        "coordinator": "Coordinator-I1021A",
-        "branch": "work/acl-2086-publish-button-focus-test",
-        "worktree": "C:\\acl-int-w2086",
-        "id": "e7c8b3bf3bf94e16a746ff4871e23b52",
-        "issue": 1086,
-        "state": "handoff",
-        "started_at": "2026-10-22T07:56:26+00:00",
-        "from_status": "status:todo",
-        "pr": 1088,
-        "report": "ACL-2086 report.\n\nRoot cause: test_checkbox_scope_updates_without_replacing_focused_footer_select resolved the campaign checkbox via box(...).evaluate(...) and clicked it later. The drawer's debounced repaint (repaintSoon, 120 ms) landing just after ready() can replace the card list in between; the click then hit a detached node (isConnected false in diagnostics), fired no change event, and the scope text stayed \"All 2 campaigns\". Reproduced 1 failure in ~20 runs before the fix.\n\nFix (tests only, no product change): new helper click_box_now looks up the checkbox and clicks it in a single page task, so a repaint cannot interleave; a real Playwright click is unusable because it would move focus off the footer select. No sleeps, assertions unchanged. Changelog fragment docs/system/changelog.d/ACL-2086.md.\n\nVerification: 30/30 consecutive local runs pass on the PR head; whole file 12 passed.\nPR: #1088."
-      },
       "708": {
         "actor": "Worker-W1022708",
         "session": "run_w1022_1708",
@@ -59877,9 +59863,25 @@
             "session": "run_w1022_2086"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1022086",
-        "coordinator": "Coordinator-I1021A"
+        "coordinator": "Coordinator-I1021A",
+        "handoff": {
+          "actor": "Worker-W1022086",
+          "session": "run_w1022_2086",
+          "coordinator": "Coordinator-I1021A",
+          "branch": "work/acl-2086-publish-button-focus-test",
+          "worktree": "C:\\acl-int-w2086",
+          "id": "e7c8b3bf3bf94e16a746ff4871e23b52",
+          "issue": 1086,
+          "state": "handoff",
+          "started_at": "2026-10-22T07:56:26+00:00",
+          "from_status": "status:todo",
+          "pr": 1088,
+          "report": "ACL-2086 report.\n\nRoot cause: test_checkbox_scope_updates_without_replacing_focused_footer_select resolved the campaign checkbox via box(...).evaluate(...) and clicked it later. The drawer's debounced repaint (repaintSoon, 120 ms) landing just after ready() can replace the card list in between; the click then hit a detached node (isConnected false in diagnostics), fired no change event, and the scope text stayed \"All 2 campaigns\". Reproduced 1 failure in ~20 runs before the fix.\n\nFix (tests only, no product change): new helper click_box_now looks up the checkbox and clicks it in a single page task, so a repaint cannot interleave; a real Playwright click is unusable because it would move focus off the footer select. No sleeps, assertions unchanged. Changelog fragment docs/system/changelog.d/ACL-2086.md.\n\nVerification: 30/30 consecutive local runs pass on the PR head; whole file 12 passed.\nPR: #1088."
+        },
+        "pr": 1088,
+        "queued_at": "2026-10-22T08:43:29+00:00"
       }
     },
     "actors": {
@@ -66129,7 +66131,8 @@
     "review_queue": [
       1054,
       710,
-      1069
+      1069,
+      1086
     ],
     "review": null,
     "history": [
@@ -117601,6 +117604,13 @@
         "issue": 708,
         "claim": "66587dd00a954ec3a21cb7e2a872a9cb",
         "actor": "Worker-W1022708"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-22T08:43:29+00:00",
+        "issue": 1086,
+        "pr": 1088,
+        "actor": "Worker-W1022086"
       }
     ],
     "policy": {
