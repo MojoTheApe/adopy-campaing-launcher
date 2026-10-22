@@ -6359,6 +6359,43 @@
         "issue_scopes": {
           "53": "e422537de9fdf02be347310b1d1b6a4ad717569d42ac5e4380170ffe2e257df9"
         }
+      },
+      "1085": {
+        "kind": "independent-review",
+        "verdict": "approved",
+        "implementer": "Coordinator-I1021A",
+        "reviewer": "Reviewer-AH1022B85",
+        "review_session": "run_ah1022_b85",
+        "execution_lane": "6ce6294652d74de3a0ea514b37fd6080",
+        "batch_id": "50de16a3aac241f4a08a1c0e4406e44e",
+        "source_heads": [
+          "b0308976ddef2b3c6a9b6c36d5c58e46c4ead831",
+          "e01e6a30a2ee9b8f22452493d249f25f2336afa1",
+          "3c8dbf8eaba4cad54e216c1bef4a7bd79338e755",
+          "8cc6ce8ccb4b19c5205450abe2caa7438d67a738",
+          "98546e1abdb7218720abcd84a22db311ef968058"
+        ],
+        "head_sha": "ab2226aa3c0a22ad71fe842bcfb7709dbe399b8c",
+        "base_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+        "tree_sha": "d62d77fd8bd51aeb2e0314da394883436209be0e",
+        "report": "Independent integration review of batch 50de16a3aac241f4a08a1c0e4406e44e, PR1085 head ab2226aa tree d62d77fd against main 3bc8d973. Reviewer run Reviewer-AH1022B85/run_ah1022_b85 is distinct from Coordinator-I1021A, Workers W1022827/W1022144/W1022028/W1022402/W1022845 and source Reviewers AD1022827/AC1022144/AF1022028/AB1022402/AE1022845; it implemented no member.\nComposition: first-parent chain is main 3bc8d973 + exactly five merge commits in frozen order: ab887388 (2nd parent b0308976, ACL-1827 #829), 30caa668 (e01e6a30, ACL-144 #951), 0322e377 (3c8dbf8e, ACL-2028 #1029), 4de01058 (8cc6ce8c, ACL-402 #1032), ab2226aa (98546e1a, ACL-1845 #850). git show --remerge-diff is empty for all five. main 3bc8d973 is an ancestor of every source tip and equals every member's recorded base; all five source PRs are open at their frozen heads, which match the recorded source reviews. PR body has exactly 'Tracker issues: ACL-1827, ACL-144, ACL-2028, ACL-402, ACL-1845' and 'Tracker batch: 50de16a3aac241f4a08a1c0e4406e44e'. Delivery request stored on the integration claim: state requested, workflow .github/workflows/complete-delivery.yml, job 'Verify published Windows package', target 'ACL stable Windows installer and update channel', issues 827/73/1028/53/845, requested 2026-10-22T06:30:20Z by Coordinator-I1021A.\nFinal tree vs union of source diffs: 22 files (+1905/-91) = exactly the union of the five source file sets (7+4+2+4+6, one shared). The only shared file is src/web/templates/report.html (1827, 1845); every other combined blob equals its source blob. The combined report.html is byte-identical to git merge-file of the two source versions over main (clean, rc 0). Hunks are disjoint: 1827 adds the shell-1827 style/script, Home KPI tiles, sidebar/asset rows and Robot health popover (regions ~3692-4520 and the cwWorkbench tail); 1845 adds publication-control CSS (~3116-3229) and cbTree/footer publication scope code (~6348-7223, 8296, 15360). No added element id or global function name collides; the generic helper names (open/close/render/load/esc) in 1827 are inside its own IIFE. browser.py is touched only by ACL-144 (address-based _find_mlx_profile_dir with folder_id, path-separator guard, no recursive rglob), and account_spend now delegates to it; no other member touches the RPA layer.\nUI text: all new user-facing dashboard strings (KPI tiles, sidebar labels, Robot health popover, publication scope/reason texts, button labels) are English; Russian appears only in code comments/docstrings and in the operator Obsidian telemetry Markdown section of failure_signatures (same language as the existing acl_telemetry_report.py note), not in the dashboard. No ad account, page, profile ids, tokens or e-mails in added lines; the only id-like literal is a synthetic scrub-test input in tests/test_failure_signatures.py. fold_changelog.py --check on the combined tree: 'valid: ACL-106, ACL-144, ACL-1827, ACL-1840, ACL-1845, ACL-2028, ACL-2037, ACL-2052, ACL-2053, ACL-402'; all five member fragments present.\nLocal checks on this tree (Windows, Python 3.13): affected tests of all five members and their neighbours - test_acl1827_shell_browser/parity, test_a_profile_folder_is_found_by_address, test_acl1886_plan_check_snapshot, test_failure_signatures, test_builder_multi_publish_browser, test_builder_publish_selected_browser, test_drawer_review_browser, test_publish_button_design_browser, test_account_spend(+_reasons_are_english), test_acl1799_country_workbench/workbench_browser, test_acl1798_campaign_inventory/home_campaigns_browser, test_robot_health, test_account_map_view, test_acl1797_design_system, test_review_ui_regressions, test_acl1800_campaign_commands/home_commands_browser, test_acl1761_plan_check, test_attach_short_path, test_browser_boundary_contract, test_a_campaign_opens_within_two_minutes, test_reads_open_a_closed_profile, test_country_campaign_footer_layout, test_sidebar_without_workbook, test_fold_changelog_2037: 697 passed, 1 skipped, 2 failed. One failure is environmental (local machine lacks PIL for test_acl1798 ... scrolled_right screenshot; passes in CI). The other, test_publish_button_design_browser::test_checkbox_scope_updates_without_replacing_focused_footer_select (new in ACL-1845), is intermittent: the whole file passed 12/12 on rerun, the single test passed 2 of 3 isolated reruns on the combined tree and 5 of 6 on the unmerged ACL-1845 source tip 98546e1a, so it is a pre-existing source-test timing flake, not a batch interaction. No local full suite.\nCombined CI on head ab2226aa, attempt 1, no reruns; scope classifier reported reuse 'no-proven-full-run' (no reused jobs): CI 39734485973 success (linux tests 3.11 shards 1-3 and 3.13 shards 1-3: 2893+3042+2680 passed each, windows tests 3.13: 327 passed, Classify and check project tooling, Process instructions, ACL verification); Windows installer 39734486101 success (Classify installer changes, Verify build inputs, Build install repair and uninstall, Installer verification); Delivery setup/descriptor 39734486220 success; Tracker linkage 39734486221 success.\nNon-blocking: the intermittent ACL-1845 test above should get a follow-up stabilisation task (the checkbox click right after ready() sometimes leaves the footer scope at 'All 2 campaigns' for 5 s). Issue #1028 (ACL-2028) has four unchecked acceptance lines for post-merge acceptance; #827, #73, #53 and #845 have none.",
+        "main_sha": "3bc8d9739a82ce8db0ddb67a832ea159bf40ed36",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          827,
+          73,
+          1028,
+          53,
+          845
+        ],
+        "recorded_at": "2026-10-22T06:58:36+00:00",
+        "issue_scopes": {
+          "827": "fdf30ddff65f891825fc8a270531da766faed723eadbc1aa4b976e58374d588c",
+          "73": "3a25372ae9c718cc8f08a1c2cf0a72178f1d6ee782f7356fba460f6033aa2db0",
+          "1028": "58b0b37224a22a2d7c5d5b192a01c1149b7d1fc9e003144935930fa9ae1dbc80",
+          "53": "e422537de9fdf02be347310b1d1b6a4ad717569d42ac5e4380170ffe2e257df9",
+          "845": "9c7c2106bea898283bcc702c2c771bee801df7835d57d9916bdef93032e9e44a"
+        }
       }
     },
     "stage": {
