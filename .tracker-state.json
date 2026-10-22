@@ -48450,9 +48450,11 @@
         "worktree": "C:\\acl-int-w2052",
         "id": "e992f46bf9884c06a2ec2d92b3ae9b10",
         "issue": 1052,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-22T02:59:59+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 1057,
+        "report": "# ACL-2052 handoff (Worker-W1022052)\n\nBrought PR #1057 to current main (4582039e) and converted the changelog entry.\n\n- Merged origin/main into work/acl-2052-meta-rules-value-rules. Only conflict: docs/system/CHANGELOG.md; took main's version exactly (git diff vs origin/main is empty for that file).\n- The ACL-2052 entry (unchanged text) now lives in docs/system/changelog.d/ACL-2052.md. `fold_changelog.py --check` -> \"valid: ACL-2037, ACL-2052\". `git diff origin/main...HEAD --stat` no longer lists CHANGELOG.md; it lists only rules.json, sources.json, the fragment, meta_rules.py, and the test file.\n- Head: 808573c6 -> e237d935 (merge + fragment commit); no code changes beyond the merge.\n- bid_adjustments check: the earlier blocking finding (bid_adjustments.retired as required_field with inverted semantics, plus 3 related shape issues) is fixed in the branch: it is now kind `fact` (status deprecated), loader requires non-empty note for `fact`, check_job skips facts. Re-review of 808573c6 approved this; the content is untouched by the merge.\n- Tests: tests/test_acl2052_meta_rules_placement.py - 4 passed. CI on e237d935: all pass (linux 1/2/3, windows, process, installer) except tracker-link, which fails only because the task is not yet in Review (\"start and implement the task, then move it to Review\"); expected to pass after this handoff and a rerun."
       },
       "1053": {
         "actor": "Worker-W1022053",
