@@ -48450,9 +48450,11 @@
         "worktree": "C:\\acl-int-w2053",
         "id": "3083aafad44443d999d373d4b2961243",
         "issue": 1053,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-22T03:03:52+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 1060,
+        "report": "# ACL-2053 handoff (Worker-W1022053, run_w1022_2053)\n\nStale PR #1060 brought to current main (4582039e). Merge of origin/main into work/acl-2053-form-template-parity had no conflicts.\nChangelog entry moved from docs/system/CHANGELOG.md to the fragment docs/system/changelog.d/ACL-2053.md; CHANGELOG.md is now identical to origin/main. `fold_changelog.py --check` passes (valid: ACL-2037, ACL-2053). Diff vs main no longer lists CHANGELOG.md.\nNo code changes beyond the merge and the fragment move.\nTests (PR files only): test_acl2053_form_parity, test_acl1776_create_forms, test_acl1775_instant_forms, test_acl1775_builder_forms: 264 passed.\nNew head 43b86212. CI on the new head: all green (linux 1/2/3, windows, verification) except tracker-link, which fails only because the task was still \"implementing\" (needs Review state); expected to pass after this handoff and a rerun.\nStill open from the issue: live check on an allowed pilot account needs the owner's OK; cover image and allow_organic_lead intentionally not done (see PR body)."
       },
       "840": {
         "actor": "Worker-W1021840",
