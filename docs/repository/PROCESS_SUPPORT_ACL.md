@@ -11,15 +11,22 @@ The earlier ACL-2026 scope, owners, counts and evidence below remain history;
 they are not silently reused as approval of this new task.
 
 Compare the complete new source against actual main
-`3bc8d9739a82ce8db0ddb67a832ea159bf40ed36`. Initial source3b7253f0 against64e73a1e
+`515689dee625bdae3241e2ab4064fd18fa5dac53`. Initial source3b7253f0 against64e73a1e
 and refreshed source2c71d1bd againste8bf31f8 each passed all16 required native
 checks, including Linux and Windows installer checks. The latter received genuine
 independent source approval. After main advanced through PR1083, the original
 Coordinator returned only this stale approval through the supported command;
 the original Worker reclaimed its same branch and incorporated all30 newly
 accepted main paths unchanged. Earlier review/check sets remain history. This
-refreshed immutable head needs its own current proof, independent review and
-required native checks.
+refreshed source cb1860a9 against3bc8d973 passed all16 required native checks and
+received a genuine recorded independent review. Before approval, main advanced
+through PR1085. The actual Reviewer returned only this task through its owned
+lane; the same original Worker reclaimed its branch and incorporated all22 newly
+accepted paths unchanged. Independent inspection of all22 deltas found no direct
+or indirect support-isolation blocker. Prior checks and reviews retain their
+actual scope; this new immutable head needs fresh current proof, independent
+review and configured native checks. No foreign ownership or product delivery
+request was changed.
 The maintained renderer/merger stopped
 at two genuine local conflicts. Explicit resolution preserves the descriptor
 workflow's master compatibility push, draft validation, permissions, jobs and
