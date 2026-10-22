@@ -49059,9 +49059,11 @@
         "worktree": "C:\\acl-int-w2028",
         "id": "d9377053d1834cd19a0f08fc524558d7",
         "issue": 1028,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-22T05:52:39+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 1029,
+        "report": "# ACL-2028 handoff\nPR #1029 brought to current main (ea7a1556, merge clean, no conflicts). Head ee7388ed -> 3c8dbf8e.\n- Added docs/system/changelog.d/ACL-2028.md (PR had no CHANGELOG entry); fold_changelog.py --check passes.\n- Tests: tests/test_acl1886_plan_check_snapshot.py - 2 passed locally.\n- CI on new head: all green (linux 1/2/3, windows, process, installer); tracker-link failed only on task state (\"move it to Review\"), expected before handoff."
       },
       "53": {
         "actor": "Worker-W1022402",
