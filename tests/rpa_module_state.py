@@ -70,7 +70,11 @@ def module_thread_locals(module) -> dict[str, threading.local]:
 
 
 def _restore(module, name: str, initial: object) -> None:
-    current = getattr(module, name, None)
+    if not hasattr(module, name):
+        # Имени в модуле нет (переименовали/убрали): не создавать его здесь,
+        # иначе тест реестра не увидит устаревшее имя в `MUTABLE`.
+        return
+    current = getattr(module, name)
     fresh = copy.deepcopy(initial)
     # На месте: на объект могли сослаться через `from meta_dom import ...`.
     if isinstance(current, dict) and isinstance(fresh, dict):
