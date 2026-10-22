@@ -48442,20 +48442,6 @@
         "started_at": "2026-10-20T09:33:29+00:00",
         "from_status": "status:backlog"
       },
-      "1052": {
-        "actor": "Worker-W1022052",
-        "session": "run_w1022_2052",
-        "coordinator": "Coordinator-I1021A",
-        "branch": "work/acl-2052-meta-rules-value-rules",
-        "worktree": "C:\\acl-int-w2052",
-        "id": "e992f46bf9884c06a2ec2d92b3ae9b10",
-        "issue": 1052,
-        "state": "handoff",
-        "started_at": "2026-10-22T02:59:59+00:00",
-        "from_status": "status:todo",
-        "pr": 1057,
-        "report": "# ACL-2052 handoff (Worker-W1022052)\n\nBrought PR #1057 to current main (4582039e) and converted the changelog entry.\n\n- Merged origin/main into work/acl-2052-meta-rules-value-rules. Only conflict: docs/system/CHANGELOG.md; took main's version exactly (git diff vs origin/main is empty for that file).\n- The ACL-2052 entry (unchanged text) now lives in docs/system/changelog.d/ACL-2052.md. `fold_changelog.py --check` -> \"valid: ACL-2037, ACL-2052\". `git diff origin/main...HEAD --stat` no longer lists CHANGELOG.md; it lists only rules.json, sources.json, the fragment, meta_rules.py, and the test file.\n- Head: 808573c6 -> e237d935 (merge + fragment commit); no code changes beyond the merge.\n- bid_adjustments check: the earlier blocking finding (bid_adjustments.retired as required_field with inverted semantics, plus 3 related shape issues) is fixed in the branch: it is now kind `fact` (status deprecated), loader requires non-empty note for `fact`, check_job skips facts. Re-review of 808573c6 approved this; the content is untouched by the merge.\n- Tests: tests/test_acl2052_meta_rules_placement.py - 4 passed. CI on e237d935: all pass (linux 1/2/3, windows, process, installer) except tracker-link, which fails only because the task is not yet in Review (\"start and implement the task, then move it to Review\"); expected to pass after this handoff and a rerun."
-      },
       "1053": {
         "actor": "Worker-W1022053",
         "session": "run_w1022_2053",
@@ -57574,28 +57560,26 @@
             "session": "run_w1022_2052"
           }
         ],
-        "state": "implementing",
+        "state": "queued",
         "worker": "Worker-W1022052",
         "coordinator": "Coordinator-I1021A",
         "handoff": {
-          "actor": "Worker-P10212052",
-          "session": "run_p1021_2052",
-          "coordinator": "Coordinator-P1021A",
+          "actor": "Worker-W1022052",
+          "session": "run_w1022_2052",
+          "coordinator": "Coordinator-I1021A",
           "branch": "work/acl-2052-meta-rules-value-rules",
-          "worktree": "C:\\acl-pl-2052",
-          "id": "3a3d09d4fde44c21b5dbce08c7640720",
+          "worktree": "C:\\acl-int-w2052",
+          "id": "e992f46bf9884c06a2ec2d92b3ae9b10",
           "issue": 1052,
           "state": "handoff",
-          "started_at": "2026-10-21T09:40:17+00:00",
+          "started_at": "2026-10-22T02:59:59+00:00",
           "from_status": "status:todo",
           "pr": 1057,
-          "report": "ACL-2052 review fixes: PR #1057, head 808573c6. New documentation-only `fact` kind in meta_rules loader (needs note; check_job skips it; tested). bid_adjustments.retired, placements.classic_non_advantage_leads (source fixed, live check in note), account_controls.placement_exclusions (values field) and value_rules.decrease_cap (limits DECREASE max 90) moved to it. Blog source categorised as announcements. CHANGELOG updated. Tests: 35 passed (acl2052 + acl1781 + meta_docs_watch_1782). check_job-unchanged test kept."
+          "report": "# ACL-2052 handoff (Worker-W1022052)\n\nBrought PR #1057 to current main (4582039e) and converted the changelog entry.\n\n- Merged origin/main into work/acl-2052-meta-rules-value-rules. Only conflict: docs/system/CHANGELOG.md; took main's version exactly (git diff vs origin/main is empty for that file).\n- The ACL-2052 entry (unchanged text) now lives in docs/system/changelog.d/ACL-2052.md. `fold_changelog.py --check` -> \"valid: ACL-2037, ACL-2052\". `git diff origin/main...HEAD --stat` no longer lists CHANGELOG.md; it lists only rules.json, sources.json, the fragment, meta_rules.py, and the test file.\n- Head: 808573c6 -> e237d935 (merge + fragment commit); no code changes beyond the merge.\n- bid_adjustments check: the earlier blocking finding (bid_adjustments.retired as required_field with inverted semantics, plus 3 related shape issues) is fixed in the branch: it is now kind `fact` (status deprecated), loader requires non-empty note for `fact`, check_job skips facts. Re-review of 808573c6 approved this; the content is untouched by the merge.\n- Tests: tests/test_acl2052_meta_rules_placement.py - 4 passed. CI on e237d935: all pass (linux 1/2/3, windows, process, installer) except tracker-link, which fails only because the task is not yet in Review (\"start and implement the task, then move it to Review\"); expected to pass after this handoff and a rerun."
         },
         "pr": 1057,
-        "queued_at": "2026-10-21T09:44:35+00:00",
-        "review_report": "stale vs main e8bf31f8; author merges current main and hands off for a fresh review; no content findings",
-        "rework": true,
-        "rework_claim": "e992f46bf9884c06a2ec2d92b3ae9b10"
+        "queued_at": "2026-10-22T03:13:22+00:00",
+        "review_report": "stale vs main e8bf31f8; author merges current main and hands off for a fresh review; no content findings"
       },
       "1053": {
         "implementers": [
@@ -64002,7 +63986,8 @@
     "review_queue": [
       1054,
       710,
-      1069
+      1069,
+      1052
     ],
     "review": {
       "id": "9d03f45ca4924033a6e8b7a5f506d396",
@@ -112685,6 +112670,13 @@
         "issue": 19,
         "claim": "0e6f9ab738e44ef685941f52846a6341",
         "actor": "Worker-W1021106"
+      },
+      {
+        "event": "handed-off",
+        "at": "2026-10-22T03:13:22+00:00",
+        "issue": 1052,
+        "pr": 1057,
+        "actor": "Worker-W1022052"
       }
     ],
     "policy": {
