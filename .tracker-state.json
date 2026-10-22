@@ -49068,9 +49068,11 @@
         "worktree": "C:\\acl-int-w144",
         "id": "d082d53b3fd640059bb2646b487c91e8",
         "issue": 73,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-22T05:33:06+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 951,
+        "report": "# ACL-144 handoff (PR #951)\n- Brought branch codex/acl-144-direct-profile-dir up to current main (3bc8d973); old head 6faf9a76, new head e01e6a30.\n- Only conflict: docs/system/CHANGELOG.md, resolved by taking main's version entirely. Diff vs main no longer lists CHANGELOG.md.\n- Changelog entry moved verbatim to docs/system/changelog.d/ACL-144.md with Task link to issue #73 (included in the merge commit). fold_changelog.py --check passes.\n- Tests: py -m pytest tests/test_a_profile_folder_is_found_by_address.py -> 13 passed.\n- CI on new head: all pass (linux 1/2/3, windows, process, installer, descriptor) except tracker-link, which fails only on task state (\"move it to Review before a ready PR\"); to be rerun after this handoff."
       },
       "827": {
         "actor": "Worker-W1022827",
