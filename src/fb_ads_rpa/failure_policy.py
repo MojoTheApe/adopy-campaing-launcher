@@ -42,6 +42,11 @@ WARNING = "warning"
 # Names are the base part, before any ":detail" suffix. Add a new step here in
 # the same commit that starts producing it, otherwise it blocks by default.
 POLICY: dict[str, tuple[str, str]] = {
+    "page_identity": (
+        BLOCKING,
+        "the requested Facebook Page could not be selected and verified in Identity; "
+        "the draft must not be published. Check Identity in Ads Manager before continuing",
+    ),
     "account_blocked": (
         BLOCKING,
         "Meta has restricted this ad account (\"Verification required to advertise\", "
@@ -311,6 +316,11 @@ PER_AD_POLICY: dict[str, tuple[str, str]] = {
 # of the long `reason()` paragraph. A test fails if a step of POLICY or
 # PER_AD_POLICY has no entry here, so add both in the same commit.
 GUIDE: dict[str, tuple[str, str, str]] = {
+    "page_identity": (
+        "Facebook Page could not be set in Identity",
+        "The Page chosen in the builder could not be selected and verified, so the draft was not published.",
+        "Check the Identity section in Ads Manager, refresh Pages in the builder and publish again.",
+    ),
     "account_blocked": (
         "Ad account restricted by Meta",
         "Meta asks for verification or has disabled this ad account, so nothing more was built.",

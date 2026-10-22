@@ -43,15 +43,33 @@ MAX_LABEL = 80
 MAX_OPTION = 60
 MAX_THANKS = 300
 MAX_LINK_TEXT = 70
+MAX_INTRO_TITLE = 60
+MAX_FOLLOW_UP_URL = 1000
 MAX_TEMPLATES = 200
 
 #: Контактные поля шаблона -> тип вопроса Graph.
-CONTACT_TYPES: dict[str, str] = {"name": "FULL_NAME", "email": "EMAIL", "phone": "PHONE"}
+#: ACL-2053: имя и фамилия отдельными полями (FIRST_NAME/LAST_NAME) рядом с полным именем.
+CONTACT_TYPES: dict[str, str] = {"name": "FULL_NAME", "email": "EMAIL", "phone": "PHONE",
+                                 "first_name": "FIRST_NAME", "last_name": "LAST_NAME"}
 #: Тип пользовательского вопроса шаблона.
 SHORT, CHOICE = "short_answer", "multiple_choice"
 QUESTION_KINDS = (SHORT, CHOICE)
 
 DEFAULT_LOCALE = "EN_US"
+#: ACL-2053: языки Instant Form, которые принимает Graph при создании формы (enum `locale` в
+#: справочнике Page/leadgen_forms). Язык задаёт лишь встроенные подписи Meta, не текст формы.
+#: Зеркало - `FORM_LOCALES` в report.html (сверяет тест).
+LOCALES: tuple[str, ...] = (
+    "AR_AR", "CS_CZ", "DA_DK", "DE_DE", "EL_GR", "EN_GB", "EN_US", "ES_ES", "ES_LA", "FI_FI", "FR_FR",
+    "HE_IL", "HI_IN", "HU_HU", "ID_ID", "IT_IT", "JA_JP", "KO_KR", "NB_NO", "NL_NL", "PL_PL", "PT_BR",
+    "PT_PT", "RO_RO", "RU_RU", "SV_SE", "TH_TH", "TR_TR", "VI_VN", "ZH_CN", "ZH_HK", "ZH_TW",
+)
+#: Тип формы -> `is_optimized_for_quality` (More volume = false, Higher intent = true).
+FORM_TYPES: dict[str, bool] = {"more_volume": False, "higher_intent": True}
+DEFAULT_FORM_TYPE = "more_volume"
+#: Сохранённые шаблоны могут нести язык вне списка (до ACL-2053 годился любой XX_YY): они
+#: продолжают грузиться и не стираются при перезаписи файла. Список - для нового ввода.
+_LOCALE_RE = re.compile(r"^[A-Z]{2}_[A-Z]{2}$")
 DEFAULT_LINK_TEXT = "Privacy Policy"
 DEFAULT_THANKS_TITLE = "Thank you"
 DEFAULT_BUTTON_TEXT = "Visit website"
@@ -59,7 +77,6 @@ DEFAULT_BUTTON_TEXT = "Visit website"
 ROBOT_NAME_RE = re.compile(r" · ACL [0-9a-f]{6}$")
 
 _HTTPS_RE = re.compile(r"^https://[^\s/?#:]+\.[^\s/?#:]+(:\d+)?([/?#]\S*)?$", re.I)
-_LOCALE_RE = re.compile(r"^[A-Z]{2}_[A-Z]{2}$")
 _ID_RE = re.compile(r"^[0-9a-f]{12}$")
 
 _lock = threading.RLock()
@@ -80,9 +97,10 @@ def _multiline(value: Any) -> str:
     return "\n".join(" ".join(line.split()) for line in text.split("\n"))
 
 
-def validate(raw: Any) -> tuple[dict[str, Any], list[str]]:
+def validate(raw: Any, lenient_locale: bool = False) -> tuple[dict[str, Any], list[str]]:
     """Шаблон -> (чистый шаблон, ошибки). Без ошибок шаблон годен для формы.
 
+    `lenient_locale` - для уже сохранённых шаблонов: годится любой язык вида XX_YY.
     Ничего не угадывает: пустое обязательное поле - ошибка, лишний вопрос
     сверх потолка - ошибка (не обрезается молча).
     """
@@ -104,6 +122,13 @@ def validate(raw: Any) -> tuple[dict[str, Any], list[str]]:
     out["intro"] = _multiline(src.get("intro"))
     if len(out["intro"]) > MAX_INTRO:
         errors.append(f"Intro is longer than {MAX_INTRO} characters")
+    # Новые поля (ACL-2053) кладём в чистый шаблон ТОЛЬКО со значением не по умолчанию:
+    # так у старых шаблонов содержание, хэш и имя формы остаются прежними.
+    intro_title = _s(src.get("intro_title"))
+    if len(intro_title) > MAX_INTRO_TITLE:
+        errors.append(f"Intro title is longer than {MAX_INTRO_TITLE} characters")
+    if intro_title:
+        out["intro_title"] = intro_title
 
     contacts = src.get("contact_fields")
     contacts = contacts if isinstance(contacts, (list, tuple)) else []
@@ -111,12 +136,22 @@ def validate(raw: Any) -> tuple[dict[str, Any], list[str]]:
     for key in contacts:
         key = _s(key).lower()
         if key not in CONTACT_TYPES:
-            errors.append(f"Unknown contact field {key!r} (use name, email or phone)")
+            errors.append(f"Unknown contact field {key!r} (use name, first_name, last_name, email or phone)")
         elif key not in chosen:
             chosen.append(key)
-    out["contact_fields"] = [k for k in CONTACT_TYPES if k in chosen]
-    if not out["contact_fields"]:
-        errors.append("Choose at least one contact field (name, email or phone)")
+    # Порядок - как выбран (у сохранённых шаблонов он уже name, email, phone).
+    # Без имени/фамилии - старый канонический порядок (иначе хэш и тело запроса поплывут
+    # и на Странице появится дубль формы); с ними порядок задаёт автор.
+    if "first_name" in chosen or "last_name" in chosen:
+        out["contact_fields"] = chosen
+    else:
+        out["contact_fields"] = [k for k in ("name", "email", "phone") if k in chosen]
+    if not chosen:
+        errors.append("Choose at least one contact field (name, first name, last name, email or phone)")
+    if "name" in chosen and ("first_name" in chosen or "last_name" in chosen):
+        errors.append("Choose either full name or first and last name, not both")
+    if src.get("questions_first") is True or _s(src.get("questions_first")).lower() == "true":
+        out["questions_first"] = True
 
     questions = src.get("questions")
     questions = questions if isinstance(questions, (list, tuple)) else []
@@ -159,10 +194,21 @@ def validate(raw: Any) -> tuple[dict[str, Any], list[str]]:
     if len(out["privacy_link_text"]) > MAX_LINK_TEXT:
         errors.append(f"Privacy link text is longer than {MAX_LINK_TEXT} characters")
 
+    follow_up = str(src.get("follow_up_action_url") or "").strip()
+    if follow_up:
+        out["follow_up_action_url"] = follow_up
+        if not is_https_url(follow_up):
+            errors.append("Follow-up URL must start with https://")
+        elif len(follow_up) > MAX_FOLLOW_UP_URL:
+            errors.append(f"Follow-up URL is longer than {MAX_FOLLOW_UP_URL} characters")
+
     out["thank_you_title"] = _s(src.get("thank_you_title")) or DEFAULT_THANKS_TITLE
     out["thank_you_text"] = _multiline(src.get("thank_you_text"))
+    # Экран «спасибо» у Graph необязателен; без текста его можно опустить только
+    # при ссылке follow-up (живая форма байера так и устроена).
     if not out["thank_you_text"]:
-        errors.append("Thank-you screen text is required")
+        if not follow_up:
+            errors.append("Thank-you screen text is required")
     elif len(out["thank_you_text"]) > MAX_THANKS:
         errors.append(f"Thank-you screen text is longer than {MAX_THANKS} characters")
     out["website_url"] = str(src.get("website_url") or "").strip()
@@ -171,9 +217,15 @@ def validate(raw: Any) -> tuple[dict[str, Any], list[str]]:
     out["button_text"] = _s(src.get("button_text")) or DEFAULT_BUTTON_TEXT
 
     locale = _s(src.get("locale")).upper().replace("-", "_") or DEFAULT_LOCALE
-    if not _LOCALE_RE.match(locale):
-        errors.append("Locale must look like EN_US")
+    if not (locale in LOCALES or (lenient_locale and _LOCALE_RE.match(locale))):
+        errors.append(f"Unknown locale: {locale} (choose a language from the list)")
     out["locale"] = locale
+
+    form_type = _s(src.get("form_type")).lower() or DEFAULT_FORM_TYPE
+    if form_type not in FORM_TYPES:
+        errors.append("Form type must be More volume or Higher intent")
+    elif form_type != DEFAULT_FORM_TYPE:
+        out["form_type"] = form_type
     return out, errors
 
 
@@ -190,14 +242,15 @@ def form_name(tpl: dict[str, Any]) -> str:
 
 
 def expected_questions(tpl: dict[str, Any]) -> list[dict[str, Any]]:
-    """Вопросы для Graph: контакты, затем пользовательские (CUSTOM)."""
-    out: list[dict[str, Any]] = [{"type": CONTACT_TYPES[k]} for k in tpl["contact_fields"]]
+    """Вопросы для Graph: контакты, затем пользовательские (CUSTOM); `questions_first` - наоборот."""
+    contacts: list[dict[str, Any]] = [{"type": CONTACT_TYPES[k]} for k in tpl["contact_fields"]]
+    custom: list[dict[str, Any]] = []
     for i, q in enumerate(tpl["questions"], start=1):
         item: dict[str, Any] = {"type": "CUSTOM", "key": f"question_{i}", "label": q["label"]}
         if q["type"] == CHOICE:
             item["options"] = [{"key": f"q{i}_option_{j}", "value": v} for j, v in enumerate(q["options"], start=1)]
-        out.append(item)
-    return out
+        custom.append(item)
+    return custom + contacts if tpl.get("questions_first") else contacts + custom
 
 
 def form_params(tpl: dict[str, Any]) -> dict[str, Any]:
@@ -208,18 +261,28 @@ def form_params(tpl: dict[str, Any]) -> dict[str, Any]:
         "question_page_custom_headline": tpl["headline"],
         "privacy_policy": {"url": tpl["privacy_url"], "link_text": tpl["privacy_link_text"]},
         "locale": tpl["locale"],
+        # Настройки формы (ACL-2053). «Больше объёма» = false; показ только целевым зрителям.
+        # `allow_organic_lead` не шлём: при создании Graph его не принимает (есть лишь
+        # устаревший allow_organic_lead_retrieval), «без органики» задаёт block_display_*.
+        "is_optimized_for_quality": FORM_TYPES[tpl.get("form_type") or DEFAULT_FORM_TYPE],
+        "block_display_for_non_targeted_viewer": True,
     }
+    if tpl.get("follow_up_action_url"):
+        params["follow_up_action_url"] = tpl["follow_up_action_url"]
     if tpl.get("intro"):
-        params["context_card"] = {"title": tpl["headline"], "style": "PARAGRAPH_STYLE",
-                                  "content": [tpl["intro"]]}
-    thanks: dict[str, Any] = {"title": tpl["thank_you_title"], "body": tpl["thank_you_text"]}
-    if tpl.get("website_url"):
-        thanks.update({"button_type": "VIEW_WEBSITE", "button_text": tpl["button_text"],
-                       "website_url": tpl["website_url"]})
-    else:
-        # button_type обязателен; без ссылки на сайт - «без кнопки» (Meta: NONE).
-        thanks["button_type"] = "NONE"
-    params["thank_you_page"] = thanks
+        params["context_card"] = {"title": tpl.get("intro_title") or tpl["headline"],
+                                  "style": "PARAGRAPH_STYLE", "content": [tpl["intro"]]}
+    if tpl.get("thank_you_text") or tpl.get("website_url"):
+        thanks: dict[str, Any] = {"title": tpl["thank_you_title"]}
+        if tpl.get("thank_you_text"):
+            thanks["body"] = tpl["thank_you_text"]
+        if tpl.get("website_url"):
+            thanks.update({"button_type": "VIEW_WEBSITE", "button_text": tpl["button_text"],
+                           "website_url": tpl["website_url"]})
+        else:
+            # button_type обязателен; без ссылки на сайт - «без кнопки» (Meta: NONE).
+            thanks["button_type"] = "NONE"
+        params["thank_you_page"] = thanks
     return params
 
 
@@ -405,7 +468,7 @@ def load() -> list[dict[str, Any]]:
     """Годные к публикации шаблоны. Битые записи не исчезают, но и не отдаются."""
     out = []
     for key, rec in _snapshot()["templates"].items():
-        clean, errors = validate(rec)
+        clean, errors = validate(rec, lenient_locale=True)
         if not errors and clean["id"] == key:
             out.append(clean)
     out.sort(key=lambda t: t["name"].casefold())
@@ -424,7 +487,7 @@ def summary(tpl: dict[str, Any]) -> str:
 
 
 def _row(key: str, rec: Any) -> dict[str, Any]:
-    clean, errors = validate(rec)
+    clean, errors = validate(rec, lenient_locale=True)
     if not errors and clean["id"] != key:
         errors = ["The template id does not match its library entry"]
     meta = rec if isinstance(rec, dict) else {}
@@ -521,6 +584,11 @@ def _stamp(rec: dict[str, Any], was: Any = None) -> dict[str, Any]:
 def save(raw: Any) -> dict[str, Any]:
     """Сохранить шаблон (новый - с новым id; с id - заменить). Ошибки - `TemplateError`."""
     clean, errors = validate(raw)
+    if errors and isinstance(raw, dict) and not [e for e in errors if not e.startswith("Unknown locale")]:
+        # Язык вне списка допустим лишь тому шаблону, у которого он уже сохранён.
+        old = next((t for t in load() if t["id"] == clean["id"]), None)
+        if old and old["locale"] == clean["locale"]:
+            clean, errors = validate(raw, lenient_locale=True)
     if errors:
         raise TemplateError(errors)
 
@@ -574,7 +642,7 @@ def restore(template_id: str) -> dict[str, Any]:
         data["updated_by"], data["updated_at"] = _tl().author(), _tl().now()
         del lib["deleted"][tid]
         lib["templates"][tid] = data
-        return validate(data)[0]
+        return validate(data, lenient_locale=True)[0]
 
     return _mutate(change, f"Restore form template {tid}")
 
@@ -585,7 +653,7 @@ def duplicate(template_id: str) -> dict[str, Any]:
     def change(lib):
         if tid not in lib["templates"]:
             raise TemplateError(["Template not found. It may have been removed on another machine"])
-        clean, errors = validate(lib["templates"][tid])
+        clean, errors = validate(lib["templates"][tid], lenient_locale=True)
         if errors:
             raise TemplateError(["Fix the template before duplicating it"] + errors)
         name = clean["name"]
@@ -609,14 +677,14 @@ def _plan_migration(local_rows: list[Any], lib: dict[str, Any]) -> tuple[list[di
     """Что из локального файла можно загрузить, и что и почему пропускается."""
     in_lib: dict[str, str | None] = {}
     for rec in lib["templates"].values():
-        clean, errors = validate(rec)
+        clean, errors = validate(rec, lenient_locale=True)
         in_lib[_name_of(rec).casefold()] = None if errors else content_hash(clean)
     adds: list[dict[str, Any]] = []
     skipped: list[dict[str, str]] = []
     used = set(lib["templates"]) | set(lib["deleted"])
     gone = {_name_of(rec.get("data")).casefold() for rec in lib["deleted"].values() if isinstance(rec, dict)}
     for row in local_rows:
-        clean, errors = validate(row)
+        clean, errors = validate(row, lenient_locale=True)
         name = clean["name"] or _name_of(row) or "(no name)"
         key = name.casefold()
         if errors:

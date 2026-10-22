@@ -33,9 +33,10 @@ def _script() -> str:
     return t[start: t.index("</script>", start)]
 
 
-def test_the_forms_button_opens_an_existing_panel_next_to_ad_titles():
+def test_the_forms_button_opens_an_existing_panel_after_the_old_links():
     t = _t()
-    assert t.index('data-view="ad-texts"') < t.index('data-view="forms"') < t.index('data-view="accounts"')
+    # ACL-1827: прежние пункты Main остаются первыми и в том же порядке — Forms идёт за Accounts.
+    assert t.index('data-view="ad-texts"') < t.index('data-view="accounts"') < t.index('data-view="forms"')
     assert 'id="view-forms"' in t
     assert "'forms'" in t[t.index("function parseHash"): t.index("function expandCountry")], "прямая ссылка #forms не открывается"
 

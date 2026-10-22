@@ -497,3 +497,18 @@ def test_local_rows_without_an_id_count_for_the_duplicate_name_check(local):
     ft.library_path().write_text(json.dumps({"templates": [{"name": "Demo form"}]}), encoding="utf-8")
     with pytest.raises(ft.TemplateError, match="already exists"):
         ft.save(TEMPLATE)
+
+
+def test_a_library_entry_with_a_legacy_locale_is_usable_and_stays_editable(team):
+    # ACL-2053 + ACL-2054: язык вне закрытого списка у сохранённой записи не делает её битой.
+    backend, on = team
+    on("Anna")
+    rec = {**TEMPLATE, "id": "bbbbbbbbbbbb", "locale": "ES_MX"}
+    put_raw(backend, {"bbbbbbbbbbbb": rec})
+    [row] = ft.listing()["rows"]
+    assert row["invalid"] is False and row["locale"] == "ES_MX"
+    assert ft.get("bbbbbbbbbbbb")["locale"] == "ES_MX"
+    ft.save({**rec, "headline": "Edited"})
+    assert ft.get("bbbbbbbbbbbb")["headline"] == "Edited"
+    with pytest.raises(ft.TemplateError):
+        ft.save({**TEMPLATE, "name": "New one", "locale": "ES_MX"})
