@@ -6262,6 +6262,27 @@
         "issue_scopes": {
           "840": "ef493a159bfb31c8be24551b9a4f3d90b60904a49576c51b0b94efdfdf6c5d40"
         }
+      },
+      "955": {
+        "kind": "independent-review",
+        "implementer": "Worker-W1021106",
+        "reviewer": "Reviewer-Z1022106",
+        "head_sha": "4a50cb4c1e399688823dd3b0aedd5aa97b67e66c",
+        "base_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+        "tree_sha": "4fe26415b644eea5ea42b74d617b525b07324f0d",
+        "verdict": "approved",
+        "report": "ACL-106 PR955 source review: _period_owner derives from cached period report (no frame rescan); None for no rows/no manager/no period/own rows; blank/nan CM rows ignored; whole-workbook case keeps existing notice plus 'may need updating'; manager case is a separate block mutually exclusive with the existing notice; auto-merged app.py/report.html regions match main (diff vs main limited to ACL-106 hunks); English UI text; 10 new tests plus sidebar tests pass (23 passed); fold_changelog --check valid; no ids leaked; all required CI green on 4a50cb4c.",
+        "execution_lane": "b3b955fadb144c60aa40952ea5659df9",
+        "review_session": "run_z1022_106",
+        "main_sha": "4582039e2e0418e23df19de131165e83e4d312d6",
+        "policy": "1bd91869a0985c04e3b308bcb67638e25cb54967bdfc18f4936a83bb5310b933",
+        "issues": [
+          19
+        ],
+        "recorded_at": "2026-10-22T03:31:24+00:00",
+        "issue_scopes": {
+          "19": "ce291401dfa6489828ba973eb602b744efb113657552fbfff1bcb7f342232d99"
+        }
       }
     },
     "stage": {
