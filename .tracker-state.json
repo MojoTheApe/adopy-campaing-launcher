@@ -50867,9 +50867,11 @@
         "worktree": "C:\\acl-2095",
         "id": "18668e25e1ae4058913c6b4db1bb9550",
         "issue": 1095,
-        "state": "implementing",
+        "state": "handoff",
         "started_at": "2026-10-22T10:21:24+00:00",
-        "from_status": "status:todo"
+        "from_status": "status:todo",
+        "pr": 1096,
+        "report": "ACL-2095 handoff \u2014 PR #1096, head c51fc41f, branch work/acl-2095-parallel-profile-launch.\n\nChecks: tests/test_acl2095_parallel_profile_launch.py (38) plus affected suites green locally (test_acl1756_fb_api, test_acl1760_api_read, test_acl1761_plan_check, test_acl1761_hang_logout, test_acl1761_api_create, test_acl1784_api_review_window, test_acl1812_warm_sessions, test_acl1826_mlx_session_lost, test_acl1886_plan_check_snapshot, test_acl1800_account_tree, test_reads_open_a_closed_profile, test_a_finished_clean_profile_closes_itself). Full suite: CI.\n\nResults: items 1-3, 5-7 and 8a-c. Shared slot gate already covered Check plan (verified in 9095y log); added paced MLX starts (ACL_MLX_PARALLEL_STARTS=1, gap 3 s), one retry on 10053/10054 with adoption of a profile that came up, cold CDP budget 40 s (first tab only), survivor-of-stop = closing, stop listeners clear warm/cold state, \"Waiting for a free profile slot\" in Check plan, proxy readiness probe + one retry on ERR_INVALID_AUTH_CREDENTIALS on the first cold navigation, ready = /json/version, settle-before-stop, wait for process exit after stop. Telemetry: fb_api_mlx_start, fb_api_cold_open, fb_api_proxy_probe, fb_api_stop_gone.\n\nRemaining risks: item 4 ceiling not measured live (default ACL_MAX_PROFILES=2 kept; telemetry ready for owner runs). Probe page api.ipify.org is a third-party request from the profile IP (configurable/off). Stop path can now wait up to start budget + 30 s. Item 8(d) split to ACL-2098. TEST9095za (C:\\acl-test-9095za) built with both commits, not yet on 9095 pending owner OK for restart."
       }
     },
     "tasks": {
