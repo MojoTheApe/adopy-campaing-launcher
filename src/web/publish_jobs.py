@@ -28,7 +28,7 @@ from src.fb_ads_rpa.draft import RpaPublishResult
 from src.fb_ads_rpa.rpa_publisher import RpaPublisher, profile_key_for
 from src.fb_ads_rpa.operations import publish_lease
 from src.web.keep_awake import keep_display_awake
-from src.web.profile_slots import ProfileSlots
+from src.web.profile_slots import KEPT_CONVENIENCE, KEPT_REVIEW, ProfileSlots
 
 # ── In-memory job store ────────────────────────────────────────────────
 _jobs: dict[str, dict[str, Any]] = {}
@@ -40,7 +40,9 @@ _publish_serial = publish_lease
 _active_publishers: dict[str, RpaPublisher] = {}
 # Сколько профилей публикуют разом — по свободной памяти машины (ACL-1321).
 # Задания сверх решения ждут в «queued» в порядке отправки; см. profile_slots.
-_slots = ProfileSlots()
+# ACL-2113: окна, оставленные «для удобства», уступают место простоем (`_evict_kept_window`).
+_slots = ProfileSlots(
+    evictor=lambda job_id, label, profile, idle_s=0.0: _evict_kept_window(job_id, label, profile, idle_s))
 # ACL-1399: ключ отправки со страницы → задание. Publish, чей ответ потерялся
 # (сервер был занят, «Failed to fetch»), страница повторяет с тем же ключом —
 # и получает то же задание, а не второе на тот же аккаунт.
@@ -349,6 +351,47 @@ def _wait_for_stopped_robot(job_id: str, profile: str) -> bool:
     return True
 
 
+def _wait_for_profile_sync(job_id: str, account_label: str) -> bool:
+    """ACL-2117: ждать конца паузы после остановки профиля ДО места в очереди. False — отменили.
+
+    Ждать внутри `open_profile` значило бы держать место по памяти и замок профиля
+    до 3 минут. Здесь, как у `_wait_for_stopped_robot`, ждём снаружи; причина видна
+    на задании, Stop снимает ожидание. Профиль уже открыт (или закрывается) — не ждём:
+    там решает `open_profile`. Только путь Graph API: у RPA своя остановка.
+    """
+    if _fb_backend() != "api":
+        return True
+    try:
+        from src.analysis_agent import account_spend as _as
+        from src.fb_api import profile as _fb_profile
+        from src.fb_api import stop_log as _stop_log
+
+        profile_id = (getattr(_as._entry_for(account_label), "profile_id", "") or "").strip()
+        if not profile_id or _fb_profile.probe_local(profile_id)[0] != "none":
+            return True
+        if not _stop_log.refusal(profile_id):
+            return True
+    except Exception:  # noqa: BLE001 — не смогли узнать: ждать будет open_profile
+        return True
+
+    def _note(text: str) -> None:
+        with _jobs_lock:
+            job = _jobs.get(job_id)
+            if job is None or job.get("abandoned"):
+                return
+            if text:
+                view = _queue_view({"reason": "profile"})
+                view["hold"] = "profile_sync"
+                view["note"] = text
+                job["queue"] = view
+            else:
+                job.pop("queue", None)
+
+    why = _stop_log.wait_or_refusal(profile_id, on_wait=_note, cancelled=lambda: _is_cancelled(job_id))
+    _note("")
+    return why != _stop_log.CANCELLED_TEXT
+
+
 def slots_snapshot() -> dict[str, Any]:
     """Сколько профилей разом разрешено сейчас, что идёт и что ждёт (ACL-1321)."""
     snap = _slots.snapshot()
@@ -429,13 +472,36 @@ def get_job(job_id: str) -> dict[str, Any] | None:
         return snap
 
 
+def _runs_the_loop_here() -> bool:
+    """True when this thread is the one running the asyncio loop it is marked with."""
+    try:
+        import asyncio.events as _ae
+
+        loop = _ae._get_running_loop()
+    except Exception:
+        return False
+    return (loop is not None and loop.is_running()
+            and getattr(loop, "_thread_id", None) == threading.get_ident())
+
+
 def _clear_inherited_asyncio_loop() -> None:
     """Clear asyncio running-loop marks before sync Playwright in a worker thread.
 
     Also stop any leaked sync Playwright driver from a prior failed CDP attach
     in this thread (that leaves get_running_loop() returning a running loop and
     triggers 'Playwright Sync API inside the asyncio loop' on the next start).
+
+    ACL-1380: never on the thread that actually runs the loop. Clearing the
+    mark there is exactly how the server died on 14.09/22.09/29.09: every next
+    task step fails with «loop … is not the running loop» and /health stops
+    answering while the process stays alive. An inherited mark in a worker
+    points to the server's loop running on ANOTHER thread — that one is ours
+    to clear.
     """
+    if _runs_the_loop_here():
+        logging.getLogger(__name__).error("ACL-1380: refused to clear the asyncio loop mark on the "
+                   "thread that runs it (%s)", threading.current_thread().name)
+        return
     try:
         from src.fb_ads_rpa.browser import _reset_asyncio_running_loop, _stop_thread_playwright
 
@@ -578,7 +644,7 @@ def _run_job_inner(
     # очереди: зависший профиль не должен занимать место и стопорить остальные
     # аккаунты (ревью PR #622, R2-B1). Ожидание видно на задании и снимается Stop.
     while True:
-        if not _wait_for_stopped_robot(job_id, profile):
+        if not _wait_for_stopped_robot(job_id, profile) or not _wait_for_profile_sync(job_id, account_label):
             with _jobs_lock:
                 _jobs[job_id].pop("queue", None)
             _finish(job_id, cancelled=True)
@@ -604,6 +670,12 @@ def _run_job_inner(
         with _jobs_lock:
             _jobs[job_id].pop("queue", None)
             _jobs[job_id]["slot_wait_s"] = grant["waited_s"]
+            # ACL-2113: задание взяло уже открытое окно (без перезапуска); окно «на
+            # проверку» остаётся таким и после этого задания.
+            if grant.get("reused_kept"):
+                _jobs[job_id]["reused_kept"] = str(grant["reused_kept"])
+        for closed in grant.get("closed_for_room") or []:
+            _append_creative_notice(job_id, room_notice(closed.get("label") or "a kept window"))
         # Сколько задание ждало места и почему его пустили — в телеметрию.
         if _rt is not None:
             try:
@@ -660,9 +732,15 @@ def _run_job_inner(
         # но не оба: брошенный поток, проснувшись, места не трогает.
         if _claim_slot(job_id):
             with _jobs_lock:
-                left_open = not bool((_jobs.get(job_id) or {}).get("profile_closed"))
+                job = _jobs.get(job_id) or {}
+                # ACL-1784: API-задание само решило, что смотреть нечего (`review_window`
+                # False) — место отпускаем, даже если профиль остался открытым.
+                left_open = (not bool(job.get("profile_closed"))
+                             and job.get("review_window") is not False)
             if left_open and _job_ran_in_browser(job_id):
-                _slots.keep(job_id, account_label)
+                kind = (KEPT_CONVENIENCE if job.get("kept_kind") == KEPT_CONVENIENCE
+                        and job.get("reused_kept") != KEPT_REVIEW else KEPT_REVIEW)
+                _slots.keep(job_id, account_label, kind)
             else:
                 _slots.release(job_id)
 
@@ -681,6 +759,7 @@ def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
         "state": ("waiting_profile" if hold == "profile"
                   else "waiting_memory" if hold in ("memory_low", "below_reserve")
                   else "waiting_review" if hold == "review_windows"
+                  else "waiting_idle" if hold == "idle_windows"
                   else "waiting_slot"),
         # «profile» — ждёт свой профиль; иначе — свободное место.
         "reason": "profile" if verdict.get("reason") == "profile" else "slot",
@@ -691,6 +770,8 @@ def _queue_view(verdict: dict[str, Any]) -> dict[str, Any]:
         "cap": verdict.get("cap"),
         "kept": verdict.get("kept"),
         "kept_accounts": list(verdict.get("kept_accounts") or []),
+        "convenience_accounts": list(verdict.get("convenience_accounts") or []),
+        "idle_close_s": verdict.get("idle_close_s"),
         "need_mb": verdict.get("need_mb"),
         "reserve_mb": verdict.get("reserve_mb"),
         "running": verdict.get("running"),
@@ -1035,8 +1116,21 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
             if job is not None and not job.get("abandoned"):
                 job["progress"] = str(text)[:200]
 
+    def units(name: str, view: dict) -> None:
+        # ACL-1992: процент сборки — по созданным объектам; новый словарь на
+        # каждую запись, опрос читает копию без замка на разбор.
+        with _jobs_lock:
+            job = _jobs.get(job_id)
+            if job is not None and not job.get("abandoned"):
+                job["units"] = {**(job.get("units") or {}), str(name): dict(view)}
+
     # Ревью M3: dry_run — предпроверка и план без единой записи (клиент без права записи).
     publisher = publish_api.ApiPublisher(progress=progress, dry_run=dry_run)
+    publisher.units = units
+    with _jobs_lock:
+        # ACL-2113: окно, оставленное прошлым заданием, — наше: закрывать/держать его
+        # решаем так же, как окно, поднятое этим заданием.
+        publisher.inherited_profile = bool((_jobs.get(job_id) or {}).get("reused_kept"))
     with _jobs_lock:
         _active_publishers[job_id] = publisher  # type: ignore[assignment]
     job_cancel.bind(publisher.cancel_event)
@@ -1100,9 +1194,17 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
         job_cancel.unbind()
         cancelled = cancelled or _is_cancelled(job_id)
         clean = not cancelled and _job_is_clean(job_id)
-        other = clean and _profile_has_other_job(job_id, account_label)
+        # ACL-1784: окно на проверку нужно, только если запись была и сверка её
+        # не подтвердила. Ничего не записали (план, предпроверка, стоп до первой
+        # записи) — смотреть нечего: профиль закрываем как после чистого.
         try:
-            outcome = publisher.finish_job(account_label, clean=clean, other_job_waits=other)
+            wrote = int(publisher.writes) > 0
+        except Exception:
+            wrote = True
+        settled = clean or not wrote
+        other = settled and _profile_has_other_job(job_id, account_label)
+        try:
+            outcome = publisher.finish_job(account_label, clean=settled, other_job_waits=other)
         except Exception:
             outcome = ""
             publisher.close()
@@ -1111,7 +1213,60 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
                 if not _abandoned(job_id):
                     _jobs[job_id]["profile_closed"] = True
             _append_creative_notice(job_id, publish_api.PROFILE_CLOSED_NOTICE)
+        # Профиль, который поднял сам job, остался открытым (Stop, ACL_KEEP_PROFILES_OPEN,
+        # пробный запуск, сбой остановки): место не отпускаем, иначе очередь поднимет
+        # второй профиль поверх открытого окна (ACL-1603).
+        try:
+            started = bool(publisher.started_profile)
+        except Exception:
+            started = True
+        still_open = outcome != "closed" and started
+        # ACL-2113: окно, оставленное намеренно после чистой публикации, — «для удобства»
+        # (уступает место простоем); всё остальное оставленное — на проверку.
+        convenience = bool(clean and getattr(publisher, "stop", None) is None
+                           and outcome == "kept" and still_open)
+        with _jobs_lock:
+            if not _abandoned(job_id):
+                _jobs[job_id]["review_window"] = (not settled) or still_open
+                _jobs[job_id]["kept_kind"] = KEPT_CONVENIENCE if convenience else KEPT_REVIEW
+        if outcome != "closed":
+            _append_creative_notice(
+                job_id, _api_review_window_notice(wrote=wrote, clean=clean, still_open=still_open,
+                                                  convenience=convenience))
         _finish(job_id, cancelled=cancelled)
+
+
+#: ACL-1784: почему окно профиля после API-задания оставлено (или нет) — в панель задания.
+API_NO_WRITE_NOTICE = ("Nothing was written to Meta, so the profile is not kept open "
+                       "for review and its slot is free.")
+API_CLEAN_NOTICE = ("All campaigns were created and verified by readback, so the profile "
+                    "is not kept open for review and its slot is free.")
+API_REVIEW_NOTICE = ("Kept the profile open for review: Meta received writes that the readback "
+                     "did not fully confirm. Check the campaigns, then close the profile.")
+
+
+API_STILL_OPEN_NOTICE = ("The profile this job started is still open, so its slot stays taken. "
+                         "Close the profile to free the slot.")
+
+
+API_KEPT_NOTICE = ("Kept the profile open so you can check the campaigns. It closes by itself "
+                   "when its slot or memory is needed and it has been idle for a while.")
+
+
+def room_notice(label: str) -> str:
+    """Строка в панели задания, которому закрыли чужое простаивающее окно (ACL-2113)."""
+    return f"Closed {label} to make room"
+
+
+def _api_review_window_notice(*, wrote: bool, clean: bool, still_open: bool = False,
+                              convenience: bool = False) -> str:
+    if convenience:
+        return API_KEPT_NOTICE
+    if still_open and (clean or not wrote):
+        return API_STILL_OPEN_NOTICE
+    if not wrote:
+        return API_NO_WRITE_NOTICE
+    return API_CLEAN_NOTICE if clean else API_REVIEW_NOTICE
 
 
 def _add_error(job_id: str, msg: str) -> None:
@@ -1320,6 +1475,12 @@ def _let_go_of_profile(job_id: str, publisher: Any, account_label: str, *, clean
             publisher.close(force=False)
     else:
         publisher.close(force=False)
+    if clean and outcome == "kept_switch":
+        # ACL-2113: чистое задание, окно оставлено намеренно — «для удобства».
+        with _jobs_lock:
+            if not _abandoned(job_id):
+                _jobs[job_id]["kept_kind"] = KEPT_CONVENIENCE
+        _append_creative_notice(job_id, API_KEPT_NOTICE)
     if outcome == "closed":
         from src.fb_ads_rpa.rpa_publisher import PROFILE_CLOSED_NOTICE
 
@@ -1365,8 +1526,6 @@ def close_profile(job_id: str) -> dict[str, Any]:
     остановку, так что новая публикация того же профиля в это время ждёт.
     Коды: `not_found`, `busy`, `failed`; текст ошибки — для человека.
     """
-    from src.fb_ads_rpa import rpa_publisher as _rp
-
     with _jobs_lock:
         job = _jobs.get(job_id)
         if job is None:
@@ -1378,12 +1537,38 @@ def close_profile(job_id: str) -> dict[str, Any]:
     if any(status in _ACTIVE_STATUSES and profile_key_for(label) == profile
            for label, status in others):
         return {"ok": False, "code": "busy", "error": busy_msg}
+    res = _stop_idle_profile(account_label, profile, busy_msg=busy_msg)
+    if not res["ok"]:
+        return res
+    with _jobs_lock:
+        if job_id in _jobs:
+            _jobs[job_id]["profile_closed"] = True
+    # ACL-1603: закрытое окно больше не держит место в очереди профилей.
+    _slots.release(job_id)
+    _slots.wake()
+    return {"ok": True, "job_id": job_id, "message": "Closed the profile"}
+
+
+def _stop_idle_profile(account_label: str, profile: str, *, busy_msg: str,
+                       strict: bool = False) -> dict[str, Any]:
+    """Мягко остановить профиль под замком профиля (без ожидания замка).
+
+    Общее для кнопки «Close profile» и для автозакрытия простаивающих окон
+    (ACL-2113). `close_account_profile` возвращается, когда процесс профиля ушёл
+    (правила остановки ACL-2095). Коды отказа: `busy`, `failed`. `strict` (автозакрытие):
+    процесс, не ушедший за срок ожидания, — отказ (`still_running`), окно считается открытым.
+    """
+    from src.fb_ads_rpa import rpa_publisher as _rp
+
     lease = _publish_serial(profile)
     if not lease.acquire(blocking=False):
         return {"ok": False, "code": "busy", "error": busy_msg}
     try:
         try:
-            _rp.close_account_profile(account_label)
+            stopped = _rp.close_account_profile(account_label)
+            if strict and stopped == "still_running":
+                return {"ok": False, "code": "still_running",
+                        "error": "The profile process is still running after the stop."}
         except Exception as exc:
             import logging
 
@@ -1401,13 +1586,53 @@ def close_profile(job_id: str) -> dict[str, Any]:
             _stop_log.record_stop(profile)
     finally:
         lease.release()
+    return {"ok": True}
+
+
+#: Что записано о последних автозакрытых окнах (ACL-2113) — для показа и разбора.
+_closed_for_room: list[dict[str, Any]] = []
+
+
+def touch_kept(account_label: str) -> None:
+    """Окно аккаунта только что использовали (чтение): срок простоя — с нуля (ACL-2113)."""
+    try:
+        _slots.touch(account_label)
+    except Exception:
+        pass
+
+
+def _evict_kept_window(kept_job_id: str, account_label: str, profile: str,
+                       idle_s: float = 0.0) -> bool:
+    """Закрыть простаивающее «удобное» окно ради нового задания (ACL-2113).
+
+    Зовёт очередь БЕЗ своего замка. Окно закрывается через MLX stop с ожиданием
+    выхода процесса. Отказ (`busy`: читает кто-то, идёт задание) — окно не
+    простаивает, оставляем. Причина записывается в телеметрию и в панель
+    задания, которому окно принадлежало.
+    """
+    label = str(account_label or "").strip()
+    if not label:
+        return False
+    res = _stop_idle_profile(label, profile, busy_msg="The window is in use", strict=True)
+    ok = bool(res.get("ok"))
+    try:
+        from src.fb_ads_rpa import run_telemetry as _rt
+
+        _rt.record("kept_window_auto_close", ok, note="idle_lru",
+                   diag={"account": label, "idle_s": round(float(idle_s), 1),
+                         "code": res.get("code", "")})
+    except Exception:
+        pass
+    if not ok:
+        return False
     with _jobs_lock:
-        if job_id in _jobs:
-            _jobs[job_id]["profile_closed"] = True
-    # ACL-1603: закрытое окно больше не держит место в очереди профилей.
-    _slots.release(job_id)
-    _slots.wake()
-    return {"ok": True, "job_id": job_id, "message": "Closed the profile"}
+        if kept_job_id in _jobs:
+            _jobs[kept_job_id]["profile_closed"] = True
+    _append_creative_notice(
+        kept_job_id, "Closed to make room for the next job — it had been idle with nothing left to check")
+    _closed_for_room.append({"account": label, "at": _now_iso()})
+    del _closed_for_room[:-20]
+    return True
 
 
 def start_job(
