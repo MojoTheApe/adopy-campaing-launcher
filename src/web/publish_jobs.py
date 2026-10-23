@@ -442,6 +442,30 @@ def active_job_count() -> int:
         )
 
 
+def profile_in_use(profile: str, since: str = "") -> bool:
+    """Строит ли робот кампании в этом профиле Multilogin (ACL-1379).
+
+    Занятым считается задание в любом незавершённом статусе — и ждущее в
+    очереди тоже: оно придёт в этот же браузер. С `since` (время ISO, как у
+    `_now_iso`) занятым считается и задание, закончившееся после этого
+    момента: выключение, прождавшее замок профиля всю публикацию, не должно
+    потом нажимать так, будто её не было.
+
+    Профиль сравнивается тем же правилом, что берёт замок (`profile_key_for`).
+    """
+    want = str(profile or "").strip()
+    if not want:
+        return False
+    with _jobs_lock:
+        jobs = [dict(job) for job in _jobs.values()]
+    for job in jobs:
+        active = job.get("status") in {"pending", "queued", "running", "cancelling"}
+        recent = bool(since) and str(job.get("finished_at") or "") >= since
+        if (active or recent) and profile_key_for(str(job.get("account_label") or "")) == want:
+            return True
+    return False
+
+
 def reserve_update() -> bool:
     """Atomically refuse active jobs and block new jobs until restart."""
     global _update_reserved
