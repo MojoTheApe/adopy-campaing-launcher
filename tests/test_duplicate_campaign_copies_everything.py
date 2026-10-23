@@ -60,7 +60,7 @@ def test_the_skipped_fields_are_few_and_named():
     body = _duplicate_body()
     block = body[body.index("SKIP_FIELDS"):body.index("var prefix")]
     skipped = set(re.findall(r"(\w+): 1", block))
-    assert skipped == {"name", "ad_count", "targeting", "os"}, skipped
+    assert skipped == {"name", "ad_count", "targeting", "os", "page_id"}, skipped  # ACL-1880: a duplicate resets the Page to Automatic
 
 
 def test_the_hand_written_list_is_gone():

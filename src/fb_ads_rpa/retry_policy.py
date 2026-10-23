@@ -92,7 +92,7 @@ CAMPAIGN_RETRY_STEPS = frozenset(
 NON_RETRYABLE_FLOW_STEPS = frozenset({"window_too_small", "account_blocked", "browser_closed",
                                       "profile_logged_out", "profile_network",
                                       "simple_create_layout", "lead_terms_not_accepted",
-                                      "objective_inline",
+                                      "objective_inline", "page_identity",
                                       # ACL-1697: не тот кабинет — повтор откроет тот же.
                                       "wrong_ad_account",
                                       # ACL-1572: имя ad set'а изменилось, пока выбирали Website.
@@ -128,6 +128,11 @@ BLOCKING_REVIEW_STEPS = frozenset(
         "profile_logged_out",
         "profile_network",
         "profile_restart_failed",
+        # ACL-1403: MLX started the profile, its CDP port refused connections.
+        "profile_cdp_refused",
+        # ACL-1401: the Multilogin app is not running (launcher refused the
+        # connection); decided by the publisher at attach, before any campaign.
+        "multilogin_not_running",
         # ACL-1320: the profile is open by hand; the publisher stops the
         # account's job before any campaign instead of closing the window.
         "profile_open_by_hand",

@@ -113,7 +113,8 @@ jobs:
     # passed on this exact tree. Any other answer (or a failed scope) runs them.
     if: ${{ always() && !cancelled() && (needs.scope.result != 'success' || needs.scope.outputs.linux != 'false') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    # ACL-1710: шард 1 обычно 20-22 мин, самый долгий зелёный был 29.2; потолок 32.
+    timeout-minutes: 32
 
     env:
       PYTHONIOENCODING: utf-8
@@ -155,8 +156,40 @@ jobs:
       # Runtime still attaches to Multilogin; Chromium is only for isolated
       # tests of recorded/synthetic DOM fixtures. --with-deps installs the
       # system libraries Chromium needs on Ubuntu.
+      # ACL-1710: apt-get update на зеркале Azure иногда висит ~35 мин. Поэтому:
+      # скачанный браузер кэшируем по версии Playwright, а сам шаг ограничен
+      # (3 попытки по 150 с, между ними чистим замки apt) и жёстко 16 мин.
+      - name: Playwright version (cache key)
+        id: pw
+        run: echo "version=$(python -c 'import importlib.metadata as m; print(m.version("playwright"))')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Chromium download
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
       - name: Install Chromium for isolated DOM tests
-        run: python -m playwright install --with-deps chromium
+        timeout-minutes: 16
+        env:
+          CI_RETRY_CLEANUP: |
+            sudo pkill -9 -x apt-get || true
+            sudo pkill -9 -x apt || true
+            sudo pkill -9 -x dpkg || true
+            sudo rm -f /var/lib/apt/lists/lock /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend /var/cache/apt/archives/lock
+            sudo rm -rf /var/lib/apt/lists/partial/*
+            sudo dpkg --configure -a || true
+        run: |
+          # ACL-2146: the hosted image also uses mirror+file: indirection.
+          # Resolve its local mirror list before install-deps calls apt-get update.
+          sudo -- "$(command -v python)" scripts/ci_ubuntu_mirror.py
+          if [ "${{ steps.pw-cache.outputs.cache-hit }}" = "true" ]; then
+            # браузер уже скачан из кэша: нужны только системные библиотеки
+            bash scripts/ci_retry.sh 3 300 15 -- python -m playwright install-deps chromium
+          else
+            bash scripts/ci_retry.sh 3 300 15 -- python -m playwright install --with-deps chromium
+          fi
 
       # `loadfile` keeps each test file on one worker: 80+ files launch their
       # own Chromium in a module fixture. See docs/repository/WORKFLOW.md.
@@ -217,8 +250,23 @@ jobs:
       - name: Smoke check (does ACL start on Windows?)
         run: python scripts/acl_smoke.py
 
+      # ACL-1710: то же ограничение, что и на Linux (здесь apt нет, но сеть бывает
+      # такой же): кэш загрузки, 3 попытки по 180 с, жёсткий потолок 12 мин.
+      - name: Playwright version (cache key)
+        id: pw
+        shell: bash
+        run: echo "version=$(python -c 'import importlib.metadata as m; print(m.version("playwright"))')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Chromium download
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
       - name: Install Chromium for isolated DOM tests
-        run: python -m playwright install chromium
+        timeout-minutes: 12
+        shell: bash
+        run: bash scripts/ci_retry.sh 3 180 10 -- python -m playwright install chromium
 
       - name: Tests (windows_only files and the Windows smoke set)
         run: |

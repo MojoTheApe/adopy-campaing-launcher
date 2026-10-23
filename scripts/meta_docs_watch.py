@@ -264,16 +264,18 @@ OBSIDIAN_NOTE = "ACL — Meta изменения.md"
 
 
 def default_vault_dir() -> Path | None:
-    """Папка «дешборд» в Obsidian: ACL_OBSIDIAN_DIR, иначе стандартное место; None, если нет."""
-    env = os.environ.get("ACL_OBSIDIAN_DIR", "").strip()
-    p = Path(env) if env else Path.home() / "Desktop" / "Obsidian" / "Kuwait Forms" / "дешборд"
-    return p if p.is_dir() else None
+    """Общая папка «дешборд» в Obsidian; None, если ни один путь не существует."""
+    sys.path.insert(0, str(ROOT))
+    from config.paths import get_obsidian_dashboard_dir
+    return get_obsidian_dashboard_dir()
 
 
 def append_obsidian(d: dict, vault: Path | None) -> bool:
     """Дописывает датированную секцию в заметку дневника. Пустой дайджест и нет vault — no-op."""
     if vault is None or not Path(vault).is_dir():
-        print("obsidian: vault not found, skipped")
+        sys.path.insert(0, str(ROOT))
+        from config.paths import OBSIDIAN_MISSING_WARNING
+        print(f"obsidian: {OBSIDIAN_MISSING_WARNING}, skipped", file=sys.stderr)
         return False
     if not d["changes"] and not d["errors"]:
         return False
@@ -323,8 +325,7 @@ def main(argv: list[str] | None = None) -> int:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     if a.obsidian is not False and not a.dry_run:
         vault = a.vault if a.vault else default_vault_dir()
-        if a.obsidian is None or vault is not None:
-            append_obsidian(d, vault)
+        append_obsidian(d, vault)
     print(render_markdown(d) if a.dry_run else
           f"ok={d['ok']} failed={d['failed']} changed={len(d['changes'])} "
           f"baselined={d['baselined']} -> {out}")

@@ -57,7 +57,7 @@ def test_a_read_from_the_profile_is_marked_as_needing_confirmation(monkeypatch):
     monkeypatch.setattr(sp, "_attach_only", lambda entry, label: Conn())
     monkeypatch.setattr(sp, "_act_from_url", lambda page, tries=20: "act_555")
     monkeypatch.setattr(sp, "_ads_manager_account_name", lambda page: "Default One")
-    out = sp.read_ad_account("p-1", "f-1", "A")
+    out = sp.read_ad_account("550e8400-e29b-41d4-a716-446655440000", "f-1", "A")
     assert out["ok"] and out["act"] == "act_555"
     assert out["needs_confirmation"] is True, "the redirected default account is a proposal"
 
@@ -126,9 +126,9 @@ def test_the_country_row_offers_both_actions_in_plain_words():
     page = (TPL / "report.html").read_text(encoding="utf-8")
     start = page.index("function amapUnlink(")
     unlink = page[start: page.index("function amapRemoveFromAcl(")]
-    assert "confirm(" in unlink and "moves to Available accounts" in unlink
+    assert "await aclConfirm(" in unlink and "moves to Available accounts" in unlink
     removal = page[page.index("function amapRemoveFromAcl("): page.index("function amapAccountModel(")]
-    assert "confirm(" in removal and "also_unlink: true" in removal
+    assert "await aclConfirm(" in removal and "also_unlink: true" in removal
     assert "shared sheet" in removal and "Multilogin profile" in removal
 
 

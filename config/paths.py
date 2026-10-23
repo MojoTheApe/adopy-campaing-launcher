@@ -76,11 +76,93 @@ def get_local_config_dir() -> str:
     """
     explicit = os.environ.get("ACL_CONFIG_DIR", "").strip()
     if explicit:
-        return explicit
-    base = os.environ.get("LOCALAPPDATA", "").strip()
+        return unvirtualize_path(explicit)
+    base = get_real_local_appdata()
     if base:  # Windows — every buyer machine today
         return os.path.join(base, "ACL")
     return os.path.join(os.path.expanduser("~"), ".config", "acl")
+
+
+# --- One settings folder for every launch path (ACL-1680) -------------------
+# A process started from Claude Desktop runs inside its MSIX package, where
+# Windows hands it a *virtualised* %LOCALAPPDATA%:
+#   C:\Users\X\AppData\Local\Packages\<Package>\LocalCache\Local
+# ``ACL`` under that root is a private copy, not the folder Explorer, the
+# installer and the buyer's own shortcut use. Every launcher must therefore
+# resolve the REAL folder the same way; this is that one place.
+_VIRTUAL_APPDATA = re.compile(
+    r"^(?P<real>.+?)[\\/]Packages[\\/][^\\/]+[\\/]LocalCache[\\/]Local(?P<rest>(?:[\\/].*)?)$",
+    re.IGNORECASE,
+)
+
+
+def unvirtualize_path(path: str) -> str:
+    r"""Map a path inside an MSIX package's virtual AppData\Local to the real one.
+
+    Anything that is not such a path is returned unchanged, so an explicit
+    ACL_CONFIG_DIR that points elsewhere (tests, portable installs) is honoured.
+    """
+    match = _VIRTUAL_APPDATA.match(path or "")
+    if not match:
+        return path
+    return match.group("real") + match.group("rest").replace("/", "\\")
+
+
+def get_real_local_appdata() -> str:
+    r"""The real per-user ``AppData\Local``, or "" off Windows / when unknown.
+
+    Starts from %LOCALAPPDATA%; when that is the package-virtualised root the
+    real one is derived from it (``USERPROFILE`` is not virtualised and is the
+    fallback when %LOCALAPPDATA% is missing).
+    """
+    base = os.environ.get("LOCALAPPDATA", "").strip()
+    if base:
+        return unvirtualize_path(base)
+    profile = os.environ.get("USERPROFILE", "").strip()
+    if profile and os.name == "nt":
+        return os.path.join(profile, "AppData", "Local")
+    return ""
+
+
+def is_virtualized_environment() -> bool:
+    """True when this process sees the package-virtualised %LOCALAPPDATA%."""
+    base = os.environ.get("LOCALAPPDATA", "").strip()
+    return bool(base) and unvirtualize_path(base) != base
+
+
+def get_shadow_config_dirs() -> list[str]:
+    r"""Other ``ACL`` folders that may hold a divergent copy of the settings.
+
+    These are the per-package virtual copies
+    (``Packages\*\LocalCache\Local\ACL``) under the real AppData, excluding
+    the folder in use now.
+    """
+    real = get_real_local_appdata()
+    if not real:
+        return []
+    current = os.path.normcase(os.path.normpath(get_local_config_dir()))
+    found: list[str] = []
+    packages = os.path.join(real, "Packages")
+    try:
+        names = sorted(os.listdir(packages))
+    except OSError:
+        return []
+    for name in names:
+        candidate = os.path.join(packages, name, "LocalCache", "Local", "ACL")
+        if os.path.isdir(candidate) and os.path.normcase(os.path.normpath(candidate)) != current:
+            found.append(candidate)
+    return found
+
+
+def pin_config_dir_env() -> str:
+    """Make ACL_CONFIG_DIR explicit for this process and every child it starts.
+
+    Called first by every launcher (exe, serve.py behind start_dashboard.bat,
+    installer scripts) so they all agree on one folder.
+    """
+    resolved = get_local_config_dir()
+    os.environ["ACL_CONFIG_DIR"] = resolved
+    return resolved
 
 
 def get_obsidian_dashboard_dir() -> Path | None:
@@ -465,8 +547,11 @@ def update_machine_env(values: dict[str, str]) -> str:
     for line in lines:
         match = re.match(r"^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=", line)
         key = match.group(1) if match else None
-        if key in pending:
-            out.append(_dotenv_line(key, pending.pop(key)))
+        if key in values:
+            if key in pending:
+                out.append(_dotenv_line(key, pending.pop(key)))
+            # Remove obsolete duplicate assignments for this updated key: dotenv
+            # uses the last value, so a later old token would survive Disconnect.
         else:
             out.append(line)
     if pending and out and out[-1].strip():
@@ -486,6 +571,38 @@ def _read_env_value(path: str | Path, key: str) -> str | None:
         return None if value is None else str(value)
     except Exception:
         return None
+
+
+_STALE_GRAPH_PIN = re.compile(
+    rb"^(?P<head>[ \t]*(?:export[ \t]+)?META_GRAPH_API_VERSION[ \t]*=[ \t]*)"
+    rb"(?P<q>[\"']?)v22\.0(?P=q)(?P<tail>[ \t]*(?:#[^\r\n]*)?)(?P<eol>\r\n|\n|\r|)$",
+    re.I,
+)
+
+
+def _clear_stale_graph_pin(path: Path) -> str:
+    """Blank a `META_GRAPH_API_VERSION=v22.0` line in place, byte for byte (ACL-2123).
+
+    Only that one line changes: BOM, encoding, line endings, other lines and an
+    inline comment survive. An unreadable file is left alone (never raises);
+    returns a log note or "".
+    """
+    try:
+        lines = Path(path).read_bytes().splitlines(keepends=True)
+        hit = False
+        for n, line in enumerate(lines):
+            m = _STALE_GRAPH_PIN.match(line)
+            if m:
+                lines[n] = m.group("head") + m.group("tail") + m.group("eol")
+                hit = True
+        if not hit:
+            return ""
+        _atomic_write(path, b"".join(lines))
+    except Exception as exc:
+        return f"META_GRAPH_API_VERSION pin check skipped ({type(exc).__name__}); .env left untouched"
+    if os.environ.get("META_GRAPH_API_VERSION", "").strip().lower() == "v22.0":
+        os.environ.pop("META_GRAPH_API_VERSION", None)
+    return "unsupported META_GRAPH_API_VERSION=v22.0 pin cleared; version now comes from meta.json"
 
 
 def migrate_legacy_env(*, create_from_example: bool = False) -> str:
@@ -508,9 +625,17 @@ def migrate_legacy_env(*, create_from_example: bool = False) -> str:
     if local.exists():
         engine = (_read_env_value(local, "FB_RPA_ENGINE") or "").strip().lower()
         if not engine:
-            update_machine_env({"FB_RPA_ENGINE": "recorded_flow"})
-            suffix = "legacy blank RPA engine normalized to recorded_flow"
+            try:
+                update_machine_env({"FB_RPA_ENGINE": "recorded_flow"})
+                suffix = "legacy blank RPA engine normalized to recorded_flow"
+            except (OSError, UnicodeError) as exc:  # e.g. a cp1251 .env: leave it as is
+                suffix = f"RPA engine normalization skipped ({type(exc).__name__}); .env left untouched"
             note = f"{note}; {suffix}" if note else suffix
+        # ACL-2123: v22.0 pinned from the old .env.example; the Graph API version
+        # now comes from config/meta_rules/meta.json, so the stale pin is cleared.
+        cleared = _clear_stale_graph_pin(local)
+        if cleared:
+            note = f"{note}; {cleared}" if note else cleared
     return note
 
 

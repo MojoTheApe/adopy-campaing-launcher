@@ -88,6 +88,16 @@ const found = (act, name) => ({ ok: true, act, account_name: name, needs_confirm
   }
   // 4. The button reads again and a fresh result needs a fresh confirmation.
   {
+    const w = world([]);
+    const m = w.ctx.amapAccountModel();
+    m.startRead(); m.finishRead(found('act_1', 'First')); m.confirmed = true;
+    assert.equal(m.canSubmit(), true);
+    m.startRead(); m.confirmed = true; m.finishRead({ok: false, error: 'Read failed'});
+    assert.equal(m.value, 'act_1', 'a failed read does not discard the last detected number');
+    assert.equal(m.confirmed, false, 'a failed reread cannot retain an invisible old tick');
+    assert.equal(m.canSubmit(), false, 'the retained default still needs explicit confirmation');
+  }
+  {
     const w = world([found('act_1', 'First'), found('act_2', 'Second')]);
     const p = w.ctx.amapAskAccount(() => w.ctx.amapReadOpenAccount({ profile_id: 'p1' }, 'A'), true);
     await tick(); await tick();
@@ -106,7 +116,7 @@ const found = (act, name) => ({ ok: true, act, account_name: name, needs_confirm
     const box = { getAttribute: () => '', querySelector: () => msg };
     const ctx = {
       calls, FormData: class {}, Object, Promise, String, JSON, encodeURIComponent,
-      prompt: () => 'KLD BFL X84', location: { reload() { calls.push({ url: 'RELOAD' }); } },
+      aclPrompt: async () => 'KLD BFL X84', location: { reload() { calls.push({ url: 'RELOAD' }); } },
       amapAskAccount: async () => answer, amapReadOpenAccount() {},
       amapSend() { calls.push({ url: '/account-links' }); }, setTimeout, AMAP_OPEN_TIMEOUT_MSG: '',
       fetch: (url, opts) => { calls.push({ url, opts }); return Promise.resolve({ json: async () => ({ ok: true }) }); },

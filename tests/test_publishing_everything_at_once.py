@@ -82,7 +82,11 @@ def test_the_owner_is_asked_once_and_told_what_will_happen():
     ask = ask[: ask.index("function _runPublishQueue")]
     assert "_safeConfirm(" in ask
     assert "Draft" in ask and "never clicks Publish" in ask, "в вопросе не сказано, что это черновик"
-    assert "Do not lock the screen" in ask, (
+    # ACL-2118: абзац про блокировку экрана переехал в подсказку ⓘ помощника окна.
+    src = TPL.read_text(encoding="utf-8")
+    helper = src[src.index("/* ACL-2118 begin */"): src.index("/* ACL-2118 end */")]
+    assert "cbPublishConfirmParts(" in ask
+    assert "Do not lock the screen" in helper, (
         "пропало предупреждение о заблокированном экране — на нём загрузка креативов встаёт"
     )
 

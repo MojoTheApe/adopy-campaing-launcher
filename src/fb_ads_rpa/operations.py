@@ -41,14 +41,16 @@ same live Multilogin profile» — то есть про один и тот же 
 насмерть, а такие вложения у нас есть (дерево читается тем же заходом, что и
 спенд). И то, и другое запускает человек руками, так что очередь конечна.
 
-Живёт всё это в одном процессе. Два **процесса** ACL на одной машине по-
-прежнему могут взяться за один профиль — от этого защищает не замок, а то,
-оператор не запускает два процесса ACL на одном профиле; Multilogin сам
-по себе не гарантирует эксклюзивное управление через CDP.
+Замок профиля общий для процессов ACM одного пользователя ОС. Его ключ —
+физический UUID Multilogin (или отдельный ключ Dolphin), независимо от
+конфига и порта. Граница действует на весь охваченный вызов; unmerged warm/API
+сессии должны отдельно удерживать её на весь срок использования браузера.
 """
 import threading
 import inspect
 from functools import wraps
+from src.fb_ads_rpa import profile_lease as _pl
+from src.fb_ads_rpa.profile_lease import profile_lock, check_nested_profile, ProfileLeaseError
 
 
 class _BrowserGate:
@@ -143,26 +145,7 @@ class _BrowserGate:
 #: через `with`, и для публикации ничего не изменилось.
 browser_operation = _BrowserGate()
 
-_profile_locks: dict[str, threading.RLock] = {}
-_profile_guard = threading.Lock()
-
-
-def profile_lock(key: str) -> threading.RLock:
-    """Очередь на одну цель. Одинаковый ключ — одна очередь, разные — не мешают.
-
-    Реентерантный: внутри чтения вызывается другое чтение того же профиля —
-    дерево читается тем же заходом, что и спенд, — и обычный замок здесь встал
-    бы намертво.
-    """
-    name = str(key or "")
-    with _profile_guard:
-        lock = _profile_locks.get(name)
-        if lock is None:
-            lock = _profile_locks[name] = threading.RLock()
-        return lock
-
-
-def publish_lease(key: str):
+def publish_lease(key: str, *, cancelled=None):
     """Занять профиль на всю публикацию.
 
     Тот же замок, что берут чтения этого профиля, — поэтому чтение,
@@ -170,10 +153,15 @@ def publish_lease(key: str):
     не ждёт ничего. Реентерантен: `_run_job` берёт его на прогон, а
     `publish_draft` внутри — ещё раз, тем же потоком.
     """
-    return profile_lock(str(key or "").strip())
+    lease = profile_lock(key)
+    return lease if cancelled is None else lease.holding(cancelled=cancelled, timeout=_pl.PUBLISH_WAIT_SECONDS)
 
 
-def serialized_browser(fn=None, *, key=None, reading=False):
+#: Сколько чтение ждёт профиль, занятый другой операцией этого или другого процесса.
+READ_WAIT_SECONDS = 600.0
+
+
+def serialized_browser(fn=None, *, key=None, reading=False, on_lease_error=None):
     """Serialize work on one profile; reads share, writes are exclusive.
 
     A write with a `key` (or a resolvable first parameter) takes that
@@ -183,6 +171,8 @@ def serialized_browser(fn=None, *, key=None, reading=False):
     resolved from the function signature so positional and keyword calls
     occupy the same profile. A failing key resolver refuses the call instead
     of silently acquiring a different profile's lock.
+    `on_lease_error` preserves an entry point's existing result-shaped refusal;
+    the browser operation is never invoked when resolution/acquisition fails.
     """
     def decorate(func):
         signature = inspect.signature(func)
@@ -195,18 +185,28 @@ def serialized_browser(fn=None, *, key=None, reading=False):
                 bound = signature.bind(*args, **kwargs)
                 bound.apply_defaults()
                 name = bound.arguments.get(first_parameter, "")
-            return str(name or "").strip()
+            resolved = str(name or "").strip()
+            check_nested_profile(resolved)
+            return resolved
 
         @wraps(func)
         def wrapped(*args, **kwargs):
-            if not reading:
-                if key is None:
-                    with browser_operation:
+            try:
+                if not reading:
+                    if key is None:
+                        with browser_operation:
+                            return func(*args, **kwargs)
+                    with publish_lease(resolve(args, kwargs)):
                         return func(*args, **kwargs)
-                with publish_lease(resolve(args, kwargs)):
+                # Чтение (Check plan, Страницы, спенд) ждёт, пока другая операция на этом
+                # профиле закончится, и подхватывает открытый профиль. Отказ «busy»
+                # через WAIT_SECONDS (120 с) превращал обычную очередь в ошибку плана.
+                with browser_operation.reading(),                         profile_lock(resolve(args, kwargs)).holding(timeout=READ_WAIT_SECONDS):
                     return func(*args, **kwargs)
-            with browser_operation.reading(), profile_lock(resolve(args, kwargs)):
-                return func(*args, **kwargs)
+            except ProfileLeaseError as exc:
+                if on_lease_error is None:
+                    raise
+                return on_lease_error(exc, *args, **kwargs)
         return wrapped
 
     return decorate(fn) if fn is not None else decorate
