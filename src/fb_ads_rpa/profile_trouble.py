@@ -33,6 +33,7 @@ from urllib.parse import urlsplit
 LOGGED_OUT = "profile_logged_out"
 NETWORK = "profile_network"
 RESTART_FAILED = "profile_restart_failed"
+CDP_REFUSED = "profile_cdp_refused"
 OPEN_BY_HAND = "profile_open_by_hand"
 SIMPLE_CREATE = "simple_create_layout"
 LEAD_TERMS = "lead_terms_not_accepted"
@@ -48,6 +49,10 @@ MESSAGES = {
     RESTART_FAILED: "Restarting the Multilogin profile failed, so it may be closed now — "
                     "open it in Multilogin, check that it loads Ads Manager, close it, "
                     "then publish again",
+    # ACL-1403: MLX сообщил порт автоматизации, но на нём никто не слушает
+    # (профиль упал при старте или порт устарел), и ожидание порта не помогло.
+    CDP_REFUSED: "The Multilogin profile started but its browser did not accept the connection - "
+                 "open the profile in Multilogin, check that it loads, close it, then press Publish again",
     # ACL-1320: профиль открыт руками (без порта автоматизации). Остановка
     # через MLX API могла потерять только что созданную сессию Facebook,
     # если Multilogin её ещё не сохранил, — робот такой профиль не трогает.

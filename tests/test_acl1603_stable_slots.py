@@ -19,6 +19,7 @@ import time
 from pathlib import Path
 
 import pytest
+from tests.profile_lease_fakes import fake_profile
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -474,7 +475,7 @@ def _fake_run(monkeypatch, *, closes: bool, cancel_after_grant: bool = False):
     import contextlib
     monkeypatch.setattr(pj, "keep_display_awake", lambda *a, **k: contextlib.nullcontext())
     monkeypatch.setattr(pj, "_watch_screen_lock", lambda *a, **k: contextlib.nullcontext())
-    monkeypatch.setattr(pj, "profile_key_for", lambda label: label)
+    monkeypatch.setattr(pj, "profile_key_for", lambda label: fake_profile(label))
 
     def fake_rpa(job_id, slots_, **kw):
         if closes:
@@ -502,7 +503,7 @@ def _fake_run(monkeypatch, *, closes: bool, cancel_after_grant: bool = False):
 def test_a_finished_job_that_left_its_window_open_keeps_the_slot_until_the_profile_is_closed(
         clean_jobs, monkeypatch):
     slots, job_id = _fake_run(monkeypatch, closes=False)
-    assert [(r["profile"], r["kept"]) for r in slots.snapshot()["running"]] == [("Doc19", True)]
+    assert [(r["profile"], r["kept"]) for r in slots.snapshot()["running"]] == [(fake_profile("Doc19"), True)]
 
     from src.fb_ads_rpa import rpa_publisher as rp
     monkeypatch.setattr(rp, "close_account_profile", lambda label: None)

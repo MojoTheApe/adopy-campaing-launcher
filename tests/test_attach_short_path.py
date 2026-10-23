@@ -37,12 +37,12 @@ sys.path.insert(0, str(ROOT))
 
 from src.analysis_agent import account_spend as sp  # noqa: E402
 
-LONG = r"C:\Users\Example User\mlx\profiles\workspace-example\folder-example\profile-example"
+LONG = r"C:\Users\Example User\mlx\profiles\workspace-example\folder-example\550e8400-e29b-41d4-a716-446655440000"
 SHORT = r"C:\Users\EXAMPL~1\mlx\profiles\WORKSP~1\FOLDER~1\PROFIL~1"
 
 
 class _Entry:
-    profile_id = "profile-example"
+    profile_id = "550e8400-e29b-41d4-a716-446655440000"
     folder_id = "folder-example"
 
 
@@ -267,3 +267,10 @@ def test_the_public_path_pins_the_strict_check():
     from src.fb_ads_rpa.browser import MultiloginDirectCDPProvider as P
 
     assert "strict_profile=True" in inspect.getsource(P.attach_existing_only)
+
+
+@pytest.fixture(autouse=True)
+def physical_ownership():
+    from src.fb_ads_rpa.operations import profile_lock
+    with profile_lock(_Entry.profile_id):
+        yield

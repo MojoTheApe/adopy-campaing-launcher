@@ -521,16 +521,26 @@ def _profile_key(account: str, *_a, **_k) -> str:
 
     Ярлыков может оказаться несколько на один профиль: карта этого не
     запрещает, а две очереди к одному браузеру — ровно то, от чего замок и
-    защищает. Если ярлык в профиль не разрешается (нет в карте, файл не
-    читается), ключом остаётся сам ярлык: занять лишнее безопаснее, чем не
-    занять нужное.
+    защищает. Без физического UUID отказываем до открытия браузера: ярлык
+    не защищает тот же профиль в другом процессе.
     """
     try:
         entry = _entry_for(account)
     except Exception:
         entry = None
     profile = (getattr(entry, "profile_id", "") or "").strip() if entry else ""
-    return profile or str(account or "")
+    from src.fb_ads_rpa.profile_lease import physical_profile_key, ProfileLeaseError
+
+    if entry is None:
+        raise ProfileLeaseError(f"{account} is not in the account map; check the account connection.")
+    return physical_profile_key(profile)
+
+
+def _failure_text(exc: BaseException) -> str:
+    """Текст сбоя чтения для человека; отказ замка профиля уже написан словами."""
+    from src.fb_ads_rpa.profile_lease import ProfileLeaseError
+
+    return str(exc) if isinstance(exc, ProfileLeaseError) else f"{type(exc).__name__}: {exc}"
 
 
 def _lock_for(account: str):
@@ -604,7 +614,7 @@ def start_read(
             text, code = _mlx.humanize(exc, "", account)
             done = SpendReading(
                 account=account, date_from=date_from, date_to=date_to,
-                state="failed", error=text or f"{type(exc).__name__}: {exc}", error_code=code,
+                state="failed", error=text or _failure_text(exc), error_code=code,
             )
         done.started_at = reading.started_at
         done.finished_at = _now()
@@ -979,12 +989,19 @@ def _publish_touched(opened: _ReadOpen) -> bool:
 
 def _close_if_still_pending(opened: _ReadOpen) -> None:
     """Конец `CLOSE_GRACE_S`: никто не забрал профиль — закрыть его."""
-    with browser_operation.reading(), profile_lock(opened.profile_id):
-        with _PENDING_LOCK:
-            if _PENDING_CLOSE.get(opened.profile_id) is not opened:
-                return
-            _PENDING_CLOSE.pop(opened.profile_id, None)
-        _close_started(opened)
+    from src.fb_ads_rpa.profile_lease import ProfileLeaseError
+
+    # ACL-1853: таймер в своём потоке — отказ замка не должен его ронять; запись остаётся
+    # в `_PENDING_CLOSE`, следующая операция с этим профилем возьмёт её или закроет.
+    try:
+        with browser_operation.reading(), profile_lock(opened.profile_id):
+            with _PENDING_LOCK:
+                if _PENDING_CLOSE.get(opened.profile_id) is not opened:
+                    return
+                _PENDING_CLOSE.pop(opened.profile_id, None)
+            _close_started(opened)
+    except ProfileLeaseError as exc:
+        log.warning("Deferred close of %s skipped: %s", opened.account, exc)
 
 
 def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False,
@@ -1154,6 +1171,10 @@ def _attach_only(entry, account_label: str):
     if not profile_id:
         raise ProfileNotAttachable(f"{account_label} has no profile_id in the account map")
 
+    from src.fb_ads_rpa.profile_lease import require_profile_lease
+
+    require_profile_lease(profile_id)
+
     direct_cls = getattr(rpa_browser, "MultiloginDirectCDPProvider", None)
     if direct_cls is None:
         raise ProfileNotAttachable(
@@ -1199,7 +1220,20 @@ def _attach_only(entry, account_label: str):
     )
 
 
-@serialized_browser(reading=True)
+def _probe_lease_error(exc, *_args, **_kwargs):
+    return {"ok": False, "act": "", "account_name": "", "error": str(exc)}
+
+
+def _open_lease_error(exc, *_args, **_kwargs):
+    return False, str(exc)
+
+
+def _spend_lease_error(exc, account, date_from, date_to=""):
+    return SpendReading(account=account, date_from=date_from, date_to=date_to or date_from,
+                        source="rpa", state="failed", error=str(exc))
+
+
+@serialized_browser(reading=True, on_lease_error=_probe_lease_error)
 def read_ad_account(profile_id: str, folder_id: str = "", instance: str = "A") -> dict:
     """Спросить у самого аккаунта, какой у него номер.
 
@@ -1325,7 +1359,7 @@ class _Profile:
         self.multilogin_instance = (instance or "A").strip() or "A"
 
 
-@serialized_browser(reading=True)
+@serialized_browser(reading=True, on_lease_error=_open_lease_error)
 def open_profile_for_automation(profile_id: str, folder_id: str = "",
                                 instance: str = "A", label: str = "") -> tuple[bool, str]:
     """Поднять профиль автоматизацией и оставить окно открытым.
@@ -1426,7 +1460,7 @@ class CodedMessage(str):
         return obj
 
 
-@serialized_browser(key=_profile_key, reading=True)
+@serialized_browser(key=_profile_key, reading=True, on_lease_error=_open_lease_error)
 def open_for_automation(account: str) -> tuple[bool, str]:
     """То же самое для аккаунта, который уже есть в карте."""
     entry = _entry_for(account)
@@ -1440,7 +1474,7 @@ def open_for_automation(account: str) -> tuple[bool, str]:
     )
 
 
-@serialized_browser(key=_profile_key, reading=True)
+@serialized_browser(key=_profile_key, reading=True, on_lease_error=_spend_lease_error)
 def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReading:
     """Прочитать спенд аккаунта за период, выбранный на дешборде.
 
@@ -3397,7 +3431,16 @@ _SWITCH_ACTION_JS = """args => {
 }"""
 
 
-@serialized_browser(key=_profile_key)
+def _turn_off_lease_error(exc, account, level, object_id, *, expected_name="", requester="", **_kwargs):
+    # No browser action started: this is a refusal, not an unconfirmed click.
+    out = TurnOffResult(account=account, level=level, object_id=str(object_id),
+                        name=expected_name, state="failed", error=str(exc), at=_now(),
+                        requester=(requester or "").strip(), route="rpa")
+    _record_turn_off(out)
+    return out
+
+
+@serialized_browser(key=_profile_key, on_lease_error=_turn_off_lease_error)
 def turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
              expected_name: str = "", date_from: str = "", date_to: str = "",
              requester: str = "") -> "TurnOffResult":
