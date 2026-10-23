@@ -249,6 +249,8 @@ def _profile_save_callers(page, *, automatic=False):
     def patch(route):
         state["posts"].append(route.request.post_data_json)
         state["pending"].append(route)
+        page.locator("#profile-country").evaluate(
+            "(el, count) => el.dataset.patchReceived = String(count)", len(state["posts"]))
 
     page.route("**/account-map-patch", patch)
     return state
@@ -355,6 +357,8 @@ def test_automatic_profile_link_keeps_inline_failures_and_reports_only_real_succ
         "ok": True, "token_saved": True, "profiles": profiles, "folders": []}))
     page.locator("#signin").click()
     expect(page.locator("#ml-profiles-probe")).to_contain_text("Linking")
+    # Linking is synchronous; wait for the intercepted Python callback too.
+    expect(page.locator("#profile-country")).to_have_attribute("data-patch-received", "1")
     assert len(state["pending"]) == 1
     assert state["posts"] == [{"account_name": "Alpha account", "folder_id": "synthetic-folder",
                                "profile_id": "Alpha", "multilogin_instance": "B"}]
