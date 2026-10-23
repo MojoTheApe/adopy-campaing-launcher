@@ -3148,6 +3148,38 @@
     #sfc-cancel:hover { background: var(--accent-soft); }
     #sfc-ok.sfc-danger { background: var(--bad); color: var(--on-danger); border-color: var(--bad); }
     .sfc-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
+    /* ACL-2118: окно подтверждения помещается в экран. Заголовок и кнопки
+       стоят на месте, прокручивается только середина. */
+    .sfc-box { display: flex; flex-direction: column; box-sizing: border-box;
+      max-height: calc(100vh - 2rem); overflow: hidden; }
+    .sfc-head { flex: none; font-size: var(--adopy-text-body); font-weight: 700; margin-bottom: 0.5rem; }
+    .sfc-lead { flex: none; margin-bottom: 0.5rem; }
+    .sfc-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+      font-size: var(--adopy-text-table); color: var(--text); line-height: 1.5; padding-right: 0.25rem; }
+    .sfc-box .sfc-actions { flex: none; margin-top: 0.75rem; padding-top: 0.65rem; border-top: 1px solid var(--border); }
+    .pc-sum { font-size: var(--adopy-text-body); font-weight: 600; color: var(--text); }
+    .pc-mode { margin-top: 0.3rem; font-size: var(--adopy-text-sm); color: var(--muted); }
+    .pc-mode b { font-weight: 500; background: #143d1b; color: var(--good); padding: 0.1rem 0.45rem; border-radius: 3px; }
+    .pc-cols { display: grid; gap: 0.9rem 1.25rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); align-items: start; }
+    .pc-h { font-size: var(--adopy-text-sm); font-weight: 600; color: var(--muted); margin: 0 0 0.3rem; }
+    .pc-acc { padding: 0.3rem 0; border-bottom: 1px solid var(--border); }
+    .pc-acc:last-child { border-bottom: 0; }
+    .pc-acc > summary { cursor: pointer; }
+    .pc-n { color: var(--muted); font-weight: 400; }
+    .pc-chips { margin-top: 0.15rem; line-height: 1.9; }
+    .pc-chip { background: var(--bg-hover); border-radius: 10px; padding: 0.05rem 0.5rem; font-size: var(--adopy-text-sm); }
+    .pc-sep { color: var(--muted); }
+    .pc-skipped { margin-top: 0.4rem; font-size: var(--adopy-text-sm); color: var(--muted); }
+    .pc-note { border-left: 3px solid var(--border-strong); padding: 0.1rem 0 0.1rem 0.5rem; margin: 0 0 0.35rem;
+      font-size: var(--adopy-text-sm); color: var(--muted); }
+    .pc-note > summary { cursor: pointer; }
+    .pc-note.pc-warn { border-left-color: var(--warn); background: var(--warn-soft); color: var(--text); font-size: var(--adopy-text-table); padding: 0.25rem 0.5rem; border-radius: 0 4px 4px 0; }
+    .pc-note.pc-block { border-left-color: var(--bad); background: var(--bad-soft); color: var(--text); font-size: var(--adopy-text-table); padding: 0.25rem 0.5rem; border-radius: 0 4px 4px 0; }
+    .pc-note ul { margin: 0.2rem 0 0.1rem 1.1rem; padding: 0; }
+    .pc-hint { color: var(--muted); }
+    .pc-help { margin-top: 0.4rem; font-size: var(--adopy-text-sm); color: var(--muted); }
+    .pc-i { cursor: help; color: var(--accent); border: 1px solid var(--border-strong); border-radius: 50%;
+      display: inline-block; width: 1.15em; height: 1.15em; line-height: 1.1em; text-align: center; font-size: 0.85em; }
     @media (prefers-reduced-motion: reduce) {
       .cb-publish-btn, .cbd-publish-all, #sfc-ok, #sfc-cancel { transition: none; }
     }
@@ -3815,6 +3847,7 @@
     .sb-more > summary::before { content: "\25B8"; display: inline-block; margin-right: var(--adopy-space-2);
       font-size: var(--adopy-text-xs); transition: transform 120ms var(--ease-out); }
     .sb-more[open] > summary::before { transform: rotate(90deg); }
+    .sb-assets-brands { margin-top: var(--adopy-space-2); padding-top: var(--adopy-space-2); border-top: 1px solid var(--adopy-border); }
     .sb-more > summary:hover { color: var(--adopy-text); background: var(--adopy-surface-hover); }
     .sb-empty, .sb-note { margin: var(--adopy-space-3) var(--adopy-space-3) 0; font-size: var(--adopy-text-sm);
       color: var(--adopy-text-muted); line-height: var(--adopy-leading-ui); }
@@ -4330,18 +4363,18 @@ async function dashRefresh(ev) {
             {% if s.active %}title="{% if s.spend %}spending{% else %}opened in the account map, nothing spent yet{% endif %}"{% endif %}>{{ c.country }}</button>
     {%- if s.ftds %}<span class="sb-ftd sb-ftd-country" title="FTDs: yours / everyone's in the selected period">{{ s.ftds.you }} / {{ s.ftds.all }}</span>{% endif %}
     <div class="sidebar-sections">
-      {#- ACL-1827: ассеты страны — строками под названием. «Все ассеты» ведёт на
-          тот же Workbench, что и прежняя ссылка; выбор ассета ставит чип. -#}
-      {% if c.workbench and c.workbench.assets %}
-      <div class="sb-assets" role="group" aria-label="Assets in {{ c.country }}">
-        {% for a in c.workbench.assets %}
+      {#- 22.10 (владелец): сверху «All assets», под ним виды страны (Workbench, Manage, 1 Assets…),
+          ниже — ассеты по брендам. Виды интереснее списка брендов, поэтому они выше и не свёрнуты. -#}
+      {% set wb_assets = (c.workbench.assets if c.workbench and c.workbench.assets else []) %}
+      {% if wb_assets %}
+      <div class="sb-assets" role="group" aria-label="All assets in {{ c.country }}">
+        {% for a in wb_assets[:1] %}
         <button type="button" class="sb-asset" data-country="{{ cid }}" data-asset="{{ a.name }}" title="FTDs: yours / everyone's">
           <span class="sb-asset-name">{{ a.label }}</span><span class="sb-ftd">{{ a.you_ftds }} / {{ a.ftds }}</span></button>
         {% endfor %}
       </div>
       {% endif %}
-      <details class="sb-more"{% if not c.workbench %} open{% endif %}>
-      <summary>More country views</summary>
+      <div class="sb-views">
       {#- Одна дверь вместо четырёх. My Goals, CM, Accounts и Campaign Builder
           отвечали на один вопрос — как идёт страна и что с этим делать, — и
           стоили четырёх кликов по экранам, которые никогда не видны рядом. -#}
@@ -4354,7 +4387,15 @@ async function dashRefresh(ev) {
       {% if c.targeting %}<button type="button" class="sidebar-link" data-view="country-{{ cid }}-targeting">{{ n_targeting }} Targeting</button>{% endif %}
       <button type="button" class="sidebar-link" data-view="country-{{ cid }}-creatives">{{ n_creatives }} Creatives</button>
       <button type="button" class="sidebar-link" data-view="country-{{ cid }}-optimization">{{ n_optimization }} Optimization</button>
-      </details>
+      </div>
+      {% if wb_assets | length > 1 %}
+      <div class="sb-assets sb-assets-brands" role="group" aria-label="Assets in {{ c.country }}">
+        {% for a in wb_assets[1:] %}
+        <button type="button" class="sb-asset" data-country="{{ cid }}" data-asset="{{ a.name }}" title="FTDs: yours / everyone's">
+          <span class="sb-asset-name">{{ a.label }}</span><span class="sb-ftd">{{ a.you_ftds }} / {{ a.ftds }}</span></button>
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
   </div>
   {% endfor %}
@@ -4901,8 +4942,17 @@ async function dashRefresh(ev) {
         {% elif ds %}
           <span class="cb-draft-badge cb-draft-badge-blocked"
                 title="{{ (ds.blocking_failures or ds.errors or ds.campaign_names) | join(', ') }}">
-            ❌ Draft blocked · do not publish
+            {% if ds.state == 'stopped' %}⚠ Draft stopped · verify partial drafts
+            {% elif ds.state == 'running' %}⏳ Build in progress · not ready
+            {% elif ds.state == 'interrupted' %}⚠ Build interrupted · verify partial drafts
+            {% elif ds.state == 'unverified' %}⚠ Draft unverified · {{ ds.errors | join('; ') }}
+            {% else %}❌ Draft blocked · do not publish{% endif %}
             <span class="cb-draft-ts">{{ ds.ts[:16].replace('T',' ') }} UTC</span>
+          </span>
+        {% endif %}
+        {% if ds.previous_ready %}
+          <span class="cb-draft-ts" title="{{ ds.previous_ready.campaign_names | join(', ') }}">
+            Previous successful build · {{ ds.previous_ready.ts[:16].replace('T',' ') }} UTC (history)
           </span>
         {% endif %}
         <span style="font-size:var(--adopy-text-sm);color:var(--muted)">{{ recs | length }} rec{{ 's' if recs|length != 1 else '' }}</span>
@@ -8661,13 +8711,18 @@ function _safeConfirm(title, bodyHtml, onConfirm, opts) {
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:9999;display:flex;align-items:center;justify-content:center';
 
   var box = document.createElement('div');
+  box.className = 'sfc-box';
   box.style.cssText = 'background:var(--bg-elev);border:1px solid '
     + (danger ? 'var(--bad)' : 'var(--border)')
-    + ';border-radius:8px;padding:1.2rem 1.5rem;max-width:460px;width:92%;box-shadow:0 8px 32px rgba(0,0,0,.65)';
+    + ';border-radius:8px;padding:1.2rem 1.5rem;box-shadow:0 8px 32px rgba(0,0,0,.65);'
+    + (opts.wide ? 'width:min(900px,90vw)' : 'max-width:460px;width:92%');
 
+  // ACL-2118: заголовок (и необязательная итоговая строка `lead`) и кнопки
+  // стоят на месте; длинное тело прокручивается внутри окна.
   box.innerHTML =
-    '<div style="font-size:var(--adopy-text-body);font-weight:700;color:' + (danger ? 'var(--bad)' : 'var(--accent)') + ';margin-bottom:0.65rem">' + title + '</div>'
-    + '<div style="font-size:var(--adopy-text-table);color:var(--text);line-height:1.6;margin-bottom:1rem">' + bodyHtml + '</div>'
+    '<div class="sfc-head" style="color:' + (danger ? 'var(--bad)' : 'var(--accent)') + '">' + title + '</div>'
+    + (opts.lead ? '<div class="sfc-lead">' + opts.lead + '</div>' : '')
+    + '<div class="sfc-body">' + bodyHtml + '</div>'
     + '<div class="sfc-actions">'
     + '<button id="sfc-cancel">Cancel</button>'
     + '<button id="sfc-ok"' + (danger ? ' class="sfc-danger"' : '') + '>' + confirmLabel + '</button>'
@@ -15159,6 +15214,105 @@ function cbDrawerWatchChecks() {
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',cbDrawerWatchChecks);
 else cbDrawerWatchChecks();
 
+/* ── ACL-2118: окно подтверждения «Publish all» ─────────────────────────
+ * Чистые помощники без обращения к странице: сгруппировать повторяющиеся
+ * замечания и собрать компактное тело окна. Блок ограничен маркерами —
+ * тест вырезает его и гоняет в node. */
+/* ACL-2118 begin */
+var CB_INFO_RULES = { primary_len: 1, headline_len: 1, media_vertical: 1 };
+
+/* Серьёзность замечания: ошибка блокирует (красное), справочные правила
+ * о длине текста — серая мелочь, остальное — настоящее предупреждение (жёлтое). */
+function cbNoticeLevel(rule, status) {
+  if (status === 'error') return 'block';
+  return CB_INFO_RULES[rule] ? 'info' : 'warn';
+}
+
+/* items: [{level, rule, label, hint, detail, campaign}] → группы по (уровень, правило,
+ * текст): одна строка со счётчиком кампаний. Порядок: красные, жёлтые, серые. */
+function cbGroupNotices(items) {
+  var rank = { block: 0, warn: 1, info: 2 }, by = Object.create(null), out = [];
+  (items || []).forEach(function (it) {
+    var level = rank[it.level] === undefined ? 'warn' : it.level;
+    var key = level + '|' + (it.rule || '') + '|' + (it.label || '') + '|' + (it.hint || '');
+    var g = by[key];
+    if (!g) {
+      g = by[key] = { level: level, rule: it.rule || '', label: it.label || '', hint: it.hint || '',
+                      count: 0, campaigns: [], details: [] };
+      out.push(g);
+    }
+    g.count += 1;
+    if (it.campaign && g.campaigns.indexOf(it.campaign) < 0) g.campaigns.push(it.campaign);
+    var d = it.campaign && it.detail ? it.campaign + ' — ' + it.detail : '';
+    if (d && g.details.indexOf(d) < 0) g.details.push(d);
+  });
+  return out
+    .map(function (g, i) { return { g: g, i: i }; })
+    .sort(function (a, b) { return rank[a.g.level] - rank[b.g.level] || a.i - b.i; })
+    .map(function (x) { return x.g; });
+}
+
+function cbNoticesHtml(groups) {
+  var esc = aclEscHtml;
+  return groups.map(function (g) {
+    var n = g.campaigns.length || g.count;
+    var what = g.campaigns.length ? (n + (n === 1 ? ' campaign' : ' campaigns')) : (n > 1 ? n + ' times' : '');
+    var rows = g.campaigns.length
+      ? g.campaigns.map(function (c) {
+          var d = g.details.filter(function (x) { return x.indexOf(c + ' — ') === 0; })[0];
+          return '<li>' + esc(d || c) + '</li>';
+        }).join('')
+      : '';
+    return '<details class="pc-note pc-' + g.level + '"><summary>'
+      + (g.level === 'warn' ? '⚠ ' : g.level === 'block' ? '✕ ' : '')
+      + '<strong>' + esc(g.label) + '</strong>'
+      + (what ? ' · ' + what : '')
+      + (g.hint ? ' <span class="pc-hint">— ' + esc(g.hint) + '</span>' : '')
+      + (rows ? ' ▸' : '') + '</summary>' + (rows ? '<ul>' + rows + '</ul>' : '') + '</details>';
+  }).join('');
+}
+
+/* m: {campaigns, accounts:[{name, camps:[...]}], skipped:[], modeHtml, targetText,
+ *     noticesHtml, collapseOver}. Возвращает {lead, body}. */
+function cbPublishConfirmParts(m) {
+  var esc = aclEscHtml, accounts = m.accounts || [];
+  var total = m.campaigns === undefined
+    ? accounts.reduce(function (n, a) { return n + a.camps.length; }, 0) : m.campaigns;
+  var collapse = total > (m.collapseOver === undefined ? 6 : m.collapseOver);
+  var lead = '<div class="pc-sum">' + esc(m.verb || 'Publish') + ' <strong>' + total + '</strong> '
+    + (total === 1 ? 'campaign' : 'campaigns') + ' on <strong>' + accounts.length + '</strong> '
+    + (accounts.length === 1 ? 'account' : 'accounts') + ' — ' + esc(m.targetText || '') + '</div>'
+    + '<div class="pc-mode">Mode: ' + (m.modeHtml || '') + '</div>';
+
+  var left = accounts.map(function (a) {
+    var chips = a.camps.map(function (c) { return '<span class="pc-chip">' + esc(c) + '</span>'; })
+      .join('<span class="pc-sep">, </span>');
+    var head = '<strong>' + esc(a.name) + '</strong>'
+      + (a.camps.length ? ' <span class="pc-n">(' + a.camps.length + ')</span>' : '');
+    if (!a.camps.length) return '<div class="pc-acc">' + head + '</div>';
+    // «Demo: имя1, имя2» читается подряд и в раскрытом виде, и для скринридера.
+    return collapse
+      ? '<details class="pc-acc"><summary>' + head + '</summary><div class="pc-chips">' + chips + '</div></details>'
+      : '<div class="pc-acc"><strong>' + esc(a.name) + '</strong>: ' + chips + '</div>';
+  }).join('');
+
+  var right = (m.noticesHtml || '')
+    + '<div class="pc-help">Keep the screen unlocked while the build runs '
+    + '<span class="pc-i" tabindex="0" role="note" aria-label="How the build runs" title="'
+    + esc('Accounts run at the same time, each in its own Multilogin profile — as many at once as this computer '
+      + 'has memory for; the rest wait as queued and start on their own. Two jobs on one profile queue. '
+      + 'A campaign whose preview shows an error is skipped; the rest of its account still go. '
+      + 'Do not lock the screen while the build runs — creative uploads stall on a locked screen.')
+    + '">ⓘ</span></div>';
+
+  var body = '<div class="pc-cols"><div class="pc-left"><div class="pc-h">Accounts and campaigns</div><div class="cb-selected-list">' + left + '</div>'
+    + (m.skipped && m.skipped.length
+      ? '<div class="pc-skipped">Already being built, skipped: ' + esc(m.skipped.join(', ')) + '</div>' : '')
+    + '</div><div class="pc-right"><div class="pc-h">Notices</div>' + right + '</div></div>';
+  return { lead: lead, body: body };
+}
+/* ACL-2118 end */
+
 window.CB_LINK_NOT_BLOCKING = /link empty/i;
 
 function cbBlockingErrors(entry) {
@@ -15266,10 +15420,10 @@ window.cbPublishAll = function (onProgress, picked, onlyKeys) {
   });
   var badForms = forms.filter(function (f) { return bad[cbFormAccount(f).toLowerCase()]; });
   var anyway = false;
-  var pfHtml = '';
+  var pfBlocksHtml = '', noteHtml = '';
   if (badList.length) {
-    pfHtml = '<div class="cb-preflight" style="border:1px solid var(--bad);border-radius:4px;padding:0.4rem 0.6rem;margin:0.5rem 0;font-size:var(--adopy-text-table)">'
-      + '<strong style="color:var(--bad)">Not ready (' + badList.length + ')</strong> — skipped unless you run them anyway:<br>'
+    pfBlocksHtml = '<div class="cb-preflight pc-note pc-block">'
+      + '<strong>✕ Not ready (' + badList.length + ')</strong> — skipped unless you run them anyway:<br>'
       + badList.map(function (a) {
           return '<div>' + aclEscHtml(a.account) + ' — ' + aclEscHtml((a.reasons || []).map(function (r) {
             return r.message + (r.seen_label ? ' (seen ' + r.seen_label + ')' : '') + ' → ' + r.hint;
@@ -15278,34 +15432,30 @@ window.cbPublishAll = function (onProgress, picked, onlyKeys) {
       + '<label style="display:block;margin-top:0.35rem"><input type="checkbox" id="cb-pf-anyway"> Run anyway</label></div>';
   }
   var notes = ((pf && pf.accounts) || []).filter(function (a) { return a.ready !== false && (a.notes || []).some(function (n) { return n.code === 'open_now'; }); });
-  if (notes.length) pfHtml += '<div class="cb-preflight-note" style="color:var(--muted);font-size:var(--adopy-text-table)">'
+  if (notes.length) noteHtml = '<div class="cb-preflight-note pc-note">'
     + aclEscHtml(notes.map(function (a) { return a.account; }).join(', ')) + ': profile is open — the robot will reuse or reopen it.</div>';
+
+  var parts = cbPublishConfirmParts({
+    verb: cbApiMode() ? 'Publish' : 'Build',
+    targetText: cbApiMode() ? 'campaign PAUSED, ad sets and ads active' : 'drafts only, nothing is published in Facebook',
+    accounts: forms.map(function (f) {
+      var picked = only ? cbPickedIn(f, only) : Array.prototype.slice.call(f.querySelectorAll('.cb-slot'));
+      return { name: cbFormTitle(f), camps: picked.map(cbSlotTitle) };
+    }),
+    skipped: running,
+    modeHtml: cbApiMode()
+      ? '<b>' + aclEscHtml(cbPublishMode().split(' — ')[0]) + '</b> ' + aclEscHtml(cbPublishMode().split(' — ').slice(1).join(' — '))
+      // Режим робота — дословно здесь: вопрос обязан сказать «черновик» и «Publish не нажимается».
+      : '<b>Draft</b> — the RPA leaves a draft in Ads Manager and never clicks Publish in Facebook',
+    noticesHtml: (pfBlocksHtml ? pfBlocksHtml : '')
+      + (typeof window.cbPreflightWarnHtml === 'function' ? window.cbPreflightWarnHtml() : '')
+      + (noteHtml || '')
+  });
 
   _safeConfirm(cbApiMode()
       ? (only ? 'Create the selected campaigns as PAUSED campaigns?' : 'Create every campaign as a PAUSED campaign?')
       : (only ? 'Build the selected campaigns as drafts?' : 'Build every campaign as a draft?'),
-    (typeof window.cbPreflightWarnHtml === 'function' ? window.cbPreflightWarnHtml() : '')
-    + pfHtml + (only ? 'Campaigns: <strong>' + campaigns + '</strong> · ' : '')
-    + 'Accounts: <strong>' + forms.length + '</strong><br>'
-    + (only
-      ? '<div class="cb-selected-list" style="font-size:var(--adopy-text-body);line-height:1.5">' + listed.join('<br>') + '</div>'
-      : '<span style="color:var(--muted);font-size:var(--adopy-text-body)">' + aclEscHtml(names.join(', ')) + '</span><br>')
-    + (running.length
-      ? '<span style="color:var(--muted);font-size:var(--adopy-text-body)">Already being built, skipped: '
-        + aclEscHtml(running.join(', ')) + '</span><br>'
-      : '')
-    + '<br>'
-    + '<span style="color:var(--muted);font-size:var(--adopy-text-body)">Accounts run at the same time, each in its own Multilogin profile — '
-    + 'as many at once as this computer has memory for; the rest wait as queued and start on their own. '
-    + 'Two jobs on one profile queue. '
-    + 'A campaign whose preview shows an error is skipped; the rest of its account still go.</span><br>'
-    + '<span style="color:var(--warn);font-size:var(--adopy-text-body)">Do not lock the screen while the build runs — '
-    + 'creative uploads stall on a locked screen.</span><br><br>'
-    + 'Mode: <span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
-    + (cbApiMode() ? aclEscHtml(cbPublishMode())
-       // Режим робота — дословно здесь: вопрос обязан сказать «черновик» и «Publish не нажимается».
-       : 'Draft — the RPA leaves a draft in Ads Manager and never clicks Publish in Facebook')
-    + '</span>',
+    parts.body,
     function () {
       var go = anyway ? forms : forms.filter(function (f) { return badForms.indexOf(f) === -1; });
       if (pf && window.cbPreflightDecision) window.cbPreflightDecision(go.map(cbFormAccount), anyway ? [] : badForms.map(cbFormAccount), anyway ? badForms.map(cbFormAccount) : []);
@@ -15314,7 +15464,7 @@ window.cbPublishAll = function (onProgress, picked, onlyKeys) {
         only ? function (form) { return cbPickedIn(form, only); } : null);
       if (got && got.skipped.length) cbSayAlreadyBuilding(got.skipped);
     },
-    { confirmLabel: (only ? 'Publish selected → ' : 'Publish all → ') + cbPublishTarget() });
+    { confirmLabel: (only ? 'Publish selected → ' : 'Publish all → ') + cbPublishTarget(), wide: true, lead: parts.lead });
   var box = (typeof document !== 'undefined' && document.getElementById) ? document.getElementById('cb-pf-anyway') : null;
   if (box) box.addEventListener('change', function () { anyway = box.checked; });
   };
@@ -15380,18 +15530,19 @@ window.cbPreflightWarnHtml = function () {
 };
 
 function cbPfWarnings(slots) {
-  var rows = [];
+  var items = [];
   slots.forEach(function (slot) {
     window.cbTree.auditLines(slot).forEach(function (x) {
       if (x.status !== 'warning') return;
-      var detail = x.detail && !/^(empty|not_https|no_valid_link)$/.test(x.detail) ? ' (' + x.detail + ')' : '';
-      rows.push('<li><strong>' + aclEscHtml(cbPfName(slot) || 'Untitled campaign') + '</strong>: '
-        + aclEscHtml(x.label) + aclEscHtml(detail) + (x.hint ? ' — ' + aclEscHtml(x.hint) : '') + '</li>');
+      var detail = x.detail && !/^(empty|not_https|no_valid_link)$/.test(x.detail) ? x.detail : '';
+      items.push({ level: cbNoticeLevel(x.rule, x.status), rule: x.rule, label: x.label, hint: x.hint || '',
+        detail: detail, campaign: cbPfName(slot) || 'Untitled campaign' });
     });
   });
-  return rows.length
-    ? '<div class="cb-warn-block">⚠ Pre-flight warnings (they do not block):<ul style="margin:0.2rem 0 0 1.1rem">'
-      + rows.join('') + '</ul></div>'
+  // ACL-2118: повторяющиеся замечания — одна строка со счётчиком, раскрывается кликом.
+  return items.length
+    ? '<div class="pc-notes cb-preflight-notes"><div class="pc-h">Pre-flight warnings (they do not block)</div>'
+      + cbNoticesHtml(cbGroupNotices(items)) + '</div>'
     : '';
 }
 
