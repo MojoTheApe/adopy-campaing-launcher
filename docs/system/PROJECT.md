@@ -29,6 +29,9 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   gap waits in the background for its refresh; typing remains available and the
   visible latest query is searched again without switching Image/Video. Selected
   creatives and campaign fields remain unchanged until the user chooses a file.
+  ACL-1668 marks selected files missing from a refreshed catalog while retaining
+  their names. Publish and Publish all name the affected rows and refuse them;
+  publish-time enrichment also checks the file again and reports deletion/rename.
   ACL-1381 keeps ACL-1769's numbered primary-text fields and separately displayed
   headline. Builder search/help and empty/error messages call the shared library
   entries ad texts; internal copy/copy2 fields and submission behavior are unchanged.
