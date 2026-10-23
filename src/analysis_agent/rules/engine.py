@@ -46,6 +46,7 @@ class RulesEngine:
         self._lock = threading.Lock()
         self._idle = threading.Condition(self._lock)
         self._busy = False
+        self.problems: list[dict] = []
         self._thread: threading.Thread | None = None
 
     # -- очередь и поток --
@@ -108,7 +109,8 @@ class RulesEngine:
     # -- оценка --
 
     def _select_rules(self, job: dict) -> list[dict]:
-        rules = [r for r in self.store.list_rules() if r.get("mode") != "disabled"]
+        rules, self.problems = self.store.list_rules_checked()
+        rules = [r for r in rules if r.get("mode") != "disabled"]
         trigger, scope = job["trigger"], job["scope"]
         if trigger == "manual" and scope:
             return [r for r in rules if r["id"] == scope]
@@ -160,7 +162,7 @@ class RulesEngine:
                 "trigger": job["trigger"], "rule_id": f["rule"]["id"], "version": f["version"]["version"],
                 "verdict": "blocked", "error": f["error"], "objects": []}))
         return {"evaluations": records, "suggestions": written, "arbitration": arbitration,
-                "rules": [i["rule"]["id"] for i in items]}
+                "rules": [i["rule"]["id"] for i in items], "skipped_malformed": list(self.problems)}
 
     def _journal(self, job: dict, item: dict, arbitration: dict) -> dict:
         rule, version, evidence, result = item["rule"], item["version"], item["evidence"], item["result"]
