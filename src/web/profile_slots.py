@@ -104,6 +104,21 @@ MEASURE_TIMEOUT_S = 5.0
 #: Замер висит дольше стольких таймаутов — бросаем его и запускаем новый.
 MEASURE_RESTART_FACTOR = 4.0
 
+#: ACL-2113: окно, оставленное «для удобства» (чистая публикация), уступает место,
+#: когда простаивает не меньше стольких секунд (`ACL_KEPT_IDLE_CLOSE_MIN`, минуты).
+DEFAULT_KEPT_IDLE_CLOSE_S = 600.0
+#: Два вида оставленных окон. «review» (сверка не подтвердила запись, ручное
+#: завершение, проблемы кабинета — ACL-2091) автоматически не закрывается никогда.
+KEPT_REVIEW = "review"
+KEPT_CONVENIENCE = "convenience"
+#: Отказы, при которых простаивающее «удобное» окно можно закрыть ради нового.
+EVICT_REASONS = frozenset({"ceiling", "override_full", "memory_low", "below_reserve",
+                           "memory_unknown_full", "idle_windows"})
+#: Пауза между двумя закрытиями ради одного ожидающего: память возвращается не мгновенно.
+EVICT_GAP_S = 10.0
+#: После неудачного закрытия то же окно не трогаем столько секунд.
+EVICT_RETRY_S = 60.0
+
 
 @dataclass(frozen=True)
 class SlotSettings:
@@ -120,6 +135,7 @@ class SlotSettings:
     reserve_mb: int = int(DEFAULT_RESERVE_GB * 1024)
     warmup_s: float = DEFAULT_WARMUP_S
     settle_s: float = DEFAULT_SETTLE_S
+    kept_idle_close_s: float = DEFAULT_KEPT_IDLE_CLOSE_S
 
 
 @dataclass(frozen=True)
@@ -167,6 +183,8 @@ def load_settings(env: dict[str, str] | Any = None) -> SlotSettings:
         reserve_mb=int(_env_number(env, "ACL_MEMORY_RESERVE_GB", DEFAULT_RESERVE_GB, minimum=0) * 1024),
         warmup_s=_env_number(env, "ACL_PROFILE_WARMUP_S", DEFAULT_WARMUP_S, minimum=0),
         settle_s=_env_number(env, "ACL_PROFILE_SETTLE_S", DEFAULT_SETTLE_S, minimum=0),
+        kept_idle_close_s=_env_number(env, "ACL_KEPT_IDLE_CLOSE_MIN",
+                                      DEFAULT_KEPT_IDLE_CLOSE_S / 60.0, minimum=0) * 60.0,
     )
 
 
@@ -450,7 +468,12 @@ class ProfileSlots:
         clock: Callable[[], float] = time.monotonic,
         tick_s: float = TICK_S,
         usage: ProfileUsage | None = None,
+        evictor: Callable[[str, str, str, float], bool] | None = None,
     ) -> None:
+        # ACL-2113: `evictor(job_id, label, profile, idle_s)` закрывает простаивающее «удобное»
+        # окно (MLX stop, ждёт выхода процесса) и отвечает, закрыто ли. Вызывается
+        # БЕЗ замка очереди. None — окна сами не закрываются.
+        self._evictor = evictor
         self._memory = memory
         # Замер идущих профилей (ACL-1424): готовый ответ будит ожидающих.
         self._usage = usage if usage is not None else ProfileUsage()
@@ -472,18 +495,25 @@ class ProfileSlots:
     def _busy_profiles(self) -> set[str]:
         # Оставленное открытым окно профиль не «занимает»: его новое задание
         # берёт себе (см. `_reuse_kept`), а не ждёт.
-        return {r["profile"] for r in self._running.values() if not r.get("kept")}
+        # ACL-2113: окно, которое прямо сейчас закрывается (`closing`), занято: задание
+        # того же аккаунта ждёт, пока остановка кончится, и поднимает профиль заново.
+        return {r["profile"] for r in self._running.values()
+                if not r.get("kept") or r.get("closing")}
 
     def _kept(self) -> list[str]:
         return [j for j, r in self._running.items() if r.get("kept")]
+
+    def _kept_of(self, kind: str) -> list[str]:
+        return [j for j, r in self._running.items()
+                if r.get("kept") and (r.get("kept_kind") or KEPT_REVIEW) == kind]
 
     def _count_running(self, profile: str = "") -> int:
         return len([1 for r in self._running.values()
                     if not (r.get("kept") and profile and r["profile"] == profile)])
 
-    def _kept_accounts(self) -> list[str]:
-        return sorted({str(r.get("label") or "") for r in self._running.values()
-                       if r.get("kept") and r.get("label")})
+    def _kept_accounts(self, kind: str = KEPT_REVIEW) -> list[str]:
+        return sorted({str(self._running[j].get("label") or "") for j in self._kept_of(kind)
+                       if self._running[j].get("label")})
 
     def release_kept(self, label: str) -> int:
         """Снять место с оставленного окна аккаунта, не закрывая его (ACL-1603).
@@ -500,10 +530,100 @@ class ProfileSlots:
             self._cond.notify_all()
         return len(gone)
 
-    def _reuse_kept(self, profile: str) -> None:
-        """Новое задание на профиль берёт место оставленного там окна."""
-        for j in [j for j, r in self._running.items() if r.get("kept") and r["profile"] == profile]:
+    def _reuse_kept(self, profile: str) -> str:
+        """Новое задание на профиль берёт место оставленного там окна.
+
+        Возвращает вид взятого окна (`review`/`convenience`) или "" — окна не было.
+        Окно «на проверку» остаётся таким и после повторного использования (ACL-2113).
+        """
+        kinds: list[str] = []
+        for j in [j for j, r in self._running.items()
+                  if r.get("kept") and not r.get("closing") and r["profile"] == profile]:
+            kinds.append(self._running[j].get("kept_kind") or KEPT_REVIEW)
             del self._running[j]
+        if not kinds:
+            return ""
+        return KEPT_REVIEW if KEPT_REVIEW in kinds else KEPT_CONVENIENCE
+
+    def _idle_candidate(self, for_profile: str, settings: SlotSettings) -> str | None:
+        """Самое давно не тронутое простаивающее «удобное» окно (LRU), которое можно закрыть."""
+        now = self._clock()
+        best: tuple[float, str] | None = None
+        for j, r in self._running.items():
+            if not r.get("kept") or (r.get("kept_kind") or KEPT_REVIEW) != KEPT_CONVENIENCE:
+                continue
+            if r.get("closing") or r["profile"] == for_profile:
+                continue
+            since = float(r.get("kept_at") if r.get("kept_at") is not None else r["started"])
+            if now - since < settings.kept_idle_close_s:
+                continue
+            failed = r.get("evict_failed_at")
+            if failed is not None and now - float(failed) < EVICT_RETRY_S:
+                continue
+            # Кто-то идёт на этом профиле или ждёт его — окно не простаивает.
+            if any(k != j and o["profile"] == r["profile"] and not o.get("kept")
+                   for k, o in self._running.items()):
+                continue
+            if any(w["profile"] == r["profile"] for w in self._waiting.values()):
+                continue
+            if best is None or since < best[0]:
+                best = (since, j)
+        return best[1] if best else None
+
+    def _evict_one(self, job_id: str, profile: str) -> dict[str, Any] | None:
+        """Закрыть одно простаивающее «удобное» окно ради `job_id`. Вызывать под замком очереди.
+
+        Замок на время остановки отпускается (остановка ждёт выхода процесса, это
+        секунды): под ним очередь и показ встали бы. `acquire` держит замок один раз,
+        поэтому `release`/`acquire` здесь снимают и берут его целиком.
+        Возвращает запись «что закрыли» или None.
+        """
+        if self._evictor is None:
+            return None
+        waiter = self._waiting.get(job_id)
+        if waiter is None:
+            return None
+        now = self._clock()
+        last = waiter.get("last_evict")
+        if last is not None and now - float(last) < EVICT_GAP_S:
+            return None
+        cand = self._idle_candidate(profile, self._settings())
+        if cand is None:
+            return None
+        entry = self._running[cand]
+        entry["closing"] = True
+        waiter["last_evict"] = now
+        label, prof = str(entry.get("label") or ""), entry["profile"]
+        since = float(entry.get("kept_at") if entry.get("kept_at") is not None else entry["started"])
+        idle_s = round(now - since, 1)
+        closed = False
+        self._cond.release()
+        try:
+            try:
+                closed = bool(self._evictor(cand, label, prof, idle_s))
+            except Exception:
+                log.exception("Could not close the idle kept window of %s", label)
+        finally:
+            self._cond.acquire()
+        cur = self._running.get(cand)
+        if cur is not None:
+            cur["closing"] = False
+            if closed:
+                del self._running[cand]
+            else:
+                cur["evict_failed_at"] = self._clock()
+        self._cond.notify_all()
+        if not closed:
+            return None
+        return {"label": label, "idle_s": idle_s, "job_id": cand}
+
+    def touch(self, label: str) -> None:
+        """Окно аккаунта только что использовали (чтение, ручная работа): простой — с нуля."""
+        label = str(label or "").strip().lower()
+        with self._cond:
+            for r in self._running.values():
+                if r.get("kept") and str(r.get("label") or "").strip().lower() == label:
+                    r["kept_at"] = self._clock()
 
     def _head(self) -> str | None:
         """Первое в очереди задание, чей профиль свободен."""
@@ -581,10 +701,19 @@ class ProfileSlots:
         decision = decide(running, self._warming(), self._memory(), settings, measured_mb, current)
         if kept_n:
             decision["kept"] = kept_n
-            decision["kept_accounts"] = self._kept_accounts()
+            # ACL-2113: `kept_accounts` — окна на проверке (их закрывает человек);
+            # «удобные» окна уступают место сами и перечислены отдельно.
+            decision["kept_accounts"] = self._kept_accounts(KEPT_REVIEW)
+            if self._kept_of(KEPT_CONVENIENCE):
+                decision["convenience_accounts"] = self._kept_accounts(KEPT_CONVENIENCE)
+                decision["idle_close_s"] = settings.kept_idle_close_s
             if not decision.get("allow") and decision.get("reason") == "ceiling":
-                # Потолок занят окнами на проверке: человеку надо их закрыть.
-                decision["reason"] = "review_windows"
+                if self._kept_of(KEPT_CONVENIENCE):
+                    # Потолок занят окнами, которые закроются сами, как только простоят.
+                    decision["reason"] = "idle_windows"
+                else:
+                    # Потолок занят окнами на проверке: человеку надо их закрыть.
+                    decision["reason"] = "review_windows"
         if probe:
             decision["measure"] = probe.get("status")
             if current:
@@ -622,6 +751,7 @@ class ProfileSlots:
             self._waiting[job_id] = {"profile": profile, "since": enqueued}
             first_hold: dict[str, Any] | None = None
             last_note: tuple | None = None
+            closed_for_room: list[dict[str, Any]] = []
             try:
                 while True:
                     if cancelled():
@@ -633,14 +763,23 @@ class ProfileSlots:
                                 "decision": {"allow": True, "reason": "shared_profile"},
                                 "first_hold": first_hold, "shared": True}
                     verdict = self._verdict(job_id)
+                    if (not verdict.get("allow") and self._evictor is not None
+                            and verdict.get("reason") in EVICT_REASONS):
+                        # ACL-2113: место или память заняты «удобными» окнами — закрыть
+                        # самое давнее простаивающее и проверить заново.
+                        done = self._evict_one(job_id, profile)
+                        if done is not None:
+                            closed_for_room.append(done)
+                            continue
                     if verdict.get("allow"):
                         del self._waiting[job_id]
-                        self._reuse_kept(profile)
+                        reused = self._reuse_kept(profile)
                         self._running[job_id] = {"profile": profile, "started": self._clock()}
                         self._grants[profile] = self._grants.get(profile, 0) + 1
                         self._cond.notify_all()   # следующий в очереди — перепроверить
                         return {"waited_s": round(self._clock() - enqueued, 1),
-                                "decision": verdict, "first_hold": first_hold, "shared": False}
+                                "decision": verdict, "first_hold": first_hold, "shared": False,
+                                "reused_kept": reused, "closed_for_room": closed_for_room}
                     if first_hold is None:
                         first_hold = verdict
                     note: tuple = (verdict.get("reason"), verdict.get("ahead"))
@@ -667,16 +806,24 @@ class ProfileSlots:
             self._running.pop(job_id, None)
             self._cond.notify_all()
 
-    def keep(self, job_id: str, label: str = "") -> None:
+    def keep(self, job_id: str, label: str = "", kind: str = KEPT_REVIEW) -> None:
         """Задание кончилось, но окно профиля оставлено открытым (ACL-1603).
 
         Место остаётся занятым, пока профиль не закроют (`release`): иначе
         очередь не видела бы открытых окон и пускала третий и четвёртый Mimic.
+
+        ACL-2113: `kind` — зачем окно оставлено. `review` (по умолчанию) — человеку
+        нужно проверить, окно держит место, пока его не закроют. `convenience` —
+        чистая публикация, окно оставлено для удобства: простояв
+        `kept_idle_close_s`, оно уступает место новому заданию (`evictor`).
         """
         with self._cond:
             if job_id in self._running:
-                self._running[job_id]["kept"] = True
-                self._running[job_id]["label"] = str(label or "")
+                r = self._running[job_id]
+                r["kept"] = True
+                r["label"] = str(label or "")
+                r["kept_kind"] = kind if kind in (KEPT_REVIEW, KEPT_CONVENIENCE) else KEPT_REVIEW
+                r["kept_at"] = self._clock()
             self._cond.notify_all()
 
     def grants(self, profile: str) -> int:
@@ -703,7 +850,8 @@ class ProfileSlots:
             return {
                 "settings": asdict(settings),
                 "mode": "override" if settings.override is not None else "auto",
-                "running": [{"job_id": j, "profile": r["profile"], "kept": bool(r.get("kept"))}
+                "running": [{"job_id": j, "profile": r["profile"], "kept": bool(r.get("kept")),
+                             "kept_kind": (r.get("kept_kind") or KEPT_REVIEW) if r.get("kept") else ""}
                             for j, r in self._running.items()],
                 "waiting": [{"job_id": j, "profile": w["profile"]} for j, w in self._waiting.items()],
                 "next": self._decide_now(),

@@ -74,6 +74,15 @@ def main() -> int:
         except Exception as exc:
             failures.append(f"{name}: {type(exc).__name__}: {exc}")
 
+    # ACL-2122: the Meta rules registry ships as data files; a build without it
+    # would publish with no Meta rules protection, so it counts as "does not start".
+    try:
+        from src.campaign_bridge import meta_rules
+
+        meta_rules.load_rules()
+    except Exception as exc:
+        failures.append(f"Meta rules registry: {type(exc).__name__}: {exc}")
+
     if failures:
         print("ACL smoke check FAILED - this version does not start:")
         for f in failures:
