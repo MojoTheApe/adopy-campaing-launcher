@@ -13427,6 +13427,19 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAn
         }).join('<br>') + '</div>';
   };
 
+  // Refusal belongs beside the live action, including when the drawer hides
+  // the form's own Publish button. Keep the named row markers and send nothing.
+  window.cbRefuseMissingCreatives = function(missing, form) {
+    var actions = [form && form.querySelector('.cb-publish-btn'), document.querySelector('.cbd-publish-all')];
+    actions.forEach(function(button) { if (button) aclInlineError(button, ''); });
+    if (!missing.length) return false;
+    var anchor = actions.filter(function(button) {
+      return button && button.isConnected && button.getClientRects().length;
+    })[0] || form || document.querySelector('form.open-account-form');
+    aclInlineError(anchor, 'Not sent: a chosen creative file is missing \u2014 pick it again.');
+    return true;
+  };
+
   function cbCreativeSig(f) {
     return f ? [f.rel_path, f.type, f.size_bytes, f.story_label, f.square_file] : null;
   }
@@ -15959,7 +15972,8 @@ window.cbPublishAll = function (onProgress, picked, onlyKeys) {
       : (only ? 'Build the selected campaigns as drafts?' : 'Build every campaign as a draft?'),
     parts.body,
     function () {
-      if (missingFiles.length) { window.alert('Not sent: a chosen creative file is missing \u2014 pick it again.'); return; }
+      if (missingFiles.length) { window.cbRefuseMissingCreatives(missingFiles, null); return; }
+      if (window.cbRefuseMissingCreatives) window.cbRefuseMissingCreatives([], null);
       var go = anyway ? forms : forms.filter(function (f) { return badForms.indexOf(f) === -1; });
       if (pf && window.cbPreflightDecision) window.cbPreflightDecision(go.map(cbFormAccount), anyway ? [] : badForms.map(cbFormAccount), anyway ? badForms.map(cbFormAccount) : []);
       if (!go.length) { aclAlert('Fix the listed accounts or tick "Run anyway".', { title: 'No account is ready to run' }); return; }
@@ -17269,7 +17283,8 @@ window.cbPublish = function(form) {
   _safeConfirm(cbApiMode()
       ? (ticked.length ? 'Create the selected campaigns as PAUSED campaigns?' : 'Create this campaign as a PAUSED campaign?')
       : (ticked.length ? 'Build the selected campaigns as drafts?' : 'Build this campaign as a draft?'), bodyHtml, function() {
-    if (missingFiles.length) { window.alert('Not sent: a chosen creative file is missing \u2014 pick it again.'); return; }
+    if (missingFiles.length) { window.cbRefuseMissingCreatives(missingFiles, form); return; }
+    if (window.cbRefuseMissingCreatives) window.cbRefuseMissingCreatives([], form);
     if (pf && window.cbPreflightDecision) window.cbPreflightDecision(mine && !anyway ? [] : [accLabel], mine && !anyway ? [accLabel] : [], mine && anyway ? [accLabel] : []);
     if (mine && !anyway) { aclAlert('Fix it, or tick "Run anyway".', { title: accLabel + ' is not ready' }); return; }
     if (onlySlot || ticked.length) {
