@@ -36,6 +36,12 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   line at the left of their sidebar row (ACL-1838), including countries opened in
   the account map before their first spend. Inactive countries have no marker;
   the expanded-country background remains a separate selection indication.
+- `src/web/draft_status.py`: current build verdicts in machine-local JSON. Accepted
+  jobs invalidate earlier readiness before starting, retain the previous success
+  as history and persist their job/plan identity, partial results and stopped or
+  failed outcome. Reloads mark unfinished jobs absent from this process interrupted;
+  missing/unreadable status is explicitly unverified. Thread and process locks cover
+  the complete read/modify/write transaction, with job/revision fencing for late writers.
 - `src/analysis_agent`: statistics workbook reading, reports and reconciliation.
   The dashboard tells an empty chosen period apart by owner (ACL-106): no workbook rows for
   anyone (the file may need updating) versus rows for other managers but none for the

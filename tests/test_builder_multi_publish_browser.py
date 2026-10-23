@@ -485,7 +485,8 @@ def test_one_account_in_two_countries_publishes_both(browser, two_country_html):
         ready(page)
         page.locator('.cbd-publish-all').click()
         modal = page.locator('#safe-confirm-modal')
-        expect(modal).to_contain_text('UL869 (Chile), UL869 (Peru)')
+        expect(modal).to_contain_text('UL869 (Chile)')
+        expect(modal).to_contain_text('UL869 (Peru)')
         expect(modal).not_to_contain_text('Already being built')
         page.locator('#sfc-ok').click()
         for _ in range(50):

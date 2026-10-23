@@ -296,7 +296,7 @@ def _run(monkeypatch, results, publisher_cls=None, *, extra_jobs=None):
     woke: list = []
     monkeypatch.setattr(pj._slots, "wake", lambda: woke.append(1))
     job_id = "job-1444"
-    monkeypatch.setitem(pj._jobs, job_id, {"errors": [], "results": [], "status": "running",
+    monkeypatch.setitem(pj._jobs, job_id, {"job_id": job_id, "errors": [], "results": [], "status": "running",
                                            "account_label": ACCOUNT, "total": len(results),
                                            "done_count": 0, "creative_notices": [],
                                            "cancel_requested": False})
