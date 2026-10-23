@@ -1,0 +1,10 @@
+{
+  "source": "ACL-1836, anonymized 2026-10-12 incident; no private runtime identifiers or DOM capture",
+  "completed": ["campaign_paused", "adset_paused"],
+  "interrupted": "video_upload_unknown",
+  "reconciliation_error": "Runtime.evaluate: Session with given id not found.",
+  "target_id": "owned-target",
+  "session_id": "detached-session",
+  "recovered_session_id": "recovered-session",
+  "url": "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1234567890"
+}
