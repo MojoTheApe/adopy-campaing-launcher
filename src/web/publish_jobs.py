@@ -368,6 +368,47 @@ def _wait_for_stopped_robot(job_id: str, profile: str) -> bool:
     return True
 
 
+def _wait_for_profile_sync(job_id: str, account_label: str) -> bool:
+    """ACL-2117: ждать конца паузы после остановки профиля ДО места в очереди. False — отменили.
+
+    Ждать внутри `open_profile` значило бы держать место по памяти и замок профиля
+    до 3 минут. Здесь, как у `_wait_for_stopped_robot`, ждём снаружи; причина видна
+    на задании, Stop снимает ожидание. Профиль уже открыт (или закрывается) — не ждём:
+    там решает `open_profile`. Только путь Graph API: у RPA своя остановка.
+    """
+    if _fb_backend() != "api":
+        return True
+    try:
+        from src.analysis_agent import account_spend as _as
+        from src.fb_api import profile as _fb_profile
+        from src.fb_api import stop_log as _stop_log
+
+        profile_id = (getattr(_as._entry_for(account_label), "profile_id", "") or "").strip()
+        if not profile_id or _fb_profile.probe_local(profile_id)[0] != "none":
+            return True
+        if not _stop_log.refusal(profile_id):
+            return True
+    except Exception:  # noqa: BLE001 — не смогли узнать: ждать будет open_profile
+        return True
+
+    def _note(text: str) -> None:
+        with _jobs_lock:
+            job = _jobs.get(job_id)
+            if job is None or job.get("abandoned"):
+                return
+            if text:
+                view = _queue_view({"reason": "profile"})
+                view["hold"] = "profile_sync"
+                view["note"] = text
+                job["queue"] = view
+            else:
+                job.pop("queue", None)
+
+    why = _stop_log.wait_or_refusal(profile_id, on_wait=_note, cancelled=lambda: _is_cancelled(job_id))
+    _note("")
+    return why != _stop_log.CANCELLED_TEXT
+
+
 def slots_snapshot() -> dict[str, Any]:
     """Сколько профилей разом разрешено сейчас, что идёт и что ждёт (ACL-1321)."""
     snap = _slots.snapshot()
@@ -620,7 +661,7 @@ def _run_job_inner(
     # очереди: зависший профиль не должен занимать место и стопорить остальные
     # аккаунты (ревью PR #622, R2-B1). Ожидание видно на задании и снимается Stop.
     while True:
-        if not _wait_for_stopped_robot(job_id, profile):
+        if not _wait_for_stopped_robot(job_id, profile) or not _wait_for_profile_sync(job_id, account_label):
             with _jobs_lock:
                 _jobs[job_id].pop("queue", None)
             _finish(job_id, cancelled=True)
@@ -1096,8 +1137,17 @@ def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, co
             if job is not None and not job.get("abandoned"):
                 job["progress"] = str(text)[:200]
 
+    def units(name: str, view: dict) -> None:
+        # ACL-1992: процент сборки — по созданным объектам; новый словарь на
+        # каждую запись, опрос читает копию без замка на разбор.
+        with _jobs_lock:
+            job = _jobs.get(job_id)
+            if job is not None and not job.get("abandoned"):
+                job["units"] = {**(job.get("units") or {}), str(name): dict(view)}
+
     # Ревью M3: dry_run — предпроверка и план без единой записи (клиент без права записи).
     publisher = publish_api.ApiPublisher(progress=progress, dry_run=dry_run)
+    publisher.units = units
     with _jobs_lock:
         # ACL-2113: окно, оставленное прошлым заданием, — наше: закрывать/держать его
         # решаем так же, как окно, поднятое этим заданием.

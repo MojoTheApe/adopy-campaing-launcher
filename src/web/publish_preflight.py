@@ -454,6 +454,9 @@ def record(summary_: dict[str, Any], *, step: str = "publish_preflight",
         log.debug("preflight telemetry failed", exc_info=True)
 
 
+META_RULES_MISSING_MESSAGE = "Meta rules registry is missing — reinstall or update ACL"
+
+
 def meta_rules_errors(
     slots: list[dict[str, Any]],
     *,
@@ -469,13 +472,21 @@ def meta_rules_errors(
     Цель оптимизации, billing event и CTA в RPA выбирает рецепт Ads Manager,
     черновик их не несёт — они не проверяются (это делает `check_job` для
     Graph API-задания). Без `drafts` слоты превращаются в задания (как в
-    превью) и сверяются целиком. Сбой самой проверки (нет реестра, нет
-    книги) кампанию не блокирует — пишется в лог.
+    превью) и сверяются целиком. Реестр, который не загрузился (нет в
+    установке, битый JSON, нарушена схема), блокирует каждую кампанию
+    (fail closed, ACL-2122). Прочие сбои проверки (нет книги) кампанию не
+    блокируют — пишутся в лог.
     """
     try:
         from src.campaign_bridge import meta_rules
 
-        ruleset = meta_rules.load_rules()
+        try:
+            ruleset = meta_rules.load_rules()
+        except Exception as exc:
+            log.error("Meta rules registry could not be loaded: %s", exc)
+            names = [str(getattr(d, "name", "") or "") for d in drafts] if drafts is not None else [
+                str(s.get("name") or "") for s in slots if isinstance(s, dict)]
+            return {n: [META_RULES_MISSING_MESSAGE] for n in names}
         out: dict[str, list[str]] = {}
 
         def _add(name: str, violations: list[Any]) -> None:

@@ -8077,11 +8077,28 @@ window.cbBuild = (function () {
     return Math.max(0, Math.min(v, start + span - PCT_GAP, 99));
   }
 
+  /* ACL-1992: API-путь отдаёт `units` — сколько объектов кампании создано
+     из скольких. Это честный счёт, а не оценка: процент = done / total, до
+     итога кампании не выше 99. Модель выше остаётся для робота. */
+  function unitsPct(u) {
+    if (!u || !(u.total > 0)) return null;
+    return Math.max(0, Math.min(99, 100 * Math.min(u.done || 0, u.total) / u.total));
+  }
+
   /* Достигнутый процент кампании: обновить по ответу и вернуть целым. */
   function percent(j, name, c, p, ads) {
-    if (!MODEL) return null;
+    var byUnits = c ? unitsPct(c.units) : null;
+    if (!MODEL && byUnits === null) return null;
     j.track = j.track || {};
     var t = j.track[name] = j.track[name] || { pct: 0, ad: 1 };
+    if (byUnits !== null) {
+      if (byUnits > t.pct) {
+        var up = Math.floor(byUnits) > Math.floor(t.pct);
+        t.pct = Math.floor(byUnits * 10) / 10;   // floor: не показывать больше, чем создано
+        if (up) save();
+      }
+      return Math.floor(t.pct);
+    }
     if (c) {
       var idle = typeof p.idle_s === 'number' ? p.idle_s : (typeof c.idle_s === 'number' ? c.idle_s : 0);
       var v = null;
@@ -8218,7 +8235,7 @@ window.cbBuild = (function () {
     var p = j.p;
     if (!p) {
       // После F5, до первого ответа: достигнутый процент из localStorage.
-      var kept = j.track && j.track[name] && MODEL ? Math.floor(j.track[name].pct) : null;
+      var kept = j.track && j.track[name] ? Math.floor(j.track[name].pct) : null;
       return { state: 'build-run', sign: '', why: 'Sent to the robot — starting', pct: kept };
     }
     var c = null;
@@ -8256,15 +8273,18 @@ window.cbBuild = (function () {
       var limit = p.stall_after_s || 180;
       // Встала — процент стоит на достигнутом (рост упирается в этап).
       var pct = percent(j, name, c, p, ads);
+      // ACL-1992: у API-пути шаг в телеметрии всегда `api_create_step`; что
+      // делается сейчас — последняя строка прогресса создателя.
+      var doing = c.units && c.units.last ? String(c.units.last) : (c.step ? stepText(c.step) : '');
       if (typeof p.idle_s === 'number' && p.idle_s >= limit) {
         return { state: 'build-attn', sign: '', pct: pct,
                  why: 'No new step for ' + minutes(p.idle_s)
-                   + (c.step ? ' (last: ' + stepText(c.step) + ')' : '')
+                   + (doing ? ' (last: ' + doing + ')' : '')
                    + ' — check the Multilogin window' };
       }
       return { state: 'build-run', sign: '', pct: pct,
-               why: c.step ? 'Building: ' + stepText(c.step) + (c.ok === false ? ' — failed, retrying' : '')
-                           : 'Building: starting' };
+               why: doing ? 'Building: ' + doing + (c.ok === false ? ' — failed, retrying' : '')
+                          : 'Building: starting' };
     }
     if (p.status === 'cancelling') return { state: 'build-run', sign: '', why: 'Stopping…' };
     if (p.status === 'running') return { state: 'build-run', sign: '', why: 'Waiting for its turn' };
@@ -16723,6 +16743,8 @@ function cbProblemsHtml(r) {
   if (r.steps_completed && r.steps_completed.length) {
     tech.push('<div>steps: ' + r.steps_completed.map(aclEscHtml).join(' → ') + '</div>');
   }
+  // ACL-1805: у API-кампании рядом со списком остаются статус PAUSED, что создано и сверка.
+  if (r.backend === 'api') h += cbApiReadbackHtml(r);
   h += '<details class="cb-problems-tech"><summary>Technical details '
     + '<span>(step codes, run id)</span></summary>'
     + '<div class="cb-problems-tech-body">' + tech.join('') + '</div></details>';
