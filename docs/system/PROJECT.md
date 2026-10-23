@@ -57,6 +57,18 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   anyone (the file may need updating) versus rows for other managers but none for the
   selected manager (nothing to review); the account map stays available in both.
 - `src/campaign_bridge`, `src/upload_agent`: campaign input/output preparation.
+- `src/web/profile_slots.py` (ACL-1642): a publish job whose Multilogin profile is already
+  open does not reserve memory for a new profile. The configured concurrency ceiling,
+  per-profile ownership and kept-window rules still apply. A read-only background probe
+  uses the same long/short-folder and profile-ID process check as the robot; only a fresh
+  answer (five seconds) bypasses memory checks. Missing, failed or stale answers retain
+  the normal memory guard. A hung probe's late reply cannot replace a newer result.
+  Before closing an owned idle window for memory alone, the queue gives a pending
+  background check up to five seconds to answer. An open answer avoids that close;
+  closed/failed answers and an expired wait retain the existing conservative policy.
+  Capacity/ownership checks still apply immediately, and the wait holds no queue lock.
+  The first eligible open-profile job may pass a head waiting for memory; the dashboard
+  explains this and shows the real free/needed memory with a close-window hint.
 - `src/fb_ads_rpa`, `src/meta_campaign_agent`: Ads Manager interactions, verified
   profile identity, draft preparation, queues and browser lifecycle. See
   [same-user process ownership and its boundaries](PROFILE_OWNERSHIP.md). ACL-1250/#247

@@ -7877,7 +7877,7 @@ window.cbTree = (function () {
             ? (q.reason === 'profile' ? 'queued — waiting for its Multilogin profile'
                : q.state === 'waiting_review' ? aclEscHtml(cbReviewWait(q)) + cbReviewRelease(q)
                : q.state === 'waiting_idle' ? aclEscHtml(cbIdleWait(q))
-               : q.state === 'waiting_memory' ? 'queued — waiting for memory'
+               : q.state === 'waiting_memory' ? 'queued — ' + aclEscHtml(cbMemoryWait(q) || 'waiting for memory')
                : 'queued — waiting for a free slot'
                  + (q.ahead === undefined ? '' : ' (' + (q.ahead || 0) + ' ahead)'))
           : 'building the draft';
@@ -8564,22 +8564,15 @@ window.cbBuild = (function () {
       return { state: 'build-wait', sign: '',
                why: 'Waiting for the Multilogin profile — another run is using it' };
     }
-    // ACL-1424: мало памяти — сколько свободно и сколько берёт профиль.
-    var gb = function (mb) { return (Math.max(0, Number(mb) || 0) / 1024).toFixed(1); };
     if (q.hold === 'review_windows') {
       return { state: 'build-wait', sign: '', why: cbReviewWait(q) };
     }
     if (q.hold === 'idle_windows') {
       return { state: 'build-wait', sign: '', why: cbIdleWait(q) };
     }
-    if ((q.hold === 'memory_low' || q.hold === 'below_reserve') && q.available_mb != null && q.profile_mb) {
-      var reserve = Number(q.reserve_mb) || 0;
-      var need = Number(q.need_mb) || (Number(q.profile_mb) + reserve);
-      return { state: 'build-wait', sign: '',
-               why: 'Waiting for memory: ' + gb(q.available_mb) + ' GB free, needs ' + gb(need) + ' GB (profile ~'
-                    + gb(q.profile_mb) + ' GB + ' + String(+gb(reserve)) + ' GB reserve)'
-                    + (ahead ? ' (' + ahead + ' ahead)' : '') };
-    }
+    // ACL-1424 / ACL-1642: мало памяти — сколько свободно, сколько берёт профиль, что поможет.
+    var memory = cbMemoryWait(q);
+    if (memory) return { state: 'build-wait', sign: '', why: memory };
     return { state: 'build-wait', sign: '',
              why: 'Waiting for a free slot' + (q.ahead === undefined ? '' : ' (' + ahead + ' ahead)') };
   }
@@ -8649,7 +8642,8 @@ window.cbBuild = (function () {
       }
       return { state: 'build-run', sign: '', pct: pct,
                why: doing ? 'Building: ' + doing + (c.ok === false ? ' — failed, retrying' : '')
-                          : 'Building: starting' };
+                           : (p.started_ahead ? 'Started ahead: its profile was already open'
+                                              : 'Building: starting') };
     }
     if (p.status === 'cancelling') return { state: 'build-run', sign: '', why: 'Stopping…' };
     if (p.status === 'running') return { state: 'build-run', sign: '', why: 'Waiting for its turn' };
@@ -16198,6 +16192,26 @@ function cbReviewWait(q) {
   var n = Math.max(1, parseInt(q && q.kept, 10) || 1);
   return 'waiting: ' + n + ' review window' + (n === 1 ? ' is' : 's are') + ' still open — close them to continue';
 }
+/* ACL-1642: очередь ждёт память — сколько свободно, сколько просит новый профиль
+   и что поможет; задание за такой головой — «ждёт за ней». null — ждёт не память. */
+function cbMemoryWait(q) {
+  q = q || {};
+  var ahead = Math.max(0, parseInt(q.ahead, 10) || 0);
+  var tail = ahead ? ' (' + ahead + ' ahead)' : '';
+  if (q.behind_memory) return 'Waiting behind a job that waits for memory' + tail;
+  if (q.hold !== 'memory_low' && q.hold !== 'below_reserve') return null;
+  var hint = '. Close a Multilogin profile you don\'t need.';
+  if (q.available_mb == null || !q.profile_mb) return 'Waiting for memory' + tail + hint;
+  var gb = function (mb) { return (Math.max(0, Number(mb) || 0) / 1024).toFixed(1); };
+  var reserve = Number(q.reserve_mb) || 0;
+  var need = Number(q.need_mb) || (Number(q.profile_mb) + reserve);
+  /* Разбор складывается в «needs»: остаток — профили, что ещё стартуют или растут. */
+  var extra = Math.max(0, need - Number(q.profile_mb) - reserve);
+  return 'Waiting for memory: ' + gb(q.available_mb) + ' GB free, a new profile needs ' + gb(need)
+    + ' GB (profile ~' + gb(q.profile_mb) + ' GB + '
+    + (extra >= 51 ? gb(extra) + ' GB for profiles still starting or growing + ' : '')
+    + String(+gb(reserve)) + ' GB reserve)' + tail + hint;
+}
 /* ACL-2113: окна, оставленные для удобства, уступают место сами, простояв N минут. */
 function cbIdleWait(q) {
   var names = (q && q.convenience_accounts) || [];
@@ -17369,7 +17383,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
           ? 'queued — waiting for the Multilogin profile (another run is using it)'
           : queue.state === 'waiting_review' ? aclEscHtml(cbReviewWait(queue)) + cbReviewRelease(queue)
           : queue.state === 'waiting_idle' ? aclEscHtml(cbIdleWait(queue))
-          : queue.state === 'waiting_memory' ? 'queued — waiting for memory'
+          : queue.state === 'waiting_memory' ? 'queued — ' + aclEscHtml(cbMemoryWait(queue) || 'waiting for memory')
           : 'queued — waiting for a free slot'
             + (queue.ahead === undefined ? '' : ' (' + (queue.ahead || 0) + ' ahead)'))
       : (job.status === 'done'
