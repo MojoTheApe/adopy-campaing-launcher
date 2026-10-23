@@ -55,6 +55,8 @@
     try { window.ACL_FB_BACKEND = {{ (fb_backend or 'rpa') | tojson }}; } catch(e) {}
     // ACL-1819: таблица правил pre-flight audit — одна на сервер и страницу.
     try { window.CB_PREFLIGHT_RULES = {{ (preflight_rules_json or {}) | tojson }}; } catch(e) {}
+    // ACL-1807: допустимые значения из реестра Meta (только ga); пусто — не ограничиваем.
+    try { window.CB_META_CAPS = {{ (meta_caps_json or {}) | tojson }}; } catch(e) {}
     function aclEscHtml(value) {
       return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
         return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
@@ -6464,6 +6466,8 @@ window.cbPreflight = (function () {
                  ads: got.ads || [], field: rule.field, side: rule.side, severity: rule.severity, topic: rule.topic });
     });
     if (serverOn) out.push(planLine(opts, fresh, notChecked, out));
+    /* ACL-1807: выбор, который Meta не принимает (реестр правил), блокирует как error. */
+    if (window.cbMetaCaps) out = out.concat(window.cbMetaCaps.lines(inp));
     return capSeverity(out);
   }
 
@@ -6550,6 +6554,99 @@ window.cbPreflight = (function () {
 
   return { adName: adName, evaluate: evaluate, lines: lines, count: count, blocks: blocks, capSeverity: capSeverity,
            lineText: lineText, table: table, topics: topics };
+})();
+</script>
+
+<script>
+/* ACL-1807: что Meta принимает в билдере — из реестра config/meta_rules/ (только `ga`).
+ *
+ * Данные приходят с сервера (window.CB_META_CAPS, та же ручка /api/meta-rules/capabilities).
+ * Здесь только отбор значений и строка аудита; решает, пускать ли кампанию, всё равно
+ * `check_job` на сервере. Пустой CB_META_CAPS (реестр не прочитался) — ничего не режем:
+ * чего реестр не знает, того не проверяем. Текст причины — как у серверной проверки.
+ */
+window.cbMetaCaps = (function () {
+  var OBJECTIVES = { awareness: 'OUTCOME_AWARENESS', traffic: 'OUTCOME_TRAFFIC', engagement: 'OUTCOME_ENGAGEMENT',
+                     leads: 'OUTCOME_LEADS', 'app promotion': 'OUTCOME_APP_PROMOTION', sales: 'OUTCOME_SALES' };
+  var LABELS = { objective: 'Campaign objective', optimization_goal: 'Optimization goal',
+                 billing_event: 'Billing event', call_to_action: 'Call to action', destination_type: 'Destination type' };
+  var DEST = { website: 'WEBSITE', instant_form: 'ON_AD' };
+
+  function caps() { return window.CB_META_CAPS || {}; }
+  function up(v) { return String(v == null ? '' : v).trim().toUpperCase(); }
+  function has(list, v) { return (list || []).some(function (x) { return up(x) === up(v); }); }
+
+  function objectiveCode(label) {
+    var t = String(label == null ? '' : label).trim();
+    if (!t) return '';
+    return OBJECTIVES[t.toLowerCase()] || (/^[A-Z][A-Z_]+$/.test(t) ? t : '');
+  }
+  function objectiveEntry(objective) {
+    var o = caps().objectives || {};
+    return o[objectiveCode(objective)] || null;
+  }
+  /* Допустимые значения поля при выбранной цели кампании; null — не ограничено. */
+  function options(field, sel) {
+    var c = caps(), e = objectiveEntry(sel && sel.objective);
+    if (field === 'objective') return c.objectives ? Object.keys(c.objectives) : null;
+    if (field === 'destination_type') return (c.destination_types || []).length ? c.destination_types : null;
+    if (!e) return null;
+    if (field === 'optimization_goal') return Object.keys(e.goals || {});
+    if (field === 'call_to_action') return e.ctas || [];
+    if (field === 'billing_event') {
+      var evs = (e.goals || {})[up(sel.optimization_goal)];
+      return evs && evs.length ? evs : (c.billing_events || null);
+    }
+    return null;
+  }
+  function msg(field, value) {
+    return LABELS[field] + " '" + value + "' is not an accepted Meta value for this campaign.";
+  }
+  /* Нарушения выбора {objective, optimization_goal, billing_event, call_to_action, destination}. */
+  function violations(sel) {
+    var out = [];
+    sel = sel || {};
+    var objective = objectiveCode(sel.objective);
+    var dest = sel.destination ? (DEST[sel.destination] || '') : up(sel.destination_type);
+    var checks = [
+      ['objective', objective, options('objective', sel)],
+      ['optimization_goal', up(sel.optimization_goal), options('optimization_goal', sel)],
+      ['billing_event', up(sel.billing_event), options('billing_event', sel)],
+      ['call_to_action', up(sel.call_to_action), options('call_to_action', sel)],
+      ['destination_type', dest, options('destination_type', sel)]
+    ];
+    checks.forEach(function (c) {
+      if (c[1] && c[2] && !has(c[2], c[1])) out.push({ field: c[0], value: c[1], message: msg(c[0], c[1]) });
+    });
+    return out;
+  }
+  /* Строки аудита карточки: только нарушения (в порядке ok строк нет — таблица правил не меняется). */
+  function lines(inp) {
+    inp = inp || {};
+    var sel = { objective: inp.objective, optimization_goal: inp.optimization_goal, billing_event: inp.billing_event,
+                destination: inp.destination };
+    var res = violations(sel).map(function (x) { return { x: x, level: x.field === 'destination_type' ? 'adset' : 'campaign' }; });
+    (inp.ads || []).forEach(function (ad, i) {
+      violations({ objective: inp.objective, call_to_action: ad.cta }).forEach(function (x) {
+        if (x.field === 'call_to_action') res.push({ x: x, level: 'ad', ad: i + 1 });
+      });
+    });
+    return res.map(function (r) {
+      return { rule: 'meta_rules', label: 'Meta rules', hint: 'Pick a value Meta accepts for this objective',
+               status: 'error', detail: r.x.message, ads: r.ad ? [r.ad] : [],
+               field: { sel: r.x.field === 'destination_type' ? '.cb-destination' : '', level: r.level },
+               side: 'client', severity: 'error', topic: 'meta' };
+    });
+  }
+  /* Можно ли выбрать это «место конверсии» билдера (website / instant_form) по реестру. */
+  function destinationAllowed(value) {
+    var allowed = options('destination_type', {});
+    var code = DEST[value];
+    return !(allowed && code && !has(allowed, code));
+  }
+  function destinationReason(value) { return msg('destination_type', DEST[value] || value); }
+  return { objectiveCode: objectiveCode, options: options, violations: violations, lines: lines,
+           destinationAllowed: destinationAllowed, destinationReason: destinationReason };
 })();
 </script>
 
@@ -13953,8 +14050,15 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     var instant = L.destination(sel.value) === 'instant_form';
     /* RPA: Instant Form не выбрать; уже выбранное остаётся рабочим, чтобы
        проверка сказала об этом вслух, а не молча вернула сайт. */
-    var opt = sel.querySelector('option[value="instant_form"]');
-    if (opt && opt.disabled !== !api) opt.disabled = !api;
+    /* ACL-1807: вариант, которого реестр Meta не разрешает, выключен с причиной. */
+    var caps = window.cbMetaCaps;
+    ['website', 'instant_form'].forEach(function (v) {
+      var o = sel.querySelector('option[value="' + v + '"]');
+      var bad = !!(caps && !caps.destinationAllowed(v));
+      var off2 = bad || (v === 'instant_form' && !api);
+      if (o && o.disabled !== off2) o.disabled = off2;
+      if (o && bad) o.title = caps.destinationReason(v); else if (o && o.title && !(v === 'instant_form' && !api)) o.removeAttribute('title');
+    });
     var off = !api && !instant;
     if (sel.disabled !== off) sel.disabled = off;
     var tip = off ? 'API backend only: Instant Forms are created through the Graph API' : '';
