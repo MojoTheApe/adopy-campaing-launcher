@@ -1,5 +1,33 @@
 # Repository process history
 
+## 2026-10-22 — ACL-2079 isolated manual verification support candidate
+
+Select independently reviewed published Master1.8.0 / Tracker3.10.0 and their
+exact canonical helper closure through the maintained renderer, three-way merger,
+validator and writer. Explicitly resolve two local text conflicts while retaining
+ACL's master/draft descriptor checks and stronger verification guidance. Tracker
+configuration is byte-identical; only the descriptor's three version/revision
+pins change. Application, packaging, runtime, delivery authorization, existing
+publication workflows, capacities and incumbent ownership remain unchanged.
+Current AGENTS/early-adoption navigation selects the same pair; the previous
+ACL-2026 selection remains under its dated historical heading.
+
+The normal independently reviewed source/frozen-batch route and full applicable
+CI remain required. This canonical support update requests no unchanged product
+publication. The separately bounded ACL-2071 supplemental outcome needs the real
+compatible deployed reader, actual adopted pair, original acceptance and genuine
+independent isolation/run evidence. Source publication alone completes neither
+that original task nor a product release. See PROCESS_SUPPORT_ACL.md and ACL-2079.
+
+## 2026-10-21 — ACL-2071 manual acceptance of a published release tag
+
+A new manual workflow, `verify-published-tag.yml`, runs the unchanged isolated Windows
+install/update/restart/recovery acceptance for an explicitly given tag and its previous
+tag; the tag must be the currently latest published stable release. It produces the same delivery evidence, usable with
+`record-delivery --evidence-file`. Automatic delivery, its authorization,
+`complete-delivery.yml`, `release.yml` and the harness scripts are unchanged; the new
+workflow writes no tracker state.
+
 ## 2026-10-20 — ACL-2026 cumulative common support
 
 The owner requested one cumulative ACL update on the original Issue/PR. After the

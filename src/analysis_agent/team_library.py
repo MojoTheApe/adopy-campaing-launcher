@@ -42,7 +42,13 @@ from typing import Callable, Protocol
 API = "https://api.github.com"
 
 #: kind → файл в репозитории и ключ записей внутри него.
-FILES = {"targets": ("targets.json", "targets"), "ad_texts": ("ad_texts.json", "texts")}
+FILES = {"targets": ("targets.json", "targets"), "ad_texts": ("ad_texts.json", "texts"),
+         # ACL-2054: шаблоны Instant Form; ключ записи — id шаблона, не имя.
+         "form_templates": ("form_templates.json", "templates")}
+
+#: Виды, у которых отсутствующий файл — пустая библиотека, а не ошибка: в уже
+#: засеянном репозитории данных его ещё нет, первая запись создаёт его сама (ACL-2054).
+_AUTO_CREATE = {"form_templates"}
 
 #: Сколько раз повторить запись, если файл поменяли между чтением и записью.
 _CONFLICT_RETRIES = 5
@@ -234,6 +240,9 @@ def _parse(kind: str, remote: Remote) -> dict:
 
 def validate(kind: str, data: dict) -> None:
     """Reject the complete snapshot if any record is invalid; never drop rows."""
+    if kind == "form_templates":
+        _validate_form_templates(data)
+        return
     if kind == "targets":
         from src.analysis_agent.targeting_registry import Target as Record
         required = ("interests",)
@@ -263,6 +272,27 @@ def validate(kind: str, data: dict) -> None:
     if not isinstance(renamed, dict) or any(not isinstance(k, str) or not isinstance(v, str) or not v.strip()
                                             for k, v in renamed.items()):
         raise ValueError("invalid renamed section")
+
+
+def _validate_form_templates(data: dict) -> None:
+    """Для шаблонов форм проверяется только форма файла, а не содержание.
+
+    Запись, не прошедшая form_templates.validate (старый формат, правка руками,
+    поле из будущей версии), остаётся в библиотеке как есть и помечается в
+    списке как invalid. Объявить весь файл «повреждённым» из-за одной такой
+    записи значило бы заблокировать правки всей команде, а молча выбросить её —
+    потерять данные при следующей записи.
+    """
+    for key, raw in data["templates"].items():
+        if not isinstance(key, str) or not key.strip() or not isinstance(raw, dict):
+            raise ValueError("invalid record")
+    for key, rec in data["deleted"].items():
+        if not isinstance(rec, dict) or not all(isinstance(rec.get(k), str) for k in ("deleted_by", "deleted_at")):
+            raise ValueError("invalid deleted record")
+        if not isinstance(rec.get("data"), dict):
+            raise ValueError("invalid record")
+        # Ключ и в активных, и в удалённых — не повод блокировать команду:
+        # побеждает активная запись, читающий код удалённую с этим ключом не показывает.
 
 
 def preserve_local_copy(path: Path) -> None:
@@ -297,6 +327,8 @@ def fetch(kind: str) -> dict:
     if b is None:
         raise LibraryError("The team library is not connected on this machine.")
     remote = b.get(FILES[kind][0])
+    if remote.text is None and kind in _AUTO_CREATE:
+        return empty(kind)
     if remote.text is None:
         raise LibraryError(f"The team library file {FILES[kind][0]} is missing. "
                            "Seed the library before connecting dashboards; the local copy was kept.")
@@ -322,7 +354,7 @@ def _transact(kind: str, change: Callable[[dict], object], message: str, *,
     path = FILES[kind][0]
     for _ in range(_CONFLICT_RETRIES):
         remote = b.get(path)
-        if remote.text is None and not allow_create:
+        if remote.text is None and not allow_create and kind not in _AUTO_CREATE:
             raise LibraryError(f"The team library file {path} is missing. Seed it before editing.")
         data = _parse(kind, remote)
         result = change(data)
