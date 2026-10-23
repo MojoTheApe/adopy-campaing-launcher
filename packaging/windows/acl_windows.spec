@@ -29,6 +29,7 @@ datas = [
     (str(PROJECT_ROOT / "config" / "content_plan_week.example.json"), "config"),
     (str(PROJECT_ROOT / "config" / "knowledge_base.json"), "config"),
     (str(PROJECT_ROOT / "config" / "rpa_forbidden_zones.yaml"), "config"),
+    (str(PROJECT_ROOT / "config" / "meta_rules"), "config/meta_rules"),
     (str(PROJECT_ROOT / "config" / "rpa_intents"), "config/rpa_intents"),
     (str(PROJECT_ROOT / "config" / "rpa_recipes"), "config/rpa_recipes"),
     (str(PROJECT_ROOT / "config" / "rpa_variations"), "config/rpa_variations"),

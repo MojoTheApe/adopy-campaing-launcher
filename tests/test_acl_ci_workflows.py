@@ -326,7 +326,8 @@ import re  # noqa: E402
 RETRY = re.compile(r"gh\s+run\s+rerun|nick-fields/retry|retry-action|run_attempt\s*<|rerun", re.I)
 
 
-@pytest.mark.parametrize("name", ["ci.yml", "windows-installer.yml", "release.yml", "tracker-link.yml", "delivery-check.yml"])
+@pytest.mark.parametrize("name", ["ci.yml", "windows-installer.yml", "release.yml", "tracker-link.yml", "delivery-check.yml",
+                                  "verify-published-tag.yml"])
 def test_no_workflow_reruns_or_retries_itself(name):
     text = (ROOT / ".github/workflows" / name).read_text(encoding="utf-8")
     assert not RETRY.search(text), name

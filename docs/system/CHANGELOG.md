@@ -1,64 +1,26 @@
 # System history
 
-## Each person gets their own dashboard, not whoever holds port 9090 — ACL-1309
+## ACL-2050 — API builder verifies Meta kept manual placements — 2026-10-21
 
-During the team rollout on 2026-09-24 a second person started the launcher on a machine
-where the owner's dashboard was already running. The launcher saw a live ACL on port
-9090, took it for its own, and opened a browser at it: the owner's accounts and numbers,
-with nothing to say anything was wrong. Stopping the owner's dashboard was all it took
-for the second person's own to come up. The owner had hit the other half of it that
-morning — a fresh install opened his running dashboard instead of the setup wizard.
+After the API builder creates a campaign, the post-create read-back now also reads the campaign's
+`advantage_state_info` and each ad set's `value_rules_applied`/`value_rule_set_id`. If Meta reports
+`advantage_placement_state=ENABLED`, or the ad set lost the manual platforms/positions or holds a different
+list, Check plan stops with a blocking English error (no auto-fix). A missing `advantage_state_info`
+is not blocking and is flagged `placement_state_verified=false` in the diagnostics. `advantage_audience_state` at campaign level and applied value
+rules are reported as warnings and in `readback.diagnostics` only. Read-only: no new write keys, no value
+rules or account-level exclusion writes. Review fix: the placements check compares platforms, positions and devices
+order-insensitively, so Meta returning the same lists in another order no longer stops Check plan; a genuinely
+different set or automatic placements still stop. A missing `advantage_placement_state` is now also shown as a
+warning ("placement mode was not verified"). Tests: `tests/test_acl2050_placement_readback.py`.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1050).
 
-`/health` said *what* was running, never *whose*. It now carries `config`, a short hash
-of the configuration directory (`config.paths.config_identity`). A hash rather than the
-path, because `/health` is reachable by any process on the machine and the path would
-give away another Windows account's name.
+## ACL-1626 — Account notes: damaged notes file is reported — 2026-10-21
 
-The same blind check sat in four places, all now asking "is this mine" through
-`packaging/windows/local_dashboard.py`:
-
-- the launcher opened any ACL on 9090 — it now opens only its own, wherever it runs, and
-  otherwise starts beside whatever holds the port, on the next free one of 9090-9109;
-- the launcher skipped setup whenever 9090 answered, and refused to run it whenever 9090
-  was taken — only the person's own running dashboard blocks setup now;
-- the wizard's System check failed with "port 9090 is already in use", which would have
-  stopped a second person on step 2 of 6 — it now names the port the dashboard will use;
-- the updater waited for the dashboard on 9090 to stop and then to start — on a shared
-  machine that would have been the neighbour's.
-
-Nothing that holds a port is ever stopped. Two dashboards side by side is the intended
-result, not an error.
-
-The first version of the lookup asked every port over HTTP. On Windows a closed port does
-not refuse, it waits: twenty ports took **19 seconds** on every cold start and again on
-every turn of the wait-for-startup loop. Occupancy is now checked by trying to bind the
-port — exclusively (`SO_EXCLUSIVEADDRUSE`, or Windows lets you bind on top of a live
-listener and "free" would be a lie), on `0.0.0.0` (or a program listening on every
-address goes unseen), and without `listen` (so the Windows firewall asks nothing). Only
-occupied ports are asked over HTTP. 19 s became about 50 ms, and a test holds it there.
-
-A dashboard from before this change reports no `config` and therefore counts as someone
-else's. That cannot strand a person's own old dashboard: the installer holds the same
-session mutex (`AppMutex=Local\ACL-Campaign-Launcher-Server-v1`) and refuses to install
-while it runs, and the in-app update stops it first.
-
-Review of the first version (PR #310) found three gaps, fixed on 2026-10-15:
-
-- **The port belongs to the person, not to whoever started first.** Before, the first person to
-  start took 9090 and the other took 9091, so the address changed from one day to the next. Each
-  person now remembers their port (`dashboard_port.json` in their configuration directory). The
-  port is also marked in a machine-wide registry, `%ProgramData%\ACL\ports\<port>.json`, which
-  holds the configuration hash, not the path. A newcomer who starts while the owner of 9090 is
-  away therefore does not take 9090. A neighbour's mark is never overwritten. When every other
-  port is busy, a neighbour's free port is used for that run only. The wizard's System check
-  names the same port the launcher will take, and does not claim it.
-- **A listener on `[::]` is now seen.** An exclusive bind on `0.0.0.0` alone missed it, and
-  Windows would have let us bind on top of it. Occupancy now also tries an exclusive dual-stack
-  bind on `::` with `IPV6_V6ONLY=0`.
-- **The tests now catch the bug they are named after.** The launcher and setup tests used to
-  replace `find_own`. On a clean machine they still passed when the original bug was put back.
-  They now run the real launcher against real stub dashboards on real ports. Each of the
-  reviewed bugs was restored in turn, and each one turns the suite red.
+When the account notes file is damaged and set aside, the dashboard now logs a
+warning, returns the set-aside notice in the save response and shows a one-line
+banner on the account map. The backup name has millisecond resolution plus a
+collision counter, so two corruptions in the same moment keep both copies.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/626).
 
 ## ACL-1381 — Consistent Builder ad-text wording — 2026-10-18
 
@@ -77,6 +39,28 @@ new code head retains candidate verification. Existing aggregate negatives,
 producer names, triggers, policies and runtime behavior stay intact. This records
 project verification behavior; it does not establish a cost saving or delivery.
 [Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/971).
+
+## RPA: the first of two attach attempts is no longer logged as a verdict - ACL-1165
+
+- A failed strict attach attempt now logs "strict attempt found no own CDP port (not final: a lenient attach
+  may be tried next)"; a failed lenient attempt logs a neutral "lenient attempt found no CDP debug port either".
+  Both stay at INFO and no longer contain "attachment unavailable".
+- "attachment unavailable" is logged once, at WARNING, only when every path is exhausted: when DirectCDP
+  refuses to relaunch an open profile that has no CDP port. The message points to opening the profile in
+  the Multilogin Desktop app.
+- Log text only. The relaunch refusal, its error text and the `FB_RPA_ALLOW_UNPROXIED_RELAUNCH` gate are unchanged.
+
+## API publish: no review window when there is nothing to review — ACL-1784 — 2026-10-17
+
+With `fb_backend=api` a finished job keeps the Multilogin profile as a review
+window (holding a queue slot) only when Meta received writes and the readback
+did not confirm them all. A job that wrote nothing (plan or preflight error,
+stop before the first write) or whose every campaign is created and verified
+frees its slot; it stops the profile only if the job started it, never one the
+user opened. The job panel states in English why the window was or was not
+kept. If a profile the job started stays open anyway (Stop, the keep-open
+switch, a dry run, a failed stop), the slot stays taken and the panel says the
+profile is still open. The RPA path is unchanged.
 
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
@@ -305,6 +289,14 @@ a clear refusal.
   changed shard assignment. The pilot tests now restore each handler's pre-test
   filters, so later tests see their own logging behavior. Production redaction and
   the routing-log assertions remain unchanged.
+
+## Countries: a vertical activity line replaces the dot — ACL-1838
+
+- Active country rows show a static 2 px line in the existing accent color at the
+  left, following the owner's selected design option 3. Inactive rows have no marker.
+- The marker occupies no label space and has no separate pointer target. The existing
+  activity predicate, expanded-country highlight, country actions and FTD counts
+  retain their behavior.
 
 ## Media wizard: Crop -> Media loop no longer ends in a false "stuck" stop - ACL-1736
 
