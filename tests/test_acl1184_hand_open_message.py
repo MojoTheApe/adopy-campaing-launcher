@@ -32,7 +32,7 @@ from src.fb_ads_rpa import browser as br  # noqa: E402
 from src.fb_ads_rpa import profile_dir  # noqa: E402
 from src.fb_ads_rpa import profile_trouble as pt  # noqa: E402
 
-PID = "profile-1184"
+PID = "3f6c1a84-0b1e-4c1d-9a11-118400000184"
 UDD = "C:/mlx/profiles/ws/folder/" + PID
 
 
@@ -139,7 +139,8 @@ def test_read_when_the_profile_folder_is_not_found_shows_the_way_out(world, monk
     monkeypatch.setattr(sp, "_mlx_profile_dir", lambda *a, **kw: None)
     with pytest.raises(sp.ProfileNotAttachable) as refused:
         with sp.opening_closed_profile(sp._ReadOpen("FacebookDoc19")):
-            sp._attach_only(_entry(), "FacebookDoc19")
+            with sp.profile_lock(PID):  # ACL-1853: reads need the held profile lease
+                sp._attach_only(_entry(), "FacebookDoc19")
     assert str(refused.value) == sp.hand_message()
     assert refused.value.code == sp.HAND_OPEN_CODE
     assert world.ev == []
@@ -149,7 +150,8 @@ def test_read_when_the_checks_disagree_shows_the_way_out(world):
     world.running = [False, True]
     with pytest.raises(sp.ProfileNotAttachable) as refused:
         with sp.opening_closed_profile(sp._ReadOpen("FacebookDoc19")):
-            sp._attach_only(_entry(), "FacebookDoc19")
+            with sp.profile_lock(PID):  # ACL-1853: reads need the held profile lease
+                sp._attach_only(_entry(), "FacebookDoc19")
     assert str(refused.value) == sp.hand_message()
     assert refused.value.code == sp.HAND_OPEN_CODE
     assert world.ev == []
@@ -197,7 +199,8 @@ def test_connect_when_multilogin_holds_the_profile_shows_the_way_out(mlx_holds_i
 def test_read_when_multilogin_holds_the_profile_shows_the_way_out(mlx_holds_it):
     with pytest.raises(sp.ProfileNotAttachable) as refused:
         with sp.opening_closed_profile(sp._ReadOpen("FacebookDoc19")):
-            sp._attach_only(_entry(), "FacebookDoc19")
+            with sp.profile_lock(PID):  # ACL-1853: reads need the held profile lease
+                sp._attach_only(_entry(), "FacebookDoc19")
     assert str(refused.value) == sp.hand_message()
     assert refused.value.code == sp.HAND_OPEN_CODE
     assert mlx_holds_it.ev == ["start"]
