@@ -1021,12 +1021,14 @@
           (x.notes.length ? '<dt>Notes</dt><dd>' + esc(x.notes.join(' · ')) + '</dd>' : '') +
           (x.evaluated_at ? '<dt>Evaluated</dt><dd>' + esc(x.evaluated_at) + '</dd>' : '') + '</dl>' +
           '<div class="hc-rinsp-act"><button type="button" class="hc-b" data-ropen="' + i + '">Open rule</button>' +
-          (p ? '<button type="button" class="hc-b primary" data-rapply="' + i + '">Apply…</button><button type="button" class="hc-b" data-rdismiss="' + i + '">Dismiss</button>' : '') + '</div></div>';
+          (p ? '<button type="button" class="hc-b primary" data-rapply="' + i + '">Apply…</button><button type="button" class="hc-b" data-rdismiss="' + i + '">Dismiss</button>' : '') +
+          (x.applied ? '<span class="hc-sub2">' + esc(R.undoLabel(x.applied)) + '</span>' +
+            (R.canUndo(x.applied) ? '<button type="button" class="hc-b" data-rundo="' + i + '">Undo…</button>' : '') : '') + '</div></div>';
       }).join('') + '<p class="hc-sub2" data-rnote role="status"></p></div>' +
       '<div class="hc-rinsp-foot"><button type="button" class="hc-b" data-rclose>Close</button></div></div>';
     dlg.addEventListener('click', function (ev) {
       var b = ev.target.closest ? ev.target.closest('button') : null; if (!b) return;
-      var x = c.rules[Number(b.dataset.ropen || b.dataset.rapply || b.dataset.rdismiss)];
+      var x = c.rules[Number(b.dataset.ropen || b.dataset.rapply || b.dataset.rdismiss || b.dataset.rundo)];
       if (b.dataset.rclose != null) { dlg.close(); return; }
       if (b.dataset.ropen != null) {
         dlg.close();
@@ -1045,6 +1047,19 @@
           if (!res || res.kind === 'cancelled' || res.kind === 'nothing' || !res.op || !res.op.op_id) return;
           return R.postJson(fetch.bind(window), '/rules/action-result', {action_id: x.proposal.action_id, op_id: res.op.op_id, owner: ruleOwner()}).catch(function () {});
         }).then(function () { return loadRulesCells(account); }).then(render);
+        return;
+      }
+      if (b.dataset.rundo != null) {
+        var target = findRow(key);
+        if (!target) { note('Open the rule to review this undo.'); return; }
+        b.disabled = true; dlg.close();
+        R.undoProposal(x.applied, ruleOwner(), { acm: { run: function (req) {
+          return runCommand([target], req.command, req.value).then(function (res) {
+            return res && res.op && res.kind !== 'cancelled' && res.kind !== 'nothing' ? res.op : {cancelled: true};
+          });
+        } } }).then(function () { return loadRulesCells(account); }).then(render).catch(function (e) {
+          say([target], 'Undo not completed: ' + (e && e.message || e) + '. Check current values before another change.', 'bad'); render();
+        });
         return;
       }
       if (b.dataset.rdismiss != null) {

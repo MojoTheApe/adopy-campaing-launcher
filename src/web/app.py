@@ -5872,6 +5872,22 @@ async def rules_action_result(request: Request) -> JSONResponse:
     return JSONResponse(data, status_code=code)
 
 
+@app.post("/rules/undo-request")
+async def rules_undo_request(request: Request) -> JSONResponse:
+    from src.web import rules_api
+
+    data, code = await asyncio.to_thread(rules_api.prepare_undo, await _campaign_commands_body(request))
+    return JSONResponse(data, status_code=code)
+
+
+@app.post("/rules/undo-result")
+async def rules_undo_result(request: Request) -> JSONResponse:
+    from src.web import rules_api
+
+    data, code = await asyncio.to_thread(rules_api.record_undo_result, await _campaign_commands_body(request))
+    return JSONResponse(data, status_code=code)
+
+
 # ACL-1812: тёплые сессии. Состояние строк — только реестр и процессы на машине
 # (ни одного вызова к Meta); запуск и закрытие профилей — по клику человека.
 @app.get("/warm/state")

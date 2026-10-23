@@ -8,6 +8,7 @@
  *   aclRules.counters(rule)                 -> assigned / matched / ready
  *   aclRules.proposalRequest(p)             -> запрос для acmCommands.run или null
  *   aclRules.applyProposal(p, owner, deps)  -> Apply ТОЛЬКО через acmCommands.run (превью → подтверждение → readback)
+ *   aclRules.undoProposal(p, owner, deps)   -> Undo через тот же человеческий поток; предыдущие значения даёт сервер команд
  *   aclRules.dismissProposal(p, owner, deps)-> пометка «dismissed» в журнале правил
  *
  * Единственный путь записи в кампании - `acmCommands.run`: здесь нет ни одного прямого POST
@@ -190,12 +191,35 @@
     return postJson(fetchFn, '/rules/dismiss', { action_id: p.action_id, owner: owner });
   }
 
+  function canUndo(p) { return p && p.state === 'verified' && p.undo_state !== 'unknown'; }
+  function undoLabel(p) {
+    return p.state === 'undone' ? 'Undone' : p.undo_state === 'unknown' ? 'Undo outcome unknown'
+      : p.undo_state === 'failed' ? 'Applied · Undo failed' : 'Applied';
+  }
+  function undoProposal(p, owner, deps) {
+    deps = deps || {};
+    var acm = deps.acm || root.acmCommands, fetchFn = deps.fetch || root.fetch.bind(root);
+    if (!canUndo(p)) return Promise.reject(new Error('This action has no verified undo available.'));
+    if (!acm || !acm.run) return Promise.reject(new Error('The confirm flow is not loaded. Reload the dashboard.'));
+    // This local read cannot change a campaign. The returned inverse request still
+    // needs a fresh normal preview, explicit confirmation and verified command.
+    return postJson(fetchFn, '/rules/undo-request', { action_id: p.action_id, owner: owner }).then(function (prepared) {
+      var req = prepared.request;
+      req.actor = owner;
+      return acm.run(req).then(function (op) {
+        if (!op || op.cancelled || !op.op_id) return { cancelled: true };
+        return postJson(fetchFn, '/rules/undo-result', { action_id: p.action_id, op_id: op.op_id, owner: owner })
+          .then(function (rec) { return { cancelled: false, op: op, recorded: rec }; });
+      });
+    });
+  }
+
   root.aclRules = {
     AUTOMATIC_REASON: AUTOMATIC_REASON, MODES: MODES, METRIC: METRIC, KIND: KIND,
     esc: esc, usd: usd, num: num, identityText: identityText, conditionSentence: conditionSentence,
     observedText: observedText, cards: cards, counters: counters, problemOf: problemOf,
     proposalRequest: proposalRequest, proposalText: proposalText, applyProposal: applyProposal,
-    dismissProposal: dismissProposal, postJson: postJson
+    dismissProposal: dismissProposal, canUndo: canUndo, undoLabel: undoLabel, undoProposal: undoProposal, postJson: postJson
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.aclRules;
 })(typeof window !== 'undefined' ? window : globalThis);

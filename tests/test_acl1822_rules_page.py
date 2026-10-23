@@ -50,7 +50,7 @@ def test_live_page_has_the_decision_flow_pieces_and_no_design_switcher():
         assert banned not in html, banned
     # данные посева - только как JSON внутри script: разметка из них не строится
     assert "<b>1</b>" not in html.split('id="rl-seed"')[0]
-    assert "\\u003cb\\u003e1" in html or "&lt;b&gt;1" in html or "\\u003c" in html
+    assert "\\u003cb\\u003e1" in html or "&lt;b&gt;1" in html or "\\u003c" in html  # linux-ok: JSON Unicode escapes, not a filesystem path
 
 
 def test_page_has_no_direct_command_writes_and_no_dynamic_sinks():

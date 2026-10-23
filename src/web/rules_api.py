@@ -61,6 +61,7 @@ def evaluate_now(body: dict, *, engine: Any = None) -> tuple[dict, int]:
 import copy
 import re
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 
 from src.analysis_agent.rules import model as _model
 from src.analysis_agent.rules import store as _store_mod
@@ -140,7 +141,7 @@ def _health(rule: dict, last: dict | None, now: datetime, bi_max_hours: float) -
 
 
 def _rule_view(store: Any, rule: dict, last: dict | None, proposals: list[dict], now: datetime,
-               bi_max_hours: float) -> dict:
+               bi_max_hours: float, recent: list[dict]) -> dict:
     version = store.current_version(rule)
     body = {k: copy.deepcopy(v) for k, v in version.items() if k not in ("version", "created_at", "created_by")}
     mine = [p for p in proposals if p.get("rule_id") == rule["id"] and p.get("version") == version["version"]]
@@ -151,6 +152,7 @@ def _rule_view(store: Any, rule: dict, last: dict | None, proposals: list[dict],
         "automatic_blockers": _model.automatic_blockers(version),
         "last_eval": last, "health": _health(rule, last, now, bi_max_hours),
         "proposals": mine,
+        "recent_actions": [a for a in recent if a.get("rule_id") == rule["id"]][-20:],
     }
 
 
@@ -182,7 +184,8 @@ def overview(owner: str = "", *, store: Any = None, engine_status: Any = None,
     bi_max = float((settings.get("freshness") or {}).get("bi_max_age_hours") or 36)
     latest = _latest_evaluations(store)
     proposals = _open_proposals(store)
-    rules = [_rule_view(store, r, latest.get(r["id"]), proposals, now, bi_max)
+    recent = [a for a in store.latest_actions().values() if a.get("state") in ("verified", "undone")]
+    rules = [_rule_view(store, r, latest.get(r["id"]), proposals, now, bi_max, recent)
              for r in store.list_rules(owner or None)]
     status = engine_status() if callable(engine_status) else {}
     templates = []
@@ -345,6 +348,11 @@ def _op_mismatch(rec: dict, op: dict, state: str) -> str:
         command, want = "set_budget", req["daily_budget"]
     else:
         return "the suggestion has nothing to apply"
+    return _command_mismatch(rec, op, state, command, want)
+
+
+def _command_mismatch(rec: dict, op: dict, state: str, command: str, want: Any) -> str:
+    """Bind either human command to the exact account, value and single saved object."""
     if op.get("account") != rec.get("account"):
         return "another account"
     if op.get("command") != command:
@@ -354,9 +362,9 @@ def _op_mismatch(rec: dict, op: dict, state: str) -> str:
             return "another status"
     else:
         try:
-            if float(op.get("value")) != float(want):
+            if Decimal(str(op.get("value"))) != Decimal(str(want)):
                 return "another budget value"
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, InvalidOperation):
             return "another budget value"
     ours = [a for a in op.get("affected") or []
             if str(a.get("id")) == str(rec.get("id")) and a.get("level") == rec.get("level")]
@@ -365,6 +373,10 @@ def _op_mismatch(rec: dict, op: dict, state: str) -> str:
     if state == "verified" and ours[0].get("result") != "saved":
         return "the object was not saved"
     return ""
+
+
+def _op_used(store: Any, op_id: str) -> bool:
+    return any(op_id in (r.get("op_id"), r.get("undo_op_id")) for r in store.actions())
 
 
 def record_action_result(body: dict, *, store: Any = None, status: Any = None) -> tuple[dict, int]:
@@ -394,12 +406,90 @@ def record_action_result(body: dict, *, store: Any = None, status: Any = None) -
     mismatch = _op_mismatch(rec, op, state)
     if mismatch:
         return _bad("This command is not the one that was suggested: " + mismatch, "op_mismatch", 409)
-    for other in store.actions():
-        if other.get("op_id") == op_id and other.get("action_id") != rec["action_id"]:
-            return _bad("This command was already used for another suggestion.", "op_reused", 409)
+    if _op_used(store, op_id):
+        return _bad("This command was already used for a suggestion.", "op_reused", 409)
     store.append_action({**rec, "state": state, "op_id": op_id, "actor": "human:" + owner,
                          "reason": "applied by " + owner + " through the confirm flow"})
     return {"ok": True, "action_id": rec["action_id"], "state": state}, 200
+
+
+def _undo_source(body: dict, store: Any) -> tuple[dict | None, dict | None, tuple[dict, int] | None]:
+    """Read the original confirmed operation; an evaluator's older 'before' is insufficient."""
+    owner = str(body.get("owner") or "").strip()
+    if not owner:
+        return None, None, _bad("Pick the buyer in the header first.", "no_owner")
+    rec = store.latest_actions().get(str(body.get("action_id") or ""))
+    if not rec or not rec.get("rule_id"):
+        return None, None, _bad("This suggestion no longer exists.", "not_found", 404)
+    _rule, refusal = _owned(store, rec["rule_id"], owner)
+    if refusal:
+        return None, None, refusal
+    if rec.get("state") != "verified" or rec.get("undo_state") == "unknown":
+        return None, None, _bad("Only an applied, verified action with no uncertain undo can be undone.", "not_undoable", 409)
+    op, code = _guards.get_status(str(rec.get("op_id") or ""))
+    if code != 200 or op.get("state") != "Succeeded" or _op_mismatch(rec, op, "verified"):
+        return None, None, _bad("The original confirmed command is unavailable or does not match this action.", "not_undoable", 409)
+    item = op["affected"][0]
+    before, after = item.get("before"), item.get("after")
+    command = op["command"]
+    if command == "set_status" and item.get("field") == "status" and before in ("ACTIVE", "PAUSED"):
+        value = before
+        valid = after == op.get("value") and item.get("saved") == after
+    elif command == "set_budget" and item.get("field") == "daily_budget":
+        unit = op.get("unit")
+        valid = type(before) is int and before > 0 and type(unit) is int and unit in (1, 100)
+        try:
+            valid = valid and Decimal(str(after)) == Decimal(str(op.get("value"))) * unit and item.get("saved") == after
+        except (TypeError, InvalidOperation):
+            valid = False
+        value = format(Decimal(before) / unit, "f") if valid else ""
+    else:
+        valid, value = False, ""
+    if not valid:
+        return None, None, _bad("The confirmed command has no verified previous value to restore.", "not_undoable", 409)
+    request = {"account": rec["account"], "command": command, "value": value,
+               "targets": [{"level": rec["level"], "id": str(rec["id"])}]}
+    return rec, request, None
+
+
+def prepare_undo(body: dict, *, store: Any = None) -> tuple[dict, int]:
+    """Prepare a request for the existing human preview/confirm flow. No session or write."""
+    refused = _guard()
+    if refused:
+        return refused
+    rec, request, refusal = _undo_source(body or {}, _store(store))
+    if refusal:
+        return refusal
+    return {"ok": True, "action_id": rec["action_id"], "request": request}, 200
+
+
+def record_undo_result(body: dict, *, store: Any = None) -> tuple[dict, int]:
+    """Record only a matching new human command's server result; never perform the undo."""
+    refused = _guard()
+    if refused:
+        return refused
+    body, store = body or {}, _store(store)
+    rec, request, refusal = _undo_source(body, store)
+    if refusal:
+        return refusal
+    op_id = str(body.get("op_id") or "").strip()
+    if not op_id:
+        return _bad("op_id is required", "no_op")
+    if _op_used(store, op_id):
+        return _bad("This command was already used for a suggestion.", "op_reused", 409)
+    op, code = _guards.get_status(op_id)
+    if code != 200:
+        return _bad("The command is unknown to this dashboard.", "unknown_op", 404)
+    state = {"Succeeded": "verified", "Failed": "failed", "Outcome unknown": "unknown"}.get(op.get("state"))
+    if state is None:
+        return _bad("The undo command is still running.", "running", 409)
+    mismatch = _command_mismatch(rec, op, state, request["command"], request["value"])
+    if mismatch:
+        return _bad("This command is not the requested undo: " + mismatch, "op_mismatch", 409)
+    store.append_action({**rec, "state": "undone" if state == "verified" else "verified",
+                         "undo_state": state, "undo_op_id": op_id, "actor": "human:" + str(body["owner"]).strip(),
+                         "reason": "undo through the human confirm flow"})
+    return {"ok": True, "action_id": rec["action_id"], "undo_state": state}, 200
 
 
 def scope_options(account: str, *, snapshot: Any = None) -> tuple[dict, int]:
@@ -458,6 +548,7 @@ def cells(account: str, owner: str = "", *, store: Any = None) -> tuple[dict, in
     latest = _latest_evaluations(store)
     proposals = _open_proposals(store)
     holds = store.active_holds()
+    applied = [a for a in store.latest_actions().values() if a.get("state") in ("verified", "undone")]
     out: dict[str, dict] = {}
     for rule in store.list_rules(owner.strip() or None):
         version = store.current_version(rule)
@@ -482,6 +573,9 @@ def cells(account: str, owner: str = "", *, store: Any = None) -> tuple[dict, in
                 "verdict": (obj or {}).get("verdict"), "reasons": list((obj or {}).get("reasons") or []),
                 "notes": list((obj or {}).get("notes") or []), "identity": (obj or {}).get("identity"),
                 "observed": (obj or {}).get("observed") or {}, "proposal": prop, "held": bool(hold),
+                "applied": next((a for a in reversed(applied) if a.get("rule_id") == rule["id"]
+                                 and a.get("account") == o.get("account") and a.get("level") == o.get("level")
+                                 and a.get("id") == o.get("id")), None),
                 "assigned_name": o.get("name_at_assign") or o.get("name") or ""})
     for entry in out.values():
         # итог ячейки: самый «громкий» - ждущее предложение, затем совпадение, затем остальное

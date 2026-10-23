@@ -144,6 +144,8 @@
   .rl-resrow { display: flex; flex-wrap: nowrap; align-items: center; gap: .375rem; min-width: 0; }
   .rl-resrow .t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .rl-resrow .rl-btn, .rl-resrow .rl-chip { flex: none; }
+  .rl-applied .rl-resrow { flex-wrap: wrap; margin-top: .5rem; }
+  .rl-applied .t { overflow-wrap: anywhere; white-space: normal; }
   .rl-table td.rl-resc { min-width: 250px; max-width: 320px; }
   .rl-res { display: flex; flex-wrap: wrap; gap: .375rem; margin-top: .375rem; }
   .rl-foot { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: .875rem 1.25rem; border-top: 1px solid var(--adopy-border); }
@@ -482,7 +484,7 @@
       (last && last.error ? '<div class="rl-banner bad" role="alert"><b>Evaluation failed</b>' + esc(last.error) + '</div>' : '') +
       ((last && (last.reasons || []).indexOf('Ambiguous mapping') >= 0) ? '<div class="rl-banner"><b>Ambiguous mapping</b>Some objects match several workbook rows (duplicate or renamed). They are held, not guessed.</div>' : '') +
       '<div class="rl-banner"><b>Condition match is not execution permission</b>Campaign ids, outcome maturity and current delivery are verified before anything is suggested. Observe records only; Apply always asks you first.</div>' +
-      '<div class="rl-tablewrap"><table class="rl-table"><thead><tr><th>Object</th><th class="num">Spend (BI)</th><th class="num">FTDs</th><th class="num">Target</th><th>Match</th><th>Rule result</th></tr></thead><tbody>' +
+      '<h3>Review</h3><div class="rl-tablewrap"><table class="rl-table"><thead><tr><th>Object</th><th class="num">Spend (BI)</th><th class="num">FTDs</th><th class="num">Target</th><th>Match</th><th>Rule result</th></tr></thead><tbody>' +
       (rows.length ? rows.slice(0, 100).map(function (x) {
         var ob = (x.o && x.o.observed) || {};
         return '<tr data-key="' + esc(x.key) + '" aria-selected="' + (x.key === S.selKey) + '"><td><button type="button" class="rl-pick" data-pick="' + esc(x.key) + '">' + esc(x.o && x.o.name || x.a.name_at_assign || x.a.id) + '</button>' +
@@ -490,7 +492,12 @@
           '<td class="num">' + esc(ob.spend != null ? R.usd(ob.spend) : '—') + '</td><td class="num">' + esc(ob.ftd != null ? R.num(ob.ftd) : '—') + '</td>' +
           '<td class="num">' + esc(ob.target != null ? R.usd(ob.target) : '—') + '</td><td>' + esc(x.o ? R.identityText(x.o.identity) : '—') + '</td><td class="rl-resc">' + resultCell(r, x) + '</td></tr>';
       }).join('') : '<tr><td colspan="6" class="rl-muted">No objects assigned yet. Use Choose campaigns.</td></tr>') + '</tbody></table></div>' +
-      '<p class="rl-hint">Showing ' + Math.min(100, rows.length) + ' of ' + rows.length + ' assigned objects. Results come from the latest evaluation' + (last ? ' (' + esc(ago(last.at)) + ')' : '') + '.</p></div></div>';
+      '<p class="rl-hint">Showing ' + Math.min(100, rows.length) + ' of ' + rows.length + ' assigned objects. Results come from the latest evaluation' + (last ? ' (' + esc(ago(last.at)) + ')' : '') + '.</p>' +
+      ((r.recent_actions || []).length ? '<section class="rl-applied" aria-label="Applied actions"><h3>Applied actions</h3><p class="rl-hint">Review the current and previous values before you confirm Undo. An uncertain result needs checking before another change.</p>' +
+        r.recent_actions.map(function (a) {
+          return '<div class="rl-resrow"><span class="rl-chip">' + esc(R.undoLabel(a)) + '</span><span class="t">' + esc(a.account + ' · ' + a.level + ' ' + a.id + ' · ' + R.proposalText(a)) + '</span>' +
+            (R.canUndo(a) ? '<button type="button" class="rl-btn small" data-undo="' + esc(a.action_id) + '">Undo…</button>' : '') + '</div>';
+        }).join('') + '</section>' : '') + '</div></div>';
     html += '<div class="rl-foot"><span class="rl-grow" id="rl-evnote" role="status">' + esc(S.evalNote || 'Evaluate now only queues the check; it reads the workbook and the saved snapshot, not Meta.') + '</span>' +
       '<button type="button" class="rl-btn" id="rl-choose2">Choose campaigns</button>' +
       '<button type="button" class="rl-btn primary" id="rl-eval"' + (disabled || S.dirty ? ' disabled title="' + (S.dirty ? 'Save the rule first' : 'Enable the rule first') + '"' : '') + '>Evaluate now</button></div>';
@@ -587,6 +594,14 @@
     if (t.id === 'rl-toggle') { var r = rule(); setMode(r.mode === 'disabled' ? 'observe' : 'disabled'); return; }
     if (t.id === 'rl-choose' || t.id === 'rl-choose2') { openScope(); return; }
     if (t.dataset.pick) { S.selKey = t.dataset.pick; renderEditor(); return; }
+    if (t.dataset.undo) {
+      var r = rule(), a = r && (r.recent_actions || []).filter(function (x) { return x.action_id === t.dataset.undo; })[0];
+      if (!a) return;
+      t.disabled = true;
+      R.undoProposal(a, owner()).then(function (res) { say(res.cancelled ? 'Cancelled. Nothing was changed.' : 'Undo command: ' + (res.op && res.op.state)); return load(true); },
+        function (e) { say('Undo not completed: ' + (e.message || e) + ' Check current values before another change.'); renderEditor(); });
+      return;
+    }
     if (t.dataset.apply) {
       var p = findProposal(t.dataset.apply); if (!p) return;
       t.disabled = true;
