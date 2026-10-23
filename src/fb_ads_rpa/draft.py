@@ -172,6 +172,10 @@ class CampaignDraft:
     # Empty form fields are explicit choices; older callers may omit them.
     link_provided: bool = False
     language_provided: bool = False
+    # Builder Page selection is campaign-local; empty means automatic, never map fallback.
+    page_provided: bool = False
+    page_name: str = ""
+    page_name_unique: bool = False
 
     @property
     def ad_count(self) -> int:

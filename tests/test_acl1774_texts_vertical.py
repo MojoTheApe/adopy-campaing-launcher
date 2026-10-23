@@ -1,8 +1,10 @@
-"""ACL-1774: вертикальный 9:16 файл Stories/Reels (только API-бэкенд); несколько текстов - отказ.
+"""ACL-1774: up to five texts or a separate Stories/Reels file on the API backend.
 
 Один текст и один файл идут прежним `object_story_spec`. Вертикальный файл с ОДНИМ текстом -
 `asset_feed_spec`: два файла с метками и два правила по площадкам. Несколько текстов: с вертикальным
-файлом Meta отказала вживую (100/1885878), без него это Dynamic Creative - оба случая отказ в плане. Всё PAUSED, ни одного живого вызова: Graph — поддельная Meta из теста ACL-1761.
+файлом Meta отказала вживую (100/1885878), без него используется Dynamic Creative по решению 20.10.
+Кампания PAUSED, дочерние объекты следуют проверенному guard ACL-2114. Ни одного живого вызова:
+Graph — поддельная Meta из теста ACL-1761.
 """
 from __future__ import annotations
 
@@ -68,12 +70,13 @@ def test_several_texts_go_as_dynamic_creative_on_their_own_ad_set(tmp_path):
         out, _ = _run(meta, _ad_with(tmp_path, vertical=None, texts=texts))
         assert out.error == "" and out.readback["ok"], out.mismatches
         ad_set = next(o for o in meta.objects.values() if o["_kind"] == "adset")
-        assert ad_set["is_dynamic_creative"] is True and ad_set["status"] == "PAUSED"
+        assert ad_set["is_dynamic_creative"] is True and ad_set["status"] == cr.CHILD_STATUS
         fs = _creative(meta)["asset_feed_spec"]
         assert len(fs["bodies"]) == texts + 1 and len(fs["titles"]) == texts + 1
         assert "asset_customization_rules" not in fs and len(fs["images"]) == 1
         assert "adlabels" not in fs["images"][0], "один файл - без меток и правил"
-        assert all(p["status"] == "PAUSED" for path, p in meta.posts if path.endswith(("/campaigns", "/adsets", "/ads")))
+        assert all(p["status"] == (cr.PAUSED if path.endswith("/campaigns") else cr.CHILD_STATUS)
+                   for path, p in meta.posts if path.endswith(("/campaigns", "/adsets", "/ads")))
 
 
 def test_a_single_text_ad_set_is_not_dynamic(tmp_path):
@@ -149,7 +152,8 @@ def test_a_vertical_file_goes_up_with_two_labelled_files_and_two_rules(tmp_path)
     assert rules["acl_vertical"]["facebook_positions"] == ["story", "facebook_reels"]
     assert rules["acl_vertical"]["instagram_positions"] == ["story", "reels"]
     assert "story" not in rules["acl_main"]["facebook_positions"] and "feed" in rules["acl_main"]["facebook_positions"]
-    assert all(p["status"] == "PAUSED" for path, p in meta.posts if path.endswith(("/campaigns", "/adsets", "/ads")))
+    assert all(p["status"] == (cr.PAUSED if path.endswith("/campaigns") else cr.CHILD_STATUS)
+               for path, p in meta.posts if path.endswith(("/campaigns", "/adsets", "/ads")))
 
 
 def test_texts_and_the_vertical_file_together_are_refused_before_any_write(tmp_path):
@@ -343,6 +347,9 @@ def _mut(spec, fn):
 
 
 POLICY_CASES = [
+    ("instagram_feed", _cre(_feed(), object_story_spec={"page_id": "111", "instagram_user_id": "123456"}), True),
+    ("instagram_feed_bad_id", _cre(_feed(), object_story_spec={"page_id": "111", "instagram_user_id": "bad"}), False),
+    ("instagram_feed_extra_story_key", _cre(_feed(), object_story_spec={"page_id": "111", "instagram_user_id": "123456", "unknown": "x"}), False),
     ("texts_ok", _cre(_feed()), True),
     # Несколько текстов - Dynamic Creative: до 5, но только при одном файле (с правилами Meta отказала, 2026-10-14).
     ("two_bodies", _cre(_feed(bodies=[{"text": "b1"}, {"text": "b2"}])), True),
@@ -584,13 +591,13 @@ def test_filled_fields_reach_the_slot_and_the_draft():
     country, label, slots = web._parse_build_upload_form(_fields(
         camp_0_ad_0_copy2="T2", camp_0_ad_0_copy3="T3", camp_0_ad_0_copy5="T5",
         camp_0_ad_0_creative_file_vertical="a_story.png"))
-    assert slots[0]["copy2"] == "T2" and slots[0]["copy_more"] == ["T3", "T5"]
+    assert slots[0]["copy2"] == "T2" and slots[0]["copy_more"] == ["T3", "", "T5"]
     assert slots[0]["creative_file_vertical"] == "a_story.png"
     [draft] = slots_to_campaign_drafts(slots, account_label=label, country=country)
     ad = draft.ad_sets[0].ads[0]
-    assert ad.more_copy_names == ["T3", "T5"] and ad.vertical_filename == "a_story.png"
+    assert ad.more_copy_names == ["T3", "", "T5"] and ad.vertical_filename == "a_story.png"
     prev = ad.to_preview_dict()
-    assert prev["more_copy_names"] == ["T3", "T5"] and prev["vertical_file"] == "a_story.png"
+    assert prev["more_copy_names"] == ["T3", "", "T5"] and prev["vertical_file"] == "a_story.png"
 
 
 def test_an_ad_without_the_new_fields_previews_exactly_as_before():
@@ -655,3 +662,149 @@ def test_check_plan_names_dynamic_creative_and_readback_covers_both_directions(t
     out1, _ = _run(single, _ad_with(tmp_path, vertical=None))
     flags1 = [c for c in out1.readback["checks"] if c["field"] == "dynamic_creative"]
     assert flags1 and all(c["expected"] is False and c["actual"] is False and c["ok"] for c in flags1)
+
+
+@pytest.fixture
+def enrich_texts(monkeypatch, tmp_path):
+    from tests.test_second_primary_text_reaches_the_robot import enrich
+    return enrich.__wrapped__(monkeypatch, tmp_path)
+
+
+def test_equal_bodies_keep_different_library_headlines_for_the_api(enrich_texts):
+    from src.fb_ads_rpa.draft import AdDraft
+    draft = enrich_texts(AdDraft(copy_name="Text6", copy2_name="Same", more_copy_names=["Same"]))
+    ad = draft.ad_sets[0].ads[0]
+    assert ad.ad_body2 == "", "the legacy RPA second-body behavior must remain unchanged"
+    assert [v["headline"] for v in ad.text_variants] == ["H"]
+    assert [v["body"] for v in ad.text_variants] == ["Texto  uno línea\ndos"]
+
+
+def test_a_sparse_fifth_text_error_keeps_its_actual_field_number(enrich_texts):
+    from src.web import app as web
+    from src.fb_ads_rpa.build_draft import slots_to_campaign_drafts
+    fields = _fields(camp_0_ad_0_copy="Text6", camp_0_ad_0_copy5="Gone")
+    country, account, slots = web._parse_build_upload_form(fields)
+    [draft] = slots_to_campaign_drafts(slots, account_label=account, country=country)
+    enriched = enrich_texts(draft.ad_sets[0].ads[0])
+    assert any(e.startswith("Primary text 5 'Gone'") for e in enriched.errors), enriched.errors
+
+
+def test_reused_pair_cannot_pass_readback_without_its_media_labels(tmp_path):
+    meta = FakeMeta()
+    draft = _ad_with(tmp_path)
+    first, _ = _run(meta, draft)
+    assert not first.error and first.readback["ok"]
+    media = copy.deepcopy(_creative(meta)["asset_feed_spec"]["images"])
+    for row in media:
+        row.pop("adlabels", None)
+    meta.mutate_ads["creative.asset_feed_spec.images"] = media
+    writes = len(meta.posts)
+    second, _ = _run(meta, draft)
+    assert not second.readback["ok"], second.readback
+    assert "media_labels" in {c["field"] for c in second.mismatches}
+    assert len(meta.posts) == writes, "readback of a reused pair must not recreate objects"
+
+
+def test_changed_feed_after_a_partial_run_gets_a_new_creative_without_duplicate_upload(tmp_path):
+    meta = FakeMeta()
+    draft = _ad_with(tmp_path, vertical=None, texts=1)
+    meta.fail_next["ads"] = "unsent"
+    first, _ = _run(meta, draft, reconcile_wait_s=0)
+    assert first.stop_kind == "unknown"
+    assert len([o for o in meta.objects.values() if o["_kind"] == "creative"]) == 1
+    draft.ad_sets[0].ads[0].text_variants[0]["body"] = "A changed second text"
+    second, _ = _run(meta, draft)
+    assert not second.error and second.readback["ok"], second.mismatches
+    assert len([o for o in meta.objects.values() if o["_kind"] == "creative"]) == 2
+    assert len([p for p, _ in meta.posts if p.endswith("/adimages")]) == 1
+    writes = len(meta.posts)
+    third, _ = _run(meta, draft)
+    assert not third.error and third.readback["ok"]
+    assert len(meta.posts) == writes
+
+
+def test_reused_pair_cannot_pass_with_labels_but_no_media_ids(tmp_path):
+    meta = FakeMeta()
+    draft = _ad_with(tmp_path)
+    first, _ = _run(meta, draft)
+    assert first.readback["ok"]
+    media = copy.deepcopy(_creative(meta)["asset_feed_spec"]["images"])
+    for row in media:
+        row.pop("hash", None)
+    meta.mutate_ads["creative.asset_feed_spec.images"] = media
+    second, _ = _run(meta, draft)
+    assert {"main_file_binding", "stories_reels_file_binding"} <= {c["field"] for c in second.mismatches}
+
+
+def test_vertical_media_uses_the_same_bounded_loader_in_prepare_and_audit(tmp_path, monkeypatch):
+    meta = FakeMeta()
+    draft = _ad_with(tmp_path)
+    loaded = []
+    original = cr.CampaignCreator.load_media
+
+    def load(self, path, kind):
+        loaded.append((path, kind))
+        return original(self, path, kind)
+
+    monkeypatch.setattr(cr.CampaignCreator, "load_media", load)
+    out, _ = _run(meta, draft)
+    ad = draft.ad_sets[0].ads[0]
+    assert out.readback["ok"], out.error
+    assert (ad.vertical_path, "image") in loaded
+    loaded.clear()
+    from tests.test_acl1819_preflight import _audit
+    audit = _audit(FakeMeta(), draft)
+    assert not audit.error, audit.error
+    assert (ad.vertical_path, "image") in loaded
+
+
+def test_both_videos_in_a_pair_keep_the_current_chunked_upload_path(tmp_path, monkeypatch):
+    from tests.test_acl1819_preflight import _mp4
+    from tests.test_acl1891_video_chunks import ChunkMeta
+    monkeypatch.setattr(cr, "VIDEO_SINGLE_MAX_BYTES", 512)
+    draft = _draft(tmp_path, video=True, ads=1)
+    ad = draft.ad_sets[0].ads[0]
+    Path(ad.creative_path).write_bytes(_mp4(15, 1080, 1080) + b"m" * 2048)
+    vertical = tmp_path / "1000_story.mp4"
+    vertical.write_bytes(_mp4(15, 1080, 1920) + b"v" * 2048)
+    ad.vertical_filename, ad.vertical_path = vertical.name, str(vertical)
+
+    def no_whole_file_read(path):
+        raise AssertionError(f"the bounded loader must handle {Path(path).name}")
+
+    meta = ChunkMeta()
+    meta.next_id = 100000  # Match the real numeric-ID contract of asset-feed videos.
+    out, _ = _run(meta, draft, read_file=no_whole_file_read)
+    assert not out.error and out.readback["ok"], out.error or out.mismatches
+    assert len(meta.sessions) == 2 and all(s["done"] for s in meta.sessions.values())
+    assert all("upload_phase" in p for path, p in meta.posts if path.endswith("/advideos"))
+
+
+def test_partial_video_retry_ignores_an_expiring_thumbnail_url_in_creative_identity(tmp_path, monkeypatch):
+    from tests.test_acl1819_preflight import _mp4
+    from tests.test_acl1891_video_chunks import ChunkMeta
+    monkeypatch.setattr(cr, "VIDEO_SINGLE_MAX_BYTES", 512)
+    draft = _draft(tmp_path, video=True, ads=1)
+    ad = draft.ad_sets[0].ads[0]
+    Path(ad.creative_path).write_bytes(_mp4(15, 1080, 1080) + b"m" * 2048)
+    ad.text_variants = [{"body": "Second body", "headline": "Second head", "description": ""}]
+    original = cr.CampaignCreator._wait_video
+    thumbnails = []
+
+    def wait(self, *args, **kw):
+        original(self, *args, **kw)
+        url = f"https://thumbnail.invalid/video.jpg?expires={len(thumbnails)}"
+        thumbnails.append(url)
+        return url
+
+    monkeypatch.setattr(cr.CampaignCreator, "_wait_video", wait)
+    meta = ChunkMeta()
+    meta.next_id = 100000
+    meta.fail_next["ads"] = "unsent"
+    first, _ = _run(meta, draft, reconcile_wait_s=0)
+    assert first.stop_kind == "unknown"
+    second, _ = _run(meta, draft)
+    assert not second.error and second.readback["ok"], second.error or second.mismatches
+    assert len(set(thumbnails)) == 2
+    assert len(meta.sessions) == 1
+    assert len([o for o in meta.objects.values() if o["_kind"] == "creative"]) == 1

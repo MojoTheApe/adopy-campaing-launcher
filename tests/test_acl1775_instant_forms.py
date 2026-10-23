@@ -72,7 +72,7 @@ class FormMeta(FakeMeta):
             if self.drop_forms_after_creative and self._of("creative"):
                 rows = []
             return self._page(rows, params)
-        if parts == [PAGE]:
+        if parts == [PAGE] and "connected_instagram_account" not in str(params.get("fields")):
             return {"id": PAGE, "leadgen_tos_accepted": self.tos}
         if parts == [ACT, "adspixels"] and self.pixels is not None:
             return {"data": self.pixels}
@@ -419,7 +419,7 @@ def test_instant_form_ad_set_and_creative_are_created_paused_and_read_back(tmp_p
     assert out.error == "" and out.readback["ok"] is True, out.mismatches
     camp, = _objs(meta, "campaign")
     adset, = _objs(meta, "adset")
-    assert camp["status"] == "PAUSED" and adset["status"] == "PAUSED"
+    assert camp["status"] == "PAUSED" and adset["status"] == "ACTIVE"
     assert adset["destination_type"] == "ON_AD" and adset["optimization_goal"] == "LEAD_GENERATION"
     assert adset["promoted_object"] == {"page_id": PAGE}, "в promoted_object только Страница, без пикселя"
     assert "pixel" not in json.dumps(adset["promoted_object"]) and "custom_event_type" not in json.dumps(adset)
@@ -433,7 +433,7 @@ def test_instant_form_ad_set_and_creative_are_created_paused_and_read_back(tmp_p
         assert c["object_story_spec"]["page_id"] == PAGE
         assert c["object_story_spec"]["link_data"]["link"] == cr.INSTANT_FORM_LINK
     assert sorted(forms_seen) == [FORM, FORM2]
-    assert all(o["status"] == "PAUSED" for o in _objs(meta, "ad"))
+    assert all(o["status"] == "ACTIVE" for o in _objs(meta, "ad"))
     assert len(out.ad_ids) == 2
 
 
@@ -659,14 +659,34 @@ def _without_multi_advertiser(got: dict) -> dict:
     return got
 
 
+def _without_instagram(value):
+    """ACL-1896 добавляет ровно Instagram-идентичность: поле креатива, шаг предпроверки и строку сверки."""
+    if isinstance(value, dict):
+        if value.get("field") == "instagram_user_id":
+            return None
+        return {k: _without_instagram(v) for k, v in value.items() if k != "instagram_user_id"}
+    if isinstance(value, (list, tuple)):
+        items = [_without_instagram(v) for v in value
+                 if not (isinstance(v, str) and v.startswith("preflight: Instagram account of the Page"))]
+        return type(value)(v for v in items if v is not None) if isinstance(value, list) else tuple(items)
+    return value
+
+
 def test_website_plan_posts_and_readback_are_identical_to_the_pre_forms_creator(tmp_path):
     """Золотой файл снят прежним создателем (до ACL-1775) на том же черновике.
 
-    ACL-1767: пустые новые поля не меняют ни байта; добавлено лишь явное «Multi-advertiser off».
+    ACL-1767/1774 add explicit multi-advertiser opt-out and dynamic-mode verification;
+    ACL-1896 adds Instagram identity. Every other old-draft field remains identical.
     """
     want = json.loads(GOLDEN.read_text(encoding="utf-8"))
     got = _golden_run(cr, tmp_path)
-    assert _without_multi_advertiser(got) == want
+    flags = [c for c in got["readback_checks"] if c["field"] == "dynamic_creative"]
+    assert flags == [{"object": "ad set MX Leads 1", "field": "dynamic_creative",
+                      "expected": False, "actual": False, "ok": True, "not_read": False}]
+    assert got != want, "creative identity and safety verification must be present"
+    unchanged = _without_multi_advertiser(_without_instagram(got))
+    unchanged["readback_checks"] = [c for c in unchanged["readback_checks"] if c not in flags]
+    assert unchanged == want
 
 
 def test_website_draft_does_not_grow_new_keys(tmp_path):

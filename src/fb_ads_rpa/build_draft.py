@@ -76,7 +76,7 @@ def slots_to_campaign_drafts(
                 lead_form_id=(s.get("lead_form_id") or "").strip() if destination == "instant_form" else "",
                 cta=(s.get("cta") or "").strip(),
                 # ACL-1774: ключи есть в слоте только когда поле заполнено.
-                more_copy_names=[str(x).strip() for x in (s.get("copy_more") or []) if str(x).strip()],
+                more_copy_names=[str(x).strip() for x in (s.get("copy_more") or [])],
                 vertical_filename=(s.get("creative_file_vertical") or "").strip(),
                 lead_form_template=((s.get("lead_form_template") or "").strip()
                                     if destination == "instant_form" else ""),
@@ -113,11 +113,15 @@ def slots_to_campaign_drafts(
             language=language,
             link_provided=first.get("tracking_link_provided", "tracking_link" in first),
             language_provided=first.get("language_provided", "language" in first),
+            page_id=str(first.get("page_id") or "").strip() or None,
+            page_provided="page_id" in first,
             ad_sets=[ad_set],
             warnings=warnings,
         )
         if not ads:
             draft.errors.append("No ads in campaign")
+        if any(str(s.get("page_id") or "").strip() != str(first.get("page_id") or "").strip() for s in group):
+            draft.errors.append("Campaigns with the same name have different Facebook Page choices. Give each campaign a distinct name.")
         if budget is None:
             draft.errors.append("Daily budget missing")
         drafts.append(draft)

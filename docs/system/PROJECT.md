@@ -32,13 +32,32 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   ACL-1381 keeps ACL-1769's numbered primary-text fields and separately displayed
   headline. Builder search/help and empty/error messages call the shared library
   entries ad texts; internal copy/copy2 fields and submission behavior are unchanged.
+  Countries with the existing live activity state show a static 2 px blue vertical
+  line at the left of their sidebar row (ACL-1838), including countries opened in
+  the account map before their first spend. Inactive countries have no marker;
+  the expanded-country background remains a separate selection indication.
+- `src/web/draft_status.py`: current build verdicts in machine-local JSON. Accepted
+  jobs invalidate earlier readiness before starting, retain the previous success
+  as history and persist their job/plan identity, partial results and stopped or
+  failed outcome. Reloads mark unfinished jobs absent from this process interrupted;
+  missing/unreadable status is explicitly unverified. Thread and process locks cover
+  the complete read/modify/write transaction, with job/revision fencing for late writers.
 - `src/analysis_agent`: statistics workbook reading, reports and reconciliation.
+  The dashboard tells an empty chosen period apart by owner (ACL-106): no workbook rows for
+  anyone (the file may need updating) versus rows for other managers but none for the
+  selected manager (nothing to review); the account map stays available in both.
 - `src/campaign_bridge`, `src/upload_agent`: campaign input/output preparation.
 - `src/fb_ads_rpa`, `src/meta_campaign_agent`: Ads Manager interactions, verified
-  profile identity, draft preparation, queues and browser lifecycle. ACL-1250/#247
+  profile identity, draft preparation, queues and browser lifecycle. See
+  [same-user process ownership and its boundaries](PROFILE_OWNERSHIP.md). ACL-1250/#247
   confirms audience age/country values within their own field and opens the correct
   collapsed Locations/Languages control, preserving adjacent fields. Later hover-only
   controls remain ACL-1251; the deferred real pilot remains ACL-1215.
+  ACL-1138: before attaching to or starting a Multilogin profile, every Multilogin
+  provider, `attach_existing_only` and `fb_api.profile.open_profile` read the profile's proxy from the MLX API (`/profile/search` by id) and
+  stop the account with `profile_no_proxy` when none is configured. A failed check
+  does not block the run; `FB_RPA_PROXY_GATE=0` is the machine switch. The
+  browser's `--proxy-server` flag is only logged as evidence.
 - `src/fb_api`: API backend (`ACL_FB_BACKEND=api`) - Graph API calls made from inside the Multilogin
   profile's Ads Manager tab; everything is created PAUSED, never activated, never deleted. File uploads
   (`advideos`, `adimages`; ACL-1899) have no time limit: the page helper sends the file with
@@ -83,6 +102,32 @@ Read [distribution boundaries](../DISTRIBUTION.md), [product/design context](../
 [design guidance](../../DESIGN.md) and existing specs for subsystem details.
 `content_machine`, `jira_agent` and legacy `fb_publish_agent` are not automatically
 part of the ACL runtime; preserve the tested distribution boundary.
+
+### ACL-1896 — Instagram placements need an Instagram account on the Page ([issue](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/896))
+
+Live finding on Doc120 (2026-10-14): the API publish wrote the campaign, ad set and creative PAUSED, then Meta refused the ad (Graph 100, subcode 1772103, "Instagram Account Is Missing") because the Page had no Instagram account and the creative carried no Instagram identity. The creator always sends Instagram feed, Stories and Reels placements.
+
+- Read-only discovery (`src/fb_api/instagram.py`), at most two Graph reads, cached per Page for the run: the Page's `connected_instagram_account`, `instagram_business_account` and `connected_page_backed_instagram_account` fields (one read); only when all are empty, the ad account's `instagram_accounts` edge (for the message only; an account listed there is not assumed to belong to the Page). A failed read is "unknown", never a pass. The per-campaign create budget (150 calls) and the Check plan reset per draft absorb the two reads.
+- New server pre-flight rule `instagram_identity` (shared table `preflight_rules.py` and its JSON; the page draws server rows from the table, so `report.html` needs no change). Plans with Instagram placements and no confirmed identity are refused in Check plan and again before the first write: "This Facebook Page has no Instagram account, and the ad is set for Instagram placements. Connect an Instagram account to the Page, or wait for manual placements (ACL-1772) to publish Facebook-only." An unconfirmed read says Meta did not confirm one. When the Page itself is not settled the row is "unknown" (the Page row already blocks).
+- With an identity the creative carries `object_story_spec.instagram_user_id`, and the readback compares it. The closed write policy (`write_policy.py` and the page helper in `token_capture.py`) gained exactly one field: `instagram_user_id`, a string of 5-25 digits, only as a direct key of a creative's `object_story_spec`. `instagram_actor_id` is refused everywhere. No Page-backed Instagram account is created; that would be a write and needs an owner decision.
+- Documentation evidence (developers.facebook.com, 2026-10-14). Certain: `instagram_user_id` is a numeric string field of the creative's `object_story_spec`; the ad account `instagram_accounts` edge is read-only and lists IGUser nodes; the Page node has the three fields above. Not documented: `instagram_actor_id` (not used) and Page edges `instagram_accounts` / `page_backed_instagram_accounts` (not used).
+- Needs a live check on an authorized test account: that the profile's token returns the three Page fields; that Meta accepts that id as `instagram_user_id` (including a Page-backed id); where the creative read returns it (`object_story_spec` or the creative's own `instagram_user_id`, both are compared); behaviour on a Page with an Instagram account the ad account cannot use.
+- Known limit: a creative left by an earlier failed run (found by name) is reused as is; if it lacks the Instagram id, the readback reports the mismatch instead of silently passing.
+
+## In-profile Graph session recovery
+
+- `src/fb_api`: in-profile Graph transport keeps tokens inside an isolated page
+  world. ACL-1836 permits one recovery of a detached CDP session on the same owned
+  target and existing browser connection. Target and main-frame location must
+  match the navigated Ads Manager account; subsequent reads recheck that location.
+  The owned tab retains the successful explicit navigation intent and recovery
+  guard across replacement helpers, including warm read/write mode changes.
+  A helper never learns its expected account from the current page URL.
+  Local helper setup can retry, but a sent Graph request is never replayed.
+  Missing/changed targets, repeat detachment and unavailable transport stop with
+  `GraphStop`, so creator reconciliation can retain already-created object details.
+  Recovery does not open a replacement tab, restart the profile or reload for a
+  missing token. Pending creator source integration and live delivery remain separate.
 
 ## Delivery state at adoption
 
@@ -133,6 +178,33 @@ permission denial or change access, retry, token, pagination or stop rules.
 Callers that replace the exception text with a generic message still need their
 own integration; this boundary alone does not update those messages.
 
+## Profile Page fallback and no-creation proof
+
+ACL-2105 merges ad-account Pages with the profile's own ADVERTISE/MANAGE Pages
+when the account list is empty or omits an explicit choice. Account Pages retain
+priority; picker, plan/result and Instant Forms retain each Page's origin.
+
+Before any objects, uploads or forms are created with a profile Page, both Check
+plan and the real run require one `validate_only` creative for the selected account,
+Page and link. The isolated helper binds its account to navigation (or the verified
+creation account), constructs the fixed parameters itself, and leaves ordinary
+write permissions closed in read sessions. Explicit successful Meta validation
+without an error/object ID is required. Unknown, unsupported and refused responses
+stop with the Page and reason. Proof is reused only within the current operation;
+the actual run checks again after an earlier plan check. Existing call budgets,
+usage/stop guards and unknown-write fences still apply.
+
+The official Meta SDK at `efd8423a2e595ea8d4c04eb824ce113f2f1d68cd` supports
+[creative execution options](https://github.com/facebook/facebook-python-business-sdk/blob/efd8423a2e595ea8d4c04eb824ce113f2f1d68cd/facebook_business/adobjects/adaccount.py),
+[`validate_only`](https://github.com/facebook/facebook-python-business-sdk/blob/efd8423a2e595ea8d4c04eb824ce113f2f1d68cd/facebook_business/adobjects/adcreative.py),
+[Page/link story fields](https://github.com/facebook/facebook-python-business-sdk/blob/efd8423a2e595ea8d4c04eb824ce113f2f1d68cd/facebook_business/adobjects/adcreativeobjectstoryspec.py)
+and [link data](https://github.com/facebook/facebook-python-business-sdk/blob/efd8423a2e595ea8d4c04eb824ce113f2f1d68cd/facebook_business/adobjects/adcreativelinkdata.py).
+These fields do not guarantee the minimal link creative is accepted for every
+Page/plan without uploaded media. Such a refusal blocks creation; there are no
+extra asset reads or fallback writes. This is Page/account usability evidence,
+not a full media/content/ad-review guarantee. Tests use synthetic transports and
+the actual helper offline; no live Meta or profile pilot has been performed.
+
 ## CI feedback and admission
 
 The existing `Classify and check project tooling` result supplies bounded tooling
@@ -147,7 +219,8 @@ retry policy or employee installation is changed by documenting this plan.
 
 Describe implemented behavior and limitations here when changing the system. Preserve
 plans under original specs, label them as plans, and record what/why and ticket/PR
-links in CHANGELOG.md. Process-only changes belong in ../repository/CHANGELOG.md.
+links in a per-task fragment `changelog.d/ACL-NNNN.md` (folded into CHANGELOG.md by
+`scripts/fold_changelog.py`; see changelog.d/README.md). Process-only changes belong in ../repository/CHANGELOG.md.
 
 Repository instructions have a separately prepared direct-main route described in
 [PROCESS_INSTRUCTIONS.md](../repository/PROCESS_INSTRUCTIONS_ACL.md). Eligibility uses
@@ -169,7 +242,8 @@ see [the process runbook](../repository/POST_MAIN_DELIVERY.md) and parent ACL-19
 API backend only. One text and one file keep the old `object_story_spec`. Findings from the
 Meta capability spike (Doc120, 2026-10-14): `asset_feed_spec` with 3 bodies plus two placement
 customization rules was refused (error 100, subcode 1885878); a rule applies one asset per type.
-Owner decision 2026-10-20 (live acceptance of the Dynamic Creative route is still pending):
+Owner decision 2026-10-20 (the recorded PAUSED capability spike accepted Dynamic Creative;
+the visual Ads Manager presentation check remains pending):
 
 - 2-5 texts (or several headlines/descriptions) go as Dynamic Creative: `is_dynamic_creative: true`
   on the ad set (the only new ad-set key in the write allowlist, `true` only), one file, no rules,
@@ -177,3 +251,50 @@ Owner decision 2026-10-20 (live acceptance of the Dynamic Creative route is stil
 - A Stories / Reels 9:16 file (two labelled files, two placement rules) works with one text per kind.
 - Both write-policy layers (`write_policy.py`, the in-page mirror in `token_capture.py`) and the
   pre-flight rules (Python table + `cbPreflight` in `report.html`) carry the same limits.
+- Library entries with the same body retain their distinct headlines/descriptions. Empty text
+  slots preserve their field numbers. A partially created feed creative is reused only for the
+  same payload; a retry with changed texts uses a new creative without uploading the media twice.
+- Readback checks media labels and IDs even when ads are reused. Feed creatives retain the current
+  Instagram identity; vertical videos use the same bounded/chunked loader as the main video.
+  Website media/CTA controls stay outside the hidden Instant Form section, and campaign copies
+  preserve their ad counts. Existing `creative_pairing` metadata remains the source of Post/Story hints.
+- Current ACL-2114 safety still governs creation: the campaign stays PAUSED and child objects use
+  the existing confirmed-parent guard. This work adds no live activation. ACL-1767 dependency,
+  visual acceptance and unverified asset feeds with Instant Forms remain explicit conditions.
+
+
+## ACL-1891 — Videos over 200 MB upload in chunks ([issue](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/891), 2026-10-14)
+
+Videos up to 200 MB still go up in one request. A video from 200 MB up to 1536 MB (`VIDEO_MAX_BYTES` = `write_policy.UPLOAD_FILE_MAX`) goes through Meta's resumable upload on `/act_X/advideos`: `upload_phase=start` (`file_size`), `transfer` (`upload_session_id`, `start_offset`, multipart `video_file_chunk`), `finish` (`upload_session_id`, `title`, `name`). Everything stays PAUSED; nothing is deleted or activated.
+
+- Memory: the server never reads the whole file. `creator.LargeFile` reads slices from disk (a plain slice larger than one chunk is refused); the hash for the idempotency tag (`acl-<tag>-<md5[:12]>`) is computed in 1 MB blocks. The page helper holds one chunk (at most 8 MB, `UPLOAD_CHUNK_MAX`) at a time; the existing staging bridge (base64 pieces over CDP, SHA-256 and size check before sending) is reused per chunk.
+- Resume: Meta's reported `start_offset`/`end_offset` drive the loop. The next chunk is `min(Meta's range, 8 MB, rest of file)`. A refusal that names the offset (`error_data`) resumes from there, not from zero. An unknown result on a chunk re-sends the same chunk at the same offset once or twice (the protocol's own offset query); a stuck chunk stops with `unknown`. Offsets that are not digits, go backwards or lie outside the file stop the upload before `finish`.
+- Reconcile: an unknown `finish` is reconciled by reading the library back by the title tag; a found video is reused, never uploaded twice. A re-run finds a finished video by the same tag. An abandoned unfinished session is not visible in the library; the re-run starts a new one.
+- Processing wait is unchanged (`VIDEO_MAX_POLLS`). A large video costs `ceil(size / 8 MB) + 3` Graph calls (`creator.upload_calls`); `_prepare` refuses a plan up front ("split the campaign") when those calls plus a reserve of 40 (`CALLS_RESERVE_OTHER`) exceed the run's budget (`ACL_FB_API_CREATE_MAX_CALLS`, default 150, ceiling 250). With the default a video up to about 850 MB fits; a 1.5 GB video needs the budget raised to 250 and goes alone.
+- Write policy, both layers (`write_policy._check_upload`, the page helper `uploadOk`): exactly three phases, a closed key set per phase, numeric `file_size` within the limit, numeric session id, numeric `start_offset` inside the limit, a file only on `transfer` (field `video_file_chunk`, 1..8 MB; the helper checks the staged blob). `cancel`, `end_offset`, other keys, other edges: refused. Python and Node parity is tested case by case.
+- Pre-flight `media_limits`: video limit 1536 MB, message "file is larger than 1536 MB".
+- Documentation evidence (developers.facebook.com, 2026-10-14). Certain (Ad Account `advideos` reference): chunked upload parameters `upload_phase` (start, transfer, finish, cancel), `file_size`, `upload_session_id`, `start_offset`, `end_offset`, `video_file_chunk`; return fields `upload_session_id`, `start_offset`, `end_offset`, `video_id`, `success`. Not stated in the pages we could fetch: chunk size rules, file size limit, error shape for a wrong offset.
+- Needs a live check on an authorized test account (Doc120, PAUSED only): that `start` returns `video_id` and the first range; the range size Meta returns (if it is smaller than 8 MB, more calls than estimated are needed); that a chunk with the profile's token and multipart works in one page request; that a wrong offset is refused with the expected offset in `error_data` (otherwise resume falls back to stopping); that `finish` accepts `title`/`name` and the title appears in the library; that a 250 MB and a 1 GB file process and pass the readback; the profile's memory during the 1 GB upload; Meta's real maximum size for this edge (we assume the 4 GB the task states and cap at 1536 MB).
+
+### ACL-1880 — campaign-local Facebook Page selection (2026-10-13)
+
+The builder reads available Page names and IDs through `/api/account-pages`, using the existing read-only profile session and profile lock. New campaign cards start with Automatic; duplicates copy other settings but reset Page selection. The first Page in the destination account's returned order is shown and resolved before creation. Explicit campaign choices never write the account map. Legacy non-builder drafts retain map fallback.
+
+Loading failures and confirmed empty lists are distinct and support Refresh pages. A truncated discovery result is refused. API preflight still validates an explicit Page's membership, and its existing creative readback validates the resulting identity. Instant Form caches are keyed by the resolved Page ID, including in Automatic mode.
+
+RPA resolves the selection before campaign creation and passes the ID and unique display name to the recorded flow. Every ad verifies Identity; failure is non-retryable and not publishable. The existing sanitized `tests/fixtures/ads_manager/simple_create_2026_09_27.html` supplies regression coverage for the captured collapsed Identity summary. Picker interaction has offline native/custom-control tests; a live alternate-Page picker pilot has not been performed. Unrecognized or ambiguous controls fail closed. Other RPA engines are refused for builder Page selections until they implement Identity verification.
+
+Verification uses synthetic accounts and mocked browser/API transports only. The isolated local dashboard preview is not a production deployment or a stage/main merge.
+# ACL-1880: manual completion when the automatic Page list is empty
+
+Owner revised the acceptance on 2026-10-13: use the first available Page; if none
+is available, allow preparation for manual completion. In the API website path,
+a confirmed empty list and no explicit Page now produces a warning. The worker
+creates only a PAUSED campaign and its PAUSED ad sets, with readback of those
+objects. It does not upload media or create creatives/ads without a Page. Results
+carry `manual_required` and remain non-publishable. The operator adds Page/ads in
+Ads Manager or retries after Page access is restored; normal identity labels
+reuse the same campaign/ad sets. The original builder retains the ad inputs.
+Instant Forms and an explicitly unavailable Page still block, as do failed Page
+reads. The RPA path retains its existing Identity requirements. This supersedes
+the earlier requirement that every empty Page list blocks all preparation.

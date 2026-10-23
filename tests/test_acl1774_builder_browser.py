@@ -65,6 +65,17 @@ def test_the_ad_name_attributes_are_what_the_server_reads(page):
     assert {"copy", "copy2", "copy3", "copy4", "copy5", "creative_file", "creative_file_vertical"} <= suffixes
 
 
+def test_website_media_and_cta_stay_outside_the_hidden_form_section(page):
+    _open_first(page, "ad")
+    _backend(page, "api")
+    row = _row(page)
+    assert row.locator('.cb-vertical-search').is_visible()
+    assert row.locator('select.cb-cta').is_visible()
+    assert row.locator('.cb-form-wrap .cb-vertical-search, .cb-form-wrap .cb-cta').count() == 0
+    assert _slot(page).locator('.cb-ad-rows .cb-ad-count').count() == 0
+    assert _slot(page).locator('.cb-ad-count').input_value() == '1'
+
+
 def test_the_type_switch_clears_both_files_and_duplicate_copies_everything(page):
     _open_first(page, "ad")
     row = _row(page)

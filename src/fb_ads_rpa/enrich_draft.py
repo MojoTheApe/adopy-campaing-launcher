@@ -193,7 +193,10 @@ def enrich_campaign_drafts(
         # Источник запоминаем для «Check plan»; RPA эти поля не читает.
         draft.page_source = "draft" if draft.page_id else ("map" if entry and entry.page_id else "")
         draft.pixel_source = "draft" if draft.pixel_id else ("map" if entry and getattr(entry, "pixel_id", None) else "")
-        draft.page_id = draft.page_id or (entry.page_id if entry else None)
+        if not draft.page_provided:
+            draft.page_id = draft.page_id or (entry.page_id if entry else None)
+        elif not draft.page_id:
+            draft.page_source = "automatic"
         draft.pixel_id = draft.pixel_id or ((getattr(entry, "pixel_id", None) or "") if entry else "")
         # Что набрано в билдере, то и берём. Раньше строка ниже перетирала
         # ссылку значением из книги безусловно: человек вписывал её в форму,
@@ -233,7 +236,7 @@ def enrich_campaign_drafts(
         if not str(getattr(draft, "language", "") or "").strip():
             draft.warnings.append("audience language not set — the Language step will be skipped")
         # page_id is only required for ACTIVE campaigns; drafts publish without it
-        if not draft.page_id:
+        if not draft.page_id and not draft.page_provided:
             draft.warnings.append("page_id not set — required for ACTIVE campaigns only")
         if not entry.profile_id:
             if preview_mode:
@@ -326,9 +329,11 @@ def enrich_campaign_drafts(
                 # (основной текст, заголовок, описание). Пустое тело и повтор — предупреждение,
                 # такой вариант не берётся; нет записи — ошибка до записи в Meta.
                 ad.text_variants = []
-                seen_bodies = ["".join(ad.ad_body.split())] if ad.ad_body else []
-                wanted = ([(2, ad.copy2_name)] if ad.copy2_name and ad.ad_body2 else []) + [
-                    (3 + i, n) for i, n in enumerate(ad.more_copy_names)]
+                def text_key(body, headline, description):
+                    return tuple("".join(str(x or "").split()) for x in (body, headline, description))
+                seen_texts = {text_key(ad.ad_body, ad.ad_title, ad.ad_link_description)}
+                wanted = ([(2, ad.copy2_name)] if ad.copy2_name and ad.ad_body else []) + [
+                    (3 + i, n) for i, n in enumerate(ad.more_copy_names) if str(n).strip()]
                 for slot_no, vname in wanted:
                     from src.analysis_agent.ad_text_registry import AdTextError
                     try:
@@ -337,16 +342,17 @@ def enrich_campaign_drafts(
                         draft.errors.append(f"Primary text {slot_no} {vname!r}: {exc}")
                         continue
                     body = (rec.get("body") or "").strip()
-                    key = "".join(body.split())
+                    headline = (rec.get("headline") or "").strip()
+                    description = (rec.get("description") or "").strip()
+                    key = text_key(body, headline, description)
                     if not body:
                         draft.warnings.append(f"Primary text {slot_no} {vname!r} has no body — ignored")
-                    elif key in seen_bodies:
-                        draft.warnings.append(f"Primary text {slot_no} {vname!r} repeats an earlier primary text — ignored")
+                    elif key in seen_texts:
+                        draft.warnings.append(f"Primary text {slot_no} {vname!r} repeats an earlier text, headline and description — ignored")
                     else:
-                        seen_bodies.append(key)
+                        seen_texts.add(key)
                         ad.text_variants.append({"name": vname, "body": body,
-                                                 "headline": (rec.get("headline") or "").strip(),
-                                                 "description": (rec.get("description") or "").strip()})
+                                                 "headline": headline, "description": description})
 
                 # ACL-1774: вертикальный файл ищется так же, как основной.
                 if ad.vertical_filename and not preview_mode:
