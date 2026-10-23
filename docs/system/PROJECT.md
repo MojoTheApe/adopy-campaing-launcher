@@ -24,6 +24,14 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
 
 - `src/web`, `serve.py`: local dashboard, account/report views, campaign builder,
   machine configuration and update endpoints.
+  ACL-141 uses queued, labelled page dialogs in place of browser alert/confirm/prompt;
+  Escape/Cancel refuse, destructive actions initially focus Cancel, and focus returns
+  to the initiating control. Recoverable control errors stay inline. Forms deletion
+  also rechecks the row/list after confirmation; existing Page forms remain untouched.
+  Manual profile-ID saves and automatic profile links keep refusals beside their
+  visible form/list; saved/linked messages follow the real successful response.
+  Missing-creative Publish refusals stay inline beside the visible form/footer
+  action, preserving the named rows and refusal before submission.
   ACL-1651 refreshes the Builder creative list on search/window focus (ten-second
   throttle) and once per missed search streak. A miss during the two-second request
   gap waits in the background for its refresh; typing remains available and the

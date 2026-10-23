@@ -49,6 +49,7 @@
   <script src="https://unpkg.com/htmx.org@1.9.10"
           integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC"
           crossorigin="anonymous"></script>
+  <script>{% include "_acl_dialog.js" %}</script>
   <script>
     // ACL-1761: создатель кампаний через Graph API — «Check plan (no writes)» и
     // «PAUSED campaigns» вместо «drafts». Раньше любого кода билдера.
@@ -1853,6 +1854,29 @@
     .report-msg { flex: 1; font-size: var(--adopy-text-table); color: var(--muted); }
     .report-msg.good { color: var(--good); }
     .report-msg.bad { color: var(--bad); }
+
+    /* ACL-141: свои окна вместо alert/confirm/prompt браузера (templates/_acl_dialog.js).
+       Рамку, фон, тень, кнопки и поле даёт общий стиль `dialog` — здесь только
+       раскладка и цвет основной кнопки. */
+    .acl-dlg { padding: var(--space-lg); max-width: 30rem; width: 90vw; box-sizing: border-box; overflow-x: hidden; }
+    .acl-dlg-title { margin: 0 0 var(--space-sm); font-size: 1rem; line-height: 1.35; overflow-wrap: anywhere; }
+    .acl-dlg-text { margin: 0 0 var(--space-sm); font-size: var(--adopy-text-table); color: var(--muted); line-height: 1.5; overflow-wrap: anywhere; }
+    .acl-dlg-label { display: block; margin: var(--space-sm) 0 0.25rem; font-size: var(--adopy-text-sm); color: var(--muted); }
+    .acl-dlg-input { width: 100%; box-sizing: border-box; }
+    .acl-dlg-input:focus {
+      outline: none; border-color: var(--focus-ring);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 30%, transparent);
+    }
+    .acl-dlg-actions { display: flex; justify-content: flex-end; gap: var(--space-sm); margin-top: var(--space-md); }
+    .acl-dlg .acl-dlg-primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+    .acl-dlg .acl-dlg-primary:hover:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); }
+    .acl-dlg-danger .acl-dlg-primary,
+    .acl-dlg-danger .acl-dlg-primary:hover:not(:disabled) { background: var(--danger); border-color: var(--danger); color: var(--on-danger); }
+    .acl-dlg-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+    .acl-inline-err {
+      display: inline-block; margin-left: var(--space-sm); font-size: var(--adopy-text-sm);
+      color: var(--bad); font-weight: 500; line-height: 1.4; vertical-align: middle; max-width: 40rem;
+    }
 
     .amap-cell-act { display: flex; justify-content: flex-end; }
     .amap-nocov > summary.amap-row { background: color-mix(in srgb, var(--bad) 9%, var(--bg-subtle)); }
@@ -4144,6 +4168,7 @@ async function dashRefresh(ev) {
   var prev = btn.textContent;
   btn.disabled = true;
   btn.textContent = 'Refreshing…';
+  aclInlineError(btn, '');
   try {
     var r = await fetch('/refresh', {
       method: 'POST',
@@ -4154,10 +4179,9 @@ async function dashRefresh(ev) {
     try { data = await r.json(); } catch (_e) { data = null; }
     if (!r.ok || (data && data.ok === false)) {
       var err = (data && data.error) ? data.error : ('HTTP ' + r.status);
-      btn.textContent = 'Error';
-      alert('Refresh failed: ' + err);
       btn.disabled = false;
       btn.textContent = prev;
+      aclInlineError(btn, 'Refresh failed: ' + err);
       return false;
     }
     btn.textContent = 'Reloading…';
@@ -4166,7 +4190,7 @@ async function dashRefresh(ev) {
   } catch (e) {
     btn.disabled = false;
     btn.textContent = prev;
-    alert('Refresh failed: ' + (e && e.message ? e.message : e));
+    aclInlineError(btn, 'Refresh failed: ' + (e && e.message ? e.message : e));
   }
   return false;
 }
@@ -4215,11 +4239,16 @@ async function dashRefresh(ev) {
     if (btn.disabled) return;
     var name = btn.dataset.target || 'the latest release';
     var fixed = btn.dataset.fixed || '';
-    if (!confirm('Update ACM to ' + name + '?\n\n'
-      + (fixed ? 'What changed:\n' + fixed + '\n\n' : '')
+    aclConfirm((fixed ? 'What changed:\n' + fixed + '\n\n' : '')
       + 'The dashboard will restart and this page will reload by itself. '
-      + 'It takes a few minutes. If the new version does not start, the current one comes back by itself.')) return;
+      + 'It takes a few minutes. If the new version does not start, the current one comes back by itself.',
+      { title: 'Update ACM to ' + name + '?', okLabel: 'Update' }).then(function (yes) {
+      if (yes && !btn.disabled) aclApplyUpdate();
+    });
+  });
 
+  function aclApplyUpdate() {
+    aclInlineError(btn, '');
     btn.disabled = true;
     btn.textContent = 'Updating…';
     fetch('/acl/update/apply', {
@@ -4232,7 +4261,7 @@ async function dashRefresh(ev) {
         if (!data || data.ok !== true) {
           btn.disabled = false;
           btn.textContent = 'Update ACM';
-          alert('Update not started: ' + ((data && data.error) || 'unknown error'));
+          aclInlineError(btn, 'Update not started: ' + ((data && data.error) || 'unknown error'));
           return;
         }
         aclWaitForRestart();
@@ -4242,7 +4271,7 @@ async function dashRefresh(ev) {
         // success, not failure, so wait rather than reporting an error.
         aclWaitForRestart();
       });
-  });
+  }
 
   // Итог последней установки пишет помощник обновления (ACL-1240). Показываем
   // один раз: ключ — время, когда он закончил.
@@ -4250,7 +4279,7 @@ async function dashRefresh(ev) {
     if (!a || !a.finished_at || !a.result || a.result === 'updated') return;
     var key = 'acl-update-seen:' + a.finished_at;
     try { if (localStorage.getItem(key)) return; localStorage.setItem(key, '1'); } catch (e) { /* без памяти — покажем снова */ }
-    alert(a.result === 'rollback_failed'
+    aclAlert(a.result === 'rollback_failed'
       ? 'The update failed and ACM could not fully restore the previous version. Open the previous installer or contact support.\n\n' + (a.reason || '')
       : a.result === 'rolled_back'
       ? 'The update to ' + (a.to || 'the new version') + ' did not work, so ACM went back to '
@@ -4272,7 +4301,7 @@ async function dashRefresh(ev) {
       if (Date.now() - started > LIMIT_MS) {
         btn.disabled = false;
         btn.textContent = 'Update ACM';
-        alert('ACM did not come back within 10 minutes. Open it again from the desktop '
+        aclAlert('ACM did not come back within 10 minutes. Open it again from the desktop '
           + 'shortcut. If the new version did not start, the previous one is restored '
           + 'automatically; use Report a problem if it still does not open.');
         return;
@@ -8014,10 +8043,14 @@ window.cbTree = (function () {
       var found = findCampaign(id);
       if (!found) return;
       var what = found.camp.name ? '"' + found.camp.name + '"' : 'this unnamed campaign';
-      if (!window.confirm('Remove ' + what + ' from the builder?')) return;
-      if (id === openId) closeCampaign();
-      window.cbRemoveSlot(found.camp.slot);
-      paint();
+      window.aclConfirm('', { title: 'Remove ' + what + ' from the builder?', okLabel: 'Remove', danger: true })
+        .then(function (yes) {
+          var still = yes && findCampaign(id);   // за время вопроса дерево могли перерисовать
+          if (!still) return;
+          if (id === openId) closeCampaign();
+          window.cbRemoveSlot(still.camp.slot);
+          paint();
+        });
     } else if (act === 'add-here') {
       addCampaign(hit.dataset.country, hit.dataset.account);
     } else if (act === 'connect' || act === 'connect-picked') {
@@ -8031,7 +8064,7 @@ window.cbTree = (function () {
       if (!borrowConnect(chosenCountryName)) {
         openConnect = '';
         paint();
-        window.alert('This country is not on the account map yet — add it first with «+ Country».');
+        window.aclAlert('Add it first with «+ Country».', { title: 'This country is not on the account map yet' });
         return;
       }
       paint();
@@ -9181,7 +9214,8 @@ function amapCalendar(btn) {
   var open = document.querySelector('.amap-cal');
   if (open) { if (open._amapClose) open._amapClose(true); else open.remove(); return; }
   var have = amapDates();
-  if (!have.length) { alert('The workbook has no dates to choose from.'); return; }
+  if (!have.length) { aclInlineError(btn, 'The workbook has no dates to choose from.'); return; }
+  aclInlineError(btn, '');
 
   /* Выбор живёт в черновике, пока не нажали Update. Раньше второй клик по дате
      грузил период немедленно: увидеть, что выбрал, было негде, а закрыть окно
@@ -11461,6 +11495,7 @@ function amapOpenProfile(btn) {
   var account = cell && cell.dataset.account;
   if (!account) return;
   var read = btn.parentNode.querySelector('.amap-read');
+  aclInlineError(btn, '');
   btn.disabled = true;
   btn.textContent = 'opening…';
   var body = new FormData();
@@ -11507,7 +11542,7 @@ function amapOpenProfile(btn) {
       stopWatch();
       btn.disabled = false;
       btn.textContent = 'open profile';
-      alert('Could not open the profile: ' + (e && e.message || e));
+      aclInlineError(btn, 'Could not open the profile: ' + (e && e.message || e));
     });
 }
 
@@ -11539,10 +11574,10 @@ function goalMenu(chip, goal) {
     goalCloseMenu();
     // Цель — не страна. Удаление снимает цель и не трогает ни аккаунты, ни
     // историю, ни раздел страны; сказать это до нажатия, а не после.
-    if (!confirm('Stop tracking a goal for ' + goal.country + '?\n\n'
-      + 'Its accounts, history and country section stay exactly as they are — '
-      + 'it just stops being a target.')) return;
-    goalSend({ action: 'delete', country: goal.country });
+    aclConfirm('Its accounts, history and country section stay exactly as they are — '
+      + 'it just stops being a target.',
+      { title: 'Stop tracking a goal for ' + goal.country + '?', okLabel: 'Stop tracking', danger: true })
+      .then(function (yes) { if (yes) goalSend({ action: 'delete', country: goal.country }); });
   };
   m.appendChild(edit); m.appendChild(del);
   document.body.appendChild(m);
@@ -11598,7 +11633,9 @@ async function goalSend(body) {
   });
   var d = null; try { d = await r.json(); } catch (e) {}
   if (d && d.ok) { goalCloseMenu(); location.reload(); return; }
-  alert((d && d.error) ? d.error : ('Could not save (HTTP ' + r.status + ')'));
+  // Ошибка правки — под кнопкой Save открытой формы; у удаления формы нет — окно.
+  aclInlineError(document.getElementById('gf-save'),
+    (d && d.error) ? d.error : ('Could not save (HTTP ' + r.status + ')'));
 }
 
 // ── Account map: placing accounts in countries ───────────────────────
@@ -11620,7 +11657,7 @@ async function amapSend(body, msgEl) {
   // молча. Подтверждение спрашивается один раз и с текстом, который
   // объясняет, что именно НЕ произойдёт — кампании продолжат работать.
   if (data && data.needs_confirm) {
-    if (confirm(data.error + '\n\nTake it out anyway?')) {
+    if (await aclConfirm(data.error, { title: 'Take it out anyway?', okLabel: 'Take it out', danger: true })) {
       body.confirm = true;
       return amapSend(body, msgEl);
     }
@@ -11631,7 +11668,7 @@ async function amapSend(body, msgEl) {
     msgEl.textContent = (data && data.error) ? data.error : ('error ' + r.status);
     msgEl.className = 'amap-msg bad';
   } else {
-    alert((data && data.error) ? data.error : ('Could not save (HTTP ' + r.status + ')'));
+    aclAlert((data && data.error) ? data.error : ('HTTP ' + r.status), { title: 'Could not save' });
   }
   return false;
 }
@@ -11812,9 +11849,10 @@ function amapUnlink(account, kind, value) {
 }
 
 function amapClose(kind, value, label) {
-  if (!confirm('Retire ' + (label || value) + '?\n\nIts accounts move to Available accounts. '
-    + 'Nothing is deleted — they keep their Multilogin profile, proxy and history.')) return;
-  amapSend({ action: 'close', kind: kind, value: value }, null);
+  aclConfirm('Its accounts move to Available accounts. '
+    + 'Nothing is deleted — they keep their Multilogin profile, proxy and history.',
+    { title: 'Retire ' + (label || value) + '?', okLabel: 'Retire', danger: true })
+    .then(function (yes) { if (yes) amapSend({ action: 'close', kind: kind, value: value }, null); });
 }
 
 // ── Available accounts: выбрать и убрать (ACL-1319) ───────────────────
@@ -11882,7 +11920,7 @@ function amapAvailShowInactive(cb) {
 function amapAvailMsg(box, text, bad) {
   var msg = box && box.querySelector('.amap-avail-msg');
   if (msg) { msg.textContent = text || ''; msg.className = 'amap-msg amap-avail-msg' + (bad ? ' bad' : ''); }
-  else if (bad && text) alert(text);
+  else if (bad && text) aclAlert(text);
 }
 
 function amapAvailRemove(btn) {
@@ -11891,11 +11929,12 @@ function amapAvailRemove(btn) {
   var names = amapAvailVisiblePicks(box).filter(function (cb) { return cb.checked; })
     .map(function (cb) { return cb.value; });
   if (!names.length) return;
-  if (names.length > 1 && !confirm('Remove ' + names.length + ' accounts from Available accounts?\n\n'
-      + 'They are only hidden from this list on this machine. Nothing is deleted — '
+  if (names.length < 2) return amapAvailSave(box, names, true);
+  return aclConfirm('They are only hidden from this list on this machine. Nothing is deleted — '
       + 'profiles, the account map, placements and history stay. '
-      + 'You can bring them back from "Hidden accounts".')) return;
-  return amapAvailSave(box, names, true);
+      + 'You can bring them back from "Hidden accounts".',
+    { title: 'Remove ' + names.length + ' accounts from Available accounts?', okLabel: 'Remove' })
+    .then(function (yes) { if (yes) return amapAvailSave(box, names, true); });
 }
 
 function amapAvailRestore(btn, name) {
@@ -12434,14 +12473,16 @@ async function amapConnect(box, profile, instance, btn, opened) {
      аккаунтов в карте записаны книжными именами, и связь с книгой идёт по
      имени, поэтому новые под именем профиля своих чисел не увидят. */
   var name = d.suggested_name || profile.name || '';
-  name = (prompt('Ad account name:', name) || '').trim();
+  name = ((await aclPrompt('', { title: 'Connect ' + (profile.name || 'this profile'),
+    label: 'Ad account name', value: name, okLabel: 'Next' })) || '').trim();
   if (!name) return;
   var act = (d.ad_account_id || '').trim();
   if (!act && profile._openTimedOut) {
     /* Профиль не ответил: второй раз спрашивать у него то же самое значит ждать
        ещё минуту. Номер впишет человек — или останется пустым, как и раньше. */
-    var typed0 = prompt(AMAP_OPEN_TIMEOUT_MSG + '\n\nThe profile will still be saved here. '
-      + 'Paste the Ads Manager link or the account number \u2014 or leave this empty to fill it in later:', '');
+    var typed0 = await aclPrompt(AMAP_OPEN_TIMEOUT_MSG + '\n\nThe profile will still be saved here. '
+      + 'Paste the Ads Manager link or the account number \u2014 or leave this empty to fill it in later.',
+      { title: 'Ad account number', label: 'Ads Manager link or account number', okLabel: 'Connect' });
     if (typed0 === null) return;
     act = (typed0 || '').trim();
   } else if (!act) {
@@ -12469,10 +12510,12 @@ async function amapConnect(box, profile, instance, btn, opened) {
     }
     msg.textContent = '';
 
-    var head, seed;
+    var head, seed, title;
     if (found && found.ok) {
+      title = 'Is this the right ad account?';
       head = 'The open profile says its ad account is:'
-        + (found.account_name ? '\n' + found.account_name : '');
+        + (found.account_name ? '\n' + found.account_name : '')
+        + '\n\nA profile can have several; the one it opens by default was read. Change the number if it is not this one.';
       seed = found.act;
     } else {
       /* Пустой ответ больше не отменяет подключение. Номер нужен, чтобы
@@ -12483,14 +12526,16 @@ async function amapConnect(box, profile, instance, btn, opened) {
          Прежнее «пусто = отмена» загоняло в тупик ровно там, где человек
          впервые видит новый профиль: номер знает открытый профиль, а открыть
          его дешборд соглашался только у подключённого аккаунта. */
-      head = 'Could not read it from the profile:\n' + ((found && found.error) || 'unknown')
+      title = 'Could not read the ad account from the profile';
+      head = ((found && found.error) || 'unknown')
         + (opened === false ? '\n\nThe profile did not open with automation. If its window '
             + 'is open by hand, close it in Multilogin and press Connect again.' : '')
         + '\n\nPaste the Ads Manager link or the account number — or leave this '
-        + 'empty to connect now and fill the number in later:';
+        + 'empty to connect now and fill the number in later.';
       seed = '';
     }
-    var typed = prompt(head, seed);
+    var typed = await aclPrompt(head, { title: title, value: seed,
+      label: 'Ads Manager link or account number', okLabel: 'Connect' });
     if (typed === null) return;          // Cancel — человек передумал
     act = (typed || '').trim();          // пусто — подключаем без номера
   }
@@ -12809,14 +12854,20 @@ function mlSignin(cid) {
       if (matched.length === 1) {
         var mp = matched[0];
         usedProfileIds[mp.profile_id] = true;
-        _mlSaveIds(accLabel, mp.folder_id, mp.profile_id, instance, null);
-        autoLinked.push((mp.name||'?') + ' → ' + accLabel);
+        autoLinked.push(_mlSaveIds(accLabel, mp.folder_id, mp.profile_id, instance, null, profilesDiv)
+          .then(function(saved) { return saved ? (mp.name||'?') + ' → ' + accLabel : null; }));
       }
     });
 
     if (autoLinked.length) {
-      profilesDiv.innerHTML = '<span style="color:var(--good);font-size:var(--adopy-text-sm)">'
-        + '✓ Linked automatically: ' + autoLinked.map(aclEscHtml).join(', ') + '</span>';
+      profilesDiv.textContent = 'Linking matched profiles…';
+      Promise.all(autoLinked).then(function(results) {
+        var linked = results.filter(function(name) { return name !== null; });
+        profilesDiv.innerHTML = linked.length
+          ? '<span style="color:var(--good);font-size:var(--adopy-text-sm)">'
+            + '✓ Linked automatically: ' + linked.map(aclEscHtml).join(', ') + '</span>'
+          : '';
+      });
       return;
     }
 
@@ -12887,11 +12938,12 @@ function mlManualSave(cid) {
       + '<span style="color:var(--warn);font-size:var(--adopy-text-sm)">⚠ This overwrites the current IDs in ad_account_map.csv</span>';
     _safeConfirm('Save IDs manually?', bodyHtml, function() {
       if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Saving…</span>';
-      _mlSaveIds(accLabel, folderId, profileId, 'A', null);
-      // Show success after short delay
-      setTimeout(function() {
-        if (statusEl) statusEl.innerHTML = '<span style="color:var(--good)">✓ Saved for ' + aclEscHtml(accLabel) + '</span>';
-      }, 800);
+      var errorAnchor = statusEl || document.getElementById('ml-manual-profile-' + cid);
+      _mlSaveIds(accLabel, folderId, profileId, 'A', null, errorAnchor).then(function(saved) {
+        if (statusEl) statusEl.innerHTML = saved
+          ? '<span style="color:var(--good)">✓ Saved for ' + aclEscHtml(accLabel) + '</span>'
+          : '';
+      });
     }, { confirmLabel: 'Save' });
   }
 
@@ -12940,7 +12992,8 @@ function mlManualSave(cid) {
 function mlSearchByTerm(cid, instance) {
   var input = document.getElementById('ml-search-manual-' + cid);
   var term = input ? input.value.trim() : '';
-  if (!term) { alert('Type something to search for'); return; }
+  if (!term) { aclInlineError(input, 'Type something to search for'); return; }
+  aclInlineError(input, '');
   var profilesDiv = document.getElementById('ml-profiles-' + cid);
   var statusEl = document.getElementById('ml-status-' + cid);
   if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Searching for "' + aclEscHtml(term) + '"…</span>';
@@ -13115,7 +13168,7 @@ function mlUseProfile(folderId, profileId, instance, profileName, btn) {
     .filter(Boolean);
 
   if (!accTitles.length) {
-    alert('No accounts found on this page.');
+    aclInlineError(btn, 'No accounts found on this page.');
     return;
   }
 
@@ -13174,10 +13227,12 @@ function mlUseProfile(folderId, profileId, instance, profileName, btn) {
   }, 50);
 }
 
-function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
+function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAnchor) {
+  var anchor = errorAnchor || triggerBtn;
+  aclInlineError(anchor, '');
   if (triggerBtn) { triggerBtn.disabled = true; triggerBtn.textContent = 'Saving…'; }
 
-  fetch('/account-map-patch', {
+  return fetch('/account-map-patch', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
@@ -13191,8 +13246,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   .then(function(data) {
     if (triggerBtn) { triggerBtn.disabled = false; triggerBtn.textContent = 'Use'; }
     if (!data.ok) {
-      alert('Save failed: ' + (data.error || 'unknown error'));
-      return;
+      aclInlineError(anchor, 'Save failed: ' + (data.error || 'unknown error'));
+      return false;
     }
     // Update all Multilogin status rows for this account
     var accId = accLabel.replace(/[\s.]/g, '_');
@@ -13219,10 +13274,12 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     document.querySelectorAll('[id^="ml-status-"]').forEach(function(s) {
       s.innerHTML += ' <span style="color:var(--good)">· saved to ' + aclEscHtml(accLabel) + ' ✓</span>';
     });
+    return true;
   })
   .catch(function(e) {
     if (triggerBtn) { triggerBtn.disabled = false; triggerBtn.textContent = 'Use'; }
-    alert('Network error: ' + e.message);
+    aclInlineError(anchor, 'Network error: ' + e.message);
+    return false;
   });
 }
 
@@ -13368,6 +13425,19 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
       + missing.map(function(m) {
           return aclEscHtml((m.slot ? title(m.slot) : 'Campaign') + ' \u2014 Ad ' + m.ad + ': ' + m.file);
         }).join('<br>') + '</div>';
+  };
+
+  // Refusal belongs beside the live action, including when the drawer hides
+  // the form's own Publish button. Keep the named row markers and send nothing.
+  window.cbRefuseMissingCreatives = function(missing, form) {
+    var actions = [form && form.querySelector('.cb-publish-btn'), document.querySelector('.cbd-publish-all')];
+    actions.forEach(function(button) { if (button) aclInlineError(button, ''); });
+    if (!missing.length) return false;
+    var anchor = actions.filter(function(button) {
+      return button && button.isConnected && button.getClientRects().length;
+    })[0] || form || document.querySelector('form.open-account-form');
+    aclInlineError(anchor, 'Not sent: a chosen creative file is missing \u2014 pick it again.');
+    return true;
   };
 
   function cbCreativeSig(f) {
@@ -15845,7 +15915,10 @@ window.cbPublishAll = function (onProgress, picked, onlyKeys) {
     if (mine) listed.push('<strong>' + aclEscHtml(cbFormTitle(form)) + '</strong>: '
       + aclEscHtml(mine.map(cbSlotTitle).join(', ')));
   });
-  if (!forms.length && !running.length) { window.alert('Nothing is being assembled yet.'); return; }
+  if (!forms.length && !running.length) {
+    aclInlineError(document.querySelector('.cbd-publish-all'), 'Nothing is being assembled yet.');
+    return;
+  }
   if (!forms.length) { cbSayAlreadyBuilding(running); return; }
 
   var names = forms.map(cbFormTitle);
@@ -15899,10 +15972,11 @@ window.cbPublishAll = function (onProgress, picked, onlyKeys) {
       : (only ? 'Build the selected campaigns as drafts?' : 'Build every campaign as a draft?'),
     parts.body,
     function () {
-      if (missingFiles.length) { window.alert('Not sent: a chosen creative file is missing \u2014 pick it again.'); return; }
+      if (missingFiles.length) { window.cbRefuseMissingCreatives(missingFiles, null); return; }
+      if (window.cbRefuseMissingCreatives) window.cbRefuseMissingCreatives([], null);
       var go = anyway ? forms : forms.filter(function (f) { return badForms.indexOf(f) === -1; });
       if (pf && window.cbPreflightDecision) window.cbPreflightDecision(go.map(cbFormAccount), anyway ? [] : badForms.map(cbFormAccount), anyway ? badForms.map(cbFormAccount) : []);
-      if (!go.length) { window.alert('No account is ready to run. Fix the listed accounts or tick "Run anyway".'); return; }
+      if (!go.length) { aclAlert('Fix the listed accounts or tick "Run anyway".', { title: 'No account is ready to run' }); return; }
       var got = _runPublishQueue(go, onProgress || function () {},
         only ? function (form) { return cbPickedIn(form, only); } : null);
       if (got && got.skipped.length) cbSayAlreadyBuilding(got.skipped);
@@ -15992,7 +16066,7 @@ function cbPfWarnings(slots) {
 var CB_PF_UNAVAILABLE = 'Pre-flight audit unavailable — reload the page';
 function cbPfUnavailable() {
   window.CB_PF_GATE = { blocked: true, bad: [], reason: CB_PF_UNAVAILABLE };
-  window.alert(CB_PF_UNAVAILABLE);
+  aclAlert(CB_PF_UNAVAILABLE);
 }
 
 /* Ворота Publish: клиентские ошибки блокируют сразу; при API — серверные проверки
@@ -16520,7 +16594,7 @@ function cbNewRun(notify) {
       // ACL-1819: повтор отправки проходит те же ворота pre-flight audit, что и Publish;
       // нет ворот — нет повтора.
       if (typeof window.cbPreflightGate !== 'function' || !e.form) {
-        window.alert('Pre-flight audit unavailable — reload the page');
+        aclAlert('Pre-flight audit unavailable — reload the page');
         return false;
       }
       var all = Array.prototype.slice.call(e.form.querySelectorAll('.cb-slot'));
@@ -17043,7 +17117,8 @@ window.cbHighlightField = function(field) {
 function cbQueueUncertain() {
   var q = window.CB_QUEUE;
   if (!q || !q.uncertain) return false;
-  alert('The status of the previous run in this tab is unknown (the dashboard may have restarted). Reload the page (F5) and press Publish again.');
+  aclAlert('The dashboard may have restarted. Reload the page (F5) and press Publish again.',
+    { title: 'The status of the previous run in this tab is unknown' });
   return true;
 }
 
@@ -17095,9 +17170,9 @@ function cbAccountBusy(key) {
 }
 
 function cbSayAlreadyBuilding(labels) {
-  alert(labels.join(', ') + (labels.length > 1 ? ' are' : ' is') + ' already being built in this tab. '
-    + 'Wait for that run to finish (or press Stop on it) before publishing '
-    + (labels.length > 1 ? 'these accounts' : 'this account') + ' again.');
+  aclAlert('Wait for that run to finish (or press Stop on it) before publishing '
+    + (labels.length > 1 ? 'these accounts' : 'this account') + ' again.',
+    { title: labels.join(', ') + (labels.length > 1 ? ' are' : ' is') + ' already being built in this tab' });
 }
 
 /* Помощники режима — здесь, рядом с cbPublish: тестовые срезы билдера берут
@@ -17208,9 +17283,10 @@ window.cbPublish = function(form) {
   _safeConfirm(cbApiMode()
       ? (ticked.length ? 'Create the selected campaigns as PAUSED campaigns?' : 'Create this campaign as a PAUSED campaign?')
       : (ticked.length ? 'Build the selected campaigns as drafts?' : 'Build this campaign as a draft?'), bodyHtml, function() {
-    if (missingFiles.length) { window.alert('Not sent: a chosen creative file is missing \u2014 pick it again.'); return; }
+    if (missingFiles.length) { window.cbRefuseMissingCreatives(missingFiles, form); return; }
+    if (window.cbRefuseMissingCreatives) window.cbRefuseMissingCreatives([], form);
     if (pf && window.cbPreflightDecision) window.cbPreflightDecision(mine && !anyway ? [] : [accLabel], mine && !anyway ? [accLabel] : [], mine && anyway ? [accLabel] : []);
-    if (mine && !anyway) { window.alert(accLabel + ' is not ready — fix it, or tick "Run anyway".'); return; }
+    if (mine && !anyway) { aclAlert('Fix it, or tick "Run anyway".', { title: accLabel + ' is not ready' }); return; }
     if (onlySlot || ticked.length) {
       var got = _runPublishQueue([form], window.cbTree.showQueue, onlySlot || ticked);
       if (got && got.skipped.length) cbSayAlreadyBuilding(got.skipped);
@@ -17645,9 +17721,9 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (banner) banner.remove();
-        if (!d.ok) { alert('Resume error: ' + (d.error || '?')); }
+        if (!d.ok) { aclAlert(d.error || '?', { title: 'Could not resume the RPA' }); }
       })
-      .catch(function(e) { alert('Error: ' + e.message); });
+      .catch(function(e) { aclAlert(e.message, { title: 'Could not resume the RPA' }); });
   };
 
   // Scroll to the status panel ONCE, when polling starts. Scrolling on
@@ -18210,18 +18286,19 @@ function aclPickerSearch(inst, text) {
   /* Группой — то же, что по одной: у кого есть запись на машине, у того
      она убирается; остальные уходят с глаз. Выбирают их вперемешку, и
      разбираться, какой строке что положено, человек не должен. */
-  function removeMany(picked) {
+  async function removeMany(picked) {
     if (!picked.length) return;
     var labels = picked.map(function (x) { return x.label; });
     var list = labels.slice(0, 8).join(', ') + (labels.length > 8 ? ' and ' + (labels.length - 8) + ' more' : '');
     var mapped = picked.filter(function (x) { return x.removable; }).map(function (x) { return x.label; });
     var sheet = picked.filter(function (x) { return !x.removable; }).map(function (x) { return x.label; });
-    if (!window.confirm('Take ' + labels.length + ' account(s) out of this list?'
+    if (!await aclConfirm('Take ' + labels.length + ' account(s) out of this list?'
         + String.fromCharCode(10, 10) + list + String.fromCharCode(10, 10)
         + (mapped.length ? mapped.length + ' had a row on this machine — it is dropped.' + String.fromCharCode(10) : '')
         + (sheet.length ? sheet.length + ' came from the shared sheet with nothing stored here — '
             + 'they are put out of sight and can be brought back.' + String.fromCharCode(10) : '')
-        + String.fromCharCode(10) + 'Nothing in the shared sheet changes.')) return;
+        + String.fromCharCode(10) + 'Nothing in the shared sheet changes.',
+        { okLabel: 'Take out', danger: true })) return;
 
     var btn = el('ac-bulk-drop');
     if (btn) btn.disabled = true;
@@ -18280,11 +18357,11 @@ function aclPickerSearch(inst, text) {
      пришедшего из общей таблицы её нет, убирать нечего — строка уходит с
      глаз. Для человека результат один: аккаунта больше нет в списке, и
      общая таблица не тронута ни в том, ни в другом случае. */
-  function drop(btn) {
+  async function drop(btn) {
     var row = btn.closest('tr'); if (!row) return;
     var label = row.getAttribute('data-label');
     var hasRow = btn.dataset.removable === '1';
-    if (!window.confirm(hasRow
+    if (!await aclConfirm(hasRow
         ? 'Remove "' + label + '" from the map of THIS machine?'
           + String.fromCharCode(10, 10)
           + 'The account stays in the shared sheet with all its history — this '
@@ -18293,7 +18370,9 @@ function aclPickerSearch(inst, text) {
           + String.fromCharCode(10, 10)
           + 'It comes from the shared sheet and nothing is stored for it here, '
           + 'so there is nothing to delete — it is put out of sight on this '
-          + 'machine and can be brought back.')) return;
+          + 'machine and can be brought back.',
+        { okLabel: hasRow ? 'Remove' : 'Take out', danger: true })) return;
+    if (!btn.isConnected) return;
     btn.disabled = true;
     var done = function (ok, err) {
       btn.disabled = false;
@@ -18731,7 +18810,12 @@ function aclPickerSearch(inst, text) {
     var name = t.getAttribute('data-tg-edit');
     if (name) { startEdit(name); return; }
     name = t.getAttribute('data-tg-del');
-    if (name) { if (confirm('Remove «' + name + '» for the whole team? It stays in Recently deleted and can be restored.')) send({action:'delete', name:name}); return; }
+    if (name) {
+      aclConfirm('It stays in Recently deleted and can be restored.',
+        { title: 'Remove «' + name + '» for the whole team?', okLabel: 'Remove', danger: true })
+        .then(function (yes) { if (yes && !pending) send({action:'delete', name:name}); });
+      return;
+    }
     name = t.getAttribute('data-tg-restore');
     if (name) { send({action:'restore', name:name}); return; }
     if (t.getAttribute('data-view') === 'targets') load();
@@ -18929,7 +19013,12 @@ function aclPickerSearch(inst, text) {
     var name = t.getAttribute('data-at-edit');
     if (name) { startEdit(name); return; }
     name = t.getAttribute('data-at-del');
-    if (name) { if (confirm('Remove «' + name + '» for the whole team? It stays in Recently deleted and can be restored.')) send({action:'delete', name:name}); return; }
+    if (name) {
+      aclConfirm('It stays in Recently deleted and can be restored.',
+        { title: 'Remove «' + name + '» for the whole team?', okLabel: 'Remove', danger: true })
+        .then(function (yes) { if (yes && !pending) send({action:'delete', name:name}); });
+      return;
+    }
     name = t.getAttribute('data-at-restore');
     if (name) { send({action:'restore', name:name}); return; }
     if (t.getAttribute('data-view') === 'ad-texts') load(false);
@@ -19188,10 +19277,16 @@ function aclPickerSearch(inst, text) {
     id = t.getAttribute('data-fm-del');
     if (id) {
       var row = rowById(id);
+      if (!row) return;
+      var confirmedScope = scope;
       var where = scope === 'local' ? 'from this computer' : 'for the whole team';
-      if (confirm('Delete «' + (row ? row.name : id) + '» ' + where + '? It stays in Recently deleted and can be restored. Forms already created on Pages are not touched.')) {
-        act('/api/form-templates/delete', {id: id}, 'Deleted. It is in Recently deleted if you need it back.');
-      }
+      aclConfirm('It stays in Recently deleted and can be restored. Forms already created on Pages are not touched.',
+        { title: 'Delete «' + row.name + '» ' + where + '?', okLabel: 'Delete', danger: true })
+        .then(function (yes) {
+          // The library may have refreshed while the asynchronous question was open.
+          if (!yes || pending || !t.isConnected || rowById(id) !== row || scope !== confirmedScope) return;
+          act('/api/form-templates/delete', {id: id}, 'Deleted. It is in Recently deleted if you need it back.');
+        });
       return;
     }
     id = t.getAttribute('data-fm-restore');
@@ -19661,13 +19756,14 @@ window.cwWorkbench = (function () {
       text: 'Landing “' + ev.landing + '” is noted on this draft. The builder has no landing field — the account’s tracking link decides it.' };
   }
 
-  function useEvidence(panel, kind, ev) {
+  async function useEvidence(panel, kind, ev) {
     var cid = panel.dataset.country;
     var ctx = { country: cid, countryName: panel.dataset.cwCountry, asset: (states[cid] || {}).asset || '' };
     var active = activeTarget();
     var plan = planUse(kind, ctx, active);
     if (!plan.ok) { say(panel, plan.message, true); return plan; }
-    if (plan.mismatch && !window.confirm(plan.mismatch)) {
+    if (plan.mismatch && !await aclConfirm(plan.mismatch.replace(/\s*Use it anyway\?$/, ''),
+        { title: 'Use it anyway?', okLabel: 'Use it' })) {
       say(panel, 'Cancelled — nothing was added.', false);
       return { ok: false, reason: 'declined' };
     }
