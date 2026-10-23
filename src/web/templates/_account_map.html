@@ -181,8 +181,9 @@
       {% for g in cm_groups %}
       <details class="amap-cm-country" data-country="__cm__:{{ g.country | e }}">
         <summary class="amap-cm-row amap-row">
-          <span class="amap-cell-name">{{ g.country }}{% if g.comparison_only %}{{ mx.flag('gone') }}{% endif %}</span>
-          {{ mx.spans(g.spend, g.leads, g.deposits, prev=(compare.cm_group(g.country) if compare else false), gone=g.comparison_only or false) }}
+          {% set group_prev = compare.cm_group(g.country) if compare else false %}
+          <span class="amap-cell-name">{{ g.country }}{% if compare %}{{ mx.flag('gone' if g.comparison_only else compare_state(g, group_prev)) }}{% endif %}</span>
+          {{ mx.spans(g.spend, g.leads, g.deposits, prev=group_prev, gone=g.comparison_only or false) }}
           <span></span><span></span>
         </summary>
         {% for r in g.rows %}

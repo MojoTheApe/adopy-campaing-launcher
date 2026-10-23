@@ -5387,10 +5387,11 @@ async function dashRefresh(ev) {
     </tr>
     {% if row.has_variants %}
     {% for v in row.variants %}
+    {% set variant_prev = compare.creative_variant(c.country, row, v) if compare else false %}
     <tr class="creative-variant" hidden>
-      <td style="padding-left:1.5em">{{ v.label }}</td>
+      <td style="padding-left:1.5em">{{ v.label }}{% if compare %}{{ mx.flag(compare_state(v, variant_prev)) }}{% endif %}</td>
       <td>{{ row.text_name or '—' }}</td>
-      {{ mx.cells(v.spend, v.leads, v.deposits, prev=(compare.creative_variant(c.country, row, v) if compare else false)) }}
+      {{ mx.cells(v.spend, v.leads, v.deposits, prev=variant_prev) }}
     </tr>
     {% endfor %}
     {% endif %}

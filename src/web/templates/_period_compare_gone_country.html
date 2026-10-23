@@ -7,8 +7,8 @@
 {% endif %}
 {% for heading, earlier_rows, name in [('Campaign managers', earlier_country.cm_comparison or [], 'cm'), ('Accounts', compare.accounts_gone(earlier_country.country, []), 'account')] %}
 {% if earlier_rows %}
-<h4>{{ heading }}</h4><div class="cmp-table-scroll"><table><thead><tr><th>{{ heading }}</th>{{ mx.headers() }}</tr></thead><tbody>
-{% for r in earlier_rows %}<tr class="cmp-gone-row"><td>{{ r[name] or '(unknown)' }}{{ mx.flag('gone') }}</td>{{ mx.cells(0, 0, 0, prev=r, gone=true) }}</tr>{% endfor %}
+<h4>{{ heading }}</h4><div class="cmp-table-scroll"><table><thead><tr><th>{{ heading }}</th>{{ mx.headers() }}{% if name == 'cm' %}<th>Net</th><th>ROI</th>{% endif %}</tr></thead><tbody>
+{% for r in earlier_rows %}<tr class="cmp-gone-row"><td>{{ r[name] or '(unknown)' }}{{ mx.flag('gone') }}</td>{{ mx.cells(0, 0, 0, prev=r, gone=true) }}{% if name == 'cm' %}<td class="num">—{{ mx.cmp_cell(value_compare(none, r.get('net'))) }}</td><td class="num">—{{ mx.cmp_cell(value_compare(none, r.get('roi'), 'ratio')) }}</td>{% endif %}</tr>{% endfor %}
 </tbody></table></div>
 {% endif %}
 {% endfor %}

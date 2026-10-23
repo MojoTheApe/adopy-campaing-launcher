@@ -211,3 +211,59 @@ def test_earlier_only_workbench_pack_retains_its_exact_versions_without_current_
     gone = model['slices']['Alpha']['_period_gone']['creatives']
     assert any(r.get('key') and r['_period'][0]['prev'].startswith('$') for r in gone)
     assert current['slices']['Alpha']['creatives'] == []
+
+
+def test_new_exact_version_under_an_existing_pack_is_marked_new_without_mutation():
+    report, _, compare, _ = workbench_fixture()
+    current = deepcopy(report['countries'][0]['workbench'])
+    pack = current['slices']['Alpha']['creatives'][0]
+    added = {**pack['versions'][0], 'key': 'new-exact-version', 'version': '99', 'raw': '42_99'}
+    pack['versions'].append(added)
+    original = deepcopy(current)
+    result = compare.workbench('Costa Rica', current)['slices']['Alpha']['creatives'][0]
+    assert result['_period_state'] == 'both'
+    assert result['versions'][-1].get('_period_state') == 'new'
+    assert result['versions'][0].get('_period_state') == 'both'
+    assert current == original
+
+
+def test_static_new_creative_variant_under_retained_parent_has_a_new_badge():
+    import re
+
+    report, amap, _ = fixtures()
+    old = metrics(10, variant='1', label='Retained version')
+    new = metrics(10, variant='2', label='New exact static version')
+    parent = metrics(20, creative_id='42', ad_title='42', text_name='Text', has_variants=True, variants=[old, new])
+    report['countries'][0]['creatives'] = [parent]
+    compare = pc.PeriodCompare(INFO, {'countries': [{'country': 'Costa Rica', 'creatives': [{**parent, 'variants': [old]}]}]})
+    html = render(report, amap, compare)
+    row = re.search(r'<tr class="creative-variant"[^>]*>\s*<td[^>]*>New exact static version(.*?)</tr>', html, re.S)[1]
+    assert 'cmp-flag new' in row
+
+
+def test_home_new_campaign_manager_country_group_has_a_new_badge():
+    import re
+
+    report, amap, compare = fixtures()
+    amap['cm_section'].append({'country': 'New country', **metrics(0), 'rows': [metrics(0, cm='Zero manager')]})
+    html = web.templates.env.get_template('_account_map.html').render(amap=amap, compare=compare, mlx={})
+    group = re.search(r'data-country="__cm__:New country">\s*<summary(.*?)</summary>', html, re.S)[1]
+    assert 'cmp-flag new' in group
+
+
+@pytest.mark.parametrize('all_rows', [False, True], ids=['workbench-disappeared', 'whole-country-disappeared'])
+def test_absent_whole_workbench_retains_exact_versions_as_readonly_evidence(all_rows):
+    _, _, compare, before = workbench_fixture()
+    expected = {v['raw'] for r in before['slices']['Alpha']['creatives'] for v in r['versions']}
+    tables = compare.earlier_workbench_tables({'country': 'Costa Rica'}, all_rows=all_rows)
+    labels = {r['label'] for table in tables for r in table['rows']}
+    assert expected and expected.issubset(labels)
+
+
+def test_earlier_only_whole_country_retains_campaign_manager_net_and_roi():
+    prior = {'country': 'Retired country', 'cm_comparison': [metrics(10, cm='Prior manager', net=234, roi=1.25)]}
+    compare = pc.PeriodCompare(INFO, {'countries': [prior]})
+    html = web.templates.env.get_template('_period_compare_gone_country.html').render(earlier_country=prior, compare=compare)
+    assert '<th>Net</th>' in html and '<th>ROI</th>' in html
+    assert '$234' in html and '>1.25</span>' in html
+    assert 'button' not in html and 'hx-get' not in html

@@ -11,7 +11,7 @@ from playwright.sync_api import expect, sync_playwright
 
 from src.web.period_compare import PeriodCompare
 from src.web import app as web
-from tests.test_acl110_missing_rows import INFO, fixtures, render, workbench_fixture
+from tests.test_acl110_missing_rows import INFO, fixtures, metrics, render, workbench_fixture
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -33,6 +33,16 @@ def test_comparison_everywhere_is_readonly_and_both_modes_keep_primary_dates(bro
     report['countries'][0]['workbench'] = wb_report['countries'][0]['workbench']
     prior = base_compare._report
     prior['countries'][0]['workbench'] = wb_compare._report['countries'][0]['workbench']
+    pack = report['countries'][0]['workbench']['slices']['Alpha']['creatives'][0]
+    new_raw = pack['pack'] + ' 99 - new comparison version'
+    pack['versions'].append({**pack['versions'][0], 'key': pack['pack'] + '|99', 'version': '99', 'raw': new_raw})
+    old_variant = metrics(10, variant='1', label='Retained static version')
+    new_variant = metrics(10, variant='2', label='New static version')
+    creative = metrics(20, creative_id='42', ad_title='42', text_name='Text', has_variants=True,
+                       variants=[old_variant, new_variant])
+    report['countries'][0]['creatives'] = [creative]
+    prior['countries'][0]['creatives'] = [{**creative, 'variants': [old_variant]}]
+    amap['cm_section'].append({'country': 'New country', **metrics(0), 'rows': [metrics(0, cm='Zero manager')]})
     # A whole earlier-only target is evidence, never a current Use index.
     old_target = dict(prior['countries'][0]['workbench']['slices']['Alpha']['targets'][0], target='Retired <target>')
     prior['countries'][0]['workbench']['slices']['Alpha']['targets'].append(old_target)
@@ -94,6 +104,8 @@ def test_comparison_everywhere_is_readonly_and_both_modes_keep_primary_dates(bro
                 rect = control.bounding_box()
                 assert outer['x'] - 1 <= rect['x'] and rect['x'] + rect['width'] <= outer['x'] + outer['width'] + 1
         expect(p.locator('#amap-cm').get_by_text('Bob', exact=False)).to_have_count(1)
+        p.locator('#amap-cm > summary').click()
+        expect(p.locator('#amap-cm [data-country="__cm__:New country"] > summary .cmp-flag.new')).to_be_visible()
         p.evaluate('() => amapRefreshCountryLines(amapPeriod())')
         assert map_queries[-1]['compare'] == ['prev']
         assert map_queries[-1]['date_from'] == ['2026-10-08']
@@ -109,6 +121,9 @@ def test_comparison_everywhere_is_readonly_and_both_modes_keep_primary_dates(bro
         for tab in ('campaigns', 'setups', 'landings', 'targets', 'creatives', 'buyers'):
             panel.locator('[data-cw-tab="'+tab+'"]').click()
             expect(panel.locator('.cw-table:not(.cmp-readonly) .cmp-prev').first).to_be_visible()
+        panel.locator('[data-cw-tab="creatives"]').click()
+        panel.locator('.cw-pack').filter(has_text='Pack ' + pack['pack']).locator('.cw-toggle').click()
+        expect(panel.locator('.cw-sub').filter(has_text=new_raw).locator('.cmp-flag.new')).to_be_visible()
         panel.locator('[data-cw-tab="targets"]').click()
         retired = panel.locator('.cmp-readonly').filter(has_text='Retired <target>')
         expect(retired).to_be_visible()
@@ -119,6 +134,10 @@ def test_comparison_everywhere_is_readonly_and_both_modes_keep_primary_dates(bro
         if shots:
             Path(shots).mkdir(parents=True, exist_ok=True)
             p.screenshot(path=str(Path(shots)/f'compare-{theme}-{width}.png'))
+        p.goto('http://acl.test/?date_from=2026-10-08&date_to=2026-10-14&compare=prev#country-costa-rica-creatives')
+        static = p.locator('#view-country-costa-rica-creatives')
+        static.locator('.creative-group').click()
+        expect(static.locator('.creative-variant').filter(has_text='New static version').locator('.cmp-flag.new')).to_be_visible()
         # Use the real date picker. Navigation is caught by the local-only route.
         p.locator('#period-btn').click()
         p.locator('[data-cmp-mode]').select_option('custom')

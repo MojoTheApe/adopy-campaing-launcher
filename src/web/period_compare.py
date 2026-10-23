@@ -414,11 +414,12 @@ class PeriodCompare:
         tables = []
         for asset, sl in (before.get("slices") or {}).items():
             for tab in ("campaigns", "setups", "landings", "targets", "creatives", "buyers"):
-                rows = sl.get(tab) or []
+                rows = self._workbench_gone_rows(sl.get(tab) or [], tab)
                 if rows:
                     tables.append({"title": (asset or "All assets") + " · " + tab,
                                    "section": "workbench", "rows": [dict(r, deposits=r.get("ftds"),
-                                    label=" · ".join(str(x) for x in self._workbench_key(tab, r)) or "—") for r in rows]})
+                                    label=(r.get("raw") if tab == "creatives" else None)
+                                    or " · ".join(str(x) for x in self._workbench_key(tab, r)) or "—") for r in rows]})
         return tables
 
     def creative_variant(self, country: str, creative: dict, variant: dict) -> Optional[dict]:
@@ -510,6 +511,7 @@ class PeriodCompare:
                         for version in row.get("versions") or []:
                             pv = versions.pop(self._workbench_key("versions", version), None)
                             version["_period"] = metric_compare(self._workbench_metrics(version), self._workbench_metrics(pv))
+                            version["_period_state"] = NEW if pv is None else BOTH
                         row["_period_gone_versions"] = [dict(v, _period=metric_compare(None, self._workbench_metrics(v)))
                                                         for v in versions.values()]
                 sl["_period_gone"][tab] = self._workbench_gone_rows(old.values(), tab)
