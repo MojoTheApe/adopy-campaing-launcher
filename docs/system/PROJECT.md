@@ -67,6 +67,18 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   The dashboard tells an empty chosen period apart by owner (ACL-106): no workbook rows for
   anyone (the file may need updating) versus rows for other managers but none for the
   selected manager (nothing to review); the account map stays available in both.
+- `src/web/period_compare.py`: the dashboard can compare the selected workbook
+  period with the previous range of equal length or a custom range (ACL-110).
+  Both use the existing report and metric formulas. Earlier zero is retained;
+  zero or missing denominators give a dash for the change. Country/account/manager,
+  recommendation and breakdown rows present in only one report are marked new/gone.
+  Historical-only evidence is read only and does not restore account assignments
+  or become a Builder/Workbench action. Current Workbench row indices and cached
+  reports are preserved. Home and Workbench metrics retain their existing cohort
+  and weighting semantics; a map-summary refresh keeps the same comparison dates.
+  Measured spend and FTD summaries also compare in volume cards, row You tags,
+  asset chips and sidebar counters; structural counts, goals and draft inputs keep
+  their existing meaning. Historical-only exact versions and CM Net/ROI remain visible.
 - `src/campaign_bridge`, `src/upload_agent`: campaign input/output preparation.
 - `src/fb_ads_rpa/pacing.py` and job progress:
   ACL-1142 keeps Website teach waits and Continue answers per publish job. The

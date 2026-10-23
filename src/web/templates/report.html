@@ -426,7 +426,9 @@
     /* Период: рамка с подписью, вписанной в верхнюю границу. Под подписью
        тот же фон, что у поля и шапки, — иначе в тёмной теме проступило бы
        светлое пятно. */
-    .period-pick { grid-area: period; display: flex; align-items: center; }
+    .period-pick { grid-area: period; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 0; }
+    .period-pick > .period-btn { flex: 0 0 100%; }
+    .period-pick > .cmp-note { flex-basis: 100%; }
     .period-btn {
       position: relative;
       display: flex; align-items: center; gap: 10px;
@@ -2159,6 +2161,28 @@
     .amap-cal-grid button.has:hover { border-color: var(--accent); }
     .amap-cal-grid button.sel { background: var(--accent); color: var(--on-accent); }
     .amap-cal-grid button.inrange { background: var(--accent-soft); }
+    /* ACL-110: сравнение периодов */
+    .amap-cmp { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; padding: 0.5rem 0.9rem 0; font-size: var(--adopy-text-sm); color: var(--muted); }
+    .amap-cmp select, .amap-cmp input[type=date] { font: inherit; color: var(--text); background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 6px; padding: 0.2rem 0.4rem; }
+    .amap-cmp-note { color: var(--muted); }
+    .cmp-chip { display: inline-flex; align-items: center; gap: 0.35rem; max-width: 100%; padding: 0.15rem 0.5rem; border: 1px solid var(--border); border-radius: 999px; font-size: var(--adopy-text-sm); color: var(--muted); white-space: normal; }
+    .cmp-chip a { color: var(--muted); text-decoration: none; padding: 0.2rem; }
+    .cmp-note { margin: 0.25rem 0 0; font-size: var(--adopy-text-sm); color: var(--bad); }
+    small.cmp { display: flex; justify-content: flex-end; gap: 0.35rem; font-size: var(--adopy-text-xs); font-weight: 400; color: var(--muted); line-height: 1.25; }
+    .cmp-delta.up, .cmp-delta.down { font-weight: 600; }
+    .cmp-delta.good { color: var(--good); }
+    .cmp-delta.bad { color: var(--bad); }
+    .cmp-flag { display: inline-block; margin-left: 0.4rem; padding: 0 0.35rem; border-radius: 4px; font-size: var(--adopy-text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+    .cmp-flag.new { color: var(--good); border: 1px solid var(--good); }
+    .cmp-flag.gone { color: var(--muted); border: 1px solid var(--border); }
+    tr.cmp-gone-row td { opacity: 0.75; font-style: italic; }
+    .cmp-only-country { margin: 0.75rem 0; padding: 0.75rem; border: 1px solid var(--border); border-radius: 6px; }
+    .cmp-only-country > summary { cursor: pointer; font-weight: 600; }
+    .cmp-only-country h4 { margin: 1rem 0 0.4rem; }
+    .cmp-table-scroll { max-width: 100%; overflow-x: auto; }
+    .cmp-table-scroll table { min-width: 38rem; }
+    .cmp-table-scroll td:first-child { white-space: normal; overflow-wrap: anywhere; }
+    .cmp-recs { margin-left: 0.5rem; font-size: var(--adopy-text-xs); color: var(--muted); font-weight: 400; }
     .amap-cal-foot {
       display: flex; align-items: center; margin-top: 0.6rem; gap: 0.5rem;
       color: var(--muted); font-size: var(--adopy-text-sm);
@@ -3888,6 +3912,8 @@
     .sb-asset:hover { background: var(--adopy-surface-hover); }
     .sb-asset:focus-visible, .sb-more summary:focus-visible { outline: var(--adopy-focus-width) solid var(--adopy-focus); outline-offset: 1px; }
     .sb-asset-name { overflow-wrap: anywhere; }
+    .sb-asset.sb-asset-compare { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+    .sb-asset-compare > .cmp { grid-column: 1 / -1; margin: 0; text-align: right; white-space: normal; }
     .sb-asset.active { color: var(--adopy-link); font-weight: var(--adopy-weight-semibold); background: var(--adopy-surface);
       box-shadow: inset 2px 0 0 var(--adopy-primary); }
     .sb-asset.active .sb-ftd { color: var(--adopy-link); }
@@ -4019,7 +4045,13 @@
       </span>
       <svg class="period-caret" viewBox="0 0 12 8" width="11" height="8" aria-hidden="true"><path d="M1 1.5h10L6 6.5Z"/></svg>
     </button>
+    {%- if compare %}
+    <span class="cmp-chip" title="Every number below also shows the earlier value and the change">vs {{ compare.label }}
+      <a href="javascript:void(0)" onclick="amapApply(_amapPick.from, _amapPick.to, _amapPick.span, {mode: ''})" aria-label="Stop comparing" title="Stop comparing">×</a></span>
+    {%- endif %}
     <script type="application/json" id="amap-dates">{{ (account_map.dates if account_map else []) | tojson }}</script>
+    {%- if compare_note %}<p class="cmp-note" role="status">{{ compare_note }}</p>{% endif %}
+    {%- if compare and compare.empty %}<p class="cmp-note" role="status">The workbook has no rows for {{ compare.label }}, so every row is new.</p>{% endif %}
   </div>
   {#- «Под кем смотрим» — отдельный элемент, а не строчка под логотипом.
       Это не свойство продукта, а положение зрителя, и меняется оно чаще,
@@ -4417,6 +4449,7 @@ async function dashRefresh(ev) {
     <button type="button" class="sidebar-country-btn{% if s.active %} live{% endif %}" data-country="{{ cid }}"
             {% if s.active %}title="{% if s.spend %}spending{% else %}opened in the account map, nothing spent yet{% endif %}"{% endif %}>{{ c.country }}</button>
     {%- if s.ftds %}<span class="sb-ftd sb-ftd-country" title="FTDs: yours / everyone's in the selected period">{{ s.ftds.you }} / {{ s.ftds.all }}</span>{% endif %}
+    {% if compare and s.ftds %}<div style="margin:0 var(--space-sm) var(--space-sm);text-align:right">{{ mx.ftd_pair(compare.asset_counts(c.country, {'name':'', 'you_ftds':s.ftds.you, 'ftds':s.ftds.all})) }}</div>{% endif %}
     <div class="sidebar-sections">
       {#- 22.10 (владелец): сверху «All assets», под ним виды страны (Workbench, Manage, 1 Assets…),
           ниже — ассеты по брендам. Виды интереснее списка брендов, поэтому они выше и не свёрнуты. -#}
@@ -4424,8 +4457,8 @@ async function dashRefresh(ev) {
       {% if wb_assets %}
       <div class="sb-assets" role="group" aria-label="All assets in {{ c.country }}">
         {% for a in wb_assets[:1] %}
-        <button type="button" class="sb-asset" data-country="{{ cid }}" data-asset="{{ a.name }}" title="FTDs: yours / everyone's">
-          <span class="sb-asset-name">{{ a.label }}</span><span class="sb-ftd">{{ a.you_ftds }} / {{ a.ftds }}</span></button>
+        <button type="button" class="sb-asset{% if compare %} sb-asset-compare{% endif %}" data-country="{{ cid }}" data-asset="{{ a.name }}" title="FTDs: yours / everyone's">
+          <span class="sb-asset-name">{{ a.label }}{% if compare %}{{ mx.flag(compare.asset_counts(c.country, a).state) }}{% endif %}</span><span class="sb-ftd">{{ a.you_ftds }} / {{ a.ftds }}</span>{% if compare %}{{ mx.ftd_pair(compare.asset_counts(c.country, a)) }}{% endif %}</button>
         {% endfor %}
       </div>
       {% endif %}
@@ -4446,8 +4479,8 @@ async function dashRefresh(ev) {
       {% if wb_assets | length > 1 %}
       <div class="sb-assets sb-assets-brands" role="group" aria-label="Assets in {{ c.country }}">
         {% for a in wb_assets[1:] %}
-        <button type="button" class="sb-asset" data-country="{{ cid }}" data-asset="{{ a.name }}" title="FTDs: yours / everyone's">
-          <span class="sb-asset-name">{{ a.label }}</span><span class="sb-ftd">{{ a.you_ftds }} / {{ a.ftds }}</span></button>
+        <button type="button" class="sb-asset{% if compare %} sb-asset-compare{% endif %}" data-country="{{ cid }}" data-asset="{{ a.name }}" title="FTDs: yours / everyone's">
+          <span class="sb-asset-name">{{ a.label }}{% if compare %}{{ mx.flag(compare.asset_counts(c.country, a).state) }}{% endif %}</span><span class="sb-ftd">{{ a.you_ftds }} / {{ a.ftds }}</span>{% if compare %}{{ mx.ftd_pair(compare.asset_counts(c.country, a)) }}{% endif %}</button>
         {% endfor %}
       </div>
       {% endif %}
@@ -4757,6 +4790,7 @@ async function dashRefresh(ev) {
       страны: взвешенные, пиры без выбранного байера, мало данных — подпись).
       Данных нет — полосы нет, а не нули. -#}
   {% if home_kpis %}
+  {% set home_period = compare.home_tiles(report) if compare else {} %}
   <section class="hk-row" id="home-kpis" aria-label="Your results compared with other buyers, all countries">
     <div class="hk-head"><h2 class="hk-title">You vs Others</h2>
       <span class="hk-sub">All countries · selected period · others exclude {{ report.my_cm or 'the selected buyer' }}</span></div>
@@ -4764,8 +4798,8 @@ async function dashRefresh(ev) {
       {% for t in home_kpis %}
       <div class="hk-tile" data-kpi="{{ t.key }}">
         <div class="hk-label"><span>{{ t.label }}</span><span class="hk-chip">You</span></div>
-        <div class="hk-you">{{ t.you }}{% if t.you_note %}<small>{{ t.you_note }}</small>{% endif %}</div>
-        <div class="hk-others"><span>Others{% if t.others_note %} <small>{{ t.others_note }}</small>{% endif %}</span><b>{{ t.others }}</b></div>
+        <div class="hk-you">{{ t.you }}{% if compare %}{{ mx.cmp_cell(home_period[t.key].you) }}{% endif %}{% if t.you_note %}<small>{{ t.you_note }}</small>{% endif %}</div>
+        <div class="hk-others"><span>Others{% if t.others_note %} <small>{{ t.others_note }}</small>{% endif %}</span><b>{{ t.others }}{% if compare %}{{ mx.cmp_cell(home_period[t.key].others) }}{% endif %}</b></div>
         <div class="hk-cap{% if t.cls %} {{ t.cls }}{% endif %}">{{ t.caption }}</div>
       </div>
       {% endfor %}
@@ -4811,7 +4845,7 @@ async function dashRefresh(ev) {
    Trend, Combos, Targeting, Creatives, Optimization) остаются на своих адресах; отсюда на них ведут ссылки. #}
 {% if c.workbench %}
 <div id="view-country-{{ cid }}-workbench" class="view-panel cw-panel" data-country="{{ cid }}" data-cw-country="{{ c.country }}" data-cw-from="{{ (period or {}).date_from }}" data-cw-to="{{ (period or {}).date_to }}">
-  <script type="application/json" id="cw-data-{{ cid }}">{{ c.workbench | tojson }}</script>
+  <script type="application/json" id="cw-data-{{ cid }}">{{ (compare.workbench(c.country, c.workbench) if compare else c.workbench) | tojson }}</script>
   <script type="application/json" id="cw-goal-{{ cid }}">{{ ((cw_goals or {}).get(c.country | lower)) | tojson }}</script>
   <header class="cw-head">
     <p class="cw-crumb" data-cw="crumb">{{ c.country }}</p>
@@ -4860,15 +4894,24 @@ async function dashRefresh(ev) {
         hx-swap="afterend"
         hx-trigger="click"
         {% endif %}>
-      <td class="{% if row.is_me %}me{% endif %}">{{ row.cm or '(unknown)' }}</td>
-      {{ mx.cells(row.spend, row.leads, row.deposits) }}
-      <td class="num">{{ row.net | fmt_usd }}</td>
+      {%- set cpv = compare.cm(c.country, row.cm) if compare else false %}
+      <td class="{% if row.is_me %}me{% endif %}">{{ row.cm or '(unknown)' }}{% if compare %}{{ mx.flag(compare_state(row, cpv)) }}{% endif %}</td>
+      {{ mx.cells(row.spend, row.leads, row.deposits, prev=cpv) }}
+      <td class="num">{{ row.net | fmt_usd }}{% if compare %}{{ mx.cmp_cell(value_compare(row.net, cpv.get('net') if cpv else none)) }}{% endif %}</td>
       <td class="num {% if row.roi > 1 %}roi-pos{% elif row.roi and row.roi < 1 %}roi-neg{% endif %}">
-        {% if row.roi %}{{ '%.2f' % row.roi }}{% else %}—{% endif %}
+        {% if row.roi %}{{ '%.2f' % row.roi }}{% else %}—{% endif %}{% if compare %}{{ mx.cmp_cell(value_compare(row.roi, cpv.get('roi') if cpv else none, 'ratio')) }}{% endif %}
       </td>
       <td style="color:var(--muted);font-size:var(--adopy-text-sm)">{% if row.deposits > 0 %}▸{% endif %}</td>
     </tr>
   {% endfor %}
+  {#- ACL-110: менеджеры, которые были в прошлом периоде и пропали из этого. -#}
+  {% if compare %}{% for g in compare.cm_gone(c.country, c.cm_comparison | map(attribute='cm')) %}
+    <tr class="cmp-gone-row">
+      <td>{{ g.cm or '(unknown)' }}{{ mx.flag('gone') }}</td>
+      {{ mx.cells(0, 0, 0, prev=g, gone=true) }}
+      <td class="num">—{{ mx.cmp_cell(value_compare(none, g.get('net'))) }}</td><td class="num">—{{ mx.cmp_cell(value_compare(none, g.get('roi'), 'ratio')) }}</td><td></td>
+    </tr>
+  {% endfor %}{% endif %}
   </tbody>
 </table>
 
@@ -4909,6 +4952,15 @@ async function dashRefresh(ev) {
     на аккаунт вместо двух. -#}
 
 </div>
+{% if compare %}
+{% for group in compare.open_accounts_gone(c.country, c.open_recs or {}) %}
+<p class="cmp-recs">Open recommendations · {{ group.account }}: {{ group.diff.now }} now, {{ group.diff.before }} earlier · {{ group.diff.gone | join(', ') }} {{ mx.flag('gone', 'the earlier open recommendations') }}</p>
+{% endfor %}
+{% set earlier_tables = compare.earlier_only_tables(c) %}
+{% if earlier_tables %}<details class="cmp-only-country"><summary>Earlier-only breakdown rows</summary>
+{% for table in earlier_tables %}{% include "_period_compare_gone_table.html" %}{% endfor %}
+</details>{% endif %}
+{% endif %}
 <details class="manage-builder" id="manage-builder-{{ cid }}">
   {#- Билдер — не панель, а страница: свои слоты, аккордеон аккаунтов,
       предпросмотр и публикация. Свёрнут, иначе у Manage не видно дна;
@@ -4980,6 +5032,10 @@ async function dashRefresh(ev) {
     <div class="cb-acc-header" data-acc-id="{{ acc_id }}">
       <span class="cb-acc-chevron" id="cb-chev-{{ acc_id }}">▸</span>
       <span class="cb-acc-title">{{ acc_label }}</span>
+      {#- ACL-110: что изменилось в рекомендациях на открытие против сравниваемого периода. -#}
+      {%- if compare %}{% set rd = compare.open_recs_diff(c.country, acc_label, recs) %}
+      <span class="cmp-recs" title="Open recommendations in the selected period compared with {{ compare.label }}{% if rd.new %}. New: {{ rd.new | join(', ') }}{% endif %}{% if rd.gone %}. Gone: {{ rd.gone | join(', ') }}{% endif %}">vs {{ rd.before }}: {{ rd.now }} now{% if rd.new %} · {{ rd.new | length }} new{% endif %}{% if rd.gone %} · {{ rd.gone | length }} gone{% endif %}</span>
+      {%- endif %}
       <span class="cb-acc-meta">
         {% if pf.missing_map_fields %}
           <span class="cb-pf-err" style="font-size:var(--adopy-text-sm)">⚠ missing: {{ pf.missing_map_fields | join(', ') }}</span>
@@ -5210,7 +5266,7 @@ async function dashRefresh(ev) {
 {% if c.asset_variants %}
 {# tojson is already HTML-safe (escapes < > & to \uXXXX); `safe` stops the
    autoescaper from entity-encoding the quotes, which broke JSON.parse. #}
-<script type="application/json" id="asset-variants-{{ cid }}">{{ c.asset_variants | tojson }}</script>
+<script type="application/json" id="asset-variants-{{ cid }}">{{ (compare.asset_variants(c.country, c.asset_variants) if compare else c.asset_variants) | tojson }}</script>
 {% endif %}
 <table>
   <thead><tr>
@@ -5220,11 +5276,12 @@ async function dashRefresh(ev) {
   </tr></thead>
   <tbody id="asset-tbody-{{ cid }}">
   {% for row in c.asset_summary %}
+    {% set breakdown_prev = compare.breakdown(c.country, 'asset_summary', row) if compare else false %}
     <tr class="asset-row" onclick="assetVariantToggle(this, '{{ cid }}')" data-offer="{{ row.offer | e }}"
         title="Show the breakdown by landing page">
-      <td>{{ row.offer }} <span class="asset-caret">▸</span></td>
-      {{ mx.cells(row.spend, row.leads, row.deposits) }}
-      <td class="num">{{ row.net | fmt_usd }}</td>
+      <td>{{ row.offer }} <span class="asset-caret">▸</span>{% if compare %}{{ mx.flag(compare_state(row, breakdown_prev)) }}{% endif %}</td>
+      {{ mx.cells(row.spend, row.leads, row.deposits, prev=breakdown_prev) }}
+      <td class="num">{{ row.net | fmt_usd }}{% if compare %}{{ mx.cmp_cell(value_compare(row.net, breakdown_prev.get('net') if breakdown_prev else none)) }}{% endif %}</td>
     </tr>
   {% endfor %}
   </tbody>
@@ -5244,10 +5301,11 @@ async function dashRefresh(ev) {
   </tr></thead>
   <tbody>
   {% for row in c.variants %}
+    {% set breakdown_prev = compare.breakdown(c.country, 'variants', row) if compare else false %}
     <tr{% if row.is_untagged %} class="lp-untagged"{% endif %}>
-      <td>{% if row.is_untagged %}<span style="color:var(--muted);font-style:italic">— (no landing)</span>{% else %}{{ row.variant }}{% endif %}</td>
-      {{ mx.cells(row.spend, row.leads, row.deposits, 'good' if row.deposits > 0 else ('bad' if row.spend > 0 else '')) }}
-      <td class="num">{{ row.net | fmt_usd }}</td>
+      <td>{% if row.is_untagged %}<span style="color:var(--muted);font-style:italic">— (no landing)</span>{% else %}{{ row.variant }}{% endif %}{% if compare %}{{ mx.flag(compare_state(row, breakdown_prev)) }}{% endif %}</td>
+      {{ mx.cells(row.spend, row.leads, row.deposits, 'good' if row.deposits > 0 else ('bad' if row.spend > 0 else ''), prev=breakdown_prev) }}
+      <td class="num">{{ row.net | fmt_usd }}{% if compare %}{{ mx.cmp_cell(value_compare(row.net, breakdown_prev.get('net') if breakdown_prev else none)) }}{% endif %}</td>
     </tr>
   {% endfor %}
   </tbody>
@@ -5282,7 +5340,7 @@ async function dashRefresh(ev) {
           <td>{{ row.device or '—' }}</td>
           <td>{{ row.interest or '—' }}</td>
           <td>{{ row.creative or '—' }}</td>
-          {{ mx.pair_cells(metric_values(row.spend_recent, row.leads_recent, row.deposits_recent), metric_values(row.spend_total, row.leads_total, row.deposits_total)) }}
+          {{ mx.pair_cells(metric_values(row.spend_recent, row.leads_recent, row.deposits_recent), metric_values(row.spend_total, row.leads_total, row.deposits_total), recent_compare=(metric_compare({'spend': row.spend_recent, 'leads': row.leads_recent, 'deposits': row.deposits_recent}, compare.trend_metrics(c.country, row, '_recent')) if compare else none), period_compare=(metric_compare({'spend': row.spend_total, 'leads': row.leads_total, 'deposits': row.deposits_total}, compare.trend_metrics(c.country, row, '_total')) if compare else none)) }}
         </tr>
       {% endfor %}
       </tbody>
@@ -5302,6 +5360,7 @@ async function dashRefresh(ev) {
   </tr></thead>
   <tbody>
   {% for row in c.top_combos %}
+    {% set breakdown_prev = compare.breakdown(c.country, 'top_combos', row) if compare else false %}
     <tr>
       {#- ACL-1652 (вариант A): одна ячейка на всю комбинацию, чтобы шесть метрик
           встали в стандартные колонки. Cat — значок рядом с именем. -#}
@@ -5309,8 +5368,8 @@ async function dashRefresh(ev) {
         <div class="l1">{{ row.offer or '—' }} · {{ row.device or '—' }} · {{ row.age or '—' }}
           <span class="combo-chip {{ 'cat-strong' if row.category == 'Strong' else 'cat-interesting' }}">{{ row.category }}</span></div>
         <div class="l2">{{ row.interest or '—' }} · {{ row.creative or '—' }}</div>
-      </td>
-      {{ mx.cells(row.spend, row.leads, row.deposits) }}
+      {% if compare %}{{ mx.flag(compare_state(row, breakdown_prev)) }}{% endif %}</td>
+      {{ mx.cells(row.spend, row.leads, row.deposits, prev=breakdown_prev) }}
     </tr>
   {% endfor %}
   </tbody>
@@ -5328,9 +5387,10 @@ async function dashRefresh(ev) {
   </tr></thead>
   <tbody>
   {% for row in c.targeting %}
+    {% set breakdown_prev = compare.breakdown(c.country, 'targeting', row) if compare else false %}
     <tr>
-      <td class="interest-cell" title="{{ row.interest }}">{{ row.interest }}</td>
-      {{ mx.cells(row.spend, row.leads, row.deposits) }}
+      <td class="interest-cell" title="{{ row.interest }}">{{ row.interest }}{% if compare %}{{ mx.flag(compare_state(row, breakdown_prev)) }}{% endif %}</td>
+      {{ mx.cells(row.spend, row.leads, row.deposits, prev=breakdown_prev) }}
     </tr>
   {% endfor %}
   </tbody>
@@ -5350,18 +5410,20 @@ async function dashRefresh(ev) {
   </tr></thead>
   <tbody>
   {% for row in c.creatives %}
+    {% set breakdown_prev = compare.breakdown(c.country, 'creatives', row) if compare else false %}
     {# ACL-1593: группа раскрывается в строки вариантов (сумма = строка группы). #}
     <tr title="{{ row.ad_title }}"{% if row.has_variants %} class="creative-group" style="cursor:pointer" onclick="var n=this.nextElementSibling;while(n&&n.classList.contains('creative-variant')){n.hidden=!n.hidden;n=n.nextElementSibling;}"{% endif %}>
-      <td>{% if row.has_variants %}&#9656; {% endif %}{{ row.creative_id or row.ad_title }}</td>
+      <td>{% if row.has_variants %}&#9656; {% endif %}{{ row.creative_id or row.ad_title }}{% if compare %}{{ mx.flag(compare_state(row, breakdown_prev)) }}{% endif %}</td>
       <td>{{ row.text_name or '—' }}</td>
-      {{ mx.cells(row.spend, row.leads, row.deposits) }}
+      {{ mx.cells(row.spend, row.leads, row.deposits, prev=breakdown_prev) }}
     </tr>
     {% if row.has_variants %}
     {% for v in row.variants %}
+    {% set variant_prev = compare.creative_variant(c.country, row, v) if compare else false %}
     <tr class="creative-variant" hidden>
-      <td style="padding-left:1.5em">{{ v.label }}</td>
+      <td style="padding-left:1.5em">{{ v.label }}{% if compare %}{{ mx.flag(compare_state(v, variant_prev)) }}{% endif %}</td>
       <td>{{ row.text_name or '—' }}</td>
-      {{ mx.cells(v.spend, v.leads, v.deposits) }}
+      {{ mx.cells(v.spend, v.leads, v.deposits, prev=variant_prev) }}
     </tr>
     {% endfor %}
     {% endif %}
@@ -5374,13 +5436,14 @@ async function dashRefresh(ev) {
 </div>
 
 
-{% set has_close = c.close_recs.values() | map('length') | sum > 0 if c.close_recs else false %}
+{% set close_accounts = compare.close_accounts(c.country, c.close_recs or {}) if compare else (c.close_recs or {}).keys() | sort %}
+{% set has_close = close_accounts | length > 0 if compare else (c.close_recs.values() | map('length') | sum > 0 if c.close_recs else false) %}
 <div id="view-country-{{ cid }}-optimization" class="view-panel" data-country="{{ cid }}">
 <h2 class="view-title">{{ c.country }}: {{ n_optimization }} Optimization <span class="hint">click ad set row to drill into ads</span></h2>
 {% if has_close %}
-{% for label in c.close_recs.keys() | sort %}
-  {% set recs = c.close_recs[label] %}
-  {% if recs %}
+{% for label in close_accounts %}
+  {% set recs = (c.close_recs or {}).get(label, []) %}
+  {% if recs or (compare and compare.adset_gone(c.country, label, [])) %}
     <p><strong>{{ label }}</strong></p>
     <table>
       <thead><tr>
@@ -5398,11 +5461,20 @@ async function dashRefresh(ev) {
             hx-swap="afterend"
             hx-trigger="click"
             {% endif %}>
-          <td class="adset">{{ r.adset_name[:60] }}</td>
-          {{ mx.cells(r.spend, r.leads, r.deposits, 'bad' if (r.deposits == 0 and r.spend > 0) else ('good' if r.deposits > 0 else '')) }}
+          {%- set apv = compare.adset(c.country, label, r.adset_name) if compare else false %}
+          <td class="adset">{{ r.adset_name[:60] }}{% if compare %}{{ mx.flag(compare_state(r, apv), 'the close recommendations of the earlier period') }}{% endif %}</td>
+          {{ mx.cells(r.spend, r.leads, r.deposits, 'bad' if (r.deposits == 0 and r.spend > 0) else ('good' if r.deposits > 0 else ''), prev=apv) }}
           <td class="{% if r.reason %}bad{% endif %}">{{ r.reason or '' }}</td>
         </tr>
       {% endfor %}
+      {#- ACL-110: ad sets, которые просили закрыть в прошлом периоде и которых нет в этом. -#}
+      {% if compare %}{% for g in compare.adset_gone(c.country, label, recs | map(attribute='adset_name')) %}
+        <tr class="cmp-gone-row">
+          <td class="adset">{{ g.adset_name[:60] }}{{ mx.flag('gone', 'the close recommendations of the earlier period') }}</td>
+          {{ mx.cells(0, 0, 0, prev=g, gone=true) }}
+          <td></td>
+        </tr>
+      {% endfor %}{% endif %}
       </tbody>
     </table>
   {% endif %}
@@ -9049,16 +9121,17 @@ function assetVariantToggle(tr, cid) {
   });
   var render = function(r, cls) {
     var name = r.variant ? esc(r.variant) : '— (no landing)';
-    var m = acl6Metrics(r.spend, r.leads, r.deposits);
-    return '<tr class="' + (cls || '') + '"><td>' + name + '</td>'
+    var m = r._period_state === 'gone' ? ['—', '—', '—', '—', '—', '—'] : acl6Metrics(r.spend, r.leads, r.deposits);
+    return '<tr class="' + (cls || '') + '"><td>' + name + (r._period_state === 'new' || r._period_state === 'gone' ? '<span class="cmp-flag ' + r._period_state + '">' + r._period_state + '</span>' : '') + '</td>'
       + m.map(function(x, i) {
-          return '<td class="num' + (i === 2 && r.deposits > 0 ? ' good' : '') + '">' + x + '</td>';
+          return '<td class="num' + (i === 2 && r.deposits > 0 ? ' good' : '') + '">' + x + (r._period ? '<small class="cmp"><span class="cmp-prev">' + esc(r._period[i].prev) + '</span><span class="cmp-delta">' + esc(r._period[i].delta) + '</span></small>' : '') + '</td>';
         }).join('') + '</tr>';
   };
-  var total = rows.reduce(function(a, r) {
+  var total = rows.filter(function(r) { return r._period_state !== 'gone'; }).reduce(function(a, r) {
     a.leads += r.leads || 0; a.deposits += r.deposits || 0; a.spend += r.spend || 0;
     return a;
   }, { variant: 'Total', leads: 0, deposits: 0, spend: 0 });
+  if (rows.length && rows[0]._period_total) total._period = rows[0]._period_total;
   var body = rows.map(function(r) { return render(r); }).join('')
     || '<tr><td colspan="7" style="color:var(--muted)">No landing data</td></tr>';
   var detail = document.createElement('tr');
@@ -9152,6 +9225,8 @@ function _safeConfirm(title, bodyHtml, onConfirm, opts) {
 
 // ── Календарь периода для карты аккаунтов ────────────────────────────
 var _amapPick = { from: '{{ pd.date_from }}', to: '{{ pd.date_to }}', span: '{{ pd.span }}' };
+/* ACL-110: с чем сравниваем выбранный период. mode: '' | 'prev' | 'custom'. */
+var _amapCmp = { mode: {{ ((compare_pick or {}).mode or '') | tojson }}, from: {{ ((compare_pick or {}).date_from or '') | tojson }}, to: {{ ((compare_pick or {}).date_to or '') | tojson }} };
 
 function amapDates() {
   var el = document.getElementById('amap-dates');
@@ -9227,6 +9302,7 @@ function amapCalendar(btn) {
      грузил период немедленно: увидеть, что выбрал, было негде, а закрыть окно
      после первого клика — значило потерять его молча. */
   var draft = { from: _amapPick.from, to: _amapPick.to, span: _amapPick.span || '' };
+  var cmpDraft = { mode: _amapCmp.mode || '', from: _amapCmp.from || '', to: _amapCmp.to || '' };
   var last = have[have.length - 1];
   var first = have[0];
   /* Открываемся на месяце выбранного периода, а не на последнем месяце книги:
@@ -9271,6 +9347,33 @@ function amapCalendar(btn) {
   box._amapClose = amapCalClose;
   document.addEventListener('mousedown', amapCalOutside, true);
   document.addEventListener('keydown', amapCalEsc, true);
+
+  /* ACL-110: «Compare with» — предыдущий период той же длины или свой диапазон. */
+  function cmpPrevText() {
+    if (draft.span === 'all' || !draft.from) return '';
+    var s = new Date(draft.from + 'T00:00:00'), e = new Date((draft.to || draft.from) + 'T00:00:00');
+    var n = Math.round((e - s) / 86400000) + 1;
+    var pe = new Date(s.getTime() - 86400000), ps = new Date(pe.getTime() - (n - 1) * 86400000);
+    return amapIso(ps) + (n > 1 ? ' – ' + amapIso(pe) : '');
+  }
+  function cmpHtml() {
+    var off = draft.span === 'all' || !draft.from;
+    var m = off ? '' : cmpDraft.mode;
+    var noPick = off ? 'disabled' : '';   /* только когда нет периода, не по книге */
+    var h = '<div class="amap-cmp"><label>Compare with <select data-cmp-mode="1" ' + noPick + '>'
+      + '<option value=""' + (m === '' ? ' selected' : '') + '>Nothing</option>'
+      + '<option value="prev"' + (m === 'prev' ? ' selected' : '') + '>Previous period</option>'
+      + '<option value="custom"' + (m === 'custom' ? ' selected' : '') + '>Custom range</option>'
+      + '</select></label>';
+    if (m === 'prev') h += '<span class="amap-cmp-note">' + cmpPrevText() + '</span>';
+    if (m === 'custom') {
+      h += '<input type="date" data-cmp-from="1" value="' + cmpDraft.from + '" aria-label="Comparison start">'
+        + '<span class="amap-cal-arrow">–</span>'
+        + '<input type="date" data-cmp-to="1" value="' + cmpDraft.to + '" aria-label="Comparison end">';
+    }
+    if (off) h += '<span class="amap-cmp-note">pick a date range to compare</span>';
+    return h + '</div>';
+  }
 
   function hasData(p) {
     if (p.key === 'all') return true;
@@ -9355,6 +9458,7 @@ function amapCalendar(btn) {
           : '<span class="amap-cal-arrow">–</span><span class="amap-cal-field">' + b + '</span>')
       + '<button type="button" class="amap-cal-x" data-close="1" title="Close">×</button>'
       + '</div>'
+      + cmpHtml()
       + '<div class="amap-cal-foot">'
       + '<span>' + have.length + ' days in the workbook'
         + (last < amapIso(new Date()) ? ', last ' + last : '') + '</span>'
@@ -9397,11 +9501,22 @@ function amapCalendar(btn) {
         draw();
       };
     });
+    var cm = box.querySelector('[data-cmp-mode]');
+    if (cm) cm.onchange = function () { cmpDraft.mode = cm.value; draw(); };
+    var cf = box.querySelector('[data-cmp-from]'), ct = box.querySelector('[data-cmp-to]');
+    if (cf) cf.onchange = function () { cmpDraft.from = cf.value; if (!cmpDraft.to || cmpDraft.to < cf.value) { cmpDraft.to = cf.value; if (ct) ct.value = cf.value; } };
+    if (ct) ct.onchange = function () { cmpDraft.to = ct.value; };
     box.querySelector('[data-close]').onclick = function () { amapCalClose(true); };
     box.querySelector('[data-cancel]').onclick = function () { amapCalClose(true); };
     box.querySelector('[data-apply]').onclick = function () {
       // Начали период и не закончили — концом считается его начало: один день.
-      amapApply(draft.from, draft.to || draft.from, draft.span);
+      var off = draft.span === 'all' || !draft.from;
+      if (!off && cmpDraft.mode === 'custom' && !cmpDraft.from) {
+        alert('Pick the start of the comparison range, or choose another way to compare.');
+        return;
+      }
+      amapApply(draft.from, draft.to || draft.from, draft.span,
+                off ? { mode: '' } : { mode: cmpDraft.mode, from: cmpDraft.from, to: cmpDraft.to || cmpDraft.from });
     };
   }
   draw();
@@ -9411,17 +9526,28 @@ function amapCalendar(btn) {
    перезагружается целиком. Подменять фрагменты по одному значило бы держать
    на экране числа за разные периоды, пока догружаются остальные, — и в этот
    момент любые два соседних блока выглядели бы одинаково достоверно. */
-function amapApply(from, to, span) {
+function amapApply(from, to, span, cmp) {
   var cal = document.querySelector('.amap-cal');
   /* Тем же закрытием, что Cancel: тот же адрес с якорем — это переход по
      якорю без перезагрузки, и кнопка осталась бы «открытой» (ACL-1778). */
   if (cal) { if (cal._amapClose) cal._amapClose(false); else cal.remove(); }
   _amapPick = { from: from, to: to, span: span || '' };
+  /* Сравнение остаётся в адресе, пока его не выключили: выбранный период и
+     сравниваемый — одна пара, и смена периода не должна её терять. */
+  cmp = cmp || (span === 'all' ? { mode: '' } : _amapCmp);
+  _amapCmp = { mode: cmp.mode || '', from: cmp.from || '', to: cmp.to || '' };
   var q = [];
   if (span === 'all') q.push('span=all');
   else {
     if (from) q.push('date_from=' + encodeURIComponent(from));
     if (to) q.push('date_to=' + encodeURIComponent(to));
+    if (_amapCmp.mode) {
+      q.push('compare=' + encodeURIComponent(_amapCmp.mode));
+      if (_amapCmp.mode === 'custom') {
+        q.push('cmp_from=' + encodeURIComponent(_amapCmp.from));
+        q.push('cmp_to=' + encodeURIComponent(_amapCmp.to || _amapCmp.from));
+      }
+    }
   }
   var hash = window.location.hash || '';
   window.location.href = window.location.pathname + (q.length ? '?' + q.join('&') : '') + hash;
@@ -9697,9 +9823,13 @@ function amapAwaitSplit(account, per, tries) {
 
 function amapRefreshCountryLines(per) {
   // Reuse server-rendered summaries, preserving existing forms and DOM listeners.
+  var cmp = typeof _amapCmp === 'undefined' ? {} : _amapCmp;
+  var comparison = cmp.mode ? '&compare=' + encodeURIComponent(cmp.mode) : '';
+  if (cmp.mode === 'custom') comparison += '&cmp_from=' + encodeURIComponent(cmp.from)
+    + '&cmp_to=' + encodeURIComponent(cmp.to || cmp.from);
   return fetch('/account-map?date_from=' + encodeURIComponent(per.from)
                + '&date_to=' + encodeURIComponent(per.to)
-               + '&span=' + encodeURIComponent(per.span), { credentials: 'same-origin' })
+               + '&span=' + encodeURIComponent(per.span) + comparison, { credentials: 'same-origin' })
     .then(function (r) {
       if (!r.ok) throw new Error('Could not refresh the country totals');
       return r.text();
@@ -19401,7 +19531,7 @@ window.cwWorkbench = (function () {
 
   /* Плитка KPI: «Вы», «Другие», разница. Разница есть только при достаточных
      когортах с обеих сторон; иначе строка объясняет, чего не хватает. */
-  function kpiTile(name, cmp) {
+  function kpiTile(name, cmp, period) {
     var m = cmp.metrics[name], th = cmp.thresholds;
     var you = valueText(name, m.you, m.you_state, cmp.you);
     var oth = valueText(name, m.others, m.others_state, cmp.others);
@@ -19420,20 +19550,25 @@ window.cwWorkbench = (function () {
     }
     return '<div class="cw-kpi" data-kpi="' + name + '">'
       + '<div class="cw-kpi-label"><span>' + LABEL[name] + '</span><span>You vs Others</span></div>'
-      + '<div class="cw-kpi-you">' + esc(you) + (yn ? '<small>' + esc(yn) + '</small>' : '') + '</div>'
-      + '<div class="cw-kpi-peer"><span>Others <b>' + esc(oth) + '</b>' + (on ? ' <small>' + esc(on) + '</small>' : '')
+      + '<div class="cw-kpi-you">' + esc(you) + periodCell(period && period.you[{cpl: 3, cpa: 4, cr: 5}[name]]) + (yn ? '<small>' + esc(yn) + '</small>' : '') + '</div>'
+      + '<div class="cw-kpi-peer"><span>Others <b>' + esc(oth) + periodCell(period && period.others[{cpl: 3, cpa: 4, cr: 5}[name]]) + '</b>' + (on ? ' <small>' + esc(on) + '</small>' : '')
       + '</span><span>' + cmp.others.buyers + ' buyer' + (cmp.others.buyers === 1 ? '' : 's') + '</span></div>'
       + '<div class="cw-kpi-delta' + cls + '">' + esc(delta) + '</div></div>';
   }
 
-  function volumeTile(cmp) {
+  function volumeTile(cmp, period) {
     var y = cmp.you.ftds, o = cmp.others.ftds, tot = y + o;
+    var un = period && period.unattributed && period.unattributed[0];
     return '<div class="cw-kpi" data-kpi="ftds">'
       + '<div class="cw-kpi-label"><span>FTDs</span><span>Volume</span></div>'
-      + '<div class="cw-kpi-you">' + y + '<small>of ' + tot + ' attributed</small></div>'
-      + '<div class="cw-kpi-peer"><span>Others <b>' + o + '</b></span><span>' + money(cmp.you.spend) + ' you · ' + money(cmp.others.spend) + ' others</span></div>'
+      + '<div class="cw-kpi-you">' + y + periodCell(period && period.you[2]) + '<small>of ' + tot + ' attributed</small>' + periodCell(period && period.attributed) + '</div>'
+      + '<div class="cw-kpi-peer"><span>Others <b>' + o + periodCell(period && period.others[2]) + '</b></span><span>' + money(cmp.you.spend) + ' you'
+      + (period ? periodCell(period.you[0]) : ' · ') + money(cmp.others.spend) + ' others'
+      + periodCell(period && period.others[0]) + '</span></div>'
       + '<div class="cw-kpi-delta">'
-      + (cmp.unattributed.spend > 0 ? money(cmp.unattributed.spend) + ' spend has no CM and is in neither group' : 'Peers exclude the selected buyer')
+      + (cmp.unattributed.spend > 0 || (un && un.prev !== '—')
+        ? money(cmp.unattributed.spend) + ' spend has no CM and is in neither group' + periodCell(un)
+        : 'Peers exclude the selected buyer')
       + '</div></div>';
   }
 
@@ -19506,9 +19641,36 @@ window.cwWorkbench = (function () {
   }
 
   /* Строка таблицы с шестью метриками; `fmt6` — acl6Metrics страницы. */
+  function periodCell(c) {
+    return c ? '<small class="cmp"><span class="cmp-prev" title="Earlier period">' + esc(c.prev)
+      + '</span><span class="cmp-delta ' + esc(c.dir || '') + ' ' + esc(c.tone || '') + '">' + esc(c.delta) + '</span></small>' : '';
+  }
   function metricCells(r, fmt6) {
-    var f = fmt6(r.spend, r.leads, r.ftds);
-    return f.map(function (t) { return '<td class="cw-num">' + esc(t) + '</td>'; }).join('');
+    var f = r._period_gone ? ['—', '—', '—', '—', '—', '—'] : fmt6(r.spend, r.leads, r.ftds);
+    return f.map(function (t, i) { return '<td class="cw-num">' + esc(t)
+      + (i === 0 && r._period_state === 'new' ? '<span class="cmp-flag new">new</span>' : '')
+      + periodCell(r._period && r._period[i]) + '</td>'; }).join('');
+  }
+  function periodCounts(c) {
+    return c ? '<small class="cmp" aria-label="Earlier FTDs and change"><span class="cmp-prev">You ' + esc(c.you.prev) + ' · ' + esc(c.you.delta)
+      + '</span><span class="cmp-prev">All ' + esc(c.all.prev) + ' · ' + esc(c.all.delta) + '</span></small>' : '';
+  }
+  function youTag(r) {
+    var p = r._period_you && r._period_you[2];
+    if ((!r.you || !(r.you.spend > 0)) && !r._period_you_visible) return '';
+    var current = r._period_gone || !r.you || r.you.ftds == null ? '—' : r.you.ftds;
+    return '<span class="cw-tag cw-you">You · ' + esc(current) + ' FTD' + periodCell(p) + '</span>';
+  }
+  function periodGoneTable(rows, label) {
+    if (!rows || !rows.length) return '';
+    var h = '<div class="cw-scroll"><table class="cw-table cmp-readonly"><caption>' + esc(label) + ' · earlier only</caption><thead><tr><th>Row</th>'
+      + ['Spend', 'Leads', 'FTDs', 'CPL', 'CPA', 'CR'].map(function (v) { return '<th>' + v + '</th>'; }).join('') + '</tr></thead><tbody>';
+    rows.forEach(function (r) {
+      var name = r.name || r.landing || r.target || r.pack || r.cm || [r.device, r.age, r.target, r.landing].filter(Boolean).join(' · ') || '—';
+      h += '<tr class="cmp-gone-row"><td>' + esc(name) + '<span class="cmp-flag gone">gone</span>' + youTag(Object.assign({}, r, {_period_gone: true})) + '</td>'
+        + metricCells(Object.assign({}, r, {_period_gone: true}), fmt6) + '</tr>';
+    });
+    return h + '</tbody></table></div>';
   }
   /* CW-PURE-END */
 
@@ -19534,10 +19696,6 @@ window.cwWorkbench = (function () {
 
   function q(panel, name) { return panel.querySelector('[data-cw="' + name + '"]'); }
 
-  function youTag(r) {
-    if (!r.you || !(r.you.spend > 0)) return '';
-    return '<span class="cw-tag cw-you">You · ' + r.you.ftds + ' FTD</span>';
-  }
   function head(cols) {
     return '<thead><tr>' + cols.map(function (c) { return '<th' + (c.num ? ' class="cw-num"' : '') + '>' + esc(c.t) + '</th>'; }).join('') + '</tr></thead>';
   }
@@ -19598,6 +19756,10 @@ window.cwWorkbench = (function () {
               + youTag(v) + '<span class="cw-detail">' + esc(v.raw) + '</span></td>' + metricCells(v, fmt6)
               + '<td>' + (v.pack ? useBtn('creative', 'Use version', ix, ' data-vx="' + vx + '"') : '') + '</td></tr>';
           });
+          (r._period_gone_versions || []).forEach(function(v) {
+            h += '<tr class="cmp-gone-row"><td>' + esc(v.raw || v.version || 'No version in title') + '<span class="cmp-flag gone">gone</span>' + youTag(Object.assign({}, v, {_period_gone: true})) + '</td>'
+              + metricCells(Object.assign({}, v, {_period_gone: true}), fmt6) + '<td></td></tr>';
+          });
         }
       });
     } else if (tab === 'buyers') {
@@ -19636,12 +19798,15 @@ window.cwWorkbench = (function () {
 
     q(panel, 'chips').innerHTML = d.data.assets.map(function (a) {
       return '<button type="button" class="cw-chip" data-cw-asset="' + esc(a.name) + '" aria-pressed="' + (a.name === st.asset) + '">'
-        + esc(a.label) + '<small>' + a.you_ftds + ' / ' + a.ftds + ' FTDs</small></button>';
+        + esc(a.label) + (a._period_ftds && a._period_ftds.state === 'new' ? '<span class="cmp-flag new">new</span>' : '')
+        + '<small>' + a.you_ftds + ' / ' + a.ftds + ' FTDs</small>' + periodCounts(a._period_ftds) + '</button>';
+    }).join('') + (d.data._period_assets_gone || []).map(function(a) {
+      return '<span class="cw-sub cmp-readonly">' + esc(a.label) + ' · ' + esc(a.you_ftds) + ' / ' + esc(a.ftds) + ' earlier FTDs <span class="cmp-flag gone">gone</span></span>';
     }).join('') + (d.data.assets_total > d.data.assets.length - 1
       ? '<span class="cw-sub" style="align-self:center">Top ' + (d.data.assets.length - 1) + ' of ' + d.data.assets_total + ' assets by FTDs</span>' : '');
 
     var cmp = sl.compare;
-    q(panel, 'kpis').innerHTML = volumeTile(cmp) + kpiTile('cpl', cmp) + kpiTile('cpa', cmp) + kpiTile('cr', cmp)
+    q(panel, 'kpis').innerHTML = volumeTile(cmp, sl._period_compare) + kpiTile('cpl', cmp, sl._period_compare) + kpiTile('cpa', cmp, sl._period_compare) + kpiTile('cr', cmp, sl._period_compare)
       + refsHtml(d.goal, sl.reference)
       + (cmp.status === 'ok' ? '' : '<div class="cw-notice">' + esc(cmp.status === 'no_buyer'
         ? 'No buyer is selected, so there is no “You” side.'
@@ -19655,7 +19820,10 @@ window.cwWorkbench = (function () {
     var tabLabel = TABS.filter(function (t) { return t.id === st.tab; })[0].label;
     q(panel, 'view').innerHTML = '<div class="cw-ctx"><h3>' + esc(tabLabel) + '</h3><p>' + esc(country + ' › ' + assetLabel) + ' · '
       + 'top ' + (sl[st.tab] || []).length + ' by FTDs</p></div>'
-      + tabHtml(sl, st.tab, st) + '<div class="cw-foot">' + esc(TAB_NOTE[st.tab]) + '</div>';
+      + tabHtml(sl, st.tab, st) + periodGoneTable(sl._period_gone && sl._period_gone[st.tab], tabLabel)
+      + Object.keys(d.data._period_earlier_slices || {}).map(function(asset) {
+          return periodGoneTable(d.data._period_earlier_slices[asset][st.tab], asset + ' · ' + tabLabel);
+        }).join('') + '<div class="cw-foot">' + esc(TAB_NOTE[st.tab]) + '</div>';
     refreshDest(panel);
     /* ACL-1827: боковая колонка подсвечивает выбранный ассет. */
     document.dispatchEvent(new CustomEvent('acl:cwasset', { detail: { country: cid, asset: st.asset } }));

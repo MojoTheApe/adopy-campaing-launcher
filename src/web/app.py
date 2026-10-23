@@ -69,6 +69,7 @@ from src.web.request_limits import (
 from concurrent.futures import ThreadPoolExecutor
 from src.analysis_agent.money_format import fmt_usd, fmt_currency, fmt_summary_amount
 from src.analysis_agent import metric_columns
+from src.web import period_compare
 from src.creative_agent.creative_scanner import find_creative_file, scan_file, SUPPORTED_EXTS
 from src.creative_agent.audience_builder import build_audience_profile
 from src.creative_agent.stats_correlator import correlate
@@ -1422,6 +1423,10 @@ templates.env.filters["fmt_summary_amount"] = fmt_summary_amount
 # ACL-1652: шесть метрик одним кодом. Макросы `_metrics.html` берут отсюда и
 # заголовки, и ячейки — таблицы не могут разойтись друг с другом.
 templates.env.globals["metric_values"] = metric_columns.metric_values
+# ACL-110: «было X и изменение» под значением, когда включено сравнение периодов.
+templates.env.globals["metric_compare"] = period_compare.metric_compare
+templates.env.globals["value_compare"] = period_compare.value_compare
+templates.env.globals["compare_state"] = period_compare.state_for
 # Owner, 2026-10-07: the "Copy for group" button and its hint under a red account
 # status are hidden for now. True brings them back (template: _account_map_country.html).
 SHOW_COPY_FOR_GROUP = False
@@ -1944,6 +1949,34 @@ def _enrich_country_overview(report: Dict[str, Any]) -> None:
             country["my_spend"] = country["my_totals"]["spend"]
 
 
+def _build_compare(
+    base_report: dict, df, date_from: str, date_to: str, span: str,
+    compare: str, cmp_from: str, cmp_to: str,
+) -> tuple["period_compare.PeriodCompare | None", str]:
+    """Отчёт и карта аккаунтов за сравниваемый период (ACL-110).
+
+    Считаются тем же кодом, что и страница: `report_for_period` и
+    `_build_account_map_view`. Сломанное сравнение не должно ронять страницу —
+    она остаётся обычной, а причина показывается в шапке.
+    """
+    info, note = period_compare.resolve_compare(
+        compare, cmp_from, cmp_to, date_from, date_to, span)
+    if info is None:
+        return None, note
+    try:
+        from copy import deepcopy
+
+        # Копия: отчёт за период лежит в общем кэше, а его параллельно копирует
+        # основной путь страницы.
+        prev = deepcopy(report_for_period(base_report, df, info["date_from"], info["date_to"]))
+        _enrich_country_overview(prev)
+        # span="all": чтения с аккаунтов сравнению не нужны, только книжные числа.
+        prev_amap = _build_account_map_view(prev, df, info["date_from"], info["date_to"], "all")
+        return period_compare.PeriodCompare(info, prev, prev_amap), ""
+    except Exception:
+        return None, "Could not calculate the earlier period; showing the selected period only."
+
+
 def _render_report(
     request: Request,
     *,
@@ -1951,6 +1984,9 @@ def _render_report(
     date_from: str = "",
     date_to: str = "",
     span: str = "",
+    compare: str = "",
+    cmp_from: str = "",
+    cmp_to: str = "",
 ) -> HTMLResponse:
     try:
         report, _df, warnings = get_cached_report()
@@ -1977,6 +2013,7 @@ def _render_report(
     # Стартовые цели не зависят от выбранных дней — те же страны, что
     # сохранит первая правка (_goal_countries_now).
     goal_seed = _my_goal_countries(report)
+    base_report = report
     try:
         report = report_for_period(report, _df, date_from, date_to)
     except PeriodReportError as exc:
@@ -1995,6 +2032,9 @@ def _render_report(
     # готовности, и строку в билдере, а не одно из двух.
     _add_linked_accounts_to_builder(report)
     _enrich_country_overview(report)
+    period_cmp, compare_note = _build_compare(
+        base_report, _df, date_from, date_to, span.strip(),
+        compare.strip(), cmp_from.strip(), cmp_to.strip())
     ref_opts = _load_ref_options()
 
     # Collect all account labels from open_recs across all countries
@@ -2047,6 +2087,12 @@ def _render_report(
             # ACL-1827: плитки «Вы / Другие» над картой аккаунтов на Home.
             "home_kpis": _home_kpis(report),
             "period": {"date_from": date_from, "date_to": date_to, "span": span},
+            # ACL-110: сравнение с другим периодом (None — не включено).
+            "compare": period_cmp,
+            "compare_note": compare_note,
+            # Только проверенное: сырое значение из адреса попало бы в разметку календаря.
+            "compare_pick": ({"mode": period_cmp.mode, "date_from": period_cmp.date_from,
+                              "date_to": period_cmp.date_to} if period_cmp else {}),
             "period_owner": _period_owner(report),
             "goals": goals_view,
             # ACL-1799: цель страны (My Goals) для Country Workbench — отдельным
@@ -2468,7 +2514,8 @@ def _start_warm(date_from: str, date_to: str, span: str) -> None:
 
 @app.get("/", response_class=HTMLResponse)
 async def index(
-    request: Request, date_from: str = "", date_to: str = "", span: str = ""
+    request: Request, date_from: str = "", date_to: str = "", span: str = "",
+    compare: str = "", cmp_from: str = "", cmp_to: str = "",
 ) -> HTMLResponse:
     # ACL-1399: холодный отчёт — не держать страницу (и весь сервер) минуту,
     # а сразу ответить «цифры загружаются» и собрать его в фоне.
@@ -2479,7 +2526,8 @@ async def index(
         # Фоновая сборка упала — рисуем страницу обычным путём: он покажет
         # ту же ошибку по-человечески (нет файла, не тот формат).
     return await _in_report_pool(
-        _render_report, request, date_from=date_from, date_to=date_to, span=span
+        _render_report, request, date_from=date_from, date_to=date_to, span=span,
+        compare=compare, cmp_from=cmp_from, cmp_to=cmp_to,
     )
 
 
@@ -4663,7 +4711,8 @@ def account_attribution(
 @app.get("/account-map")
 @_off_loop
 def account_map_fragment(
-    request: Request, date_from: str = "", date_to: str = "", span: str = ""
+    request: Request, date_from: str = "", date_to: str = "", span: str = "",
+    compare: str = "", cmp_from: str = "", cmp_to: str = "",
 ) -> Response:
     """The account map alone, recomputed for a period.
 
@@ -4676,6 +4725,21 @@ def account_map_fragment(
     except Exception as exc:
         return HTMLResponse(f'<div class="amap-empty">Could not read the workbook: {exc}</div>')
 
+    from copy import deepcopy
+
+    base_report = report
+    period_cmp, compare_note = None, ""
+    if compare.strip():
+        date_from, date_to = resolve_period(df, date_from.strip(), date_to.strip(), span.strip())
+        try:
+            report = report_for_period(base_report, df, date_from, date_to)
+        except PeriodReportError:
+            return HTMLResponse('<div class="amap-empty">Could not calculate the selected period.</div>', status_code=503)
+        period_cmp, compare_note = _build_compare(
+            base_report, df, date_from, date_to, span.strip(),
+            compare.strip(), cmp_from.strip(), cmp_to.strip())
+    # Enrichment belongs to this response, never the shared workbook cache.
+    report = deepcopy(report)
     _enrich_country_overview(report)
     return templates.TemplateResponse(
         request,
@@ -4686,6 +4750,8 @@ def account_map_fragment(
                 report, df, date_from.strip(), date_to.strip(), span.strip()
             ),
             "mlx": mlx_instance_labels(),
+            "compare": period_cmp,
+            "compare_fragment_note": compare_note,
         },
     )
 
