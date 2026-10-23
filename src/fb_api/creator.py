@@ -141,6 +141,8 @@ RECONCILE_WAIT_S = 5.0
 UPLOAD_RECONCILE_FACTORS = (1, 2, 4, 6, 6, 6)
 #: Не чаще раза в секунду показываем процент загрузки файла.
 UPLOAD_PROGRESS_EVERY_S = 1.0
+#: Как часто (с) загрузка кусками пишет шаг «uploaded X/Y MB», чтобы панель не краснила её как зависшую (ACL-1998).
+UPLOAD_STEP_EVERY_S = 12.0
 #: Страниц списка в ПОВТОРНЫХ чтениях сверки загрузки (поиск до загрузки и первое чтение - полные).
 UPLOAD_RECONCILE_PAGES = 3
 #: Сколько страниц (по 100) свежих креативов кабинета смотреть в поиске своего.
@@ -1271,6 +1273,10 @@ class CampaignCreator:
         # Предохранитель от бесконечного цикла: не больше вдвое сверх числа кусков.
         guard = 2 * (-(-size // VIDEO_CHUNK_MAX)) + 4
         failures = 0
+        # ACL-1998: большая загрузка идёт минутами; без шагов панель считает её зависшей (idle_s > 180 с).
+        # Шаг «uploaded X/Y MB» - не чаще раза в UPLOAD_STEP_EVERY_S секунд, но не реже каждых 10% файла.
+        mb_total = max(size // (1024 * 1024), 1)
+        last_step_at, last_step_off = self.clock(), offset
         while offset < size:
             guard -= 1
             if guard < 0:
@@ -1302,6 +1308,11 @@ class CampaignCreator:
                 continue
             failures = 0
             offset, end = self._offsets(body, size, offset, what)
+            now = self.clock()
+            if offset < size and (now - last_step_at >= UPLOAD_STEP_EVERY_S
+                                  or (offset - last_step_off) * 10 >= size):
+                self._step(out, f"{who}: uploaded {offset // (1024 * 1024)}/{mb_total} MB")
+                last_step_at, last_step_off = now, offset
         try:
             done = self._upload_call(out, what, path, {"upload_phase": "finish", "upload_session_id": sid,
                                                         "title": title, "name": title,
