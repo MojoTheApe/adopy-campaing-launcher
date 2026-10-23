@@ -53,6 +53,11 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   confirms audience age/country values within their own field and opens the correct
   collapsed Locations/Languages control, preserving adjacent fields. Later hover-only
   controls remain ACL-1251; the deferred real pilot remains ACL-1215.
+  ACL-1138: before attaching to or starting a Multilogin profile, every Multilogin
+  provider, `attach_existing_only` and `fb_api.profile.open_profile` read the profile's proxy from the MLX API (`/profile/search` by id) and
+  stop the account with `profile_no_proxy` when none is configured. A failed check
+  does not block the run; `FB_RPA_PROXY_GATE=0` is the machine switch. The
+  browser's `--proxy-server` flag is only logged as evidence.
 - `src/fb_api`: API backend (`ACL_FB_BACKEND=api`) - Graph API calls made from inside the Multilogin
   profile's Ads Manager tab; everything is created PAUSED, never activated, never deleted. File uploads
   (`advideos`, `adimages`; ACL-1899) have no time limit: the page helper sends the file with
@@ -97,6 +102,17 @@ Read [distribution boundaries](../DISTRIBUTION.md), [product/design context](../
 [design guidance](../../DESIGN.md) and existing specs for subsystem details.
 `content_machine`, `jira_agent` and legacy `fb_publish_agent` are not automatically
 part of the ACL runtime; preserve the tested distribution boundary.
+
+### ACL-1896 — Instagram placements need an Instagram account on the Page ([issue](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/896))
+
+Live finding on Doc120 (2026-10-14): the API publish wrote the campaign, ad set and creative PAUSED, then Meta refused the ad (Graph 100, subcode 1772103, "Instagram Account Is Missing") because the Page had no Instagram account and the creative carried no Instagram identity. The creator always sends Instagram feed, Stories and Reels placements.
+
+- Read-only discovery (`src/fb_api/instagram.py`), at most two Graph reads, cached per Page for the run: the Page's `connected_instagram_account`, `instagram_business_account` and `connected_page_backed_instagram_account` fields (one read); only when all are empty, the ad account's `instagram_accounts` edge (for the message only; an account listed there is not assumed to belong to the Page). A failed read is "unknown", never a pass. The per-campaign create budget (150 calls) and the Check plan reset per draft absorb the two reads.
+- New server pre-flight rule `instagram_identity` (shared table `preflight_rules.py` and its JSON; the page draws server rows from the table, so `report.html` needs no change). Plans with Instagram placements and no confirmed identity are refused in Check plan and again before the first write: "This Facebook Page has no Instagram account, and the ad is set for Instagram placements. Connect an Instagram account to the Page, or wait for manual placements (ACL-1772) to publish Facebook-only." An unconfirmed read says Meta did not confirm one. When the Page itself is not settled the row is "unknown" (the Page row already blocks).
+- With an identity the creative carries `object_story_spec.instagram_user_id`, and the readback compares it. The closed write policy (`write_policy.py` and the page helper in `token_capture.py`) gained exactly one field: `instagram_user_id`, a string of 5-25 digits, only as a direct key of a creative's `object_story_spec`. `instagram_actor_id` is refused everywhere. No Page-backed Instagram account is created; that would be a write and needs an owner decision.
+- Documentation evidence (developers.facebook.com, 2026-10-14). Certain: `instagram_user_id` is a numeric string field of the creative's `object_story_spec`; the ad account `instagram_accounts` edge is read-only and lists IGUser nodes; the Page node has the three fields above. Not documented: `instagram_actor_id` (not used) and Page edges `instagram_accounts` / `page_backed_instagram_accounts` (not used).
+- Needs a live check on an authorized test account: that the profile's token returns the three Page fields; that Meta accepts that id as `instagram_user_id` (including a Page-backed id); where the creative read returns it (`object_story_spec` or the creative's own `instagram_user_id`, both are compared); behaviour on a Page with an Instagram account the ad account cannot use.
+- Known limit: a creative left by an earlier failed run (found by name) is reused as is; if it lacks the Instagram id, the readback reports the mismatch instead of silently passing.
 
 ## In-profile Graph session recovery
 

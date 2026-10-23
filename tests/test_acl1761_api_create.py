@@ -372,7 +372,7 @@ def test_call_cap_counts_writes():
 class FakeMeta:
     """Graph API в памяти: тот же интерфейс, что `InPageGraph` (request/write/stage_file)."""
 
-    def __init__(self, *, video_states=("processing", "ready"), hash_fn=None, drop_labels=()):
+    def __init__(self, *, video_states=("processing", "ready"), hash_fn=None, drop_labels=(), instagram="one"):
         self.objects: dict[str, dict] = {}
         self.images: dict[str, str] = {}
         self.posts: list[tuple[str, dict]] = []
@@ -392,6 +392,10 @@ class FakeMeta:
         self.hash_fn = hash_fn or (lambda d: hashlib.md5(d).hexdigest())
         #: Виды объектов, на которых «Meta» не сохраняет adlabels.
         self.drop_labels = set(drop_labels)
+        #: Instagram Страницы (ACL-1896): "one" - подключённый аккаунт, "none" - как у Doc120,
+        #: "error" - Meta отвечает ошибкой на чтение, "ad_account_only" - у Страницы пусто, у кабинета есть.
+        self.instagram = instagram
+        self.instagram_id = "17841400000000001"
 
     # -- служебное
     def _new(self, kind, **fields):
@@ -493,8 +497,18 @@ class FakeMeta:
             return {"data": []}
         if parts[0] == ACT and len(parts) == 1:
             return {"account_id": ACT[4:], "currency": "USD", "account_status": 1}
+        if len(parts) == 1 and "connected_instagram_account" in str(params.get("fields")):
+            if self.instagram == "error":
+                return {"error": {"code": 10, "type": "OAuthException",
+                                  "message": "(#10) Application does not have permission for this action"}}
+            if self.instagram == "one":
+                return {"id": parts[0], "connected_instagram_account": {"id": self.instagram_id, "username": "page_ig"}}
+            return {"id": parts[0]}
         if parts[0] == ACT:
             edge = parts[1]
+            if edge == "instagram_accounts":
+                return {"data": [{"id": "17841499999999999", "username": "other"}]
+                        if self.instagram == "ad_account_only" else []}
             if edge == "promote_pages":
                 return {"data": [{"id": "111"}]}
             if edge == "adspixels":
