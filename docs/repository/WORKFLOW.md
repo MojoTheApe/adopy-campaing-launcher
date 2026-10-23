@@ -264,6 +264,7 @@ a combined candidate. Release/manual rules stay in force.
 A new push to a PR branch cancels that PR's superseded CI and installer runs;
 stage/main/master pushes and manual runs retain their own run identities.
 The installer build/install job stops at 20 minutes.
+The Chromium install step (Linux and Windows) runs through `scripts/ci_retry.sh`: 3 attempts, each cut at 300 s (Linux) or 180 s (Windows), apt sources switched off the stalling Azure mirror, apt locks cleaned between attempts, the browser download cached by Playwright version, and a hard step limit (16 min Linux, 12 min Windows). The Linux test job stops at 32 minutes (shard 1 normally takes 20-22 min, the longest green run was 29.2), the Windows one at 30 (ACL-1710: an `apt-get update` hang used to burn 35 minutes per job).
 `--dist loadfile` keeps every test file on one worker: more than 80 files start
 their own Chromium in a module fixture, and spreading one file over all workers
 starts that browser once per worker (on the owner's laptop the test-by-test
@@ -294,7 +295,12 @@ closed classification.
 Combined batch, actual stage, promotion/main and manual contexts require complete
 applicable checks. A push or PR may reuse successful applicable jobs of the exact
 same Git tree (ACL-1565/1649, `scripts/acl_ci_reuse.py`); the run summary links
-that evidence. Manual runs and uncertainty run in full. Never treat separate
+that evidence. Combined batch PRs run their own full matrix without borrowing jobs.
+Release validation fetches the reused run IDs recorded by the successful main
+scope job (annotation, or its older classifier JSON log), revalidates their exact
+tree, merged-PR binding and jobs, and combines them with main's successful jobs.
+Complete proof returns without a run-list lookup; partial proof retains bounded
+discovery and fail-closed validation. Manual runs and uncertainty run in full. Never treat separate
 source checks as combined-content proof. The private pinned Master
 Action's access must be verified in a real consumer run. Draft descriptor success
 is structural feedback, not activation or live environment evidence.

@@ -41,13 +41,13 @@ def invoke(obj, draft, method):
 @pytest.mark.parametrize('method', ['publish_draft', 'publish_slots'])
 def test_direct_publisher_waits_for_readers(method):
     # С acl-1210 публикация занимает профиль, а не процесс: ждёт она
-    # чтение СВОЕГО профиля — ключ у обоих один, `synthetic` (ярлык без
-    # карты — сам ключ), и берётся тем же `profile_lock`, что и у чтений.
+    # чтение СВОЕГО профиля — оба ярлыка разрешены в один физический UUID,
+    # и берётся тот же `profile_lock`, что и у чтений.
     entered, release = threading.Event(), threading.Event()
     obj, draft = publisher(entered, release)
     thread = threading.Thread(target=invoke, args=(obj, draft, method))
     try:
-        with browser_operation.reading(), profile_lock('synthetic'):
+        with browser_operation.reading(), profile_lock('550e8400-e29b-41d4-a716-446655440000'):
             thread.start()
             assert not entered.wait(.2)
         assert entered.wait(3)
@@ -64,7 +64,7 @@ def test_direct_publisher_does_not_wait_for_a_reader_of_another_profile(method):
     obj, draft = publisher(entered, release)
     thread = threading.Thread(target=invoke, args=(obj, draft, method))
     try:
-        with browser_operation.reading(), profile_lock('another-profile'):
+        with browser_operation.reading(), profile_lock('6ba7b810-9dad-11d1-80b4-00c04fd430c8'):
             thread.start()
             assert entered.wait(2), "публикация ждёт чтение чужого профиля"
     finally:
@@ -91,7 +91,7 @@ def test_separate_publishers_are_exclusive():
     assert second.is_set()
 
 
-@pytest.mark.parametrize('first_id', ['synthetic-profile', ' synthetic-profile '])
+@pytest.mark.parametrize('first_id', ['550e8400-e29b-41d4-a716-446655440000', ' 550e8400-e29b-41d4-a716-446655440000 '])
 def test_profile_probe_serializes_positional_and_keyword_calls(monkeypatch, first_id):
     first, second, release = threading.Event(), threading.Event(), threading.Event()
     monkeypatch.setattr(account_spend, '_probe_entry', lambda *a, **k: object())
@@ -103,7 +103,7 @@ def test_profile_probe_serializes_positional_and_keyword_calls(monkeypatch, firs
         raise RuntimeError('synthetic: no browser was opened')
     monkeypatch.setattr(account_spend, '_attach_only', attach)
     threads = [threading.Thread(target=account_spend.read_ad_account, args=(first_id,)),
-               threading.Thread(target=account_spend.read_ad_account, kwargs={'profile_id':'synthetic-profile'})]
+               threading.Thread(target=account_spend.read_ad_account, kwargs={'profile_id':'550e8400-e29b-41d4-a716-446655440000'})]
     try:
         threads[0].start(); assert first.wait(3)
         threads[1].start(); assert not second.wait(.2)
@@ -112,3 +112,11 @@ def test_profile_probe_serializes_positional_and_keyword_calls(monkeypatch, firs
         for t in threads:
             if t.ident is not None: t.join(5)
     assert second.is_set()
+
+
+@pytest.fixture(autouse=True)
+def physical_mapping(monkeypatch):
+    from src.fb_ads_rpa import rpa_publisher as rp
+    monkeypatch.setattr(rp, "load_ad_account_map", lambda *_: {})
+    monkeypatch.setattr(rp, "resolve_account_entry", lambda *_: SimpleNamespace(
+        profile_id="550e8400-e29b-41d4-a716-446655440000"))

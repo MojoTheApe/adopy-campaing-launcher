@@ -33,10 +33,12 @@ from urllib.parse import urlsplit
 LOGGED_OUT = "profile_logged_out"
 NETWORK = "profile_network"
 RESTART_FAILED = "profile_restart_failed"
+CDP_REFUSED = "profile_cdp_refused"
 OPEN_BY_HAND = "profile_open_by_hand"
 SIMPLE_CREATE = "simple_create_layout"
 LEAD_TERMS = "lead_terms_not_accepted"
 WRONG_AD_ACCOUNT = "wrong_ad_account"
+NO_PROXY = "profile_no_proxy"
 MLX_NOT_RUNNING = "multilogin_not_running"
 
 #: Что сказать человеку — английский, это видно в дешборде.
@@ -47,6 +49,10 @@ MESSAGES = {
     RESTART_FAILED: "Restarting the Multilogin profile failed, so it may be closed now — "
                     "open it in Multilogin, check that it loads Ads Manager, close it, "
                     "then publish again",
+    # ACL-1403: MLX сообщил порт автоматизации, но на нём никто не слушает
+    # (профиль упал при старте или порт устарел), и ожидание порта не помогло.
+    CDP_REFUSED: "The Multilogin profile started but its browser did not accept the connection - "
+                 "open the profile in Multilogin, check that it loads, close it, then press Publish again",
     # ACL-1320: профиль открыт руками (без порта автоматизации). Остановка
     # через MLX API могла потерять только что созданную сессию Facebook,
     # если Multilogin её ещё не сохранил, — робот такой профиль не трогает.
@@ -69,6 +75,11 @@ MESSAGES = {
     WRONG_AD_ACCOUNT: "This profile's Facebook user has no access to that ad account, or Meta opened "
                       "another one. Check the ad account id on the Accounts page and that the "
                       "account is visible in this profile",
+    # ACL-1138: в Multilogin у профиля не задан прокси — он вышел бы в
+    # Facebook с настоящего IP этой машины. Профиль не открываем вовсе.
+    NO_PROXY: "This Multilogin profile has no proxy set, so it would reach Facebook from this "
+              "computer's own IP address. Add the proxy to the profile in Multilogin, "
+              "then press Publish again",
     # ACL-1401: локальный лаунчер Multilogin (launcher.mlx.yt:45001) отказал
     # в соединении — приложение Multilogin на компьютере не запущено. Ни один
     # профиль этого аккаунта (и любого другого) не поднимется, пока его не
