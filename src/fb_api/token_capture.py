@@ -24,9 +24,13 @@
 
 Токен НИКОГДА не возвращается в Python: ни значением, ни в исключении, ни в
 логе. Python видит только `has_token: true/false` и откуда он взят. Помощник
-принимает только GET, без `method`/`_method`/`batch`/`suppress_http_code`/
+принимает обычные чтения GET без `method`/`_method`/`batch`/`suppress_http_code`/
 `access_token` в параметрах, и не идёт по перенаправлениям. Python проверяет то
 же до вызова.
+
+ACL-2105: отдельный validatePage строит только фиксированный no-creation creative
+с validate_only для закреплённого кабинета. Он не включает обычные POST; токен и
+параметры выбора validate_only остаются внутри того же защищённого помощника.
 
 Переснять токен (ошибка 190) — перезагрузить вкладку: новый документ, новый
 отдельный мир, нового помощника Python создаёт заново (`InPageGraph.reacquire`).
@@ -41,8 +45,10 @@ import urllib.parse
 from contextlib import contextmanager
 from typing import Any, Callable
 
-from src.fb_api.cdp import CdpError, CdpTimeout, PageError, StaleContextError, host_and_path
-from src.fb_api.graph import Checkpoint, GraphStop, LoggedOut, PageUnresponsive
+from src.fb_api.cdp import (CdpError, CdpTimeout, PageError, StaleContextError,
+                            SessionLostError, PageIdentityError, host_and_path)
+from src.fb_api.graph import (Checkpoint, GraphStop, LoggedOut, PageFailed,
+                              PageUnresponsive)
 from src.fb_api.telemetry import strip_tokens
 
 ADS_MANAGER_URL = "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act={act}"
@@ -71,6 +77,8 @@ _HELPER_JS = r"""
   // ACL-1761: политика записи (null — только чтение). Вшита при установке,
   // страница её не видит и не меняет.
   const WRITE = __WRITE__;
+  // ACL-2105: separate no-creation capability, pinned to the navigated account.
+  const VALIDATE_ACT = __VALIDATE_ACT__;
   const g = (typeof globalThis !== 'undefined') ? globalThis : self;
   if (g[NAME]) return;
 
@@ -228,6 +236,43 @@ _HELPER_JS = r"""
     return typeof story[key] === 'string' && new RegExp((WRITE.instagram || {}).id_re || '^$').test(story[key]);
   }
 
+
+  // ACL-1891: зеркало write_policy._check_upload - фазы загрузки видео кусками.
+  function digitsOf(v) {
+    const U = WRITE.upload;
+    if (typeof v === 'number') return (Number.isSafeInteger(v) && v >= 0) ? v : null;
+    if (typeof v === 'string' && new RegExp(U.number_re).test(v)) return Number(v);
+    return null;
+  }
+  function uploadOk(params, spec) {
+    const U = WRITE.upload;
+    if (!U) return 'upload';
+    const phase = params.upload_phase;
+    if (typeof phase !== 'string' || U.phases.indexOf(phase) < 0) return 'upload_phase';
+    const allowed = U.keys[phase];
+    for (const k of Object.keys(params)) if (allowed.indexOf(k) < 0) return 'upload_key';
+    if ('waterfall_id' in params && !(typeof params.waterfall_id === 'string' && /^[0-9a-f]{32}$/.test(params.waterfall_id))) return 'upload_waterfall';
+    if (phase === 'start') {
+      const n = digitsOf(params.file_size);
+      if (!n || n > U.file_max) return 'upload_size';
+    } else {
+      const sid = params.upload_session_id;
+      if (typeof sid !== 'string' || !new RegExp(U.id_re).test(sid)) return 'upload_session';
+    }
+    if (phase === 'transfer') {
+      const off = digitsOf(params.start_offset);
+      if (off === null || off >= U.file_max) return 'upload_offset';
+    }
+    if (phase === 'finish') {
+      for (const k of ['title', 'name']) {
+        if (k in params && !(typeof params[k] === 'string' && params[k].length > 0 && params[k].length <= 200)) return 'upload_text';
+      }
+    }
+    const fk = Object.keys(spec.files || {});
+    if (phase === 'transfer') { if (fk.length !== 1 || fk[0] !== U.chunk_field) return 'file'; }
+    else if (fk.length) return 'file';
+    return null;
+  }
   // ACL-1775: единственное место, где разрешён lead_gen_form_id (зеркало
   // write_policy._without_lead_form). Возвращает копию без ключа, null — отказ,
   // исходный объект — формы нет. Ключ в другом месте остаётся и ловится statusOk.
@@ -256,7 +301,7 @@ _HELPER_JS = r"""
   // write_policy.check_form_create). Возвращает null (можно) или короткую причину.
   function checkForm(spec) {
     const F = WRITE && WRITE.form_create;
-    if (!F) return 'form_policy';
+    if (!F || !Array.isArray(F.bool_keys)) return 'form_policy';
     const m = new RegExp('^/([0-9]{1,25})/' + F.edge + '$').exec(String(spec.path || ''));
     if (!m) return 'form_path';
     // Страница закреплена на сессию (WRITE.form_create.page), а не берётся у вызывающего.
@@ -308,7 +353,8 @@ _HELPER_JS = r"""
       }
     }
     if ('question_page_custom_headline' in c && !txt(c.question_page_custom_headline)) return 'form_headline';
-    if ('follow_up_action_url' in c && !url(c.follow_up_action_url)) return 'form_url';
+    if ('follow_up_action_url' in c && (!url(c.follow_up_action_url) || c.follow_up_action_url.length > F.max_text)) return 'form_url';
+    for (const k of F.bool_keys) if (k in c && typeof c[k] !== 'boolean') return 'form_bool';
     if ('privacy_policy' in c) {
       const p = c.privacy_policy;
       if (!only(p, 'privacy_policy') || !url(p.url) || !txt(p.link_text)) return 'form_privacy';
@@ -371,11 +417,22 @@ _HELPER_JS = r"""
     const edge = m[2];
     const keys = WRITE.edges[edge];
     if (!keys) return refused('edge');
+    if (edge === 'advideos' && 'upload_phase' in params) {
+      // ACL-1891: своя закрытая схема на каждую фазу; файл только у transfer.
+      const why = uploadOk(params, spec);
+      if (why) return refused(why);
+      files = spec.files || {};
+      want = params.upload_phase === 'transfer' ? WRITE.upload.chunk_field : null;
+    } else {
     for (const k of Object.keys(params)) {
       if (!KEY_RE.test(String(k)) || keys.indexOf(String(k)) < 0) return refused('key');
     }
-    if (WRITE.paused_required.indexOf(edge) >= 0 && params.status !== 'PAUSED') return refused('status');
+    // ACL-2114: ACTIVE только у набора/объявления и только при children_active (кампания подтверждена PAUSED).
+    const childActive = spec.children_active === true && (WRITE.child_edges || []).indexOf(edge) >= 0
+      && params.status === 'ACTIVE';
+    if (WRITE.paused_required.indexOf(edge) >= 0 && params.status !== 'PAUSED' && !childActive) return refused('status');
     checked = Object.assign({}, params);
+    if (childActive) checked.status = 'PAUSED';
     for (const k of WRITE.json_keys) {
       if (!(k in params)) continue;
       let v = params[k];
@@ -417,11 +474,14 @@ _HELPER_JS = r"""
     if (want) { if (fk.length !== 1 || fk[0] !== want) return refused('file'); }
     else if (fk.length) return refused('file');
     }
+    }
     let blob = null;
     if (want) {
       const parts = staged[String(files[want])];
       if (!parts || !parts.length) return { error: 'no_file' };
       blob = new Blob(parts);
+      // ACL-1891: кусок загрузки - не больше потолка и не пустой.
+      if (want === (WRITE.upload || {}).chunk_field && (blob.size < 1 || blob.size > WRITE.upload.chunk_max)) return refused('chunk_size');
       // Ревью M1: ушло бы не то, что положил Python — отказ ДО отправки.
       const expect = spec.expect || {};
       if (typeof expect.bytes !== 'number' || blob.size !== expect.bytes) return refused('file_size');
@@ -564,7 +624,11 @@ _HELPER_JS = r"""
     text = clean(text);
     let parsed;
     try { parsed = JSON.parse(text); } catch (e) { parsed = { non_json: text.slice(0, 300) }; }
-    return { status: resp.status, body: parsed, headers: {}, endpoint: endpoint };
+    const headers = {};
+    for (const name of HEADERS) {
+      try { const v = resp.headers.get(name); if (v) headers[name] = clean(v); } catch (e) {}
+    }
+    return { status: resp.status, body: parsed, headers: headers, endpoint: endpoint };
   }
 
   async function call(spec) {
@@ -617,20 +681,40 @@ _HELPER_JS = r"""
     return { status: resp.status, body: body, headers: headers, endpoint: endpoint };
   }
 
+  async function validatePage(spec) {
+    const refused = (why) => ({ error: 'validation_refused', why: why });
+    if (retired) return { error: 'retired' };
+    if (!VALIDATE_ACT || !/^act_[0-9]{5,}$/.test(VALIDATE_ACT)) return refused('account');
+    if (!spec || Object.keys(spec).some((k) => !['page_id', 'link', 'host', 'credentials'].includes(k))) return refused('key');
+    if (typeof spec.page_id !== 'string' || !/^[0-9]{1,25}$/.test(spec.page_id)) return refused('page');
+    const link = spec.link || 'https://www.facebook.com/';
+    if (typeof link !== 'string' || link.length > 2048 || /[\s\x00-\x1f]/.test(link)) return refused('link');
+    let url;
+    try { url = new URL(link); } catch (e) { return refused('link'); }
+    if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password) return refused('link');
+    const params = { name: 'ACL Page access validation',
+      object_story_spec: { page_id: spec.page_id, link_data: { link: link } },
+      execution_options: ['validate_only'] };
+    // Fixed edge/option; no files, object creation, forms or caller-supplied params.
+    return post('/' + VALIDATE_ACT + '/adcreatives', params, null, null, spec, {}, null);
+  }
+
   function probe() { scanFast(); scanHtml(); return state(); }
   function retire() { retired = true; token = null; return true; }
 
   g[NAME] = Object.freeze({ call: call, state: state, probe: probe, retire: retire,
+                          validatePage: validatePage,
                           stage: stage, unstage: unstage,
                           startCall: startCall, poll: poll, abort: abort });
 })();
 """
 
 
-def helper_source(name: str, write_policy: dict | None = None) -> str:
+def helper_source(name: str, write_policy: dict | None = None, validation_act: str | None = None) -> str:
     """Исходник помощника. `write_policy` — только у создателя кампаний (ACL-1761)."""
     return (_HELPER_JS.replace("__NAME__", json.dumps(name))
-            .replace("__WRITE__", json.dumps(write_policy) if write_policy else "null"))
+            .replace("__WRITE__", json.dumps(write_policy) if write_policy else "null")
+            .replace("__VALIDATE_ACT__", json.dumps(validation_act)))
 
 
 def ads_manager_url(act_id: str) -> str:
@@ -664,6 +748,7 @@ class InPageGraph:
         self.object_updates = bool(allow_object_updates)
         self.allow_writes = bool(allow_writes) or self.object_updates
         self.write_act = None
+        self.validation_act: str | None = None
         self.write_page: str | None = None
         self._write_policy: dict | None = None
         if self.allow_writes:
@@ -673,6 +758,8 @@ class InPageGraph:
             if not m:
                 raise ValueError("allow_writes needs the verified act_<id>")
             self.write_act = str(write_act)
+            if not self.object_updates:
+                self.validation_act = self.write_act
             if write_page and not re.fullmatch(r"[0-9]{1,25}", str(write_page)):
                 raise ValueError("write_page must be the numeric Page id of the plan")
             self.write_page = str(write_page) if write_page else None
@@ -691,6 +778,11 @@ class InPageGraph:
         self._clock = clock
         self._ctx: int | None = None
         self._injected = False
+        # Warm reuse can replace the helper mode without navigating the tab.
+        # Inherit only ACL's prior navigation intent, never the current page URL.
+        self._expected_url = getattr(tab, "navigation_url", "")
+        self._session_recovered = bool(getattr(tab, "recovery_attempted", False))
+        self._connection_stop: GraphStop | None = None
 
     # -- таймаут вкладки: что на самом деле с ней (F1, ACL-1761)
     def _timeout_stop(self, exc: BaseException) -> GraphStop | None:
@@ -766,29 +858,56 @@ class InPageGraph:
                 self._injected = False
             if not self._injected:
                 # Повторный вызов безвреден: помощник сам выходит, если уже стоит.
-                self.tab.evaluate_in(self._ctx, helper_source(self.name, self._write_policy), timeout=10.0)
+                self.tab.evaluate_in(self._ctx, helper_source(self.name, self._write_policy, self.validation_act), timeout=10.0)
                 self._injected = True
             return self._ctx
 
     def _eval_helper(self, tail: str, *, timeout: float = 60.0) -> Any:
         """Не-Meta вызов помощника (`state`/`probe`/`retire`): можно повторить.
 
-        Повтор ТОЛЬКО если отдельный мир исчез (`StaleContextError`): это не
-        запрос к Meta, пересоздать мир и попробовать ещё раз безопасно. Прочие
-        ошибки (`PageError`/`CdpError`/`CdpTimeout`) поднимаются как есть — к
-        Graph они не относятся, повторять нечего.
+        Retry local work once after a stale world or a detached session. A
+        detached session must reattach to the same verified owned target first.
+        Graph calls never pass through this retry boundary.
         """
         expr = f"globalThis[{json.dumps(self.name)}]{tail}"
+        if self._connection_stop is not None:
+            raise self._connection_stop
         for attempt in (0, 1):
-            ctx = self._ensure()
             try:
                 with self._timeouts_as_stops():
+                    if self._session_recovered:
+                        self.tab.verify_url(self._expected_url)
+                ctx = self._ensure()
+                with self._timeouts_as_stops():
                     return strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout))
+            except SessionLostError as exc:
+                self._reset_world()
+                if attempt:
+                    raise self._stop_connection(exc) from exc
+                try:
+                    self.tab.recover_session(self._expected_url)
+                    self._session_recovered = True
+                except (CdpError, OSError) as recovery:
+                    raise self._stop_connection(recovery) from recovery
+            except PageIdentityError as exc:
+                raise self._stop_connection(exc) from exc
             except StaleContextError:
                 self._reset_world()
                 if attempt:
                     raise
         raise CdpError("isolated world evaluation failed")  # недостижимо
+
+    def _stop_connection(self, exc: BaseException) -> GraphStop:
+        kind = getattr(exc, "kind", "")
+        if kind == "checkpoint":
+            stop = Checkpoint("the profile is on a Facebook checkpoint")
+        elif kind == "login":
+            stop = LoggedOut("the profile is logged out of Facebook")
+        else:
+            stop = PageFailed("connection to the owned Ads Manager tab was lost or its account changed; "
+                              "recovery stopped without replaying the interrupted request")
+        self._connection_stop = stop
+        return stop
 
     def _ready_for_call(self, *, timeout: float = 10.0) -> None:
         """Приготовить отдельный мир к Graph-вызову: помощник на месте, мир живой.
@@ -796,7 +915,17 @@ class InPageGraph:
         Повторы допустимы — сюда ничего к Meta не уходит. `.state()` заодно
         подтверждает, что контекст отвечает (иначе `_eval_helper` его пересоздаст).
         """
-        self._eval_helper(".state()", timeout=timeout)
+        try:
+            state = self._eval_helper(".state()", timeout=timeout)
+            if self._session_recovered and isinstance(state, dict) and not state.get("has_token"):
+                state = self._eval_helper(".probe()", timeout=timeout)
+        except (CdpError, OSError) as exc:
+            raise self._stop_connection(exc) from exc
+        if isinstance(state, dict) and state.get("kind") in ("login", "checkpoint"):
+            raise self._stop_connection(PageIdentityError(state["kind"]))
+        if self._session_recovered and (not isinstance(state, dict) or
+                state.get("kind") != "ads_manager" or not state.get("has_token")):
+            raise self._stop_connection(PageIdentityError())
 
     # -- жизненный цикл
     def install(self) -> None:
@@ -807,6 +936,10 @@ class InPageGraph:
         """Открыть Ads Manager кабинета в своей вкладке. Одна загрузка, ни одного клика."""
         with self._timeouts_as_stops():
             self.tab.navigate(ads_manager_url(act_id), timeout=timeout)
+        self._expected_url = ads_manager_url(act_id)
+        act = "act_" + act_digits(act_id)
+        self.validation_act = (act if not self.object_updates and re.fullmatch(r"act_[0-9]{5,}", act)
+                               and (not self.write_act or self.write_act == act) else None)
         self._reset_world()
 
     def start(self, act_id: str, *, timeout: float = 90.0) -> dict:
@@ -901,6 +1034,24 @@ class InPageGraph:
         return got if isinstance(got, dict) else {"error": "bad_reply"}
 
     # -- запись (ACL-1761)
+    def validate_page(self, act: str, page_id: str, link: str = "", *, timeout: float = 60.0) -> dict:
+        """One account-bound creative validate_only call; never enables ordinary writes."""
+        from src.fb_api.page_validation import params
+
+        checked = params(act, page_id, link)
+        if act != self.validation_act or self.object_updates:
+            raise ValueError("Page validation is not bound to this ad account")
+        self._ready_for_call()
+        ctx = self._ensure()
+        spec = {"page_id": page_id, "link": checked["object_story_spec"]["link_data"]["link"],
+                "host": self.graph_host, "credentials": self.credentials}
+        expr = f"globalThis[{json.dumps(self.name)}].validatePage({json.dumps(spec)})"
+        try:
+            got = strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout))
+        except (CdpTimeout, StaleContextError, PageError, CdpError, TimeoutError):
+            return {"error": "validation_unknown"}
+        return got if isinstance(got, dict) else {"error": "validation_unknown"}
+
     #: Размер куска файла, который кладётся в помощник за один вызов CDP.
     STAGE_CHUNK = 768 * 1024
 
@@ -945,7 +1096,7 @@ class InPageGraph:
 
     def write(self, path: str, params: dict | None = None, *, files: dict | None = None,
               filename: str = "", timeout: float = 120.0, on_ad: bool = False,
-              form_page: str = "", progress: Callable[[float], None] | None = None,
+              children_active: bool = False, form_page: str = "", progress: Callable[[float], None] | None = None,
               cancelled: Callable[[], bool] | None = None) -> dict:
         """POST в разрешённое ребро. РОВНО один раз; сбой после отправки — `call_unknown`.
 
@@ -974,7 +1125,8 @@ class InPageGraph:
         elif self.object_updates:
             _wp.check_object_update("POST", path, params, files)
         else:
-            _wp.check(self.write_act, "POST", path, params, files, on_ad=on_ad)
+            _wp.check(self.write_act, "POST", path, params, files, on_ad=on_ad,
+                      children_active=children_active)
         spec: dict[str, Any] = {"method": "POST", "path": path, "params": params or {}, "files": {},
                                 "filename": filename, "host": self.graph_host,
                                 "credentials": self.credentials}
@@ -983,6 +1135,9 @@ class InPageGraph:
         if on_ad:
             # ACL-1775: набор плана ON_AD — вторая линия политики пропустит форму в креативе.
             spec["on_ad"] = True
+        if children_active:
+            # ACL-2114: кампания-родитель подтверждена PAUSED - вторая линия пропустит ACTIVE у набора/объявления.
+            spec["children_active"] = True
         if files:
             (field_name, data), = files.items()
             if not isinstance(data, (bytes, bytearray)):

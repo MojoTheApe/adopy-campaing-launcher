@@ -511,6 +511,15 @@ class WarmRegistry:
     def record_stop(self, profile_id: str) -> None:
         self._stops.record(profile_id)
 
+    def forget_stopped(self, profile_id: str) -> None:
+        """Профиль остановлен где угодно (журнал остановок): его порт и вкладку забываем.
+
+        Следующее действие поднимает профиль заново через MLX, а не цепляется к
+        порту остановленного браузера (TEST9095y, B97: `CdpTimeout: connect`).
+        """
+        if self.is_warm(profile_id):
+            self._forget(profile_id, stopped=False)
+
     def restart_wait_s(self, profile_id: str) -> float:
         """Сколько секунд ещё нельзя запускать профиль после его остановки (общий журнал)."""
         return self._stops.restart_wait_s(profile_id)
@@ -636,6 +645,17 @@ class WarmRegistry:
         if foreign:
             return _result(False, "This profile is kept warm by another dashboard window on this computer. "
                            "Use that window, or close it first. Nothing was changed.", "other_dashboard")
+        # ACL-1853: замок профиля теперь по физическому UUID и отказывает словами (в карте не UUID,
+        # профиль занят другой операцией ACM). Отказ — обычный ответ, а не исключение: иначе он
+        # оборвал бы всю пачку `open_many`.
+        from src.fb_ads_rpa.profile_lease import ProfileLeaseError
+
+        try:
+            return self._adopt_locked(label, pid, port)
+        except ProfileLeaseError as exc:
+            return _result(False, f"{exc} Nothing was changed.", "profile_lease")
+
+    def _adopt_locked(self, label: str, pid: str, port: int) -> dict:
         from src.fb_ads_rpa.operations import profile_lock
 
         queue = self._slot_queue()
@@ -910,6 +930,12 @@ class WarmRegistry:
 
     def _raise_for_state(self, sess: WarmSession, state: dict) -> None:
         kind = state.get("kind")
+        try:
+            from src.fb_api import launch as _launch
+
+            _launch.note_graph_session(sess.profile_id, bool(state.get("has_token")), account=sess.account)
+        except Exception:  # noqa: BLE001 — телеметрия не роняет действие
+            pass
         if kind == "checkpoint":
             self._note_login_stop(sess)
             raise Checkpoint("the profile is on a Facebook checkpoint")
@@ -1006,7 +1032,7 @@ def scan_local(profile_ids: list[str]) -> dict[str, tuple[str, int | None]]:
     except Exception:
         return {pid: ("unknown", None) for pid in profile_ids}
     try:
-        procs = list(psutil.process_iter(["name", "exe", "cmdline"]))
+        procs = list(psutil.process_iter(["name", "exe", "cmdline", "create_time"]))
     except Exception:
         return {pid: ("unknown", None) for pid in profile_ids}
 
@@ -1020,9 +1046,10 @@ def scan_local(profile_ids: list[str]) -> dict[str, tuple[str, int | None]]:
     out: dict[str, tuple[str, int | None]] = {}
     for pid in profile_ids:
         try:
+            # Браузер, переживший нашу недавнюю остановку, — "closing", а не порт.
             out[pid] = _fb_profile.local_debug_port(
                 pid, process_iter=lambda: procs, profile_dir=_fb_profile.find_profile_dir(pid),
-                listens=listens)
+                listens=listens, stopped_at=_stop_log.default().recent_stop_at(pid))
         except Exception:
             out[pid] = ("unknown", None)
     return out
@@ -1068,4 +1095,5 @@ def registry() -> WarmRegistry:
     with _REGISTRY_LOCK:
         if _REGISTRY is None:
             _REGISTRY = WarmRegistry()
+            _REGISTRY._stops.on_stop(_REGISTRY.forget_stopped)
         return _REGISTRY

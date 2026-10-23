@@ -521,16 +521,26 @@ def _profile_key(account: str, *_a, **_k) -> str:
 
     Ярлыков может оказаться несколько на один профиль: карта этого не
     запрещает, а две очереди к одному браузеру — ровно то, от чего замок и
-    защищает. Если ярлык в профиль не разрешается (нет в карте, файл не
-    читается), ключом остаётся сам ярлык: занять лишнее безопаснее, чем не
-    занять нужное.
+    защищает. Без физического UUID отказываем до открытия браузера: ярлык
+    не защищает тот же профиль в другом процессе.
     """
     try:
         entry = _entry_for(account)
     except Exception:
         entry = None
     profile = (getattr(entry, "profile_id", "") or "").strip() if entry else ""
-    return profile or str(account or "")
+    from src.fb_ads_rpa.profile_lease import physical_profile_key, ProfileLeaseError
+
+    if entry is None:
+        raise ProfileLeaseError(f"{account} is not in the account map; check the account connection.")
+    return physical_profile_key(profile)
+
+
+def _failure_text(exc: BaseException) -> str:
+    """Текст сбоя чтения для человека; отказ замка профиля уже написан словами."""
+    from src.fb_ads_rpa.profile_lease import ProfileLeaseError
+
+    return str(exc) if isinstance(exc, ProfileLeaseError) else f"{type(exc).__name__}: {exc}"
 
 
 def _lock_for(account: str):
@@ -604,7 +614,7 @@ def start_read(
             text, code = _mlx.humanize(exc, "", account)
             done = SpendReading(
                 account=account, date_from=date_from, date_to=date_to,
-                state="failed", error=text or f"{type(exc).__name__}: {exc}", error_code=code,
+                state="failed", error=text or _failure_text(exc), error_code=code,
             )
         done.started_at = reading.started_at
         done.finished_at = _now()
@@ -847,7 +857,8 @@ def _start_closed(entry, account_label: str, opened: _ReadOpen, recheck=None):
 
     profile_id = (getattr(entry, "profile_id", "") or "").strip()
     # ACL-1812 (ревью #813, B1-bis): закрыли недавно — не поднимаем (ACL-1811).
-    why = _stop_log.refusal(profile_id)
+    # ACL-2117: пока MLX досохраняет профиль, чтение ждёт (а не отказывает).
+    why = _stop_log.wait_or_refusal(profile_id, on_wait=lambda text: _set_wait_note(account_label, text))
     if why:
         raise ProfileNotAttachable(why, code="restart_cooldown")
     queue = _slot_queue()
@@ -972,22 +983,51 @@ def _publish_touched(opened: _ReadOpen) -> bool:
 
 def _close_if_still_pending(opened: _ReadOpen) -> None:
     """Конец `CLOSE_GRACE_S`: никто не забрал профиль — закрыть его."""
-    with browser_operation.reading(), profile_lock(opened.profile_id):
-        with _PENDING_LOCK:
-            if _PENDING_CLOSE.get(opened.profile_id) is not opened:
-                return
-            _PENDING_CLOSE.pop(opened.profile_id, None)
-        _close_started(opened)
+    from src.fb_ads_rpa.profile_lease import ProfileLeaseError
+
+    # ACL-1853: таймер в своём потоке — отказ замка не должен его ронять; запись остаётся
+    # в `_PENDING_CLOSE`, следующая операция с этим профилем возьмёт её или закроет.
+    try:
+        with browser_operation.reading(), profile_lock(opened.profile_id):
+            with _PENDING_LOCK:
+                if _PENDING_CLOSE.get(opened.profile_id) is not opened:
+                    return
+                _PENDING_CLOSE.pop(opened.profile_id, None)
+            _close_started(opened)
+    except ProfileLeaseError as exc:
+        log.warning("Deferred close of %s skipped: %s", opened.account, exc)
 
 
-def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False) -> None:
-    """После чтения: закрыть то, что чтение запустило (сразу или после паузы)."""
+def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False,
+                    grace_s: float | None = None, convenience: bool = False) -> None:
+    """После чтения: закрыть то, что чтение запустило (сразу или после паузы).
+
+    `grace_s` (ACL-2117) — свой срок вместо `CLOSE_GRACE_S`: Check plan держит окно, пока
+    человек решает про Publish; если его не взяли, оно закроется по сроку, как и раньше.
+    """
     if not opened.started:
         return
-    if keep_for_next and CLOSE_GRACE_S > 0 and opened.profile_id:
+    if keep_for_next and convenience and opened.slot_id:
+        # ACL-2117 + ACL-2113: keep-open включён — окно Check plan становится «удобным» оставленным
+        # окном: Publish берёт его место (`_reuse_kept`), а простой и вытеснение решает очередь
+        # (LRU, `ACL_KEPT_IDLE_CLOSE_MIN`). Своего таймера нет.
+        try:
+            _slot_queue().keep(opened.slot_id, opened.account, kind="convenience")
+        except Exception:
+            log.exception("Could not mark the kept window of %s", opened.account)
+        return
+    grace = CLOSE_GRACE_S if grace_s is None else float(grace_s)
+    if keep_for_next and grace > 0 and opened.profile_id:
+        if grace_s is not None and opened.slot_id:
+            # ACL-2117: окно, которое держим под Publish, — оставленное (kept): Publish берёт его
+            # место (`_reuse_kept`) и не стоит в очереди за обычным местом чтения.
+            try:
+                _slot_queue().keep(opened.slot_id, opened.account)
+            except Exception:
+                log.exception("Could not mark the kept window of %s", opened.account)
         with _PENDING_LOCK:
             _PENDING_CLOSE[opened.profile_id] = opened
-        timer = threading.Timer(CLOSE_GRACE_S, _close_if_still_pending, args=(opened,))
+        timer = threading.Timer(grace, _close_if_still_pending, args=(opened,))
         timer.daemon = True
         timer.start()
         return
@@ -1011,47 +1051,14 @@ def _logged_out(page, *, deep: bool = False) -> bool:
 
 
 def _mlx_profile_dir(profile_id: str, folder_id: str = "") -> Path | None:
-    """Папка профиля Multilogin — по адресу, а не обходом дерева.
+    """Папка профиля Multilogin — по адресу, без обхода дерева.
 
-    Штатный `_find_mlx_profile_dir` делает `rglob` по всему `~/mlx/profiles`, а
-    там лежат полные каталоги Chrome. Замерено на этой машине: **около десяти
-    секунд на каждый вызов**, и не только на первый. Адресный поиск — 0.001 с,
-    ответ тот же.
-
-    Путь описан в самом слое RPA: `profiles/{ws}/{folder_id}/{profile_id}`.
-    Раскладку проверяем в трёх видах, все — на глубину не больше двух уровней.
-
-    Живёт здесь, а не в `src/fb_ads_rpa`, потому что тот файл принадлежит
-    другому треку. Эти десять секунд платит и каждый прогон публикации —
-    заведено как `acl-144`.
+    Логика живёт в одном месте: `fb_ads_rpa.browser._find_mlx_profile_dir`
+    (ACL-144 — тот же адресный поиск теперь и у прогона публикации).
     """
-    profile_id = (profile_id or "").strip()
-    if not profile_id:
-        return None
-    root = Path(os.environ.get("MLX_HOME", str(Path.home() / "mlx"))) / "profiles"
-    if not root.is_dir():
-        return None
-    folder_id = (folder_id or "").strip()
-    try:
-        for ws in root.iterdir():
-            if not ws.is_dir():
-                continue
-            if folder_id:
-                p = ws / folder_id / profile_id
-                if p.is_dir():
-                    return p
-            p = ws / profile_id
-            if p.is_dir():
-                return p
-            for folder in ws.iterdir():
-                if not folder.is_dir():
-                    continue
-                p = folder / profile_id
-                if p.is_dir():
-                    return p
-    except OSError:
-        return None
-    return None
+    from src.fb_ads_rpa import browser as rpa_browser
+
+    return rpa_browser._find_mlx_profile_dir(profile_id, folder_id)
 
 
 def _dir_spellings(path) -> list[str]:
@@ -1147,6 +1154,10 @@ def _attach_only(entry, account_label: str):
     if not profile_id:
         raise ProfileNotAttachable(f"{account_label} has no profile_id in the account map")
 
+    from src.fb_ads_rpa.profile_lease import require_profile_lease
+
+    require_profile_lease(profile_id)
+
     direct_cls = getattr(rpa_browser, "MultiloginDirectCDPProvider", None)
     if direct_cls is None:
         raise ProfileNotAttachable(
@@ -1192,7 +1203,20 @@ def _attach_only(entry, account_label: str):
     )
 
 
-@serialized_browser(reading=True)
+def _probe_lease_error(exc, *_args, **_kwargs):
+    return {"ok": False, "act": "", "account_name": "", "error": str(exc)}
+
+
+def _open_lease_error(exc, *_args, **_kwargs):
+    return False, str(exc)
+
+
+def _spend_lease_error(exc, account, date_from, date_to=""):
+    return SpendReading(account=account, date_from=date_from, date_to=date_to or date_from,
+                        source="rpa", state="failed", error=str(exc))
+
+
+@serialized_browser(reading=True, on_lease_error=_probe_lease_error)
 def read_ad_account(profile_id: str, folder_id: str = "", instance: str = "A") -> dict:
     """Спросить у самого аккаунта, какой у него номер.
 
@@ -1318,7 +1342,7 @@ class _Profile:
         self.multilogin_instance = (instance or "A").strip() or "A"
 
 
-@serialized_browser(reading=True)
+@serialized_browser(reading=True, on_lease_error=_open_lease_error)
 def open_profile_for_automation(profile_id: str, folder_id: str = "",
                                 instance: str = "A", label: str = "") -> tuple[bool, str]:
     """Поднять профиль автоматизацией и оставить окно открытым.
@@ -1413,7 +1437,7 @@ class CodedMessage(str):
         return obj
 
 
-@serialized_browser(key=_profile_key, reading=True)
+@serialized_browser(key=_profile_key, reading=True, on_lease_error=_open_lease_error)
 def open_for_automation(account: str) -> tuple[bool, str]:
     """То же самое для аккаунта, который уже есть в карте."""
     entry = _entry_for(account)
@@ -1427,7 +1451,7 @@ def open_for_automation(account: str) -> tuple[bool, str]:
     )
 
 
-@serialized_browser(key=_profile_key, reading=True)
+@serialized_browser(key=_profile_key, reading=True, on_lease_error=_spend_lease_error)
 def read_via_rpa(account: str, date_from: str, date_to: str = "") -> SpendReading:
     """Прочитать спенд аккаунта за период, выбранный на дешборде.
 
@@ -3384,7 +3408,16 @@ _SWITCH_ACTION_JS = """args => {
 }"""
 
 
-@serialized_browser(key=_profile_key)
+def _turn_off_lease_error(exc, account, level, object_id, *, expected_name="", requester="", **_kwargs):
+    # No browser action started: this is a refusal, not an unconfirmed click.
+    out = TurnOffResult(account=account, level=level, object_id=str(object_id),
+                        name=expected_name, state="failed", error=str(exc), at=_now(),
+                        requester=(requester or "").strip(), route="rpa")
+    _record_turn_off(out)
+    return out
+
+
+@serialized_browser(key=_profile_key, on_lease_error=_turn_off_lease_error)
 def turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
              expected_name: str = "", date_from: str = "", date_to: str = "",
              requester: str = "") -> "TurnOffResult":

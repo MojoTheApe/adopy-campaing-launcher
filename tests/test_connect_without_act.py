@@ -81,9 +81,9 @@ def browser(monkeypatch):
 def test_a_profile_can_be_opened_without_being_in_the_account_map(browser, monkeypatch):
     """Тот самый выход из круга: карты нет, а открыть надо."""
     monkeypatch.setattr(sp, "_mlx_profile_dir", lambda *a, **kw: None)
-    ok, message = sp.open_profile_for_automation("prof-1", "folder-1", "B", "FacebookDQ438")
+    ok, message = sp.open_profile_for_automation("550e8400-e29b-41d4-a716-446655440000", "folder-1", "B", "FacebookDQ438")
     assert ok, message
-    assert browser.opened_with.profile_id == "prof-1"
+    assert browser.opened_with.profile_id == "550e8400-e29b-41d4-a716-446655440000"
     assert browser.opened_with.folder_id == "folder-1"
     assert browser.opened_with.instance == "B"
 
@@ -95,7 +95,7 @@ def test_a_missing_profile_folder_is_not_a_refusal(browser, monkeypatch):
     потому, что его ни разу не запускали.
     """
     monkeypatch.setattr(sp, "_mlx_profile_dir", lambda *a, **kw: None)
-    ok, _ = sp.open_profile_for_automation("prof-new")
+    ok, _ = sp.open_profile_for_automation("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
     assert ok
     assert browser.opened_with is not None, "до запуска через Multilogin не дошли"
 
@@ -106,7 +106,7 @@ def test_the_instance_is_carried_through(browser, monkeypatch):
     Открыть не в том — значит не найти профиль вовсе.
     """
     monkeypatch.setattr(sp, "_mlx_profile_dir", lambda *a, **kw: None)
-    sp.open_profile_for_automation("prof-1", instance="B")
+    sp.open_profile_for_automation("550e8400-e29b-41d4-a716-446655440000", instance="B")
     assert browser.opened_with.instance == "B"
 
 
@@ -135,7 +135,7 @@ def test_a_profile_opened_by_hand_is_still_refused(browser, monkeypatch, tmp_pat
             return True
 
     monkeypatch.setattr("src.fb_ads_rpa.browser.MultiloginDirectCDPProvider", _Running)
-    ok, message = sp.open_profile_for_automation("prof-1", label="DQ438")
+    ok, message = sp.open_profile_for_automation("550e8400-e29b-41d4-a716-446655440000", label="DQ438")
     assert not ok
     assert message == sp.HAND_OPEN_MESSAGE
     assert browser.opened_with is None, "профиль, открытый руками, всё-таки трогали"
@@ -163,7 +163,7 @@ def test_an_already_automated_profile_is_not_restarted(browser, monkeypatch, tmp
             return True
 
     monkeypatch.setattr("src.fb_ads_rpa.browser.MultiloginDirectCDPProvider", _Attached)
-    ok, message = sp.open_profile_for_automation("prof-1")
+    ok, message = sp.open_profile_for_automation("550e8400-e29b-41d4-a716-446655440000")
     assert ok and "already open" in message
     assert closed == [True], "окно закрыли за человеком"
     assert browser.opened_with is None, "профиль подняли заново вместо того, чтобы прицепиться"
@@ -173,10 +173,10 @@ def test_the_map_based_entry_point_still_works(browser, monkeypatch):
     """Кнопка на строке подключённого аккаунта не должна была сломаться."""
     monkeypatch.setattr(sp, "_mlx_profile_dir", lambda *a, **kw: None)
     monkeypatch.setattr(sp, "_entry_for", lambda account: SimpleNamespace(
-        profile_id="prof-9", folder_id="f-9", multilogin_instance="A"))
+        profile_id="550e8400-e29b-41d4-a716-446655440000", folder_id="f-9", multilogin_instance="A"))
     ok, _ = sp.open_for_automation("KLD_BFL_X84")
     assert ok
-    assert browser.opened_with.profile_id == "prof-9"
+    assert browser.opened_with.profile_id == "550e8400-e29b-41d4-a716-446655440000"
 
 
 def test_an_account_missing_from_the_map_says_so(browser, monkeypatch):
