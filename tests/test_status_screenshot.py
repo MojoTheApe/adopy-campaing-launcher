@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from src.analysis_agent import account_spend as sp  # noqa: E402
+from tests.profile_lease_fakes import fake_profile
 
 DAY = "2026-09-30"
 ACC = "FacebookDoc20 - Example"
@@ -58,7 +59,7 @@ def _read(monkeypatch, status, *, grid=True, shots_on=True):
 
     page = NS(url="https://adsmanager.facebook.com/?act=111", goto=lambda *a, **k: None,
               close=lambda: None, screenshot=screenshot)
-    monkeypatch.setattr(sp, "_entry_for", lambda _: NS(ad_account_id="111"))
+    monkeypatch.setattr(sp, "_entry_for", lambda _: NS(ad_account_id="111", profile_id=fake_profile(ACC)))
     monkeypatch.setattr(sp, "_attach_only", lambda *a: NS(page=page, close=lambda **k: None))
     monkeypatch.setattr(sp, "_wait_for_grid", lambda _: grid)
     monkeypatch.setattr(sp, "_read_status", lambda _: status)
@@ -119,7 +120,7 @@ def test_a_failed_screenshot_does_not_break_the_read(local, monkeypatch):
         raise RuntimeError("page closed")
     page = NS(url="https://adsmanager.facebook.com/?act=111", goto=lambda *a, **k: None,
               close=lambda: None, screenshot=boom)
-    monkeypatch.setattr(sp, "_entry_for", lambda _: NS(ad_account_id="111"))
+    monkeypatch.setattr(sp, "_entry_for", lambda _: NS(ad_account_id="111", profile_id=fake_profile(ACC)))
     monkeypatch.setattr(sp, "_attach_only", lambda *a: NS(page=page, close=lambda **k: None))
     monkeypatch.setattr(sp, "_wait_for_grid", lambda _: True)
     monkeypatch.setattr(sp, "_read_status", lambda _: ("disabled", "Account disabled"))
@@ -166,7 +167,7 @@ def _spy_read(monkeypatch, status, *, env=None, **fakes):
               close=lambda: None, screenshot=screenshot, context=ctx,
               new_cdp_session=new_cdp_session,
               evaluate=lambda *a: {"width": 1, "height": 1, "visible": True})
-    monkeypatch.setattr(sp, "_entry_for", lambda _: NS(ad_account_id="111"))
+    monkeypatch.setattr(sp, "_entry_for", lambda _: NS(ad_account_id="111", profile_id=fake_profile(ACC)))
     monkeypatch.setattr(sp, "_attach_only", lambda *a: NS(page=page, close=lambda **k: None))
     monkeypatch.setattr(sp, "_wait_for_grid", lambda _: True)
     monkeypatch.setattr(sp, "_read_status", lambda _: status)
