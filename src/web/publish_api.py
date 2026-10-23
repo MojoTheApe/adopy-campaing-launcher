@@ -37,6 +37,7 @@ from src.fb_api.creator import (
     plan_from_draft,
     preflight_account,
 )
+from src.web.api_build_progress import BuildCounter
 from src.fb_api.graph import CallBudget, GraphClient, GraphError, GraphStop, normalize_act
 
 log = logging.getLogger(__name__)
@@ -246,6 +247,9 @@ class ApiPublisher:
         self.sleep: Callable[[float], None] = time.sleep
         self.cancel_event = threading.Event()
         self.progress = progress
+        #: ACL-1992: счёт созданных объектов кампании для процента сборки;
+        #: задание подставляет свой приёмник после создания.
+        self.units: Callable[[str, dict], None] = lambda _n, _u: None
         self._tab = None
         #: ACL-1812: аренда тёплой вкладки профиля (вместо своей вкладки).
         self._lease: Any = None
@@ -439,9 +443,17 @@ class ApiPublisher:
                     f"({pinned.get('kind') or 'no token'}). Nothing was created; run again."))
         self._client.reset_budget(int(_env_number(CREATE_MAX_CALLS_ENV, DEFAULT_CREATE_MAX_CALLS, 20, 250)))
 
+        # Пробный запуск ничего не создаёт — процента сборки у него нет.
+        counter = None if self.dry_run else self._counter(plan)
+
         def step(text: str) -> None:
             self.progress(f"{name}: {text}")
             _record("api_create_step", True, campaign=name, diag={"step": text})
+            if counter is not None:   # и строка без новой единицы — «last» на странице свежий
+                self._report_units(name, counter, text)
+
+        if counter is not None:
+            self._report_units(name, counter)
 
         creator = CampaignCreator(self._client, self._facts, self._resolver,
                                   cancelled=self.cancelled, progress=step, sleep=self.sleep,
@@ -488,6 +500,21 @@ class ApiPublisher:
                     "created": res["created"], "reused": res["reused"],
                     "mismatches": len(outcome.mismatches), "stop": outcome.stop_kind})
         return res
+
+    @staticmethod
+    def _counter(plan: Any) -> BuildCounter | None:
+        try:
+            return BuildCounter(plan)
+        except Exception:  # noqa: BLE001 — процент не должен ронять публикацию
+            return None
+
+    def _report_units(self, name: str, counter: BuildCounter, text: str = "") -> None:
+        try:
+            if text:
+                counter.feed(text)
+            self.units(name, counter.view())
+        except Exception:  # noqa: BLE001 — процент не должен ронять публикацию
+            pass
 
     # -- конец
     def close(self, *, force: bool = False) -> None:
