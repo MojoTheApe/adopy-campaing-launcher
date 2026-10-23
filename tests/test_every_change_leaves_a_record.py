@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -32,6 +33,8 @@ TPL = ROOT / "src" / "web" / "templates" / "report.html"
 @pytest.fixture(autouse=True)
 def store(tmp_path, monkeypatch):
     """Журнал живёт рядом с показаниями; в тестах — во временной папке."""
+    monkeypatch.setattr(sp, "_entry_for", lambda _: SimpleNamespace(
+        profile_id="550e8400-e29b-41d4-a716-446655440000"))
     monkeypatch.setattr(sp, "_store_path", lambda: str(tmp_path / "spend.json"))
     return tmp_path
 
