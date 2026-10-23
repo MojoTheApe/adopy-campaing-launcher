@@ -393,3 +393,76 @@ def test_sentry_event_with_bi_driver_error_has_no_host_or_login(monkeypatch):
     sent = acl_sentry._before_send(event, {})
     assert sent is not None
     _assert_clean(repr(sent))
+
+
+# --- ACL-103d/e/f: currency and day boundary, source versus account figures ---
+
+def test_bi_figures_carry_an_explicit_assumed_currency_and_day_boundary(monkeypatch):
+    from src.analysis_agent import bi_compare
+
+    monkeypatch.delenv("BI_ASSUMPTIONS_CONFIRMED", raising=False)
+    monkeypatch.delenv("BI_CURRENCY", raising=False)
+    info = bi_compare.provenance("bi")
+    assert info["currency"] == "USD" and info["assumed"] is True
+    assert "assumption" in info["note"] and "day boundary" in info["note"]
+    monkeypatch.setenv("BI_ASSUMPTIONS_CONFIRMED", "1")
+    monkeypatch.setenv("BI_CURRENCY", "eur")
+    confirmed = bi_compare.provenance("bi")
+    assert confirmed["currency"] == "EUR" and confirmed["assumed"] is False
+    assert "assumption" not in confirmed["note"]
+
+
+def test_report_carries_source_info_and_warns_while_assumed(monkeypatch, tmp_path):
+    _enable_bi(monkeypatch)
+    monkeypatch.delenv("BI_ASSUMPTIONS_CONFIRMED", raising=False)
+    monkeypatch.setattr(bi_stats, "fetch_raw", lambda cfg=None: _raw([ROW_KNOWN]))
+    monkeypatch.setattr(bi_stats, "load_cm_map", lambda path=None: CM_MAP)
+    report, _df, warnings = morning_service.load_morning_report(
+        excel_path=str(tmp_path / "absent.xlsx"), skip_gsheet=True)
+    assert report["source_info"]["source"] == "BI" and report["source_info"]["assumed"] is True
+    assert any("assumption" in w for w in warnings)
+
+
+def test_source_and_account_spend_are_shown_separately(monkeypatch):
+    from src.analysis_agent import bi_compare
+
+    monkeypatch.delenv("BI_CURRENCY", raising=False)
+    df = bi_stats.to_workbook_frame(_raw([ROW_KNOWN, ROW_DAY(date(2026, 10, 19), "3")]), CM_MAP)
+    source = bi_compare.source_spend_by_account(df, "2026-10-18", "2026-10-18")
+    assert source == {"FacebookDoc101": 12.5}
+    readings = {
+        "FacebookDoc101": {"state": "ok", "spend": 14.0, "currency": "USD"},
+        "Facebook_Eur": {"state": "ok", "spend": 5.0, "currency": "EUR"},
+        "Facebook_Busy": {"state": "running", "spend": None, "currency": ""},
+    }
+    rows = {r["account"]: r for r in bi_compare.compare_spend({**source, "Facebook_Eur": 4.0, "Facebook_Busy": 1.0}, readings)}
+    assert rows["FacebookDoc101"]["source_spend"] == 12.5
+    assert rows["FacebookDoc101"]["account_spend"] == 14.0
+    assert rows["FacebookDoc101"]["gap"] == 1.5 and rows["FacebookDoc101"]["differs"] is True
+    assert rows["Facebook_Eur"]["currency_mismatch"] is True and rows["Facebook_Eur"]["gap"] is None
+    assert rows["Facebook_Busy"]["account_spend"] is None and rows["Facebook_Busy"]["gap"] is None
+
+
+def test_source_vs_account_endpoint(monkeypatch, tmp_path):
+    from src.web import app as web
+
+    df = bi_stats.to_workbook_frame(_raw([ROW_KNOWN]), CM_MAP)
+    df.attrs["stats_source"] = "bi"
+    monkeypatch.setattr(web, "get_cached_report", lambda *a, **k: ({}, df, []))
+    monkeypatch.setattr(web, "_live_spend", lambda f="", t="": {
+        "FacebookDoc101": {"state": "ok", "spend": 12.5, "currency": "USD"}})
+    response = web.api_source_vs_account.__wrapped__(date_from="2026-10-18", date_to="2026-10-18") \
+        if hasattr(web.api_source_vs_account, "__wrapped__") else None
+    assert response is not None
+    import json
+    body = json.loads(response.body)
+    assert body["source"]["source"] == "BI"
+    row = body["rows"][0]
+    assert (row["source_spend"], row["account_spend"], row["gap"], row["differs"]) == (12.5, 12.5, 0.0, False)
+
+
+def test_mapping_document_names_every_column_and_the_assumption():
+    doc = (Path(__file__).resolve().parents[1] / "docs" / "ACL-103-bi-field-mapping.md").read_text(encoding="utf-8")
+    for bi_col, book_col in bi_stats.COLUMN_MAP.items():
+        assert f"`{bi_col}`" in doc and book_col in doc
+    assert "BI_ASSUMPTIONS_CONFIRMED" in doc and "Granularity" in doc

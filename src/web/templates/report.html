@@ -4021,6 +4021,10 @@
     <dl class="brand-meta">
       <div><dt>Last updated:</dt>
       <dd title="Source: {{ report.source_excel }}">{{ built_at or report.date }}</dd></div>
+      {%- if report.source_info and report.stats_source in ('bi', 'archive') %}
+      <div><dt>Figures:</dt>
+      <dd id="acl-source-info" title="{{ report.source_info.note }}">{{ report.source_info.source }} · {{ report.source_info.currency }}{% if report.source_info.assumed %} (assumed){% endif %}</dd></div>
+      {%- endif %}
       <div><dt>Version:</dt>
       <dd id="acl-version" title="Installed ACM release. Restarting the dashboard does not change it — use the Update button, which appears when a newer release exists.">{{ rel.tag or rel.short or 'unknown build' }}</dd></div>
       {%- set st = stage_status or {} %}

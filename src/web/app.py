@@ -2673,6 +2673,25 @@ def _wants_json(request: Request) -> bool:
     return (request.query_params.get("format") or "").lower() == "json"
 
 
+@app.get("/api/source-vs-account")
+@_off_loop
+def api_source_vs_account(date_from: str = "", date_to: str = "") -> JSONResponse:
+    """ACL-103d: spend from the data source (BI / workbook) and spend read from
+    the account, side by side and never merged. The difference is the signal."""
+    from src.analysis_agent import bi_compare
+
+    _report, df, _warnings = get_cached_report()
+    date_from, date_to = resolve_period(df, date_from.strip(), date_to.strip(), "")
+    info = bi_compare.provenance("bi" if df.attrs.get("stats_source") in ("bi", "archive") else "excel")
+    rows = bi_compare.compare_spend(
+        bi_compare.source_spend_by_account(df, date_from, date_to),
+        _live_spend(date_from, date_to),
+        source_currency=info["currency"],
+    )
+    return JSONResponse({"ok": True, "date_from": date_from, "date_to": date_to,
+                         "source": info, "rows": rows})
+
+
 @app.get("/api/machine-paths")
 def api_machine_paths() -> JSONResponse:
     """Where this computer keeps the Stats workbook and the Creatives folder."""

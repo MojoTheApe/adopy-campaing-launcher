@@ -35,7 +35,7 @@ from src.creative_variant import apply_backfill as apply_variant_backfill
 from src.analysis_agent.gsheet_accounts import fetch_account_rows
 from src.analysis_agent.morning_report import build_morning_report
 from src.analysis_agent.stats_workbook import read_stats_workbook
-from src.analysis_agent import bi_stats
+from src.analysis_agent import bi_compare, bi_stats
 from src.analysis_agent.news_context import NewsFetcher, build_news_context
 
 
@@ -387,6 +387,11 @@ def load_morning_report(
     report["stats_source"] = enriched_df.attrs.get("stats_source", "excel")
     if report["stats_source"] in ("bi", "archive"):
         report["source_excel"] = "BI (MySQL) + local stats archive"
+    # ACL-103e: валюта и граница дня источника — вместе с цифрами. Допущение
+    # (пока BI не подтвердил) названо прямо, чтобы цифру не читали как точную.
+    report["source_info"] = bi_compare.provenance("bi" if report["stats_source"] in ("bi", "archive") else "excel")
+    if report["stats_source"] in ("bi", "archive") and report["source_info"]["assumed"]:
+        warnings.append(report["source_info"]["note"])
     note = enriched_df.attrs.get("stats_note")
     if note:
         warnings.append(note)
