@@ -60,3 +60,6 @@ sentry-sdk==2.69.1
 # Несёт внутри статический ffmpeg: у байера системного не будет, а требовать
 # его установки — та самая ручная возня, на которой ломается установка.
 imageio-ffmpeg==0.6.0
+
+# zoneinfo needs the IANA database on Windows (ACL-1767: start time by the ad account time zone)
+tzdata==2026.3

@@ -237,6 +237,32 @@ and records exact task delivery only from the successful native acceptance job.
 Source preparation, policy activation and actual delivery remain distinct facts;
 see [the process runbook](../repository/POST_MAIN_DELIVERY.md) and parent ACL-1923.
 
+## Several primary texts and Stories / Reels media (ACL-1774)
+
+API backend only. One text and one file keep the old `object_story_spec`. Findings from the
+Meta capability spike (Doc120, 2026-10-14): `asset_feed_spec` with 3 bodies plus two placement
+customization rules was refused (error 100, subcode 1885878); a rule applies one asset per type.
+Owner decision 2026-10-20 (the recorded PAUSED capability spike accepted Dynamic Creative;
+the visual Ads Manager presentation check remains pending):
+
+- 2-5 texts (or several headlines/descriptions) go as Dynamic Creative: `is_dynamic_creative: true`
+  on the ad set (the only new ad-set key in the write allowlist, `true` only), one file, no rules,
+  text optimizations stay OFF. The ad must be alone in its ad set; Instant Form refuses it.
+- A Stories / Reels 9:16 file (two labelled files, two placement rules) works with one text per kind.
+- Both write-policy layers (`write_policy.py`, the in-page mirror in `token_capture.py`) and the
+  pre-flight rules (Python table + `cbPreflight` in `report.html`) carry the same limits.
+- Library entries with the same body retain their distinct headlines/descriptions. Empty text
+  slots preserve their field numbers. A partially created feed creative is reused only for the
+  same payload; a retry with changed texts uses a new creative without uploading the media twice.
+- Readback checks media labels and IDs even when ads are reused. Feed creatives retain the current
+  Instagram identity; vertical videos use the same bounded/chunked loader as the main video.
+  Website media/CTA controls stay outside the hidden Instant Form section, and campaign copies
+  preserve their ad counts. Existing `creative_pairing` metadata remains the source of Post/Story hints.
+- Current ACL-2114 safety still governs creation: the campaign stays PAUSED and child objects use
+  the existing confirmed-parent guard. This work adds no live activation. ACL-1767 dependency,
+  visual acceptance and unverified asset feeds with Instant Forms remain explicit conditions.
+
+
 ## ACL-1891 — Videos over 200 MB upload in chunks ([issue](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/891), 2026-10-14)
 
 Videos up to 200 MB still go up in one request. A video from 200 MB up to 1536 MB (`VIDEO_MAX_BYTES` = `write_policy.UPLOAD_FILE_MAX`) goes through Meta's resumable upload on `/act_X/advideos`: `upload_phase=start` (`file_size`), `transfer` (`upload_session_id`, `start_offset`, multipart `video_file_chunk`), `finish` (`upload_session_id`, `title`, `name`). Everything stays PAUSED; nothing is deleted or activated.

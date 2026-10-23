@@ -35,13 +35,19 @@ MAX_HEADLINE = 40
 MAX_PRIMARY_VISIBLE = 125
 AGE_MIN, AGE_MAX = 18, 65
 
-#: Допустимые CTA по цели кампании. Билдер сегодня шлёт только LEARN_MORE; список — те CTA
-#: для лидов, которые принимает Meta для ссылочного/лид-креатива.
+#: Допустимые CTA по цели кампании и месту конверсии (ACL-1767). Единый список - в
+#: `write_policy` (CTA_WEBSITE / CTA_FORM): тот же набор разрешает и политика записи.
+#: Ключ `<цель>_instant_form` - список для лид-формы.
+from src.fb_api import write_policy as _wp  # noqa: E402
+
 ALLOWED_CTA = {
-    "leads": ("LEARN_MORE", "SIGN_UP", "APPLY_NOW", "GET_QUOTE", "SUBSCRIBE", "CONTACT_US",
-              "DOWNLOAD", "GET_OFFER"),
+    "leads": _wp.CTA_WEBSITE,
+    "leads_instant_form": _wp.CTA_FORM,
 }
 DEFAULT_OBJECTIVE = "leads"
+#: Версия iOS/Android: «14» или «14.0»; старт набора: «YYYY-MM-DDTHH:MM» (ACL-1767).
+_OS_MIN_RE = r"^[0-9]{1,2}(\.[0-9]{1,2})?$"
+_START_RE = r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}$"
 
 #: Минимальный дневной бюджет Meta по валюте кабинета, в единицах валюты (не в центах).
 #: Meta не публикует полной таблицы по валютам (Marketing API: «bid and budget are at the
@@ -123,6 +129,21 @@ RULES: list[dict[str, Any]] = [
     _r("media_vertical", "Vertical file for Stories and Reels", WARNING, "server",
        "no 9:16 file: without one Facebook crops the picture itself",
        sel=".cb-creative-search", level="ad", unit="ad"),
+    _r("vertical_needs_main", "Main file next to the Stories / Reels file", ERROR, "client",
+       "choose the main (1:1 or 4:5) file too, or clear the Stories / Reels file",
+       sel=".cb-creative-search", level="ad", unit="ad"),
+    _r("vertical_ratio", "Aspect ratios: main 1:1 or 4:5, Stories / Reels 9:16", ERROR, "server",
+       "with a Stories / Reels file the main file must be 1:1 or 4:5, the vertical one 9:16, both images "
+       "or both videos, and the size must be readable (JPG/PNG, MP4/MOV)",
+       sel=".cb-vertical-search", level="ad", unit="ad"),
+    _r("texts_limit", "Up to 5 texts per field", ERROR, "client",
+       "an ad takes up to 5 primary texts, 5 headlines and 5 descriptions: remove the extra ones",
+       sel=".cb-adtitle-search", level="ad", unit="ad"),
+    _r("texts_vertical", "Several texts and a Stories / Reels file", ERROR, "client",
+       _wp.MSG_TEXTS_VERTICAL, sel=".cb-vertical-search", level="ad", unit="ad"),
+    _r("texts_dynamic", "Several texts need their own ad set", ERROR, "client",
+       _wp.MSG_TEXTS_DYNAMIC_SET,
+       sel=".cb-adtitle-search", level="ad", unit="ad"),
     _r("primary_text", "Primary text", ERROR, "client", "choose a primary text in each ad",
        sel=".cb-adtitle-search", level="ad", unit="ad"),
     _r("headline", "Headline", ERROR, "client", "the chosen text has no headline: pick another library entry",
@@ -141,6 +162,12 @@ RULES: list[dict[str, Any]] = [
        sel='[name$="_budget"]', level="campaign"),
     _r("age_range", "Age 18-65", ERROR, "client", "age must be between 18 and 65, and min not above max",
        sel='[name$="_age"]', level="adset"),
+    _r("devices_consistent", "Devices and OS version fit together", ERROR, "client",
+       "iOS and Android are mobile only (not desktop only), and a minimum version needs iOS or Android "
+       "and looks like 14 or 14.0", sel='[name$="_os"]', level="adset"),
+    _r("start_time_valid", "Start time", ERROR, "client",
+       "enter the start as date and time, not earlier than today (ad account time zone)",
+       sel='[name$="_start_time"]', level="adset"),
     _r("ad_names_unique", "Ad names are unique", ERROR, "client",
        "give the ads different creatives or texts: their names must differ inside a campaign",
        sel=".cb-adtitle-search", level="ad", unit="ad"),
@@ -160,7 +187,9 @@ def export_rules() -> dict[str, Any]:
         "rules": RULES,
         "consts": {"max_headline": MAX_HEADLINE, "max_primary_visible": MAX_PRIMARY_VISIBLE,
                    "age_min": AGE_MIN, "age_max": AGE_MAX, "allowed_cta": {k: list(v) for k, v in ALLOWED_CTA.items()},
-                   "default_objective": DEFAULT_OBJECTIVE, "link_re": _LINK_RE, "track_re": _TRACK_RE},
+                   "default_objective": DEFAULT_OBJECTIVE, "link_re": _LINK_RE, "track_re": _TRACK_RE,
+                   "os_min_re": _OS_MIN_RE, "start_re": _START_RE,
+                   "max_texts": MAX_TEXTS},
     }
 
 
@@ -177,7 +206,16 @@ def load_json() -> dict[str, Any]:
 # Вход аудита (одна кампания; сегодня у неё один набор объявлений):
 #   {"destination": "website"|"instant_form", "objective": "leads", "link": str, "country": str,
 #    "budget": number|None, "age_min": int, "age_max": int,
-#    "ads": [{"name": str, "file": str, "form_id": str, "template": {"privacy_url": str, "contact_fields": [str]}|None, "body": str, "headline": str, "cta": str}]}
+#    "ads": [{"name": str, "file": str, "form_id": str, "template": {"privacy_url": str, "contact_fields": [str]}|None, "body": str, "headline": str, "cta": str,
+#             ACL-1774 (необязательные): "bodies": [str], "headlines": [str], "descriptions": [str],
+#             "vertical_file": str}],
+#    ACL-1767 (необязательные): "os": "All"|"iOS"|"Android", "device": ""|"mobile"|"desktop",
+#    "os_min": str, "start_time": "YYYY-MM-DDTHH:MM", "now": "YYYY-MM-DDTHH:MM" (часы страницы)}
+
+def _multi_text(a: dict) -> bool:
+    """Больше одного разного текста/заголовка/описания (Meta: это Dynamic Creative, идёт отдельным набором (Dynamic Creative, ACL-1774))."""
+    return any(len(_distinct(a.get(k))) > 1 for k in ("bodies", "headlines", "descriptions"))
+
 
 def _s(v: Any) -> str:
     return str(v if v is not None else "").strip()
@@ -185,6 +223,22 @@ def _s(v: Any) -> str:
 
 def _v(rule: str, status: str, detail: str = "", ads: list[int] | None = None) -> dict[str, Any]:
     return {"rule": rule, "status": status, "detail": detail, "ads": list(ads or [])}
+
+
+#: Сколько текстов каждого вида допускает одно объявление (ACL-1774; справочник Graph).
+MAX_TEXTS = _wp.ASSET_FEED_MAX_TEXTS
+
+
+def _distinct(items: Any) -> list[str]:
+    """Непустые тексты без повторов (пробелы не в счёт) — как на сервере (`creator._unique`)."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for x in items if isinstance(items, list) else []:
+        key = "".join(_s(x).split())
+        if key and key not in seen:
+            seen.add(key)
+            out.append(key)
+    return out
 
 
 def applies(rule: dict[str, Any], destination: str) -> bool:
@@ -232,6 +286,16 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
                 out.append(_v(rid, OK if re.search(_TRACK_RE, link) else WARNING))
         elif rid == "media_chosen":
             out.append(_per_ad(rid, inp, lambda a: not _s(a.get("file"))))
+        elif rid == "vertical_needs_main":
+            out.append(_per_ad(rid, inp, lambda a: bool(_s(a.get("vertical_file"))) and not _s(a.get("file"))))
+        elif rid == "texts_limit":
+            out.append(_per_ad(rid, inp, lambda a: any(
+                len(_distinct(a.get(k))) > MAX_TEXTS for k in ("bodies", "headlines", "descriptions"))))
+        elif rid == "texts_vertical":
+            out.append(_per_ad(rid, inp, lambda a: _multi_text(a) and bool(_s(a.get("vertical_file")))))
+        elif rid == "texts_dynamic":
+            out.append(_per_ad(rid, inp, lambda a: _multi_text(a) and not _s(a.get("vertical_file"))
+                                      and len(inp.get("ads") or []) > 1))
         elif rid == "primary_text":
             out.append(_per_ad(rid, inp, lambda a: not _s(a.get("body"))))
         elif rid == "headline":
@@ -241,7 +305,8 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
         elif rid == "primary_len":
             out.append(_per_ad(rid, inp, lambda a: len(_s(a.get("body"))) > MAX_PRIMARY_VISIBLE, WARNING))
         elif rid == "cta_allowed":
-            allowed = ALLOWED_CTA.get(_s(inp.get("objective")).lower() or DEFAULT_OBJECTIVE, ())
+            key = (_s(inp.get("objective")).lower() or DEFAULT_OBJECTIVE) + ("_instant_form" if dest == "instant_form" else "")
+            allowed = ALLOWED_CTA.get(key, ())
             out.append(_per_ad(rid, inp, lambda a: (_s(a.get("cta")) or "LEARN_MORE") not in allowed))
         elif rid == "budget_set":
             b = inp.get("budget")
@@ -258,6 +323,28 @@ def evaluate_client(inp: dict[str, Any]) -> list[dict[str, Any]]:
             except (TypeError, ValueError):
                 good = False
             out.append(_v(rid, OK if good else ERROR))
+        elif rid == "devices_consistent":
+            os_ = _s(inp.get("os")).lower() or "all"
+            dev, ver = _s(inp.get("device")).lower(), _s(inp.get("os_min"))
+            mobile = os_ in ("ios", "android")
+            if mobile and dev == "desktop":
+                out.append(_v(rid, ERROR, "mobile_os_desktop"))
+            elif ver and not mobile:
+                out.append(_v(rid, ERROR, "version_needs_os"))
+            elif ver and not re.fullmatch(_OS_MIN_RE, ver):
+                out.append(_v(rid, ERROR, "bad_version"))
+            else:
+                out.append(_v(rid, OK))
+        elif rid == "start_time_valid":
+            st, now = _s(inp.get("start_time")), _s(inp.get("now"))
+            if not st:
+                out.append(_v(rid, OK))
+            elif not re.fullmatch(_START_RE, st):
+                out.append(_v(rid, ERROR, "format"))
+            elif re.fullmatch(_START_RE, now) and st[:10] < now[:10]:
+                out.append(_v(rid, ERROR, "past"))
+            else:
+                out.append(_v(rid, OK))
         elif rid == "ad_names_unique":
             names = [_s(a.get("name")) for a in ads]
             dup = {n for n in names if n and names.count(n) > 1}
@@ -436,7 +523,14 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
 
     resolver = creator.resolver
     guarded("country_resolves", lambda: (resolver.country(plan.country), put("country_resolves", OK)))
-    guarded("language_resolves", lambda: (resolver.locale(plan.language), put("language_resolves", OK)))
+
+    def languages() -> None:
+        resolver.locale(plan.language)
+        for s in plan.ad_sets:          # ACL-1767: дополнительные языки - тоже только точные совпадения
+            for extra in s.languages:
+                resolver.locale(extra)
+        put("language_resolves", OK)
+    guarded("language_resolves", languages)
 
     def interests() -> None:
         for s in plan.ad_sets:
@@ -448,6 +542,7 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
     # Файлы: читаем с диска как создатель (или берём уже прочитанные).
     readable: list[int] = []
     problems: dict[str, list[tuple[int, str]]] = {"media_readable": [], "media_limits": []}
+    ratio_bad: list[tuple[int, str]] = []
     vertical_bad: list[int] = []
     vertical_unknown: list[int] = []
     long_video: list[int] = []
@@ -471,6 +566,22 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
                 problems["media_limits"].append((ad.index, f"Ad {ad.index}: file is larger than {limit // (1024 * 1024)} MB"))
             readable.append(ad.index)
             size = None
+            if ad.vertical_path:
+                # ACL-1774: пара файлов — читаем вертикальный, сверяем соотношения и вид.
+                try:
+                    vdata = (files or {}).get(ad.vertical_path)
+                    if vdata is None:
+                        vdata = creator.load_media(ad.vertical_path, ad.vertical_kind)
+                except OSError as exc:
+                    problems["media_readable"].append((ad.index, f"Ad {ad.index}: Stories / Reels file cannot be read ({exc})"))
+                    vdata = b""
+                vlimit = cr.VIDEO_MAX_BYTES if ad.vertical_kind == "video" else cr.IMAGE_MAX_BYTES
+                if vdata and len(vdata) > vlimit:
+                    problems["media_limits"].append((ad.index, f"Ad {ad.index}: Stories / Reels file is larger than {vlimit // (1024 * 1024)} MB"))
+                if vdata and ad.vertical_kind != ad.kind:
+                    ratio_bad.append((ad.index, f"Ad {ad.index}: the main file is {ad.kind} and the Stories / Reels file is {ad.vertical_kind}"))
+                elif vdata:
+                    ratio_bad += [(ad.index, m) for m in cr.pair_problems(ad.index, ad.kind, data, vdata)]
             if ad.kind == "video":
                 vi = video_info(data)
                 if vi and vi.get("seconds", 0) > VIDEO_MAX_SECONDS:
@@ -481,11 +592,17 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
                     size = (int(vi["width"]), int(vi["height"]))
             else:
                 size = image_size(data)
-            if size and size[1]:
+            if ad.vertical_path:
+                pass                      # вертикальный файл есть: «обрежет сама» не про это объявление
+            elif size and size[1]:
                 if size[0] / size[1] > VERTICAL_MAX_RATIO:
                     vertical_bad.append(ad.index)
             else:
                 vertical_unknown.append(ad.index)
+    if ratio_bad:
+        put("vertical_ratio", ERROR, "; ".join(m for _, m in ratio_bad), sorted({i for i, _ in ratio_bad}))
+    else:
+        put("vertical_ratio", OK)
     for rid in ("media_readable", "media_limits"):
         if problems[rid]:
             put(rid, ERROR, "; ".join(m for _, m in problems[rid]), [i for i, _ in problems[rid]])

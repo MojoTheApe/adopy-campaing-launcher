@@ -44,8 +44,9 @@ EDGE_KEYS: dict[str, frozenset[str]] = {
                             "daily_budget", "bid_strategy", "adlabels"}),
     "adsets": frozenset({"name", "campaign_id", "status", "optimization_goal", "billing_event",
                          "destination_type", "promoted_object", "targeting", "start_time",
-                         "adlabels"}),
-    "adcreatives": frozenset({"name", "object_story_spec", "degrees_of_freedom_spec", "adlabels"}),
+                         "adlabels", "is_dynamic_creative"}),
+    "adcreatives": frozenset({"name", "object_story_spec", "degrees_of_freedom_spec", "adlabels",
+                              "contextual_multi_ads", "asset_feed_spec"}),
     "ads": frozenset({"name", "adset_id", "creative", "status", "adlabels"}),
     "adimages": frozenset(),
     "advideos": frozenset({"name", "title"}),
@@ -102,7 +103,8 @@ LEAD_FORM_ID_RE = re.compile(r"^[0-9]{5,25}$")
 #: Ключи, которые Graph читает как JSON. Строку в них Graph разберёт сам —
 #: поэтому и мы разбираем её до проверок статуса (ревью, minor 1).
 JSON_KEYS = frozenset({"special_ad_categories", "adlabels", "promoted_object", "targeting",
-                       "object_story_spec", "creative", "degrees_of_freedom_spec"})
+                       "object_story_spec", "creative", "degrees_of_freedom_spec",
+                       "contextual_multi_ads", "asset_feed_spec"})
 #: Ключи-«статусы», которые не про показ объявления: участие в улучшениях
 #: Advantage+ creative. Разрешено только выключить (OPT_OUT), никогда — включить.
 OPT_OUT_KEYS = frozenset({"enroll_status"})
@@ -113,6 +115,64 @@ OPT_OUT = "OPT_OUT"
 #: `text_optimizations` — в справочнике Graph «Ad Creative Features Spec».
 #: Отдельного документированного ключа «text generation» там нет — не гадаем.
 DOF_FEATURES = frozenset({"text_optimizations"})
+
+#: Multi-advertiser ads (ACL-1767): ключ креатива, который можно только ВЫКЛЮЧИТЬ — ровно
+#: {"enroll_status": "OPT_OUT"}. Включить его (OPT_IN) политика не даёт никогда.
+MULTI_ADS_KEY = "contextual_multi_ads"
+
+#: Кнопки (call_to_action.type), которые билдер может отправить для цели Leads (ACL-1767).
+#: Имена — из справочника Graph «Ad Creative Link Data Call To Action» (enum проверен);
+#: какие из них принимает именно цель OUTCOME_LEADS, Meta не публикует списком — берём
+#: те, что предлагает Ads Manager для лидов; лишнее Meta отвергнет известной ошибкой #100.
+CTA_WEBSITE = ("LEARN_MORE", "SIGN_UP", "APPLY_NOW", "GET_QUOTE", "SUBSCRIBE", "CONTACT_US",
+               "DOWNLOAD", "GET_OFFER", "BOOK_NOW", "ORDER_NOW", "REQUEST_TIME")
+#: Для Instant Form (форма Страницы вместо сайта) — без «Order now».
+CTA_FORM = ("LEARN_MORE", "SIGN_UP", "APPLY_NOW", "GET_QUOTE", "SUBSCRIBE", "CONTACT_US",
+            "DOWNLOAD", "GET_OFFER", "BOOK_NOW", "REQUEST_TIME")
+CTA_TYPES = frozenset(CTA_WEBSITE) | frozenset(CTA_FORM)
+
+#: Тексты и вертикальный файл (ACL-1774): ключ креатива `asset_feed_spec` с ЗАКРЫТОЙ схемой.
+#: Справочник Graph «Ad Asset Feed Spec» / «Asset Feed Options»: до 5 bodies (1024 знака),
+#: до 5 titles и descriptions (255), для правил кастомизации нужно минимум два правила.
+#: Допустимо ровно то, что шлёт создатель: тексты, ОДНА или ДВЕ картинки/видео с метками,
+#: ссылка сайта, кнопка, формат и (при двух файлах) ровно два правила по площадкам.
+ASSET_FEED_KEY = "asset_feed_spec"
+ASSET_FEED_MAX_TEXTS = 5
+#: Живой прогон 2026-10-14 (Doc120): Meta отказала (100/1885878) на ленте с 3 bodies и двумя правилами
+#: площадок - правило применяет по ОДНОМУ ассету каждого типа. Решение владельца 2026-10-20: до 5 текстов
+#: идут как Dynamic Creative (`is_dynamic_creative: true` на наборе, лента БЕЗ правил, один файл), а
+#: вертикальный файл с правилами площадок - только с одним текстом каждого вида.
+ASSET_FEED_TEXTS_WITH_RULES = 1
+#: Ключ набора, включающий Dynamic Creative: только значение True.
+DYNAMIC_KEY = "is_dynamic_creative"
+#: Тексты отказов (один источник для плана, предпроверки и страницы).
+MSG_TEXTS_VERTICAL = ("Several primary texts and a Stories/Reels file can't be combined: Meta applies one "
+                      "text per placement group. Use several texts without the vertical file, or one text with it.")
+MSG_TEXTS_DYNAMIC_SET = ("An ad with several texts runs as Dynamic Creative, and Meta allows only one ad in such an "
+                         "ad set: move the other ads of this ad set to a separate ad set")
+ASSET_FEED_TEXT_MAX = {"bodies": 1024, "titles": 255, "descriptions": 255}
+ASSET_FEED_MAX_MEDIA = 2
+ASSET_FEED_FORMATS = ("SINGLE_IMAGE", "SINGLE_VIDEO")
+#: Метки файлов: только наши (`acl_main`, `acl_vertical`), чужие имена в Graph не попадают.
+ASSET_LABEL_RE = re.compile(r"^acl_[a-z0-9_]{1,30}$")
+IMAGE_HASH_RE = re.compile(r"^[0-9a-f]{32}$")
+VIDEO_ID_RE = re.compile(r"^[0-9]{5,25}$")
+#: Площадки правил — подмножество ручного списка создателя (ACL-1761).
+RULE_PLATFORMS = frozenset({"facebook", "instagram"})
+RULE_FACEBOOK_POSITIONS = frozenset({"feed", "story", "facebook_reels", "instream_video"})
+RULE_INSTAGRAM_POSITIONS = frozenset({"stream", "story", "reels"})
+
+#: Ключи `targeting`, которые создатель вообще отправляет (ACL-1767: закрытый список).
+TARGETING_KEYS = frozenset({"geo_locations", "age_min", "age_max", "genders", "locales",
+                            "flexible_spec", "targeting_automation", "publisher_platforms",
+                            "facebook_positions", "instagram_positions", "device_platforms",
+                            "user_os"})
+#: genders: 1 — мужчины, 2 — женщины (Graph «Targeting»); «все» = ключа нет.
+GENDER_VALUES = frozenset({1, 2})
+#: device_platforms: Graph «Targeting» — mobile, desktop.
+DEVICE_PLATFORMS = frozenset({"mobile", "desktop"})
+#: user_os: «iOS» / «Android» или с минимальной версией «iOS_ver_14.0_and_above».
+USER_OS_RE = re.compile(r"^(iOS|Android)(_ver_[0-9]{1,2}(\.[0-9]{1,2})?_and_above)?$")
 
 _PATH_RE = re.compile(r"/(act_\d{5,})/([a-z]+)\Z")
 
@@ -137,6 +197,22 @@ def policy_for_page(act: str, page: str = "") -> dict:
         "json_keys": sorted(JSON_KEYS),
         "opt_out_keys": sorted(OPT_OUT_KEYS),
         "dof_features": sorted(DOF_FEATURES),
+        "multi_ads_key": MULTI_ADS_KEY,
+        "asset_feed": {"key": ASSET_FEED_KEY, "max_texts": ASSET_FEED_MAX_TEXTS, "max_texts_with_rules": ASSET_FEED_TEXTS_WITH_RULES,
+                       "dynamic_key": DYNAMIC_KEY,
+                       "text_max": dict(ASSET_FEED_TEXT_MAX), "max_media": ASSET_FEED_MAX_MEDIA,
+                       "formats": list(ASSET_FEED_FORMATS), "label_re": ASSET_LABEL_RE.pattern,
+                       "hash_re": IMAGE_HASH_RE.pattern, "video_id_re": VIDEO_ID_RE.pattern,
+                       "platforms": sorted(RULE_PLATFORMS),
+                       "facebook_positions": sorted(RULE_FACEBOOK_POSITIONS),
+                       "instagram_positions": sorted(RULE_INSTAGRAM_POSITIONS)},
+        "cta_types": sorted(CTA_TYPES),
+        "cta_website": list(CTA_WEBSITE),
+        "cta_form": list(CTA_FORM),
+        "targeting": {"keys": sorted(TARGETING_KEYS), "genders": sorted(GENDER_VALUES),
+                      "devices": sorted(DEVICE_PLATFORMS), "user_os_re": USER_OS_RE.pattern},
+
+
         "instagram": {"key": INSTAGRAM_KEY, "id_re": INSTAGRAM_ID_RE.pattern},
         "lead_form": {"key": LEAD_FORM_KEY, "edge": "adcreatives",
                       "formats": list(LEAD_FORM_FORMATS), "id_re": LEAD_FORM_ID_RE.pattern},
@@ -165,9 +241,9 @@ def _walk(value: Any, where: str, depth: int = 0) -> None:
             low = str(key).lower()
             if low in FORBIDDEN_ANYWHERE:
                 raise WriteRefused(f"write refused: key {key!r} is not allowed ({where})")
-            if low == "degrees_of_freedom_spec" and depth > 0:
+            if low in ("degrees_of_freedom_spec", MULTI_ADS_KEY, ASSET_FEED_KEY) and depth > 0:
                 # Ревью R6: только на верхнем уровне креатива, где его проверяет `_check_dof`.
-                raise WriteRefused(f"write refused: degrees_of_freedom_spec is only allowed at the top ({where})")
+                raise WriteRefused(f"write refused: {key} is only allowed at the top ({where})")
             if low in OPT_OUT_KEYS:
                 if item != OPT_OUT:
                     raise WriteRefused(f"write refused: {key} may only be OPT_OUT ({where})")
@@ -191,6 +267,174 @@ def _check_dof(value: Any) -> None:
             raise WriteRefused(f"write refused: creative feature {feature!r} is not on the opt-out list")
         if not (isinstance(item, dict) and item == {"enroll_status": OPT_OUT}):
             raise WriteRefused(f"write refused: creative feature {feature!r} must be exactly OPT_OUT")
+
+
+def _check_multi_ads(value: Any) -> None:
+    """Ровно {"enroll_status": "OPT_OUT"}: Multi-advertiser ads можно только выключить (ACL-1767)."""
+    if value != {"enroll_status": OPT_OUT} or not isinstance(value, dict):
+        raise WriteRefused("write refused: contextual_multi_ads may only be exactly OPT_OUT")
+
+
+def _is_text_list(items: Any, kind: str, *, required: bool, limit_count: int = ASSET_FEED_MAX_TEXTS) -> bool:
+    if not isinstance(items, list) or len(items) > limit_count or (required and not items):
+        return False
+    limit = ASSET_FEED_TEXT_MAX[kind]
+    return all(isinstance(x, dict) and set(x) == {"text"} and isinstance(x["text"], str)
+               and x["text"].strip() != "" and len(x["text"]) <= limit for x in items)
+
+
+def _labels_of(item: dict) -> list[str] | None:
+    """Метки файла: нет ключа - пусто; иначе ровно одна наша метка."""
+    if "adlabels" not in item:
+        return []
+    raw = item["adlabels"]
+    if not (isinstance(raw, list) and len(raw) == 1 and isinstance(raw[0], dict)
+            and set(raw[0]) == {"name"} and isinstance(raw[0]["name"], str)
+            and ASSET_LABEL_RE.fullmatch(raw[0]["name"])):
+        return None
+    return [raw[0]["name"]]
+
+
+def _check_asset_feed(spec: Any, creative: dict) -> None:
+    """Закрытая схема `asset_feed_spec` (ACL-1774); всё сверх неё - отказ.
+
+    Рядом допустим `object_story_spec` со Страницей и проверенной Instagram-идентичностью: формат объявления
+    (`link_data`/`video_data`) вместе с лентой ассетов Meta не принимает, и мы его не даём.
+    Форма лидов сюда не попадает вовсе: `lead_gen_form_id` в этом ключе запрещён везде.
+    """
+    def refuse(why: str) -> None:
+        raise WriteRefused(f"write refused: asset_feed_spec {why}")
+
+    if not isinstance(spec, dict):
+        refuse("must be an object")
+    allowed = {"bodies", "titles", "descriptions", "images", "videos", "link_urls",
+               "call_to_action_types", "ad_formats", "asset_customization_rules"}
+    extra = sorted(set(spec) - allowed)
+    if extra:
+        refuse(f"key {extra[0]!r} is not allowed")
+    story = creative.get("object_story_spec")
+    if not (isinstance(story, dict) and set(story) <= {"page_id", INSTAGRAM_KEY}
+            and isinstance(story.get("page_id"), str)):
+        refuse("needs object_story_spec with page_id and optional Instagram identity only")
+    has_images, has_videos = bool(spec.get("images")), bool(spec.get("videos"))
+    if has_images == has_videos or ("images" in spec and "videos" in spec):
+        refuse("needs either images or videos")
+    kind = "images" if has_images else "videos"
+    media = spec[kind]
+    if not (isinstance(media, list) and 1 <= len(media) <= ASSET_FEED_MAX_MEDIA):
+        refuse(f"{kind} must hold 1-{ASSET_FEED_MAX_MEDIA} files")
+    cap = ASSET_FEED_TEXTS_WITH_RULES if len(media) > 1 else ASSET_FEED_MAX_TEXTS
+    if not _is_text_list(spec.get("bodies"), "bodies", required=True, limit_count=cap):
+        refuse(f"bodies must hold 1-{cap} non-empty texts")
+    if not _is_text_list(spec.get("titles"), "titles", required=True, limit_count=cap):
+        refuse(f"titles must hold 1-{cap} non-empty texts")
+    if "descriptions" in spec and not _is_text_list(spec["descriptions"], "descriptions", required=True,
+                                                    limit_count=cap):
+        refuse(f"descriptions must hold 1-{cap} non-empty texts")
+    names: list[str] = []
+    for item in media:
+        if not isinstance(item, dict):
+            refuse(f"{kind} item must be an object")
+        if kind == "images":
+            ok = set(item) <= {"hash", "adlabels"} and isinstance(item.get("hash"), str) \
+                and bool(IMAGE_HASH_RE.fullmatch(item["hash"]))
+        else:
+            thumb = item.get("thumbnail_url")
+            ok = set(item) <= {"video_id", "thumbnail_url", "adlabels"} \
+                and isinstance(item.get("video_id"), str) and bool(VIDEO_ID_RE.fullmatch(item["video_id"])) \
+                and isinstance(thumb, str) and thumb.startswith("https://")
+        labels = _labels_of(item) if ok else None
+        if not ok or labels is None:
+            refuse(f"{kind} item is not allowed")
+        names += labels
+    if len(set(names)) != len(names):
+        refuse("file labels must differ")
+    if "link_urls" in spec:
+        links = spec["link_urls"]
+        if not (isinstance(links, list) and len(links) == 1 and isinstance(links[0], dict)
+                and set(links[0]) == {"website_url"} and isinstance(links[0]["website_url"], str)
+                and links[0]["website_url"].startswith("https://")):
+            refuse("link_urls must hold one https website_url")
+    ctas = spec.get("call_to_action_types")
+    if not (isinstance(ctas, list) and len(ctas) == 1 and ctas[0] in CTA_WEBSITE):
+        refuse("call_to_action_types must hold one allowed button")
+    want = "SINGLE_IMAGE" if kind == "images" else "SINGLE_VIDEO"
+    if spec.get("ad_formats") != [want]:
+        refuse(f"ad_formats must be exactly [{want!r}]")
+    rules = spec.get("asset_customization_rules")
+    if len(media) == 1:
+        if "asset_customization_rules" in spec:
+            refuse("rules need two files")
+        if names:
+            refuse("a single file takes no label")
+        return
+    # Два файла: метки обязательны и ровно два правила (Meta требует минимум два).
+    if len(names) != 2:
+        refuse("two files need a label each")
+    if not (isinstance(rules, list) and len(rules) == 2):
+        refuse("two files need exactly two rules")
+    label_key = "image_label" if kind == "images" else "video_label"
+    used: list[str] = []
+    for rule in rules:
+        if not (isinstance(rule, dict) and set(rule) == {"customization_spec", label_key}):
+            refuse("rule keys are not allowed")
+        lab = rule[label_key]
+        if not (isinstance(lab, dict) and set(lab) == {"name"} and lab["name"] in names):
+            refuse("rule label must name one of the files")
+        used.append(lab["name"])
+        cs = rule["customization_spec"]
+        if not (isinstance(cs, dict) and cs and set(cs) <= {"publisher_platforms", "facebook_positions",
+                                                           "instagram_positions"}):
+            refuse("customization_spec keys are not allowed")
+        for key, allowed_values in (("publisher_platforms", RULE_PLATFORMS),
+                                    ("facebook_positions", RULE_FACEBOOK_POSITIONS),
+                                    ("instagram_positions", RULE_INSTAGRAM_POSITIONS)):
+            if key in cs and not (isinstance(cs[key], list) and cs[key]
+                                  and all(isinstance(x, str) and x in allowed_values for x in cs[key])):
+                refuse(f"{key} value is not allowed")
+    if sorted(used) != sorted(names):
+        refuse("each file needs its own rule")
+
+
+def _check_cta(spec: Any, on_ad: bool = False) -> None:
+    """Тип кнопки — из списка; всё прочее Graph отвергнет, мы не даём и отправить (ACL-1767)."""
+    if not isinstance(spec, dict):
+        return
+    # Назначение известно, когда вызывающий сказал `on_ad` (Instant Form): тогда список формы,
+    # без «Order now». Иначе - список сайта (он шире и включает список формы).
+    allowed = CTA_FORM if on_ad else CTA_WEBSITE
+    for fmt in LEAD_FORM_FORMATS:
+        data = spec.get(fmt)
+        if not isinstance(data, dict) or "call_to_action" not in data:
+            continue
+        cta = data["call_to_action"]      # null тоже отказ, как в слое страницы
+        if not (isinstance(cta, dict) and cta.get("type") in allowed):
+            raise WriteRefused("write refused: call_to_action.type is not on the allowed list")
+
+
+def _check_targeting(t: Any) -> None:
+    """Закрытый список ключей таргетинга и допустимые значения новых полей (ACL-1767)."""
+    if not isinstance(t, dict):
+        raise WriteRefused("write refused: targeting must be an object")
+    extra = sorted(set(t) - TARGETING_KEYS)
+    if extra:
+        raise WriteRefused(f"write refused: targeting key {extra[0]!r} is not allowed")
+    if "genders" in t:
+        g = t["genders"]
+        if not (isinstance(g, list) and g and all(type(x) is int and x in GENDER_VALUES for x in g)):
+            raise WriteRefused("write refused: targeting.genders may hold only 1 and 2")
+    if "device_platforms" in t:
+        d = t["device_platforms"]
+        if not (isinstance(d, list) and d and all(x in DEVICE_PLATFORMS for x in d)):
+            raise WriteRefused("write refused: targeting.device_platforms may hold only mobile and desktop")
+    if "user_os" in t:
+        o = t["user_os"]
+        if not (isinstance(o, list) and o and all(isinstance(x, str) and USER_OS_RE.fullmatch(x) for x in o)):
+            raise WriteRefused("write refused: targeting.user_os value is not allowed")
+    if "locales" in t:
+        loc = t["locales"]
+        if not (isinstance(loc, list) and loc and all(type(x) is int and x > 0 for x in loc)):
+            raise WriteRefused("write refused: targeting.locales must be a list of numeric ids")
 
 
 def _without_lead_form(edge: str, checked: dict, on_ad: bool) -> dict:
@@ -337,6 +581,16 @@ def check(act: str, method: str, path: str, params: dict | None,
             raise WriteRefused(f"write refused: {key} must be a JSON object or list")
     if "degrees_of_freedom_spec" in checked:
         _check_dof(checked["degrees_of_freedom_spec"])
+    if MULTI_ADS_KEY in checked:
+        _check_multi_ads(checked[MULTI_ADS_KEY])
+    if ASSET_FEED_KEY in checked:
+        _check_asset_feed(checked[ASSET_FEED_KEY], checked)
+    if edge == "adcreatives":
+        _check_cta(checked.get("object_story_spec"), on_ad)
+    if edge == "adsets" and "targeting" in checked:
+        _check_targeting(checked["targeting"])
+    if DYNAMIC_KEY in checked and checked[DYNAMIC_KEY] is not True:
+        raise WriteRefused(f"write refused: {DYNAMIC_KEY} may only be true")
     if edge == "ads" and "creative" in checked:
         # Объявление ссылается на готовый креатив — и только (ревью R5-M1:
         # встроенный креатив провёз бы свой degrees_of_freedom_spec).

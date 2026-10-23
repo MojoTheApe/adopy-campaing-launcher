@@ -11,13 +11,31 @@
         "SUBSCRIBE",
         "CONTACT_US",
         "DOWNLOAD",
-        "GET_OFFER"
+        "GET_OFFER",
+        "BOOK_NOW",
+        "ORDER_NOW",
+        "REQUEST_TIME"
+      ],
+      "leads_instant_form": [
+        "LEARN_MORE",
+        "SIGN_UP",
+        "APPLY_NOW",
+        "GET_QUOTE",
+        "SUBSCRIBE",
+        "CONTACT_US",
+        "DOWNLOAD",
+        "GET_OFFER",
+        "BOOK_NOW",
+        "REQUEST_TIME"
       ]
     },
     "default_objective": "leads",
     "link_re": "^https://[^\\s/?#:]+\\.[^\\s/?#:]+(:\\d+)?([/?#]\\S*)?$",
     "max_headline": 40,
     "max_primary_visible": 125,
+    "max_texts": 5,
+    "os_min_re": "^[0-9]{1,2}(\\.[0-9]{1,2})?$",
+    "start_re": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}$",
     "track_re": "\\?[^#\\s]*[^=&#\\s]="
   },
   "rules": [
@@ -272,6 +290,71 @@
       "applies": "always",
       "field": {
         "level": "ad",
+        "sel": ".cb-creative-search"
+      },
+      "hint": "choose the main (1:1 or 4:5) file too, or clear the Stories / Reels file",
+      "id": "vertical_needs_main",
+      "label": "Main file next to the Stories / Reels file",
+      "severity": "error",
+      "side": "client",
+      "unit": "ad"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-vertical-search"
+      },
+      "hint": "with a Stories / Reels file the main file must be 1:1 or 4:5, the vertical one 9:16, both images or both videos, and the size must be readable (JPG/PNG, MP4/MOV)",
+      "id": "vertical_ratio",
+      "label": "Aspect ratios: main 1:1 or 4:5, Stories / Reels 9:16",
+      "severity": "error",
+      "side": "server",
+      "unit": "ad"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-adtitle-search"
+      },
+      "hint": "an ad takes up to 5 primary texts, 5 headlines and 5 descriptions: remove the extra ones",
+      "id": "texts_limit",
+      "label": "Up to 5 texts per field",
+      "severity": "error",
+      "side": "client",
+      "unit": "ad"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-vertical-search"
+      },
+      "hint": "Several primary texts and a Stories/Reels file can't be combined: Meta applies one text per placement group. Use several texts without the vertical file, or one text with it.",
+      "id": "texts_vertical",
+      "label": "Several texts and a Stories / Reels file",
+      "severity": "error",
+      "side": "client",
+      "unit": "ad"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "ad",
+        "sel": ".cb-adtitle-search"
+      },
+      "hint": "An ad with several texts runs as Dynamic Creative, and Meta allows only one ad in such an ad set: move the other ads of this ad set to a separate ad set",
+      "id": "texts_dynamic",
+      "label": "Several texts need their own ad set",
+      "severity": "error",
+      "side": "client",
+      "unit": "ad"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "ad",
         "sel": ".cb-adtitle-search"
       },
       "hint": "choose a primary text in each ad",
@@ -368,6 +451,32 @@
       "hint": "age must be between 18 and 65, and min not above max",
       "id": "age_range",
       "label": "Age 18-65",
+      "severity": "error",
+      "side": "client",
+      "unit": "campaign"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "adset",
+        "sel": "[name$=\"_os\"]"
+      },
+      "hint": "iOS and Android are mobile only (not desktop only), and a minimum version needs iOS or Android and looks like 14 or 14.0",
+      "id": "devices_consistent",
+      "label": "Devices and OS version fit together",
+      "severity": "error",
+      "side": "client",
+      "unit": "campaign"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "adset",
+        "sel": "[name$=\"_start_time\"]"
+      },
+      "hint": "enter the start as date and time, not earlier than today (ad account time zone)",
+      "id": "start_time_valid",
+      "label": "Start time",
       "severity": "error",
       "side": "client",
       "unit": "campaign"

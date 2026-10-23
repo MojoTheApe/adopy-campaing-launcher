@@ -79,10 +79,10 @@ def ui(browser):
 
 def _pick(page, row_sel, query, title):
     """Набрать в поле второго текста и выбрать строку списка — как человек."""
-    box = page.locator(f"{row_sel} .cb-text2-search")
+    box = page.locator(f"{row_sel} .cb-text2-search:not(.cb-textx-search)")
     box.click()
     box.fill(query)
-    opt = page.locator(f"{row_sel} .cb-text2-sel-wrap .cb-sel-opt[data-val='{title}']")
+    opt = page.locator(f"{row_sel} .cb-text2-sel-wrap:not(.cb-textx-sel-wrap) .cb-sel-opt[data-val='{title}']")
     expect(opt).to_be_visible()
     opt.dispatch_event("mousedown")
 
@@ -90,7 +90,7 @@ def _pick(page, row_sel, query, title):
 def _text2(page, name):
     return page.evaluate(
         "n => { const h = document.querySelector('[name=\"' + n + '\"]');"
-        " return h ? [h.value, h.closest('.cb-text2-sel-wrap').querySelector('.cb-text2-search').value] : null; }",
+        " return h ? [h.value, h.closest('.cb-text2-sel-wrap:not(.cb-textx-sel-wrap)').querySelector('.cb-text2-search:not(.cb-textx-search)').value] : null; }",
         name)
 
 
@@ -105,15 +105,15 @@ def test_the_ad_block_has_primary_text_2_and_no_cta_select(ui):
     add(p)
     _show(p)
     row = p.locator(".cb-slot:not([hidden]) .cb-ad-row").first
-    expect(row.locator(".cb-text2-search")).to_have_count(1)
-    expect(row.locator(".cb-text2-search")).to_be_visible()
+    expect(row.locator(".cb-text2-search:not(.cb-textx-search)")).to_have_count(1)
+    expect(row.locator(".cb-text2-search:not(.cb-textx-search)")).to_be_visible()
     expect(row.locator("input[type=hidden][name='camp_0_ad_0_copy2']")).to_have_count(1)
     assert "Primary text 2" in row.inner_text() and "(optional)" in row.inner_text()
     expect(p.locator(".cb-cta-select")).to_have_count(0)
-    # ACL-1769: CTA показан выключенным (список — ACL-1767), а не рабочим полем.
+    # ACL-1767: CTA - настоящий выбор из списка Meta, умолчание Learn more (не заглушка).
     assert "preview only" not in row.inner_text()
-    expect(row.locator("[data-future='cta'] select")).to_be_disabled()
-    assert "ACL-1767" in row.locator("[data-future='cta']").get_attribute("title")
+    expect(row.locator("[data-future='cta']")).to_have_count(0)
+    expect(row.locator("select[name='camp_0_ad_0_cta']")).to_have_value("LEARN_MORE")
     # Превью живо и показывает постоянную кнопку (перерисовка — по событию
     # смены библиотеки текстов, как на живой странице).
     p.evaluate("t => document.dispatchEvent(new CustomEvent('acl:adtextschange', {detail: {texts: t}}))", TEXTS)
@@ -131,7 +131,7 @@ def test_primary_text_2_is_chosen_from_the_ad_text_library(ui):
     # Поле первого текста не тронуто.
     assert p.input_value("[name='camp_0_ad_0_copy']") == ""
     # Набрано не название записи — выбора нет, поле подсвечено.
-    box = p.locator(f"{row} .cb-text2-search")
+    box = p.locator(f"{row} .cb-text2-search:not(.cb-textx-search)")
     box.fill("Text1")
     assert _text2(p, "camp_0_ad_0_copy2") == ["", "Text1"]
     expect(box).to_have_class(re.compile(r"cb-text2-unmatched"))
@@ -172,7 +172,7 @@ def test_an_unpicked_primary_text_2_stays_outlined_after_a_reload(ui):
     p, _ = ui
     add(p)
     _show(p)
-    box = p.locator(".cb-slot:not([hidden]) .cb-ad-row[data-ad-idx='0'] .cb-text2-search")
+    box = p.locator(".cb-slot:not([hidden]) .cb-ad-row[data-ad-idx='0'] .cb-text2-search:not(.cb-textx-search)")
     box.click()
     box.fill("Text1")
     assert _text2(p, "camp_0_ad_0_copy2") == ["", "Text1"]
@@ -180,7 +180,7 @@ def test_an_unpicked_primary_text_2_stays_outlined_after_a_reload(ui):
     p.wait_for_load_state("load")
     p.wait_for_function("document.querySelector('[name=\"camp_0_ad_0_copy2\"]')")
     assert _text2(p, "camp_0_ad_0_copy2") == ["", "Text1"]
-    restored = p.locator(".cb-text2-search").first
+    restored = p.locator(".cb-text2-search:not(.cb-textx-search)").first
     expect(restored).to_have_class(re.compile(r"cb-text2-unmatched"))
 
 
@@ -213,7 +213,7 @@ def test_primary_text_1_names_the_library_pick_and_shows_its_headline(ui):
     row = p.locator(".cb-slot:not([hidden]) .cb-ad-row[data-ad-idx='0']")
     text = row.inner_text()
     assert "Primary text 1" in text and "Ad Title" not in text
-    assert "Primary text 2" in text and "+ Primary text 3–5" in text
+    assert "Primary text 2" in text and "+ Primary text 3" in text
     expect(row.locator("[data-headline]")).to_be_hidden()
     box = row.locator(".cb-adtitle-search")
     expect(box).to_have_attribute("placeholder", "— type to search ad text —")
@@ -228,7 +228,7 @@ def test_primary_text_1_names_the_library_pick_and_shows_its_headline(ui):
     assert p.input_value("[name='camp_0_ad_0_copy']") == "Text7", "имя поля или значение изменились"
 
 
-@pytest.mark.parametrize("wrapper", [".cb-adtitle-sel-wrap", ".cb-text2-sel-wrap"])
+@pytest.mark.parametrize("wrapper", [".cb-adtitle-sel-wrap", ".cb-text2-sel-wrap:not(.cb-textx-sel-wrap)"])
 @pytest.mark.parametrize("status, message", [
     (200, "No ad texts found"),
     (503, "Could not load ad texts"),

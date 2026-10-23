@@ -86,13 +86,15 @@ Object.keys(L.FUTURE).forEach((key) => {
 });
 assert.equal(L.futureTip('adsets'), 'Multiple ad sets — coming in ACL-1768');
 assert.equal(L.futureTip('forms'), '', 'ACL-1775: формы больше не заглушка');
-assert.equal(L.futureTip('texts'), 'Up to 5 primary texts — coming in ACL-1774');
+assert.equal(L.futureTip('texts'), '', 'ACL-1774: тексты 3-5 больше не заглушка');
+assert.equal(L.futureTip('media'), '', 'ACL-1774: файл Stories / Reels больше не заглушка');
 assert.equal(L.futureTip('placements'), 'Placement editor — coming in ACL-1772');
 assert.equal(L.futureTip('copyTo'), 'Copy to accounts — coming in ACL-1773');
-assert.equal(L.futureTip('cta'), 'CTA list — coming in ACL-1767');
+assert.equal(L.futureTip('cta'), '', 'ACL-1767: кнопка больше не заглушка');
+['gender', 'languages'].forEach((k) => assert.equal(L.futureTip(k), '', k + ': ACL-1767 больше не заглушка'));
 assert.equal(L.futureHtml('нет-такого', 'button'), '', 'неизвестный ключ нарисовал элемент');
 // Показанное в выключенном списке экранируется.
-assert.ok(!/<script/.test(L.futureHtml('cta', 'select', '<script>x</script>')));
+assert.ok(!/<script/.test(L.futureHtml('placements', 'select', '<script>x</script>')));
 
 // ── сообщения сервера → поля ──────────────────────────────────────────
 const sels = (m) => L.routes(m).map((r) => r.sel);
@@ -108,6 +110,11 @@ assert.deepEqual(sels('Ad 1: no creative file'), ['.cb-creative-search']);
   assert.ok(sels(m).includes('.cb-adtitle-search'), 'не ложится на Primary text 1: ' + m));
 assert.deepEqual(sels("Primary text 2 'T' needs an Ad Title with a primary text — ignored"), ['.cb-text2-search'],
   'ошибка второго текста ушла в Primary text 1');
+assert.deepEqual(sels("Primary text 4 'T' needs an Ad Title with a primary text — ignored"), ['.cb-textx-search'],
+  'ошибка текста 4 ушла не в свой ряд');
+assert.deepEqual(sels('Ad 1: Stories / Reels file: not found'), ['.cb-vertical-search']);
+assert.deepEqual(sels('Ad 1: a Stories / Reels file needs the main file too'), ['.cb-vertical-search']);
+assert.deepEqual(sels('Ad 1: up to 5 primary texts per ad (got 6)'), ['.cb-adtitle-search']);
 assert.deepEqual(sels('Daily budget missing'), ['[name$="_budget"]']);
 assert.ok(sels('Detailed targeting not found by Meta: Foo').includes('.cb-targeting-search'));
 assert.ok(sels('Tracking link is empty; the API backend needs it for the ads').includes('input[name="tracking_link"]'));

@@ -136,6 +136,25 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
     "tracking_unknown_when_link_broken": (_with(link="nope"), "link_tracking", "unknown", []),
     "media_ok": (_with(), "media_chosen", "ok", []),
     "media_missing": (_with(ads=_ad(1, file="")), "media_chosen", "error", [2]),
+    # ACL-1774: до 5 текстов и вертикальный файл только рядом с основным.
+    "texts_ok": (_with(), "texts_limit", "ok", []),
+    "texts_six_bodies": (_with(ads=_ad(0, bodies=[f"b{i}" for i in range(6)])), "texts_limit", "error", [1]),
+    "vertical_ok": (_with(ads=_ad(0, vertical_file="1000_story.png")), "vertical_needs_main", "ok", []),
+    "vertical_without_main": (_with(ads=_ad(1, file="", vertical_file="1001_story.png")),
+                              "vertical_needs_main", "error", [2]),
+    # Живой 2026-10-14: несколько текстов вместе с вертикальным файлом - отказ Meta; без него - отдельный набор.
+    "texts_vertical_ok": (_with(ads=_ad(0, vertical_file="1000_story.png")), "texts_vertical", "ok", []),
+    "texts_vertical_combo": (_with(ads=_ad(0, vertical_file="1000_story.png", bodies=["a", "b"])),
+                             "texts_vertical", "error", [1]),
+    "texts_vertical_titles": (_with(ads=_ad(1, vertical_file="v.png", headlines=["a", "b"])),
+                              "texts_vertical", "error", [2]),
+    "texts_dynamic_ok": (_with(ads=_ad(0, bodies=["a", "a "])), "texts_dynamic", "ok", []),
+    "texts_dynamic_two": (_with(ads=_ad(0, bodies=["a", "b"])), "texts_dynamic", "error", [1]),
+    "texts_dynamic_descriptions": (_with(ads=_ad(1, descriptions=["a", "b"])), "texts_dynamic", "error", [2]),
+    # Решение владельца 2026-10-20: несколько текстов - Dynamic Creative, объявление одно в наборе.
+    "texts_dynamic_alone_ok": (_with(ads=_ad(0, bodies=["a", "b", "c", "d", "e"])[:1]), "texts_dynamic", "ok", []),
+    "texts_dynamic_not_with_vertical": (_with(ads=_ad(0, vertical_file="v.png", bodies=["a", "b"])),
+                                        "texts_dynamic", "ok", []),
     "primary_ok": (_with(), "primary_text", "ok", []),
     "primary_missing": (_with(ads=_ad(0, body="  ")), "primary_text", "error", [1]),
     "headline_ok": (_with(), "headline", "ok", []),
@@ -146,6 +165,22 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
     "primary_126_warns": (_with(ads=_ad(1, body="y" * 126)), "primary_len", "warning", [2]),
     "cta_ok": (_with(), "cta_allowed", "ok", []),
     "cta_wrong": (_with(ads=_ad(0, cta="SHOP_NOW")), "cta_allowed", "error", [1]),
+    # ACL-1767: список кнопок по месту конверсии, устройства и старт набора.
+    "cta_new_website_ok": (_with(ads=_ad(0, cta="BOOK_NOW")), "cta_allowed", "ok", []),
+    "cta_order_now_not_for_forms": (_with(destination="instant_form",
+                                          ads=[{**a, "form_id": "7", "cta": "ORDER_NOW"} for a in _ok_input()["ads"]]),
+                                    "cta_allowed", "error", [1, 2]),
+    "cta_order_now_on_website_ok": (_with(ads=_ad(1, cta="ORDER_NOW")), "cta_allowed", "ok", []),
+    "devices_ok": (_with(), "devices_consistent", "ok", []),
+    "devices_ios_version_ok": (_with(os="iOS", os_min="14.0", device="mobile"), "devices_consistent", "ok", []),
+    "devices_ios_desktop": (_with(os="iOS", device="desktop"), "devices_consistent", "error", []),
+    "devices_version_needs_os": (_with(os="All", os_min="14"), "devices_consistent", "error", []),
+    "devices_version_bad": (_with(os="Android", os_min="14.x"), "devices_consistent", "error", []),
+    "start_empty_ok": (_with(), "start_time_valid", "ok", []),
+    "start_future_ok": (_with(start_time="2026-10-20T10:00", now="2026-10-12T12:00"), "start_time_valid", "ok", []),
+    "start_today_ok": (_with(start_time="2026-10-12T08:00", now="2026-10-12T12:00"), "start_time_valid", "ok", []),
+    "start_bad_format": (_with(start_time="20.10.2026 10:00", now="2026-10-12T12:00"), "start_time_valid", "error", []),
+    "start_in_the_past": (_with(start_time="2026-10-11T23:00", now="2026-10-12T12:00"), "start_time_valid", "error", []),
     "budget_ok": (_with(), "budget_set", "ok", []),
     "budget_missing": (_with(budget=None), "budget_set", "error", []),
     "budget_zero": (_with(budget="0"), "budget_set", "error", []),
@@ -320,7 +355,7 @@ def test_a_clean_campaign_has_no_server_error(tmp_path):
     assert {v["rule"]: v["status"] for v in out.audit} == {
         "account_active": "ok", "page_ok": "ok", "instagram_identity": "ok", "pixel_ok": "ok", "country_resolves": "ok",
         "language_resolves": "ok", "interests_resolve": "ok", "media_readable": "ok", "media_limits": "ok",
-        "media_vertical": "ok", "budget_min": "ok", "existing_diffs": "ok"}
+        "media_vertical": "ok", "vertical_ratio": "ok", "budget_min": "ok", "existing_diffs": "ok"}
 
 
 def test_page_not_on_the_account(tmp_path):

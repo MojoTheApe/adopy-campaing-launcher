@@ -46,6 +46,15 @@ class AdDraft:
     ad_body2: str = ""
     # ACL-1775: id существующей формы Страницы (только Instant Form, только API-бэкенд).
     lead_form_id: str = ""
+    # ACL-1767: тип кнопки (call_to_action.type); пусто = LEARN_MORE как всегда (только API-бэкенд).
+    cta: str = ""
+    # ACL-1774 (только API-бэкенд): тексты 3-5 — названия записей библиотеки (как `copy2_name`)
+    # и разобранные записи для слотов 2-5: [{"name", "body", "headline", "description"}].
+    more_copy_names: list[str] = field(default_factory=list)
+    text_variants: list[dict[str, str]] = field(default_factory=list)
+    # ACL-1774: необязательный вертикальный (9:16) файл Stories/Reels рядом с основным.
+    vertical_filename: str = ""
+    vertical_path: str | None = None
     # ACL-1776: id шаблона формы из библиотеки (форму создаёт робот; только API-бэкенд).
     lead_form_template: str = ""
 
@@ -92,6 +101,12 @@ class AdDraft:
             out["ad_body2"] = (self.ad_body2 or "")[:80]
         if self.lead_form_id:
             out["lead_form_id"] = self.lead_form_id
+        if self.cta:
+            out["cta"] = self.cta
+        if self.more_copy_names:
+            out["more_copy_names"] = list(self.more_copy_names)
+        if self.vertical_filename:
+            out["vertical_file"] = self.vertical_filename
         if self.lead_form_template:
             out["lead_form_template"] = self.lead_form_template
         return out
@@ -108,6 +123,12 @@ class AdSetDraft:
     ads: list[AdDraft] = field(default_factory=list)
     # ACL-1775: "website" (как всегда) или "instant_form" (только API-бэкенд).
     destination: str = "website"
+    # ACL-1767 (только API-бэкенд): пусто = как раньше, в черновике и плане ключей нет.
+    gender: str = ""            # "men" | "women"
+    languages: list[str] = field(default_factory=list)   # дополнительные языки
+    device: str = ""            # "mobile" | "desktop" (пусто = все устройства)
+    os_min: str = ""            # минимальная версия ОС, например "14"
+    start_time: str = ""        # "YYYY-MM-DDTHH:MM", время часового пояса кабинета
 
     def to_preview_dict(self) -> dict[str, Any]:
         out = {
@@ -120,6 +141,9 @@ class AdSetDraft:
         }
         if self.destination != "website":
             out["destination"] = self.destination
+        for key in ("gender", "languages", "device", "os_min", "start_time"):
+            if getattr(self, key):
+                out[key] = getattr(self, key)
         return out
 
 
