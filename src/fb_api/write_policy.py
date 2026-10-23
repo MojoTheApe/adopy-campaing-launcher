@@ -10,9 +10,19 @@
 `tos_accepted` и любое упоминание условий - никогда, DELETE и прочие рёбра
 Страницы - никогда. С цепочкой `act_X` она не пересекается.
 
-Никогда: DELETE, ACTIVE, `effective_status`/`configured_status`,
+ACL-2114: единственное исключение из «только PAUSED» - `status=ACTIVE` у набора объявлений и объявления
+(`adsets`, `ads`), и только когда вызывающий передал `children_active=True`: кампания-родитель
+подтверждена чтением как PAUSED (под паузой кампании ничего не показывается). Кампания, креатив,
+вложенные статусы и любая другая запись с ACTIVE по-прежнему отказ.
+
+В обычных записях никогда: DELETE, ACTIVE (кроме случая выше), `effective_status`/`configured_status`,
 `execution_options`, согласие с условиями, создание форм лидов, запись куда-то,
 кроме `/act_X/<ребро>`.
+
+ACL-2105: отдельный `page_validation`/`InPageGraph.validate_page` не создаёт объектов:
+он сам строит фиксированный creative с `validate_only` для закреплённого кабинета.
+Этот запрос не проходит через обычную `check`; запрет `execution_options` ниже
+сохранён для всех обычных записей и их параметров.
 
 Единственное исключение для форм (ACL-1775): `lead_gen_form_id` ссылается на
 УЖЕ СУЩЕСТВУЮЩУЮ форму Страницы и допустим ровно в одном месте — креатив
@@ -42,6 +52,10 @@ EDGE_KEYS: dict[str, frozenset[str]] = {
 }
 #: Рёбра, где статус обязателен и равен PAUSED.
 PAUSED_REQUIRED = frozenset({"campaigns", "adsets", "ads"})
+#: ACL-2114: ребра, где ACTIVE допустим при `children_active` (родитель-кампания подтверждена чтением
+#: как PAUSED: созданная этим запуском или найденная с прошлого). Кампания - никогда ACTIVE; прочие записи - тоже.
+CHILD_EDGES = frozenset({"adsets", "ads"})
+ACTIVE = "ACTIVE"
 #: Поле файла (multipart) — только у загрузок.
 FILE_FIELDS = {"adimages": "filename", "advideos": "source"}
 #: Ключи, которых не должно быть нигде, на любой глубине.
@@ -49,6 +63,30 @@ FORBIDDEN_ANYWHERE = frozenset({"effective_status", "configured_status", "execut
                                 "access_token", "method", "_method", "batch",
                                 "suppress_http_code", "lead_gen_form_id", "tos_accepted"})
 PAUSED = "PAUSED"
+
+#: Загрузка большого видео кусками (ACL-1891): `POST /act_X/advideos` с `upload_phase`.
+#: Справочник Graph «Ad Account / Advideos» (POST, chunked upload): `upload_phase` = start | transfer |
+#: finish (| cancel - не даём), `file_size`, `upload_session_id`, `start_offset`, `video_file_chunk`.
+#: Ровно три фазы с ЗАКРЫТЫМ набором ключей на фазу; всё прочее - отказ.
+UPLOAD_PHASES = ("start", "transfer", "finish")
+#: 17.10 живой Doc120 (файл 247 МБ): Meta отказала в start с подкодом 1363049
+#: «A waterfall ID is required when the caller is a Facebook App» — токен Ads Manager
+#: считается приложением. `waterfall_id` — наш случайный id одной загрузки (32 hex),
+#: один и тот же во всех трёх фазах, как у загрузчика Ads Manager.
+UPLOAD_WATERFALL_RE = re.compile(r"[0-9a-f]{32}", re.ASCII)
+UPLOAD_KEYS = {
+    "start": frozenset({"upload_phase", "file_size", "waterfall_id"}),
+    "transfer": frozenset({"upload_phase", "upload_session_id", "start_offset", "waterfall_id"}),
+    "finish": frozenset({"upload_phase", "upload_session_id", "title", "name", "waterfall_id"}),
+}
+#: Файл фазы transfer (multipart); у start и finish файла нет.
+UPLOAD_CHUNK_FIELD = "video_file_chunk"
+#: Потолок одного куска, который мы отправляем (память профиля и одного запроса).
+UPLOAD_CHUNK_MAX = 8 * 1024 * 1024
+#: Потолок файла на пути кусками: безопасный для профиля и для бюджета вызовов (Meta сама - 4 ГБ).
+UPLOAD_FILE_MAX = 1536 * 1024 * 1024
+UPLOAD_ID_RE = re.compile(r"^[0-9]{5,25}$")
+UPLOAD_NUMBER_RE = re.compile(r"^[0-9]{1,13}$")
 #: Ключ существующей формы лидов: разрешён только в `_without_lead_form` (ACL-1775).
 LEAD_FORM_KEY = "lead_gen_form_id"
 #: Форматы креатива, в `call_to_action.value` которых форма может стоять.
@@ -83,7 +121,12 @@ def policy_for_page(act: str, page: str = "") -> dict:
         "act": act,
         "edges": {k: sorted(v) for k, v in EDGE_KEYS.items()},
         "paused_required": sorted(PAUSED_REQUIRED),
+        "child_edges": sorted(CHILD_EDGES),
         "files": dict(FILE_FIELDS),
+        "upload": {"phases": list(UPLOAD_PHASES), "keys": {k: sorted(v) for k, v in UPLOAD_KEYS.items()},
+                   "chunk_field": UPLOAD_CHUNK_FIELD, "chunk_max": UPLOAD_CHUNK_MAX,
+                   "file_max": UPLOAD_FILE_MAX, "id_re": UPLOAD_ID_RE.pattern,
+                   "number_re": UPLOAD_NUMBER_RE.pattern},
         "forbidden": sorted(FORBIDDEN_ANYWHERE),
         "json_keys": sorted(JSON_KEYS),
         "opt_out_keys": sorted(OPT_OUT_KEYS),
@@ -175,12 +218,65 @@ def _without_lead_form(edge: str, checked: dict, on_ad: bool) -> dict:
     return checked
 
 
+def _digits(value: Any) -> int | None:
+    """Целое из int или строки цифр (не bool, не float); иначе None."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value >= 0 else None
+    if isinstance(value, str) and UPLOAD_NUMBER_RE.fullmatch(value):
+        return int(value)
+    return None
+
+
+def _check_upload(params: dict, files: dict) -> None:
+    """Фазы загрузки видео кусками (ACL-1891): имя фазы, числа, id сессии, размер куска."""
+    phase = params.get("upload_phase")
+    if not (isinstance(phase, str) and phase in UPLOAD_PHASES):
+        raise WriteRefused("write refused: upload_phase must be start, transfer or finish")
+    extra = sorted(set(params) - UPLOAD_KEYS[phase])
+    if extra:
+        raise WriteRefused(f"write refused: key {extra[0]!r} is not allowed in upload phase {phase}")
+    if "waterfall_id" in params and not (isinstance(params["waterfall_id"], str)
+                                         and UPLOAD_WATERFALL_RE.fullmatch(params["waterfall_id"])):
+        raise WriteRefused("write refused: waterfall_id must be 32 lowercase hex characters")
+    if phase == "start":
+        size = _digits(params.get("file_size"))
+        if not size or size > UPLOAD_FILE_MAX:
+            raise WriteRefused("write refused: file_size must be a positive size within the video limit")
+    else:
+        sid = params.get("upload_session_id")
+        if not (isinstance(sid, str) and UPLOAD_ID_RE.fullmatch(sid)):
+            raise WriteRefused("write refused: upload_session_id must be the numeric id Meta returned")
+    if phase == "transfer":
+        off = _digits(params.get("start_offset"))
+        if off is None or off >= UPLOAD_FILE_MAX:
+            raise WriteRefused("write refused: start_offset must be a number inside the video limit")
+    if phase == "finish":
+        for key in ("title", "name"):
+            if key in params and not (isinstance(params[key], str) and 0 < len(params[key]) <= 200):
+                raise WriteRefused(f"write refused: {key} must be a short text")
+    if phase == "transfer":
+        if set(files) != {UPLOAD_CHUNK_FIELD}:
+            raise WriteRefused(f"write refused: transfer needs exactly the file field {UPLOAD_CHUNK_FIELD!r}")
+        chunk = files[UPLOAD_CHUNK_FIELD]
+        if not isinstance(chunk, (bytes, bytearray)) or not 0 < len(chunk) <= UPLOAD_CHUNK_MAX:
+            raise WriteRefused(f"write refused: a chunk must be 1..{UPLOAD_CHUNK_MAX} bytes")
+    elif files:
+        raise WriteRefused(f"write refused: upload phase {phase} takes no file")
+
+
 def check(act: str, method: str, path: str, params: dict | None,
-          files: dict | None = None, *, on_ad: bool = False) -> str:
+          files: dict | None = None, *, on_ad: bool = False, children_active: bool = False) -> str:
     """Проверить запись. Возвращает ребро; иначе `WriteRefused`.
 
     `on_ad` — набор объявлений того же плана создаётся с `destination_type=ON_AD`
     (только тогда креатив может нести `lead_gen_form_id`).
+
+    `children_active` (ACL-2114) — вызывающий подтвердил чтением, что кампания-родитель
+    в статусе PAUSED. Только тогда набор объявлений/объявление (`adsets`, `ads`) может
+    быть создан с `status=ACTIVE`: пока кампания на паузе, ничего не показывается.
+    Кампания всегда PAUSED; вложенные статусы - только PAUSED.
     """
     if method != "POST":
         raise WriteRefused(f"write refused: method {method!r} (only POST; never DELETE)")
@@ -193,12 +289,21 @@ def check(act: str, method: str, path: str, params: dict | None,
     if edge not in EDGE_KEYS:
         raise WriteRefused(f"write refused: edge {edge!r} is not on the allowlist")
     params = dict(params or {})
+    if edge == "advideos" and "upload_phase" in params:
+        _check_upload(params, dict(files or {}))
+        return edge
     extra = sorted(set(params) - EDGE_KEYS[edge])
     if extra:
         raise WriteRefused(f"write refused: key {extra[0]!r} is not allowed on {edge}")
-    if edge in PAUSED_REQUIRED and params.get("status") != PAUSED:
-        raise WriteRefused(f"write refused: {edge} must be created with status PAUSED")
+    child_active = (children_active is True and edge in CHILD_EDGES
+                    and params.get("status") == ACTIVE)
+    if edge in PAUSED_REQUIRED and params.get("status") != PAUSED and not child_active:
+        raise WriteRefused(f"write refused: {edge} must be created with status PAUSED"
+                           + (" (ACTIVE only for ad sets and ads under a confirmed PAUSED campaign)"
+                              if edge in CHILD_EDGES else ""))
     checked = dict(params)
+    if child_active:
+        checked["status"] = PAUSED  # верхний статус разрешён выше; вложенные проверяет `_walk`
     for key in JSON_KEYS & set(params):
         checked[key] = _parsed(params[key], f"{edge}.{key}")
         if not isinstance(checked[key], (dict, list)):
@@ -232,7 +337,10 @@ def check(act: str, method: str, path: str, params: dict | None,
 FORM_EDGE = "leadgen_forms"
 #: Ключи верхнего уровня запроса. `tos_accepted` сюда не попадёт никогда.
 FORM_KEYS = frozenset({"name", "questions", "privacy_policy", "thank_you_page", "context_card",
-                       "question_page_custom_headline", "locale", "follow_up_action_url"})
+                       "question_page_custom_headline", "locale", "follow_up_action_url",
+                       "is_optimized_for_quality", "block_display_for_non_targeted_viewer"})
+#: Булевы ключи верхнего уровня (ACL-2053): только true/false, не строки и не числа.
+FORM_BOOL_KEYS = frozenset({"is_optimized_for_quality", "block_display_for_non_targeted_viewer"})
 #: Ключи, которые Graph читает как JSON (строку разбираем до проверок, как у `act_X`).
 FORM_JSON_KEYS = frozenset({"questions", "privacy_policy", "thank_you_page", "context_card"})
 #: Допустимые ключи вложенных объектов.
@@ -243,7 +351,7 @@ FORM_NESTED: dict[str, list[str]] = {
     "question": ["key", "label", "options", "type"],
     "option": ["key", "value"],
 }
-FORM_QUESTION_TYPES = ("CUSTOM", "EMAIL", "FULL_NAME", "PHONE")
+FORM_QUESTION_TYPES = ("CUSTOM", "EMAIL", "FIRST_NAME", "FULL_NAME", "LAST_NAME", "PHONE")
 #: `NONE` - кнопки нет (нет ссылки на сайт): `button_type` у thank_you_page обязателен
 #: (справочник Meta page/leadgen_forms), для «без ссылки» там предусмотрен `NONE`.
 FORM_BUTTON_TYPES = ("VIEW_WEBSITE", "NONE")
@@ -265,7 +373,7 @@ FORM_FORBIDDEN_ANYWHERE = frozenset({"tos_accepted", "leadgen_tos_accepted", "to
 def policy_for_form_create(page: str = "") -> dict:
     """Таблица цепочки форм для страницы-помощника (JSON-сериализуемая)."""
     return {
-        "edge": FORM_EDGE, "page": str(page or ""), "keys": sorted(FORM_KEYS), "json_keys": sorted(FORM_JSON_KEYS),
+        "edge": FORM_EDGE, "page": str(page or ""), "keys": sorted(FORM_KEYS), "bool_keys": sorted(FORM_BOOL_KEYS), "json_keys": sorted(FORM_JSON_KEYS),
         "nested": {k: list(v) for k, v in FORM_NESTED.items()},
         "question_types": list(FORM_QUESTION_TYPES), "button_types": list(FORM_BUTTON_TYPES),
         "card_styles": list(FORM_CARD_STYLES), "max_questions": FORM_MAX_QUESTIONS,
@@ -377,6 +485,11 @@ def check_form_create(page_id: str, method: str, path: str, params: dict | None,
         _form_text(checked["question_page_custom_headline"], "question_page_custom_headline")
     if "follow_up_action_url" in checked:
         _form_url(checked["follow_up_action_url"], "follow_up_action_url")
+        if len(checked["follow_up_action_url"]) > FORM_MAX_TEXT:
+            raise WriteRefused("write refused: follow_up_action_url is too long")
+    for key in FORM_BOOL_KEYS & set(checked):
+        if not isinstance(checked[key], bool):
+            raise WriteRefused(f"write refused: {key} must be true or false")
     if "privacy_policy" in checked:
         pp = _form_keys(checked["privacy_policy"], "privacy_policy", "privacy_policy")
         _form_url(pp.get("url"), "privacy_policy.url")

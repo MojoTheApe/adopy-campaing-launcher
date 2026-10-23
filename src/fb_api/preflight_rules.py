@@ -75,7 +75,7 @@ RULES: list[dict[str, Any]] = [
     _r("account_active", "Ad account is active", ERROR, "server",
        "the profile has no access to the ad account, or the account is not active: check the Accounts page"),
     _r("page_ok", "Facebook Page", ERROR, "server",
-       "choose a Page that belongs to this ad account on the Accounts page (page_id)"),
+       "choose a Facebook Page in this campaign or use Automatic; Refresh pages to retry loading"),
     _r("pixel_ok", "Pixel for conversions", ERROR, "server",
        "website conversions need exactly one pixel on the ad account; set pixel_id on the Accounts page",
        applies="website"),
@@ -115,7 +115,7 @@ RULES: list[dict[str, Any]] = [
        "the file is missing, empty or unreadable: choose another file",
        sel=".cb-creative-search", level="ad", unit="ad"),
     _r("media_limits", "Media within Meta limits", ERROR, "server",
-       "file type, size (image 30 MB, video 200 MB) or video length is over the limit",
+       "file type, size (image 30 MB, video 1536 MB) or video length is over the limit",
        sel=".cb-creative-search", level="ad", unit="ad"),
     _r("media_vertical", "Vertical file for Stories and Reels", WARNING, "server",
        "no 9:16 file: without one Facebook crops the picture itself",
@@ -380,7 +380,9 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
 
     facts = creator.facts
     put("account_active", OK)
-    guarded("page_ok", lambda: (cr.resolve_page(plan, facts), put("page_ok", OK)))
+    guarded("page_ok", lambda: (cr.resolve_page(plan, facts), creator.check_profile_page(plan),
+                                put("page_ok", WARNING if cr.needs_manual_page(plan) else OK,
+                                    cr.MANUAL_PAGE_NOTICE if cr.needs_manual_page(plan) else "")))
     if any(not s.instant for s in plan.ad_sets):
         guarded("pixel_ok", lambda: (cr.resolve_pixel(plan, facts), put("pixel_ok", OK)))
 
@@ -437,7 +439,7 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
             try:
                 data = (files or {}).get(ad.path)
                 if data is None:
-                    data = creator.read_file(ad.path)
+                    data = creator.load_media(ad.path, ad.kind)
             except OSError as exc:
                 problems["media_readable"].append((ad.index, f"Ad {ad.index}: creative file cannot be read ({exc})"))
                 continue
