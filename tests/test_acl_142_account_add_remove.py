@@ -147,6 +147,22 @@ def test_remove_from_acl_matches_placements_by_case(machine):
     assert account_links.values_for("Acc B", "country") == []
 
 
+def test_remove_from_acl_drops_the_same_account_map_row_and_all_links_despite_case(machine):
+    account_links.link("Acc B", "asset", "Asset B")
+    account_links.link("Acc A", "asset", "Asset A")
+
+    out = _remove({"account_name": "acc b", "also_unlink": True})
+
+    assert out["ok"]
+    assert out["removed"] == ["Acc B"], "full removal must also delete the map row"
+    assert out["missing"] == [], "another spelling of the removed account is not missing"
+    assert _names(machine) == ["Acc A"]
+    assert account_links.values_for("Acc B", "country") == []
+    assert account_links.values_for("Acc B", "asset") == []
+    assert account_links.values_for("Acc A", "country") == ["Chile", "Peru"]
+    assert account_links.values_for("Acc A", "asset") == ["Asset A"]
+
+
 def test_remove_from_acl_works_when_this_machine_has_no_map_file(tmp_path, monkeypatch):
     monkeypatch.setattr(account_links, "links_path", lambda: tmp_path / "account_links.csv")
     account_links.link("Orphan", "country", "Peru")

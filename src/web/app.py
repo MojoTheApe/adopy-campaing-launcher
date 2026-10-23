@@ -4862,6 +4862,12 @@ async def account_map_remove(request: Request) -> JSONResponse:
     removed: list[str] = []
     kept: list = []
     unlinked: list[dict] = []
+
+    def account_key(name: str) -> str:
+        # Full removal uses the same account identity as the local placements.
+        # Ordinary map-only removals retain their exact-name matching.
+        return name.lower() if also_unlink else name
+
     try:
         if map_path.is_file():
             with open(map_path, encoding="utf-8-sig", newline="") as f:
@@ -4869,11 +4875,11 @@ async def account_map_remove(request: Request) -> JSONResponse:
                 fieldnames = reader.fieldnames or []
                 rows = list(reader)
 
-            target = set(wanted)
-            kept = [r for r in rows if (r.get("account_name") or "").strip() not in target]
+            target = {account_key(name) for name in wanted}
+            kept = [r for r in rows if account_key((r.get("account_name") or "").strip()) not in target]
             removed = [
                 (r.get("account_name") or "").strip() for r in rows
-                if (r.get("account_name") or "").strip() in target
+                if account_key((r.get("account_name") or "").strip()) in target
             ]
             if removed:
                 write_csv_atomic(map_path, fieldnames, kept)
@@ -4903,7 +4909,8 @@ async def account_map_remove(request: Request) -> JSONResponse:
 
     # `missing` is reported rather than treated as failure: the rest were
     # removed, and pretending otherwise would invite a confused retry.
-    missing = sorted(set(wanted) - set(removed))
+    removed_keys = {account_key(name) for name in removed}
+    missing = sorted(name for name in set(wanted) if account_key(name) not in removed_keys)
     return JSONResponse(
         {"ok": True, "removed": removed, "missing": missing, "left": len(kept),
          "unlinked": unlinked}
