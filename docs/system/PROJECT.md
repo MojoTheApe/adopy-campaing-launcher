@@ -36,6 +36,16 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   line at the left of their sidebar row (ACL-1838), including countries opened in
   the account map before their first spend. Inactive countries have no marker;
   the expanded-country background remains a separate selection indication.
+- `src/web/builder_drafts.py` and `/api/builder-state`: debounced machine-local
+  copies of Builder campaigns, drawer open/wide state and publish-job memory.
+  localStorage remains a fast cache; initial reconciliation restores the newer
+  copy and backs up displaced data. Atomic writes use the shared ACL config path
+  and machine lock, preserving corrupt files before replacement. Each document
+  serializes normal saves; delayed acknowledgements/refusals cannot replace a newer
+  local edit or rewind its timestamp. The latest queued snapshot uses the last
+  acknowledged server base. Browser-only fallback remains available if the server
+  is unreachable. A closing-page flush sends the latest keepalive copy immediately,
+  without relying on an earlier response callback; superseded replies are ignored.
 - `src/web/draft_status.py`: current build verdicts in machine-local JSON. Accepted
   jobs invalidate earlier readiness before starting, retain the previous success
   as history and persist their job/plan identity, partial results and stopped or
