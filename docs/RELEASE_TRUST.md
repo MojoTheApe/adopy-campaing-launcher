@@ -10,9 +10,12 @@ access can still push to `main` and tag it.
 
 ### Git channel (`Install ACL.bat`, `start_dashboard.bat`, the dashboard update button)
 
-This is the channel buyers use today: `Install ACL.bat` clones the repository
-and `start_dashboard.bat` fast-forwards to `origin/main` when an update is
-requested. The gate is `scripts/acl_update_gate.py` (and its PowerShell twin
+This is the older channel. New machines are set up with the one-file installer
+`Adopy-Campaign-Launcher-Setup-<version>.exe` and update through the packaged
+channel below; `docs/SETUP-NEW-PC.md` no longer mentions the `.bat` files. The
+Git channel stays for machines installed before that: `Install ACL.bat` clones
+the repository and `start_dashboard.bat` fast-forwards to `origin/main` when an
+update is requested. The gate is `scripts/acl_update_gate.py` (and its PowerShell twin
 `Get-AclRelease` in `Install ACL.bat`).
 
 The candidate must be the exact target of an annotated `acl-release-*` tag
