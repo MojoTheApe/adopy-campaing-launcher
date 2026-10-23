@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from test_builder_per_account import _render
 from test_campaign_build_dot_browser import add, browser, names
-from test_drawer_review_browser import fields
+from test_drawer_review_browser import OFFLINE_FILES, fields
 from src.web.publish_progress import job_progress
 
 
@@ -37,7 +37,7 @@ def teach_ui(browser, tmp_path):
         if request.request.resource_type == "document":
             request.fulfill(content_type="text/html", body=html)
             return
-        data = {"files": [], "texts": [], "profiles": [], "waiting": False}
+        data = {"files": OFFLINE_FILES, "texts": [], "profiles": [], "waiting": False}
         if path == "/preview-publish":
             form = fields(request.request)
             data = {"plan": [{"Campaign Name": form[f"camp_{i}_name"],
