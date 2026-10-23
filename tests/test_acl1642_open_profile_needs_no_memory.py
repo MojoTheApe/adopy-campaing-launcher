@@ -290,15 +290,135 @@ class _ReadOnlyProc:
         raise AssertionError(f"open-profile check touched the process: {name}")
 
 
-def test_find_open_profiles_reads_process_list_only():
+def test_find_open_profiles_reads_process_list_only(monkeypatch):
+    import psutil
+    from src.fb_ads_rpa import browser
+
     mimic = "/home/x/mlx/deps/mimic_140/chrome.exe"
     procs = [
         _ReadOnlyProc(mimic, ["chrome.exe", "--client-session-id=ABC-1"]),
-        _ReadOnlyProc(mimic, ["chrome.exe", "--type=renderer", "--client-session-id=ZZZ-9"]),
+        _ReadOnlyProc(mimic, ["chrome.exe", "--client-session-id=another-profile"]),
         _ReadOnlyProc("/opt/google/chrome/chrome.exe", ["chrome.exe", "--client-session-id=zzz-9"]),
     ]
-    opened = ps.find_open_profiles(["abc-1", "zzz-9", "none"], processes=lambda: procs)
+    monkeypatch.setattr(psutil, "process_iter", lambda attrs: procs)
+    monkeypatch.setattr(browser, "_find_mlx_profile_dir", lambda profile: None)
+    opened = ps.find_open_profiles(["abc-1", "zzz-9", "none"])
     assert opened == {"abc-1"}
+
+
+def test_queue_uses_the_robot_running_check_with_resolved_folder(monkeypatch, tmp_path):
+    import psutil
+    from src.fb_ads_rpa import browser
+
+    monkeypatch.setattr(psutil, "process_iter", lambda attrs: [])
+    folder = tmp_path / "profile-folder"
+    monkeypatch.setattr(browser, "_find_mlx_profile_dir",
+                        lambda profile: folder if profile == "p1" else None)
+    seen = []
+
+    def running(self, directory, profile_id=""):
+        seen.append((directory, profile_id))
+        return profile_id == "p1"
+
+    monkeypatch.setattr(browser.MultiloginDirectCDPProvider, "profile_is_running", running)
+    assert ps.find_open_profiles(["p1", "p2", "", "p1"]) == {"p1"}
+    assert seen == [(str(folder), "p1"), ("", "p2")]
+
+
+def test_queue_recognizes_the_same_short_folder_as_the_robot(monkeypatch, tmp_path):
+    import psutil
+    from src.fb_ads_rpa import browser, profile_dir
+
+    folder = tmp_path / "long-profile-folder"
+    short = str(tmp_path / "SHORT~1")
+    monkeypatch.setattr(browser, "_find_mlx_profile_dir", lambda profile: folder)
+    monkeypatch.setattr(profile_dir, "short_path", lambda path: short)
+    proc = _ReadOnlyProc("/mlx/mimic/chrome.exe", ["chrome.exe", "--user-data-dir=" + short])
+    monkeypatch.setattr(psutil, "process_iter", lambda attrs: [proc])
+    assert ps.find_open_profiles(["profile-id"]) == {"profile-id"}
+
+
+def test_superseded_probe_cannot_replace_a_newer_closed_answer():
+    release_old = threading.Event()
+    first_started = threading.Event()
+    clock = {"now": 0.0}
+    calls = {"n": 0}
+    wakes = []
+
+    def check(profiles):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            first_started.set()
+            assert release_old.wait(3)
+            return set(profiles)
+        return set()
+
+    probe = ps.OpenProfileProbe(check, clock=lambda: clock["now"], ttl_s=0.5,
+                                max_age_s=0.5, restart_s=1.0,
+                                on_ready=lambda: wakes.append(True))
+    try:
+        assert probe.read("p1") is None
+        assert first_started.wait(1)
+        clock["now"] = 2.0
+        probe.read("p1")  # the hung first check is replaced
+        assert _until(lambda: probe.checks == 1)
+        assert probe.read("p1") is False
+        release_old.set()
+        assert _until(lambda: probe.checks == 2)
+        assert probe.read("p1") is False
+        assert _until(lambda: len(wakes) == 1)
+    finally:
+        release_old.set()
+
+
+def test_open_profile_low_memory_does_not_evict_an_idle_kept_window():
+    m = Machine(open_profiles={"p1", "p2"}, kept_idle_close_s=1.0)
+    usage = ps.ProfileUsage(lambda profiles: {p: 4 * GB for p in profiles},
+                            clock=lambda: m.now, background=False)
+    probe = ps.OpenProfileProbe(m._check, clock=lambda: m.now, background=False)
+    evictions = []
+    slots = ps.ProfileSlots(memory=lambda: mem(m.available_gb), settings=lambda: m.settings,
+                            clock=lambda: m.now, usage=usage, open_probe=probe,
+                            evictor=lambda *args: evictions.append(args) or True)
+    slots.acquire("A", "p1")
+    slots.keep("A", "account-a", kind=ps.KEPT_CONVENIENCE)
+    m.now += 2
+    m.available_gb = 1.0
+    grant = slots.acquire("B", "p2")
+    assert grant["decision"]["reason"] == "profile_open"
+    assert grant["closed_for_room"] == [] and evictions == []
+    kept = next(r for r in slots.snapshot()["running"] if r["profile"] == "p1")
+    assert kept["kept"] and kept["kept_kind"] == ps.KEPT_CONVENIENCE
+
+
+def test_reused_open_review_window_retains_its_current_kind():
+    m = Machine(open_profiles={"p1", "p2"})
+    usage = ps.ProfileUsage(lambda profiles: {p: 4 * GB for p in profiles},
+                            clock=lambda: m.now, background=False)
+    probe = ps.OpenProfileProbe(m._check, clock=lambda: m.now, background=False)
+    slots = ps.ProfileSlots(memory=lambda: mem(m.available_gb), settings=lambda: m.settings,
+                            clock=lambda: m.now, usage=usage, open_probe=probe)
+    slots.acquire("A", "p1")
+    slots.keep("A", "account-a", kind=ps.KEPT_REVIEW)
+    slots.acquire("B", "p2")
+    m.available_gb = 1.0
+    grant = slots.acquire("A2", "p1")
+    assert grant["decision"]["reason"] == "profile_open"
+    assert grant["reused_kept"] == ps.KEPT_REVIEW
+    assert grant["closed_for_room"] == []
+    assert len(slots.snapshot()["running"]) == 2
+
+
+def test_an_open_profile_still_waits_while_its_kept_window_is_closing():
+    m = Machine(open_profiles={"p1"})
+    slots = m.slots()
+    slots.acquire("A", "p1")
+    slots.keep("A", "account-a", kind=ps.KEPT_CONVENIENCE)
+    _enqueue(slots, ("B", "p1"))
+    with slots._cond:
+        slots._running["A"]["closing"] = True
+        verdict = slots._verdict("B")
+    assert not verdict["allow"] and verdict["reason"] == "profile"
 
 
 def test_slow_detection_never_blocks_the_queue():

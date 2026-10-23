@@ -3,6 +3,13 @@
   "harvested": "Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).",
   "steps": [
     {
+      "step": "Graph reconciliation after CDP session detachment",
+      "robot": "PageTab / InPageGraph local helper recovery before the next Graph read (ACL-1836)",
+      "layouts": [
+        {"layout": "Transport trace: paused campaign/ad set, uncertain video upload, lost readback session", "seen": ["anonymized 2026-10-12 incident, ACL-1836"], "fixture": "fb_api_session_lost_2026_10_12.json", "fragment": null, "test": "tests/test_acl1836_session_recovery.py", "expected": "one reattach to the same verified owned target; no replay of sent calls; unavailable/changed target becomes a typed stop", "status": "pass"}
+      ]
+    },
+    {
       "step": "objective",
       "robot": "Create -> objective dialog -> Leads (`_create_took`, `_objective_missing_reason`, simple_create.ensure_leads_objective)",
       "layouts": [
@@ -259,6 +266,23 @@
       "layouts": [
         {"layout": "Create-campaign dialog 'Meta AI-guided setup' / 'Manual campaign setup' (radio pair, Create new campaign)", "seen": ["fb358fda8aab/00_stall_objective_wait"], "fixture": "ai_guided_setup_dialog_2026_10_05.html", "fragment": "dialog", "test": "tests/test_ai_rescue.py", "expected": "dialog listed first with its title; both radios with checked state; summary has no ids, URLs or e-mails", "status": "pass"},
         {"layout": "Collapsed Audience card (same capture as ACL-1611)", "seen": ["6ebd77ccaf6a/02_further_limit_reach_click"], "fixture": "audience_card_collapsed_drawer_2026_10_05.html", "fragment": "card_run_a, card_run_b", "test": "tests/test_ai_rescue.py", "expected": "card button listed as not-pressed; a model pick of it is expanded by exactly one click", "status": "pass"}
+      ]
+    },
+    {
+      "step": "Graph read permission diagnostics (ACL-1886)",
+      "robot": "GraphClient.get/get_all error context",
+      "layouts": [
+        {
+          "layout": "Plan check Graph10 Permission Denied without failed-operation context; response fields reconstructed from owner screenshots",
+          "seen": [
+            "anonymized Plan check error 2026-10-13"
+          ],
+          "fixture": "fb_api_permission_denied_2026_10_13.json",
+          "fragment": null,
+          "test": "tests/test_acl1886_graph_error_context.py",
+          "expected": "GET and allowlisted operation/search subtype visible, request data absent; denial remains denied with unchanged requests and stops; live permission cause unknown",
+          "status": "pass"
+        }
       ]
     }
   ],

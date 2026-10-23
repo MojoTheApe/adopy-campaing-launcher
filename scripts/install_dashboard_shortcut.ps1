@@ -27,7 +27,7 @@ if (-not (Test-Path $DashboardBat)) {
 }
 
 if (-not (Test-Path $IcoFile)) {
-    Write-Error "ACL icon not found: $IcoFile`nRun: python scripts/convert_favicon_to_ico.py"
+    Write-Error "ACL icon not found: $IcoFile`nRestore assets/dashboard.ico from the repository (the brand-kit icon)."
     exit 1
 }
 
