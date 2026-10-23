@@ -22,6 +22,10 @@
 <small class="cmp"><span class="cmp-prev" title="Earlier period">{{ c.prev }}</span><span class="cmp-delta {{ c.dir }} {{ c.tone }}">{{ c.delta }}</span></small>
 {%- endmacro %}
 
+{% macro ftd_pair(c) -%}
+<small class="cmp" aria-label="Earlier FTDs and change"><span class="cmp-prev">You {{ c.you.prev }} · {{ c.you.delta }}</span><span class="cmp-prev">All {{ c.all.prev }} · {{ c.all.delta }}</span></small>
+{%- endmacro %}
+
 {#- Метка строки, которой нет в одном из периодов. -#}
 {% macro flag(state, what='the earlier period') -%}
 {%- if state == 'new' %}<span class="cmp-flag new" title="Not in {{ what }}">new</span>{% elif state == 'gone' %}<span class="cmp-flag gone" title="In {{ what }}, not in this period">gone</span>{% endif -%}

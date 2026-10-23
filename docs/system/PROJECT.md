@@ -68,6 +68,9 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   or become a Builder/Workbench action. Current Workbench row indices and cached
   reports are preserved. Home and Workbench metrics retain their existing cohort
   and weighting semantics; a map-summary refresh keeps the same comparison dates.
+  Measured spend and FTD summaries also compare in volume cards, row You tags,
+  asset chips and sidebar counters; structural counts, goals and draft inputs keep
+  their existing meaning. Historical-only exact versions and CM Net/ROI remain visible.
 - `src/campaign_bridge`, `src/upload_agent`: campaign input/output preparation.
 - `src/web/profile_slots.py` (ACL-1642): a publish job whose Multilogin profile is already
   open does not reserve memory for a new profile. The configured concurrency ceiling,

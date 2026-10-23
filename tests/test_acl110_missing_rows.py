@@ -47,7 +47,7 @@ def render(report, amap, compare):
         request=MagicMock(), report=report, mlx_labels={}, warnings=[], built_at="2026-10-23", upload_errors={},
         account_map=amap, account_preflight={}, account_preflight_json={}, ref_options={}, ref_options_json={},
         account_alias_map_json={}, draft_status={}, period={"date_from": "2026-10-08", "date_to": "2026-10-14", "span": ""},
-        compare=compare, compare_note="", compare_pick={'mode': compare.mode, 'date_from': compare.date_from, 'date_to': compare.date_to} if compare else {}, home_kpis=web._home_kpis(report))
+        compare=compare, compare_note="", compare_pick={'mode': compare.mode, 'date_from': compare.date_from, 'date_to': compare.date_to} if compare else {}, home_kpis=web._home_kpis(report), sidebar_countries=web._sidebar_countries(report, amap))
 
 
 def test_real_zero_row_is_present_but_explicit_no_data_is_absent():
@@ -267,3 +267,56 @@ def test_earlier_only_whole_country_retains_campaign_manager_net_and_roi():
     assert '<th>Net</th>' in html and '<th>ROI</th>' in html
     assert '$234' in html and '>1.25</span>' in html
     assert 'button' not in html and 'hx-get' not in html
+
+
+@pytest.mark.parametrize('now_spend, delta', [(7, '+133%'), (0, '−100%')])
+def test_workbench_keeps_unattributed_spend_comparison_including_current_zero(now_spend, delta):
+    before = {'unattributed': {'spend': 3}}
+    compare = pc.PeriodCompare(INFO, {'countries': [{'country': 'Costa Rica', 'workbench': {'slices': {'Alpha': {'compare': before}}}}]})
+    current = {'slices': {'Alpha': {'compare': {'unattributed': {'spend': now_spend}}}}}
+    period = compare.workbench('Costa Rica', current)['slices']['Alpha']['_period_compare']
+    assert period.get('unattributed', [{}])[0].get('prev') == '$3'
+    assert period['unattributed'][0]['delta'] == delta
+
+
+@pytest.mark.parametrize('tab', ['campaigns', 'setups', 'landings', 'targets', 'creatives'])
+def test_workbench_row_you_ftds_keep_their_own_earlier_cohort(tab):
+    report, _, compare, _ = workbench_fixture()
+    rows = compare.workbench('Costa Rica', report['countries'][0]['workbench'])['slices']['Alpha'][tab]
+    row = next(r for r in rows if r.get('you', {}).get('ftds', 0) > 0)
+    assert row.get('_period_you', [{}, {}, {}])[2].get('prev') is not None
+    assert row['_period_you'][2]['delta'] == '+100%'
+    if tab == 'creatives':
+        assert row['versions'][0]['_period_you'][2]['delta'] == '+100%'
+
+
+def test_workbench_asset_ftds_and_sidebar_summaries_compare_without_mutation():
+    report, amap, compare, _ = workbench_fixture()
+    original = deepcopy(report)
+    model = compare.workbench('Costa Rica', report['countries'][0]['workbench'])
+    asset = next(a for a in model['assets'] if a['name'] == 'Alpha')
+    counts = asset.get('_period_ftds', {})
+    assert counts.get('you', {}).get('prev') == '4'
+    assert counts.get('all', {}).get('prev') == '19'
+    assert counts['all']['delta'] == '+100%'
+    html = render(report, amap, compare).split('</aside>', 1)[0]
+    assert html.count('aria-label="Earlier FTDs and change"') >= 3
+    assert report == original
+
+
+def test_workbench_attributed_ftd_total_has_earlier_value_and_delta():
+    report, _, compare, _ = workbench_fixture()
+    period = compare.workbench('Costa Rica', report['countries'][0]['workbench'])['slices']['Alpha']['_period_compare']
+    assert period.get('attributed', {}).get('prev') == '10'
+    assert period['attributed']['delta'] == '+100%'
+
+
+def test_previously_visible_you_zero_ftds_survives_current_zero_spend():
+    before = {'target': 'Zero own FTDs', 'spend': 20, 'leads': 2, 'ftds': 1,
+              'you': {'spend': 10, 'leads': 1, 'ftds': 0}}
+    prior = {'country': 'Costa Rica', 'workbench': {'slices': {'Alpha': {'targets': [before]}}}}
+    compare = pc.PeriodCompare(INFO, {'countries': [prior]})
+    current = {'slices': {'Alpha': {'targets': [{**before, 'you': {'spend': 0, 'leads': 0, 'ftds': 0}}]}}}
+    row = compare.workbench('Costa Rica', current)['slices']['Alpha']['targets'][0]
+    assert row['_period_you'][2]['prev'] == '0'
+    assert row['_period_you_visible'] is True

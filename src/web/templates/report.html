@@ -3888,6 +3888,8 @@
     .sb-asset:hover { background: var(--adopy-surface-hover); }
     .sb-asset:focus-visible, .sb-more summary:focus-visible { outline: var(--adopy-focus-width) solid var(--adopy-focus); outline-offset: 1px; }
     .sb-asset-name { overflow-wrap: anywhere; }
+    .sb-asset.sb-asset-compare { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+    .sb-asset-compare > .cmp { grid-column: 1 / -1; margin: 0; text-align: right; white-space: normal; }
     .sb-asset.active { color: var(--adopy-link); font-weight: var(--adopy-weight-semibold); background: var(--adopy-surface);
       box-shadow: inset 2px 0 0 var(--adopy-primary); }
     .sb-asset.active .sb-ftd { color: var(--adopy-link); }
@@ -4418,6 +4420,7 @@ async function dashRefresh(ev) {
     <button type="button" class="sidebar-country-btn{% if s.active %} live{% endif %}" data-country="{{ cid }}"
             {% if s.active %}title="{% if s.spend %}spending{% else %}opened in the account map, nothing spent yet{% endif %}"{% endif %}>{{ c.country }}</button>
     {%- if s.ftds %}<span class="sb-ftd sb-ftd-country" title="FTDs: yours / everyone's in the selected period">{{ s.ftds.you }} / {{ s.ftds.all }}</span>{% endif %}
+    {% if compare and s.ftds %}<div style="margin:0 var(--space-sm) var(--space-sm);text-align:right">{{ mx.ftd_pair(compare.asset_counts(c.country, {'name':'', 'you_ftds':s.ftds.you, 'ftds':s.ftds.all})) }}</div>{% endif %}
     <div class="sidebar-sections">
       {#- 22.10 (владелец): сверху «All assets», под ним виды страны (Workbench, Manage, 1 Assets…),
           ниже — ассеты по брендам. Виды интереснее списка брендов, поэтому они выше и не свёрнуты. -#}
@@ -4425,8 +4428,8 @@ async function dashRefresh(ev) {
       {% if wb_assets %}
       <div class="sb-assets" role="group" aria-label="All assets in {{ c.country }}">
         {% for a in wb_assets[:1] %}
-        <button type="button" class="sb-asset" data-country="{{ cid }}" data-asset="{{ a.name }}" title="FTDs: yours / everyone's">
-          <span class="sb-asset-name">{{ a.label }}</span><span class="sb-ftd">{{ a.you_ftds }} / {{ a.ftds }}</span></button>
+        <button type="button" class="sb-asset{% if compare %} sb-asset-compare{% endif %}" data-country="{{ cid }}" data-asset="{{ a.name }}" title="FTDs: yours / everyone's">
+          <span class="sb-asset-name">{{ a.label }}{% if compare %}{{ mx.flag(compare.asset_counts(c.country, a).state) }}{% endif %}</span><span class="sb-ftd">{{ a.you_ftds }} / {{ a.ftds }}</span>{% if compare %}{{ mx.ftd_pair(compare.asset_counts(c.country, a)) }}{% endif %}</button>
         {% endfor %}
       </div>
       {% endif %}
@@ -4447,8 +4450,8 @@ async function dashRefresh(ev) {
       {% if wb_assets | length > 1 %}
       <div class="sb-assets sb-assets-brands" role="group" aria-label="Assets in {{ c.country }}">
         {% for a in wb_assets[1:] %}
-        <button type="button" class="sb-asset" data-country="{{ cid }}" data-asset="{{ a.name }}" title="FTDs: yours / everyone's">
-          <span class="sb-asset-name">{{ a.label }}</span><span class="sb-ftd">{{ a.you_ftds }} / {{ a.ftds }}</span></button>
+        <button type="button" class="sb-asset{% if compare %} sb-asset-compare{% endif %}" data-country="{{ cid }}" data-asset="{{ a.name }}" title="FTDs: yours / everyone's">
+          <span class="sb-asset-name">{{ a.label }}{% if compare %}{{ mx.flag(compare.asset_counts(c.country, a).state) }}{% endif %}</span><span class="sb-ftd">{{ a.you_ftds }} / {{ a.ftds }}</span>{% if compare %}{{ mx.ftd_pair(compare.asset_counts(c.country, a)) }}{% endif %}</button>
         {% endfor %}
       </div>
       {% endif %}
@@ -19447,12 +19450,17 @@ window.cwWorkbench = (function () {
 
   function volumeTile(cmp, period) {
     var y = cmp.you.ftds, o = cmp.others.ftds, tot = y + o;
+    var un = period && period.unattributed && period.unattributed[0];
     return '<div class="cw-kpi" data-kpi="ftds">'
       + '<div class="cw-kpi-label"><span>FTDs</span><span>Volume</span></div>'
-      + '<div class="cw-kpi-you">' + y + periodCell(period && period.you[2]) + '<small>of ' + tot + ' attributed</small></div>'
-      + '<div class="cw-kpi-peer"><span>Others <b>' + o + periodCell(period && period.others[2]) + '</b></span><span>' + money(cmp.you.spend) + ' you · ' + money(cmp.others.spend) + ' others</span></div>'
+      + '<div class="cw-kpi-you">' + y + periodCell(period && period.you[2]) + '<small>of ' + tot + ' attributed</small>' + periodCell(period && period.attributed) + '</div>'
+      + '<div class="cw-kpi-peer"><span>Others <b>' + o + periodCell(period && period.others[2]) + '</b></span><span>' + money(cmp.you.spend) + ' you'
+      + (period ? periodCell(period.you[0]) : ' · ') + money(cmp.others.spend) + ' others'
+      + periodCell(period && period.others[0]) + '</span></div>'
       + '<div class="cw-kpi-delta">'
-      + (cmp.unattributed.spend > 0 ? money(cmp.unattributed.spend) + ' spend has no CM and is in neither group' : 'Peers exclude the selected buyer')
+      + (cmp.unattributed.spend > 0 || (un && un.prev !== '—')
+        ? money(cmp.unattributed.spend) + ' spend has no CM and is in neither group' + periodCell(un)
+        : 'Peers exclude the selected buyer')
       + '</div></div>';
   }
 
@@ -19535,13 +19543,23 @@ window.cwWorkbench = (function () {
       + (i === 0 && r._period_state === 'new' ? '<span class="cmp-flag new">new</span>' : '')
       + periodCell(r._period && r._period[i]) + '</td>'; }).join('');
   }
+  function periodCounts(c) {
+    return c ? '<small class="cmp" aria-label="Earlier FTDs and change"><span class="cmp-prev">You ' + esc(c.you.prev) + ' · ' + esc(c.you.delta)
+      + '</span><span class="cmp-prev">All ' + esc(c.all.prev) + ' · ' + esc(c.all.delta) + '</span></small>' : '';
+  }
+  function youTag(r) {
+    var p = r._period_you && r._period_you[2];
+    if ((!r.you || !(r.you.spend > 0)) && !r._period_you_visible) return '';
+    var current = r._period_gone || !r.you || r.you.ftds == null ? '—' : r.you.ftds;
+    return '<span class="cw-tag cw-you">You · ' + esc(current) + ' FTD' + periodCell(p) + '</span>';
+  }
   function periodGoneTable(rows, label) {
     if (!rows || !rows.length) return '';
     var h = '<div class="cw-scroll"><table class="cw-table cmp-readonly"><caption>' + esc(label) + ' · earlier only</caption><thead><tr><th>Row</th>'
       + ['Spend', 'Leads', 'FTDs', 'CPL', 'CPA', 'CR'].map(function (v) { return '<th>' + v + '</th>'; }).join('') + '</tr></thead><tbody>';
     rows.forEach(function (r) {
       var name = r.name || r.landing || r.target || r.pack || r.cm || [r.device, r.age, r.target, r.landing].filter(Boolean).join(' · ') || '—';
-      h += '<tr class="cmp-gone-row"><td>' + esc(name) + '<span class="cmp-flag gone">gone</span></td>'
+      h += '<tr class="cmp-gone-row"><td>' + esc(name) + '<span class="cmp-flag gone">gone</span>' + youTag(Object.assign({}, r, {_period_gone: true})) + '</td>'
         + metricCells(Object.assign({}, r, {_period_gone: true}), fmt6) + '</tr>';
     });
     return h + '</tbody></table></div>';
@@ -19570,10 +19588,6 @@ window.cwWorkbench = (function () {
 
   function q(panel, name) { return panel.querySelector('[data-cw="' + name + '"]'); }
 
-  function youTag(r) {
-    if (!r.you || !(r.you.spend > 0)) return '';
-    return '<span class="cw-tag cw-you">You · ' + r.you.ftds + ' FTD</span>';
-  }
   function head(cols) {
     return '<thead><tr>' + cols.map(function (c) { return '<th' + (c.num ? ' class="cw-num"' : '') + '>' + esc(c.t) + '</th>'; }).join('') + '</tr></thead>';
   }
@@ -19635,7 +19649,7 @@ window.cwWorkbench = (function () {
               + '<td>' + (v.pack ? useBtn('creative', 'Use version', ix, ' data-vx="' + vx + '"') : '') + '</td></tr>';
           });
           (r._period_gone_versions || []).forEach(function(v) {
-            h += '<tr class="cmp-gone-row"><td>' + esc(v.raw || v.version || 'No version in title') + '<span class="cmp-flag gone">gone</span></td>'
+            h += '<tr class="cmp-gone-row"><td>' + esc(v.raw || v.version || 'No version in title') + '<span class="cmp-flag gone">gone</span>' + youTag(Object.assign({}, v, {_period_gone: true})) + '</td>'
               + metricCells(Object.assign({}, v, {_period_gone: true}), fmt6) + '<td></td></tr>';
           });
         }
@@ -19676,7 +19690,8 @@ window.cwWorkbench = (function () {
 
     q(panel, 'chips').innerHTML = d.data.assets.map(function (a) {
       return '<button type="button" class="cw-chip" data-cw-asset="' + esc(a.name) + '" aria-pressed="' + (a.name === st.asset) + '">'
-        + esc(a.label) + '<small>' + a.you_ftds + ' / ' + a.ftds + ' FTDs</small></button>';
+        + esc(a.label) + (a._period_ftds && a._period_ftds.state === 'new' ? '<span class="cmp-flag new">new</span>' : '')
+        + '<small>' + a.you_ftds + ' / ' + a.ftds + ' FTDs</small>' + periodCounts(a._period_ftds) + '</button>';
     }).join('') + (d.data._period_assets_gone || []).map(function(a) {
       return '<span class="cw-sub cmp-readonly">' + esc(a.label) + ' · ' + esc(a.you_ftds) + ' / ' + esc(a.ftds) + ' earlier FTDs <span class="cmp-flag gone">gone</span></span>';
     }).join('') + (d.data.assets_total > d.data.assets.length - 1

@@ -36,6 +36,9 @@ def test_comparison_everywhere_is_readonly_and_both_modes_keep_primary_dates(bro
     pack = report['countries'][0]['workbench']['slices']['Alpha']['creatives'][0]
     new_raw = pack['pack'] + ' 99 - new comparison version'
     pack['versions'].append({**pack['versions'][0], 'key': pack['pack'] + '|99', 'version': '99', 'raw': new_raw})
+    prior_pack = prior['countries'][0]['workbench']['slices']['Alpha']['creatives'][0]
+    prior_pack['versions'].append({**prior_pack['versions'][0], 'key': pack['pack'] + '|77', 'version': '77',
+                                  'raw': 'Retired exact comparison version', 'you': {'spend': 10, 'leads': 1, 'ftds': 1}})
     old_variant = metrics(10, variant='1', label='Retained static version')
     new_variant = metrics(10, variant='2', label='New static version')
     creative = metrics(20, creative_id='42', ad_title='42', text_name='Text', has_variants=True,
@@ -43,6 +46,11 @@ def test_comparison_everywhere_is_readonly_and_both_modes_keep_primary_dates(bro
     report['countries'][0]['creatives'] = [creative]
     prior['countries'][0]['creatives'] = [{**creative, 'variants': [old_variant]}]
     amap['cm_section'].append({'country': 'New country', **metrics(0), 'rows': [metrics(0, cm='Zero manager')]})
+    zero_own = {'target': 'Zero own FTDs', 'spend': 20, 'leads': 2, 'ftds': 1,
+                'you': {'spend': 10, 'leads': 1, 'ftds': 0}}
+    prior['countries'][0]['workbench']['slices']['Alpha']['targets'].append(zero_own)
+    report['countries'][0]['workbench']['slices']['Alpha']['targets'].append(
+        {**zero_own, 'you': {'spend': 0, 'leads': 0, 'ftds': 0}})
     # A whole earlier-only target is evidence, never a current Use index.
     old_target = dict(prior['countries'][0]['workbench']['slices']['Alpha']['targets'][0], target='Retired <target>')
     prior['countries'][0]['workbench']['slices']['Alpha']['targets'].append(old_target)
@@ -118,13 +126,31 @@ def test_comparison_everywhere_is_readonly_and_both_modes_keep_primary_dates(bro
         expect(panel).to_be_visible()
         expect(panel.locator('[data-cw="kpis"] .cmp-prev').first).to_be_visible()
         panel.locator('[data-cw-asset="Alpha"]').click()
+        asset_counts = panel.locator('[data-cw-asset="Alpha"] [aria-label="Earlier FTDs and change"]')
+        expect(asset_counts).to_contain_text('You 4')
+        expect(asset_counts).to_contain_text('All 19')
+        if width == 1280:
+            sidebar_counts = p.locator('.sb-asset[data-asset="Alpha"] [aria-label="Earlier FTDs and change"]')
+            expect(sidebar_counts).to_contain_text('You 4')
+            expect(sidebar_counts).to_contain_text('All 19')
+            assert sidebar_counts.evaluate('e => e.getBoundingClientRect().right <= document.querySelector(".sidebar").getBoundingClientRect().right + 1')
+            assert p.locator('.sb-asset[data-asset="Alpha"] .sb-asset-name').bounding_box()['width'] > 60
+        volume = panel.locator('[data-kpi="ftds"]')
+        earlier_money = volume.locator('.cmp-prev').all_text_contents()
+        assert earlier_money.count('$600') == 2 and '$999' in earlier_money, earlier_money
         for tab in ('campaigns', 'setups', 'landings', 'targets', 'creatives', 'buyers'):
             panel.locator('[data-cw-tab="'+tab+'"]').click()
             expect(panel.locator('.cw-table:not(.cmp-readonly) .cmp-prev').first).to_be_visible()
+            if tab != 'buyers':
+                expect(panel.locator('.cw-table:not(.cmp-readonly) .cw-you .cmp-prev').first).to_be_visible()
         panel.locator('[data-cw-tab="creatives"]').click()
         panel.locator('.cw-pack').filter(has_text='Pack ' + pack['pack']).locator('.cw-toggle').click()
         expect(panel.locator('.cw-sub').filter(has_text=new_raw).locator('.cmp-flag.new')).to_be_visible()
+        gone_version = panel.locator('.cmp-gone-row').filter(has_text='Retired exact comparison version')
+        expect(gone_version.locator('.cw-you .cmp-prev')).to_have_text('1')
+        expect(gone_version.locator('button,[data-cw-use]')).to_have_count(0)
         panel.locator('[data-cw-tab="targets"]').click()
+        expect(panel.locator('.cw-table:not(.cmp-readonly) tr').filter(has_text='Zero own FTDs').locator('.cw-you .cmp-prev')).to_have_text('0')
         retired = panel.locator('.cmp-readonly').filter(has_text='Retired <target>')
         expect(retired).to_be_visible()
         expect(retired.locator('button, [data-cw-use], [onclick], form')).to_have_count(0)

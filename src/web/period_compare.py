@@ -156,7 +156,7 @@ def value_compare(cur: Any, prev: Any, kind: str = "money") -> dict:
     """A supplementary report number uses the same zero/missing delta rule."""
     p = _num(prev)
     text, direction = delta_text(cur, p)
-    formatted = (mc.fmt_money(p) if kind == "money" else
+    formatted = (mc.fmt_money(p) if kind == "money" else mc.fmt_count(p) if kind == "count" else
                  (f"{p:.2f}" if p is not None else DASH))
     return {"prev": formatted, "delta": text, "dir": direction, "tone": ""}
 
@@ -478,16 +478,32 @@ class PeriodCompare:
         return ({"spend": row.get("spend"), "leads": row.get("leads"), "deposits": row.get("ftds")}
                 if row is not None else None)
 
+    @staticmethod
+    def _had_you(row: Optional[dict]) -> bool:
+        return (_num(((row or {}).get("you") or {}).get("spend")) or 0) > 0
+
     @classmethod
     def _workbench_gone_rows(cls, rows: Iterable[dict], tab: str) -> list[dict]:
         out = []
         for row in rows:
-            out.append(dict(row, _period=metric_compare(None, cls._workbench_metrics(row))))
+            out.append(dict(row, _period=metric_compare(None, cls._workbench_metrics(row)),
+                            _period_you=metric_compare(None, cls._workbench_metrics(row.get("you"))),
+                            _period_you_visible=cls._had_you(row)))
             if tab == "creatives":
                 for v in row.get("versions") or []:
                     out.append(dict(v, name=v.get("raw") or v.get("version") or "No version in title",
-                                    _period=metric_compare(None, cls._workbench_metrics(v))))
+                                    _period=metric_compare(None, cls._workbench_metrics(v)),
+                                    _period_you=metric_compare(None, cls._workbench_metrics(v.get("you"))),
+                                    _period_you_visible=cls._had_you(v)))
         return out
+
+    def asset_counts(self, country: str, current: dict) -> dict:
+        before = (self._countries.get(_norm(country)) or {}).get("workbench") or {}
+        prior = next((a for a in before.get("assets") or []
+                      if _norm(a.get("name")) == _norm(current.get("name"))), None)
+        return {"you": value_compare(current.get("you_ftds"), (prior or {}).get("you_ftds"), "count"),
+                "all": value_compare(current.get("ftds"), (prior or {}).get("ftds"), "count"),
+                "state": NEW if prior is None else BOTH}
 
     def workbench(self, country: str, current: dict) -> dict:
         """Annotate a render-only copy; never insert historical rows into Use indices."""
@@ -505,6 +521,8 @@ class PeriodCompare:
                 for row in rows:
                     prior = old.pop(self._workbench_key(tab, row), None)
                     row["_period"] = metric_compare(self._workbench_metrics(row), self._workbench_metrics(prior))
+                    row["_period_you"] = metric_compare(self._workbench_metrics(row.get("you")), self._workbench_metrics((prior or {}).get("you")))
+                    row["_period_you_visible"] = self._had_you(prior)
                     row["_period_state"] = NEW if prior is None else BOTH
                     if tab == "creatives":
                         versions = {self._workbench_key("versions", v): v for v in (prior or {}).get("versions") or []}
@@ -512,14 +530,25 @@ class PeriodCompare:
                             pv = versions.pop(self._workbench_key("versions", version), None)
                             version["_period"] = metric_compare(self._workbench_metrics(version), self._workbench_metrics(pv))
                             version["_period_state"] = NEW if pv is None else BOTH
-                        row["_period_gone_versions"] = [dict(v, _period=metric_compare(None, self._workbench_metrics(v)))
+                            version["_period_you"] = metric_compare(self._workbench_metrics(version.get("you")), self._workbench_metrics((pv or {}).get("you")))
+                            version["_period_you_visible"] = self._had_you(pv)
+                        row["_period_gone_versions"] = [dict(v, _period=metric_compare(None, self._workbench_metrics(v)),
+                                                            _period_you=metric_compare(None, self._workbench_metrics(v.get("you"))),
+                                                            _period_you_visible=self._had_you(v))
                                                         for v in versions.values()]
                 sl["_period_gone"][tab] = self._workbench_gone_rows(old.values(), tab)
             sl["_period_compare"] = {}
-            for side in ("you", "others"):
+            for side in ("you", "others", "unattributed"):
                 sl["_period_compare"][side] = metric_compare(
                     self._workbench_metrics((sl.get("compare") or {}).get(side)),
                     self._workbench_metrics((prev.get("compare") or {}).get(side)))
+            def attributed(data):
+                values = [_num(((data or {}).get(side) or {}).get("ftds")) for side in ("you", "others")]
+                return sum(values) if all(v is not None for v in values) else None
+            sl["_period_compare"]["attributed"] = value_compare(
+                attributed(sl.get("compare")), attributed(prev.get("compare")), "count")
+        for asset in out.get("assets") or []:
+            asset["_period_ftds"] = self.asset_counts(country, asset)
         out["_period_assets_gone"] = [a for a in before.get("assets") or []
                                        if _norm(a.get("name")) not in {_norm(k) for k in (out.get("slices") or {})}]
         out["_period_earlier_slices"] = {
