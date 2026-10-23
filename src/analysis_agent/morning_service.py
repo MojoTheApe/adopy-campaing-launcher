@@ -192,7 +192,7 @@ def _read_stats_rows(excel_path: str) -> Tuple[pd.DataFrame, str, Optional[str]]
     try:
         window = bi_stats.normalize(bi_stats.fetch_raw())
     except Exception as e:  # noqa: BLE001 — покажем архив/книгу ниже
-        notes.append(f"BI unavailable ({type(e).__name__}: {e}) — showing saved days.")
+        notes.append(f"BI unavailable ({bi_stats.describe_error(e)}) — showing saved days.")
     try:
         if window is not None:
             bi_archive.ingest_bi_window(window)
@@ -202,7 +202,7 @@ def _read_stats_rows(excel_path: str) -> Tuple[pd.DataFrame, str, Optional[str]]
                 bi_archive.ingest_workbook(_read_workbook_cached(excel_path), version)
         stored = bi_archive.read_archive()
     except Exception as e:  # noqa: BLE001 — архив сломан: без него, как до архива
-        notes.append(f"Stats archive unavailable ({type(e).__name__}: {e}).")
+        notes.append(f"Stats archive unavailable ({type(e).__name__}: {bi_stats.redact(str(e))}).")
         stored = None
 
     if stored is None:

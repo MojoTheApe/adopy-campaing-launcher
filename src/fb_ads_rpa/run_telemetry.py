@@ -181,9 +181,24 @@ _SCRUB = (
 )
 
 
+#: ACL-103: адрес, логин и пароль BI (MySQL) живут только в машинном .env.
+#: Текст ошибки драйвера содержит их дословно («Can't connect to MySQL server
+#: on '<host>'», «Access denied for user '<user>'@…»), и по имени ключа их не
+#: найти, поэтому прячем сами настроенные значения.
+_BI_ENV_NAMES = ("BI_MYSQL_HOST", "BI_MYSQL_USER", "BI_MYSQL_PASSWORD")
+
+
+def _hide_configured_bi(text: str) -> str:
+    for name in _BI_ENV_NAMES:
+        value = (os.environ.get(name) or "").strip()
+        if len(value) >= 3:
+            text = re.sub(re.escape(value), "<hidden>", text, flags=re.I)
+    return text
+
+
 def scrub(text: str) -> str:
     """Убрать из строки всё, по чему опознаётся аккаунт или профиль."""
-    out = str(text or "")
+    out = _hide_configured_bi(str(text or ""))
     for pattern, replacement in _SCRUB:
         out = pattern.sub(replacement, out)
     return out

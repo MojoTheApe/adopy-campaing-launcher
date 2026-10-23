@@ -189,6 +189,30 @@ def fetch_revision(cfg: Optional[Dict[str, Any]] = None) -> str:
     return f"{last}|{count}"
 
 
+def describe_error(exc: BaseException) -> str:
+    """Безопасное описание сбоя BI для лога, страницы и error.html.
+
+    Только класс исключения и числовой код драйвера (``OperationalError 2003``).
+    Текст ошибки PyMySQL не берётся совсем: он содержит адрес сервера и логин
+    (ACL-103). На случай, если описание когда-нибудь дополнят, итог всё равно
+    проходит общий скраббер — он прячет настроенные BI_MYSQL_*.
+    """
+    from src.fb_ads_rpa.run_telemetry import scrub
+
+    text = type(exc).__name__
+    code = exc.args[0] if getattr(exc, "args", None) else None
+    if isinstance(code, int) and not isinstance(code, bool):
+        text += f" {code}"
+    return scrub(text)
+
+
+def redact(text: str) -> str:
+    """Текст чужой ошибки (например, архива) через общий скраббер."""
+    from src.fb_ads_rpa.run_telemetry import scrub
+
+    return scrub(text)
+
+
 class BIUnavailable(FileNotFoundError):
     """BI не ответил, а книги-фолбэка нет. FileNotFoundError — чтобы страницы
     показали обычную ошибку «нет данных», а не 500."""

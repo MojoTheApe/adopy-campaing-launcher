@@ -271,3 +271,125 @@ def test_cm_map_change_applies_to_archived_days(monkeypatch, tmp_path):
     monkeypatch.setattr(bi_stats, "load_cm_map", lambda path=None: {"4006": "Yinon Avraham"})
     rows, _, _ = morning_service._read_stats_rows(absent)
     assert list(rows["CM"]) == ["Yinon Avraham"]
+
+
+# --- Review of PR #1031, B1: BI host / login never reach logs, page, error.html or Sentry ---
+
+BI_HOST = "bi-secret-host.example.invalid"
+BI_USER = "bi_secret_reader"
+BI_PASSWORD = "bi-secret-pass-77"
+LEAKS = (BI_HOST, BI_USER, BI_PASSWORD)
+
+
+class _FakeOperationalError(Exception):
+    """Как pymysql.err.OperationalError: args[0] — числовой код, текст с адресом."""
+
+
+def _enable_secret_bi(monkeypatch):
+    monkeypatch.setenv("BI_MYSQL_HOST", BI_HOST)
+    monkeypatch.setenv("BI_MYSQL_USER", BI_USER)
+    monkeypatch.setenv("BI_MYSQL_PASSWORD", BI_PASSWORD)
+
+
+def _failing_fetch(code, message):
+    def boom(cfg=None):
+        raise _FakeOperationalError(code, message)
+
+    return boom
+
+
+DRIVER_MESSAGES = [
+    (2003, f"Can't connect to MySQL server on '{BI_HOST}' (timed out)"),
+    (1045, f"Access denied for user '{BI_USER}'@'10.1.2.3' (using password: YES)"),
+]
+
+
+def _assert_clean(text):
+    for secret in LEAKS:
+        assert secret not in text
+
+
+@pytest.mark.parametrize("code,message", DRIVER_MESSAGES)
+def test_bi_failure_note_and_stderr_carry_no_host_or_login(monkeypatch, tmp_path, capsys, code, message):
+    _enable_secret_bi(monkeypatch)
+    monkeypatch.setattr(bi_stats, "fetch_raw", _failing_fetch(code, message))
+    book = _book(tmp_path / "stats.xlsx")
+
+    df = morning_service._load_enriched_df(str(book))
+    # Второе чтение: архив уже есть, BI снова не отвечает — это ветка с печатью в stderr.
+    rows, _, note = morning_service._read_stats_rows(str(book))
+
+    captured = capsys.readouterr()
+    for text in (df.attrs["stats_note"], note, captured.err, captured.out):
+        _assert_clean(text or "")
+    # Диагностика осталась: класс и числовой код, оператору хватает.
+    assert f"_FakeOperationalError {code}" in df.attrs["stats_note"]
+    assert "showing saved days" in df.attrs["stats_note"]
+
+
+@pytest.mark.parametrize("code,message", DRIVER_MESSAGES)
+def test_bi_failure_error_page_carries_no_host_or_login(monkeypatch, tmp_path, code, message):
+    from starlette.requests import Request
+
+    from src.web import app as web
+
+    _enable_secret_bi(monkeypatch)
+    monkeypatch.setattr(bi_stats, "fetch_raw", _failing_fetch(code, message))
+    absent = str(tmp_path / "absent.xlsx")
+    with pytest.raises(bi_stats.BIUnavailable) as raised:
+        morning_service._load_enriched_df(absent)
+    _assert_clean(str(raised.value))
+
+    def unavailable(*args, **kwargs):
+        raise raised.value
+
+    monkeypatch.setattr(web, "get_cached_report", unavailable)
+    request = Request({"type": "http", "method": "GET", "path": "/", "headers": [],
+                       "query_string": b"", "server": ("testserver", 80), "scheme": "http"})
+    response = web._render_report(request)
+
+    html = response.body.decode("utf-8")
+    assert "No data file" in html
+    _assert_clean(html)
+
+
+def test_report_warning_for_failed_bi_has_no_host_or_login(monkeypatch, tmp_path):
+    _enable_secret_bi(monkeypatch)
+    monkeypatch.setattr(bi_stats, "fetch_raw", _failing_fetch(*DRIVER_MESSAGES[1]))
+    df = morning_service._load_enriched_df(str(_book(tmp_path / "stats.xlsx")))
+    # load_morning_report добавляет stats_note в warnings как есть (render: report.html).
+    assert df.attrs["stats_note"]
+    _assert_clean(df.attrs["stats_note"])
+
+
+def test_describe_error_is_class_and_code_only():
+    text = bi_stats.describe_error(_FakeOperationalError(*DRIVER_MESSAGES[0]))
+    assert text == "_FakeOperationalError 2003"
+    assert bi_stats.describe_error(OSError("host bi.x refused")) == "OSError"
+
+
+def test_shared_scrubber_hides_configured_bi_values(monkeypatch):
+    from src.fb_ads_rpa import run_telemetry
+
+    _enable_secret_bi(monkeypatch)
+    text = f"Can't connect to MySQL server on '{BI_HOST}'; user '{BI_USER.upper()}'@x pw {BI_PASSWORD}"
+    out = run_telemetry.scrub(text)
+    _assert_clean(out.lower())
+    assert BI_USER.upper() not in out
+    # без настроенного BI ничего лишнего не прячется
+    monkeypatch.delenv("BI_MYSQL_HOST")
+    assert run_telemetry.scrub(f"on '{BI_HOST}'") == f"on '{BI_HOST}'"
+
+
+def test_sentry_event_with_bi_driver_error_has_no_host_or_login(monkeypatch):
+    from src import acl_sentry
+
+    _enable_secret_bi(monkeypatch)
+    event = {
+        "message": DRIVER_MESSAGES[0][1],
+        "exception": {"values": [{"type": "OperationalError", "value": DRIVER_MESSAGES[1][1]}]},
+        "breadcrumbs": {"values": [{"message": f"connect {BI_HOST} as {BI_USER}"}]},
+    }
+    sent = acl_sentry._before_send(event, {})
+    assert sent is not None
+    _assert_clean(repr(sent))
