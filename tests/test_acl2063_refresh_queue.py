@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import inspect
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -38,6 +39,8 @@ class Env:
         self.snaps: dict[str, ci.Snapshot] = {}
         self.failures: dict[str, ci.Snapshot] = {}
         self.read: list[tuple[str, str]] = []
+        self.attempts: dict[str, dict] = {}
+        self.stops: dict[str, tuple[str, str]] = {}
 
     def reader(self, account: str, trigger: str) -> ci.Snapshot:
         self.read.append((account, trigger))
@@ -54,6 +57,8 @@ def env(monkeypatch):
     clock = Clock()
     e = Env(clock)
     monkeypatch.setattr(ci, "get_snapshot", lambda account: e.snaps.get(account))
+    monkeypatch.setattr(ci, "get_attempt", lambda account: e.attempts.get(account))
+    monkeypatch.setattr(ci, "latest_stops", lambda: dict(e.stops))
     e.telemetry = []
     monkeypatch.setattr(account_spend_api, "_telemetry_skip",
                         lambda *a, **k: e.telemetry.append((a, k)))
@@ -272,7 +277,9 @@ def test_call_budget_stop_is_untimed(env):
 
 def test_account_level_stop_kinds_do_not_halt():
     assert ar.classify(ci.Snapshot(account="A", state="failed", stop="logged_out")) == "account"
-    assert ar.classify(_stop_partial("A", "page_unresponsive")) == "ok"
+    # Частичный снимок, оборванный выходом из аккаунта или зависшей страницей, - строка с причиной.
+    assert ar.classify(_stop_partial("A", "page_unresponsive")) == "account"
+    assert ar.classify(_stop_partial("A", "logged_out")) == "account"
 
 
 def test_forced_retry_reads_only_itself_during_untimed_halt(env):
@@ -365,12 +372,13 @@ def test_stop_during_blocking_read_and_start_spawns_nothing(env):
     thread = q._thread
     q.stop(timeout=0.2)
     assert q._thread is thread and thread.is_alive()  # пока читает — поток не забыт
-    q.start()
+    q.start()  # остановка отменена: поток один и тот же, после чтения он берёт B
     assert q._thread is thread
     release.set()
-    thread.join(5)
-    assert not thread.is_alive()
-    assert reads == ["A"]
+    deadline = time.time() + 5
+    while time.time() < deadline and reads != ["A", "B"]:
+        time.sleep(0.02)
+    assert reads == ["A", "B"]
     q.stop()
     assert q._thread is None
 
@@ -403,3 +411,172 @@ def test_skip_telemetry_is_not_an_api_read(monkeypatch):
     account_spend_api._telemetry_skip("A", "attention")
     assert seen["rec"] == ["api_read_skip"] and "api_read" not in seen["rec"]
     assert seen["tm"][0]["event"] == "fb_api_skip" and seen["tm"][0]["kind"] == "skipped_fresh"
+
+
+# ───────── ACL-2063: разбор ревью очереди ─────────
+
+def test_success_of_another_account_does_not_clear_a_checkpoint_halt(env):
+    env.failures["A"] = ci.Snapshot(account="A", state="failed", error="Facebook checkpoint", stop="checkpoint")
+    q = _queue(env)
+    q.request("A", "attention")
+    q._drain_once()
+    halt = q.state()["halt"]
+    assert halt and halt["kind"] == "checkpoint" and halt["account"] == "A" and halt["until"] is None
+    # Явный Retry соседа читается мимо паузы, но его удача чекпоинт A не снимает.
+    assert q.request("B", "retry", force=True) == {"queued": True, "reason": "queued"}
+    q._drain_once()
+    assert [a for a, _ in env.read] == ["A", "B"]
+    assert q.state()["halt"] is not None
+    # Удачный Retry самого A снимает.
+    del env.failures["A"]
+    q.request("A", "retry", force=True)
+    q._drain_once()
+    assert q.state()["halt"] is None
+
+
+def test_non_checkpoint_halt_is_cleared_by_any_successful_forced_read(env):
+    env.failures["A"] = _failed("A", "[WinError 10061] launcher.mlx.yt")
+    q = _queue(env)
+    q.request("A", "attention")
+    q._drain_once()
+    q.request("B", "retry", force=True)
+    q._drain_once()
+    assert q.state()["halt"] is None
+
+
+def test_start_after_timed_out_stop_keeps_a_worker(env):
+    entered, release = threading.Event(), threading.Event()
+
+    def reader(account, trigger):
+        entered.set()
+        release.wait(5)
+        return env.reader(account, trigger)
+
+    q = ar.RefreshQueue(reader=reader, clock=env.clock)
+    q.request("A", "attention")
+    q.start()
+    assert entered.wait(5)
+    q.stop(timeout=0.1)
+    q.start()
+    release.set()
+    q.request("B", "attention")  # пришла после перезапуска: рабочий должен её взять
+    deadline = time.time() + 5
+    while time.time() < deadline and [a for a, _ in env.read] != ["A", "B"]:
+        time.sleep(0.02)
+    assert [a for a, _ in env.read] == ["A", "B"]
+    q.stop()
+
+
+def test_checkpoint_halt_is_restored_from_the_store(env):
+    env.stops["A"] = ("checkpoint", _iso(NOW - 60))
+    q = _queue(env)  # новый процесс или рестарт: в памяти ничего нет
+    halt = q.state()["halt"]
+    assert halt and halt["kind"] == "checkpoint" and halt["account"] == "A"
+    assert q.request("B", "attention") == {"queued": True, "reason": "halted"}
+    q._drain_once()
+    assert env.read == []
+    # Retry самого A мимо паузы; удача перезаписала запись (остановки в хранилище больше нет).
+    q.request("A", "retry", force=True)
+    env.stops.clear()
+    q._drain_once()
+    assert q.state()["halt"] is None
+    assert [a for a, _ in env.read] == ["A", "B"]
+
+
+def test_timed_stop_in_the_store_expires_with_its_cooldown(env):
+    env.stops["A"] = ("rate_limited", _iso(NOW - 10))
+    q = _queue(env)
+    halt = q.state()["halt"]
+    assert halt and halt["until"] is not None
+    env.clock.t = halt["until"] + 1
+    assert q.state()["halt"] is None
+
+
+def test_recently_failed_account_is_not_reread_by_automatic_triggers(env):
+    env.attempts["A"] = {"state": "failed", "at_utc": _iso(NOW - 600), "stop": ""}
+    q = _queue(env)
+    assert q.request("A", "attention") == {"queued": False, "reason": "recent_failure"}
+    assert q.request("A", "schedule", window="morning") == {"queued": False, "reason": "recent_failure"}
+    assert q.state()["queued"] == []
+    # Явный Retry читает.
+    assert q.request("A", "retry", force=True)["queued"] is True
+    # Старая неудача (старше часа) не мешает.
+    env.attempts["B"] = {"state": "failed", "at_utc": _iso(NOW - ar.FRESH_S - 5), "stop": ""}
+    assert q.request("B", "attention")["queued"] is True
+
+
+def test_freshness_is_rechecked_when_the_request_is_taken(env):
+    q = _queue(env)
+    q.request("A", "schedule", window="morning")
+    env.snaps["A"] = ci.Snapshot(account="A", state="ok", finished_at_utc=_iso(NOW - 30))  # прочитал другой процесс
+    q._drain_once()
+    assert env.read == []
+    assert env.telemetry == [(("A", "schedule:morning"), {})]
+    # Явная заявка читается, даже если снимок свежий.
+    q.request("A", "retry", force=True)
+    q._drain_once()
+    assert env.read == [("A", "retry")]
+
+
+def test_failure_recorded_while_queued_is_rechecked_when_taken(env):
+    q = _queue(env)
+    q.request("A", "attention")
+    env.attempts["A"] = {"state": "failed", "at_utc": _iso(NOW - 5), "stop": ""}
+    q._drain_once()
+    assert env.read == []
+
+
+def test_cooldown_from_text_is_not_shorter_than_the_table():
+    from src.analysis_agent.account_spend_api import COOLDOWN_S
+
+    assert ar._cooldown_s("checkpoint", "wait about 1 min") == COOLDOWN_S["checkpoint"]
+    assert ar._cooldown_s("rate_limited", "wait about 20 min") == 20 * 60.0
+
+
+def test_forced_request_for_the_running_account_waits_behind_the_read(env):
+    entered, release = threading.Event(), threading.Event()
+
+    def reader(account, trigger):
+        entered.set()
+        release.wait(5)
+        return env.reader(account, trigger)
+
+    q = ar.RefreshQueue(reader=reader, clock=env.clock)
+    q.request("A", "attention")
+    t = threading.Thread(target=q._drain_once)
+    t.start()
+    assert entered.wait(5)
+    assert q.request("A", "attention") == {"queued": False, "reason": "running"}
+    assert q.request("A", "action", force=True) == {"queued": True, "reason": "queued"}
+    release.set()
+    t.join(5)
+    # Явная заявка не потеряна: тот же проход читает аккаунт второй раз сразу за первым.
+    assert env.read == [("A", "attention"), ("A", "action")]
+    assert q.state()["queued"] == []
+
+
+def test_schedule_requests_carry_their_window_tag(env):
+    q = _queue(env)
+    q.begin_sweep("morning", 2)
+    q.request("A", "schedule", window="morning")
+    q.request("B", "schedule", window="morning")
+    assert q.state()["queued"] == [{"account": "A", "trigger": "schedule:morning"},
+                                   {"account": "B", "trigger": "schedule:morning"}]
+    q._drain_once()
+    assert env.read == [("A", "schedule:morning"), ("B", "schedule:morning")]
+    assert q.state()["sweep"]["done"] == 2
+
+
+def test_row_does_not_stay_updating_when_the_read_is_interrupted(env):
+    class Boom(BaseException):
+        pass
+
+    def reader(account, trigger):
+        raise Boom()
+
+    q = ar.RefreshQueue(reader=reader, clock=env.clock)
+    q.request("A", "attention")
+    with pytest.raises(Boom):
+        q._drain_once()
+    row = q.state()["rows"]["A"]
+    assert row["state"] == "failed" and "interrupted" in row["error"]

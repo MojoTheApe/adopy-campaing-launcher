@@ -1,6 +1,8 @@
 """ACL-2063: чтение только структуры — без Insights, без периода, финал «ok» по трём шагам."""
 from __future__ import annotations
 
+import contextlib
+
 import sys
 from datetime import date
 from pathlib import Path
@@ -67,6 +69,7 @@ def test_structure_only_finalize_ok():
 
 def test_run_read_stores_snapshot(monkeypatch):
     monkeypatch.setattr(ci, "backend_ready", lambda: True)
+    monkeypatch.setattr(ci._as, "_lock_for", lambda account: contextlib.nullcontext())  # профиль не открываем
     seen = {}
 
     def fake(account, date_from="", date_to="", *, structure_only=False, trigger=""):
@@ -129,6 +132,7 @@ def test_run_read_holds_reading_and_account_lock_around_the_read(monkeypatch):
 
 def test_run_read_failure_keeps_previous_good_snapshot(monkeypatch):
     monkeypatch.setattr(ci, "backend_ready", lambda: True)
+    monkeypatch.setattr(ci._as, "_lock_for", lambda account: contextlib.nullcontext())  # профиль не открываем
     good = _structure_snap()
     good.account = "A"
     ci.put_result(good)
@@ -171,3 +175,19 @@ def test_read_via_api_empty_trigger_adds_no_trigger_note(monkeypatch):
     _stub_session(monkeypatch, events)
     ci.read_via_api("A", structure_only=True)
     assert events and "trigger" not in events[0]
+
+
+def test_failed_attempt_persists_its_stop_and_a_later_success_clears_it():
+    bad = ci.Snapshot(account="A", state="failed", error="checkpoint", stop="checkpoint",
+                      finished_at_utc="2026-10-23T08:00:00+00:00")
+    ci.put_result(bad)
+    assert ci.latest_stops() == {"A": ("checkpoint", "2026-10-23T08:00:00+00:00")}
+    ci.put_result(_structure_snap())
+    assert ci.latest_stops() == {}
+
+
+def test_partial_snapshot_stop_is_listed_until_the_next_read():
+    part = ci.Snapshot(account="B", state="partial", stop="rate_limited",
+                       finished_at_utc="2026-10-23T08:00:00+00:00")
+    ci.put_result(part)
+    assert ci.latest_stops() == {"B": ("rate_limited", "2026-10-23T08:00:00+00:00")}

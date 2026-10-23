@@ -567,6 +567,29 @@ def get_attempt(account: str) -> dict | None:
     return attempt if isinstance(attempt, dict) else None
 
 
+def latest_stops() -> dict[str, tuple[str, str]]:
+    """Аккаунт → (вид остановки Meta, ISO UTC времени) по последней записи: попытке или снимку.
+
+    Только непустые остановки. Новая удача перезаписывает запись и снимает остановку.
+    """
+    with _LOCK:
+        data = _load_all()
+    out: dict[str, tuple[str, str]] = {}
+    for account, rec in data.items():
+        if not isinstance(rec, dict):
+            continue
+        attempt = rec.get("attempt")
+        if isinstance(attempt, dict):
+            kind, at = str(attempt.get("stop") or ""), str(attempt.get("at_utc") or "")
+        else:
+            snap = rec.get("snapshot")
+            snap = snap if isinstance(snap, dict) else {}
+            kind, at = str(snap.get("stop") or ""), str(snap.get("finished_at_utc") or "")
+        if kind:
+            out[account] = (kind, at)
+    return out
+
+
 def put_result(done: Snapshot) -> None:
     """Принять результат чтения.
 
@@ -577,8 +600,11 @@ def put_result(done: Snapshot) -> None:
         data = _load_all()
         rec = data.get(done.account) if isinstance(data.get(done.account), dict) else {}
         if done.state == "failed":
-            rec["attempt"] = {"state": "failed", "at": done.finished_at, "error": done.error,
-                              "code": done.error_code, "date_from": done.date_from, "date_to": done.date_to}
+            # `stop` и `at_utc` нужны очереди обновления: пауза по чекпоинту переживает рестарт
+            # и видна второму процессу дешборда (ACL-2063).
+            rec["attempt"] = {"state": "failed", "at": done.finished_at, "at_utc": done.finished_at_utc,
+                              "error": done.error, "code": done.error_code, "stop": done.stop,
+                              "date_from": done.date_from, "date_to": done.date_to}
         else:
             rec["snapshot"] = done.to_dict()
             rec["attempt"] = None

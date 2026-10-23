@@ -67,14 +67,28 @@ def is_fresh(account: str, *, now: float | None = None) -> bool:
     return 0 <= (time.time() if now is None else now) - done < FRESH_S
 
 
+def recently_failed(account: str, *, now: float | None = None) -> bool:
+    """Последняя попытка чтения не удалась и моложе `FRESH_S`: автоматические заявки её не повторяют.
+
+    Только явные Retry/действие (force) читают такой аккаунт раньше срока.
+    """
+    attempt = campaign_inventory.get_attempt(account)
+    if not attempt or attempt.get("state") != "failed":
+        return False
+    at = _parse_utc(attempt.get("at_utc") or "")
+    if at is None:
+        return False
+    return 0 <= (time.time() if now is None else now) - at < FRESH_S
+
+
 def _cooldown_s(kind: str, text: str) -> float:
     """Сколько ждать по таймеру: минуты из текста, иначе COOLDOWN_S по виду остановки."""
     from src.analysis_agent.account_spend_api import COOLDOWN_S
 
+    table = float(COOLDOWN_S.get(kind, 300.0))
     mins = _MINUTES.search(text or "")
-    if mins:
-        return int(mins.group(1)) * 60.0
-    return float(COOLDOWN_S.get(kind, 300.0))
+    # Минуты из текста не короче таблицы: подсказка «about 1 min» не отменяет остывание вида.
+    return max(int(mins.group(1)) * 60.0, table) if mins else table
 
 
 def _global_stop(snap: Snapshot) -> tuple[str, float | None] | None:
@@ -101,11 +115,26 @@ def _global_stop(snap: Snapshot) -> tuple[str, float | None] | None:
     return None
 
 
+#: Остановки одного аккаунта: строка с причиной и Retry, очередь идёт дальше.
+_ACCOUNT_STOPS = frozenset({"logged_out", "page_unresponsive"})
+
+
 def classify(snap: Snapshot) -> Literal["ok", "account", "global"]:
     # Стоп бывает и у «partial»-снимка без ошибки: клиент оборвал чтение на adsets/ads.
     if snap.state != "failed" and not snap.stop:
         return "ok"
-    return "global" if _global_stop(snap) else ("account" if snap.state == "failed" else "ok")
+    if _global_stop(snap):
+        return "global"
+    # Частичный снимок, оборванный выходом из аккаунта или зависшей страницей, - не «ok»:
+    # строка получает причину и Retry, а не ложный «list 14:20».
+    return "account" if snap.state == "failed" or (snap.stop or "") in _ACCOUNT_STOPS else "ok"
+
+
+def _halt_kind(snap: Snapshot) -> str:
+    """Вид общей паузы: `checkpoint` снимается только чтением того же аккаунта, остальные - любым удачным."""
+    kind = (snap.stop or "").strip()
+    text = (snap.error or "").lower()
+    return "checkpoint" if kind == "checkpoint" or (not kind and "checkpoint" in text) else (kind or "global")
 
 
 class RefreshQueue:
@@ -129,48 +158,93 @@ class RefreshQueue:
         self._rows: dict[str, dict] = {}
         self._thread: threading.Thread | None = None
         self._stop = False
+        #: Заявки, отброшенные при выборе как уже свежие: телеметрию пишем вне замка.
+        self._pending_skips: list[tuple[str, str]] = []
 
     # ───────── заявки ─────────
 
+    def _persisted_halt(self) -> dict | None:
+        """Пауза, восстановленная из хранилища: чекпоинт и потолок вызовов переживают рестарт
+        и видны второму процессу дешборда (остановка записана в последней попытке аккаунта).
+        """
+        try:
+            stops = campaign_inventory.latest_stops()
+        except Exception:  # noqa: BLE001 — нечитаемое хранилище не должно валить очередь
+            log.debug("persisted stops were not read", exc_info=True)
+            return None
+        now = self._clock()
+        found: dict | None = None
+        for account, (kind, at_utc) in sorted(stops.items()):
+            if kind in ("checkpoint", "call_budget"):
+                until = None
+            elif kind in ("rate_limited", "policy_block"):
+                at = _parse_utc(at_utc)
+                if at is None:
+                    continue
+                until = at + _cooldown_s(kind, "")
+                if now >= until:
+                    continue
+            else:
+                continue
+            halt = {"reason": _GLOBAL_STOPS[kind][0], "until": until, "kind": kind,
+                    "account": account, "persisted": True}
+            if kind == "checkpoint":
+                return halt
+            found = found or halt
+        return found
+
     def _maybe_lift(self) -> None:
         halt = self._halt
+        if halt and halt.get("persisted"):
+            self._halt = halt = None  # восстановленная пауза выводится заново: файл мог измениться
         if halt and halt["until"] is not None and self._clock() >= halt["until"]:
             self._halt = None
             self._bypass.clear()
+        if self._halt is None:
+            self._halt = self._persisted_halt()
 
-    def request(self, account: str, trigger: str, *, force: bool = False) -> dict:
+    def request(self, account: str, trigger: str, *, force: bool = False, window: str = "") -> dict:
         """Поставить аккаунт в очередь.
 
         Явный `retry`/`action` (force) пересчитывает свежесть, но паузу всей очереди не снимает:
         без таймера он читает только свой аккаунт мимо паузы, и пауза уходит, лишь если чтение
         удалось; с таймером ждёт его конца. Остальные заявки на паузе встают в очередь.
+        Автоматические заявки (`attention`, `schedule`) не читают аккаунт, чьё последнее чтение
+        упало меньше часа назад. `window` помечает обход по расписанию в телеметрии.
         """
         if trigger not in PRIORITY:
             raise ValueError(f"unknown trigger {trigger!r}")
+        label = f"schedule:{window}" if trigger == "schedule" and window else trigger
         skipped = False
+        failed_recently = False
         halted = False
         with self._lock:
             self._maybe_lift()
-            if self._running == account:
+            if self._running == account and not force:
                 return {"queued": False, "reason": "running"}
             if not force and is_fresh(account, now=self._clock()):
                 snap = campaign_inventory.get_snapshot(account)
                 self._rows[account] = {"list_at": snap.finished_at if snap else "",
                                        "state": snap.state if snap else "", "error": ""}
                 skipped = True
+            elif not force and recently_failed(account, now=self._clock()):
+                failed_recently = True
             else:
-                self._push(account, trigger, force)
+                # Явная заявка на читаемый сейчас аккаунт не теряется: встаёт за текущим чтением.
+                self._push(account, trigger, label, force)
                 halted = self._halt is not None
                 if halted and force and trigger in ("retry", "action") and self._halt["until"] is None:
                     self._bypass.add(account)
                     halted = False
                 self._wake.notify()
         if skipped:
-            self._telemetry_skipped(account, trigger)
+            self._telemetry_skipped(account, label)
             return {"queued": False, "reason": "fresh"}
+        if failed_recently:
+            return {"queued": False, "reason": "recent_failure"}
         return {"queued": True, "reason": "halted" if halted else "queued"}
 
-    def _push(self, account: str, trigger: str, force: bool) -> None:
+    def _push(self, account: str, trigger: str, label: str, force: bool) -> None:
         prio = PRIORITY[trigger]
         current = self._entries.get(account)
         if current is not None and current[0] <= prio:
@@ -179,7 +253,7 @@ class RefreshQueue:
                 self._entries[account] = (*current[:3], True)
             return
         self._seq += 1
-        self._entries[account] = (prio, self._seq, trigger, force or bool(current and current[3]))
+        self._entries[account] = (prio, self._seq, label, force or bool(current and current[3]))
         heapq.heappush(self._heap, (prio, self._seq, account))
 
     def _telemetry_skipped(self, account: str, trigger: str) -> None:
@@ -228,6 +302,14 @@ class RefreshQueue:
             if entry is None or entry[1] != seq:
                 continue  # заменена более приоритетной
             del self._entries[account]
+            # Свежесть проверяется и при выборе: пока заявка стояла, аккаунт могли прочитать
+            # другой триггер или второй процесс дешборда. Явные заявки (force) читаются всегда.
+            if not entry[3]:
+                if is_fresh(account, now=self._clock()):
+                    self._pending_skips.append((account, entry[2]))
+                    continue
+                if recently_failed(account, now=self._clock()):
+                    continue
             return account, entry[2], False
         return None
 
@@ -246,6 +328,10 @@ class RefreshQueue:
             while True:
                 with self._lock:
                     item = self._pop()
+                    skips, self._pending_skips = self._pending_skips, []
+                for acc, label in skips:
+                    self._telemetry_skipped(acc, label)
+                with self._lock:
                     if item is None:
                         return done
                     account, trigger, bypassed = item
@@ -259,6 +345,11 @@ class RefreshQueue:
                         self._running = None
                         if snap is not None:
                             self._settle(account, trigger, snap, bypassed)
+                        else:
+                            # Чтение оборвано не-Exception (выход, KeyboardInterrupt): строка не висит в «updating».
+                            prev = self._rows.get(account, {}).get("list_at", "")
+                            self._rows[account] = {"list_at": prev, "state": "failed",
+                                                   "error": "The read was interrupted. Press Retry."}
                 done += 1
         finally:
             self._drain_lock.release()
@@ -266,20 +357,25 @@ class RefreshQueue:
     def _settle(self, account: str, trigger: str, snap: Snapshot, bypassed: bool) -> None:
         """Записать итог чтения. Под замком."""
         verdict = classify(snap)
-        if self._sweep and trigger == "schedule":
+        if self._sweep and trigger.split(":")[0] == "schedule":
             self._sweep["done"] = min(self._sweep["total"], self._sweep["done"] + 1)
         prev_at = self._rows.get(account, {}).get("list_at", "")
         if verdict == "ok":
             self._rows[account] = {"list_at": snap.finished_at, "state": snap.state, "error": ""}
-            if bypassed and self._halt is not None:
-                self._halt = None  # Retry удался — пауза без таймера снята
-                self._bypass.clear()
+            halt = self._halt
+            if bypassed and halt is not None:
+                # Пауза чекпоинта снимается только удачным чтением аккаунта, который её поднял:
+                # удача соседнего профиля ничего не говорит о чекпоинте этого.
+                if halt.get("kind") != "checkpoint" or halt.get("account") == account:
+                    self._halt = None
+                    self._bypass.clear()
             return
         why = snap.error or (snap.problems[-1] if snap.problems else "") or snap.error_code or snap.stop or "failed"
         self._rows[account] = {"list_at": prev_at, "state": "failed", "error": why}
         if verdict == "global":
             reason, wait = _global_stop(snap)  # type: ignore[misc]
-            self._halt = {"reason": reason, "until": self._clock() + wait if wait else None}
+            self._halt = {"reason": reason, "until": self._clock() + wait if wait else None,
+                          "kind": _halt_kind(snap), "account": account}
 
     def _has_work(self) -> bool:
         self._maybe_lift()
@@ -293,6 +389,9 @@ class RefreshQueue:
                 while not self._stop and not self._has_work():
                     self._wake.wait(timeout=5.0)
                 if self._stop:
+                    # Решение выйти принято под замком: start() после этого заведёт новый поток.
+                    if self._thread is threading.current_thread():
+                        self._thread = None
                     return
             try:
                 self._drain_once()
@@ -303,7 +402,10 @@ class RefreshQueue:
     def start(self) -> None:
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
-                return  # старый поток ещё жив (в том числе дочитывает после stop): второго не заводим
+                # Старый поток ещё жив (дочитывает после stop с истёкшим ожиданием): второго не заводим,
+                # а отменяем остановку, иначе после чтения очередь осталась бы без рабочего.
+                self._stop = False
+                return
             self._stop = False
             self._thread = threading.Thread(target=self._loop, name="account-refresh", daemon=True)
             self._thread.start()
