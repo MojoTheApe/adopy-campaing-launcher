@@ -45,8 +45,10 @@ import urllib.parse
 from contextlib import contextmanager
 from typing import Any, Callable
 
-from src.fb_api.cdp import CdpError, CdpTimeout, PageError, StaleContextError, host_and_path
-from src.fb_api.graph import Checkpoint, GraphStop, LoggedOut, PageUnresponsive
+from src.fb_api.cdp import (CdpError, CdpTimeout, PageError, StaleContextError,
+                            SessionLostError, PageIdentityError, host_and_path)
+from src.fb_api.graph import (Checkpoint, GraphStop, LoggedOut, PageFailed,
+                              PageUnresponsive)
 from src.fb_api.telemetry import strip_tokens
 
 ADS_MANAGER_URL = "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act={act}"
@@ -217,6 +219,60 @@ _HELPER_JS = r"""
     return true;
   }
 
+  // ACL-1896: зеркало write_policy._check_instagram — одно числовое поле, прямой ключ object_story_spec.
+  function isObj(v) { return v !== null && typeof v === 'object' && !Array.isArray(v); }
+  function IGK() { return (WRITE.instagram || {}).key || 'instagram_user_id'; }
+  function countKey(v, key) {
+    if (Array.isArray(v)) return v.reduce((n, x) => n + countKey(x, key), 0);
+    if (isObj(v)) return Object.keys(v).reduce((n, k) => n + (k === key ? 1 : 0) + countKey(v[k], key), 0);
+    return 0;
+  }
+  function instagramOk(edge, checked) {
+    const key = IGK();
+    const seen = countKey(checked, key);
+    if (!seen) return true;
+    const story = edge === 'adcreatives' ? checked.object_story_spec : null;
+    if (seen !== 1 || !isObj(story) || !(key in story)) return false;
+    return typeof story[key] === 'string' && new RegExp((WRITE.instagram || {}).id_re || '^$').test(story[key]);
+  }
+
+
+  // ACL-1891: зеркало write_policy._check_upload - фазы загрузки видео кусками.
+  function digitsOf(v) {
+    const U = WRITE.upload;
+    if (typeof v === 'number') return (Number.isSafeInteger(v) && v >= 0) ? v : null;
+    if (typeof v === 'string' && new RegExp(U.number_re).test(v)) return Number(v);
+    return null;
+  }
+  function uploadOk(params, spec) {
+    const U = WRITE.upload;
+    if (!U) return 'upload';
+    const phase = params.upload_phase;
+    if (typeof phase !== 'string' || U.phases.indexOf(phase) < 0) return 'upload_phase';
+    const allowed = U.keys[phase];
+    for (const k of Object.keys(params)) if (allowed.indexOf(k) < 0) return 'upload_key';
+    if ('waterfall_id' in params && !(typeof params.waterfall_id === 'string' && /^[0-9a-f]{32}$/.test(params.waterfall_id))) return 'upload_waterfall';
+    if (phase === 'start') {
+      const n = digitsOf(params.file_size);
+      if (!n || n > U.file_max) return 'upload_size';
+    } else {
+      const sid = params.upload_session_id;
+      if (typeof sid !== 'string' || !new RegExp(U.id_re).test(sid)) return 'upload_session';
+    }
+    if (phase === 'transfer') {
+      const off = digitsOf(params.start_offset);
+      if (off === null || off >= U.file_max) return 'upload_offset';
+    }
+    if (phase === 'finish') {
+      for (const k of ['title', 'name']) {
+        if (k in params && !(typeof params[k] === 'string' && params[k].length > 0 && params[k].length <= 200)) return 'upload_text';
+      }
+    }
+    const fk = Object.keys(spec.files || {});
+    if (phase === 'transfer') { if (fk.length !== 1 || fk[0] !== U.chunk_field) return 'file'; }
+    else if (fk.length) return 'file';
+    return null;
+  }
   // ACL-1775: единственное место, где разрешён lead_gen_form_id (зеркало
   // write_policy._without_lead_form). Возвращает копию без ключа, null — отказ,
   // исходный объект — формы нет. Ключ в другом месте остаётся и ловится statusOk.
@@ -361,11 +417,22 @@ _HELPER_JS = r"""
     const edge = m[2];
     const keys = WRITE.edges[edge];
     if (!keys) return refused('edge');
+    if (edge === 'advideos' && 'upload_phase' in params) {
+      // ACL-1891: своя закрытая схема на каждую фазу; файл только у transfer.
+      const why = uploadOk(params, spec);
+      if (why) return refused(why);
+      files = spec.files || {};
+      want = params.upload_phase === 'transfer' ? WRITE.upload.chunk_field : null;
+    } else {
     for (const k of Object.keys(params)) {
       if (!KEY_RE.test(String(k)) || keys.indexOf(String(k)) < 0) return refused('key');
     }
-    if (WRITE.paused_required.indexOf(edge) >= 0 && params.status !== 'PAUSED') return refused('status');
+    // ACL-2114: ACTIVE только у набора/объявления и только при children_active (кампания подтверждена PAUSED).
+    const childActive = spec.children_active === true && (WRITE.child_edges || []).indexOf(edge) >= 0
+      && params.status === 'ACTIVE';
+    if (WRITE.paused_required.indexOf(edge) >= 0 && params.status !== 'PAUSED' && !childActive) return refused('status');
     checked = Object.assign({}, params);
+    if (childActive) checked.status = 'PAUSED';
     for (const k of WRITE.json_keys) {
       if (!(k in params)) continue;
       let v = params[k];
@@ -397,6 +464,7 @@ _HELPER_JS = r"""
       if (ck.length !== 1 || ck[0] !== 'creative_id'
           || (typeof c.creative_id !== 'string' && typeof c.creative_id !== 'number')) return refused('creative');
     }
+    if (!instagramOk(edge, checked)) return refused('instagram');
     const walked = withoutLeadForm(edge, checked, spec.on_ad === true);
     if (walked === null) return refused('lead_form');
     if (!statusOk(walked)) return refused('status');
@@ -406,11 +474,14 @@ _HELPER_JS = r"""
     if (want) { if (fk.length !== 1 || fk[0] !== want) return refused('file'); }
     else if (fk.length) return refused('file');
     }
+    }
     let blob = null;
     if (want) {
       const parts = staged[String(files[want])];
       if (!parts || !parts.length) return { error: 'no_file' };
       blob = new Blob(parts);
+      // ACL-1891: кусок загрузки - не больше потолка и не пустой.
+      if (want === (WRITE.upload || {}).chunk_field && (blob.size < 1 || blob.size > WRITE.upload.chunk_max)) return refused('chunk_size');
       // Ревью M1: ушло бы не то, что положил Python — отказ ДО отправки.
       const expect = spec.expect || {};
       if (typeof expect.bytes !== 'number' || blob.size !== expect.bytes) return refused('file_size');
@@ -707,6 +778,11 @@ class InPageGraph:
         self._clock = clock
         self._ctx: int | None = None
         self._injected = False
+        # Warm reuse can replace the helper mode without navigating the tab.
+        # Inherit only ACL's prior navigation intent, never the current page URL.
+        self._expected_url = getattr(tab, "navigation_url", "")
+        self._session_recovered = bool(getattr(tab, "recovery_attempted", False))
+        self._connection_stop: GraphStop | None = None
 
     # -- таймаут вкладки: что на самом деле с ней (F1, ACL-1761)
     def _timeout_stop(self, exc: BaseException) -> GraphStop | None:
@@ -789,22 +865,49 @@ class InPageGraph:
     def _eval_helper(self, tail: str, *, timeout: float = 60.0) -> Any:
         """Не-Meta вызов помощника (`state`/`probe`/`retire`): можно повторить.
 
-        Повтор ТОЛЬКО если отдельный мир исчез (`StaleContextError`): это не
-        запрос к Meta, пересоздать мир и попробовать ещё раз безопасно. Прочие
-        ошибки (`PageError`/`CdpError`/`CdpTimeout`) поднимаются как есть — к
-        Graph они не относятся, повторять нечего.
+        Retry local work once after a stale world or a detached session. A
+        detached session must reattach to the same verified owned target first.
+        Graph calls never pass through this retry boundary.
         """
         expr = f"globalThis[{json.dumps(self.name)}]{tail}"
+        if self._connection_stop is not None:
+            raise self._connection_stop
         for attempt in (0, 1):
-            ctx = self._ensure()
             try:
                 with self._timeouts_as_stops():
+                    if self._session_recovered:
+                        self.tab.verify_url(self._expected_url)
+                ctx = self._ensure()
+                with self._timeouts_as_stops():
                     return strip_tokens(self.tab.evaluate_in(ctx, expr, timeout=timeout))
+            except SessionLostError as exc:
+                self._reset_world()
+                if attempt:
+                    raise self._stop_connection(exc) from exc
+                try:
+                    self.tab.recover_session(self._expected_url)
+                    self._session_recovered = True
+                except (CdpError, OSError) as recovery:
+                    raise self._stop_connection(recovery) from recovery
+            except PageIdentityError as exc:
+                raise self._stop_connection(exc) from exc
             except StaleContextError:
                 self._reset_world()
                 if attempt:
                     raise
         raise CdpError("isolated world evaluation failed")  # недостижимо
+
+    def _stop_connection(self, exc: BaseException) -> GraphStop:
+        kind = getattr(exc, "kind", "")
+        if kind == "checkpoint":
+            stop = Checkpoint("the profile is on a Facebook checkpoint")
+        elif kind == "login":
+            stop = LoggedOut("the profile is logged out of Facebook")
+        else:
+            stop = PageFailed("connection to the owned Ads Manager tab was lost or its account changed; "
+                              "recovery stopped without replaying the interrupted request")
+        self._connection_stop = stop
+        return stop
 
     def _ready_for_call(self, *, timeout: float = 10.0) -> None:
         """Приготовить отдельный мир к Graph-вызову: помощник на месте, мир живой.
@@ -812,7 +915,17 @@ class InPageGraph:
         Повторы допустимы — сюда ничего к Meta не уходит. `.state()` заодно
         подтверждает, что контекст отвечает (иначе `_eval_helper` его пересоздаст).
         """
-        self._eval_helper(".state()", timeout=timeout)
+        try:
+            state = self._eval_helper(".state()", timeout=timeout)
+            if self._session_recovered and isinstance(state, dict) and not state.get("has_token"):
+                state = self._eval_helper(".probe()", timeout=timeout)
+        except (CdpError, OSError) as exc:
+            raise self._stop_connection(exc) from exc
+        if isinstance(state, dict) and state.get("kind") in ("login", "checkpoint"):
+            raise self._stop_connection(PageIdentityError(state["kind"]))
+        if self._session_recovered and (not isinstance(state, dict) or
+                state.get("kind") != "ads_manager" or not state.get("has_token")):
+            raise self._stop_connection(PageIdentityError())
 
     # -- жизненный цикл
     def install(self) -> None:
@@ -823,6 +936,7 @@ class InPageGraph:
         """Открыть Ads Manager кабинета в своей вкладке. Одна загрузка, ни одного клика."""
         with self._timeouts_as_stops():
             self.tab.navigate(ads_manager_url(act_id), timeout=timeout)
+        self._expected_url = ads_manager_url(act_id)
         act = "act_" + act_digits(act_id)
         self.validation_act = (act if not self.object_updates and re.fullmatch(r"act_[0-9]{5,}", act)
                                and (not self.write_act or self.write_act == act) else None)
@@ -982,7 +1096,7 @@ class InPageGraph:
 
     def write(self, path: str, params: dict | None = None, *, files: dict | None = None,
               filename: str = "", timeout: float = 120.0, on_ad: bool = False,
-              form_page: str = "", progress: Callable[[float], None] | None = None,
+              children_active: bool = False, form_page: str = "", progress: Callable[[float], None] | None = None,
               cancelled: Callable[[], bool] | None = None) -> dict:
         """POST в разрешённое ребро. РОВНО один раз; сбой после отправки — `call_unknown`.
 
@@ -1011,7 +1125,8 @@ class InPageGraph:
         elif self.object_updates:
             _wp.check_object_update("POST", path, params, files)
         else:
-            _wp.check(self.write_act, "POST", path, params, files, on_ad=on_ad)
+            _wp.check(self.write_act, "POST", path, params, files, on_ad=on_ad,
+                      children_active=children_active)
         spec: dict[str, Any] = {"method": "POST", "path": path, "params": params or {}, "files": {},
                                 "filename": filename, "host": self.graph_host,
                                 "credentials": self.credentials}
@@ -1020,6 +1135,9 @@ class InPageGraph:
         if on_ad:
             # ACL-1775: набор плана ON_AD — вторая линия политики пропустит форму в креативе.
             spec["on_ad"] = True
+        if children_active:
+            # ACL-2114: кампания-родитель подтверждена PAUSED - вторая линия пропустит ACTIVE у набора/объявления.
+            spec["children_active"] = True
         if files:
             (field_name, data), = files.items()
             if not isinstance(data, (bytes, bytearray)):

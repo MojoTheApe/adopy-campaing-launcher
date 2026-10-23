@@ -96,7 +96,7 @@ def _read_in_session(account: str) -> dict:
         return {"ok": True, "state": "ready" if pages else "empty", "pages": pages, "sources": counts,
                 "act": sess.act, "account": account, "message": "" if pages else
                 "No Page is available for this account. With Automatic, the Graph API backend creates only "
-                "the website campaign and ad sets PAUSED (add a Page and ads in Ads Manager), and the RPA "
+                "the website campaign (PAUSED) and its ad sets (active, they start when you turn the campaign on); add a Page and ads in Ads Manager, and the RPA "
                 "backend leaves the Identity as Ads Manager sets it. A specific Page or an Instant Form "
                 "requires a Page; Refresh pages after restoring access."}
 

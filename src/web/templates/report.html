@@ -55,6 +55,8 @@
     try { window.ACL_FB_BACKEND = {{ (fb_backend or 'rpa') | tojson }}; } catch(e) {}
     // ACL-1819: таблица правил pre-flight audit — одна на сервер и страницу.
     try { window.CB_PREFLIGHT_RULES = {{ (preflight_rules_json or {}) | tojson }}; } catch(e) {}
+    // ACL-1807: допустимые значения из реестра Meta (только ga); пусто — не ограничиваем.
+    try { window.CB_META_CAPS = {{ (meta_caps_json or {}) | tojson }}; } catch(e) {}
     function aclEscHtml(value) {
       return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
         return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
@@ -3148,6 +3150,38 @@
     #sfc-cancel:hover { background: var(--accent-soft); }
     #sfc-ok.sfc-danger { background: var(--bad); color: var(--on-danger); border-color: var(--bad); }
     .sfc-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
+    /* ACL-2118: окно подтверждения помещается в экран. Заголовок и кнопки
+       стоят на месте, прокручивается только середина. */
+    .sfc-box { display: flex; flex-direction: column; box-sizing: border-box;
+      max-height: calc(100vh - 2rem); overflow: hidden; }
+    .sfc-head { flex: none; font-size: var(--adopy-text-body); font-weight: 700; margin-bottom: 0.5rem; }
+    .sfc-lead { flex: none; margin-bottom: 0.5rem; }
+    .sfc-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+      font-size: var(--adopy-text-table); color: var(--text); line-height: 1.5; padding-right: 0.25rem; }
+    .sfc-box .sfc-actions { flex: none; margin-top: 0.75rem; padding-top: 0.65rem; border-top: 1px solid var(--border); }
+    .pc-sum { font-size: var(--adopy-text-body); font-weight: 600; color: var(--text); }
+    .pc-mode { margin-top: 0.3rem; font-size: var(--adopy-text-sm); color: var(--muted); }
+    .pc-mode b { font-weight: 500; background: #143d1b; color: var(--good); padding: 0.1rem 0.45rem; border-radius: 3px; }
+    .pc-cols { display: grid; gap: 0.9rem 1.25rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); align-items: start; }
+    .pc-h { font-size: var(--adopy-text-sm); font-weight: 600; color: var(--muted); margin: 0 0 0.3rem; }
+    .pc-acc { padding: 0.3rem 0; border-bottom: 1px solid var(--border); }
+    .pc-acc:last-child { border-bottom: 0; }
+    .pc-acc > summary { cursor: pointer; }
+    .pc-n { color: var(--muted); font-weight: 400; }
+    .pc-chips { margin-top: 0.15rem; line-height: 1.9; }
+    .pc-chip { background: var(--bg-hover); border-radius: 10px; padding: 0.05rem 0.5rem; font-size: var(--adopy-text-sm); }
+    .pc-sep { color: var(--muted); }
+    .pc-skipped { margin-top: 0.4rem; font-size: var(--adopy-text-sm); color: var(--muted); }
+    .pc-note { border-left: 3px solid var(--border-strong); padding: 0.1rem 0 0.1rem 0.5rem; margin: 0 0 0.35rem;
+      font-size: var(--adopy-text-sm); color: var(--muted); }
+    .pc-note > summary { cursor: pointer; }
+    .pc-note.pc-warn { border-left-color: var(--warn); background: var(--warn-soft); color: var(--text); font-size: var(--adopy-text-table); padding: 0.25rem 0.5rem; border-radius: 0 4px 4px 0; }
+    .pc-note.pc-block { border-left-color: var(--bad); background: var(--bad-soft); color: var(--text); font-size: var(--adopy-text-table); padding: 0.25rem 0.5rem; border-radius: 0 4px 4px 0; }
+    .pc-note ul { margin: 0.2rem 0 0.1rem 1.1rem; padding: 0; }
+    .pc-hint { color: var(--muted); }
+    .pc-help { margin-top: 0.4rem; font-size: var(--adopy-text-sm); color: var(--muted); }
+    .pc-i { cursor: help; color: var(--accent); border: 1px solid var(--border-strong); border-radius: 50%;
+      display: inline-block; width: 1.15em; height: 1.15em; line-height: 1.1em; text-align: center; font-size: 0.85em; }
     @media (prefers-reduced-motion: reduce) {
       .cb-publish-btn, .cbd-publish-all, #sfc-ok, #sfc-cancel { transition: none; }
     }
@@ -3815,6 +3849,7 @@
     .sb-more > summary::before { content: "\25B8"; display: inline-block; margin-right: var(--adopy-space-2);
       font-size: var(--adopy-text-xs); transition: transform 120ms var(--ease-out); }
     .sb-more[open] > summary::before { transform: rotate(90deg); }
+    .sb-assets-brands { margin-top: var(--adopy-space-2); padding-top: var(--adopy-space-2); border-top: 1px solid var(--adopy-border); }
     .sb-more > summary:hover { color: var(--adopy-text); background: var(--adopy-surface-hover); }
     .sb-empty, .sb-note { margin: var(--adopy-space-3) var(--adopy-space-3) 0; font-size: var(--adopy-text-sm);
       color: var(--adopy-text-muted); line-height: var(--adopy-leading-ui); }
@@ -4330,18 +4365,18 @@ async function dashRefresh(ev) {
             {% if s.active %}title="{% if s.spend %}spending{% else %}opened in the account map, nothing spent yet{% endif %}"{% endif %}>{{ c.country }}</button>
     {%- if s.ftds %}<span class="sb-ftd sb-ftd-country" title="FTDs: yours / everyone's in the selected period">{{ s.ftds.you }} / {{ s.ftds.all }}</span>{% endif %}
     <div class="sidebar-sections">
-      {#- ACL-1827: ассеты страны — строками под названием. «Все ассеты» ведёт на
-          тот же Workbench, что и прежняя ссылка; выбор ассета ставит чип. -#}
-      {% if c.workbench and c.workbench.assets %}
-      <div class="sb-assets" role="group" aria-label="Assets in {{ c.country }}">
-        {% for a in c.workbench.assets %}
+      {#- 22.10 (владелец): сверху «All assets», под ним виды страны (Workbench, Manage, 1 Assets…),
+          ниже — ассеты по брендам. Виды интереснее списка брендов, поэтому они выше и не свёрнуты. -#}
+      {% set wb_assets = (c.workbench.assets if c.workbench and c.workbench.assets else []) %}
+      {% if wb_assets %}
+      <div class="sb-assets" role="group" aria-label="All assets in {{ c.country }}">
+        {% for a in wb_assets[:1] %}
         <button type="button" class="sb-asset" data-country="{{ cid }}" data-asset="{{ a.name }}" title="FTDs: yours / everyone's">
           <span class="sb-asset-name">{{ a.label }}</span><span class="sb-ftd">{{ a.you_ftds }} / {{ a.ftds }}</span></button>
         {% endfor %}
       </div>
       {% endif %}
-      <details class="sb-more"{% if not c.workbench %} open{% endif %}>
-      <summary>More country views</summary>
+      <div class="sb-views">
       {#- Одна дверь вместо четырёх. My Goals, CM, Accounts и Campaign Builder
           отвечали на один вопрос — как идёт страна и что с этим делать, — и
           стоили четырёх кликов по экранам, которые никогда не видны рядом. -#}
@@ -4354,7 +4389,15 @@ async function dashRefresh(ev) {
       {% if c.targeting %}<button type="button" class="sidebar-link" data-view="country-{{ cid }}-targeting">{{ n_targeting }} Targeting</button>{% endif %}
       <button type="button" class="sidebar-link" data-view="country-{{ cid }}-creatives">{{ n_creatives }} Creatives</button>
       <button type="button" class="sidebar-link" data-view="country-{{ cid }}-optimization">{{ n_optimization }} Optimization</button>
-      </details>
+      </div>
+      {% if wb_assets | length > 1 %}
+      <div class="sb-assets sb-assets-brands" role="group" aria-label="Assets in {{ c.country }}">
+        {% for a in wb_assets[1:] %}
+        <button type="button" class="sb-asset" data-country="{{ cid }}" data-asset="{{ a.name }}" title="FTDs: yours / everyone's">
+          <span class="sb-asset-name">{{ a.label }}</span><span class="sb-ftd">{{ a.you_ftds }} / {{ a.ftds }}</span></button>
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
   </div>
   {% endfor %}
@@ -4901,8 +4944,17 @@ async function dashRefresh(ev) {
         {% elif ds %}
           <span class="cb-draft-badge cb-draft-badge-blocked"
                 title="{{ (ds.blocking_failures or ds.errors or ds.campaign_names) | join(', ') }}">
-            ❌ Draft blocked · do not publish
+            {% if ds.state == 'stopped' %}⚠ Draft stopped · verify partial drafts
+            {% elif ds.state == 'running' %}⏳ Build in progress · not ready
+            {% elif ds.state == 'interrupted' %}⚠ Build interrupted · verify partial drafts
+            {% elif ds.state == 'unverified' %}⚠ Draft unverified · {{ ds.errors | join('; ') }}
+            {% else %}❌ Draft blocked · do not publish{% endif %}
             <span class="cb-draft-ts">{{ ds.ts[:16].replace('T',' ') }} UTC</span>
+          </span>
+        {% endif %}
+        {% if ds.previous_ready %}
+          <span class="cb-draft-ts" title="{{ ds.previous_ready.campaign_names | join(', ') }}">
+            Previous successful build · {{ ds.previous_ready.ts[:16].replace('T',' ') }} UTC (history)
           </span>
         {% endif %}
         <span style="font-size:var(--adopy-text-sm);color:var(--muted)">{{ recs | length }} rec{{ 's' if recs|length != 1 else '' }}</span>
@@ -6357,6 +6409,8 @@ window.cbPreflight = (function () {
       out.push({ rule: 'plan_error', label: 'Plan check', hint: '', status: 'error', detail: opts.planError,
                  ads: [], field: { sel: '', level: 'campaign' }, side: 'server', severity: 'error' });
     }
+    /* ACL-1807: выбор, который Meta не принимает (реестр правил), блокирует как error. */
+    if (window.cbMetaCaps) out = out.concat(window.cbMetaCaps.lines(inp));
     return capSeverity(out);
   }
 
@@ -6416,6 +6470,99 @@ window.cbPreflight = (function () {
 
   return { adName: adName, evaluate: evaluate, lines: lines, count: count, blocks: blocks, capSeverity: capSeverity,
            lineText: lineText, table: table };
+})();
+</script>
+
+<script>
+/* ACL-1807: что Meta принимает в билдере — из реестра config/meta_rules/ (только `ga`).
+ *
+ * Данные приходят с сервера (window.CB_META_CAPS, та же ручка /api/meta-rules/capabilities).
+ * Здесь только отбор значений и строка аудита; решает, пускать ли кампанию, всё равно
+ * `check_job` на сервере. Пустой CB_META_CAPS (реестр не прочитался) — ничего не режем:
+ * чего реестр не знает, того не проверяем. Текст причины — как у серверной проверки.
+ */
+window.cbMetaCaps = (function () {
+  var OBJECTIVES = { awareness: 'OUTCOME_AWARENESS', traffic: 'OUTCOME_TRAFFIC', engagement: 'OUTCOME_ENGAGEMENT',
+                     leads: 'OUTCOME_LEADS', 'app promotion': 'OUTCOME_APP_PROMOTION', sales: 'OUTCOME_SALES' };
+  var LABELS = { objective: 'Campaign objective', optimization_goal: 'Optimization goal',
+                 billing_event: 'Billing event', call_to_action: 'Call to action', destination_type: 'Destination type' };
+  var DEST = { website: 'WEBSITE', instant_form: 'ON_AD' };
+
+  function caps() { return window.CB_META_CAPS || {}; }
+  function up(v) { return String(v == null ? '' : v).trim().toUpperCase(); }
+  function has(list, v) { return (list || []).some(function (x) { return up(x) === up(v); }); }
+
+  function objectiveCode(label) {
+    var t = String(label == null ? '' : label).trim();
+    if (!t) return '';
+    return OBJECTIVES[t.toLowerCase()] || (/^[A-Z][A-Z_]+$/.test(t) ? t : '');
+  }
+  function objectiveEntry(objective) {
+    var o = caps().objectives || {};
+    return o[objectiveCode(objective)] || null;
+  }
+  /* Допустимые значения поля при выбранной цели кампании; null — не ограничено. */
+  function options(field, sel) {
+    var c = caps(), e = objectiveEntry(sel && sel.objective);
+    if (field === 'objective') return c.objectives ? Object.keys(c.objectives) : null;
+    if (field === 'destination_type') return (c.destination_types || []).length ? c.destination_types : null;
+    if (!e) return null;
+    if (field === 'optimization_goal') return Object.keys(e.goals || {});
+    if (field === 'call_to_action') return e.ctas || [];
+    if (field === 'billing_event') {
+      var evs = (e.goals || {})[up(sel.optimization_goal)];
+      return evs && evs.length ? evs : (c.billing_events || null);
+    }
+    return null;
+  }
+  function msg(field, value) {
+    return LABELS[field] + " '" + value + "' is not an accepted Meta value for this campaign.";
+  }
+  /* Нарушения выбора {objective, optimization_goal, billing_event, call_to_action, destination}. */
+  function violations(sel) {
+    var out = [];
+    sel = sel || {};
+    var objective = objectiveCode(sel.objective);
+    var dest = sel.destination ? (DEST[sel.destination] || '') : up(sel.destination_type);
+    var checks = [
+      ['objective', objective, options('objective', sel)],
+      ['optimization_goal', up(sel.optimization_goal), options('optimization_goal', sel)],
+      ['billing_event', up(sel.billing_event), options('billing_event', sel)],
+      ['call_to_action', up(sel.call_to_action), options('call_to_action', sel)],
+      ['destination_type', dest, options('destination_type', sel)]
+    ];
+    checks.forEach(function (c) {
+      if (c[1] && c[2] && !has(c[2], c[1])) out.push({ field: c[0], value: c[1], message: msg(c[0], c[1]) });
+    });
+    return out;
+  }
+  /* Строки аудита карточки: только нарушения (в порядке ok строк нет — таблица правил не меняется). */
+  function lines(inp) {
+    inp = inp || {};
+    var sel = { objective: inp.objective, optimization_goal: inp.optimization_goal, billing_event: inp.billing_event,
+                destination: inp.destination };
+    var res = violations(sel).map(function (x) { return { x: x, level: x.field === 'destination_type' ? 'adset' : 'campaign' }; });
+    (inp.ads || []).forEach(function (ad, i) {
+      violations({ objective: inp.objective, call_to_action: ad.cta }).forEach(function (x) {
+        if (x.field === 'call_to_action') res.push({ x: x, level: 'ad', ad: i + 1 });
+      });
+    });
+    return res.map(function (r) {
+      return { rule: 'meta_rules', label: 'Meta rules', hint: 'Pick a value Meta accepts for this objective',
+               status: 'error', detail: r.x.message, ads: r.ad ? [r.ad] : [],
+               field: { sel: r.x.field === 'destination_type' ? '.cb-destination' : '', level: r.level },
+               side: 'client', severity: 'error' };
+    });
+  }
+  /* Можно ли выбрать это «место конверсии» билдера (website / instant_form) по реестру. */
+  function destinationAllowed(value) {
+    var allowed = options('destination_type', {});
+    var code = DEST[value];
+    return !(allowed && code && !has(allowed, code));
+  }
+  function destinationReason(value) { return msg('destination_type', DEST[value] || value); }
+  return { objectiveCode: objectiveCode, options: options, violations: violations, lines: lines,
+           destinationAllowed: destinationAllowed, destinationReason: destinationReason };
 })();
 </script>
 
@@ -7507,6 +7654,7 @@ window.cbTree = (function () {
           : x.stage === 'queued'
             ? (q.reason === 'profile' ? 'queued — waiting for its Multilogin profile'
                : q.state === 'waiting_review' ? aclEscHtml(cbReviewWait(q)) + cbReviewRelease(q)
+               : q.state === 'waiting_idle' ? aclEscHtml(cbIdleWait(q))
                : q.state === 'waiting_memory' ? 'queued — waiting for memory'
                : 'queued — waiting for a free slot'
                  + (q.ahead === undefined ? '' : ' (' + (q.ahead || 0) + ' ahead)'))
@@ -7858,7 +8006,7 @@ window.cbTree = (function () {
   "stages": [["profile", 18], ["campaign", 57], ["adset", 178], ["ad", 175], ["final", 6]],
   "rules": [
     ["^(window_|overlays_cleared$|foreign_window$|ai_rescue$|stall_|step_stuck$|tab_frozen$|tab_unblocked$|tab_unblock_skipped$|tab_hung$|click_|browser_addon|error_page_reload$|facebook_error_page$|wizard_recover$|account_controls_toast$|naming_template_dialog$|creative_setup_modal$|dynamic_creative_dialog$|name_suggestions$|review_error_other$|profile_|account_blocked$|multilogin_not_running$|lead_terms_not_accepted$|wrong_ad_account$|spend_profile_|api_read$|browser_closed$|simple_create_layout$|tab_frozen_budget_exceeded$|step_budget_exceeded$|campaign_budget_exceeded$)", "hold"],
-    ["^(job_phase|campaigns_list_ready|fresh_tab|browser_error)", "profile"],
+    ["^(job_phase|campaigns_list_ready|fresh_tab|browser_error|proxy_gate_)", "profile"],
     ["^(browser_window|drafts_pending|tab_woken|create|objective_|campaign_|daily_budget|leads$|continue$|onboarding_modal$|simple_create$|simple_objective$|simple_adset_section$|next_to_adset$)", "campaign"],
     ["^(adset_|conversion_|website_|further_limit|pick_further_limit|advantage_plus|age_suggestion|audience_|before_audience|languages|locations_open|targeting|placements|account_placement|devices_ios|simple_card$|listbox_left_open$|next_to_ad(_stuck_on_adset)?$|simple_ad_section$)", "adset"],
     ["^(ad_level_summary$|destination_sweep|simple_create_draft$)", "final"],
@@ -8067,11 +8215,28 @@ window.cbBuild = (function () {
     return Math.max(0, Math.min(v, start + span - PCT_GAP, 99));
   }
 
+  /* ACL-1992: API-путь отдаёт `units` — сколько объектов кампании создано
+     из скольких. Это честный счёт, а не оценка: процент = done / total, до
+     итога кампании не выше 99. Модель выше остаётся для робота. */
+  function unitsPct(u) {
+    if (!u || !(u.total > 0)) return null;
+    return Math.max(0, Math.min(99, 100 * Math.min(u.done || 0, u.total) / u.total));
+  }
+
   /* Достигнутый процент кампании: обновить по ответу и вернуть целым. */
   function percent(j, name, c, p, ads) {
-    if (!MODEL) return null;
+    var byUnits = c ? unitsPct(c.units) : null;
+    if (!MODEL && byUnits === null) return null;
     j.track = j.track || {};
     var t = j.track[name] = j.track[name] || { pct: 0, ad: 1 };
+    if (byUnits !== null) {
+      if (byUnits > t.pct) {
+        var up = Math.floor(byUnits) > Math.floor(t.pct);
+        t.pct = Math.floor(byUnits * 10) / 10;   // floor: не показывать больше, чем создано
+        if (up) save();
+      }
+      return Math.floor(t.pct);
+    }
     if (c) {
       var idle = typeof p.idle_s === 'number' ? p.idle_s : (typeof c.idle_s === 'number' ? c.idle_s : 0);
       var v = null;
@@ -8177,6 +8342,9 @@ window.cbBuild = (function () {
     if (q.hold === 'review_windows') {
       return { state: 'build-wait', sign: '', why: cbReviewWait(q) };
     }
+    if (q.hold === 'idle_windows') {
+      return { state: 'build-wait', sign: '', why: cbIdleWait(q) };
+    }
     if ((q.hold === 'memory_low' || q.hold === 'below_reserve') && q.available_mb != null && q.profile_mb) {
       var reserve = Number(q.reserve_mb) || 0;
       var need = Number(q.need_mb) || (Number(q.profile_mb) + reserve);
@@ -8205,7 +8373,7 @@ window.cbBuild = (function () {
     var p = j.p;
     if (!p) {
       // После F5, до первого ответа: достигнутый процент из localStorage.
-      var kept = j.track && j.track[name] && MODEL ? Math.floor(j.track[name].pct) : null;
+      var kept = j.track && j.track[name] ? Math.floor(j.track[name].pct) : null;
       return { state: 'build-run', sign: '', why: 'Sent to the robot — starting', pct: kept };
     }
     var c = null;
@@ -8243,15 +8411,18 @@ window.cbBuild = (function () {
       var limit = p.stall_after_s || 180;
       // Встала — процент стоит на достигнутом (рост упирается в этап).
       var pct = percent(j, name, c, p, ads);
+      // ACL-1992: у API-пути шаг в телеметрии всегда `api_create_step`; что
+      // делается сейчас — последняя строка прогресса создателя.
+      var doing = c.units && c.units.last ? String(c.units.last) : (c.step ? stepText(c.step) : '');
       if (typeof p.idle_s === 'number' && p.idle_s >= limit) {
         return { state: 'build-attn', sign: '', pct: pct,
                  why: 'No new step for ' + minutes(p.idle_s)
-                   + (c.step ? ' (last: ' + stepText(c.step) + ')' : '')
+                   + (doing ? ' (last: ' + doing + ')' : '')
                    + ' — check the Multilogin window' };
       }
       return { state: 'build-run', sign: '', pct: pct,
-               why: c.step ? 'Building: ' + stepText(c.step) + (c.ok === false ? ' — failed, retrying' : '')
-                           : 'Building: starting' };
+               why: doing ? 'Building: ' + doing + (c.ok === false ? ' — failed, retrying' : '')
+                          : 'Building: starting' };
     }
     if (p.status === 'cancelling') return { state: 'build-run', sign: '', why: 'Stopping…' };
     if (p.status === 'running') return { state: 'build-run', sign: '', why: 'Waiting for its turn' };
@@ -8637,13 +8808,18 @@ function _safeConfirm(title, bodyHtml, onConfirm, opts) {
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:9999;display:flex;align-items:center;justify-content:center';
 
   var box = document.createElement('div');
+  box.className = 'sfc-box';
   box.style.cssText = 'background:var(--bg-elev);border:1px solid '
     + (danger ? 'var(--bad)' : 'var(--border)')
-    + ';border-radius:8px;padding:1.2rem 1.5rem;max-width:460px;width:92%;box-shadow:0 8px 32px rgba(0,0,0,.65)';
+    + ';border-radius:8px;padding:1.2rem 1.5rem;box-shadow:0 8px 32px rgba(0,0,0,.65);'
+    + (opts.wide ? 'width:min(900px,90vw)' : 'max-width:460px;width:92%');
 
+  // ACL-2118: заголовок (и необязательная итоговая строка `lead`) и кнопки
+  // стоят на месте; длинное тело прокручивается внутри окна.
   box.innerHTML =
-    '<div style="font-size:var(--adopy-text-body);font-weight:700;color:' + (danger ? 'var(--bad)' : 'var(--accent)') + ';margin-bottom:0.65rem">' + title + '</div>'
-    + '<div style="font-size:var(--adopy-text-table);color:var(--text);line-height:1.6;margin-bottom:1rem">' + bodyHtml + '</div>'
+    '<div class="sfc-head" style="color:' + (danger ? 'var(--bad)' : 'var(--accent)') + '">' + title + '</div>'
+    + (opts.lead ? '<div class="sfc-lead">' + opts.lead + '</div>' : '')
+    + '<div class="sfc-body">' + bodyHtml + '</div>'
     + '<div class="sfc-actions">'
     + '<button id="sfc-cancel">Cancel</button>'
     + '<button id="sfc-ok"' + (danger ? ' class="sfc-danger"' : '') + '>' + confirmLabel + '</button>'
@@ -13677,8 +13853,15 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     var instant = L.destination(sel.value) === 'instant_form';
     /* RPA: Instant Form не выбрать; уже выбранное остаётся рабочим, чтобы
        проверка сказала об этом вслух, а не молча вернула сайт. */
-    var opt = sel.querySelector('option[value="instant_form"]');
-    if (opt && opt.disabled !== !api) opt.disabled = !api;
+    /* ACL-1807: вариант, которого реестр Meta не разрешает, выключен с причиной. */
+    var caps = window.cbMetaCaps;
+    ['website', 'instant_form'].forEach(function (v) {
+      var o = sel.querySelector('option[value="' + v + '"]');
+      var bad = !!(caps && !caps.destinationAllowed(v));
+      var off2 = bad || (v === 'instant_form' && !api);
+      if (o && o.disabled !== off2) o.disabled = off2;
+      if (o && bad) o.title = caps.destinationReason(v); else if (o && o.title && !(v === 'instant_form' && !api)) o.removeAttribute('title');
+    });
     var off = !api && !instant;
     if (sel.disabled !== off) sel.disabled = off;
     var tip = off ? 'API backend only: Instant Forms are created through the Graph API' : '';
@@ -15135,6 +15318,105 @@ function cbDrawerWatchChecks() {
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',cbDrawerWatchChecks);
 else cbDrawerWatchChecks();
 
+/* ── ACL-2118: окно подтверждения «Publish all» ─────────────────────────
+ * Чистые помощники без обращения к странице: сгруппировать повторяющиеся
+ * замечания и собрать компактное тело окна. Блок ограничен маркерами —
+ * тест вырезает его и гоняет в node. */
+/* ACL-2118 begin */
+var CB_INFO_RULES = { primary_len: 1, headline_len: 1, media_vertical: 1 };
+
+/* Серьёзность замечания: ошибка блокирует (красное), справочные правила
+ * о длине текста — серая мелочь, остальное — настоящее предупреждение (жёлтое). */
+function cbNoticeLevel(rule, status) {
+  if (status === 'error') return 'block';
+  return CB_INFO_RULES[rule] ? 'info' : 'warn';
+}
+
+/* items: [{level, rule, label, hint, detail, campaign}] → группы по (уровень, правило,
+ * текст): одна строка со счётчиком кампаний. Порядок: красные, жёлтые, серые. */
+function cbGroupNotices(items) {
+  var rank = { block: 0, warn: 1, info: 2 }, by = Object.create(null), out = [];
+  (items || []).forEach(function (it) {
+    var level = rank[it.level] === undefined ? 'warn' : it.level;
+    var key = level + '|' + (it.rule || '') + '|' + (it.label || '') + '|' + (it.hint || '');
+    var g = by[key];
+    if (!g) {
+      g = by[key] = { level: level, rule: it.rule || '', label: it.label || '', hint: it.hint || '',
+                      count: 0, campaigns: [], details: [] };
+      out.push(g);
+    }
+    g.count += 1;
+    if (it.campaign && g.campaigns.indexOf(it.campaign) < 0) g.campaigns.push(it.campaign);
+    var d = it.campaign && it.detail ? it.campaign + ' — ' + it.detail : '';
+    if (d && g.details.indexOf(d) < 0) g.details.push(d);
+  });
+  return out
+    .map(function (g, i) { return { g: g, i: i }; })
+    .sort(function (a, b) { return rank[a.g.level] - rank[b.g.level] || a.i - b.i; })
+    .map(function (x) { return x.g; });
+}
+
+function cbNoticesHtml(groups) {
+  var esc = aclEscHtml;
+  return groups.map(function (g) {
+    var n = g.campaigns.length || g.count;
+    var what = g.campaigns.length ? (n + (n === 1 ? ' campaign' : ' campaigns')) : (n > 1 ? n + ' times' : '');
+    var rows = g.campaigns.length
+      ? g.campaigns.map(function (c) {
+          var d = g.details.filter(function (x) { return x.indexOf(c + ' — ') === 0; })[0];
+          return '<li>' + esc(d || c) + '</li>';
+        }).join('')
+      : '';
+    return '<details class="pc-note pc-' + g.level + '"><summary>'
+      + (g.level === 'warn' ? '⚠ ' : g.level === 'block' ? '✕ ' : '')
+      + '<strong>' + esc(g.label) + '</strong>'
+      + (what ? ' · ' + what : '')
+      + (g.hint ? ' <span class="pc-hint">— ' + esc(g.hint) + '</span>' : '')
+      + (rows ? ' ▸' : '') + '</summary>' + (rows ? '<ul>' + rows + '</ul>' : '') + '</details>';
+  }).join('');
+}
+
+/* m: {campaigns, accounts:[{name, camps:[...]}], skipped:[], modeHtml, targetText,
+ *     noticesHtml, collapseOver}. Возвращает {lead, body}. */
+function cbPublishConfirmParts(m) {
+  var esc = aclEscHtml, accounts = m.accounts || [];
+  var total = m.campaigns === undefined
+    ? accounts.reduce(function (n, a) { return n + a.camps.length; }, 0) : m.campaigns;
+  var collapse = total > (m.collapseOver === undefined ? 6 : m.collapseOver);
+  var lead = '<div class="pc-sum">' + esc(m.verb || 'Publish') + ' <strong>' + total + '</strong> '
+    + (total === 1 ? 'campaign' : 'campaigns') + ' on <strong>' + accounts.length + '</strong> '
+    + (accounts.length === 1 ? 'account' : 'accounts') + ' — ' + esc(m.targetText || '') + '</div>'
+    + '<div class="pc-mode">Mode: ' + (m.modeHtml || '') + '</div>';
+
+  var left = accounts.map(function (a) {
+    var chips = a.camps.map(function (c) { return '<span class="pc-chip">' + esc(c) + '</span>'; })
+      .join('<span class="pc-sep">, </span>');
+    var head = '<strong>' + esc(a.name) + '</strong>'
+      + (a.camps.length ? ' <span class="pc-n">(' + a.camps.length + ')</span>' : '');
+    if (!a.camps.length) return '<div class="pc-acc">' + head + '</div>';
+    // «Demo: имя1, имя2» читается подряд и в раскрытом виде, и для скринридера.
+    return collapse
+      ? '<details class="pc-acc"><summary>' + head + '</summary><div class="pc-chips">' + chips + '</div></details>'
+      : '<div class="pc-acc"><strong>' + esc(a.name) + '</strong>: ' + chips + '</div>';
+  }).join('');
+
+  var right = (m.noticesHtml || '')
+    + '<div class="pc-help">Keep the screen unlocked while the build runs '
+    + '<span class="pc-i" tabindex="0" role="note" aria-label="How the build runs" title="'
+    + esc('Accounts run at the same time, each in its own Multilogin profile — as many at once as this computer '
+      + 'has memory for; the rest wait as queued and start on their own. Two jobs on one profile queue. '
+      + 'A campaign whose preview shows an error is skipped; the rest of its account still go. '
+      + 'Do not lock the screen while the build runs — creative uploads stall on a locked screen.')
+    + '">ⓘ</span></div>';
+
+  var body = '<div class="pc-cols"><div class="pc-left"><div class="pc-h">Accounts and campaigns</div><div class="cb-selected-list">' + left + '</div>'
+    + (m.skipped && m.skipped.length
+      ? '<div class="pc-skipped">Already being built, skipped: ' + esc(m.skipped.join(', ')) + '</div>' : '')
+    + '</div><div class="pc-right"><div class="pc-h">Notices</div>' + right + '</div></div>';
+  return { lead: lead, body: body };
+}
+/* ACL-2118 end */
+
 window.CB_LINK_NOT_BLOCKING = /link empty/i;
 
 function cbBlockingErrors(entry) {
@@ -15242,10 +15524,10 @@ window.cbPublishAll = function (onProgress, picked, onlyKeys) {
   });
   var badForms = forms.filter(function (f) { return bad[cbFormAccount(f).toLowerCase()]; });
   var anyway = false;
-  var pfHtml = '';
+  var pfBlocksHtml = '', noteHtml = '';
   if (badList.length) {
-    pfHtml = '<div class="cb-preflight" style="border:1px solid var(--bad);border-radius:4px;padding:0.4rem 0.6rem;margin:0.5rem 0;font-size:var(--adopy-text-table)">'
-      + '<strong style="color:var(--bad)">Not ready (' + badList.length + ')</strong> — skipped unless you run them anyway:<br>'
+    pfBlocksHtml = '<div class="cb-preflight pc-note pc-block">'
+      + '<strong>✕ Not ready (' + badList.length + ')</strong> — skipped unless you run them anyway:<br>'
       + badList.map(function (a) {
           return '<div>' + aclEscHtml(a.account) + ' — ' + aclEscHtml((a.reasons || []).map(function (r) {
             return r.message + (r.seen_label ? ' (seen ' + r.seen_label + ')' : '') + ' → ' + r.hint;
@@ -15254,34 +15536,30 @@ window.cbPublishAll = function (onProgress, picked, onlyKeys) {
       + '<label style="display:block;margin-top:0.35rem"><input type="checkbox" id="cb-pf-anyway"> Run anyway</label></div>';
   }
   var notes = ((pf && pf.accounts) || []).filter(function (a) { return a.ready !== false && (a.notes || []).some(function (n) { return n.code === 'open_now'; }); });
-  if (notes.length) pfHtml += '<div class="cb-preflight-note" style="color:var(--muted);font-size:var(--adopy-text-table)">'
+  if (notes.length) noteHtml = '<div class="cb-preflight-note pc-note">'
     + aclEscHtml(notes.map(function (a) { return a.account; }).join(', ')) + ': profile is open — the robot will reuse or reopen it.</div>';
+
+  var parts = cbPublishConfirmParts({
+    verb: cbApiMode() ? 'Publish' : 'Build',
+    targetText: cbApiMode() ? 'campaign PAUSED, ad sets and ads active' : 'drafts only, nothing is published in Facebook',
+    accounts: forms.map(function (f) {
+      var picked = only ? cbPickedIn(f, only) : Array.prototype.slice.call(f.querySelectorAll('.cb-slot'));
+      return { name: cbFormTitle(f), camps: picked.map(cbSlotTitle) };
+    }),
+    skipped: running,
+    modeHtml: cbApiMode()
+      ? '<b>' + aclEscHtml(cbPublishMode().split(' — ')[0]) + '</b> ' + aclEscHtml(cbPublishMode().split(' — ').slice(1).join(' — '))
+      // Режим робота — дословно здесь: вопрос обязан сказать «черновик» и «Publish не нажимается».
+      : '<b>Draft</b> — the RPA leaves a draft in Ads Manager and never clicks Publish in Facebook',
+    noticesHtml: (pfBlocksHtml ? pfBlocksHtml : '')
+      + (typeof window.cbPreflightWarnHtml === 'function' ? window.cbPreflightWarnHtml() : '')
+      + (noteHtml || '')
+  });
 
   _safeConfirm(cbApiMode()
       ? (only ? 'Create the selected campaigns as PAUSED campaigns?' : 'Create every campaign as a PAUSED campaign?')
       : (only ? 'Build the selected campaigns as drafts?' : 'Build every campaign as a draft?'),
-    (typeof window.cbPreflightWarnHtml === 'function' ? window.cbPreflightWarnHtml() : '')
-    + pfHtml + (only ? 'Campaigns: <strong>' + campaigns + '</strong> · ' : '')
-    + 'Accounts: <strong>' + forms.length + '</strong><br>'
-    + (only
-      ? '<div class="cb-selected-list" style="font-size:var(--adopy-text-body);line-height:1.5">' + listed.join('<br>') + '</div>'
-      : '<span style="color:var(--muted);font-size:var(--adopy-text-body)">' + aclEscHtml(names.join(', ')) + '</span><br>')
-    + (running.length
-      ? '<span style="color:var(--muted);font-size:var(--adopy-text-body)">Already being built, skipped: '
-        + aclEscHtml(running.join(', ')) + '</span><br>'
-      : '')
-    + '<br>'
-    + '<span style="color:var(--muted);font-size:var(--adopy-text-body)">Accounts run at the same time, each in its own Multilogin profile — '
-    + 'as many at once as this computer has memory for; the rest wait as queued and start on their own. '
-    + 'Two jobs on one profile queue. '
-    + 'A campaign whose preview shows an error is skipped; the rest of its account still go.</span><br>'
-    + '<span style="color:var(--warn);font-size:var(--adopy-text-body)">Do not lock the screen while the build runs — '
-    + 'creative uploads stall on a locked screen.</span><br><br>'
-    + 'Mode: <span style="background:#143d1b;color:var(--good);padding:0.1rem 0.45rem;border-radius:3px">'
-    + (cbApiMode() ? aclEscHtml(cbPublishMode())
-       // Режим робота — дословно здесь: вопрос обязан сказать «черновик» и «Publish не нажимается».
-       : 'Draft — the RPA leaves a draft in Ads Manager and never clicks Publish in Facebook')
-    + '</span>',
+    parts.body,
     function () {
       var go = anyway ? forms : forms.filter(function (f) { return badForms.indexOf(f) === -1; });
       if (pf && window.cbPreflightDecision) window.cbPreflightDecision(go.map(cbFormAccount), anyway ? [] : badForms.map(cbFormAccount), anyway ? badForms.map(cbFormAccount) : []);
@@ -15290,7 +15568,7 @@ window.cbPublishAll = function (onProgress, picked, onlyKeys) {
         only ? function (form) { return cbPickedIn(form, only); } : null);
       if (got && got.skipped.length) cbSayAlreadyBuilding(got.skipped);
     },
-    { confirmLabel: (only ? 'Publish selected → ' : 'Publish all → ') + cbPublishTarget() });
+    { confirmLabel: (only ? 'Publish selected → ' : 'Publish all → ') + cbPublishTarget(), wide: true, lead: parts.lead });
   var box = (typeof document !== 'undefined' && document.getElementById) ? document.getElementById('cb-pf-anyway') : null;
   if (box) box.addEventListener('change', function () { anyway = box.checked; });
   };
@@ -15356,18 +15634,19 @@ window.cbPreflightWarnHtml = function () {
 };
 
 function cbPfWarnings(slots) {
-  var rows = [];
+  var items = [];
   slots.forEach(function (slot) {
     window.cbTree.auditLines(slot).forEach(function (x) {
       if (x.status !== 'warning') return;
-      var detail = x.detail && !/^(empty|not_https|no_valid_link)$/.test(x.detail) ? ' (' + x.detail + ')' : '';
-      rows.push('<li><strong>' + aclEscHtml(cbPfName(slot) || 'Untitled campaign') + '</strong>: '
-        + aclEscHtml(x.label) + aclEscHtml(detail) + (x.hint ? ' — ' + aclEscHtml(x.hint) : '') + '</li>');
+      var detail = x.detail && !/^(empty|not_https|no_valid_link)$/.test(x.detail) ? x.detail : '';
+      items.push({ level: cbNoticeLevel(x.rule, x.status), rule: x.rule, label: x.label, hint: x.hint || '',
+        detail: detail, campaign: cbPfName(slot) || 'Untitled campaign' });
     });
   });
-  return rows.length
-    ? '<div class="cb-warn-block">⚠ Pre-flight warnings (they do not block):<ul style="margin:0.2rem 0 0 1.1rem">'
-      + rows.join('') + '</ul></div>'
+  // ACL-2118: повторяющиеся замечания — одна строка со счётчиком, раскрывается кликом.
+  return items.length
+    ? '<div class="pc-notes cb-preflight-notes"><div class="pc-h">Pre-flight warnings (they do not block)</div>'
+      + cbNoticesHtml(cbGroupNotices(items)) + '</div>'
     : '';
 }
 
@@ -15467,7 +15746,7 @@ function cbPlanHtml(data) {
       + (r.error ? 'var(--bad)' : 'var(--good)') + '">';
     h += '<div><strong>' + aclEscHtml(r.campaign_name || '?') + '</strong>'
       + (r.published_as ? ' → published as <strong>' + aclEscHtml(r.published_as) + '</strong>' : '')
-      + (s ? ' · PAUSED · ' + aclEscHtml(cbPlanMoney(s))
+      + (s ? ' · Campaign PAUSED · ad sets and ads active, start when you turn the campaign on · ' + aclEscHtml(cbPlanMoney(s))
            + (s.existing ? ' · <em>already exists; a publish would reuse it</em>' : '') : '')
       + '</div>';
     if (r.error) h += '<div class="cbd-plan-err" style="color:var(--bad)">✕ ' + aclEscHtml(r.error) + '</div>';
@@ -15662,6 +15941,13 @@ function cbReviewWait(q) {
   if (names.length) return 'waiting: review windows still open for ' + names.join(', ') + ' — close them to continue';
   var n = Math.max(1, parseInt(q && q.kept, 10) || 1);
   return 'waiting: ' + n + ' review window' + (n === 1 ? ' is' : 's are') + ' still open — close them to continue';
+}
+/* ACL-2113: окна, оставленные для удобства, уступают место сами, простояв N минут. */
+function cbIdleWait(q) {
+  var names = (q && q.convenience_accounts) || [];
+  var mins = Math.max(1, Math.round((Number(q && q.idle_close_s) || 600) / 60));
+  return 'waiting: ' + (names.length ? names.join(', ') + (names.length === 1 ? ' is' : ' are') : 'kept windows are')
+    + ' kept open — a window that has been idle for ' + mins + ' min closes by itself to make room';
 }
 /* «Release» у каждого оставленного окна: снять место, не закрывая окно. */
 function cbReviewRelease(q) {
@@ -16462,7 +16748,7 @@ function cbApiMode() { return typeof window !== 'undefined' && window.ACL_FB_BAC
 function cbPublishTarget() { return cbApiMode() ? 'PAUSED campaigns' : 'drafts'; }
 function cbPublishMode() {
   return cbApiMode()
-    ? 'PAUSED — created through the Graph API; nothing is activated, a person turns it on in Ads Manager'
+    ? 'Campaign PAUSED — ad sets and ads are active and start when you turn the campaign on (created through the Graph API)'
     : 'Draft — the RPA leaves a draft in Ads Manager and never clicks Publish in Facebook';
 }
 
@@ -16703,6 +16989,8 @@ function cbProblemsHtml(r) {
   if (r.steps_completed && r.steps_completed.length) {
     tech.push('<div>steps: ' + r.steps_completed.map(aclEscHtml).join(' → ') + '</div>');
   }
+  // ACL-1805: у API-кампании рядом со списком остаются статус PAUSED, что создано и сверка.
+  if (r.backend === 'api') h += cbApiReadbackHtml(r);
   h += '<details class="cb-problems-tech"><summary>Technical details '
     + '<span>(step codes, run id)</span></summary>'
     + '<div class="cb-problems-tech-body">' + tech.join('') + '</div></details>';
@@ -16720,7 +17008,7 @@ function cbApiReadbackHtml(r) {
       + aclEscHtml(JSON.stringify(r.plan, null, 2)) + '</pre></details>';
   }
   if (r.status === 'PAUSED') {
-    h += '<span style="font-weight:600">Status: PAUSED</span> — nothing was activated. ';
+    h += '<span style="font-weight:600">Campaign PAUSED</span> — ad sets and ads are active and start when you turn the campaign on. ';
   }
   var counts = function(o) {
     return Object.keys(o || {}).map(function(k) { return o[k] + ' ' + k; }).join(', ');
@@ -16824,13 +17112,14 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
           : queue.reason === 'profile'
           ? 'queued — waiting for the Multilogin profile (another run is using it)'
           : queue.state === 'waiting_review' ? aclEscHtml(cbReviewWait(queue)) + cbReviewRelease(queue)
+          : queue.state === 'waiting_idle' ? aclEscHtml(cbIdleWait(queue))
           : queue.state === 'waiting_memory' ? 'queued — waiting for memory'
           : 'queued — waiting for a free slot'
             + (queue.ahead === undefined ? '' : ' (' + (queue.ahead || 0) + ' ahead)'))
       : (job.status === 'done'
         ? (jobPublishable
           ? (job.fb_backend === 'api'
-            ? 'created PAUSED via the API — readback matches; a person activates it in Ads Manager'
+            ? 'created via the API — readback matches; campaign PAUSED, ad sets and ads active, they start when you turn the campaign on'
             : 'draft ready — the campaign is in Ads Manager, Publish was not clicked')
           : (job.fb_backend === 'api' && job.dry_run && !hasFatal
             ? 'dry run via the API — nothing was created; see the plan below'

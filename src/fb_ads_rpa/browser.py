@@ -16,7 +16,7 @@ from typing import Any, Callable, Protocol
 from playwright.sync_api import Browser, Page, Playwright, sync_playwright
 
 from src.meta_campaign_agent.ad_account_map import AccountMapEntry
-from src.fb_ads_rpa import hand_window, profile_trouble
+from src.fb_ads_rpa import hand_window, profile_dir, profile_proxy_gate, profile_trouble
 from src.fb_ads_rpa.config import ensure_playwright_browsers_path
 from src.fb_ads_rpa.window_visibility import PerPage
 
@@ -1493,6 +1493,17 @@ def _unminimize_before_attach(browser) -> list[dict]:
     return done
 
 
+#: ACL-1403: паузы между повторами подключения к порту, который MLX объявил
+#: после старта профиля, а он ещё не слушает (всего ~9 с).
+CDP_PORT_WAIT_S = (1.0, 2.0, 3.0, 3.0)
+
+
+def _cdp_refused(exc: BaseException) -> bool:
+    """Подключение к порту CDP отказано (`connect ECONNREFUSED 127.0.0.1:…`)."""
+    text = str(exc).lower()
+    return "econnrefused" in text or "connection refused" in text
+
+
 def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, ws_endpoint: str | None,
                         new_page: bool = False, check_responsive: bool = False) -> BrowserConnection:
     ensure_playwright_browsers_path()
@@ -1602,6 +1613,8 @@ class MultiloginBrowserProvider:
 
         if not entry.profile_id:
             raise MultiloginLauncherError(f"{account_label}: profile_id is required")
+        # ACL-1138: профиль без прокси в Multilogin не поднимаем.
+        profile_proxy_gate.ensure_profile_has_proxy(entry, account_label)
 
         ml = get_multilogin_instance(entry.multilogin_instance)
         self._launcher = MultiloginLauncher(ml)
@@ -1760,6 +1773,42 @@ class MultiloginDirectCDPProvider:
                 continue
         return False
 
+    def _log_proxy_flag(self, user_data_dir: str, profile_id: str = "") -> bool | None:
+        """ACL-1138: записать, несёт ли браузер профиля `--proxy-server`.
+
+        Только свидетельство, не гейт: часть типов прокси MLX может применять
+        через агента без флага. Правда — конфигурация в MLX API
+        (`profile_proxy_gate`). `None` — процесс профиля не найден.
+        """
+        import psutil  # type: ignore
+
+        # MLX запускает Mimic с короткими именами 8.3 (…\B18D03~1\…): ни длинного
+        # пути, ни полного uuid там нет — ищем ещё по шести символам без дефисов.
+        short = profile_id.replace("-", "").lower()[:6]
+        needles = [n for n in (user_data_dir.lower().replace("/", "\\").rstrip("\\"),
+                               profile_id.lower(), f"\\{short}~" if short else "") if n]
+        for proc in psutil.process_iter(["name", "exe", "cmdline"]):
+            try:
+                if not (proc.info["name"] and "chrome" in proc.info["name"].lower()):
+                    continue
+                exe = (proc.info["exe"] or "").lower().replace("/", "\\")
+                if "mimic" not in exe and "\\mlx\\" not in exe:
+                    continue
+                args = proc.info["cmdline"] or []
+                if any(a.startswith("--type=") for a in args if isinstance(a, str)):
+                    continue
+                cmd = " ".join(args).lower().replace("/", "\\")
+                if not any(n in cmd for n in needles):
+                    continue
+                flag = profile_proxy_gate.cmdline_has_proxy_flag(args)
+                log.info("Profile %s browser command line %s --proxy-server", profile_id,
+                         "carries" if flag else "has NO")
+                return flag
+            except Exception:
+                continue
+        log.info("Profile %s browser process not found; --proxy-server not checked", profile_id)
+        return None
+
     def _discover_debug_port(self, user_data_dir: str, profile_id: str = "") -> int | None:
         """Find CDP port of an already-running Mimic (DevToolsActivePort or cmdline)."""
         import psutil  # type: ignore
@@ -1888,7 +1937,14 @@ class MultiloginDirectCDPProvider:
         принадлежал именно этому профилю. Свободный поиск годится публикации,
         которая профиль только что подняла сама; чтению он позволил бы
         прицепиться к чужому окну и прочитать чужой кабинет.
+
+        ACL-1138: профиль без прокси в Multilogin — `ProfileStop(profile_no_proxy)`.
         """
+        from types import SimpleNamespace
+
+        profile_proxy_gate.ensure_profile_has_proxy(
+            # Пространство здесь неизвестно — гейт спросит оба (A, затем B).
+            SimpleNamespace(profile_id=profile_id, multilogin_instance=""), profile_id)
         return self._try_attach_existing(
             profile_id, user_data_dir, strict_profile=True, new_page=new_page
         )
@@ -1899,8 +1955,22 @@ class MultiloginDirectCDPProvider:
         Нужно, чтобы отличить «профиль закрыт» от «профиль открыт руками в MLX
         Desktop»: у второго нет отладочного порта, прицепиться не к чему, и
         человеку надо сказать именно это, а не «профиль не найден».
+
+        ACL-1184: это ЕДИНСТВЕННАЯ проверка «профиль запущен» — её зовут и
+        дешборд (чтение, «open profile»), и `MultiloginAttachProvider.open`.
+        Раньше у них были свои, с разными аргументами, и они расходились:
+        дешборд говорил «закрыт», RPA — «запущен», и человеку выходил голый
+        `RuntimeError`. Оба написания папки (длинное и 8.3) проверяются
+        здесь же; папка не найдена (`""`) — ищем по id профиля. Если Mimic
+        запущен с папкой 8.3 (`PROFIL~1`), id в его командной строке может не
+        быть — тогда профиль найдёт уже отказ MLX «can't lock» при запуске
+        (`MLX_LOCK_NO_RESTART`), с тем же текстом для человека.
         """
-        return self._profile_process_running(user_data_dir, profile_id)
+        if not user_data_dir:
+            # Пустая строка совпала бы с любой командной строкой Mimic.
+            return bool(profile_id) and self._profile_process_running(profile_id, profile_id)
+        return any(self._profile_process_running(spelling, profile_id)
+                   for spelling in profile_dir.spellings(user_data_dir))
 
     def _try_attach_existing(
         self, profile_id: str, user_data_dir: str, *, strict_profile: bool = False, new_page: bool = False,
@@ -1942,6 +2012,10 @@ class MultiloginDirectCDPProvider:
                 **({"check_responsive": True} if check_responsive else {}),
             )
             log.info("Reusing already-running Mimic profile %s on CDP %s", profile_id, port)
+            try:
+                self._log_proxy_flag(user_data_dir, profile_id)
+            except Exception:
+                pass
             return conn
         except (ProfileUnresponsive, profile_trouble.ProfileStop):
             # Вызывающий просил проверить живость — ему и решать (ACL-1320).
@@ -1955,6 +2029,8 @@ class MultiloginDirectCDPProvider:
         if not profile_id:
             raise RuntimeError(f"{account_label}: profile_id required for DirectCDP provider")
         self._profile_id_cache = profile_id
+        # ACL-1138: профиль без прокси в Multilogin не открываем и не цепляемся.
+        profile_proxy_gate.ensure_profile_has_proxy(entry, account_label)
 
         user_data_dir = self._find_profile_user_data_dir(profile_id)
         if user_data_dir is None:
@@ -2244,8 +2320,16 @@ class ReopenCancelled(RuntimeError):
     """Stop нажат, пока ждали освобождения профиля: профиль не поднят (ACL-1606)."""
 
 
+#: ACL-1184: `where` отказа запуска без перезапуска, когда Multilogin держит профиль.
+MLX_LOCK_NO_RESTART = "mlx_lock_no_restart"
+
+
 def _start_still_held(exc: BaseException) -> bool:
     """Запуск отказан, потому что Multilogin ещё держит профиль (ACL-1606)."""
+    if (isinstance(exc, profile_trouble.ProfileStop) and exc.code == profile_trouble.OPEN_BY_HAND
+            and exc.detail == MLX_LOCK_NO_RESTART):
+        # ACL-1184: запуск без перезапуска отказывает этой остановкой, а не текстом MLX.
+        return True
     msg = str(exc).lower()
     return any(mark in msg for mark in (
         "already running", "profile_already_running", "browser process is running",
@@ -2406,10 +2490,9 @@ class MultiloginAttachOnlyProvider:
                     or "profile_already_running" in msg
                 )
                 if lock_conflict and not allow_restart:
-                    raise RuntimeError(
-                        f"{account_label}: profile is already running; no stop or restart was performed. "
-                        "Close it in Multilogin Desktop before opening it with automation."
-                    ) from exc
+                    # ACL-1184: тот же отказ «открыт руками», что и в `open`, — не голый
+                    # RuntimeError: дешборд показывает по нему `hand_message()`.
+                    raise _open_by_hand(profile_id, account_label, MLX_LOCK_NO_RESTART) from exc
                 if lock_conflict and not _robot_profile(profile_id, udd):
                     # ACL-1320: MLX держит профиль, а робот его не поднимал —
                     # значит, открыт руками. Не останавливаем.
@@ -2473,6 +2556,8 @@ class MultiloginAttachOnlyProvider:
         profile_id = entry.profile_id
         if not profile_id:
             raise RuntimeError(f"{account_label}: profile_id is required")
+        # ACL-1138: до прицепа и до запуска — у профиля в Multilogin есть прокси.
+        profile_proxy_gate.ensure_profile_has_proxy(entry, account_label)
 
         user_data_dir = _find_mlx_profile_dir(profile_id)
         if user_data_dir is None and not allow_missing_dir:
@@ -2529,9 +2614,13 @@ class MultiloginAttachOnlyProvider:
         # yet; the job stops with `profile_open_by_hand`. Only a profile the robot
         # started itself earlier is restarted through the MLX API here (graceful
         # stop of ONLY this profile, cookies kept, other profiles untouched).
-        elif self._direct._profile_process_running(udd or profile_id, profile_id):
+        elif self._direct.profile_is_running(udd, profile_id):
             if not allow_restart:
-                raise RuntimeError(f"{account_label}: profile is already running; no restart was performed")
+                # ACL-1184: не голый RuntimeError, а остановка «открыт руками» —
+                # дешборд показывает по ней `hand_message()` с выходом.
+                raise _open_by_hand(profile_id, account_label,
+                                    "no_restart; robot profile" if _robot_profile(profile_id, udd)
+                                    else "no_restart")
             if not _robot_profile(profile_id, udd):
                 if reopen_by_hand:
                     return self._reopen_hand_opened(entry, account_label, profile_id, udd,
@@ -2599,12 +2688,32 @@ class MultiloginAttachOnlyProvider:
             profile_id,
             started.port,
         )
-        return _connect_playwright(
-            cdp_url=cdp,
-            provider="multilogin_attach",
-            debug_port=started.port,
-            ws_endpoint=started.ws_endpoint,
-        )
+        try:
+            self._direct._log_proxy_flag("", profile_id)
+        except Exception:
+            pass
+        # ACL-1403: порт объявил MLX, но Chrome мог ещё не слушать (гонка
+        # старта) или уже упал (устаревший порт). Ждём порт коротко и ограниченно;
+        # не поднялся — именованная остановка вместо голого RuntimeError.
+        waited = 0.0
+        for pause in (*CDP_PORT_WAIT_S, None):
+            try:
+                return _connect_playwright(
+                    cdp_url=cdp,
+                    provider="multilogin_attach",
+                    debug_port=started.port,
+                    ws_endpoint=started.ws_endpoint,
+                )
+            except Exception as exc:
+                if not _cdp_refused(exc):
+                    raise
+                if pause is None or self._cancel_requested():
+                    detail = f"port {started.port} refused after {waited:g}s: {_exc_text(exc)}"
+                    raise profile_trouble.ProfileStop(profile_trouble.CDP_REFUSED, detail) from exc
+                log.info("CDP port %s of profile %s refused the connection; retry in %s s",
+                         started.port, profile_id, pause)
+                time.sleep(pause)
+                waited += pause
 
     def _reopen_hand_opened(self, entry: AccountMapEntry, account_label: str, profile_id: str,
                             udd: str, where: str, *,
@@ -2686,7 +2795,8 @@ class MultiloginAttachOnlyProvider:
                 conn = self._connect_started(started, profile_id)
                 break
             except Exception as exc:
-                detail = _exc_text(exc)
+                # ACL-1184: у отказа «MLX держит профиль» в телеметрию — исходный текст MLX.
+                detail = _exc_text(exc.__cause__ if _start_still_held(exc) and exc.__cause__ else exc)
                 if _start_still_held(exc) and retries < len(HAND_WINDOW_START_BACKOFF_S):
                     pause = HAND_WINDOW_START_BACKOFF_S[retries]
                     retries += 1
@@ -2763,6 +2873,18 @@ class MultiloginAttachOnlyProvider:
         _record_profile_restart(entry, profile_id, ok=True, where="campaign_open")
         return conn
 
+    def robot_owns_profile(self, entry: AccountMapEntry) -> bool:
+        """Профиль поднят роботом (или робот цеплялся к нему по порту) — ему же решать, закрывать ли.
+
+        Те же условия, что у `close_finished_profile`, но без остановки (ACL-2113): окно,
+        открытое руками, не «оставлено для удобства» — оно не наше.
+        """
+        profile_id = (entry.profile_id or "").strip()
+        if not profile_id:
+            return False
+        user_data_dir = _find_mlx_profile_dir(profile_id)
+        return bool(_robot_profile(profile_id, str(user_data_dir) if user_data_dir is not None else ""))
+
     def close_finished_profile(self, entry: AccountMapEntry, account_label: str) -> str:
         """Закрыть профиль, чьи кампании собрались чисто (ACL-1444).
 
@@ -2822,13 +2944,19 @@ def stop_profile_on_request(entry: AccountMapEntry, account_label: str) -> str:
     from src.fb_api import profile as _fb_profile
 
     settled = _launch.wait_start_settled(profile_id)
+    stop_at = time.time()
     MultiloginAttachOnlyProvider()._stop_profile(entry, account_label, profile_id, udd, allow_kill=False)
     _ROBOT_PROFILES.pop(profile_id, None)
     # Закрытым профиль считаем, когда его процесс ушёл (статусу MLX Desktop не верим).
     gone = _fb_profile.wait_gone(profile_id)
+    # ACL-2117: время остановки и ухода процесса — для проверки гипотезы «переоткрыли в разгар сохранения».
+    _launch.record_profile_stop(account=account_label, profile_id=profile_id, stop_at=stop_at,
+                                exit_at=time.time() if gone else None, settled=settled, gone=gone)
     if not gone:
         log.warning("%s: profile %s still has a process %.0f s after the MLX stop (start was %s)",
                     account_label, profile_id, _launch.STOP_GONE_WAIT_S, settled)
+        # ACL-2113: автозакрытие простаивающих окон не считает это успехом.
+        return "still_running"
     return "closed"
 
 

@@ -37,6 +37,7 @@ from src.fb_api.creator import (
     plan_from_draft,
     preflight_account,
 )
+from src.web.api_build_progress import BuildCounter
 from src.fb_api.graph import CallBudget, GraphClient, GraphError, GraphStop, normalize_act
 
 log = logging.getLogger(__name__)
@@ -186,7 +187,7 @@ def dry_run_result(outcome: Outcome) -> dict[str, Any]:
         "backend": "api", "dry_run": True, "status": "",
         "success": ok, "publishable": False,
         "warnings": list(outcome.warnings) + (["Dry run: nothing was created"] if ok else []),
-        "blocking_failures": [], "problems": [], "run_id": None, "campaign_id": None,
+        "blocking_failures": [], "problems": list(outcome.problems), "run_id": None, "campaign_id": None,
         "adset_id": None, "creative_id": None, "ad_id": None, "ad_ids": [],
         "error": outcome.error or None, "steps_completed": list(outcome.steps), "screenshots": [],
         "readback": {}, "plan": outcome.plan, "created": {}, "reused": {}, "ts": _now_iso(),
@@ -216,8 +217,8 @@ def result_dict(outcome: Outcome, *, error: str = "") -> dict[str, Any]:
         "manual_required": list(outcome.manual_required),
         "warnings": list(outcome.warnings),
         "blocking_failures": blocking,
-        # Текстовая отрисовка панели (список проблем RPA здесь не нужен).
-        "problems": [],
+        # ACL-1805: отказы Meta и правил - списком ACL-1437 (причина и что делать).
+        "problems": list(outcome.problems),
         "run_id": None,
         "campaign_id": outcome.campaign_id or None,
         "adset_id": outcome.adset_ids[0] if outcome.adset_ids else None,
@@ -246,6 +247,9 @@ class ApiPublisher:
         self.sleep: Callable[[float], None] = time.sleep
         self.cancel_event = threading.Event()
         self.progress = progress
+        #: ACL-1992: счёт созданных объектов кампании для процента сборки;
+        #: задание подставляет свой приёмник после создания.
+        self.units: Callable[[str, dict], None] = lambda _n, _u: None
         self._tab = None
         #: ACL-1812: аренда тёплой вкладки профиля (вместо своей вкладки).
         self._lease: Any = None
@@ -254,6 +258,9 @@ class ApiPublisher:
         self._resolver: TargetingResolver | None = None
         self._entry = None
         self._opened = None
+        #: ACL-2113: окно открыто прошлым заданием и оставлено (мы его взяли без перезапуска) —
+        #: для решений «закрыть/держать» оно наше, как поднятое этим заданием.
+        self.inherited_profile = False
         self.account_label = ""
         self.act = ""
         self.stop: GraphStop | None = None
@@ -268,7 +275,7 @@ class ApiPublisher:
     @property
     def started_profile(self) -> bool:
         """Профиль поднят самим заданием (не пользователем) — ACL-1784."""
-        return bool(getattr(self._opened, "started_now", False))
+        return bool(getattr(self._opened, "started_now", False)) or bool(self.inherited_profile)
 
     @property
     def writes(self) -> int:
@@ -310,7 +317,9 @@ class ApiPublisher:
         from src.fb_api import mlx_session as _mlx
 
         try:
-            with _mlx.scope(account=account_label):
+            from src.fb_api import stop_log as _stop_log
+
+            with _mlx.scope(account=account_label), _stop_log.cancel_scope(self.cancelled):
                 self._opened = _open_profile(profile_id, (getattr(entry, "folder_id", "") or "").strip(),
                                              (getattr(entry, "multilogin_instance", "") or "A").strip() or "A")
         except _fb_profile.ProfileError as exc:
@@ -331,6 +340,12 @@ class ApiPublisher:
             # Вкладка не ответила, браузер сказал почему (логин/checkpoint/молчит): стоп, без повторов.
             self._halt(exc)
 
+        try:
+            from src.fb_api import launch as _launch
+
+            _launch.note_graph_session(profile_id, bool(state.get("has_token")), account=account_label)
+        except Exception:  # noqa: BLE001 — телеметрия не роняет публикацию
+            pass
         if state.get("kind") == "checkpoint":
             self._halt(Checkpoint("the profile is on a Facebook checkpoint"))
         if state.get("kind") == "login":
@@ -428,9 +443,17 @@ class ApiPublisher:
                     f"({pinned.get('kind') or 'no token'}). Nothing was created; run again."))
         self._client.reset_budget(int(_env_number(CREATE_MAX_CALLS_ENV, DEFAULT_CREATE_MAX_CALLS, 20, 250)))
 
+        # Пробный запуск ничего не создаёт — процента сборки у него нет.
+        counter = None if self.dry_run else self._counter(plan)
+
         def step(text: str) -> None:
             self.progress(f"{name}: {text}")
             _record("api_create_step", True, campaign=name, diag={"step": text})
+            if counter is not None:   # и строка без новой единицы — «last» на странице свежий
+                self._report_units(name, counter, text)
+
+        if counter is not None:
+            self._report_units(name, counter)
 
         creator = CampaignCreator(self._client, self._facts, self._resolver,
                                   cancelled=self.cancelled, progress=step, sleep=self.sleep,
@@ -478,6 +501,21 @@ class ApiPublisher:
                     "mismatches": len(outcome.mismatches), "stop": outcome.stop_kind})
         return res
 
+    @staticmethod
+    def _counter(plan: Any) -> BuildCounter | None:
+        try:
+            return BuildCounter(plan)
+        except Exception:  # noqa: BLE001 — процент не должен ронять публикацию
+            return None
+
+    def _report_units(self, name: str, counter: BuildCounter, text: str = "") -> None:
+        try:
+            if text:
+                counter.feed(text)
+            self.units(name, counter.view())
+        except Exception:  # noqa: BLE001 — процент не должен ронять публикацию
+            pass
+
     # -- конец
     def close(self, *, force: bool = False) -> None:
         """Закрыть свою вкладку. Профиль не трогаем."""
@@ -503,10 +541,17 @@ class ApiPublisher:
         if self.dry_run:
             clean = False   # после пробного запуска окно остаётся: настоящий запуск следом
         opened = self._opened
-        if not (opened is not None and getattr(opened, "started_now", False)):
+        ours = (opened is not None and getattr(opened, "started_now", False)) or (
+            opened is not None and self.inherited_profile)
+        if not ours:
             _record("profile_closed_after_job", None, diag={"note": "not_started_by_job"})
             return ""
-        if not clean or other_job_waits or self.cancelled() or _keep_profiles_open():
+        if clean and not other_job_waits and not self.cancelled() and _keep_profiles_open():
+            # ACL-2113: чистая публикация — окно остаётся для байера (его закроет простой
+            # при нехватке места/памяти, либо кнопка Close profile).
+            _record("profile_closed_after_job", None, diag={"note": "kept_convenience"})
+            return "kept"
+        if not clean or other_job_waits or self.cancelled():
             _record("profile_closed_after_job", None, diag={"note": "kept"})
             return ""
         from src.fb_api import stop_log as _stop_log
@@ -537,6 +582,19 @@ class ApiPublisher:
 #: Потолок вызовов на предпроверку кабинета внутри «Check plan».
 PLAN_PREFLIGHT_MAX_CALLS = 12
 
+#: ACL-2117: сколько секунд Check plan держит открытым профиль, который сам поднял
+#: (0 — закрывать как раньше, через `CLOSE_GRACE_S`).
+PLAN_KEEP_OPEN_ENV = "ACL_PLAN_KEEP_OPEN_S"
+DEFAULT_PLAN_KEEP_OPEN_S = 600.0
+
+
+def plan_keep_open_s() -> float:
+    try:
+        value = float(str(os.environ.get(PLAN_KEEP_OPEN_ENV, "") or DEFAULT_PLAN_KEEP_OPEN_S).replace(",", "."))
+    except ValueError:
+        value = DEFAULT_PLAN_KEEP_OPEN_S
+    return max(0.0, min(3600.0, value))
+
 
 def _plan_in_read_session(account_label: str, drafts: list[Any]) -> list[dict[str, Any]]:
     from src.analysis_agent import account_spend_api as _api
@@ -563,6 +621,17 @@ def _plan_in_read_session(account_label: str, drafts: list[Any]) -> list[dict[st
             results.append(pub.publish_draft(draft))
         if client.writes:
             raise AssertionError("Check plan must not write")
+        # ACL-2117: проверенный план обычно сразу публикуют. Окно, которое подняла проверка,
+        # держим `plan_keep_open_s()` — Publish подхватит его без второго старта (и без
+        # остановки → переоткрытия во время сохранения профиля MLX). Не взяли — закроется по сроку
+        # (keep-open выключен) или уступит место по простою (keep-open включён).
+        # Только после чистого прохода: остановка Meta/логаут/потолок вызовов окно не держат.
+        if (client.stopped is None and any(not d.errors for d in drafts)
+                and plan_keep_open_s() > 0):
+            sess.keep_next, sess.keep_grace_s = True, plan_keep_open_s()
+            # Keep-open включён (по умолчанию после ACL-2113): окно — «удобное» kept-окно, им
+            # управляет вытеснение по простою; таймер `plan_keep_open_s()` — только при выключенном.
+            sess.keep_convenience = _keep_profiles_open()
     return results
 
 

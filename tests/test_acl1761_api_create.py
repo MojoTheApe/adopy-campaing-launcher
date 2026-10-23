@@ -372,12 +372,14 @@ def test_call_cap_counts_writes():
 class FakeMeta:
     """Graph API в памяти: тот же интерфейс, что `InPageGraph` (request/write/stage_file)."""
 
-    def __init__(self, *, video_states=("processing", "ready"), hash_fn=None, drop_labels=()):
+    def __init__(self, *, video_states=("processing", "ready"), hash_fn=None, drop_labels=(), instagram="one"):
         self.objects: dict[str, dict] = {}
         self.images: dict[str, str] = {}
         self.posts: list[tuple[str, dict]] = []
         #: (путь, передан ли on_ad) по каждой записи - ACL-1775.
         self.on_ad_posts: list[tuple[str, bool]] = []
+        #: (путь, передан ли children_active) по каждой записи - ACL-2114.
+        self.children_active_posts: list[tuple[str, bool]] = []
         self.gets: list[tuple[str, dict]] = []
         self.video_states = list(video_states)
         self.next_id = 100
@@ -390,6 +392,10 @@ class FakeMeta:
         self.hash_fn = hash_fn or (lambda d: hashlib.md5(d).hexdigest())
         #: Виды объектов, на которых «Meta» не сохраняет adlabels.
         self.drop_labels = set(drop_labels)
+        #: Instagram Страницы (ACL-1896): "one" - подключённый аккаунт, "none" - как у Doc120,
+        #: "error" - Meta отвечает ошибкой на чтение, "ad_account_only" - у Страницы пусто, у кабинета есть.
+        self.instagram = instagram
+        self.instagram_id = "17841400000000001"
 
     # -- служебное
     def _new(self, kind, **fields):
@@ -431,8 +437,10 @@ class FakeMeta:
             p.pop("adlabels", None)
         return self._new(kind, **p)
 
-    def write(self, path, params, files=None, filename="", on_ad=False, **_k):
-        wp.check(ACT, "POST", path, params, files, on_ad=on_ad)       # та же политика, что у страницы
+    def write(self, path, params, files=None, filename="", on_ad=False, children_active=False, **_k):
+        # та же политика, что у страницы (ACL-2114: children_active - кампания подтверждена PAUSED)
+        wp.check(ACT, "POST", path, params, files, on_ad=on_ad, children_active=children_active)
+        self.children_active_posts.append((path, bool(children_active)))
         self.posts.append((path, dict(params)))
         self.on_ad_posts.append((path, bool(on_ad)))
         edge = path.rsplit("/", 1)[1]
@@ -489,8 +497,18 @@ class FakeMeta:
             return {"data": []}
         if parts[0] == ACT and len(parts) == 1:
             return {"account_id": ACT[4:], "currency": "USD", "account_status": 1}
+        if len(parts) == 1 and "connected_instagram_account" in str(params.get("fields")):
+            if self.instagram == "error":
+                return {"error": {"code": 10, "type": "OAuthException",
+                                  "message": "(#10) Application does not have permission for this action"}}
+            if self.instagram == "one":
+                return {"id": parts[0], "connected_instagram_account": {"id": self.instagram_id, "username": "page_ig"}}
+            return {"id": parts[0]}
         if parts[0] == ACT:
             edge = parts[1]
+            if edge == "instagram_accounts":
+                return {"data": [{"id": "17841499999999999", "username": "other"}]
+                        if self.instagram == "ad_account_only" else []}
             if edge == "promote_pages":
                 return {"data": [{"id": "111"}]}
             if edge == "adspixels":
@@ -592,9 +610,13 @@ def test_full_create_is_paused_everywhere_and_the_readback_matches(tmp_path):
     assert edges == ["campaigns", "adsets", "adimages", "adcreatives", "ads", "adimages", "adcreatives",
                      "ads", "advideos", "adcreatives", "ads"]
     for path, params in meta.posts:
-        if path.rsplit("/", 1)[1] in ("campaigns", "adsets", "ads"):
+        edge = path.rsplit("/", 1)[1]
+        # ACL-2114: кампания PAUSED, наборы и объявления ACTIVE под ней.
+        if edge == "campaigns":
             assert params["status"] == "PAUSED"
-        assert "ACTIVE" not in json.dumps(params)
+        if edge in ("adsets", "ads"):
+            assert params["status"] == "ACTIVE"
+        assert json.dumps(params).count("ACTIVE") == (1 if edge in ("adsets", "ads") else 0)
     camp = next(o for o in meta.objects.values() if o["_kind"] == "campaign")
     assert camp["daily_budget"] == "2000" and camp["objective"] == "OUTCOME_LEADS"
     adset = next(o for o in meta.objects.values() if o["_kind"] == "adset")
@@ -663,7 +685,9 @@ def test_readback_flags_a_campaign_somebody_activated(tmp_path):
     meta = FakeMeta()
     meta.mutate_on_read[("campaign", "status")] = "ACTIVE"
     out, _ = _run(meta, _draft(tmp_path, ads=1))
-    assert any(m["object"] == "campaign" and m["field"] == "status" for m in out.mismatches)
+    # ACL-2114: кампания не подтверждена PAUSED - стоп ДО первой записи набора/объявления.
+    assert out.stop_kind == "campaign_not_paused" and "not confirmed PAUSED" in out.error
+    assert [p.rsplit("/", 1)[1] for p, _ in meta.posts] == ["campaigns"]
 
 
 def test_video_processing_wait_is_bounded(tmp_path):
@@ -929,7 +953,7 @@ def test_dry_run_runs_preflight_and_returns_the_plan_with_zero_writes(tmp_path):
     plan = res["plan"]
     assert plan["campaign"]["status"] == "PAUSED" and plan["existing_campaign_id"] == ""
     ads = plan["ad_sets"][0]["ads"]
-    assert [a["format"] for a in ads] == ["image", "video"] and all(a["status"] == "PAUSED" for a in ads)
+    assert [a["format"] for a in ads] == ["image", "video"] and all(a["status"] == "ACTIVE" for a in ads)
     assert plan["ad_sets"][0]["targeting"]["geo_locations"] == {"countries": ["MX"]}
 
 
@@ -1158,13 +1182,14 @@ class FakeApiPublisher:
 
 def test_publish_job_routes_to_the_api_only_when_switched(monkeypatch):
     from src.web import publish_api, publish_jobs
+    from tests.profile_lease_fakes import fake_profile
 
     monkeypatch.setattr(publish_api, "ApiPublisher", FakeApiPublisher)
     called = {"rpa": 0}
     monkeypatch.setattr(publish_jobs, "_run_rpa", lambda *a, **k: called.__setitem__("rpa", called["rpa"] + 1))
     monkeypatch.setattr(publish_jobs, "_write_draft_status", lambda *a, **k: None)
     monkeypatch.setattr(publish_jobs, "_start_stuck_watch", lambda *a, **k: None)
-    monkeypatch.setattr(publish_jobs, "profile_key_for", lambda label: "p-" + label)
+    monkeypatch.setattr(publish_jobs, "profile_key_for", lambda label: fake_profile(label))
     monkeypatch.setattr(publish_jobs, "use_rpa_publish", lambda: True)
 
     monkeypatch.setenv("ACL_FB_BACKEND", "api")
