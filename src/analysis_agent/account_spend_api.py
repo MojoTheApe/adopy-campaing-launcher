@@ -261,6 +261,16 @@ def _cooldown_left(key: str) -> float:
     return _cooldown_state(key)[0]
 
 
+def _launch_note_session(profile_id: str, state: dict, account: str) -> None:
+    """ACL-2117: телеметрия — была ли сессия Graph на первой странице после переоткрытия."""
+    try:
+        from src.fb_api import launch as _launch
+
+        _launch.note_graph_session(profile_id, bool(state.get("has_token")), account=account)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _start_cooldown(key: str, stop: GraphStop) -> None:
     secs = COOLDOWN_S.get(stop.kind)
     if secs is None:
@@ -289,11 +299,16 @@ class _Session:
     #: Профиль, который это чтение подняло, держится ещё `CLOSE_GRACE_S` после
     #: удачного чтения: за ним придёт чтение стран (ACL-1580).
     keep_next: bool = False
+    #: ACL-2117: сколько секунд держать такое окно (вместо `CLOSE_GRACE_S`); None — обычно.
+    keep_grace_s: float | None = None
+    #: ACL-2117: keep-open включён — окно остаётся «удобным» kept-окном без своего таймера.
+    keep_convenience: bool = False
 
 
 # Точки подмены в тестах: настоящий браузер здесь не нужен.
 def _probe_local(profile_id: str) -> tuple[str, int | None]:
-    return _fb_profile.local_debug_port(profile_id, profile_dir=_fb_profile.find_profile_dir(profile_id))
+    # Браузер, переживший нашу недавнюю остановку, — "closing": к его порту не цепляемся.
+    return _fb_profile.probe_local(profile_id)
 
 
 def _open_profile(profile_id: str, folder_id: str, instance: str):
@@ -338,7 +353,8 @@ def _open_gated(entry, account: str, held: "_as._ReadOpen"):
         # ACL-1812 (ревью #813, B1): закрыли недавно — не поднимаем, и в очередь за местом не встаём.
         from src.fb_api import stop_log as _stop_log
 
-        why = _stop_log.refusal(profile_id)
+        # ACL-2117: ждём, пока MLX досохранит профиль после остановки; отказ — только если ждать слишком долго.
+        why = _stop_log.wait_or_refusal(profile_id, on_wait=lambda text: _as._set_wait_note(account, text))
         if why:
             raise ApiReadError(why, code="restart_cooldown")
         # Профиль не работает: его поднимет MLX — значит, нужно место по памяти
@@ -462,8 +478,28 @@ def _warm_session(account: str, act: str, key: str, profile_id: str, commands: b
         lease.release(stop)
 
 
+def _touch_kept_window(account: str) -> None:
+    """ACL-2113: окно аккаунта использовали — оставленное «для удобства» окно не простаивает."""
+    try:
+        from src.web import publish_jobs
+
+        publish_jobs.touch_kept(account)
+    except Exception:
+        pass
+
+
 @contextmanager
 def _session(account: str, *, commands: bool = False):
+    """Сессия чтения; по её окончании срок простоя оставленного окна идёт с нуля (ACL-2113)."""
+    try:
+        with _open_session(account, commands=commands) as sess:
+            yield sess
+    finally:
+        _touch_kept_window(account)
+
+
+@contextmanager
+def _open_session(account: str, *, commands: bool = False):
     """Профиль → вкладка → клиент. `commands=True` (ACL-1800) — клиент с правом
     ТОЛЬКО на правку существующих объектов (статус/бюджет/ставка)."""
     entry = _as._entry_for(account)
@@ -534,6 +570,7 @@ def _session(account: str, *, commands: bool = False):
             _start_cooldown(key, exc)
             raise
         page_stop: GraphStop | None = None
+        _launch_note_session(getattr(opened, "profile_id", ""), state, account)
         if state.get("kind") == "checkpoint":
             page_stop = Checkpoint("the profile is on a Facebook checkpoint")
         elif state.get("kind") == "login":
@@ -567,7 +604,9 @@ def _session(account: str, *, commands: bool = False):
         # ACL-1580: профиль, который поднято этим чтением, закрывается мягкой
         # остановкой (и при отказе тоже) или ждёт `CLOSE_GRACE_S` под страны.
         try:
-            _as._finish_started(held, keep_for_next=bool(sess and sess.keep_next))
+            _as._finish_started(held, keep_for_next=bool(sess and sess.keep_next),
+                                grace_s=(sess.keep_grace_s if sess else None),
+                                convenience=bool(sess and sess.keep_convenience))
         except Exception:
             log.exception("Could not finish the profile the read started (%s)", account)
 

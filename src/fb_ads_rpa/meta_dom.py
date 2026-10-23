@@ -5384,6 +5384,9 @@ def run_recorded_campaign_flow(
     on_new_page=None,
     ad_body2: str = "",
     expected_act: str = "",
+    page_id: str = "",
+    page_name: str = "",
+    page_name_unique: bool = False,
 ) -> str:
     """Create -> Website -> ... -> Ad level, using the exact locators from a
     verified human Playwright codegen recording (2026-07-21) instead of the
@@ -6567,6 +6570,10 @@ def run_recorded_campaign_flow(
         # С каким именем сверять открытое объявление перед текстом.
         copy_ad_name = ad_name or f"{campaign_name} Ad"
         if reached_ad_level:
+            if page_id:
+                from src.fb_ads_rpa.page_identity import ensure_page_identity
+                if not ensure_page_identity(page, page_id, page_name, page_name_unique):
+                    return "page_identity"
             final_ad_name = ad_name or f"{campaign_name} Ad"
             name_try: dict = {}
             if not _fill(page.get_by_placeholder(_AD_NAME_PLACEHOLDER), final_ad_name, where="ad_name",
@@ -6843,6 +6850,10 @@ def run_recorded_campaign_flow(
                         continue
 
                     extra_name = extra.get("ad_name") or f"{campaign_name} Ad {i}"
+                    if page_id:
+                        from src.fb_ads_rpa.page_identity import ensure_page_identity
+                        if not ensure_page_identity(page, page_id, page_name, page_name_unique):
+                            return "page_identity"
                     extra_copy_name = extra_name
                     name_try = {}
                     name_ok = _fill(page.get_by_placeholder(_AD_NAME_PLACEHOLDER), extra_name,
