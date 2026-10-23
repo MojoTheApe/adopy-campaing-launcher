@@ -15,6 +15,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
+from tests.profile_lease_fakes import fake_profile
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -168,6 +170,7 @@ DAY = "2026-09-22"
 
 @pytest.fixture
 def stores(monkeypatch, tmp_path):
+    monkeypatch.setattr(sp, "_entry_for", lambda account: SimpleNamespace(profile_id=fake_profile(account)))
     monkeypatch.setattr(sp, "_store_path", lambda: tmp_path / "account_spend.json")
     monkeypatch.setattr(sp, "_UNSAVED", {})
     monkeypatch.setattr(cs, "_store_path", lambda: tmp_path / "country_splits.json")

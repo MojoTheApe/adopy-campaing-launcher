@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
@@ -89,7 +90,9 @@ def meta():
 @pytest.fixture(autouse=True)
 def world(tmp_path, monkeypatch, meta):
     monkeypatch.setattr(sp, "_store_path", lambda: str(tmp_path / "spend.json"))
-    monkeypatch.setattr(sp, "_profile_key", lambda account, *a, **k: "profile-1")
+    # ACL-1853: ключ очереди - физический UUID профиля из карты; в тесте он строится на лету.
+    entry = SimpleNamespace(profile_id=str(uuid.UUID(int=1945)))
+    monkeypatch.setattr(sp, "_entry_for", lambda account: entry)
     monkeypatch.setattr(api, "TURN_OFF_RECONCILE_PAUSE_S", 0.0)
     state = SimpleNamespace(sessions=0, clients=[])
 
@@ -231,7 +234,7 @@ def test_bad_input_is_refused_before_any_session(level, oid, parent, meta, world
 
 
 def test_a_busy_profile_is_refused_with_the_journal_entry(meta, world):
-    out = off(profile_busy=lambda key: key == "profile-1")
+    out = off(profile_busy=lambda key: key == str(uuid.UUID(int=1945)).lower())
 
     assert out.state == "failed" and out.error == api.PROFILE_BUSY_ERROR
     assert world.sessions == 0 and meta.posts == []

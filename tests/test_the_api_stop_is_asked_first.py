@@ -236,3 +236,71 @@ def test_a_read_can_restart_gracefully_without_kill_permission(attach_provider):
     assert started.port == "58906"
     assert fake.stops == 1 and fake.starts == 2
     assert attach_provider["kills"] == []
+
+
+# ── ACL-2040: один сбой основного адреса не оставляет окно открытым ───────
+
+@pytest.fixture
+def flaky(monkeypatch):
+    """Основной адрес сначала рвётся (как 16.10 23:10 на Doc120), потом отвечает."""
+    import src.meta_campaign_agent.multilogin_launcher as mod
+
+    asked: list[str] = []
+    plan: dict = {"fail_primary": 1}
+
+    def fake_get(url, headers=None, params=None, timeout=None, **kw):
+        path = url.split("45001", 1)[-1]
+        asked.append(path)
+        if path == STOP:
+            if plan["fail_primary"] > 0:
+                plan["fail_primary"] -= 1
+                raise ConnectionError("Connection aborted: remote end closed connection")
+            return _Reply(200, {"status": {"http_code": 200}})
+        return _routing_miss()
+
+    monkeypatch.setattr(mod.requests, "get", fake_get)
+    monkeypatch.setattr(mod.time, "sleep", lambda s: None)
+    cfg = MultiloginInstanceConfig(instance_id="A", automation_token="t",
+                                   launcher_base_v2="https://launcher.mlx.yt:45001/api/v2")
+    return {"launcher": MultiloginLauncher(cfg), "asked": asked, "plan": plan}
+
+
+def test_one_dropped_request_is_asked_again_and_the_profile_closes(flaky):
+    flaky["launcher"].stop_profile(PROFILE, folder_id=FOLDER)
+    assert flaky["asked"] == [STOP, STOP], "старые адреса не нужны, если основной ответил"
+
+
+def test_a_main_address_that_keeps_failing_is_named_in_the_error(flaky):
+    flaky["plan"]["fail_primary"] = 99
+    with pytest.raises(MultiloginLauncherError) as err:
+        flaky["launcher"].stop_profile(PROFILE, folder_id=FOLDER)
+    assert flaky["asked"][:3] == [STOP, STOP, STOP]
+    text = str(err.value)
+    assert "main address" in text and "Connection aborted" in text
+
+
+def test_a_server_error_on_the_main_address_is_retried(flaky, monkeypatch):
+    import src.meta_campaign_agent.multilogin_launcher as mod
+
+    replies = [_Reply(502, None, "Bad Gateway"), _Reply(200, {"status": {"http_code": 200}})]
+    monkeypatch.setattr(mod.requests, "get",
+                        lambda url, **kw: (flaky["asked"].append(url.split("45001", 1)[-1]), replies.pop(0))[1])
+    flaky["launcher"].stop_profile(PROFILE, folder_id=FOLDER)
+    assert flaky["asked"] == [STOP, STOP]
+
+
+def test_a_timeout_on_the_main_address_is_not_asked_again(flaky, monkeypatch):
+    import src.meta_campaign_agent.multilogin_launcher as mod
+
+    def fake_get(url, **kw):
+        path = url.split("45001", 1)[-1]
+        flaky["asked"].append(path)
+        if path == STOP:
+            raise mod.requests.Timeout("Read timed out")
+        return _routing_miss()
+
+    monkeypatch.setattr(mod.requests, "get", fake_get)
+    with pytest.raises(MultiloginLauncherError) as err:
+        flaky["launcher"].stop_profile(PROFILE, folder_id=FOLDER)
+    assert flaky["asked"].count(STOP) == 1
+    assert "Read timed out" in str(err.value)

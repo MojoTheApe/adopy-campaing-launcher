@@ -249,6 +249,7 @@ def test_a_reopened_profile_that_is_logged_out_stops_with_profile_logged_out(wor
     from src.fb_ads_rpa.rpa_publisher import RpaPublisher
     import src.fb_ads_rpa.rpa_publisher as pub_mod
 
+    monkeypatch.setattr(pub_mod, "load_ad_account_map", lambda _: {"Facebook_6540": _entry()})
     monkeypatch.setenv("FB_RPA_ENGINE", "recorded_flow")
     monkeypatch.setattr(br, "put_window_back", lambda page: None)
     monkeypatch.setattr(amf.time, "sleep", lambda s: None)
@@ -269,6 +270,7 @@ def test_a_reopened_profile_that_is_logged_out_stops_with_profile_logged_out(wor
     pub._entry = None
     pub._built_at = None
     pub._provider = world.prov
+    pub.browser_provider_name = "multilogin_attach"
     monkeypatch.setattr(pub, "_resolve_entry", lambda label: _entry())
 
     drafts = [CampaignDraft(n, "MX", "Facebook_6540",

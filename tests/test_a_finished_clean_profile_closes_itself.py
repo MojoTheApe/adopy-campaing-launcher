@@ -26,6 +26,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from tests.profile_lease_fakes import fake_profile
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -42,8 +43,9 @@ ACCOUNT = "FacebookDQ204 - Test"
 
 @pytest.fixture(autouse=True)
 def _switch_default(monkeypatch):
-    # conftest держит прежнее поведение для всех остальных тестов.
-    monkeypatch.delenv(rp.ENV_KEEP_PROFILES_OPEN, raising=False)
+    # conftest держит окна открытыми для всех остальных тестов; здесь —
+    # прежнее поведение ACL-1444 (выключатель снят явным `0`, ACL-2113).
+    monkeypatch.setenv(rp.ENV_KEEP_PROFILES_OPEN, "0")
 
 
 def _rows(step: str) -> list[dict]:
@@ -208,8 +210,12 @@ def test_the_switch_values(monkeypatch, value):
     assert rp.keep_profiles_open()
 
 
-def test_the_switch_is_off_by_default():
-    assert not rp.keep_profiles_open()
+def test_the_windows_stay_open_by_default_and_zero_turns_that_off(monkeypatch):
+    monkeypatch.delenv(rp.ENV_KEEP_PROFILES_OPEN, raising=False)
+    assert rp.keep_profiles_open()
+    for value in ("0", "false", "no", "off"):
+        monkeypatch.setenv(rp.ENV_KEEP_PROFILES_OPEN, value)
+        assert not rp.keep_profiles_open()
 
 
 def test_the_editor_must_say_all_edits_saved(monkeypatch):
@@ -279,7 +285,7 @@ def _run(monkeypatch, results, publisher_cls=None, *, extra_jobs=None):
     made: list = []
     for jid, job in (extra_jobs or {}).items():
         monkeypatch.setitem(pj._jobs, jid, job)
-    monkeypatch.setattr(pj, "profile_key_for", lambda label: "P-" + label.split()[0])
+    monkeypatch.setattr(pj, "profile_key_for", lambda label: fake_profile(label.split()[0]))
 
     def factory(**kw):
         pub = (publisher_cls or _JobPublisher)(results)
@@ -291,7 +297,7 @@ def _run(monkeypatch, results, publisher_cls=None, *, extra_jobs=None):
     woke: list = []
     monkeypatch.setattr(pj._slots, "wake", lambda: woke.append(1))
     job_id = "job-1444"
-    monkeypatch.setitem(pj._jobs, job_id, {"errors": [], "results": [], "status": "running",
+    monkeypatch.setitem(pj._jobs, job_id, {"job_id": job_id, "errors": [], "results": [], "status": "running",
                                            "account_label": ACCOUNT, "total": len(results),
                                            "done_count": 0, "creative_notices": [],
                                            "cancel_requested": False})
@@ -398,7 +404,7 @@ def button(monkeypatch):
         return "closed"
 
     monkeypatch.setattr(rp, "close_account_profile", close_account_profile)
-    monkeypatch.setattr(pj, "profile_key_for", lambda label: "P-" + label.split()[0])
+    monkeypatch.setattr(pj, "profile_key_for", lambda label: fake_profile(label.split()[0]))
     woke: list = []
     monkeypatch.setattr(pj._slots, "wake", lambda: woke.append(1))
 
@@ -441,7 +447,7 @@ def test_a_job_on_another_profile_does_not_block_the_button(button):
 def test_the_button_waits_for_nobody_holding_the_profile(button):
     """Чтение спенда держит замок профиля — кнопка не ждёт, а отказывает."""
     button.job("j1", "done")
-    lease = pj.publish_lease("P-" + ACCOUNT.split()[0])
+    lease = pj.publish_lease(fake_profile(ACCOUNT.split()[0]))
     held, release = threading.Event(), threading.Event()
 
     def hold():
@@ -506,7 +512,9 @@ def test_close_account_profile_uses_the_graceful_stop(monkeypatch):
     monkeypatch.setattr(rp, "_resolve_account", lambda label: _entry())
     monkeypatch.setattr(br, "stop_profile_on_request",
                         lambda entry, label: calls.append((entry.profile_id, label)) or "closed")
-    assert rp.close_account_profile(ACCOUNT) == "closed"
+    from src.fb_ads_rpa.operations import profile_lock
+    with profile_lock(PROFILE):
+        assert rp.close_account_profile(ACCOUNT) == "closed"
     assert calls == [(PROFILE, ACCOUNT)]
 
 
