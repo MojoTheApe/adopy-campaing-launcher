@@ -4025,7 +4025,7 @@
       <dd title="Source: {{ report.source_excel }}">{{ built_at or report.date }}</dd></div>
       {%- if report.source_info and report.stats_source in ('bi', 'archive') %}
       <div><dt>Figures:</dt>
-      <dd id="acl-source-info" title="{{ report.source_info.note }}">{{ report.source_info.source }} · {{ report.source_info.currency }}{% if report.source_info.assumed %} (assumed){% endif %}</dd></div>
+      <dd id="acl-source-info" data-source-name="the BI data" title="{{ report.source_info.note }}">{{ report.source_info.source }} · {{ report.source_info.currency }}{% if report.source_info.assumed %} (assumed){% endif %}</dd></div>
       {%- endif %}
       <div><dt>Version:</dt>
       <dd id="acl-version" title="Installed ACM release. Restarting the dashboard does not change it — use the Update button, which appears when a newer release exists.">{{ rel.tag or rel.short or 'unknown build' }}</dd></div>
@@ -9933,6 +9933,7 @@ function amapTreeName(s) {
   }
 }
 
+var AMAP_SOURCE = (function () { var e = document.getElementById('acl-source-info'); return (e && e.dataset.sourceName) || 'the stats workbook'; })();
 var AMAP_SHARED_TIP = 'The workbook cannot tell ads with the same name apart; '
                     + 'these are the totals for all of them';
 
@@ -10005,7 +10006,7 @@ function amapFillAttribution(box, objects, data) {
       var has = text !== '';
       cell.textContent = has ? text : '—';
       cell.classList.toggle('nodata', !has);
-      cell.title = got ? (shared > 1 ? AMAP_SHARED_TIP : 'From the stats workbook') : why;
+      cell.title = got ? (shared > 1 ? AMAP_SHARED_TIP : 'From ' + AMAP_SOURCE) : why;
     });
     /* Пометка — только над числами: над прочерком «общие числа» ничего не
        значат. Стоит в мелкой строке уровня над именем («ad»), чтобы не
