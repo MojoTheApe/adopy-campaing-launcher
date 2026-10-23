@@ -213,6 +213,53 @@ def test_disconnect_removes_the_token_and_keeps_local_data(fake_lib, machine, mo
     assert [t.name for t in tr.all_targets()] == ["Invest"]
 
 
+@pytest.mark.parametrize("kind,key", [("targets", "targets"), ("ad_texts", "texts")])
+def test_retry_reconciles_failed_originals_and_current_items_without_overwriting_team(kind, key, fake_lib, monkeypatch):
+    import copy
+    from src.analysis_agent import team_library_seed as seed
+
+    def record(name):
+        return ({"name": name, "interests": name + " interest", "narrow": ""}
+                if kind == "targets" else {"name": name, "headline": name + " headline", "body": "", "description": ""})
+
+    local = {"targets": {"version": 1, "targets": {}, "deleted": {}, "renamed": {}},
+             "ad_texts": {"version": 1, "texts": {}, "deleted": {}}}
+    local[kind][key] = {"Pending original": record("Pending original")}
+    original = copy.deepcopy(local[kind][key])
+    remote = copy.deepcopy(local[kind])
+    remote[key] = {"Team existing": record("Team existing")}
+    remote["deleted"] = {"Blocked deleted": {"data": record("Blocked deleted"),
+                                           "deleted_by": "fixture", "deleted_at": "2026-10-23"}}
+    fake_lib.put(tl.FILES[kind][0], json.dumps(remote), None, "fixture")
+    monkeypatch.setattr(tlc, "_local_snapshots", lambda: copy.deepcopy(local))
+    real_seed, attempts = seed.seed, []
+
+    def fail_once(candidate, **kwargs):
+        if candidate == kind:
+            attempts.append(candidate)
+            if len(attempts) == 1:
+                raise tl.LibraryError("Synthetic initial seed refusal.")
+        return real_seed(candidate, **kwargs)
+
+    monkeypatch.setattr(seed, "seed", fail_once)
+    first = tlc.connect(TOKEN)
+    assert first["ok"] and not first["seeded"]
+    tlc.disconnect()
+    # A remote refresh hid the failed original; another local item was then added.
+    local[kind][key] = {"Fresh local": record("Fresh local"),
+                       "Team existing": record("Changed local team existing"),
+                       "Blocked deleted": record("Blocked deleted")}
+    current = copy.deepcopy(local)
+    second = tlc.connect(TOKEN)
+    assert second["ok"] and second["seeded"] and second["added"][kind] == 2
+    saved = tl._parse(kind, fake_lib.get(tl.FILES[kind][0]))
+    assert set(saved[key]) == {"Pending original", "Fresh local", "Team existing"}
+    assert all(saved[key]["Pending original"][k] == v for k, v in original["Pending original"].items())
+    assert saved[key]["Team existing"] == remote[key]["Team existing"]
+    assert saved["deleted"] == remote["deleted"] and local == current
+    assert tlc.connect(TOKEN)["added"][kind] == 0
+
+
 # ── HTTP ───────────────────────────────────────────────────────────────────
 @pytest.fixture
 def client():

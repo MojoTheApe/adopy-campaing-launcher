@@ -18666,10 +18666,15 @@ window.aclTeamLibrary = (function () {
         token = '';
         go.disabled = false;
         if (j && j.ok) {
-          msg.style.color = 'var(--good)';
+          var incomplete = j.seeded === false || !!j.seed_error;
+          msg.style.color = incomplete ? 'var(--danger)' : 'var(--good)';
           msg.textContent = (j.message || 'Connected.') + (j.seed_error ? ' ' + j.seed_error : '');
-          input.style.display = 'none'; cancel.style.display = 'none';
-          go.textContent = 'Done'; go.dataset.done = '1';
+          if (incomplete) {
+            input.focus();
+          } else {
+            input.style.display = 'none'; cancel.style.display = 'none';
+            go.textContent = 'Done'; go.dataset.done = '1';
+          }
         } else {
           msg.style.color = 'var(--danger)'; msg.textContent = (j && j.error) || 'Could not connect.';
         }
@@ -18680,7 +18685,7 @@ window.aclTeamLibrary = (function () {
   // Кнопка рядом со строкой состояния: Connect, пока токена нет, и Disconnect, когда он есть.
   function decorate(statusEl, lib) {
     if (!statusEl) return;
-    var old = statusEl.querySelector('.tl-action'); if (old) old.remove();
+    statusEl.querySelectorAll('.tl-action').forEach(function (old) { old.remove(); });
     var b = document.createElement('button');
     b.type = 'button'; b.className = 'amap-btn tl-action'; b.style.marginLeft = '.6rem';
     if (!(lib || {}).connected) {
@@ -18689,14 +18694,38 @@ window.aclTeamLibrary = (function () {
       b.textContent = 'Disconnect';
       b.title = 'Remove the token from this computer. Your local targets and ad texts stay.';
       b.onclick = function () {
-        if (!confirm('Disconnect the team library on this computer? Your local targets and ad texts stay.')) return;
-        post('/api/team-library/disconnect').then(function (j) {
-          if (j && j.ok) window.location.reload();
-          else alert((j && j.error) || 'Could not disconnect.');
-        });
+        function showError(text) {
+          if (typeof window.aclInlineError === 'function') { window.aclInlineError(statusEl, text); return; }
+          var message = statusEl.querySelector('.tl-error');
+          if (!message) {
+            message = document.createElement('span'); message.className = 'tl-error';
+            message.setAttribute('role', 'alert'); message.style.color = 'var(--danger)';
+            statusEl.appendChild(message);
+          }
+          message.textContent = text;
+        }
+        function disconnect() {
+          post('/api/team-library/disconnect').then(function (j) {
+            if (j && j.ok) window.location.reload();
+            else showError((j && j.error) || 'Could not disconnect.');
+          }).catch(function () { showError('Could not reach the dashboard.'); });
+        }
+        var question = 'Disconnect the team library on this computer? Your local targets and ad texts stay.';
+        if (typeof window.aclConfirm === 'function') {
+          window.aclConfirm(question, {title: 'Disconnect team library', okLabel: 'Disconnect'})
+            .then(function (confirmed) { if (confirmed) disconnect(); });
+        } else {
+          _safeConfirm('Disconnect team library', question, disconnect, {confirmLabel: 'Disconnect'});
+        }
       };
     }
     statusEl.appendChild(b);
+    if ((lib || {}).connected) {
+      var retry = document.createElement('button'); retry.type = 'button';
+      retry.className = 'amap-btn tl-action'; retry.style.marginLeft = '.6rem';
+      retry.textContent = 'Add local items'; retry.title = 'Add missing items from this computer, or retry an incomplete import.';
+      retry.onclick = dialog; statusEl.appendChild(retry);
+    }
   }
   return { open: dialog, decorate: decorate };
 })();

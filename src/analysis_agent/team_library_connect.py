@@ -90,7 +90,14 @@ def connect(token: str) -> dict:
     repo = current_repo()
     # Снимок местных целей и текстов — до сохранения токена: с токеном любое открытие
     # раздела подтягивает общую копию поверх местной.
-    local = {**_local_snapshots(), **_pending}
+    local = dict(_local_snapshots())
+    for kind, pending in _pending.items():
+        key = seed.KINDS[kind][1]
+        current = local.get(kind, {})
+        # Keep originals hidden by a remote refresh, alongside newly added local
+        # records. A failed kind must not replace the entire current snapshot.
+        local[kind] = {**current, **pending,
+                       key: {**current.get(key, {}), **pending.get(key, {})}}
     _pending.clear()
     _pending.update(local)
     branch = (os.environ.get("ACL_LIBRARY_BRANCH") or "").strip() or tl.DEFAULT_BRANCH
