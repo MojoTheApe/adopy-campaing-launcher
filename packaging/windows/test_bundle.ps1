@@ -51,6 +51,11 @@ Write-Host "Checking packaged imports..."
 & $Executable --smoke-check
 Assert-LastExitCode "Packaged import smoke check"
 
+Write-Host "Checking bundled account name rules..."
+if (-not (Test-Path (Join-Path $BundleDirectory "_internal/config/account_name_rules.json") -PathType Leaf)) {
+    throw "config/account_name_rules.json is missing from the bundle."
+}
+
 Write-Host "Checking bundled Meta rules registry..."
 foreach ($RegistryFile in @("meta.json", "rules.json", "sources.json")) {
     $RegistryPath = Join-Path $BundleDirectory "_internal/config/meta_rules/$RegistryFile"

@@ -5639,6 +5639,165 @@ async function dashRefresh(ev) {
 </div>
 
 <script>
+/* Серверная копия черновиков билдера (ACL-1681).
+ *
+ * localStorage — свой у каждого профиля Chrome и у каждого адреса
+ * (127.0.0.1 и localhost — разные сайты); после краха он пуст, а работа
+ * была. Поэтому три документа — `keep` (карточки кампаний), `jobs` (память
+ * заданий публикации) и `ui` (ящик открыт / растянут) — дублируются на
+ * машине дашборда: GET/POST /api/builder-state, файл в папке ACL.
+ *
+ * У каждого документа метка времени последнего изменения (мс). При загрузке
+ * сравниваем свою с серверной: новее серверная — раскладываем её (модуль
+ * сам откладывает проигравшую локальную копию), новее наша — отправляем.
+ * Пока ответ сервера не получен, ничего не отправляем: пустой localStorage
+ * после краха не должен затереть серверную копию.
+ *
+ * Сервер недоступен — всё работает как раньше, на одном localStorage.
+ */
+window.cbSrv = (function () {
+  var URL = '/api/builder-state';
+  var SYNC_KEY = 'acl.builder.sync';
+  var DEBOUNCE_MS = 800;
+  var regs = {};          // имя → {snapshot, legacyAt, apply}
+  var last = {};          // имя → последний замеченный снимок (строкой)
+  var dirty = {};         // имя → ждёт отправки
+  var timers = {};
+  var generations = {};   // имя → поколение локального изменения
+  var inFlight = {};      // обычные записи последовательны; token отсекает старые ответы
+  var ready = false;      // серверные копии получены и сверены
+  var docs = {};          // что ответил сервер (модуль может зарегистрироваться позже ответа)
+  var pulling = false;
+  var meta = { at: {}, base: {} };
+
+  try {
+    var m = JSON.parse(localStorage.getItem(SYNC_KEY) || 'null');
+    if (m && typeof m === 'object') { meta.at = m.at || {}; meta.base = m.base || {}; }
+  } catch (e) { /* без памяти — сверимся с сервером заново */ }
+
+  function persist() {
+    try { localStorage.setItem(SYNC_KEY, JSON.stringify(meta)); } catch (e) { /* не помним */ }
+  }
+  function stamp(name) { return +meta.at[name] || 0; }
+  function setStamp(name, at, base) {
+    meta.at[name] = at;
+    if (base !== undefined) meta.base[name] = base;
+    persist();
+  }
+  function snap(name) { return JSON.stringify(regs[name].snapshot()); }
+
+  function post(name, keepalive) {
+    /* pagehide не ждёт callback старой записи: последняя копия уходит сразу
+       через keepalive. Сервер сравнивает saved_at даже при обратном порядке. */
+    if (inFlight[name] && !keepalive) return;
+    var reg = regs[name];
+    var at = stamp(name);
+    var generation = generations[name] || 0;
+    var body = JSON.stringify({ name: name, saved_at: at, base: meta.base[name] || null, data: reg.snapshot() });
+    var request = {};
+    inFlight[name] = request;
+    dirty[name] = false;
+    return fetch(URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body, keepalive: !!keepalive })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (inFlight[name] !== request) return;
+        if (!j || j.ok !== true || !j.doc) { dirty[name] = true; return; }
+        /* Ответ подтверждает серверную базу именно этой записи. Он не меняет
+           метку и содержимое более нового локального поколения. */
+        meta.base[name] = j.doc.saved_at; persist();
+        if (j.accepted || (generations[name] || 0) !== generation) return;
+        /* Сервер новее (писали с другого адреса/вкладки): берём его. */
+        reg.apply(j.doc);
+        last[name] = snap(name);
+        setStamp(name, j.doc.saved_at, j.doc.saved_at);
+      })
+      .catch(function () { if (inFlight[name] === request) dirty[name] = true; })
+      .then(function () {
+        if (inFlight[name] !== request) return;
+        inFlight[name] = false;
+        /* Дебаунс мог истечь, пока ждали ответ. Отправляем только последний
+           снимок, уже с подтверждённой базой; отказ сети сам себя не повторяет. */
+        if (dirty[name] && (generations[name] || 0) !== generation && !timers[name]) {
+          post(name);
+        }
+      });
+  }
+
+  function reconcile(name, doc) {
+    var reg = regs[name];
+    var at = stamp(name);
+    if (!at) {                       // черновик до ACL-1681: возраст — по содержимому
+      var legacy = reg.legacyAt();
+      if (legacy) { at = legacy; setStamp(name, at); }
+    }
+    if (!doc) {
+      if (at) post(name);
+    } else if (doc.saved_at > at) {
+      reg.apply(doc);
+      last[name] = snap(name);
+      setStamp(name, doc.saved_at, doc.saved_at);
+    } else if (doc.saved_at < at) {
+      meta.base[name] = doc.saved_at; persist();
+      post(name);
+    } else {
+      meta.base[name] = doc.saved_at; persist();
+    }
+  }
+
+  function pull() {
+    if (pulling || ready) return;
+    pulling = true;
+    fetch(URL, { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
+      pulling = false;
+      if (!j || j.ok !== true || !j.docs || typeof j.docs !== 'object') return;
+      ready = true;
+      docs = j.docs;
+      Object.keys(regs).forEach(function (name) { reconcile(name, docs[name] || null); });
+    }).catch(function () { pulling = false; });
+  }
+
+  function schedule(name) {
+    if (timers[name]) clearTimeout(timers[name]);
+    timers[name] = setTimeout(function () { timers[name] = null; if (ready && regs[name]) post(name); }, DEBOUNCE_MS);
+  }
+
+  return {
+    /* Модуль сообщает: у меня есть документ `name`. Вызывать после того, как
+       локальное состояние уже разложено. */
+    register: function (name, reg) {
+      regs[name] = reg;
+      last[name] = snap(name);
+      if (typeof fetch !== 'function') return;
+      if (ready) reconcile(name, docs[name] || null);
+      else pull();
+    },
+    /* Локальная запись состоялась: если содержимое изменилось — метка
+       времени и отправка (после первой сверки с сервером; до неё изменение
+       выглядит как «новее» и уйдёт вместе со сверкой, если оно и вправду новее). */
+    note: function (name) {
+      if (!regs[name]) return;
+      var now = snap(name);
+      if (now === last[name]) return;
+      last[name] = now;
+      generations[name] = (generations[name] || 0) + 1;
+      setStamp(name, Math.max(Date.now(), stamp(name) + 1));
+      dirty[name] = true;
+      if (ready) schedule(name); else pull();
+    },
+    /* Страница закрывается: отправить немедленно, не дожидаясь паузы. */
+    flush: function () {
+      if (!ready) return;
+      Object.keys(dirty).forEach(function (n) {
+        if (dirty[n] && regs[n]) { if (timers[n]) { clearTimeout(timers[n]); timers[n] = null; } post(n, true); }
+      });
+    },
+    ready: function () { return ready; },
+    stamp: stamp
+  };
+})();
+</script>
+
+<script>
 /* Ящик билдера: открыть, закрыть, помнить.
  *
  * Ни одного обработчика на документе тут нет и не должно быть. Прежняя
@@ -5674,12 +5833,14 @@ window.cbDrawer = (function () {
      Тогда ящик просто не помнит состояние — но работает. */
   function remember(open) {
     try { localStorage.setItem(KEY, open ? '1' : '0'); } catch (e) { /* не помним */ }
+    if (window.cbSrv) window.cbSrv.note('ui');
   }
   function remembered() {
     try { return localStorage.getItem(KEY) === '1'; } catch (e) { return false; }
   }
   function rememberSize() {
     try { localStorage.setItem(SIZE_KEY, mode === 'custom' ? String(custom) : mode); } catch (e) { /* не помним */ }
+    if (window.cbSrv) window.cbSrv.note('ui');
   }
   /* Мусор в записи — не повод падать: берём обычную ширину. */
   function readSize() {
@@ -5822,6 +5983,27 @@ window.cbDrawer = (function () {
   apply(remembered());
   setCount(0);
 
+  /* ACL-1681: открыт ли ящик и растянут ли он — тоже на сервере, чтобы после
+     краха Chrome или смены адреса он встал как был. */
+  if (window.cbSrv) window.cbSrv.register('ui', {
+    snapshot: function () { return { open: isOpen(), expanded: isExpanded() }; },
+    legacyAt: function () { return 0; },
+    apply: function (doc) {
+      var d = doc.data || {};
+      set(d.open === true, false);
+      /* Ширина: на сервере только «растянут ли» (>= WIDE_AT); точную ширину
+         custom держит браузер, а тут режим — wide или обычный. */
+      if ((d.expanded === true) !== isExpanded()) {
+        mode = d.expanded === true ? 'wide' : 'normal';
+        applySize();
+      }
+      try {
+        localStorage.setItem(KEY, d.open === true ? '1' : '0');
+        localStorage.setItem(SIZE_KEY, mode === 'custom' ? String(custom) : mode);
+      } catch (e) { /* не помним */ }
+    }
+  });
+
   return {
     open: function () { return set(true); },
     close: function () { return set(false); },
@@ -5873,6 +6055,11 @@ window.cbKeep = (function () {
     if (!raw) return null;
     var parsed;
     try { parsed = JSON.parse(raw); } catch (e) { return null; }
+    return validate(parsed);
+  }
+
+  /* Годен ли документ: и из localStorage, и с сервера (ACL-1681) — те же правила. */
+  function validate(parsed) {
     if (!parsed || parsed.v !== VERSION || !parsed.forms) return null;
     var fresh = {}, now = Date.now();
     Object.keys(parsed.forms).forEach(function (k) {
@@ -5884,6 +6071,7 @@ window.cbKeep = (function () {
 
   function write() {
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* не помним */ }
+    if (window.cbSrv) window.cbSrv.note('keep');
   }
 
   /* Ключ ставится, пока форма ещё стоит в своём блоке: гостя в ящике, она
@@ -5997,8 +6185,8 @@ window.cbKeep = (function () {
     write();
   }
 
-  function restore() {
-    var stored = read();
+  function restore(given) {
+    var stored = given || read();
     if (!stored) { state = { v: VERSION, forms: {} }; return 0; }
     state = stored;
     restoring = true;
@@ -6024,7 +6212,7 @@ window.cbKeep = (function () {
     return made;
   }
 
-  window.addEventListener('pagehide', save);
+  window.addEventListener('pagehide', function () { save(); if (window.cbSrv) window.cbSrv.flush(); });
   var timer = null;
   function saveSoon() {
     if (timer) clearTimeout(timer);
@@ -6064,7 +6252,40 @@ window.cbKeep = (function () {
     var made = restore();
     watchStructure();
     if (made && window.cbTree) window.cbTree.paint();
+    serverCopy();
     return made;
+  }
+
+  /* ACL-1681: серверная копия черновиков. localStorage — быстрый кэш; если
+     на сервере копия новее (краш Chrome, другой адрес или профиль), она
+     раскладывается заново, а прежняя локальная откладывается в
+     `acl.builder.v2.older` — молча ничего не теряется. */
+  function serverCopy() {
+    if (!window.cbSrv) return;
+    window.cbSrv.register('keep', {
+      snapshot: function () { return state; },
+      legacyAt: function () {
+        return Object.keys(state.forms).reduce(function (m, k) { return Math.max(m, state.forms[k].touched || 0); }, 0);
+      },
+      apply: function (doc) {
+        var incoming = validate(doc.data);
+        if (!incoming) return;
+        if (Object.keys(state.forms).length && JSON.stringify(state.forms) !== JSON.stringify(incoming.forms)) {
+          try { localStorage.setItem(KEY + '.older', JSON.stringify(state)); } catch (e) { /* не помним */ }
+        }
+        restoring = true;
+        forms().forEach(function (form) {
+          Array.prototype.slice.call(form.querySelectorAll('.cb-slot')).reverse().forEach(function (slot) {
+            window.cbRemoveSlot(slot);
+          });
+        });
+        restoring = false;
+        state = incoming;
+        try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* не помним */ }
+        var made = restore(incoming);
+        if (made && window.cbTree) window.cbTree.paint();
+      }
+    });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
@@ -6078,6 +6299,7 @@ window.cbKeep = (function () {
     readSlot: readSlot,
     writeSlot: writeSlot,
     all: function () { return state.forms; },
+    validate: validate,
     staleMs: STALE_MS,
     forget: function () { state = { v: VERSION, forms: {} }; write(); }
   };
@@ -8275,14 +8497,19 @@ window.cbBuild = (function () {
     return Math.floor(t.pct);
   }
 
-  function save() {
+  function snapshot() {
     var out = {};
     Object.keys(jobs).forEach(function (id) {
       var j = jobs[id];
       out[id] = { account: j.account, country: j.country || '', names: j.names, at: j.at, lost: !!j.lost,
                   track: j.track || {} };
     });
-    try { localStorage.setItem(KEY, JSON.stringify(out)); } catch (e) { /* не помним — не страшно */ }
+    return out;
+  }
+
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(snapshot())); } catch (e) { /* не помним — не страшно */ }
+    if (window.cbSrv) window.cbSrv.note('jobs');
   }
 
   function repaint() {
@@ -8473,13 +8700,14 @@ window.cbBuild = (function () {
     return best ? classify(best, name, ads) : null;
   }
 
-  (function restore() {
-    var raw = {};
-    try { raw = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { raw = {}; }
-    var now = Date.now();
-    Object.keys(raw).forEach(function (id) {
+  /* Разложить запомненные задания по `jobs`. Возвращает номера новых.
+     Задание, которое уже есть здесь, заменяется только более свежим (`at`). */
+  function adopt(raw) {
+    var now = Date.now(), added = [];
+    Object.keys(raw || {}).forEach(function (id) {
       var s = raw[id];
       if (!s || typeof s !== 'object' || !(now - (s.at || 0) < KEEP_MS)) return;
+      if (jobs[id] && !(s.at > jobs[id].at)) return;
       var track = {};
       if (s.track && typeof s.track === 'object') {
         Object.keys(s.track).forEach(function (n) {
@@ -8491,8 +8719,36 @@ window.cbBuild = (function () {
       jobs[id] = { account: String(s.account || ''), country: String(s.country || ''),
                    names: Array.isArray(s.names) ? s.names.map(String) : [],
                    at: s.at, lost: !!s.lost, p: null, restored: true, track: track };
+      added.push(id);
     });
+    return added;
+  }
+
+  (function restore() {
+    var raw = {};
+    try { raw = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { raw = {}; }
+    adopt(raw);
     save();
+    /* ACL-1681: серверная копия. Задания не затираются, а складываются:
+       чужое (с другого адреса/профиля) задание — тоже задание. */
+    /* На сервер идёт без `track` (процент пересчитывается из опроса): иначе
+       каждое его изменение было бы записью на диск. */
+    if (window.cbSrv) window.cbSrv.register('jobs', {
+      snapshot: function () {
+        var out = snapshot();
+        Object.keys(out).forEach(function (id) { delete out[id].track; });
+        return out;
+      },
+      legacyAt: function () {
+        return Object.keys(jobs).reduce(function (m, id) { return Math.max(m, jobs[id].at || 0); }, 0);
+      },
+      apply: function (doc) {
+        var added = adopt(doc.data);
+        try { localStorage.setItem(KEY, JSON.stringify(snapshot())); } catch (e) { /* не помним */ }
+        added.forEach(function (id) { if (!jobs[id].lost) poll(id); });
+        repaint();
+      }
+    });
     function start() {
       Object.keys(jobs).forEach(function (id) { if (!jobs[id].lost) poll(id); });
       repaint();
