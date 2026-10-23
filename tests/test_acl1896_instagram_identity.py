@@ -86,8 +86,8 @@ def test_a_page_with_an_instagram_account_creates_paused_and_reads_it_back(tmp_p
     assert out.error == "" and out.readback["ok"] is True
     creatives = _creatives(meta)
     assert creatives and all(c["object_story_spec"]["instagram_user_id"] == IG_ID for c in creatives)
-    assert all(o.get("status") == "PAUSED" for o in meta.objects.values()
-               if o["_kind"] in ("campaign", "adset", "ad"))
+    # ACL-2114: the campaign is PAUSED; its ad sets and ads are ACTIVE under it.
+    assert all(o.get("status") == "PAUSED" for o in meta.objects.values() if o["_kind"] == "campaign")
     fields = [c for c in out.readback["checks"] if c["field"] == "instagram_user_id"]
     assert len(fields) == 2
 
@@ -114,12 +114,12 @@ def test_the_identity_is_read_once_per_page_and_costs_at_most_two_reads(tmp_path
 
 
 def test_without_a_settled_page_the_identity_is_not_checked(tmp_path):
-    """Страница не определена (на кабинете их нет) - строка Page уже ошибка, Instagram не читается."""
+    """Страница не определена (на кабинете их нет) - строка Page не OK (ACL-2105: предупреждение), Instagram не читается."""
     d = _draft(tmp_path, ads=1)
     d.page_id = ""
     meta = AuditMeta(pages=(), instagram="none")
     out = _audit(meta, d)
-    assert _by(out)["page_ok"]["status"] == "error"
+    assert _by(out)["page_ok"]["status"] in ("warning", "error")
     row = _by(out)["instagram_identity"]
     assert row["status"] == "unknown" and "not settled" in row["detail"]
 
