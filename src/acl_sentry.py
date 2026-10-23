@@ -261,6 +261,35 @@ def report_step_stuck(step: str, idle_s: float, *, job: str = "", account: str =
         return sentry_sdk.capture_message(f"step_stuck: {step}", level="error") or ""
 
 
+def report_tab_unblocked(step: str, method: str, stuck_s: float, *, ok: bool, job: str = "",
+                         account: str = "", campaign: str = "", api: str = "", where: str = "",
+                         tried: list | None = None) -> str:
+    """Сторож разблокировал зависшую вкладку (ACL-1702) — одно событие на случай.
+
+    Отпечаток — по шагу и месту вызова: одно и то же зависание у разных
+    заданий складывается в один тикет.
+    """
+    if not init():
+        return ""
+    import sentry_sdk
+
+    step = str(step or "unknown")
+    with sentry_sdk.new_scope() as scope:
+        scope.fingerprint = ["acl-tab-unblocked", step, str(where or "")]
+        scope.set_tag("failure_kind", "tab_hung")
+        scope.set_tag("step", step)
+        scope.set_tag("unblock_method", method or "none")
+        scope.set_tag("unblock_ok", "yes" if ok else "no")
+        if account:
+            scope.set_tag("account", account_tag(account))
+        ctx = {"stuck_s": round(float(stuck_s), 1), "campaign": campaign, "api": api,
+               "where": where, "tried": list(tried or [])}
+        if job:
+            ctx["job"] = str(job).replace("-", "")
+        scope.set_context("run", ctx)
+        return sentry_sdk.capture_message(f"tab_unblocked: {step}", level="error") or ""
+
+
 def account_tag(account: str) -> str:
     """Тег аккаунта — только короткий ярлык (первое слово: «FacebookDoc19»),
     без имени персоны после него (повторное ревью v3 PR #314)."""

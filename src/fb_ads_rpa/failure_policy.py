@@ -103,6 +103,13 @@ POLICY: dict[str, tuple[str, str]] = {
         "them in Meta, so the campaign was stopped and not retried - a partial draft is left "
         "in Ads Manager - " + _profile.MESSAGES[_profile.LEAD_TERMS],
     ),
+    # ACL-1697: Ads Manager opened another ad account than the draft's.
+    _profile.WRONG_AD_ACCOUNT: (
+        BLOCKING,
+        "Ads Manager opened a different ad account than the one in the draft (or the opened "
+        "account could not be read), so the campaign was stopped before Create and nothing "
+        "was built - " + _profile.MESSAGES[_profile.WRONG_AD_ACCOUNT],
+    ),
     # ACL-1327 (review of PR #340, F4): the draft already exists when the
     # objective is checked inside the single-screen editor.
     "objective_inline": (
@@ -133,6 +140,12 @@ POLICY: dict[str, tuple[str, str]] = {
         "building this campaign took longer than the robot's time limit, so it was stopped; "
         "the draft is incomplete and was not retried - check it in Ads Manager and finish or "
         "delete it",
+    ),
+    "tab_hung": (
+        BLOCKING,
+        "the profile's browser tab stopped answering inside one step for minutes, so the "
+        "robot closed that tab (the profile stays open) and stopped the campaign; the draft is "
+        "incomplete and was not retried - check it in Ads Manager and finish or delete it",
     ),
     "step_budget_exceeded": (
         BLOCKING,
@@ -169,6 +182,17 @@ POLICY: dict[str, tuple[str, str]] = {
         "Meta's location search showed no suggestions when the country was first typed; "
         "the robot set it on a second pass at the end of the campaign and read it back "
         "from Locations",
+    ),
+    "conversion_website_name_changed": (
+        BLOCKING,
+        "the ad set name changed while Conversion location was being set; the draft was "
+        "stopped so a changed name is not published - check the ad set name in Ads Manager",
+    ),
+    "next_to_ad_stuck_on_adset": (
+        BLOCKING,
+        "the editor stayed on the ad set after Next was pressed several times, so the ad was not "
+        "built; the draft was not retried (a retry would leave another partial draft) - open it in "
+        "Ads Manager and finish or delete it",
     ),
     "conversion_event": (
         BLOCKING,
@@ -298,7 +322,7 @@ GUIDE: dict[str, tuple[str, str, str]] = {
     _profile.LOGGED_OUT: (
         "Facebook logged out in this profile",
         "Facebook showed its login page, so no draft was created.",
-        "Log in to Facebook in this Multilogin profile, close it, then publish again.",
+        "Log in to Facebook in the profile window that was brought to the front, then publish again.",
     ),
     _profile.NETWORK: (
         "Profile cannot reach Facebook",
@@ -326,6 +350,12 @@ GUIDE: dict[str, tuple[str, str, str]] = {
         "Only a person can accept Meta's Lead Ads Terms, so the build stopped with a partial draft.",
         "Accept the Page's Lead Ads Terms in Meta, then publish again.",
     ),
+    _profile.WRONG_AD_ACCOUNT: (
+        "Wrong ad account opened",
+        "Ads Manager showed another ad account than the draft's, so nothing was created.",
+        "Check the ad account id on the Accounts page and that the account is visible in "
+        "this profile, then publish again.",
+    ),
     "objective_inline": (
         "Objective — not switched to Leads",
         "The draft may run with the wrong campaign objective.",
@@ -344,6 +374,11 @@ GUIDE: dict[str, tuple[str, str, str]] = {
     "campaign_budget_exceeded": (
         "Campaign build took too long",
         "The build hit the robot's time limit, so the draft is incomplete.",
+        "Open the draft in Ads Manager and finish or delete it.",
+    ),
+    "tab_hung": (
+        "Browser tab hung during a step",
+        "The robot closed the frozen tab and stopped, so the draft is incomplete.",
         "Open the draft in Ads Manager and finish or delete it.",
     ),
     "step_budget_exceeded": (
@@ -377,6 +412,16 @@ GUIDE: dict[str, tuple[str, str, str]] = {
         "Meta's location search stalled; the robot set the country at the end "
         "of the campaign and read it back.",
         "Check \"Locations\" on the ad set before publishing.",
+    ),
+    "conversion_website_name_changed": (
+        "Ad set name changed",
+        "The name changed while Conversion location was being set, so the build was stopped.",
+        "Check the ad set name in Ads Manager, then publish again.",
+    ),
+    "next_to_ad_stuck_on_adset": (
+        "Editor stayed on the ad set",
+        "Next was pressed several times but the ad was not opened, so the draft has no ad.",
+        "Open the draft in Ads Manager and finish or delete it.",
     ),
     "conversion_event": (
         "Conversion event — not verified",
@@ -513,6 +558,52 @@ PER_AD_DETAIL: dict[tuple[str, str], tuple[str, str, str, str]] = {
         "Meta's media picker never finished loading, so this ad has no media.",
         "Open the ad in Ads Manager, add its media by hand (Set up creative - Media), "
         "or run the campaign again later.",
+    ),
+    # ACL-1637 (live 06.10): ads 2-4 of one campaign use the same video; the
+    # robot could neither take a copy from Meta's library nor upload it again.
+    # BLOCKING: the ad has no media, so the campaign is do-not-publish.
+    **{("creative_upload", why): (
+        reason,
+        "Ad media - " + title,
+        "This ad has no media, so the campaign must not be published.",
+        "Open the ad in Ads Manager, add its media by hand (Set up creative - Media), "
+        "or run the campaign again.",
+    ) for why, reason, title in (
+        ("library_has_no_copy",
+         "the same video was used by an earlier ad, Meta's media library showed no copy of it "
+         "and the robot's re-upload for this ad did not attach it",
+         "no library copy of the shared video"),
+        ("same_file_already_uploaded_this_run",
+         "the same video was uploaded for an earlier ad but could not be attached to this ad",
+         "shared video not attached"),
+        ("same_file_already_failed_this_run",
+         "the same video already failed to upload for an earlier ad and was not accepted again",
+         "shared video failed earlier"),
+        ("file_not_landed",
+         "the browser did not hand the video file to Meta's upload dialog for this ad",
+         "video file not accepted by the upload dialog"),
+        ("wizard_not_opened",
+         "Meta's 'Set up creative' wizard did not open for this ad",
+         "creative wizard did not open"),
+        # ACL-1669 (live 07.10, B97): the library grid showed no "N selected" counter.
+        ("library_selection_unreadable",
+         "Meta's media library showed no selection counter, so the robot could not tell what "
+         "is selected and neither clicked a tile nor uploaded over it; attach the media by hand",
+         "library selection unreadable"),
+        ("library_not_searched_counter_unreadable",
+         "Meta's media library showed no selection counter, so the robot did not search it "
+         "for a copy of the video; the library was not asked, it did not say it has no copy, "
+         "and the robot did not upload again - attach the media by hand",
+         "library not searched, counter unreadable"),
+    )},
+    # ACL-1669: no media on the ad, so Meta shows no URL field. Still BLOCKING.
+    ("destination", "url_field_missing_no_media"): (
+        "the website URL field is missing because this ad has no media (Meta shows no "
+        "destination fields without it); this follows from the media step, not from the "
+        "destination itself",
+        "Ad destination - no media on the ad",
+        "This ad has no media, so its website URL could not be set; fix the media first.",
+        "Open the ad in Ads Manager, add its media by hand, then check the website URL.",
     ),
     # ACL-1551: the wizard of the previous ad was still open and its own Close
     # did not close it, so the ad set's Action menu could not be used.

@@ -183,6 +183,8 @@ def stopped_profile_page():
 PROBE_S = 10.0
 IDLE_S = 24.0
 OPEN_BUDGET_S = 30.0
+# Окно замера скорости соседнего потока: короче — GIL мог ни разу не смениться.
+MIN_RATE_WINDOW_S = 0.25
 
 
 def test_the_probe_and_the_waits_on_a_stopped_profile_return_at_once(stopped_profile_page, monkeypatch):
@@ -205,9 +207,17 @@ def test_the_probe_and_the_waits_on_a_stopped_profile_return_at_once(stopped_pro
         # ACL-1491: под нагрузкой раннера опорная скорость до вызова бывала
         # выше, чем стала к нему (соседний воркер поднимал свой Chromium).
         # Сравниваем с меньшей из опор до и после — при той же нагрузке.
-        if rate <= 0.25 * base:
-            base = min(base, counter.baseline())
-        assert rate > 0.25 * base, (rate, base)
+        # ACL-1628: CI 06.10 (Windows) — `rate 0.0` при опоре 8.3 млн/с: ожидание
+        # вернулось сразу (профиль уже признан ушедшим) и не отпустило GIL ни на
+        # один квант, поэтому соседний поток не успел сделать ни шага. Это не
+        # спин, а ровно то, что тест требует, — «вернулось сразу». Скорость
+        # соседа осмысленна только на окне, где GIL успел бы смениться много
+        # раз (переключение — 5 мс); короткий возврат доказан границей по
+        # времени выше, а долгий спин с голодным соседом ловит эта проверка.
+        if dt >= MIN_RATE_WINDOW_S:
+            if rate <= 0.25 * base:
+                base = min(base, counter.baseline())
+            assert rate > 0.25 * base, (rate, base, dt)
 
         monkeypatch.setattr(md, "CAMPAIGN_OPEN_BUDGET_S", OPEN_BUDGET_S)
         pressed: list[str] = []

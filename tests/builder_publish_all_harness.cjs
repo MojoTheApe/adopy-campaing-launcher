@@ -176,8 +176,9 @@ function runQueue(accounts, opts = {}) {
     window: {},
     FormData, RegExp, String, parseInt, Object, JSON, Promise,
     aclEscHtml: (v) => String(v == null ? '' : v),
-    document: { querySelectorAll: () => forms, querySelector: () => null },
-    _safeConfirm: (title, body, onYes) => { events.push('asked'); if (opts.confirm !== false) onYes(); },
+    document: { querySelectorAll: () => forms, querySelector: () => null,
+                getElementById: (id) => (id === 'cb-pf-anyway' && opts.box ? opts.box : null) },
+    _safeConfirm: (title, body, onYes) => { events.push('asked'); if (opts.defer) { opts.defer.push(onYes); return; } if (opts.confirm !== false) onYes(); },
     cbPreview: (form, done) => {
       events.push('preview:' + form._label);
       if (opts.preview) return opts.preview(form, done);
@@ -203,8 +204,14 @@ function runQueue(accounts, opts = {}) {
   vm.runInNewContext(
     'window.cbSkipByName = cbSkipByName; window.cbFormDataSkipping = cbFormDataSkipping;\n' + busyCode + '\n' + queueCode,
     sandbox);
+  // ACL-1604: проверка аккаунтов живёт на window; без неё подтверждение открывается сразу.
+  if (opts.preflight) sandbox.window.cbPreflightFetch = opts.preflight;
+  // ACL-1819: ворота pre-flight audit — заглушка; сам гейт проверяют preflight_gate_harness.cjs.
+  const gated = [];
+  sandbox.window.cbPreflightGate = (items, go) => { gated.push(items); if (!opts.gateRefuses) go(); };
+  sandbox.window.cbPreflightDecision = (queued, skipped, anyway) => { events.push('decision'); (opts.decisions || []).push({ queued, skipped, anyway }); };
   sandbox.window.cbPublishAll(() => {});
-  return { events, said, pending, sandbox, forms, keys };
+  return { events, said, pending, sandbox, forms, keys, gated };
 }
 
 // Запрос уходит через микрозадачи — без этого проверка смотрит на «ещё
@@ -383,6 +390,7 @@ const posts = (q) => q.events.filter((e) => e === 'POST').length;
   // Retry у A — тот же ключ; сервер ответил, за заданием следят.
   assert.equal(q.sandbox.window.CB_QUEUE.retry('|A'), true);
   await flush();
+  assert.equal(q.gated.length, 1, 'the retry skipped the pre-flight gate');
   assert.equal(posts(q), 3);
   assert.equal(q.keys[2], q.keys[0], 'retry used a new key: the server could start a second job');
   assert.equal(q.pending.length, 1, 'the retried job is not being watched');
@@ -399,6 +407,14 @@ const posts = (q) => q.events.filter((e) => e === 'POST').length;
   // Ревью PR #408, R9: Dismiss освобождает аккаунт, не дожидаясь повтора, —
   // а следующая его отправка идёт с ТЕМ ЖЕ ключом: если первая всё же дошла,
   // сервер вернёт её задание, второго не будет.
+  // ACL-1819: ворота не пустили — повтор ничего не шлёт.
+  q = runQueue(['A'], { fail: 1, gateRefuses: true });
+  await flush();
+  assert.equal(posts(q), 1);
+  q.sandbox.window.CB_QUEUE.retry('|A');
+  await flush();
+  assert.equal(posts(q), 1, 'a refused gate still let the retry post');
+  assert.equal(q.gated.length, 1);
   q = runQueue(['A', 'B'], { fail: 2 });
   await flush();
   assert.equal(q.sandbox.window.CB_QUEUE.dismiss('|B'), true);
@@ -423,6 +439,40 @@ const posts = (q) => q.events.filter((e) => e === 'POST').length;
   assert.equal(posts(q), 0, 'отправлена кампания, у которой нет ни одной годной');
   assert.deepEqual(q.events.filter((e) => e.startsWith('preview')), ['preview:A', 'preview:B'],
     'очередь встала на сломанном аккаунте');
+
+  // ACL-1604: проверка аккаунтов до подтверждения.
+  const notReady = { accounts: [
+    { account: 'A', ready: false, reasons: [{ message: 'no token', hint: 'connect', seen_label: '' }], notes: [] },
+    { account: 'B', ready: true, reasons: [], notes: [] }] };
+  // Не ответила (сеть, таймаут, не тот ответ — на странице это null): старое
+  // подтверждение и все аккаунты уходят, как раньше.
+  q = runQueue(['A', 'B'], { preflight: () => Promise.resolve(null) });
+  await flush();
+  assert.equal(q.events.filter((e) => e === 'asked').length, 1, 'без проверки подтверждение не открылось');
+  assert.equal(posts(q), 2, 'без ответа проверки аккаунты не ушли');
+  assert.ok(!q.events.includes('decision'), 'решение записано без проверки');
+
+  // Неготовый пропускается, готовый уходит; решение записано.
+  let decisions = [];
+  q = runQueue(['A', 'B'], { preflight: () => Promise.resolve(notReady), decisions });
+  await flush();
+  assert.equal(posts(q), 1, 'неготовый аккаунт ушёл без Run anyway');
+  assert.deepEqual(q.events.filter((e) => e.startsWith('preview')), ['preview:B']);
+  assert.deepEqual(decisions, [{ queued: ['B'], skipped: ['A'], anyway: [] }]);
+
+  // Run anyway: человек ставит галку, и оба идут; решение это записывает.
+  decisions = [];
+  const yes = [];
+  const box = { checked: false, addEventListener: (t, f) => { box.handler = f; } };
+  q = runQueue(['A', 'B'], { preflight: () => Promise.resolve(notReady), decisions, box, defer: yes });
+  await flush();
+  assert.equal(posts(q), 0, 'ушло до подтверждения');
+  assert.ok(box.handler, 'галка Run anyway не подключена');
+  box.checked = true; box.handler();
+  yes[0]();
+  await flush();
+  assert.equal(posts(q), 2, 'Run anyway не отправил неготовый аккаунт');
+  assert.deepEqual(decisions, [{ queued: ['A', 'B'], skipped: [], anyway: ['A'] }]);
 
   console.log('ok (queue)');
 })();

@@ -89,7 +89,7 @@ def check_creatives_folder(raw: str) -> tuple[str, bool]:
         except OSError as exc:
             raise MachinePathError(f"The Creatives folder could not be created: {exc}") from exc
     if not os.access(path, os.R_OK):
-        raise MachinePathError(f"ACL cannot read {path}.")
+        raise MachinePathError(f"ACM cannot read {path}.")
     return str(path.resolve()), created
 
 

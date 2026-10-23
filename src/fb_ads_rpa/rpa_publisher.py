@@ -157,6 +157,13 @@ class RpaPublisher:
         return resolve_account_entry(account_map, account_label)
 
     def _reset_browser(self, *, keep_browser_open: bool = False) -> None:
+        # ACL-1702 (ревью PR #704, m3): адрес CDP старого соединения сторожу больше не нужен.
+        try:
+            from src.fb_ads_rpa import tab_watchdog
+
+            tab_watchdog.forget_endpoint()
+        except Exception:
+            pass
         if self._conn:
             try:
                 self._conn.close(keep_browser_open=keep_browser_open)
@@ -467,6 +474,21 @@ class RpaPublisher:
             pass
         return bool(meta_dom._all_edits_saved(page))
 
+    def _drop_hung_tab(self) -> None:
+        """Вкладку закрыл сторож (ACL-1702): снять метку и отпустить соединение.
+
+        Отключение Playwright — из ЭТОГО потока (потока задания), окно
+        профиля остаётся открытым (`keep_browser_open`). Следующая кампания
+        задания подключается заново (`_ensure_browser`) и берёт живую вкладку;
+        иначе страж «вкладки нет» отвечал бы `browser_closed` на каждую.
+        """
+        from src.fb_ads_rpa import tab_watchdog
+
+        conn = getattr(self, "_conn", None)
+        if conn is not None:
+            tab_watchdog.clear_page_mark(getattr(conn, "page", None))
+        self._reset_browser(keep_browser_open=True)
+
     def _flow(self, conn: BrowserConnection, account_label: str) -> AdsManagerFlow:
         """Поток кампании, который может сменить вкладку и перезапустить профиль."""
         return AdsManagerFlow(
@@ -564,6 +586,14 @@ class RpaPublisher:
                 _telemetry.set_current_job(job)
         except Exception:
             pass
+        # ACL-1702 (ревью PR #704, B3): разблокировка, случившаяся вне кампании
+        # (уборка окна, шаги после потока), не клеймит `tab_hung` следующую.
+        try:
+            from src.fb_ads_rpa import tab_watchdog
+
+            tab_watchdog.take_hung()
+        except Exception:
+            pass
 
     @staticmethod
     def _profile_stop_result(campaign_name: str, stop: "profile_trouble.ProfileStop", *,
@@ -638,6 +668,23 @@ class RpaPublisher:
         try:
             result = flow.publish_campaign(draft, dry_run=self.dry_run)
         except Exception as exc:
+            # ACL-1702: вкладку разблокировал сторож (зависла в одном вызове) —
+            # кампания кончена красным `tab_hung`, без переподключения и
+            # повтора: черновик частичный, повтор наплодил бы дубли.
+            from src.fb_ads_rpa import failure_policy, tab_watchdog
+
+            hung = tab_watchdog.take_hung()
+            if hung:
+                step = f"tab_hung:{hung}"
+                # Ревью PR #704 (B3): метку снять и соединение сбросить — вкладку
+                # сторож закрыл, следующая кампания задания подключится заново.
+                self._drop_hung_tab()
+                return RpaPublishResult(
+                    campaign_name=campaign_name, success=False,
+                    error=f"Recorded flow failed at: {step} - {failure_policy.reason(step)}",
+                    steps_completed=[f"recorded_flow_fail:{step}"],
+                    blocking_failures=[step],
+                    run_id=_telemetry.current_run_id() or None)
             if not self._browser_closed_error(exc):
                 raise
             # A dead PAGE usually does not mean a dead BROWSER — confirmed
@@ -657,6 +704,10 @@ class RpaPublisher:
                 raise self._mlx_fallback_error(exc, re_exc) from re_exc
             flow = self._flow(conn, draft.account_label)
             result = flow.publish_campaign(draft, dry_run=self.dry_run)
+        # ACL-1702 (ревью PR #704, B3): кампания кончилась `tab_hung` — вкладку
+        # закрыл сторож; соединение сбросить, следующая кампания — заново.
+        if any(str(f).startswith("tab_hung") for f in (getattr(result, "blocking_failures", None) or [])):
+            self._drop_hung_tab()
         # ACL-1437: номер прогона — в «Technical details» карточки.
         if isinstance(result, RpaPublishResult) and not result.run_id:
             result.run_id = _telemetry.current_run_id() or None

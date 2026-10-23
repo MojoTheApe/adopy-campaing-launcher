@@ -28,9 +28,8 @@ from pathlib import Path
 from typing import Any, Dict
 from urllib.parse import urlencode, urlsplit
 
-from fastapi import FastAPI, Request, UploadFile, File
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from src.web import account_notes as _account_notes
@@ -50,6 +49,7 @@ from src.fb_ads_rpa.rpa_publisher import RpaPublisher
 from src.web.publish_jobs import DuplicateJobError, get_job, start_job, cancel_job
 from src.web.cache import (
     background_build_state,
+    background_progress_callback,
     cache_built_at,
     cache_clear,
     forget_background_error,
@@ -57,8 +57,17 @@ from src.web.cache import (
     peek_cached_report,
     start_background_build,
 )
+from src.web.request_limits import (
+    BUILDER_FORM,
+    DEFAULT_MAX_BODY,
+    ROUTE_MAX_BODY,
+    RequestBodyLimit,
+    SafeStaticFiles,
+    read_form,
+)
 from concurrent.futures import ThreadPoolExecutor
 from src.analysis_agent.money_format import fmt_usd, fmt_currency, fmt_summary_amount
+from src.analysis_agent import metric_columns
 from src.creative_agent.creative_scanner import find_creative_file, scan_file, SUPPORTED_EXTS
 from src.creative_agent.audience_builder import build_audience_profile
 from src.creative_agent.stats_correlator import correlate
@@ -334,6 +343,16 @@ def _build_goals_view(report: dict, seed_countries: list[str] | None = None) -> 
         "pct": min(100, round(total_deposits / total_target * 100)) if total_target else None,
         "team_lead": goals_store.is_team_lead(),
     }
+
+
+def _workbench_goals(goals_view: dict) -> dict:
+    """{страна (casefold): {ftd, cpa, cr}} — цели из My Goals; пустое поле = цели нет."""
+    out: dict[str, dict] = {}
+    for row in (goals_view or {}).get("rows", []):
+        name = (row.get("country") or "").strip().casefold()
+        if name:
+            out[name] = {"ftd": row.get("ftd") or None, "cpa": row.get("cpa"), "cr": row.get("cr")}
+    return out
 
 
 def _workbook_dates(df) -> list[str]:
@@ -673,22 +692,35 @@ def _build_account_map_view(
             # называют вслух. Это уже догадка, поэтому она идёт последней, берётся
             # только при единственном совпадении и всегда подписывается на экране.
             alias = ""
-            if not excel.get("has_data"):
+            alias_exact = False
+            from src.analysis_agent.account_names import rule_split
+
+            # Под явным правилом имени разрешатель нужен и когда числа уже
+            # нашлись: пользователь должен видеть, из какого имени книги они.
+            if not excel.get("has_data") or rule_split(label):
                 # Тот же разрешатель, что и у раскрытия объявлений: два способа
                 # отвечать на один вопрос однажды разойдутся, и разойдутся молча.
                 # Resolve identity against the whole workbook. A date filter
                 # must not hide a collision or an older exact match.
                 resolved = workbook_alias_for(df, country_name, label)
                 if resolved and resolved.casefold() != label.casefold():
+                    # Явное правило имён — точное совпадение: имя из книги
+                    # по-прежнему показываем, но без пометки «догадка по хвосту».
+                    from src.analysis_agent.account_names import account_key
+
                     alias = resolved
-                    excel = _numbers(country_name, alias) or excel
+                    alias_exact = account_key(resolved) == account_key(label)
+                    excel = _numbers(country_name, resolved) or excel
             rows.append({
                 "account": label,
                 # чем именно подставлены числа — чтобы совпадение по хвосту
                 # никогда не выглядело как имя самого аккаунта
                 "workbook_alias": alias,
+                # True — имя из книги найдено по явному правилу (config/
+                # account_name_rules.json), а не угадано по хвосту
+                "workbook_alias_exact": alias_exact,
                 # страны, под которыми числа этого аккаунта лежат на самом деле
-                "elsewhere": {} if excel.get("has_data") else _elsewhere(country_name, label),
+                "elsewhere": {} if excel.get("has_data") else _elsewhere(country_name, alias or label),
                 # состояние кабинета — без периода: спенд отвечает «сколько за
                 # эти дни», состояние — «что с ним сейчас»
                 "status": _account_status(label),
@@ -753,9 +785,9 @@ def _build_account_map_view(
             "country": country_name,
             "key": stored,
             "rows": rows,
-            "spend": sum(r["spend"] or 0 for r in rows),
-            "leads": sum(r["leads"] or 0 for r in rows),
-            "deposits": sum(r["deposits"] or 0 for r in rows),
+            "spend": sum(r["spend"] or 0 for r in _rows_counted_once(rows)),
+            "leads": sum(r["leads"] or 0 for r in _rows_counted_once(rows)),
+            "deposits": sum(r["deposits"] or 0 for r in _rows_counted_once(rows)),
             "live_read": live_read,
             "live_sums": [
                 {"currency": c, "spend": s} for c, s in sorted(live_sums.items())
@@ -861,9 +893,18 @@ def _build_account_map_view(
     def _with_assets(rows: list[dict]) -> list[dict]:
         return [{**r, "assets": account_links.values_for(r["account"], "asset")} for r in rows]
 
+    for mc in countries:
+        # ACL-1633: заметка страны живёт под каноническим ключом, а не под
+        # отображаемым именем («CR» и «Costa Rica» — одна заметка).
+        mc["note_key"] = _account_notes.country_key(mc.get("country") or "")
+
     available = _with_assets(buckets["shown"])
     return {
         "countries": countries,
+        # ACL-1654: строка Totals под странами.
+        "totals": _amap_totals(countries, live),
+        # ACL-1656: «Campaign managers» внизу Home.
+        "cm_section": _amap_cm_section(report),
         "available": available,
         "available_inactive": _with_assets(buckets["inactive"]),
         "available_hidden": buckets["hidden"],
@@ -878,12 +919,102 @@ def _build_account_map_view(
         # ACL-1620: заметки менеджера по подписи аккаунта; читаются при каждой
         # сборке карты, поэтому переживают обновление отчёта и htmx-перерисовку.
         "notes": _account_notes.load(),
+        "country_notes": _account_notes.load_countries(),
         "fallback": fallback,
         "date_from": date_from,
         "date_to": date_to,
         "span": span,
     }
 
+
+
+def _amap_totals(countries: list[dict], live: dict) -> dict:
+    """Итог по строкам стран карты (ACL-1654).
+
+    Spend, Leads и FTDs — суммы книжных тоталов стран; CPL, CPA и CR считает
+    шаблон по этим суммам (`metric_values`), а не усредняет их по странам.
+
+    `read` — суммарное чтение кабинетов, и считается оно по *различным*
+    аккаунтам: один кабинет может быть привязан к нескольким странам, а
+    сводка страны показывает весь его спенд, так что сложение по странам
+    посчитало бы его дважды. Складывается только когда все прочитанные
+    кабинеты в одной валюте (решение владельца 06.10); иначе None — прочерк.
+    """
+    spend = leads = deposits = 0.0
+    for mc in countries:
+        bk = mc.get("book") or {}
+        spend += float(bk.get("spend") or 0)
+        leads += float(bk.get("leads") or 0)
+        deposits += float(bk.get("deposits") or 0)
+    seen: set[str] = set()
+    sums: dict[str, float] = {}
+    mixed = False
+    read_ok = 0
+    for mc in countries:
+        for r in mc.get("rows") or []:
+            acc = r.get("account")
+            if not acc or acc in seen:
+                continue
+            seen.add(acc)
+            lr = (live or {}).get(acc) or {}
+            if lr.get("state") != "ok" or lr.get("spend") is None:
+                continue
+            try:
+                amount = float(lr["spend"])
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(amount):
+                continue
+            read_ok += 1
+            cur = str(lr.get("currency") or "").strip()
+            if not re.fullmatch(r"[A-Za-z]{3}", cur):
+                mixed = True  # знак без кода не говорит, какая это валюта
+                continue
+            sums[cur.upper()] = sums.get(cur.upper(), 0.0) + amount
+    read = None
+    if sums and not mixed and len(sums) == 1:
+        (cur, amount), = sums.items()
+        read = {"currency": cur, "spend": amount}
+    return {
+        "spend": spend, "leads": int(leads), "deposits": int(deposits), "read": read,
+        # для подсказки: сколько кабинетов прочитано из скольких и почему «—»
+        "read_count": read_ok, "accounts": len(seen), "mixed": bool(mixed or len(sums) > 1),
+    }
+
+
+def _amap_cm_section(report: dict) -> list[dict]:
+    """Менеджеры по странам для секции внизу Home (ACL-1656).
+
+    Те же строки, что у CM Comparison в Manage (`cm_comparison`): один источник,
+    поэтому две таблицы не разойдутся. Строка страны — сумма *всех* менеджеров
+    (решение владельца 06.10: это сравнение, а не «мои числа»), CPL/CPA/CR из
+    этих сумм считает шаблон. Текущий менеджер помечен `is_me`.
+    """
+    out: list[dict] = []
+    for c in (report or {}).get("countries", []):
+        cms = c.get("cm_comparison") or []
+        if not cms:
+            continue
+        rows = [
+            {
+                "cm": (r.get("cm") or "").strip() or "(unknown)",
+                "is_me": bool(r.get("is_me")),
+                "spend": float(r.get("spend") or 0),
+                "leads": int(r.get("leads") or 0),
+                "deposits": int(r.get("deposits") or 0),
+            }
+            for r in cms
+        ]
+        rows.sort(key=lambda r: (not r["is_me"], -r["spend"], r["cm"].lower()))
+        out.append({
+            "country": c.get("country") or "",
+            "spend": sum(r["spend"] for r in rows),
+            "leads": sum(r["leads"] for r in rows),
+            "deposits": sum(r["deposits"] for r in rows),
+            "rows": rows,
+        })
+    out.sort(key=lambda x: (-x["spend"], x["country"].lower()))
+    return out
 
 
 def _live_spend(date_from: str = "", date_to: str = "") -> dict[str, dict]:
@@ -968,6 +1099,46 @@ def _sidebar_countries(report: dict, amap: dict) -> list[dict]:
     return rows
 
 
+_HISTORY_ACT_CACHE: dict[str, tuple[float, str]] = {}
+
+
+def _history_act_note(entry) -> str:
+    """ACL-1697: заметка, если кабинет в карте не тот, где профиль работал.
+
+    `mlx_profiles.ad_account_id_for` читает последний кабинет из истории
+    браузера профиля (файл, без сети). Расхождение с картой — не ошибка, но
+    повод проверить: робот при запуске сверит открытый кабинет и остановится
+    на чужом (`wrong_ad_account`). Результат кэшируется на 2 минуты —
+    чтение копирует файл истории.
+    """
+    if not entry:
+        return ""
+    want = (entry.ad_account_id or "").strip()
+    pid = (entry.profile_id or "").strip()
+    if not want or not pid:
+        return ""
+    import time as _time
+
+    now = _time.time()
+    hit = _HISTORY_ACT_CACHE.get(pid)
+    if hit and now - hit[0] < 120:
+        seen = hit[1]
+    else:
+        try:
+            from src.fb_ads_rpa import mlx_profiles
+
+            seen = mlx_profiles.ad_account_id_for(pid) or ""
+        except Exception:
+            seen = ""
+        _HISTORY_ACT_CACHE[pid] = (now, seen)
+    digits = lambda v: "".join(ch for ch in str(v) if ch.isdigit())
+    if not seen or digits(seen) == digits(want):
+        return ""
+    return (f"The most visited account in this profile's recent history is {seen}, but the map has {want}. "
+            "If its Facebook user has no access to the map's account, the robot will stop "
+            "with wrong_ad_account - check the ad account id on the Accounts page.")
+
+
 def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
     """Return preflight info per account:
     {acc_label: {link, link_status, missing_map_fields: [str], has_map_entry}}
@@ -1014,6 +1185,7 @@ def _build_account_preflight(account_labels: list[str]) -> dict[str, dict]:
             "has_map_entry": entry is not None,
             "prefill": prefill,
             "page_name": page_name,
+            "ad_account_note": _history_act_note(entry),
         }
     return result
 
@@ -1178,9 +1350,31 @@ from urllib.parse import quote as _url_quote
 
 templates.env.filters["agg_qs"] = _aggregate_key_to_query
 templates.env.filters["anchor_slug"] = _anchor_slug
+
+
+def _campaign_table_api() -> bool:
+    """Какой список кампаний рисовать у аккаунта (ACL-1800): `api` — таблица страны, `rpa` — прежний список из Read spend.
+
+    Читается при каждом рендере, чтобы смена `ACL_FB_BACKEND` не требовала ничего, кроме перезапуска, и тест мог её переключать.
+    """
+    from src.analysis_agent import campaign_inventory as _ci
+
+    return _ci.backend_ready()
+
+
+templates.env.globals["campaign_table_api"] = _campaign_table_api
 templates.env.filters["fmt_usd"] = fmt_usd
 templates.env.filters["fmt_currency"] = fmt_currency
 templates.env.filters["fmt_summary_amount"] = fmt_summary_amount
+# ACL-1652: шесть метрик одним кодом. Макросы `_metrics.html` берут отсюда и
+# заголовки, и ячейки — таблицы не могут разойтись друг с другом.
+templates.env.globals["metric_values"] = metric_columns.metric_values
+# Owner, 2026-10-07: the "Copy for group" button and its hint under a red account
+# status are hidden for now. True brings them back (template: _account_map_country.html).
+SHOW_COPY_FOR_GROUP = False
+templates.env.globals["SHOW_COPY_FOR_GROUP"] = SHOW_COPY_FOR_GROUP
+templates.env.globals["METRIC_HEADERS"] = metric_columns.METRIC_HEADERS
+templates.env.globals["HOME_ACCOUNT_HEADERS"] = metric_columns.HOME_ACCOUNT_HEADERS
 templates.env.filters["urlencode"] = lambda s: _url_quote(str(s), safe="")
 templates.env.filters["creative_type"] = lambda name: parse_creative_from_ad_title(name)[0]
 templates.env.filters["creative_id"] = lambda name: parse_creative_from_ad_title(name)[1]
@@ -1210,16 +1404,23 @@ templates.env.filters["geo_language"] = _geo_language
 # table headers. The detail <td colspan> must match the parent table's
 # column count or the layout breaks.
 _NCOLS_BY_SECTION = {
-    "cm_comparison": 8,   # CM, Dep, Leads, Spend, Net, CPA, ROI, (drill col)
-    "trend": 6,           # offer, device, interest, creative, deposits_total/recent
-    "top_combos": 10,     # offer, device, interest, age, creative, category, deposits, leads, spend, (builder col)
-    "targeting": 5,       # interest, deposits, leads, spend, cpa
-    "creatives": 5,       # ad_title, deposits, leads, spend, cpa
-    "optimization": 7,    # adset, spend, leads, ftds, cpl, cpa, reason
+    # ACL-1652: шесть метрик в каждой таблице, поэтому и числа новые.
+    "cm_comparison": 10,  # CM, Spend, Leads, FTDs, CPL, CPA, CR, Net, ROI, (drill col)
+    "trend": 10,          # offer, device, interest, creative, six metrics
+    "top_combos": 7,      # combo, six metrics
+    "targeting": 7,       # target, six metrics
+    "creatives": 8,       # creative, text, six metrics
+    "optimization": 8,    # adset, six metrics, reason
 }
 
-app = FastAPI(title="Adopy Campaigns Launcher")
-app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+app = FastAPI(title="Adopy Campaign Manager")
+# Предел тела проверяется до чтения (ACL-1356, аудит S04). Прослойка
+# добавлена раньше local_dashboard_boundary, значит, стоит внутри неё:
+# отказ 413 тоже получает защитные заголовки.
+app.add_middleware(RequestBodyLimit, default_max_body=DEFAULT_MAX_BODY, route_max_body=ROUTE_MAX_BODY)
+# SafeStaticFiles не пускает UNC, буквы дисков и абсолютные пути к файловой
+# системе (CVE-2026-48818: исходящий SMB/NTLM на Windows).
+app.mount("/static", SafeStaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 
 # ── Отчёт — не в цикле событий (ACL-1399) ───────────────────────────────
@@ -1584,7 +1785,7 @@ async def acl_update_apply() -> JSONResponse:
         return JSONResponse(
             {
                 "ok": False,
-                "error": "ACL was not started by its launcher, so nothing would "
+                "error": "ACM was not started by its launcher, so nothing would "
                          "bring it back. Start it from the desktop shortcut and "
                          "try again.",
             },
@@ -1597,7 +1798,7 @@ async def acl_update_apply() -> JSONResponse:
             {
                 "ok": False,
                 "error": f"{busy} campaign job(s) still running. Updating restarts "
-                         "ACL, which would abandon them half-built.",
+                         "ACM, which would abandon them half-built.",
             },
             status_code=409,
         )
@@ -1641,7 +1842,7 @@ async def _apply_release_update(active_jobs) -> JSONResponse:
         restarting = True
         return JSONResponse({"ok": True, "target": manifest["version"]})
     except (release_updates.UpdateError, OSError, ValueError, TypeError, KeyError) as exc:
-        message = str(exc) if isinstance(exc, release_updates.UpdateError) else "The update could not be prepared. ACL is still running."
+        message = str(exc) if isinstance(exc, release_updates.UpdateError) else "The update could not be prepared. ACM is still running."
         return JSONResponse({"ok": False, "error": message}, status_code=400)
     finally:
         # A successful handoff deliberately keeps the reservations until exit.
@@ -1674,12 +1875,14 @@ def _render_report(
         report, _df, warnings = get_cached_report()
     except FileNotFoundError as e:
         return templates.TemplateResponse(
+            request,
             "error.html",
             {"request": request, "title": "No data file", "message": str(e)},
             status_code=200,
         )
     except ValueError as e:
         return templates.TemplateResponse(
+            request,
             "error.html",
             {"request": request, "title": "Excel format problem", "message": str(e)},
             status_code=200,
@@ -1697,6 +1900,7 @@ def _render_report(
         report = report_for_period(report, _df, date_from, date_to)
     except PeriodReportError as exc:
         return templates.TemplateResponse(
+            request,
             "error.html",
             {"request": request, "title": "Period calculation failed", "message": str(exc)},
             status_code=503,
@@ -1738,7 +1942,9 @@ def _render_report(
                 alias_map[alias] = label
         account_alias_map[cid] = alias_map
 
+    goals_view = _build_goals_view(report, goal_seed)
     return templates.TemplateResponse(
+        request,
         "report.html",
         {
             "request": request,
@@ -1758,9 +1964,31 @@ def _render_report(
             "account_map": _account_map_view,
             "sidebar_countries": _sidebar_countries(report, _account_map_view),
             "period": {"date_from": date_from, "date_to": date_to, "span": span},
-            "goals": _build_goals_view(report, goal_seed),
+            "goals": goals_view,
+            # ACL-1799: цель страны (My Goals) для Country Workbench — отдельным
+            # числом, не смешанным с порогом из benchmarks и результатом пиров.
+            "cw_goals": _workbench_goals(goals_view),
+            # ACL-1761: кнопка «Check plan (no writes)» в билдере — только при api.
+            "fb_backend": _fb_backend(),
+            # ACL-1819: общая таблица правил pre-flight audit (та же, что у сервера).
+            "preflight_rules_json": _preflight_rules(),
         },
     )
+
+
+def _preflight_rules() -> dict:
+    from src.fb_api import preflight_rules
+
+    return preflight_rules.export_rules()
+
+
+def _fb_backend() -> str:
+    try:
+        from src.web import publish_api
+
+        return publish_api.backend()
+    except Exception:  # pragma: no cover - кнопка не важнее страницы
+        return "rpa"
 
 
 
@@ -1789,6 +2017,47 @@ def _account_tail(name: str) -> str:
     return core[-3:].upper() if len(core) >= 3 else ""
 
 
+#: ACL-1824: id рекламного кабинета в конце подписи — не короче 8 цифр.
+#: Короткий числовой хвост (`Acme_123`) — часть имени, а не id кабинета.
+_ID_SUFFIX_MIN_DIGITS = 8
+_ID_SUFFIX_RE = re.compile(r"^(?P<alias>.+?)_(?P<digits>\d{%d,})$" % _ID_SUFFIX_MIN_DIGITS)
+
+
+def _rows_counted_once(rows: list) -> list:
+    """Строки страны для итогов: один алиас книги — один раз.
+
+    ACL-1824: `Facebook_5265_<id>` и `Facebook_5265` оба сводятся к одному
+    алиасу книги и показывают одни и те же числа. Строки остаются обе, а в
+    итог страны идёт только одна — предпочтительно та, что названа алиасом.
+    """
+    seen: dict = {}
+    for r in rows:
+        if not r.get("has_data"):
+            continue
+        key = _account_key(r.get("workbook_alias") or r.get("account"))
+        cur = seen.get(key)
+        if cur is None or (cur.get("workbook_alias") and not r.get("workbook_alias")):
+            seen[key] = r
+    keep = {id(r) for r in seen.values()}
+    return [r for r in rows if not r.get("has_data") or id(r) in keep]
+
+
+def _alias_without_id_suffix(label: str, known) -> str:
+    """Имя из книги для подписи `<имя>_<id кабинета>` — или пусто.
+
+    Берётся только единственное имя: два разных алиаса в книге — это не
+    «выберем первое», а отказ, как и у хвостовой догадки.
+    """
+    m = _ID_SUFFIX_RE.match((label or "").strip())
+    if not m:
+        return ""
+    want = _account_key(m.group("alias"))
+    if not want:
+        return ""
+    hits = {str(a).strip() for a in known if _account_key(a) == want}
+    return next(iter(hits)) if len(hits) == 1 else ""
+
+
 def _alias_by_tail(label: str, known: dict) -> str:
     """Имя из книги для подключённого аккаунта — или пусто.
 
@@ -1796,6 +2065,14 @@ def _alias_by_tail(label: str, known: dict) -> str:
     это не «выберем первое»: подставленное наугад число выглядит точно так же,
     как правильное, и проверить его человеку будет нечем.
     """
+    # Явное правило имён побеждает догадку по хвосту и не считается догадкой.
+    from src.analysis_agent.account_names import exact_alias, has_own_name
+
+    exact = exact_alias(label, known)
+    if exact:
+        return exact
+    if has_own_name(label, known):
+        return ""  # своё имя в книге есть — альтернатива не нужна
     tail = _account_tail(label)
     if not tail:
         return ""
@@ -1806,7 +2083,57 @@ def _alias_by_tail(label: str, known: dict) -> str:
         a for a in known
         if _account_tail(a) == tail and a.casefold() != (label or "").casefold()
     ]
-    return hits[0] if len(hits) == 1 else ""
+    if hits:
+        return hits[0] if len(hits) == 1 else ""
+    # ACL-1824: суффикс id — только последняя попытка; прежнее совпадение
+    # по хвосту и отказ при его неоднозначности сохраняют приоритет.
+    return _alias_without_id_suffix(label, known)
+
+
+#: ACL-1729: индекс алиасов книги по странам — один слот на одну книгу.
+#: Держим сильную ссылку на df, поэтому совпадение по `is` надёжно (id() мог бы
+#: переиспользоваться); новая книга из кэша отчёта сбрасывает индекс.
+_ALIAS_INDEX: dict = {"df": None, "rules": None, "by_country": {}}
+_ALIAS_INDEX_LOCK = threading.Lock()
+
+
+def _account_key(name) -> str:
+    from src.analysis_agent.account_names import account_key
+
+    return account_key(name)
+
+
+def _country_alias_index(df, country: str):
+    """{"names": отсортированные алиасы, "keys": множество account_key} или None.
+
+    None — в книге нет строк этой страны (как `sub.empty` раньше).
+    """
+    # Ключи зависят от правил имён: правка config/account_name_rules.json
+    # (горячая перезагрузка ACL-1653) обязана сбросить и индекс.
+    from src.analysis_agent import account_names
+
+    account_names._snapshot()
+    rules_stamp = account_names._CACHE["stamp"]
+    with _ALIAS_INDEX_LOCK:
+        if _ALIAS_INDEX["df"] is not df or _ALIAS_INDEX["rules"] != rules_stamp:
+            _ALIAS_INDEX["df"] = df
+            _ALIAS_INDEX["rules"] = rules_stamp
+            _ALIAS_INDEX["by_country"] = {}
+        cache = _ALIAS_INDEX["by_country"]
+        if country in cache:
+            return cache[country]
+    sub = df[df["Country Final"] == country] if "Country Final" in df.columns else df
+    if sub.empty:
+        idx = None
+    else:
+        col = sub["Account Alias"]
+        names = sorted({str(a).strip() for a in col.dropna().unique() if str(a).strip()})
+        keys = {_account_key(v) for v in col.fillna("").astype(str).unique()}
+        idx = {"names": names, "keys": keys}
+    with _ALIAS_INDEX_LOCK:
+        if _ALIAS_INDEX["df"] is df and _ALIAS_INDEX["rules"] == rules_stamp:
+            _ALIAS_INDEX["by_country"][country] = idx
+    return idx
 
 
 def workbook_alias_for(df, country: str, label: str) -> str:
@@ -1824,16 +2151,22 @@ def workbook_alias_for(df, country: str, label: str) -> str:
     if df is None or not label:
         return label
     try:
-        from src.analysis_agent.analyze_fb_stats import alias_matches
+        # ACL-1729: имена и ключи книги по стране считаются один раз на книгу,
+        # а не на каждый аккаунт (раньше — проход по ~2M ячеек на вызов).
+        idx = _country_alias_index(df, country)
+        if idx is None:
+            return label
+        names = idx["names"]
+        # Явное правило имён: если в книге аккаунт записан под другим префиксом
+        # (FacebookMKTOBFLB98 для KLD_BFL_B98), отдаём настоящее имя из книги —
+        # оно точное, а не догадка.
+        from src.analysis_agent.account_names import exact_alias
 
-        sub = df[df["Country Final"] == country] if "Country Final" in df.columns else df
-        if sub.empty:
+        exact = exact_alias(label, names)  # "" если своё имя в книге есть
+        if exact:
+            return exact
+        if _account_key(label) in idx["keys"]:
             return label
-        if bool(alias_matches(sub["Account Alias"], label).any()):
-            return label
-        names = sorted(
-            {str(a).strip() for a in sub["Account Alias"].dropna() if str(a).strip()}
-        )
         return _alias_by_tail(label, names) or label
     except Exception:  # pragma: no cover - перевод имени не должен ронять страницу
         return label
@@ -1842,9 +2175,10 @@ def workbook_alias_for(df, country: str, label: str) -> str:
 def _workbook_has_account(df, country: str, label: str) -> bool:
     if df is None or "Account Alias" not in df.columns:
         return False
-    from src.analysis_agent.analyze_fb_stats import alias_matches
-    sub = df[df["Country Final"] == country] if "Country Final" in df.columns else df
-    return bool(alias_matches(sub["Account Alias"], workbook_alias_for(df, country, label)).any())
+    idx = _country_alias_index(df, country)
+    if idx is None:
+        return False
+    return _account_key(workbook_alias_for(df, country, label)) in idx["keys"]
 
 
 def _country_code(name: str) -> str:
@@ -1904,6 +2238,8 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
         asset_val = _abbrev_asset((form.get(f"camp_{idx}_asset") or "").strip())
         budget    = (form.get(f"camp_{idx}_budget") or "").strip()
         name      = (form.get(f"camp_{idx}_name") or "").strip()
+        # ACL-1775: место конверсии набора; нет поля (RPA, старая страница) - сайт.
+        destination = (form.get(f"camp_{idx}_destination") or "website").strip().lower()
 
         try:
             ad_count = int(form.get(f"camp_{idx}_ad_count") or 1)
@@ -1952,6 +2288,15 @@ def _parse_build_upload_form(form) -> tuple[str, str, list[dict]]:
             # (и записанные из них задания) остаются прежними.
             if copy2:
                 slot["copy2"] = copy2
+            # ACL-1775: Instant Form. Ключи есть только у слотов с формой; значения
+            # другого назначения (сайта) не уходят вовсе, а у сайтовых слотов
+            # лишних ключей нет - прежние черновики не меняются ни байтом.
+            if destination != "website":
+                # Незнакомое назначение не превращается в сайт молча: уходит как есть,
+                # и план откажет вслух ("Unknown conversion location").
+                slot["destination"] = destination
+            if destination == "instant_form":
+                slot["lead_form_id"] = (form.get(f"camp_{idx}_ad_{a_idx}_form_id") or "").strip()
             slots.append(slot)
     # Return the ISO code, not the raw form value ("Costa Rica"). Confirmed
     # live 2026-07-30: the full name leaked into draft.country, where both
@@ -1981,17 +2326,22 @@ def _page_ready(date_from: str, date_to: str, span: str) -> bool:
         return False
 
 
-def _warm_page(date_from: str, date_to: str, span: str) -> None:
+def _warm_page(date_from: str, date_to: str, span: str, my_cm: str) -> None:
     """Фоновая сборка ровно того, что нужно странице: отчёт и её период."""
-    report, df, _warnings = get_cached_report()
+    progress = background_progress_callback()
+    report, df, _warnings = get_cached_report(my_cm=my_cm, progress=progress)
+    progress("preparing")
     date_from, date_to = resolve_period(df, date_from.strip(), date_to.strip(), span.strip())
     report_for_period(report, df, date_from, date_to)
 
 
 def _start_warm(date_from: str, date_to: str, span: str) -> None:
+    from src.web.buyer import get_selected_cm
+
+    my_cm = get_selected_cm()
     start_background_build(
-        functools.partial(_warm_page, date_from, date_to, span),
-        token=(date_from, date_to, span),
+        functools.partial(_warm_page, date_from, date_to, span, my_cm),
+        token=(date_from, date_to, span, my_cm),
     )
 
 
@@ -2004,7 +2354,7 @@ async def index(
     if not _page_ready(date_from, date_to, span):
         if forget_background_error() is None:
             _start_warm(date_from, date_to, span)
-            return templates.TemplateResponse("loading.html", {"request": request})
+            return templates.TemplateResponse(request, "loading.html", {"request": request})
         # Фоновая сборка упала — рисуем страницу обычным путём: он покажет
         # ту же ошибку по-человечески (нет файла, не тот формат).
     return await _in_report_pool(
@@ -2019,16 +2369,25 @@ async def report_status(date_from: str = "", date_to: str = "", span: str = "") 
     Отвечает сразу — ничего не собирает и не ждёт. Если ни готово, ни идёт
     (например, сборку начал другой период), запускает фоновую сборку сам.
     """
+    from src.web.buyer import get_selected_cm
+
+    token = (date_from, date_to, span, get_selected_cm())
     ready = _page_ready(date_from, date_to, span)
     state = background_build_state()
-    if not ready and not state["building"] and not state["error"]:
+    own_build = state["token"] == token
+    error = state["error"] if own_build else None
+    if not ready and not state["building"] and not error:
         _start_warm(date_from, date_to, span)
         state = background_build_state()
+        own_build = state["token"] == token
+        error = state["error"] if own_build else None
     return JSONResponse({
         "ready": ready,
         "building": state["building"],
-        "error": state["error"],
+        "error": error,
         "built_at": cache_built_at(),
+        "stage": "ready" if ready else state["stage"] if own_build else None,
+        "waiting": not ready and state["building"] and not own_build,
     })
 
 
@@ -2058,6 +2417,7 @@ def details(request: Request) -> HTMLResponse:
     if section not in _DRILL_ENABLED:
         ncols = 6
         return templates.TemplateResponse(
+            request,
             "_details_fragment.html",
             {
                 "request": request,
@@ -2082,6 +2442,7 @@ def details(request: Request) -> HTMLResponse:
         # Cache build failed — return a no-op fragment so the table layout
         # stays intact and the user is invited to fix the / page first.
         return templates.TemplateResponse(
+            request,
             "_details_fragment.html",
             {
                 "request": request,
@@ -2095,6 +2456,7 @@ def details(request: Request) -> HTMLResponse:
 
     rows = get_underlying_rows(df, section=section, country=country, **params)
     return templates.TemplateResponse(
+        request,
         "_details_fragment.html",
         {
             "request": request,
@@ -2271,6 +2633,7 @@ def creative_brief(request: Request, creative: str = "") -> HTMLResponse:
     creative_name = creative.strip()
     if not creative_name:
         return templates.TemplateResponse(
+            request,
             "error.html",
             {"request": request, "title": "No creative name", "message": "Pass ?creative=<name>"},
         )
@@ -2280,6 +2643,7 @@ def creative_brief(request: Request, creative: str = "") -> HTMLResponse:
     if found_path is None:
         # File not found — render upload form
         return templates.TemplateResponse(
+            request,
             "brief.html",
             {
                 "request": request,
@@ -2303,6 +2667,7 @@ def creative_brief(request: Request, creative: str = "") -> HTMLResponse:
         vision = vision_analyze(found_path)
         result = generate_brief(scan, vision, stats, audience)
         return templates.TemplateResponse(
+            request,
             "brief.html",
             {
                 "request": request,
@@ -2317,6 +2682,7 @@ def creative_brief(request: Request, creative: str = "") -> HTMLResponse:
         )
     except Exception as e:
         return templates.TemplateResponse(
+            request,
             "brief.html",
             {
                 "request": request,
@@ -3009,8 +3375,9 @@ def _creative_not_modified(request: Request | None, resolved: Path) -> Response 
 
 
 def _creative_range_response(request: Request | None, resolved: Path, media_type: str) -> Response | None:
-    """Range для видео. Starlette 0.36 (fastapi 0.110) сам Range не умеет и
-    отдавал файл целиком, а без 206 браузер не перематывает ролик. Поддержан
+    """Range для видео. Исторически (Starlette 0.36) FileResponse Range не умел и
+    отдавал файл целиком, а без 206 браузер не перематывает ролик; Starlette 1.x
+    умеет, но свой обработчик оставлен. Поддержан
     один диапазон (`bytes=a-b`, `a-`, `-n`); остальное — обычный 200."""
     if request is None:
         return None
@@ -3105,15 +3472,18 @@ async def creative_file(path: str = "", request: Request = None) -> Response:
 
 @app.get("/api/account-notes")
 def api_account_notes_get() -> JSONResponse:
-    """Все заметки менеджера к аккаунтам (ACL-1620)."""
-    return JSONResponse({"ok": True, "notes": _account_notes.load()})
+    """Все заметки менеджера: аккаунты и страны (ACL-1620, ACL-1633)."""
+    return JSONResponse({"ok": True, "notes": _account_notes.load(),
+                         "countries": _account_notes.load_countries()})
 
 
 @app.post("/api/account-notes")
 async def api_account_notes_set(request: Request) -> JSONResponse:
-    """Сохранить заметку к одному аккаунту; пустой текст удаляет её.
+    """Сохранить заметку к одному аккаунту или одной стране; пустой текст
+    удаляет её. Заметки остаются в файле этой машины и никуда не уходят.
 
-    Body JSON: {account, text}
+    Body JSON: {account, text} или {country, text}; необязательное if_empty: true —
+    записать, только если заметки сейчас нет (Undo).
     """
     try:
         body = await request.json()
@@ -3121,18 +3491,23 @@ async def api_account_notes_set(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": "Expected JSON"}, status_code=400)
     if not isinstance(body, dict):
         return JSONResponse({"ok": False, "error": "Expected a JSON object"}, status_code=400)
-    account, text = body.get("account"), body.get("text", "")
-    if not isinstance(account, str) or not account.strip():
-        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    kind = "country" if "country" in body else "account"
+    label, text = body.get(kind), body.get("text", "")
+    if not isinstance(label, str) or not label.strip():
+        return JSONResponse({"ok": False, "error": f"{kind} is required"}, status_code=400)
     if not isinstance(text, str):
         return JSONResponse({"ok": False, "error": "text must be a string"}, status_code=400)
     try:
-        notes = _account_notes.set_note(account, text)
+        notes = _account_notes.set_note(label, text, kind, if_empty=body.get("if_empty") is True)
+    except _account_notes.NoteChanged:
+        # Undo не затирает свежий текст: заметку успели написать заново.
+        return JSONResponse({"ok": False, "error": "The note changed meanwhile"}, status_code=409)
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     except OSError:
         return JSONResponse({"ok": False, "error": "Could not save the note. Try again."}, status_code=500)
-    return JSONResponse({"ok": True, "account": account.strip(), "text": notes.get(account.strip(), "")})
+    key = _account_notes.country_key(label) if kind == "country" else label.strip()
+    return JSONResponse({"ok": True, "kind": kind, kind: label.strip(), "key": key, "text": notes.get(key, "")})
 
 
 @app.post("/api/accounts-hidden")
@@ -3362,6 +3737,24 @@ def _split_plan(account: str, date_from: str, date_to: str, *,
     return {"needed": bool(why), "why": why}
 
 
+def _mlx_batch_refusal(form, account: str) -> JSONResponse | None:
+    """ACL-1826: пачка уже потеряла общую сессию Multilogin слота — этот старт пропускаем.
+
+    Страница шлёт `batch` (один id на нажатие Read all / Publish all). Без него
+    поведение прежнее: одиночные нажатия не пропускаются.
+    """
+    batch = str(form.get("batch") or "").strip()
+    if not batch:
+        return None
+    from src.fb_api import mlx_session
+
+    skip = mlx_session.refusal(batch, mlx_session.instance_of(account), account)
+    if not skip:
+        return None
+    return JSONResponse({"ok": False, "error": skip["message"], "code": skip["code"], "skipped": True},
+                        status_code=409)
+
+
 @app.post("/account-spend/read")
 async def account_spend_read(request: Request) -> JSONResponse:
     """Прочитать спенд с аккаунта. Только по нажатию человека.
@@ -3371,10 +3764,13 @@ async def account_spend_read(request: Request) -> JSONResponse:
     """
     from src.analysis_agent import account_spend
 
-    form = await request.form()
+    form = await read_form(request)
     account = (form.get("account") or "").strip()
     if not account:
         return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    skipped = _mlx_batch_refusal(form, account)
+    if skipped is not None:
+        return skipped
     # Период приходит с экрана: число, снятое не за тот отрезок, который
     # показан рядом, выглядело бы расхождением источников, а было бы ответом
     # на другой вопрос.
@@ -3439,10 +3835,13 @@ async def account_spend_read_countries(request: Request) -> JSONResponse:
     """
     from src.analysis_agent import country_split
 
-    form = await request.form()
+    form = await read_form(request)
     account = (form.get("account") or "").strip()
     if not account:
         return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    skipped = _mlx_batch_refusal(form, account)
+    if skipped is not None:
+        return skipped
     try:
         date_from, date_to = _spend_period(
             str(form.get("date_from") or ""), str(form.get("date_to") or ""),
@@ -3529,7 +3928,7 @@ async def report_problem(request: Request) -> JSONResponse:
     """
     from src import acl_sentry
 
-    form = await request.form()
+    form = await read_form(request)
     text = (form.get("text") or "").strip()
     if not text:
         return JSONResponse(
@@ -3589,7 +3988,7 @@ async def account_spend_turn_off(request: Request) -> JSONResponse:
     """
     from src.analysis_agent import account_spend
 
-    form = await request.form()
+    form = await read_form(request)
     account = (form.get("account") or "").strip()
     level = (form.get("level") or "").strip()
     object_id = (form.get("object_id") or "").strip()
@@ -3673,7 +4072,7 @@ async def account_spend_open_profile(request: Request) -> JSONResponse:
     """
     from src.analysis_agent import account_spend
 
-    form = await request.form()
+    form = await read_form(request)
     account = (form.get("account") or "").strip()
     if not account:
         return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
@@ -3709,7 +4108,7 @@ async def mlx_profile_open(request: Request) -> JSONResponse:
     """
     from src.analysis_agent import account_spend
 
-    form = await request.form()
+    form = await read_form(request)
     profile_id = (form.get("profile_id") or "").strip()
     if not profile_id:
         return JSONResponse({"ok": False, "error": "profile_id is required"}, status_code=400)
@@ -3756,7 +4155,7 @@ async def account_probe_ad_account(request: Request) -> JSONResponse:
     """
     from src.analysis_agent import account_spend
 
-    form = await request.form()
+    form = await read_form(request)
     profile_id = (form.get("profile_id") or "").strip()
     if not profile_id:
         return JSONResponse({"ok": False, "error": "profile_id is required"}, status_code=400)
@@ -3816,6 +4215,190 @@ async def account_spend_status(
     )
 
 
+# ───────────────────────── опись кампаний для Home (ACL-1798) ─────────────────────────
+# Только чтение. Чтение Meta запускает ТОЛЬКО POST /campaign-inventory/read (по
+# нажатию человека, через ту же очередь, что Read spend). Остальные маршруты —
+# локальные: берут сохранённый снимок и книгу статистики, Meta не трогают.
+
+
+def _inventory_bi(account: str, countries: list[str], date_from: str, date_to: str, span: str):
+    """BI из книги для аккаунта: `(данные | None, пометка)`. Сбой книги — не сбой описи."""
+    from src.analysis_agent.campaign_inventory import merge_attribution
+    from src.analysis_agent.morning_report import build_tree_attribution
+
+    names = [c.strip() for c in countries if c and c.strip()]
+    if not names:
+        return None, "This account is not placed in a country, so no workbook rows can be matched"
+    try:
+        _report, df, _warnings = get_cached_report()
+    except Exception as exc:  # noqa: BLE001
+        return None, f"Could not read the workbook: {exc}"
+    if df is None:
+        return None, "The stats workbook has no data"
+    date_from, date_to, span = date_from.strip(), date_to.strip(), span.strip()
+    if not date_from and not date_to and span != "all":
+        date_from, date_to = _month_to_date(_workbook_dates(df))
+    frame = _filter_by_period(df, date_from, date_to) if (date_from or date_to) else df
+    parts = []
+    for country in dict.fromkeys(names):
+        try:
+            alias = workbook_alias_for(df, country, account)
+            got = build_tree_attribution(frame, country, alias)
+        except Exception as exc:  # noqa: BLE001
+            return None, f"Workbook numbers failed: {exc}"
+        if got.get("has_data"):
+            parts.append(got)
+    if not parts:
+        return {"campaigns": {}, "ads": {}}, "The workbook has no rows for this account in the period"
+    return merge_attribution(parts), ""
+
+
+def _inventory_goal_context(countries: list[str]) -> dict:
+    """Цель CPA (My Goals) и бенчмарк CPA страны — вход для колонок Goal/Benchmark CPA и подсказок.
+
+    Только чтение локальных настроек, Meta и книгу не трогает. Нет значения — `None` и
+    причина словами: таблица пишет её рядом с тире, а не выдумывает число.
+    """
+    country = next((c.strip() for c in countries if c and c.strip()), "")
+    out: dict = {"country": country, "goal_cpa": None, "goal_ftd": None, "benchmark_cpa": None,
+                 "goal_note": "", "benchmark_note": ""}
+    if not country:
+        out["goal_note"] = out["benchmark_note"] = "This account is not placed in a country"
+        return out
+    try:
+        from src.web import goals as goals_store
+        from src.web.buyer import default_cm
+
+        who = (os.environ.get("MY_CM_NAME") or default_cm() or "").strip()
+        goal = next((g for g in goals_store.for_cm(who, []) if (g.get("country") or "").strip().casefold()
+                     == country.casefold()), None)
+        cpa = float(goal.get("cpa") or 0) if goal else 0.0
+        if cpa > 0:
+            out["goal_cpa"] = cpa
+            out["goal_ftd"] = int(goal.get("ftd") or 0) or None
+        else:
+            out["goal_note"] = f"No CPA goal is set for {country} in My Goals"
+    except Exception:  # noqa: BLE001 — цели не должны ронять опись
+        out["goal_note"] = "My Goals could not be read"
+    try:
+        from config.benchmarks import get_benchmark
+
+        cap = get_benchmark(country).get("max_cpa")
+        if cap is not None and float(cap) > 0:
+            out["benchmark_cpa"] = float(cap)
+        else:
+            out["benchmark_note"] = f"No benchmark CPA is set for {country}"
+    except Exception:  # noqa: BLE001
+        out["benchmark_note"] = "The benchmark could not be read"
+    return out
+
+
+def _inventory_context(request: Request, account: str):
+    """Снимок аккаунта, BI и сводка соединения — для маршрутов описи (без Meta)."""
+    from src.analysis_agent import campaign_inventory as ci
+
+    q = request.query_params
+    snap = ci.get_snapshot(account)
+    if snap is None:
+        return None, {}, {"available": False, "note": ""}, {}
+    bi, note = _inventory_bi(account, q.getlist("country"), q.get("date_from", ""),
+                             q.get("date_to", ""), q.get("span", ""))
+    joined, bi_summary = ci.join_bi(snap, bi)
+    bi_summary["note"] = note
+    return snap, joined, bi_summary, {}
+
+
+@app.post("/campaign-inventory/read")
+async def campaign_inventory_read(request: Request) -> JSONResponse:
+    """Прочитать опись кампаний аккаунта. Только по нажатию, только `ACL_FB_BACKEND=api`.
+
+    Тот же принцип, что у /account-spend/read: никакого расписания и опроса
+    Meta. С бэкендом `rpa` отвечает отказом и не запускает ничего.
+    """
+    from src.analysis_agent import campaign_inventory as ci
+
+    form = await read_form(request)
+    account = (form.get("account") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    skipped = _mlx_batch_refusal(form, account)
+    if skipped is not None:
+        return skipped
+    try:
+        date_from, date_to = _spend_period(str(form.get("date_from") or ""), str(form.get("date_to") or ""),
+                                           str(form.get("span") or ""))
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    try:
+        job = ci.start_read(account, date_from, date_to)
+    except ci.NeedsApiBackend:
+        return JSONResponse({"ok": False, "code": ci.NEEDS_API_CODE, "error": ci.NEEDS_API_MESSAGE},
+                            status_code=409)
+    except Exception:  # noqa: BLE001
+        return JSONResponse({"ok": False, "error": "Could not start the campaign read. Retry."},
+                            status_code=503)
+    return JSONResponse({"ok": True, **job})
+
+
+@app.get("/campaign-inventory/status")
+@_off_loop
+def campaign_inventory_status(request: Request) -> JSONResponse:
+    """Какие аккаунты читаются сейчас и что сохранено по каждому (сводки, без объектов)."""
+    from src.analysis_agent import campaign_inventory as ci
+
+    backend_ok = ci.backend_ready()
+    accounts = [a for a in request.query_params.getlist("account") if a.strip()]
+    return JSONResponse({
+        "ok": True,
+        "backend": "api" if backend_ok else "rpa",
+        "needs_api": not backend_ok,
+        "message": "" if backend_ok else ci.NEEDS_API_MESSAGE,
+        "running": ci.running_now(),
+        "accounts": ci.summaries(accounts),
+    })
+
+
+@app.get("/campaign-inventory/tree")
+@_off_loop
+def campaign_inventory_tree(request: Request) -> JSONResponse:
+    """Кампании аккаунта из снимка с BI по точному имени. Дети — отдельным запросом."""
+    from src.analysis_agent import campaign_inventory as ci
+
+    account = request.query_params.get("account", "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    snap, joined, bi_summary, _x = _inventory_context(request, account)
+    if snap is None:
+        return JSONResponse({"ok": True, "has_snapshot": False, "summary": ci.summary(None, ci.get_attempt(account)),
+                             "rows": []})
+    return JSONResponse({
+        "ok": True,
+        "has_snapshot": True,
+        "summary": ci.summary(snap, ci.get_attempt(account)),
+        "bi": bi_summary,
+        "context": _inventory_goal_context(request.query_params.getlist("country")),
+        "rows": ci.campaign_rows(snap, joined),
+    })
+
+
+@app.get("/campaign-inventory/children")
+@_off_loop
+def campaign_inventory_children(request: Request) -> JSONResponse:
+    """Дети одного объекта из снимка: ad sets кампании или объявления ad set."""
+    from src.analysis_agent import campaign_inventory as ci
+
+    q = request.query_params
+    account, level, parent = q.get("account", "").strip(), q.get("level", "").strip(), q.get("parent", "").strip()
+    if not account or not parent or level not in ("adset", "ad"):
+        return JSONResponse({"ok": False, "error": "account, parent and level (adset|ad) are required"},
+                            status_code=400)
+    snap, joined, _bi_summary, _x = _inventory_context(request, account)
+    if snap is None:
+        return JSONResponse({"ok": True, "state": "not_read", "rows": [],
+                             "note": "This account has not been read yet"})
+    return JSONResponse({"ok": True, **ci.child_rows(snap, level, parent, joined)})
+
+
 @app.get("/account-attribution")
 def account_attribution(
     account: str = "", country: str = "", date_from: str = "", date_to: str = "", span: str = ""
@@ -3850,13 +4433,17 @@ def account_attribution(
         return JSONResponse({"ok": False, "error": f"Workbook numbers failed: {exc}"}, status_code=500)
 
     def _shown(m: dict) -> dict:
+        # ACL-1652: те же шесть значений, что в таблицах; прочерк — это null,
+        # его рисует сам экран (`nodata`). CR 0.0% при лидах — настоящее число.
+        spend, _l, _f, cpl, cpa, cr = metric_columns.metric_values(m["spend"], m["leads"], m["deposits"])
+        dash = metric_columns.DASH
         return {
-            "spend": fmt_usd(m["spend"]),
+            "spend": spend,
             "leads": m["leads"],
             "deposits": m["deposits"],
-            "cpl": fmt_usd(m["cpl"]) if m["cpl"] else None,
-            "cpa": fmt_usd(m["cpa"]) if m["cpa"] else None,
-            "cr": f"{m['cr']:.1f}%" if m["cr"] else None,
+            "cpl": None if cpl == dash else cpl,
+            "cpa": None if cpa == dash else cpa,
+            "cr": None if cr == dash else cr,
         }
 
     return JSONResponse({
@@ -3888,6 +4475,7 @@ def account_map_fragment(
 
     _enrich_country_overview(report)
     return templates.TemplateResponse(
+        request,
         "_account_map.html",
         {
             "request": request,
@@ -3927,6 +4515,7 @@ def account_map_available_fragment(
             status_code=503,
         )
     return templates.TemplateResponse(
+        request,
         "_account_map_available.html", {"request": request, "amap": view}
     )
 
@@ -4623,11 +5212,47 @@ async def rpa_website_lab_disconnect() -> JSONResponse:
     return JSONResponse(result)
 
 
+INSTANT_FORM_RPA_ERROR = ("Instant Forms are available only with the Graph API backend "
+                          "(ACL_FB_BACKEND=api). Switch the ad set back to Website or use the API backend.")
+
+
+def _instant_form_refusal(slots: list[dict]) -> JSONResponse | None:
+    """ACL-1775: слот с Instant Form при RPA-бэкенде - отказ вслух, а не молча сайтом."""
+    from src.web import publish_api
+
+    if publish_api.api_enabled():
+        return None
+    if any(s.get("destination", "website") != "website" for s in slots):
+        return JSONResponse({"error": INSTANT_FORM_RPA_ERROR}, status_code=409)
+    return None
+
+
+@app.post("/api/page-forms")
+async def api_page_forms(request: Request) -> JSONResponse:
+    """ACL-1775: формы Страницы аккаунта для выбора в билдере. Только по нажатию человека.
+
+    Чтение без права записи; ни опроса, ни расписания. Только при `ACL_FB_BACKEND=api`.
+    """
+    from src.web import page_forms, publish_api
+
+    form = await read_form(request, BUILDER_FORM)
+    account = (form.get("account_label") or form.get("account") or "").strip()
+    if not account:
+        return JSONResponse({"ok": False, "error": "account is required"}, status_code=400)
+    if not publish_api.api_enabled():
+        return JSONResponse({"ok": False, "error": "Instant Forms need the Graph API backend (ACL_FB_BACKEND=api)."},
+                            status_code=409)
+    return JSONResponse(await asyncio.to_thread(page_forms.read_forms, account))
+
+
 @app.post("/preview-publish")
 async def preview_publish(request: Request) -> JSONResponse:
     """Dry-run: convert form slots → PublishJob plan, return JSON (no Meta API calls)."""
-    form = await request.form()
+    form = await read_form(request, BUILDER_FORM)
     country, account_label, slots = _parse_build_upload_form(form)
+    refused = _instant_form_refusal(slots)
+    if refused is not None:
+        return refused
     if not country:
         return JSONResponse({"error": "Country not set — check form."}, status_code=400)
     if not account_label:
@@ -4661,8 +5286,11 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
     `request_id` (ACL-1399): ключ отправки со страницы. Повтор с тем же
     ключом — после «сервер не ответил» — возвращает то же задание.
     """
-    form = await request.form()
+    form = await read_form(request, BUILDER_FORM)
     country, account_label, slots = _parse_build_upload_form(form)
+    refused = _instant_form_refusal(slots)
+    if refused is not None:
+        return refused
     via_ml = (form.get("via_multilogin") or "1").strip() not in ("0", "false", "no")
     activate = (form.get("activate") or "0").strip() in ("1", "true", "yes")
     dry_run = (form.get("dry_run") or "0").strip() in ("1", "true", "yes")
@@ -4670,7 +5298,7 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
     request_id = (form.get("request_id") or "").strip()
     if activate:
         return JSONResponse(
-            {"error": "Live activation is disabled: ACL creates draft-only campaigns."},
+            {"error": "Live activation is disabled: ACM creates draft-only campaigns."},
             status_code=403,
         )
     if not user_confirmed:
@@ -4680,6 +5308,10 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
         )
     if not country or not account_label or not slots:
         return JSONResponse({"error": "Missing country, account or slots."}, status_code=400)
+    skipped = _mlx_batch_refusal(form, account_label)
+    if skipped is not None:
+        body = json.loads(skipped.body)
+        return JSONResponse({"error": body["error"], "code": body["code"], "skipped": True}, status_code=409)
 
     def launch() -> tuple[str, int]:
         # Черновики собираются из библиотек и книги — не в цикле событий:
@@ -4711,6 +5343,124 @@ async def publish_jobs_start(request: Request) -> JSONResponse:
     return JSONResponse({"job_id": job_id, "total": total})
 
 
+@app.post("/publish-plan")
+async def publish_plan(request: Request) -> JSONResponse:
+    """ACL-1761: «Check plan (no writes)» — предпроверка и план, ни одной записи.
+
+    Только при `ACL_FB_BACKEND=api` и только с явным `dry_run=1`. Задания
+    публикации не заводит: путь чтения ACL-1760 (свой замок чтения, профиль —
+    как у Read spend), клиент без права записи.
+    """
+    from src.web import publish_api
+
+    form = await read_form(request, BUILDER_FORM)
+    if (form.get("dry_run") or "").strip() != "1":
+        return JSONResponse({"error": "Check plan only runs as a dry run (dry_run=1)."}, status_code=400)
+    if not publish_api.api_enabled():
+        return JSONResponse({"error": "Check plan needs the Graph API backend (ACL_FB_BACKEND=api)."},
+                            status_code=409)
+    country, account_label, slots = _parse_build_upload_form(form)
+    if not country or not account_label or not slots:
+        return JSONResponse({"error": "Missing country, account or slots."}, status_code=400)
+    result = await asyncio.to_thread(publish_api.check_plan, slots, account_label=account_label,
+                                     country=country)
+    return JSONResponse(result)
+
+
+# ACL-1800: команды над существующими кампаниями (статус/бюджет/ставка) — только
+# при ACL_FB_BACKEND=api, только по клику человека и с подтверждением превью.
+@app.post("/campaign-commands/preview")
+async def campaign_commands_preview(request: Request) -> JSONResponse:
+    from src.web import campaign_commands
+
+    body = await _campaign_commands_body(request)
+    data, code = await asyncio.to_thread(campaign_commands.run_preview, body)
+    return JSONResponse(data, status_code=code)
+
+
+@app.post("/campaign-commands/execute")
+async def campaign_commands_execute(request: Request) -> JSONResponse:
+    from src.web import campaign_commands
+
+    body = await _campaign_commands_body(request)
+    data, code = await asyncio.to_thread(campaign_commands.run_execute, body)
+    return JSONResponse(data, status_code=code)
+
+
+@app.get("/campaign-commands/availability")
+async def campaign_commands_availability() -> JSONResponse:
+    from src.web import campaign_commands
+
+    return JSONResponse(campaign_commands.availability())
+
+
+@app.get("/campaign-commands/history")
+async def campaign_commands_history(request: Request) -> JSONResponse:
+    """Журнал команд аккаунта; объявлен до `/campaign-commands/{op_id}`."""
+    from src.web import campaign_commands
+
+    try:
+        limit = int(request.query_params.get("limit") or 20)
+    except ValueError:
+        limit = 20
+    data, code = await asyncio.to_thread(
+        campaign_commands.account_history, request.query_params.get("account") or "", limit)
+    return JSONResponse(data, status_code=code)
+
+
+@app.get("/campaign-commands/{op_id}")
+async def campaign_commands_status(op_id: str) -> JSONResponse:
+    from src.web import campaign_commands
+
+    data, code = campaign_commands.get_status(op_id)
+    return JSONResponse(data, status_code=code)
+
+
+async def _campaign_commands_body(request: Request) -> dict:
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    return body if isinstance(body, dict) else {}
+
+
+# ACL-1812: тёплые сессии. Состояние строк — только реестр и процессы на машине
+# (ни одного вызова к Meta); запуск и закрытие профилей — по клику человека.
+@app.get("/warm/state")
+async def warm_state(request: Request) -> JSONResponse:
+    from src.web import warm_api
+
+    labels = request.query_params.getlist("account")
+    return JSONResponse(await asyncio.to_thread(warm_api.state, labels))
+
+
+@app.post("/warm/open")
+async def warm_open(request: Request) -> JSONResponse:
+    from src.web import warm_api
+
+    body = await _campaign_commands_body(request)
+    data, code = await asyncio.to_thread(warm_api.start_open, body.get("accounts"))
+    return JSONResponse(data, status_code=code)
+
+
+@app.get("/warm/job/{job_id}")
+async def warm_job(job_id: str) -> JSONResponse:
+    from src.web import warm_api
+
+    data, code = warm_api.job_status(job_id)
+    return JSONResponse(data, status_code=code)
+
+
+@app.post("/warm/close")
+async def warm_close(request: Request) -> JSONResponse:
+    from src.web import warm_api
+
+    body = await _campaign_commands_body(request)
+    data, code = await asyncio.to_thread(warm_api.close_profiles, body.get("accounts"),
+                                         body.get("confirm") is True)
+    return JSONResponse(data, status_code=code)
+
+
 @app.get("/publish-jobs/slots")
 async def publish_jobs_slots() -> JSONResponse:
     """Сколько профилей публикуют разом и почему (ACL-1321).
@@ -4723,6 +5473,51 @@ async def publish_jobs_slots() -> JSONResponse:
     return JSONResponse(slots_snapshot())
 
 
+@app.get("/api/publish-preflight")
+async def api_publish_preflight(accounts: str = "") -> JSONResponse:
+    """Кто из аккаунтов не сможет работать — до постановки в очередь (ACL-1604).
+
+    Один разбор на нажатие «Publish all», только по перечисленным аккаунтам.
+    Профили не открываются и не трогаются: читаются карта, срок токена, статус
+    кабинета, журнал прошлых прогонов и список открытых профилей (см.
+    `publish_preflight`).
+    """
+    from src.web import publish_preflight as pf
+
+    names = [a.strip() for a in (accounts or "").split(",") if a.strip()][:60]
+
+    def run() -> dict:
+        map_path = get_ad_account_map_path()
+        amap = load_ad_account_map(map_path) if os.path.isfile(map_path) else {}
+        result = pf.summary(pf.preflight(names, amap=amap))
+        pf.record(result)
+        return result
+
+    return JSONResponse(await asyncio.to_thread(run))
+
+
+@app.post("/api/publish-preflight/decision")
+async def api_publish_preflight_decision(request: Request) -> JSONResponse:
+    """Что владелец решил по списку «Not ready»: в телеметрию, для разбора потом."""
+    from src.web import publish_preflight as pf
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    body = body if isinstance(body, dict) else {}
+
+    def names(key: str) -> list[str]:
+        raw = body.get(key)
+        return [str(x)[:80] for x in raw][:60] if isinstance(raw, list) else []
+
+    queued, skipped, anyway = names("queued"), names("skipped"), names("run_anyway")
+    pf.record({"accounts": [], "ready": queued, "not_ready": skipped + anyway},
+              step="publish_preflight_decision",
+              extra={"queued": len(queued), "skipped": skipped, "run_anyway": anyway})
+    return JSONResponse({"ok": True})
+
+
 @app.post("/publish-jobs/kept/release")
 async def publish_jobs_release_kept(request: Request) -> JSONResponse:
     """«Release» у оставленного окна в очереди: снять с него место (ACL-1603).
@@ -4730,7 +5525,7 @@ async def publish_jobs_release_kept(request: Request) -> JSONResponse:
     Не зависит от панели задания. Окно не закрывается — только перестаёт
     считаться в потолке профилей. Объявлен до `/publish-jobs/{job_id}/…`.
     """
-    form = await request.form()
+    form = await read_form(request)
     from src.web.publish_jobs import release_kept
 
     got = release_kept(str(form.get("account") or ""))
@@ -4793,8 +5588,15 @@ async def publish_jobs_progress(job_id: str) -> JSONResponse:
 @app.post("/build-upload")
 async def build_upload(request: Request) -> Response:
     """Build Upload FB xlsx from campaign builder slots for one account."""
-    form = await request.form()
+    form = await read_form(request, BUILDER_FORM)
     country, account_label, slots = _parse_build_upload_form(form)
+    if any(s.get("destination") == "instant_form" for s in slots):
+        # ACL-1775: таблица Upload FB формы не умеет - не собирать сайтовую молча.
+        return await _in_report_pool(
+            _render_report, request,
+            upload_errors={(form.get("country") or "").strip() or country:
+                           {account_label: ["Instant Forms cannot be exported to Upload FB; use Publish with the API backend."]}},
+        )
 
     # The parser returns the country CODE ("MX"), which the RPA needs — without
     # it the audience Language step was silently skipped. But the template looks

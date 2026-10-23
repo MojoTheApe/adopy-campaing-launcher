@@ -75,8 +75,17 @@ def normalize_account_alias(alias) -> str:
 
 def alias_matches(series, alias):
     """Boolean mask: rows of `series` whose alias matches `alias`, suffix-blind."""
-    target = normalize_account_alias(alias)
-    return series.fillna("").astype(str).map(normalize_account_alias) == target
+    # Сравнение — единственное место, где работает явное правило имён
+    # (config/account_name_rules.json) и где регистр не важен.
+    from src.analysis_agent.account_names import account_key
+
+    target = account_key(alias)
+    # ACL-1729: в книге десятки тысяч строк, но алиасов — сотни. Ключ считался
+    # на каждую строку (и каждый раз stat файла правил) — страница Home
+    # собиралась 90 с. Считаем один раз на уникальное значение.
+    text = series.fillna("").astype(str)
+    hits = {v for v in text.unique() if account_key(v) == target}
+    return text.isin(hits)
 
 
 # A creative is identified by a 3-4 digit number; everything else in the
@@ -147,6 +156,42 @@ def split_ad_title(ad_title) -> tuple[str, str]:
     """
     creative, _variant, text = split_ad_title_variant(ad_title)
     return creative, text
+
+
+def creative_identity(ad_title) -> dict:
+    """Идентичность креатива с сохранением версии (ACL-1799).
+
+    `split_ad_title` намеренно сводит заголовок к паре (номер пакета, текст) и
+    этим склеивает версии одного пакета. Здесь версия остаётся: «1121 1» и
+    «1121 - 2» — один пакет 1121, но две разные версии. Старая функция и её
+    потребители не тронуты; эта живёт рядом и ничего у них не отнимает.
+
+    Версия берётся из того, что `split_ad_title_variant` уже умеет («2046 1 -
+    Story14» -> версия 1). Кроме того, если после номера пакета стоит только
+    число («1121 1», «1121 - 2»), это тоже версия, но помечается `ambiguous`:
+    такая запись может быть и текстовым названием. Сырая строка сохраняется,
+    чтобы разбор можно было поправить позже, ничего не потеряв.
+
+    status:
+      exact      — есть пакет и версия;
+      pack_only  — есть пакет, версии в заголовке нет;
+      unresolved — номера пакета нет (разбору нечего сказать).
+    """
+    raw = "" if ad_title is None else str(ad_title).strip()
+    if not raw or raw == "-":
+        return {"raw": raw, "pack_id": "", "version_id": "", "text_name": "",
+                "key": "", "status": "unresolved", "ambiguous": False}
+    if not _CREATIVE_NUM_RE.search(raw):
+        return {"raw": raw, "pack_id": "", "version_id": "", "text_name": "",
+                "key": "raw:" + raw.casefold(), "status": "unresolved", "ambiguous": False}
+
+    pack, version, text = split_ad_title_variant(raw)
+    ambiguous = False
+    if not version and re.fullmatch(r"\d+", text or ""):
+        version, text, ambiguous = str(int(text)), "", True  # «01» и «1» — одна версия
+    key = f"{pack}|{version}|{(text or '').casefold()}"
+    return {"raw": raw, "pack_id": pack, "version_id": version, "text_name": text,
+            "key": key, "status": "exact" if version else "pack_only", "ambiguous": ambiguous}
 
 
 _MEDIA_TYPE_TOKENS = frozenset(
@@ -351,6 +396,8 @@ def enrich_structure(df: pd.DataFrame) -> pd.DataFrame:
     df["TextName"] = _split.apply(lambda t: t[1])
     # ACL-1593: вариант креатива (ведущее число файла) — отдельной колонкой.
     df["VariantId"] = df["Ad Title"].apply(lambda t: split_ad_title_variant(t)[1])
+    # ACL-1799: ключ креатива с версией рядом с пакетным CreativeId.
+    df["CreativeKey"] = df["Ad Title"].apply(lambda t: creative_identity(t)["key"])
 
     df["Country Final"] = df["Country"]
 
@@ -599,7 +646,9 @@ def main(  # noqa: PLR0913
     filter_lines: List[str] = []
 
     def build_report_text() -> str:
-        df = pd.read_excel(excel_path)
+        from src.analysis_agent.stats_workbook import read_stats_workbook
+
+        df = read_stats_workbook(excel_path)
 
         if asset_filter:
             mask = df["Ad Asset"].fillna("").astype(str).str.lower() == asset_filter.lower()

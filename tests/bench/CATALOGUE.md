@@ -6,7 +6,7 @@ Every Meta layout the robot has met live, per robot step, with its fixture, test
 
 Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928 output/rpa_pages (oldest kept capture 2026-09-29; earlier ones of 20-28.09 are no longer on disk and are represented by the fixtures cut at the time).
 
-**21 robot steps × 108 layouts, 58 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
+**23 robot steps × 121 layouts, 66 fixtures, 0 known live bugs (xfail).** Fixtures live in `tests/fixtures/ads_manager/` (how they are cut: its README and `scripts/capture_to_fixture.py`).
 
 ## Summary
 
@@ -15,24 +15,26 @@ Captures read for ACL-1433: C:/acl-live-1001, C:/acl-live-0930, C:/acl-live-0928
 | objective | 5 | 5 | 0 | 0 |
 | simple_create_layout | 2 | 2 | 0 | 0 |
 | campaign_name / budget / adset_name | 1 | 1 | 0 | 0 |
+| conversion_website (Conversion location -> Website, ACL-1572) | 2 | 2 | 0 | 0 |
 | conversion_event | 3 | 3 | 0 | 0 |
 | advantage_plus_audience | 8 | 8 | 0 | 0 |
-| further_limit_reach (Suggest an audience) | 7 | 7 | 0 | 0 |
+| further_limit_reach (Suggest an audience) | 9 | 9 | 0 | 0 |
 | audience_location | 5 | 5 | 0 | 0 |
 | audience_age | 4 | 4 | 0 | 0 |
 | languages | 5 | 5 | 0 | 0 |
 | detailed_targeting (interests) | 2 | 2 | 0 | 0 |
-| placements | 8 | 8 | 0 | 0 |
-| next_to_ad / additional ad (classic) | 3 | 3 | 0 | 0 |
+| placements | 11 | 11 | 0 | 0 |
+| next_to_ad / additional ad (classic) | 4 | 4 | 0 | 0 |
 | ad_name | 2 | 2 | 0 | 0 |
 | ad_creative (media) | 5 | 5 | 0 | 0 |
-| creative_wizard | 15 | 15 | 0 | 0 |
+| creative_wizard | 17 | 17 | 0 | 0 |
 | ad_copy | 7 | 7 | 0 | 0 |
 | ad_destination / destination_sweep | 10 | 9 | 0 | 1 |
-| ads 2-3 (single-screen editor) | 4 | 4 | 0 | 0 |
+| ads 2-3 (single-screen editor) | 5 | 5 | 0 | 0 |
 | editor gone under the robot | 1 | 1 | 0 | 0 |
 | banners and blocks (any step) | 2 | 2 | 0 | 0 |
 | foreign windows (any step, ACL-1573) | 9 | 9 | 0 | 0 |
+| ai rescue summary (any step, ACL-1613) | 2 | 2 | 0 | 0 |
 
 ## objective
 
@@ -62,6 +64,15 @@ Robot: level name fields and daily budget (simple_create NAME_FIELDS, budget inp
 | Layout | Seen live | Fixture · fragment | Test | Expected | Status |
 | --- | --- | --- | --- | --- | --- |
 | Single-screen editor: Campaign name, Budget (expanded), Ad set name | 9e7d67471c6b/00_next_to_adset | `simple_create_2026_09_27.html` | `tests/test_the_single_screen_editor_is_walked.py` | each name field and the budget input unique on the page | pass |
+
+## conversion_website (Conversion location -> Website, ACL-1572)
+
+Robot: _pick_website_from_open_menu / _ensure_conversion_menu_open: trigger state (aria-expanded), name-field focus release, click -> keyboard -> script openers, English failure reason
+
+| Layout | Seen live | Fixture · fragment | Test | Expected | Status |
+| --- | --- | --- | --- | --- | --- |
+| Doc21 classic ad set editor, closed Conversion location trigger (combobox, aria-expanded=false); open menu synthetic, no Single/Multiple headings | 87d43d6202af/00_conversion_website, 254ee3b3e0c7/00_conversion_website, 18d15b75d1eb/00_conversion_website, 308c4f7c8a5a/00_conversion_website, 162a95a64776/00_conversion_website | `foreign_windows_doc21_2026_10_04.html` · adset_name_section, conversion_section | `tests/test_conversion_menu_opens_in_every_layout_1572.py` | menu opened by click, else keyboard, else script press; focus released from the ad set name field; Website selected and read back from the trigger; a menu closed by a method is reopened before the next one | pass |
+| Same editor, menu never opens / Website row missing / Conversion location absent (ad editor on screen) | e2df3122c39f/01_conversion_website | `foreign_windows_doc21_2026_10_04.html` · adset_name_section, conversion_section | `tests/test_conversion_menu_opens_in_every_layout_1572.py` | stops after 3 failed openings; note names the reason in English | pass |
 
 ## conversion_event
 
@@ -98,6 +109,8 @@ Robot: gear row 'Further limit the reach of your ads', suggestion age checkbox
 | Same card with custom audiences expanded (6540 FX) | 97370c743f44/00_further_limit_reach_click | `audience_suggest_layout_2026_09_26.html` · suggest_fx | `tests/test_suggest_an_audience_layout.py` | covered gear row still opened by its own element | pass |
 | Controls with 'Your suggestion' age | 7cfdc772376d/02_advantage_plus_audience | `audience_suggest_layout_2026_09_26.html` · controls_suggestion_on | `tests/test_suggest_an_audience_layout.py` | suggestion unchecked once, badge goes off | pass |
 | Controls off summary | 8c6496e50815/01_placements | `audience_suggest_layout_2026_09_26.html` · controls_off | `tests/test_suggest_an_audience_layout.py` | reads off with age and language from the summary | pass |
+| WhatsApp campaign: Age collapsed to '35 - 65+ · Unknown age on WhatsApp: Excluded' with 'Your suggestion' (Doc120) | 573ab2cf3646/00_advantage_plus_audience | `audience_whatsapp_suggestions_2026_10_06.html` · whatsapp_suggestion_collapsed | `tests/test_bench_audience_whatsapp_suggestions.py` | row opened, suggestion unchecked once, badge goes off; if Meta keeps it on the step still fails | pass |
+| WhatsApp campaign: hard age 35 - 65+ (suggestion unchecked), badge still 'Advantage+ on' (9403A) | d4f9d5f016c1/03_advantage_plus_audience | `audience_whatsapp_suggestions_2026_10_06.html` · whatsapp_age_hard_badge_on | `tests/test_bench_audience_whatsapp_suggestions.py` | nothing clicked; blocked still_on with age_suggestion_checked=false and mode=controls in diag (cause of the flip not known) | pass |
 | Age field open with 'Use as a suggestion' | 543dc9daad53/00_languages | `audience_suggest_layout_2026_09_26.html` · age_open_suggestion | `tests/test_suggest_an_audience_layout.py` | checkbox found only inside the age field | pass |
 | Editor drawer window (9403A, adsets/edit/standalone): Audience collapsed into a read-only summary card, no Edit button, Further limit row in the hidden body | 6ebd77ccaf6a/02_further_limit_reach_click | `audience_card_collapsed_drawer_2026_10_05.html` · card_run_a | `tests/test_bench_audience_card_collapsed_drawer.py` | card opened by one click on its title (never About audiences / a button inside); controls verified; simple_card ok | pass |
 | Same card, second run | e89bda52e7a5/03_further_limit_reach_click | `audience_card_collapsed_drawer_2026_10_05.html` · card_run_b | `tests/test_bench_audience_card_collapsed_drawer.py` | same as above | pass |
@@ -160,6 +173,9 @@ Robot: fill_placements
 | Single-screen editor: Placements card open, only 'Advantage+ on' + 'About placements' | cb854b07857b/02_placements | `placements_simple_create_2026_09_30.html` · card | `tests/test_bench_placements.py` | card found by its data-surface anchor; a body that never leaves Loading is named placements_card_loading (ACL-1445) | pass |
 | Single-screen editor Placements card: card found | cb854b07857b/02_placements | `placements_simple_create_2026_09_30.html` · card | `tests/test_bench_placements.py` | the card is found; once its body loads, manual placements are set and read back there (ACL-1445) | pass |
 | Single-screen editor: placements set, list collapsed to 'Included: 7, Allowed with limited spend: 0, Excluded: 13' (no capture, screenshot text) | SA_ARC_All_Video_IPO_35_01.10 (tester, 01.10) | `placements_simple_create_summary_2026_10_01.html` · card | `tests/test_bench_placements.py` | counts are not proof: the summary is opened and its rows set and read back; a summary that does not open, or right counts over a wrong set, fails (review of PR #449) | pass |
+| Classic editor (05-06.10): category expanders are plain `button[aria-label=Expand\|Collapse]` in the category `li`, no aria-expanded | b40ba4e8c2d6/00_placements, 34bf0d6c2262/00_placements | `placements_button_expanders_2026_10_06.html` · card | `tests/test_bench_placements_1629.py` | every offered placement set and read back; 'Messenger Stories' named not offered; a category folded after a click is reopened; a row or a category box disabled while Meta saves is set once it unlocks (a box that never unlocks fails); a final read-back of every row catches a late revert; a row locked in the wrong state fails and is named (ACL-1629) | pass |
+| Classic standalone editor (06.10): Placements card collapsed to a summary (aria-pressed=false), body hidden; account controls dialog | ab33293af6d7/05_placements | `placements_collapsed_card_standalone_2026_10_06.html` · card | `tests/test_bench_placements_1629.py` | the card is opened first (a card that does not open fails, named); account exclusions applied and verified by the card summary or, when it stays 'None', by reopening the dialog; a lost save or a lost switch fails; no 'Edit placement controls' is a named warning; the opened card without categories and with Meta's 'no longer available' notice is named as ACL-1336 (ACL-1629) | pass |
+| Classic editor, Doc120 (07.10): the Stories list folds twice while read and its row count flickers; five rows, no 'Messenger Stories' in the DOM | 4e4969867d28/00_placements | `placements_button_expanders_2026_10_06.html` · card | `tests/test_bench_placements_1684.py` | a complete list (end, at bottom, not busy, nothing hidden) with 'Messenger Stories' absent is 'not offered' after folds and a flickering row count; a list that never proves its end, or never settles by the hard limit, still blocks; an offered but hidden row is never 'not offered' (ACL-1684) | pass |
 
 ## next_to_ad / additional ad (classic)
 
@@ -168,6 +184,7 @@ Robot: Next to the ad level; create_additional_ad via the tree's ad set menu
 | Layout | Seen live | Fixture · fragment | Test | Expected | Status |
 | --- | --- | --- | --- | --- | --- |
 | Left tree: campaign, ad set (action menu), ad | d3e690189a6e/04_create_additional_ad, 0afc79a410c6/04_create_additional_ad | `editor_tree_adset_2026_09_24.html` | `tests/test_additional_ad_waits_for_tree.py` | ad set menu opens, ad created | pass |
+| Left tree with a fresh "New Leads Ad" row in the middle (ACL-1675): ad rows are told apart by row id, not by place | 4e4969867d28/12_ad4_create | `editor_tree_new_shell_between_2026_10_07.html` | `tests/test_a_failed_ad_leaves_no_duplicate_shell.py` | only a row id that was not in the pre-create snapshot is adopted | pass |
 | AdsPERouteLoadPlaceholder spinner instead of the editor | 7364047ef03c/05_create_additional_ad | `route_placeholder_2026_09_24.html` | `tests/test_route_placeholder_is_loading.py` | not ready; spinner wins over a stale tree | pass |
 | Breadcrumb header only, no tree rows | 7d2ce3ab1161/05_create_additional_ad | `breadcrumb_only_2026_09_24.html` | `tests/test_additional_ad_waits_for_tree.py` | not ready, no blind click | pass |
 
@@ -213,6 +230,8 @@ Robot: _creative_wizard_open, _wizard_media_step, _WIZARD_FORWARD_JS (walk), _cr
 | Media step busy after the library pick (04.10): '1 selected', Next and Cancel aria-disabled | 232d398471bd/00_wizard_media | `wizard_crop_story_missing_2026_10_04.html` · media_busy | `tests/test_bench_wizard_exit_1004.py` | the walk waits while the wizard is busy (bounded) instead of four quick misses (ACL-1551) | pass |
 | Media-first wizard opened on Media (04.10) with the media picker still loading: three 'Loading...' progressbars, no Upload/tabs/Search media/grid; footer Next aria-disabled, Cancel enabled | 2f140fa687fa/00_ad_creative_media_step, 2f140fa687fa/02_ad_creative_media_step | `wizard_media_picker_2026_10_04.html` · loading | `tests/test_bench_wizard_media_picker_1004.py` | picker read as loading (3 placeholders); the current Media step is not clicked and Next is not pressed; read-only wait, then media_picker_loading (not upload_button_missing); picker that loads during the wait goes on to the library (ACL-1559) | pass |
 | The same Media step loaded (04.10): tabs Account/Video URL/Page, Search media, Filters 1, Upload (role=button, asset-picker data-surface), drop zone, library grid with 2 tiles | 232d398471bd/00_wizard_media | `wizard_media_picker_2026_10_04.html` · loaded | `tests/test_bench_wizard_media_picker_1004.py` | picker read as loaded (upload, search, 2 tiles); exactly one Upload, inside the wizard dialog; the step goes straight to library reuse without clicks (ACL-1559) | pass |
+| Media step of the wizard opened by an upload, B97 (07.10, bc4302862ee7, 0.1 s): tabs, Search media, Upload, library grid with the one uploaded tile wrapped in data-test-decoration="selected"; the footer counters ('1 selected' / '0 selected') removed for this fixture | bc4302862ee7/00_wizard_media | `wizard_media_picker_selected_2026_10_07.html` · selected_no_counter | `tests/test_bench_b97_picker_and_crop_1007.py` | counter read as unavailable, selected tile marked -> REFUSED (library_selection_unreadable): no click, no upload over a selection the robot cannot count (ACL-1669) | pass |
+| Crop step opened while Meta still draws it (07.10, B97 bc4302862ee7): step row on Crop, heading, three role=progressbar Loading placeholders, no Square/Vertical cards, no Replace | bc4302862ee7/03_wizard_crop, bc4302862ee7/10_wizard_crop, bc4302862ee7/16_wizard_crop | `crop_cards_loading_2026_10_07.html` · cards_loading | `tests/test_bench_b97_picker_and_crop_1007.py` | read as found with empty cards; the step waits for the cards instead of answering crop_replace_button_missing (ACL-1669) | pass |
 
 ## ad_copy
 
@@ -255,6 +274,7 @@ Robot: simple_create.create_next_ad
 | Tree before, ad set Action menu, tree after Create ad, new ad name/media | f9b9fc8d7bb3/01-03, 8ce1b9985046/02-04, b3a333ff43ab/03-04, d1755a59e139/03-04, d66a22d0fa30/02-03, df5344da3a17/02 | `simple_create_more_ads_2026_09_30.html` · tree_before, adset_menu, tree_after_create, ad1_name, new_ad_name, new_ad_media | `tests/test_simple_create_more_ads.py` | Create ad from the ad set menu opens the new ad; 'Creating...' dialog waited out | pass |
 | New ad's form gone after the media wizard: Ad heading with an empty /am/editor:ad surface (no name field, no Media block) and 'Verifying your changes' with the #100 lead_gen_form_id preflight error | 4121938e6dc3/11_ad2_creative_upload, 04c8c214d2ba/01_ad2_creative_upload, 0bd520418dbe/01_ad2_creative_upload | `ad_form_gone_verifying_2026_10_01.html` · ad_form_gone_verifying | `tests/test_ad_form_gone_after_media.py` | named ad_form_gone_after_media after 30 s; no second media check or wizard (ACL-1426) | pass |
 | Single-screen editor 06.10: tree rows carry no Action menu / default buttons until the cursor is over them | aa99ab40d397/07_simple_create_more_ads, fab05371305f/08_simple_create_more_ads, da07f392ff1f/08_simple_create_more_ads | `editor_tree_no_action_buttons_2026_10_06.html` · tree | `tests/test_bench_single_screen_adset_row_hover.py` | no buttons as captured; after the robot hovers the ad set row the Action menu is found and ad 2 is created; a row that never shows it stays no_create_control after exactly 3 hovers; the hover never presses or focuses anything and stops once the buttons appear; a tab frozen during the hover is tab_frozen | pass |
+| Classic editor 07.10: tree rows carry no Action menu until the cursor is over them; breadcrumb header above the tree repeats the ad set name | f2c513f0a22d/07_create_additional_ad, f2c513f0a22d/08_create_additional_ad, f2c513f0a22d/10_create_additional_ad, f2c513f0a22d/13_create_additional_ad | `classic_editor_tree_hover_only_2026_10_07.html` · tree, breadcrumb | `tests/test_bench_classic_adset_row_hover.py` | tree counts as ready without the button; the robot hovers the tree row (never the breadcrumb), no press and no focus, stops once the button appears; then Action menu -> Create ad are the only two clicks; a row that shows no button after 3 hovers blocks with adset_action_menu_not_shown and presses nothing | pass |
 
 ## editor gone under the robot
 
@@ -288,6 +308,15 @@ Robot: window guard before each step and after a failed one (foreign_windows.bef
 | Media wizard stuck on Crop and its Replace picker | 232d398471bd/01_wizard_crop_replace, 232d398471bd/04_ad_creative_upload | `wizard_crop_story_missing_2026_10_04.html` · crop_busy, in_wizard_picker | `tests/test_foreign_windows_are_closed_or_named.py` | owned (step row / media surface): never closed, no Sentry event, no capture | pass |
 | Media wizard on its Media step (picker loaded) | 232d398471bd/00_wizard_media | `wizard_media_picker_2026_10_04.html` · loaded | `tests/test_foreign_windows_are_closed_or_named.py` | owned (step row / media surface): never closed, no Sentry event, no capture | pass |
 | Unknown dialogs over the Doc21 editor (unsafe-only buttons; safe Not now; footer-surface Close inside; Publish footer of the single-screen editor) | synthetic | `foreign_windows_doc21_2026_10_04.html` · editor_footer | `tests/test_foreign_windows_are_closed_or_named.py` | Publish/Confirm/Continue and footers never pressed; captured + Sentry + 'Unknown Meta window blocked the step: <title>'; a safe Not now closes it and the step is retried once | pass |
+
+## ai rescue summary (any step, ACL-1613)
+
+Robot: ai_rescue.build_summary: text-only page summary the model sees (dialogs first, then the anchor area), scrubbed
+
+| Layout | Seen live | Fixture · fragment | Test | Expected | Status |
+| --- | --- | --- | --- | --- | --- |
+| Create-campaign dialog 'Meta AI-guided setup' / 'Manual campaign setup' (radio pair, Create new campaign) | fb358fda8aab/00_stall_objective_wait | `ai_guided_setup_dialog_2026_10_05.html` · dialog | `tests/test_ai_rescue.py` | dialog listed first with its title; both radios with checked state; summary has no ids, URLs or e-mails | pass |
+| Collapsed Audience card (same capture as ACL-1611) | 6ebd77ccaf6a/02_further_limit_reach_click | `audience_card_collapsed_drawer_2026_10_05.html` · card_run_a, card_run_b | `tests/test_ai_rescue.py` | card button listed as not-pressed; a model pick of it is expanded by exactly one click | pass |
 
 ## Seen but not cut
 

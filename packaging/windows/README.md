@@ -1,4 +1,4 @@
-# ACL Windows installer workstream
+# Adopy Campaign Manager (ACL) Windows installer workstream
 
 The installer is now integrated with production `main`. A bundle includes the
 current reviewed source commit, identified in its embedded manifest, dashboard

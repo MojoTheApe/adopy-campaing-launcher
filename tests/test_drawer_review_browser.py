@@ -34,7 +34,17 @@ def ui(browser):
     page = context.new_page()
     errors = []
     page.on('pageerror', lambda e: errors.append(str(e)))
-    state = {'posts': [], 'previews': [], 'held': [], 'hold': False, 'status': 'done'}
+    state = {'posts': [], 'previews': [], 'held': [], 'hold': False, 'status': 'done',
+             # ACL-1628: сколько заданий должно уйти, прежде чем ответит опрос
+             # состояния; 0 — отвечает сразу. Ответы опроса, дождавшиеся этого.
+             'poll_after_posts': 0, 'polls_held': []}
+
+    def answer_poll(r):
+        if state['status'] == 'missing':
+            r.fulfill(status=404, json={'error': 'Not found'})
+            return
+        r.fulfill(json={'status': state['status'], 'publishable': True,
+                        'results': [{'success': True, 'publishable': True}], 'errors': []})
     html = _render({'Demo': [], 'Other': []})
 
     def route(r):
@@ -58,12 +68,19 @@ def ui(browser):
         elif path == '/publish-jobs' and r.request.method == 'POST':
             state['posts'].append(fields(r.request))
             data = {'job_id': 'offline-job-' + str(len(state['posts']))}
+            r.fulfill(json=data)
+            # Все нужные задания ушли — отпускаем придержанные ответы опроса.
+            if len(state['posts']) >= state['poll_after_posts']:
+                held, state['polls_held'] = state['polls_held'], []
+                for h in held:
+                    answer_poll(h)
+            return
         elif path.startswith('/publish-jobs/'):
-            if state['status'] == 'missing':
-                r.fulfill(status=404, json={'error': 'Not found'})
+            if len(state['posts']) < state['poll_after_posts']:
+                state['polls_held'].append(r)
                 return
-            data = {'status': state['status'], 'publishable': True,
-                    'results': [{'success': True, 'publishable': True}], 'errors': []}
+            answer_poll(r)
+            return
         r.fulfill(json=data)
 
     page.route('**/*', route)
@@ -185,6 +202,11 @@ def test_lost_or_cancelled_job_closes_the_queue_and_marks_it(ui, status):
     add(p, account=1)
     ready(p)
     state['status'] = status
+    # Потерянный статус первого задания по задумке останавливает отправку
+    # второго аккаунта, если его превью ещё в пути. Тест проверяет не эту
+    # гонку, а то, что уже отправленные работы остаются: опрос отвечает,
+    # когда ушли обе.
+    state['poll_after_posts'] = 2
     all_confirm(p)
     p.wait_for_function('window.CB_QUEUE && !CB_QUEUE.active')
     assert len(state['posts']) == 2
@@ -316,6 +338,7 @@ def test_delayed_tree_repaint_keeps_typing_focus_and_selection(ui):
     p, _ = ui
     p.evaluate("""() => {
       document.querySelector('[data-act=\"add-picked\"]').click();
+      cbTree.setLevel('adset');   // ACL-1769: таргетинг лежит в разделе Ad set
       const x=document.querySelector('.cb-in-drawer .cb-targeting-search');
       x.focus();x.value='typed targeting';x.setSelectionRange(2,7);
       x.dispatchEvent(new Event('input',{bubbles:true}));

@@ -432,7 +432,7 @@ def test_the_endpoint_is_local_only(local):
 
 # ── карта ────────────────────────────────────────────────────────────────
 
-def _render(status: dict) -> str:
+def _render(status: dict, show: bool = True) -> str:
     from jinja2 import Environment, FileSystemLoader
 
     from src.analysis_agent.money_format import fmt_currency
@@ -443,8 +443,10 @@ def _render(status: dict) -> str:
     country = {"country": "Kuwait", "key": "KW", "virtual": False,
                "rows": [{"account": ACC, "has_data": False, "ready": True,
                          "in_workbook": True, "status": status, "to_do": ""}]}
+    # ACL-1652 (owner, 07.10): the button is hidden by default; these tests check the
+    # markup it has when the flag is on, so they switch it on explicitly.
     html = env.get_template("_account_map_country.html").render(
-        mc=country, mlx={},
+        SHOW_COPY_FOR_GROUP=show, mc=country, mlx={},
         amap={"countries": [country], "available": [], "all_accounts": [], "live": {},
               "splits": {}, "fallback": {}, "dates": [], "date_from": "2026-09-01",
               "date_to": "2026-09-28", "span": ""})

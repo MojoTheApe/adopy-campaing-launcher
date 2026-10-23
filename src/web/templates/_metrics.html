@@ -1,0 +1,41 @@
+{#- ACL-1652: шесть метрик одним местом. Spend · Leads · FTDs · CPL · CPA · CR —
+    в таком порядке, с такими именами и такими формулами в каждой таблице
+    атрибуции. Заголовки берутся из `METRIC_HEADERS`, значения — из
+    `metric_values` (src/analysis_agent/metric_columns.py): делитель ноль даёт
+    прочерк, доллары — целыми с округлением вверх, CR — с одним знаком.
+
+    Подключать так: {% import "_metrics.html" as mx %}. Таблица аккаунтов на
+    Home и в Manage пишет свои <th>/<td> руками (у неё особая ячейка Account
+    spend), но берёт значения из того же `metric_values`. -#}
+
+{#- Шесть <th>. Первую колонку (имя строки) и хвост (Net, Reason, …) пишет
+    сама таблица. -#}
+{% macro headers() -%}
+{%- for h in METRIC_HEADERS %}<th class="num">{{ h }}</th>{% endfor -%}
+{%- endmacro %}
+
+{#- Шесть <td> по счётчикам. `ftds` — депозиты строки. -#}
+{#- `ftd_class` — необязательный класс (good/bad) только для ячейки FTDs. -#}
+{% macro cells(spend, leads, ftds, ftd_class='') -%}
+{%- for x in metric_values(spend, leads, ftds) %}<td class="num{% if loop.index == 3 and ftd_class %} {{ ftd_class }}{% endif %}">{{ x }}</td>{% endfor -%}
+{%- endmacro %}
+
+{#- Трендовая таблица: в каждой из шести ячеек две строки — последние дни
+    жирным, весь период серым снизу (решение владельца 06.10, вариант B). -#}
+{% macro pair_cells(recent, period) -%}
+{%- for r in recent %}{% set p = period[loop.index0] %}<td class="num two"><b>{{ r }}</b><small>{{ p }}</small></td>{% endfor -%}
+{%- endmacro %}
+
+{#- Те же шесть значений для грид-строк Home (не <td>, а <span>). -#}
+{% macro spans(spend, leads, ftds) -%}
+{%- for x in metric_values(spend, leads, ftds) %}<span class="num"><b>{{ x }}</b></span>{% endfor -%}
+{%- endmacro %}
+
+{% macro span_headers() -%}
+{%- for h in METRIC_HEADERS %}<span class="num">{{ h }}</span>{% endfor -%}
+{%- endmacro %}
+
+{#- Шесть прочерков: у строки нет чисел вовсе (страна без строк в книге). -#}
+{% macro dash_spans() -%}
+{%- for h in METRIC_HEADERS %}<span class="num"><b>—</b></span>{% endfor -%}
+{%- endmacro %}

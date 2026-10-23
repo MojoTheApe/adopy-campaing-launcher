@@ -21,7 +21,8 @@ from machine_config import (
 
 
 from src.analysis_agent.stats_workbook import (
-    STATS_COLUMNS, StatsWorkbookError, validate_stats_workbook as _validate_stats_workbook,
+    STATS_COLUMNS, StatsWorkbookError, first_content_row,
+    validate_stats_workbook as _validate_stats_workbook,
 )
 
 
@@ -106,7 +107,9 @@ def build_manual_setup(*, campaign_manager_name: str, stats_workbook: str) -> Ma
     try:
         sheet = workbook[workbook.sheetnames[0]]
         rows = sheet.iter_rows(values_only=True)
-        headers = [str(value or "").strip() for value in next(rows)]
+        # ACL-1864: заголовок — первая непустая строка, а не обязательно первая.
+        first = first_content_row(rows)
+        headers = [str(value or "").strip() for value in (first[1] if first else [])]
         by_name = {header.casefold(): index for index, header in enumerate(headers)}
         if "cm" not in by_name or "account alias" not in by_name:
             raise WizardValidationError("Stats workbook is missing CM or Account Alias columns.")
@@ -244,7 +247,7 @@ def sanitized_setup_summary(configuration: MachineConfiguration, version: str) -
     instances = sorted({assignment.multilogin_instance for assignment in configuration.accounts})
     return "\n".join(
         (
-            "Adopy Campaign Launcher setup summary",
+            "Adopy Campaign Manager setup summary",
             f"Installer version: {version}",
             "Status: base setup ready; account connection continues in the dashboard",
             f"Assigned accounts: {len(configuration.accounts)} (labels and IDs omitted)",
@@ -284,7 +287,7 @@ class SetupWizard:
             value=self._existing_env_value("FB_CREATIVES_ROOT") or str(default_creatives_directory()))
         self.status = tk.StringVar()
 
-        root.title("Adopy Campaign Launcher Setup")
+        root.title("Adopy Campaign Manager Setup")
         # 590 точек в высоту резали низ окна вместе с кнопкой «Next», и
         # человек оказывался в тупике на ровном месте (24.09). Запас оставлен
         # с тем же умыслом: шаг «Local files» ещё подрастёт (ACL-1305).
@@ -368,7 +371,7 @@ class SetupWizard:
         self.next_button.config(state="normal")
 
     def _welcome(self) -> None:
-        self._text("Set up Adopy Campaign Launcher on this computer", bold=True)
+        self._text("Set up Adopy Campaign Manager on this computer", bold=True)
         self._text(self.version_text)
         self._text(
             "This wizard only configures the local application. It cannot create, publish, or change a campaign."
@@ -437,7 +440,7 @@ class SetupWizard:
                    "“Connect Multilogin”, then sign in with your Multilogin email and password.")
 
     def _finish(self) -> None:
-        self._text("Adopy Campaign Launcher is ready on this computer.", bold=True, color="#17663a")
+        self._text("Adopy Campaign Manager is ready on this computer.", bold=True, color="#17663a")
         self._text("No campaign action was performed. The first campaign run must remain supervised.")
         self._text("Click Close to open the dashboard. Then open Accounts and press Connect Multilogin "
                    "to sign in — until that is done the robot cannot open a profile.")

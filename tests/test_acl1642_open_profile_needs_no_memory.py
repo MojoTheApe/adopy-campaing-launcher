@@ -92,6 +92,17 @@ def test_open_profile_starts_despite_low_memory():
     assert not grant["decision"].get("started_ahead")
 
 
+def test_open_profile_needs_no_memory_reading_at_all():
+    """Память не прочиталась: открытому профилю она и не нужна, держит только потолок."""
+    settings = dataclasses.replace(ps.load_settings({}), ceiling=ps.FALLBACK_LIMIT + 2)
+    open_ = ps.decide(2, 0, None, settings, profile_open=True)
+    assert open_["allow"] and open_["reason"] == "profile_open"
+    closed = ps.decide(2, 0, None, settings)
+    assert not closed["allow"] and closed["reason"] == "memory_unknown_full"
+    full = ps.decide(settings.ceiling, 0, None, settings, profile_open=True)
+    assert not full["allow"] and full["reason"] == "ceiling"
+
+
 def test_closed_profile_behaves_as_before():
     m = Machine(open_profiles={"p2"})
     slots = m.slots()
@@ -335,9 +346,27 @@ def test_dashboard_text_has_the_hint_and_the_started_ahead_note():
     assert "Waiting behind a job that waits for memory" in html
     assert "GB for profiles still starting or growing" in html
     assert "Started ahead: its profile was already open" in html
+    # Все три места, где очередь пишет «ждёт память», берут один текст с подсказкой.
+    assert "queued — waiting for memory'" not in html
+    assert html.count("cbMemoryWait(") >= 4
     src = (ROOT / "src" / "web" / "profile_slots.py").read_text(encoding="utf-8")
     for forbidden in ("terminate(", ".kill(", "close_profile", "stop_profile"):
         assert forbidden not in src
+
+
+def test_a_probe_thread_that_cannot_start_means_closed_not_an_error(monkeypatch):
+    """CI Windows (PR #936): поток не стартовал — задание идёт как с закрытым профилем, не падает."""
+    probe = ps.OpenProfileProbe(lambda profiles: {"p1"}, ttl_s=0.5)
+
+    def fail(*a):
+        raise RuntimeError("cannot start new thread")
+
+    monkeypatch.setattr(threading.Thread, "start", fail)
+    assert probe.read("p1") is None
+    assert probe.read("p1") is None   # в окне отката новых попыток нет
+    monkeypatch.undo()
+    slots = ps.ProfileSlots(memory=lambda: mem(48.0), open_probe=probe)
+    assert slots.acquire("A", "p1")["decision"]["allow"]
 
 
 def test_a_failing_check_does_not_spin_the_queue():

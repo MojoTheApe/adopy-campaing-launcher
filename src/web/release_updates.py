@@ -296,7 +296,7 @@ def _check(*, force: bool = False, now: float | None = None) -> dict[str, Any]:
         return {**base, "ok": False, "note": state.get("error") or "No release information yet."}
     manifest = parse_release(json.dumps(manifest).encode("utf-8"))
     if not is_newer(manifest["version"], current["version"]):
-        return {**base, "note": "ACL is up to date."}
+        return {**base, "note": "ACM is up to date."}
     return {**base, "available": True, "signature": state.get("signature") or {},
             "candidate": {"tag": manifest.get("tag", ""), "version": manifest["version"],
                           "published_at": manifest.get("published_at", "")},
@@ -338,7 +338,7 @@ def download(ch: Channel | None = None) -> tuple[Path, dict]:
         raise UpdateError("Updates are not configured in this build.")
     manifest, release = fetch_latest(ch)
     if not is_newer(manifest["version"], installed_version()):
-        raise UpdateError("ACL is already on this release or a newer version.")
+        raise UpdateError("ACM is already on this release or a newer version.")
     inst = manifest["installer"]
     target = updates_dir() / inst["name"]
     if target.is_file() and target.stat().st_size == inst["size"] and _sha256(target) == inst["sha256"]:
@@ -377,4 +377,4 @@ def start_helper(setup: Path, manifest: dict) -> None:
                          env={**os.environ, "PYINSTALLER_RESET_ENVIRONMENT": "1"})
     except OSError as exc:
         pending.unlink(missing_ok=True)
-        raise UpdateError("The update helper could not start. ACL is still running.") from exc
+        raise UpdateError("The update helper could not start. ACM is still running.") from exc

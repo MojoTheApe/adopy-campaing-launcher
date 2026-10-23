@@ -27,7 +27,8 @@ except `aria-activedescendant`, `id`, `data-surface`, `placeholder`, `type`,
 `value`, `tabindex`, `hidden`, `for`, `checked`, `disabled`, `name`, `min`,
 `max`, `step`, `typeaheadcomponentid`, `contenteditable`; `href` set to `#`). Removed: scripts,
 styles, frames, images/video (an `<i>` stands in), SVG (an `<i>`), classes,
-inline styles, `data-*` other than `data-surface`, the robot's own marks.
+inline styles, `data-*` other than `data-surface` and `data-test-decoration` (Meta's
+selected-tile mark, which the robot reads), the robot's own marks.
 Meta render ids (`js_*`, `_r_*_`, `u_*`, `mount_*`) become `syn_N`, the same N
 wherever the same id is referenced (`for`, `aria-labelledby`, ...).
 
@@ -63,7 +64,7 @@ FIXTURES = _ROOT / "tests" / "fixtures" / "ads_manager"
 KEEP_ATTRS = (
     "role", "id", "data-surface", "placeholder", "type", "value", "tabindex", "hidden",
     "for", "checked", "disabled", "name", "min", "max", "step", "typeaheadcomponentid",
-    "contenteditable",
+    "contenteditable", "data-test-decoration",
 )
 
 #: JS that cuts one fragment out of the loaded capture (runs in offline
@@ -107,7 +108,8 @@ _CUT_JS = r"""
       const name = a.name;
       const ok = keep.includes(name) || name === 'href'
         || (name.startsWith('aria-') && name !== 'aria-activedescendant');
-      if (!ok) { n.removeAttribute(name); continue; }
+      // data-test-decoration is kept only as Meta's selected-tile mark.
+      if (!ok || (name === 'data-test-decoration' && a.value !== 'selected')) { n.removeAttribute(name); continue; }
       if (name === 'href') { n.setAttribute('href', '#'); continue; }
       if (idRefs.includes(name)) {
         const v = a.value.split(/\s+/).filter(Boolean).map(syn).join(' ');

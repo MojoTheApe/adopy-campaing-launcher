@@ -12,6 +12,7 @@ form fields and violated the product's manual-final-publish boundary.
 from __future__ import annotations
 
 import contextlib
+import logging
 import os
 import threading
 import time
@@ -135,7 +136,7 @@ def create_job(
 ) -> str:
     """Create a new publish job, store it, return its job_id."""
     if activate:
-        raise ValueError("ACL is draft-only: live activation is disabled")
+        raise ValueError("ACM is draft-only: live activation is disabled")
     if not use_rpa_publish():
         raise RuntimeError(
             "The legacy Meta API backend is disabled in the campaign-manager dashboard"
@@ -145,7 +146,7 @@ def create_job(
     job_id = str(uuid.uuid4())
     with _jobs_lock:
         if _update_reserved:
-            raise RuntimeError("ACL is restarting for an update. Wait until it returns before starting a campaign.")
+            raise RuntimeError("ACM is restarting for an update. Wait until it returns before starting a campaign.")
         # ACL-1603: 05.10 второй «Publish all» поставил десять заданий на
         # аккаунты, у которых задания уже были. Проверка и вставка — под одним
         # замком, иначе два запроса разом прошли бы оба.
@@ -162,6 +163,8 @@ def create_job(
             "dry_run": dry_run,
             "hand_off": hand_off,
             "backend": "rpa" if use_rpa_publish() else "api",
+            # ACL-1761: чем создаются кампании — роботом или Graph API (PAUSED).
+            "fb_backend": _fb_backend(),
             "status": "pending",
             "created_at": _now_iso(),
             "started_at": None,
@@ -602,8 +605,8 @@ def _run_job_inner(
             _jobs[job_id].pop("queue", None)
             _jobs[job_id]["slot_wait_s"] = grant["waited_s"]
             # ACL-1642: пропущено вперёд головы очереди, ждавшей память.
-            if grant["decision"].get("started_ahead"):
-                _jobs[job_id]["started_ahead"] = True
+            # Ставим каждый раз: повторная выдача места (ACL-1614) может быть уже не «вперёд».
+            _jobs[job_id]["started_ahead"] = bool(grant["decision"].get("started_ahead"))
         # Сколько задание ждало места и почему его пустили — в телеметрию.
         if _rt is not None:
             try:
@@ -630,7 +633,7 @@ def _run_job_inner(
             _start_stuck_watch(job_id, account_label)
 
             if activate or not use_rpa_publish():
-                _fatal(job_id, "ACL safety gate: only draft-only RPA jobs are allowed")
+                _fatal(job_id, "ACM safety gate: only draft-only RPA jobs are allowed")
                 return
             # Заблокированный экран останавливает сборку: система уходит на
             # защищённый рабочий стол, браузер перестаёт получать время, и
@@ -640,6 +643,11 @@ def _run_job_inner(
             # не вокруг шага: прерывать нельзя всю. Очередь в это время ждёт
             # снаружи — держать экран ради ожидания незачем.
             with keep_display_awake(account_label), _watch_screen_lock(job_id):
+                if _fb_backend() == "api":
+                    # ACL-1761: Graph API в профиле, всё на паузе.
+                    _run_api(job_id, slots, account_label=account_label, country=country,
+                             dry_run=dry_run)
+                    return
                 _run_rpa(
                     job_id,
                     slots,
@@ -728,7 +736,21 @@ def _append_result(job_id: str, res: dict[str, Any]) -> None:
         _jobs[job_id]["done_count"] += 1
 
 
+def _mlx_text(job_id: str, msg: str) -> str:
+    """ACL-1826: потеря общей сессии Multilogin / вход в прокси — одной понятной фразой."""
+    try:
+        from src.fb_api import mlx_session
+
+        with _jobs_lock:
+            account = (_jobs.get(job_id) or {}).get("account_label", "")
+        text, _code = mlx_session.humanize(msg, "", account)
+        return text or msg
+    except Exception:
+        return msg
+
+
 def _fatal(job_id: str, msg: str) -> None:
+    msg = _mlx_text(job_id, msg)
     with _jobs_lock:
         if _abandoned(job_id):
             return
@@ -912,6 +934,22 @@ def _run_rpa(
             _active_publishers.pop(job_id, None)
         return
 
+    # ACL-1781: кампания, которую Meta отклонит по своим правилам, не идёт в
+    # Ads Manager — причина (English) показывается в карточке кампании.
+    try:
+        from src.web import publish_preflight as _pf
+
+        meta_errors = _pf.meta_rules_errors(slots, account_label=account_label, country=country, drafts=drafts)
+    except Exception:
+        # Проверка правил Meta не должна ронять публикацию, но и молчать о
+        # своём сбое нельзя: причина остаётся в логе.
+        logging.getLogger(__name__).exception("Meta rules check could not run; campaigns are not blocked by it")
+        meta_errors = {}
+    for draft in drafts:
+        for msg in meta_errors.get(getattr(draft, "name", ""), []):
+            if msg not in draft.errors:
+                draft.errors.append(msg)
+
     ready: list[Any] = []
     for draft in drafts:
         if _is_cancelled(job_id):
@@ -982,8 +1020,110 @@ def _run_rpa(
         _finish(job_id, cancelled=cancelled or _is_cancelled(job_id))
 
 
+def _fb_backend() -> str:
+    """`api` — создавать кампании через Graph API (ACL-1761), иначе `rpa`."""
+    from src.web import publish_api
+
+    return publish_api.backend()
+
+
+def _run_api(job_id: str, slots: list[dict[str, Any]], *, account_label: str, country: str,
+             dry_run: bool = False) -> None:
+    """ACL-1761: те же черновики, но кампании создаёт Graph API, всё PAUSED.
+
+    Место по памяти и замок профиля уже взяты (`_run_job_inner`). Итоги — в том
+    же виде, что у робота; профиль отпускается тем же `_let_go_of_profile`.
+    """
+    from src.web import publish_api
+
+    def progress(text: str) -> None:
+        with _jobs_lock:
+            job = _jobs.get(job_id)
+            if job is not None and not job.get("abandoned"):
+                job["progress"] = str(text)[:200]
+
+    # Ревью M3: dry_run — предпроверка и план без единой записи (клиент без права записи).
+    publisher = publish_api.ApiPublisher(progress=progress, dry_run=dry_run)
+    with _jobs_lock:
+        _active_publishers[job_id] = publisher  # type: ignore[assignment]
+    job_cancel.bind(publisher.cancel_event)
+    if _is_cancelled(job_id):
+        publisher.cancel()
+    try:
+        drafts = publisher.build_drafts(slots, account_label=account_label, country=country)
+    except Exception as e:
+        job_cancel.unbind()
+        _fatal(job_id, f"Failed to build campaign drafts: {e}")
+        with _jobs_lock:
+            _active_publishers.pop(job_id, None)
+        return
+
+    with _jobs_lock:
+        if not _abandoned(job_id):
+            _jobs[job_id]["total"] = len(drafts)
+            _jobs[job_id]["campaign_names"] = [str(getattr(d, "name", "") or "") for d in drafts]
+    if not drafts:
+        job_cancel.unbind()
+        _fatal(job_id, "No campaigns to publish.")
+        with _jobs_lock:
+            _active_publishers.pop(job_id, None)
+        return
+
+    ready: list[Any] = []
+    for draft in drafts:
+        if draft.errors:
+            _append_result(job_id, publish_api.result_dict(
+                publish_api.Outcome(campaign_name=draft.name),
+                error="; ".join(draft.errors) + ". Nothing was created."))
+        else:
+            ready.append(draft)
+
+    cancelled = False
+    try:
+        if ready and not _is_cancelled(job_id):
+            publisher.open(account_label)
+            for draft in ready:
+                if _is_cancelled(job_id):
+                    cancelled = True
+                    _add_error(job_id, "Stopped by the user")
+                    break
+                _append_result(job_id, publisher.publish_draft(draft))
+    except job_cancel.JobCancelled:
+        cancelled = True
+        _add_error(job_id, "Stopped by the user")
+    except Exception as e:
+        if _is_cancelled(job_id):
+            cancelled = True
+            _add_error(job_id, "Stopped by the user")
+        else:
+            _add_error(job_id, f"Graph API publish error: {e}")
+            try:
+                from src import acl_sentry
+
+                acl_sentry.report_job_exception(e, job=job_id, account=account_label, phase="api_publish")
+            except Exception:
+                pass
+    finally:
+        job_cancel.unbind()
+        cancelled = cancelled or _is_cancelled(job_id)
+        clean = not cancelled and _job_is_clean(job_id)
+        other = clean and _profile_has_other_job(job_id, account_label)
+        try:
+            outcome = publisher.finish_job(account_label, clean=clean, other_job_waits=other)
+        except Exception:
+            outcome = ""
+            publisher.close()
+        if outcome == "closed":
+            with _jobs_lock:
+                if not _abandoned(job_id):
+                    _jobs[job_id]["profile_closed"] = True
+            _append_creative_notice(job_id, publish_api.PROFILE_CLOSED_NOTICE)
+        _finish(job_id, cancelled=cancelled)
+
+
 def _add_error(job_id: str, msg: str) -> None:
     """Ошибка в задание; брошенное по сроку Stop молчит (ACL-1614)."""
+    msg = _mlx_text(job_id, msg)
     with _jobs_lock:
         if not _abandoned(job_id):
             _jobs[job_id]["errors"].append(msg)
@@ -1016,8 +1156,21 @@ def _step_stuck_tick(job_id: str, state: dict[str, Any], account_label: str) -> 
     state["fired"] = True
     campaign = names[done] if done < len(names) else ""
     step = step or "job_start"
+    diag: dict[str, Any] = {"last_step": step, "idle_s": round(idle, 1)}
+    # ACL-1702: стек потока задания — какой именно вызов держит его.
+    job_thread = state.get("job_thread")
+    if job_thread is not None:
+        try:
+            from src.fb_ads_rpa import tab_watchdog
+
+            path = tab_watchdog.dump_stack(job_thread, run_id=_rt.last_run_id(job_id), step=step,
+                                           reason="step_stuck", idle_s=idle)
+            if path is not None:
+                diag["stack_file"] = path.name
+        except Exception:
+            pass
     try:
-        _rt.record("step_stuck", None, campaign=campaign, diag={"last_step": step, "idle_s": round(idle, 1)})
+        _rt.record("step_stuck", None, run_id=_rt.last_run_id(job_id), campaign=campaign, diag=diag)
     except Exception:
         pass
     try:
@@ -1030,21 +1183,109 @@ def _step_stuck_tick(job_id: str, state: dict[str, Any], account_label: str) -> 
     return True
 
 
+def _unblock_tick(job_id: str, state: dict[str, Any], account_label: str) -> dict[str, Any] | None:
+    """ACL-1702: поток задания стоит в одном вызове Playwright дольше порога —
+    разблокировать его вкладку через своё соединение CDP (`tab_watchdog`).
+
+    Только для идущего задания. Итог — строка `tab_unblocked` (шаг, способ,
+    сколько стояли) и одно событие Sentry; отказ из-за человека у браузера —
+    строка `tab_unblock_skipped`, одна на причину.
+    """
+    from src.fb_ads_rpa import run_telemetry as _rt
+    from src.fb_ads_rpa import tab_watchdog
+
+    watch = state.get("watch")
+    if watch is None:
+        return None
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if job is None or job.get("abandoned") or job.get("status") not in ("running", "cancelling"):
+            return None
+        names = list(job.get("campaign_names") or [])
+        done = int(job.get("done_count") or 0)
+    seen = _rt.last_activity(job_id)
+    last_t, step = seen if seen else (state["since"], "")
+    last_t = max(last_t, state["since"])
+    now = _rt.clock()
+    idle = now - last_t
+    step = step or "job_start"
+    result = tab_watchdog.unblock_tick(watch, idle_s=idle, step=step, now=now)
+    if result is None:
+        return None
+    campaign = names[done] if done < len(names) else ""
+    run_id = _rt.last_run_id(job_id)
+    if "skipped" in result:
+        why = str(result["skipped"])
+        if why not in state.setdefault("skips", set()):
+            state["skips"].add(why)
+            try:
+                _rt.record("tab_unblock_skipped", None, run_id=run_id, campaign=campaign, note=why,
+                           diag={"last_step": step, "idle_s": round(idle, 1)})
+            except Exception:
+                pass
+        return result
+    stack = tab_watchdog.dump_stack(watch.job, run_id=run_id, step=step, reason="tab_unblock",
+                                    idle_s=idle)
+    diag = {"last_step": step, "stuck_s": round(idle, 1), "method": result.get("method") or "",
+            "tried": result.get("tried") or [], "why": result.get("why") or "",
+            "api": result.get("api") or "", "where": result.get("where") or "",
+            "seconds": result.get("seconds"), "url": result.get("url") or ""}
+    if stack is not None:
+        diag["stack_file"] = stack.name
+    try:
+        _rt.record("tab_unblocked", bool(result.get("ok")), run_id=run_id, campaign=campaign,
+                   note=result.get("method") or result.get("why") or "failed", diag=diag)
+    except Exception:
+        pass
+    try:
+        from src.fb_ads_rpa import sentry_signal
+
+        sentry_signal.report_tab_unblocked(step, result.get("method") or "", idle,
+                                           ok=bool(result.get("ok")), job=job_id,
+                                           account=account_label, campaign=campaign,
+                                           api=diag["api"], where=diag["where"], tried=diag["tried"])
+    except Exception:
+        pass
+    return result
+
+
+def _watch_poll_s() -> float:
+    from src.fb_ads_rpa import tab_watchdog
+
+    return max(0.05, min(_STUCK_POLL_S, _step_stuck_s() / 2, tab_watchdog.unblock_after_s() / 4))
+
+
 def _start_stuck_watch(job_id: str, account_label: str) -> None:
-    """Сторож тишины: свой поток на задание, в браузер не ходит."""
+    """Сторож тишины: свой поток на задание.
+
+    Зовёт ПОТОК ЗАДАНИЯ: здесь запоминается он сам (id и главный greenlet) —
+    по нему сторож снимает стек (ACL-1702). В браузер сторож ходит только
+    своим соединением CDP и только для разблокировки (`_unblock_tick`).
+    """
     try:
         from src.fb_ads_rpa import run_telemetry as _rt
+        from src.fb_ads_rpa import tab_watchdog
 
-        state: dict[str, Any] = {"fired": False, "since": _rt.clock()}
         ended = _job_ended.get(job_id)
         if ended is None:
             return
+        # Ревью PR #704 (C2): поток задания регистрируем, только когда сторож
+        # точно запускается, — его `forget_thread` в конце и снимает запись.
+        job_thread = tab_watchdog.this_thread()
+        state: dict[str, Any] = {"fired": False, "since": _rt.clock(), "job_thread": job_thread,
+                                 "watch": tab_watchdog.Watch(job=job_thread)}
 
         def watch() -> None:
             _rt.set_current_job(job_id)    # строка сигнала несёт номер задания
-            while not ended.wait(max(0.05, min(_STUCK_POLL_S, _step_stuck_s() / 2))):
-                if _step_stuck_tick(job_id, state, account_label):
-                    return
+            try:
+                while not ended.wait(_watch_poll_s()):
+                    _step_stuck_tick(job_id, state, account_label)
+                    try:
+                        _unblock_tick(job_id, state, account_label)
+                    except Exception:
+                        pass
+            finally:
+                tab_watchdog.forget_thread(job_thread.tid)
 
         threading.Thread(target=watch, daemon=True, name=f"stuck-watch-{job_id[:8]}").start()
     except Exception:
@@ -1159,6 +1400,12 @@ def close_profile(job_id: str) -> dict[str, Any]:
                                                 account_label, scrub(str(exc))[:200])
             return {"ok": False, "code": "failed",
                     "error": "Multilogin could not close the profile. Close its window in Multilogin."}
+        finally:
+            # ACL-1812 (ревью #813, B1-ter): остановка записана при любой попытке — следующий
+            # запуск ждёт паузу (ACL-1811). Кнопка есть на обоих бэкендах.
+            from src.fb_api import stop_log as _stop_log
+
+            _stop_log.record_stop(profile)
     finally:
         lease.release()
     with _jobs_lock:
@@ -1232,7 +1479,7 @@ def _start_job(
     hand_off: bool,
 ) -> str:
     if activate:
-        raise ValueError("ACL is draft-only: live activation is disabled")
+        raise ValueError("ACM is draft-only: live activation is disabled")
     if not use_rpa_publish():
         raise RuntimeError(
             "The legacy Meta API backend is disabled in the campaign-manager dashboard"

@@ -332,6 +332,16 @@ def profile_name_key(name: str) -> str:
 
     words = (name or "").split()
     first = words[0] if words else ""
+    # Явное правило имён (config/account_name_rules.json): id после префикса —
+    # точная идентичность, любой длины, без угадывания по хвосту.
+    try:
+        from src.analysis_agent.account_names import id_suffix
+
+        ident = id_suffix(first)
+        if ident:
+            return ident
+    except Exception:  # pragma: no cover - конфиг правил не должен ронять поиск профиля
+        pass
     m = _re.search(r"([A-Za-z])(\d{1,4})\s*$", first)
     return (m.group(1) + m.group(2)).upper() if m else ""
 
@@ -367,7 +377,10 @@ def ad_account_id_for(profile_id: str) -> str:
     if hist is None:
         return ""
 
-    tmp = _os.path.join(_tempfile.gettempdir(), f"acl_hist_{pid[:8]}.db")
+    # ACL-1697: свой временный файл на каждый вызов — параллельные отрисовки
+    # дашборда не должны затирать копию друг друга.
+    tmp = _os.path.join(
+        _tempfile.gettempdir(), f"acl_hist_{pid[:8]}_{_os.getpid()}_{_os.urandom(4).hex()}.db")
     try:
         # The live file is locked by the running browser; work on a copy.
         _shutil.copyfile(hist, tmp)

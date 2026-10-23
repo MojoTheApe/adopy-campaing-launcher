@@ -14,11 +14,11 @@ except ImportError:  # запуск как python scripts/acl_publish_release.py
 
 
 def _git(*args: str) -> str:
-    return subprocess.check_output(["git", *args], text=True).strip()
+    return subprocess.check_output(["git", *args], text=True, encoding="utf-8", errors="replace").strip()
 
 
 def _gh(*args: str) -> str:
-    return subprocess.check_output(["gh", *args], text=True).strip()
+    return subprocess.check_output(["gh", *args], text=True, encoding="utf-8", errors="replace").strip()
 
 
 def _api(path: str) -> dict:
@@ -61,14 +61,20 @@ def verify_promotion(tag: str, source_repo: str, report=print) -> str:
         return sha
     tree = _git("rev-parse", f"{sha}^{{tree}}")
     try:
-        proof = reuse.find_reuse(Path.cwd(), _api, source_repo, "ci.yml", tree, exclude_run_id=run["id"])
+        # ACL-1649: полный набор (3.11 + 3.13 + Windows) может быть собран из нескольких прогонов
+        # этого дерева — stage, PR в main — и из прогона PR, доказуемо связанного с main-коммитом.
+        heads = reuse.collect_pr_heads(Path.cwd(), _api, source_repo, tree, [sha])
+        # Собственные пройденные задания записанного main-прогона тоже считаются (3.11 после
+        # PR в main идёт именно в нём): он push-прогон этого коммита, поэтому не исключается.
+        proof = reuse.find_reuse(Path.cwd(), _api, source_repo, "ci.yml", tree, pr_heads=heads)
     except Exception as error:  # noqa: BLE001 — недоказанный прогон = отказ
         raise ValueError("Recorded main CI reused a run that could not be proven: " + type(error).__name__) from error
     if not proof:
         raise ValueError("Recorded main CI neither ran the full test matrix nor reused "
                          "a provable successful full run of the same tree")
     # В журнал релиза — запуск, который на самом деле прогнал тесты этого дерева.
-    report(f"Main run {main_url} reused full results of run {proof['run_url']} "
+    urls = [r["run_url"] for r in proof.get("runs") or [proof]]
+    report(f"Main run {main_url} reused full results of {'run' if len(urls) == 1 else 'runs'} {', '.join(urls)} "
            f"(commit {proof['commit']}, same tree {tree})")
     return sha
 
@@ -93,7 +99,7 @@ def publish(tag: str, repo: str, directory: Path) -> None:
         assets.append(signature)
     # Upload first to a draft. /releases/latest cannot expose a half upload.
     _gh("release", "create", tag, *(str(p) for p in assets), "--repo", repo, "--draft",
-        "--title", f"Adopy Campaign Launcher {manifest['version']}",
+        "--title", f"Adopy Campaign Manager {manifest['version']}",
         "--notes-file", str(directory / "release-notes.md"))
     _gh("release", "edit", tag, "--repo", repo, "--draft=false", "--latest")
 

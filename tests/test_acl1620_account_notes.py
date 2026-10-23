@@ -175,7 +175,11 @@ def test_template_shows_truncated_note_with_full_text_in_title_and_no_setup():
     cell = re.search(r'<td class="amap-acct-note"[^>]*>(.*?)</td>', html, re.S)
     assert "END" not in cell.group(1) and "…" in cell.group(1)
     assert f'title="{long}"' in html and f'data-note="{long}"' in html
-    assert "add note" in html and 'title="Add a note"' in html
+    # ACL-1633: пустая ячейка не пишет ничего (карандаш рисует CSS при наведении).
+    empty = re.search(r'<td class="amap-acct-note empty"[^>]*>(.*?)</td>', html, re.S)
+    assert empty and re.sub(r"<[^>]+>", "", empty.group(1)).strip() == ""
+    assert 'class="amap-note-box"' in empty.group(1)  # коробка есть и у пустой
+    assert "add note" not in html.lower()
     assert "Setup" not in html and "amap-setup" not in html and "needs setup" not in html
     assert ">Note<" in html
     assert len(re.findall(r"<th[ >]", html)) == len(re.findall(r"<td[ >]", html)) // 2 == 11
@@ -204,8 +208,9 @@ def _js_block() -> str:
 
 def _css() -> str:
     src = (TPL / "report.html").read_text(encoding="utf-8")
-    m = re.search(r"(\.amap table\.amap-grid td\.amap-acct-note \{.*?\.amap-note-pop \.amap-note-state\.bad \{[^}]*\})", src, re.S)
-    return m.group(1) if m else ""
+    m = re.search(r"(\.amap table\.amap-grid td\.amap-acct-note \{.*?\.amap-note-toast \{[^}]*\})", src, re.S)
+    from _design_tokens import tokens_css  # ACL-1797: палитра — отдельный файл
+    return tokens_css() + (m.group(1) if m else "")
 
 
 def _page_html() -> str:
@@ -292,13 +297,13 @@ def test_outside_click_and_close_button_save_and_empty_deletes(browser):
     assert _get() == {"Demo": "by outside click"}
     _cell(page, "Demo").click()
     page.locator(".amap-note-pop textarea").fill("")
-    page.locator(".amap-note-close").click()
+    page.keyboard.press("Control+Enter")
     _hidden(page)
     assert _get() == {}
-    assert "add note" in _cell(page, "Demo").inner_text()
+    assert _cell(page, "Demo").inner_text().strip() == ""
     _cell(page, "Evil").click()
     page.locator(".amap-note-pop textarea").fill("by close")
-    page.locator(".amap-note-close").click()
+    page.keyboard.press("Control+Enter")
     _hidden(page)
     assert _get() == {"Evil": "by close"}
     assert not errors, errors
@@ -311,7 +316,7 @@ def test_html_note_is_inert_and_cells_added_later_work(browser):
     evil = '<img src=x onerror="window.__x=1"><b>bold</b>'
     _cell(page, "Evil").click()
     page.locator(".amap-note-pop textarea").fill(evil)
-    page.locator(".amap-note-close").click()
+    page.keyboard.press("Control+Enter")
     _hidden(page)
     assert page.locator("td.amap-acct-note img, td.amap-acct-note b").count() == 0
     assert _cell(page, "Evil").inner_text().startswith("<img")
@@ -332,8 +337,8 @@ def test_a_failed_save_keeps_the_editor_open_with_the_text(browser):
     page, errors = _open_page(browser, fail_posts=True)
     _cell(page, "Demo").click()
     page.locator(".amap-note-pop textarea").fill("must not be lost")
-    page.locator(".amap-note-close").click()
-    page.wait_for_function("document.querySelector('.amap-note-state').textContent.includes('save failed')")
+    page.keyboard.press("Control+Enter")
+    page.wait_for_function("document.querySelector('.amap-note-state').textContent.includes('Save failed')")
     assert page.locator(".amap-note-pop").is_visible()
     assert page.locator(".amap-note-pop textarea").input_value() == "must not be lost"
     page.close()
@@ -344,7 +349,7 @@ def test_reopening_right_after_close_shows_the_new_text(browser):
     page, errors = _open_page(browser, hold=held)  # ответ сервера придержан
     _cell(page, "Demo").click()
     page.locator(".amap-note-pop textarea").fill("fresh text")
-    page.locator(".amap-note-close").click()
+    page.keyboard.press("Control+Enter")
     page.wait_for_timeout(300)
     assert held, "сохранение не ушло"
     # Сохранение в пути: открытие игнорируется, окно не перерисовывается старым текстом.

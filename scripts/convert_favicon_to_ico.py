@@ -1,4 +1,10 @@
-"""Generate assets/dashboard.ico from the ACL launcher mark.
+"""Generate assets/dashboard.ico from the Adopy Campaign Manager mark (the "A" mark, #2563eb).
+
+Внимание: релиз 1 ребрендинга (ACL-1705) положил в assets/dashboard.ico готовый
+набор из kit (синяя метка на белом скруглённом квадрате, 16..256). Этот скрипт
+рисует старую метку ACL и больше не является источником иконки; не запускать,
+не заменив рисование.
+
 
 Draws the icon programmatically with Pillow (no SVG renderer needed).
 Produces sizes 256, 48, 32, 16 packed into a single .ico file.

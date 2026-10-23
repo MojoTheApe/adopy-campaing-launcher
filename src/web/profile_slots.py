@@ -489,8 +489,15 @@ class OpenProfileProbe:
                 self._want.clear()
         if start:
             if self._background:
-                threading.Thread(target=self._run, args=(batch, gen), daemon=True,
-                                 name="acl-open-profile").start()
+                try:
+                    threading.Thread(target=self._run, args=(batch, gen), daemon=True,
+                                     name="acl-open-profile").start()
+                except Exception as exc:   # поток не стартовал — ответа нет, как при сбое проверки
+                    log.info("open-profile probe could not start: %s", exc)
+                    with self._lock:
+                        self._failed_at = self._clock()
+                        if gen == self._gen:
+                            self._inflight_since = None
             else:
                 self._run(batch, gen)
         with self._lock:
@@ -540,15 +547,16 @@ def decide(running: int, warming: int, memory: MemoryReading | None,
     if running >= settings.ceiling:
         out.update(limit=settings.ceiling, allow=False, reason="ceiling")
         return out
+    if profile_open:
+        # ACL-1642: профиль уже открыт — новой памяти нет (и знать её не нужно),
+        # потолок проверен выше.
+        out.update(limit=min(settings.ceiling, running + 1), allow=True, reason="profile_open")
+        return out
     if memory is None:
         # Память не прочиталась: не блокируем навсегда, но и не больше двух.
         limit = min(FALLBACK_LIMIT, settings.ceiling)
         out.update(limit=limit, allow=running < limit,
                    reason="memory_unknown" if running < limit else "memory_unknown_full")
-        return out
-    if profile_open:
-        # ACL-1642: профиль уже открыт — новой памяти нет, потолок проверен выше.
-        out.update(limit=min(settings.ceiling, running + 1), allow=True, reason="profile_open")
         return out
     need = settings.profile_mb * (1 + warming) + settings.reserve_mb + growth
     out["need_mb"] = need
@@ -827,8 +835,7 @@ class ProfileSlots:
                     if verdict.get("allow"):
                         del self._waiting[job_id]
                         self._reuse_kept(profile)
-                        self._running[job_id] = {"profile": profile, "started": self._clock(),
-                                                 "open": verdict.get("reason") == "profile_open"}
+                        self._running[job_id] = {"profile": profile, "started": self._clock()}
                         self._grants[profile] = self._grants.get(profile, 0) + 1
                         self._cond.notify_all()   # следующий в очереди — перепроверить
                         return {"waited_s": round(self._clock() - enqueued, 1),

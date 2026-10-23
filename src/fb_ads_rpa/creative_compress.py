@@ -232,6 +232,24 @@ def cache_path(src: str, target_mb: float) -> Path:
     return cache_dir() / f"{Path(src).stem}.{key}.mp4"
 
 
+def cached_copy_name(src: str, *, limit_mb: float = DEFAULT_LIMIT_MB,
+                     target_mb: float = DEFAULT_TARGET_MB) -> str:
+    """Имя сжатой копии `src` в кэше, если она уже есть; иначе пусто.
+
+    ACL-1637: в Meta уезжает именно эта копия, и в медиатеке она подписана
+    ЕЁ именем (`<имя>.<ключ>.mp4`), а не именем исходника. Объявление 2+ искало
+    плитку по имени исходника и «не находило копии». Здесь ничего не сжимается
+    и ffmpeg не нужен: только проверка, что копия лежит в кэше.
+    """
+    original = size_mb(src)
+    if original <= limit_mb:
+        return ""
+    dst = cache_path(src, target_mb)
+    if dst.is_file() and 0 < size_mb(dst) <= min(limit_mb, original):
+        return dst.name
+    return ""
+
+
 def compress(src: str, dst: str, video_kbps: int, *, run=_run,
              exe: str = "", timeout: float = 3600) -> bool:
     """Два прохода x264 в заданный битрейт. Разрешение и длительность не трогаем.

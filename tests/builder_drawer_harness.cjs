@@ -15,7 +15,7 @@ assert(start > 0, 'window.cbDrawer не найден в шаблоне');
 const tail = '\n})();';
 const end = html.indexOf(tail, start) + tail.length;
 const code = html.slice(start, end);
-assert(code.includes('localStorage') && code.length < 4000, 'срез захватил не то');
+assert(code.includes('localStorage') && code.length < 12000, 'срез захватил не то');
 
 // ── поддельная страница ───────────────────────────────────────────────
 function makeElement(id) {
@@ -31,21 +31,25 @@ function makeElement(id) {
     setAttribute(name, value) { this.attrs[name] = String(value); },
     getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attrs, name) ? this.attrs[name] : null; },
     addEventListener(name, fn) { (this.handlers[name] = this.handlers[name] || []).push(fn); },
-    click() { (this.handlers.click || []).forEach(function (fn) { fn(); }); },
+    click() { this.fire('click', {}); },
+    fire(name, ev) { (this.handlers[name] || []).forEach(function (fn) { fn(ev || {}); }); },
     classList: {
       toggle(name, on) { on ? this.owner.classes.add(name) : this.owner.classes.delete(name); },
+      add(name) { this.owner.classes.add(name); },
+      remove(name) { this.owner.classes.delete(name); },
     },
   };
 }
 
-function makePage(store) {
-  const ids = ['cbd-root', 'cbd-panel', 'cbd-handle', 'cbd-count', 'cbd-sub', 'cbd-close', 'cbd-body', 'cbd-foot'];
+function makePage(store, vw) {
+  const ids = ['cbd-root', 'cbd-panel', 'cbd-handle', 'cbd-count', 'cbd-sub', 'cbd-close', 'cbd-preset-closed', 'cbd-preset-normal', 'cbd-preset-wide', 'cbd-body', 'cbd-foot'];
   const els = {};
   ids.forEach(function (id) {
     els[id] = makeElement(id);
     els[id].classList.owner = els[id];
   });
   els['cbd-root'].setAttribute('data-open', '0');
+  els['cbd-root'].classList.owner = els['cbd-root'];
 
   const body = makeElement('body');
   body.classList.owner = body;
@@ -57,16 +61,17 @@ function makePage(store) {
     getElementById(id) { return els[id] || null; },
     addEventListener(name, fn) { documentHandlers.push(name); },
     dispatchEvent(e) { events.push(e); return true; },
+    documentElement: { style: { props: {}, setProperty(k, v) { this.props[k] = v; } } },
   };
 
   const sandbox = {
     document,
     localStorage: store,
     CustomEvent: function (type, init) { this.type = type; this.detail = (init || {}).detail; },
-    window: {},
+    window: { innerWidth: vw || 1400 },
   };
   vm.runInNewContext(code, sandbox);
-  return { api: sandbox.window.cbDrawer, els, body, events, documentHandlers };
+  return { api: sandbox.window.cbDrawer, els, body, events, documentHandlers, doc: document };
 }
 
 function memoryStore(initial) {
@@ -151,5 +156,84 @@ assert.equal(page.events[0].type, 'acl:builder-drawer');
 assert.equal(page.events[0].detail.open, true);
 page.api.open();
 assert.equal(page.events.length, 1, 'повторное открытие объявлено зря');
+
+// ── ACL-1871: размер с язычка ─────────────────────────────────────────
+// Три кнопки (закрыть / обычная / широкая) и перетаскивание подписи.
+const cssW = (pg) => pg.doc.documentElement.style.props['--cbd-w'];
+const ptr = (id, x) => ({ pointerId: id, clientX: x, button: 0 });
+const wide = memoryStore();
+page = makePage(wide);
+const h = page.els['cbd-handle'];
+assert.equal(page.api.isExpanded(), false, 'без записи панель обычная');
+assert.equal(cssW(page), '480px');
+assert.equal(page.els['cbd-preset-closed'].getAttribute('aria-pressed'), 'true');
+page.els['cbd-preset-wide'].click();
+assert.equal(page.api.isOpen(), true, 'Wide не открыл ящик');
+assert.equal(page.api.isExpanded(), true);
+assert.equal(cssW(page), (1400 - 40 - 16) + 'px', 'wide — почти всё окно');
+assert.equal(page.els['cbd-root'].getAttribute('data-expanded'), '1');
+assert.equal(page.els['cbd-preset-wide'].getAttribute('aria-pressed'), 'true');
+assert.equal(page.els['cbd-preset-normal'].getAttribute('aria-pressed'), 'false');
+assert.equal(wide.data['acl.builder.width'], 'wide');
+page.els['cbd-preset-closed'].click();
+assert.equal(page.api.isOpen(), false);
+assert.equal(page.els['cbd-preset-closed'].getAttribute('aria-pressed'), 'true');
+assert.equal(wide.data['acl.builder.width'], 'wide', 'закрытие сбросило размер');
+h.click();                                           // клик по подписи — вернуть как было
+assert.equal(page.api.isOpen(), true);
+assert.equal(page.api.isExpanded(), true, 'открылся не на прежней ширине');
+page.els['cbd-preset-normal'].click();
+assert.equal(cssW(page), '480px');
+assert.equal(page.api.isExpanded(), false);
+assert.equal(page.els['cbd-preset-normal'].getAttribute('aria-pressed'), 'true');
+assert.equal(wide.data['acl.builder.width'], 'normal');
+
+// перетаскивание: тянем влево — шире, клик после протяжки не закрывает
+h.fire('pointerdown', ptr(1, 900));
+h.fire('pointermove', ptr(1, 898));                  // дрожь руки — ещё не протяжка
+assert.equal(cssW(page), '480px', 'дрожь изменила ширину');
+h.fire('pointermove', ptr(1, 700));
+assert.equal(cssW(page), '680px');
+assert.equal(page.els['cbd-root'].classes.has('cbd-dragging'), true);
+h.fire('pointerup', ptr(1, 700));
+h.click();                                           // браузер шлёт click после pointerup
+assert.equal(page.api.isOpen(), true, 'протяжка закончилась закрытием');
+assert.equal(wide.data['acl.builder.width'], '680');
+assert.equal(page.els['cbd-root'].classes.has('cbd-dragging'), false);
+h.click();                                           // следующий клик — настоящий
+assert.equal(page.api.isOpen(), false);
+// пределы: не уже минимума и не шире окна
+h.fire('pointerdown', ptr(2, 900));
+h.fire('pointermove', ptr(2, 3000));
+assert.equal(cssW(page), '320px', 'ниже минимума');
+h.fire('pointermove', ptr(2, -9000));
+assert.equal(cssW(page), (1400 - 40 - 16) + 'px', 'шире окна');
+h.fire('pointerup', ptr(2, -9000));
+assert.equal(page.api.isOpen(), true, 'протяжка закрытого ящика не открыла его');
+h.click();                                           // этот click гасится
+assert.equal(page.api.isOpen(), true);
+// клавиатура
+page.els['cbd-preset-normal'].click();
+h.fire('keydown', { key: 'ArrowLeft', preventDefault() {} });
+assert.equal(cssW(page), '520px');
+h.fire('keydown', { key: 'ArrowRight', preventDefault() {} });
+assert.equal(cssW(page), '480px');
+
+// после F5 размер возвращается; мусор в записи и узкое окно не ломают
+again = makePage(memoryStore({ 'acl.builder.width': '700' }));
+assert.equal(cssW(again), '700px');
+again = makePage(memoryStore({ 'acl.builder.width': '9999999' }));
+assert.equal(cssW(again), '480px', 'мусор принят');
+again = makePage(memoryStore({ 'acl.builder.width': 'abc' }));
+assert.equal(cssW(again), '480px');
+again = makePage(memoryStore({ 'acl.builder.width': '1200' }), 700);
+assert.equal(cssW(again), (700 - 40 - 16) + 'px', 'сохранённая ширина переросла окно');
+again = makePage(memoryStore(), 380);
+assert.equal(cssW(again), '340px', 'обычная ширина не влезает в узкое окно');
+// закрытое хранилище
+page = makePage(locked);
+page.api.expand();
+assert.equal(page.api.isExpanded(), true, 'без хранилища растянуть нельзя');
+assert.deepEqual(page.documentHandlers, [], 'ящик слушает документ');
 
 console.log('ok');

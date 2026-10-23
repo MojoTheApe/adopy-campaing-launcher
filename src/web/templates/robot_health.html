@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" href="/favicon.ico?v=acl" sizes="32x32">
+  <link rel="icon" href="/favicon.ico?v=acm" sizes="32x32">
   <title>Robot health{% if run %} — run {{ run.run_id }}{% endif %}</title>
   <script>
     // Та же тема, что у дешборда: выбор человека в localStorage, иначе ОС.
@@ -16,20 +16,18 @@
       document.documentElement.setAttribute('data-theme', t);
     })();
   </script>
+  <style id="adopy-tokens">{% autoescape false %}{% include "adopy-tokens.css" %}{% endautoescape %}</style>
   <style>
+    /* ACL-1797: цвета из токенов Adopy (adopy-tokens.css). */
     :root {
-      --bg: #f6f7f9; --bg-elev: #ffffff; --border: #d9dde3; --text: #1d2330;
-      --muted: #5f6b7a; --accent: #1f6feb; --good: #1a7f37; --warn: #9a6700;
-      --bad: #cf222e; --good-bg: #dafbe1; --warn-bg: #fff8c5; --bad-bg: #ffebe9;
-    }
-    :root[data-theme="dark"] {
-      --bg: #0e1116; --bg-elev: #161b22; --border: #2a3140; --text: #d8dde3;
-      --muted: #8b949e; --accent: #58a6ff; --good: #3fb950; --warn: #d29922;
-      --bad: #f85149; --good-bg: #12261a; --warn-bg: #2b2411; --bad-bg: #3a1618;
+      --bg: var(--adopy-bg); --bg-elev: var(--adopy-surface); --border: var(--adopy-border);
+      --text: var(--adopy-text); --muted: var(--adopy-text-muted); --accent: var(--adopy-link);
+      --good: var(--adopy-success); --warn: var(--adopy-warning); --bad: var(--adopy-danger);
+      --good-bg: var(--adopy-success-bg); --warn-bg: var(--adopy-warning-bg); --bad-bg: var(--adopy-danger-bg);
     }
     * { box-sizing: border-box; }
     body { margin: 0; padding: 1.25rem 1.5rem 3rem; background: var(--bg); color: var(--text);
-           font: 13px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+           font-family: var(--adopy-font-sans); font-size: var(--adopy-text-table); line-height: var(--adopy-leading-ui); }
     a { color: var(--accent); text-decoration: none; }
     a:hover { text-decoration: underline; }
     header { display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap;
@@ -104,7 +102,8 @@
   {#- Один прогон: исходы шагов по порядку и его снимки. -#}
   <h2>Run {{ run.run_id }} · {{ run.account }} · build {{ run.build }}</h2>
   <p class="help">Started {{ run.started[:19] | replace('T', ' ') }} UTC · {{ run.n_ok }}/{{ run.n_steps }} steps ok
-    {%- if run.abort %} · stopped at <code>{{ run.abort }}</code>{% endif %}</p>
+    {%- if run.abort %} · stopped at <code>{{ run.abort }}</code>{% endif %}
+    {%- if run.abort_label %} · <strong>{{ run.abort_label }}</strong>{% endif %}</p>
   {% if run.failures %}
   <ul class="hl">
     {% for f in run.failures %}
@@ -188,6 +187,7 @@
       <td class="left">
         {% for f in r.failures %}<code>{{ f.step }}</code><span class="tag {{ 'new' if f.status == 'new' else 'known' }}">{{ f.status }}</span>{% if not loop.last %} {% endif %}{% endfor %}
         {% if not r.failures and r.abort %}<span class="muted">stopped at <code>{{ r.abort }}</code></span>{% endif %}
+        {% if r.abort_label %}<span class="tag new">{{ r.abort_label }}</span>{% endif %}
       </td></tr>
     {% endfor %}
   </table></div>

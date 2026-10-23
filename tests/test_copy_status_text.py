@@ -23,7 +23,7 @@ TPL = ROOT / "src" / "web" / "templates"
 HINT = "Copy for group — paste it into the provider's group"
 
 
-def _render(account: str, status: dict) -> str:
+def _render(account: str, status: dict, show: bool = True) -> str:
     from src.analysis_agent.money_format import fmt_currency
 
     env = Environment(loader=FileSystemLoader(str(TPL)), autoescape=True)
@@ -32,8 +32,10 @@ def _render(account: str, status: dict) -> str:
     country = {"country": "Kuwait", "key": "KW", "virtual": False,
                "rows": [{"account": account, "has_data": False, "ready": True,
                          "in_workbook": True, "status": status, "to_do": ""}]}
+    # ACL-1652 (owner, 07.10): the button is hidden by default; these tests check the
+    # markup it has when the flag is on, so they switch it on explicitly.
     html = env.get_template("_account_map_country.html").render(
-        mc=country, mlx={},
+        SHOW_COPY_FOR_GROUP=show, mc=country, mlx={},
         amap={"countries": [country], "available": [], "all_accounts": [], "live": {},
               "splits": {}, "fallback": {}, "dates": [], "date_from": "2026-09-01",
               "date_to": "2026-09-28", "span": ""})
@@ -133,15 +135,18 @@ _LIVE_STUBS = (
 )
 
 
-def _live(pw):
-    return _page_with(pw, _LIVE_ROW, [_LIVE_STUBS, _js("var AMAP_STATUS_WORDS"), _js("function amapApplyReading")])
+def _live(pw, show: bool | None = None):
+    """`show` — флаг SHOW_COPY_FOR_GROUP, который report.html отдаёт странице как
+    `window.AMAP_SHOW_COPY_FOR_GROUP`; None — флага нет вовсе (как до присваивания)."""
+    flag = "" if show is None else f"window.AMAP_SHOW_COPY_FOR_GROUP = {str(show).lower()};"
+    return _page_with(pw, _LIVE_ROW, [_LIVE_STUBS, flag, _js("var AMAP_STATUS_WORDS"), _js("function amapApplyReading")])
 
 
 @pytest.mark.parametrize("shot", ["status_Doc20__20261002-100000", ""])
 def test_a_live_read_that_finds_a_problem_offers_copy_for_group(shot):
-    """После Read ячейка статуса пересобирается — кнопка и подсказка не пропадают."""
+    """Флаг включён: после Read ячейка статуса пересобирается, кнопка и подсказка на месте."""
     with sync_playwright() as pw:
-        b, _ctx, p, sent = _live(pw)
+        b, _ctx, p, sent = _live(pw, show=True)
         p.evaluate("s => amapApplyReading('FacebookDoc20 - Mios Darwiti', s)",
                    {"state": "ok", "spend": 7, "currency": "USD", "status": "disabled",
                     "status_text": "Account disabled", "finished_at": "2026-10-02 10:00:00", "status_shot": shot,
@@ -161,6 +166,32 @@ def test_a_live_read_that_finds_a_problem_offers_copy_for_group(shot):
             assert btn.get_attribute("title") == "Screenshots are switched off for safety"
         assert sent == []
         b.close()
+
+
+@pytest.mark.parametrize("show", [None, False])
+@pytest.mark.parametrize("shot", ["status_Doc20__20261002-100000", ""])
+def test_a_live_read_does_not_bring_copy_for_group_back_by_default(shot, show):
+    """Владелец 07.10 скрыл кнопку; живой Read не должен возвращать её (ревью PR #667).
+
+    Скрыто и без флага вовсе, и при `false`. Статус и красный значок остаются."""
+    with sync_playwright() as pw:
+        b, _ctx, p, sent = _live(pw, show=show)
+        p.evaluate("s => amapApplyReading('FacebookDoc20 - Mios Darwiti', s)",
+                   {"state": "ok", "spend": 7, "currency": "USD", "status": "disabled",
+                    "status_text": "Account disabled", "finished_at": "2026-10-02 10:00:00", "status_shot": shot,
+                    "status_shot_at": "2026-10-02 10:00:01"})
+        cell = p.locator(".amap-status")
+        assert cell.locator(".amap-st.bad").inner_text() == "disabled"
+        assert cell.locator(".amap-copy-group").count() == 0
+        assert cell.locator(".amap-st-hint").count() == 0
+        assert sent == []
+        b.close()
+
+
+def test_the_page_hands_the_flag_to_the_script():
+    src = (TPL / "report.html").read_text(encoding="utf-8")
+    assert "window.AMAP_SHOW_COPY_FOR_GROUP = {{ SHOW_COPY_FOR_GROUP | tojson }};" in src
+    assert "window.AMAP_SHOW_COPY_FOR_GROUP === true" in src  # `typeof window` guard keeps Node vm stands working
 
 
 @pytest.mark.parametrize("status", ["clear", "unknown"])
@@ -192,7 +223,7 @@ def test_a_live_unreadable_status_with_a_shot_keeps_copy_screenshot():
 def test_a_live_read_escapes_the_account_name():
     """Хвост ячейки после Read собирается строкой — имя аккаунта экранируется."""
     with sync_playwright() as pw:
-        b, _ctx, p, _sent = _live(pw)
+        b, _ctx, p, _sent = _live(pw, show=True)
         p.evaluate("""() => {
             document.querySelector('.amap-live').dataset.account = 'Evil"><b id=x>y - Owner';
             amapApplyReading('Evil"><b id=x>y - Owner', {state: 'ok', spend: 1, currency: 'USD',

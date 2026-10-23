@@ -15,6 +15,8 @@ except ImportError:
 
 
 def linked_numbers(body, config):
+    if re.search(r'^Tracker capture:', body or '', re.M | re.I):
+        raise ValueError('Capture is not an Issue; use the explicit modern subject parser')
     lines = re.findall(r'^Tracker issues:\s*([^\n]+)', body or '', re.M | re.I)
     if len(lines) != 1: raise ValueError('PR needs one explicit Tracker issues: line')
     project = config['project']; prefix = project.get('id_prefix', '')
@@ -36,28 +38,55 @@ def linked_numbers(body, config):
     return numbers
 
 
-def check(request, config, pr_number, *, allow_transition=False, admission=False):
+def check(request, config, pr_number, *, allow_transition=False, admission=False, approval_recovery=False):
     repo=config['project']['repository'];root='repos/'+repo
     pr=request(root+f'/pulls/{pr_number}')
-    direction = delivery_policy.route(config, pr)
+    direction = delivery_policy.route(config, pr, request)
     if pr['base'].get('repo',{}).get('full_name',repo).lower()!=repo.lower():
         raise ValueError('PR belongs to a different repository')
+    modern = config.get('execution_policy', {}).get('schema_version') == 4
+    capture = bool(re.search(r'^Tracker capture:', pr.get('body') or '', re.M | re.I))
+    if capture:
+        if not modern:
+            raise ValueError('Capture requires the explicitly adopted modern route')
+        direct = delivery_policy.direct_module()
+        selected = direct.linkage(pr.get('body'), config)
+        shared = delivery_policy.read_full_state(request, repo)
+        delivery_policy.execution_state(shared, config)
+        direct.check_capture(request, config, pr, selected, shared)
+        result = {'repository':repo,'pr':pr_number,'issues':[],'subject':selected,'verified':True}
+        if admission:result['admission'] = delivery_policy.admit(request, config, pr, [])
+        return result
     numbers=linked_numbers(pr.get('body'),config)
-    delivery_policy.naming(config, pr, numbers)
+    delivery_policy.naming(config, pr, numbers, request)
+    if direction == 'process' and len(numbers) != 1:
+        raise ValueError('Process instructions require one task per source PR')
     stages={s if isinstance(s,str) else s['id']:s if isinstance(s,str) else s['phase'] for s in config['workflow']}
     modules={m['id'] for m in config['modules']}
     for n in numbers:
         issue=request(root+f'/issues/{n}')
+        if 'task_context_policy' in config:
+            delivery_policy.context_module().requirements(issue.get('body'))
         if 'pull_request' in issue: raise ValueError(f'#{n} is a PR, not a tracked task')
         labels={l['name'] for l in issue['labels']}
         status=[s[7:] for s in labels if s.startswith('status:')]
         allowed={'review','merged'}|({'in_progress'} if pr.get('draft') else set())
         if delivery_policy.policy(config):
             allowed.add('stage')
+            if delivery_policy.batch_mode(config):
+                allowed.add('approved')
             if direction == 'promotion' and not pr.get('draft'):
                 allowed = {'stage', 'merged'}
+        if direction == 'process':
+            allowed = {'review', 'merged'} | ({'in_progress'} if pr.get('draft') else set())
         resuming_merge = (allow_transition and pr.get('merged') and len(status)==2
-                          and {stages.get(s) for s in status} in ({'review','merged'}, {'stage','merged'}, {'review','stage'}))
+                          and {stages.get(s) for s in status} in ({'review','merged'}, {'stage','merged'}, {'review','stage'}, {'approved','stage'}, {'approved','merged'}))
+        if direction == 'process':
+            resuming_merge = (allow_transition and pr.get('merged') and len(status) == 2
+                              and {stages.get(s) for s in status} == {'review', 'merged'})
+        resuming_merge = resuming_merge or (approval_recovery and delivery_policy.batch_mode(config)
+                                            and direction == 'approval' and len(status) == 2
+                                            and {stages.get(s) for s in status} == {'review', 'approved'})
         if not resuming_merge and (len(status)!=1 or stages.get(status[0]) not in allowed):
             raise ValueError(f'#{n}: start and implement the task, then move it to Review before a ready PR')
         closed_by_merge = allow_transition and pr.get('merged') and issue.get('state_reason')=='completed'
@@ -72,6 +101,8 @@ def check(request, config, pr_number, *, allow_transition=False, admission=False
         if len(priority)!=1 or priority[0] not in ('high','medium','low'):
             raise ValueError(f'#{n}: choose one valid priority')
     result = {'repository':repo,'pr':pr_number,'issues':numbers,'verified':True}
+    if modern and not re.search(r'^Tracker batch:', pr.get('body') or '', re.M):
+        result['subject'] = delivery_policy.direct_module().linkage(pr.get('body'), config)
     if admission:
         result['admission'] = delivery_policy.admit(request, config, pr, numbers)
     return result

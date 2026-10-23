@@ -97,8 +97,8 @@ def cancels(name, earlier, later):
     return concurrency(name, earlier)[0] == concurrency(name, later)[0]
 
 
-ALL = ["ci.yml", "windows-installer.yml", "tracker-link.yml"]
-PUSHED = ["ci.yml", "windows-installer.yml"]
+ALL = ["ci.yml", "windows-installer.yml", "tracker-link.yml", "delivery-check.yml"]
+PUSHED = ["ci.yml", "windows-installer.yml", "delivery-check.yml"]
 
 
 @pytest.mark.parametrize("name", ALL)
@@ -142,6 +142,22 @@ def test_push_triggers_are_the_permanent_branches(name):
 
 def test_tracker_link_runs_only_on_pull_requests():
     assert set(workflow("tracker-link.yml")[True]) == {"pull_request"}
+
+
+@pytest.mark.parametrize("activity,expected", [
+    ("edited", {"tracker-link.yml"}),
+    ("synchronize", set(ALL)),
+])
+def test_pr_metadata_feedback_does_not_restart_candidate_verification(activity, expected):
+    # GitHub defaults an absent types filter to opened/synchronize/reopened:
+    # https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request
+    defaults = {"opened", "synchronize", "reopened"}
+    triggered = set()
+    for name in ALL:
+        event = workflow(name)[True]["pull_request"] or {}
+        if activity in event.get("types", defaults):
+            triggered.add(name)
+    assert triggered == expected
 
 
 # --- the Python matrix ------------------------------------------------------------------------------
@@ -301,3 +317,22 @@ def test_update_step_outlives_the_update_cycle_script_wait():
     step = next(s for s in installer_job()["steps"] if s["name"] == name)
     limit_s = step["timeout-minutes"] * 60
     assert limit_s >= STEP_MAX[name] + max(waits) + 60
+
+
+# --- ACL-1649: no automatic whole-workflow retries ----------------------------------------------------
+
+import re  # noqa: E402
+
+RETRY = re.compile(r"gh\s+run\s+rerun|nick-fields/retry|retry-action|run_attempt\s*<|rerun", re.I)
+
+
+@pytest.mark.parametrize("name", ["ci.yml", "windows-installer.yml", "release.yml", "tracker-link.yml", "delivery-check.yml"])
+def test_no_workflow_reruns_or_retries_itself(name):
+    text = (ROOT / ".github/workflows" / name).read_text(encoding="utf-8")
+    assert not RETRY.search(text), name
+    assert "workflow_run" not in workflow(name)[True]          # verification never reruns itself; authorized delivery has its own guarded workflow
+
+
+def test_the_scope_job_runs_the_chain_tests_too():
+    run = workflow("ci.yml")["jobs"]["scope"]["steps"][-1]["run"]
+    assert "tests/test_acl_ci_chain.py" in run and "tests/test_acl_ci_minutes.py" in run
