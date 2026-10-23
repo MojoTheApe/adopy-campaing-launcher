@@ -5267,28 +5267,54 @@ def robot_health_capture(run_id: str, name: str) -> Response:
     return FileResponse(str(path))
 
 
+def _teach_with_accounts(teach: dict) -> dict:
+    """Name the account each waiting job belongs to (ACL-1142)."""
+    from src.web import publish_jobs
+
+    jobs = []
+    for item in teach.get("jobs") or []:
+        job = publish_jobs.get_job(item["job_id"]) or {}
+        jobs.append({**item, "account_label": job.get("account_label") or ""})
+    return {**teach, "jobs": jobs}
+
+
 @app.get("/rpa-takeover")
 async def rpa_takeover_status() -> JSONResponse:
     from src.fb_ads_rpa.pacing import is_takeover_active, get_teach_state
-    teach = get_teach_state()
+    teach = _teach_with_accounts(get_teach_state())
     return JSONResponse({"active": is_takeover_active(), "teach": teach})
 
 
 @app.post("/rpa-teach/resume")
-async def rpa_teach_resume() -> JSONResponse:
-    """Tell the RPA that the user has clicked Website manually — resume the flow."""
+async def rpa_teach_resume(job_id: str = "") -> JSONResponse:
+    """The user has clicked the wanted element by hand — resume ONE job.
+
+    ACL-1142: the wait is per job. `job_id` names the job to release; without
+    it the call works only while exactly one job waits, so that "continue" can
+    never release the wrong account.
+    """
     from src.fb_ads_rpa.pacing import end_teach_wait, get_teach_state
     state = get_teach_state()
-    if not state.get("waiting"):
+    waiting = [j["job_id"] for j in state.get("jobs") or []]
+    if not job_id:
+        if len(waiting) > 1:
+            return JSONResponse(
+                {"ok": False, "error": "Several accounts are waiting - say which one (job_id)"},
+                status_code=409,
+            )
+        job_id = waiting[0] if waiting else ""
+    if not job_id or job_id not in waiting:
         return JSONResponse({"ok": False, "error": "Not in teach-mode wait"}, status_code=400)
-    end_teach_wait()
+    end_teach_wait(job_id=job_id)
     return JSONResponse({"ok": True, "message": "RPA resumed — capturing locator"})
 
 
 @app.get("/rpa-teach/status")
-async def rpa_teach_status() -> JSONResponse:
+async def rpa_teach_status(job_id: str = "") -> JSONResponse:
     from src.fb_ads_rpa.pacing import get_teach_state
-    return JSONResponse(get_teach_state())
+    if job_id:
+        return JSONResponse(_teach_with_accounts({**get_teach_state(job_id), "job_id": job_id}))
+    return JSONResponse(_teach_with_accounts(get_teach_state()))
 
 
 @app.get("/rpa-teach/pending-strategies")

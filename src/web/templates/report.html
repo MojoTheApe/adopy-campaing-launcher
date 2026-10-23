@@ -8669,6 +8669,12 @@ window.cbBuild = (function () {
       return p.status === 'cancelled' ? { state: 'build-bad', sign: '', why: stoppedText(p) } : null;
     }
 
+    // ACL-1142: the robot of THIS job waits for the user's click (teach mode) —
+    // amber, named by the account's own dot; other accounts keep their own state.
+    if (active && !c.result && p.teach && p.teach.waiting && p.status === 'running' && c.name === p.current) {
+      return { state: 'build-attn', sign: '',
+               why: 'Waiting for your click in the Multilogin window of this account — press "I clicked Website" in the banner' };
+    }
     var r = c.result;
     if (active && c.blocker) return { state: 'build-attn', sign: '', why: String(c.blocker) };
     if (r) {
@@ -17677,47 +17683,55 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
     });
   }
 
-  var _teachBannerShown = false;
+  /* ACL-1142: the teach wait belongs to ONE job. The poll answer carries
+     `teach` for this job, so the banner names the account it waits for and its
+     button releases only that job — two builds at once never share an answer. */
+  function _teachBannerId() { return 'rpa-teach-banner-' + jobId; }
 
-  function _checkTeachMode() {
-    fetch('/rpa-teach/status')
-      .then(function(r) { return r.json(); })
-      .then(function(s) {
-        var banner = document.getElementById('rpa-teach-banner');
-        if (s.waiting) {
-          if (!banner) {
-            banner = document.createElement('div');
-            banner.id = 'rpa-teach-banner';
-            banner.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);'
-              + 'z-index:9999;background:#1e3a5f;color:#fff;border:2px solid #3b82f6;'
-              + 'border-radius:10px;padding:1rem 1.5rem;max-width:480px;text-align:center;'
-              + 'box-shadow:0 4px 24px rgba(0,0,0,0.5);font-size:0.92rem;line-height:1.5';
-            banner.innerHTML = '<strong style="font-size:1rem">We need your click</strong><br>'
-              + 'The RPA could not select <b>Website</b> on its own.<br>'
-              + 'Click <b>Website</b> in the open browser menu, then press the button below.<br><br>'
-              + '<button onclick="rpaTeachResume()" style="padding:0.5rem 1.2rem;'
-              + 'background:#3b82f6;color:#fff;border:none;border-radius:6px;'
-              + 'cursor:pointer;font-weight:700;font-size:0.9rem">I clicked Website — continue</button>'
-              + '<button onclick="document.getElementById(\'rpa-teach-banner\').remove()" '
-              + 'style="margin-left:0.7rem;padding:0.5rem 0.8rem;background:transparent;'
-              + 'color:#93c5fd;border:1px solid #3b82f6;border-radius:6px;cursor:pointer;font-size:var(--adopy-text-body)">Hide</button>';
-            document.body.appendChild(banner);
-          }
-          _teachBannerShown = true;
-        } else if (banner) {
-          banner.remove();
-          _teachBannerShown = false;
-        }
-      })
-      .catch(function() {});
+  function _removeTeachBanner() {
+    var old = document.getElementById(_teachBannerId());
+    if (old) old.remove();
   }
 
-  window.rpaTeachResume = function() {
-    var banner = document.getElementById('rpa-teach-banner');
+  function _renderTeachBanner(teach) {
+    var banner = document.getElementById(_teachBannerId());
+    if (!(teach && teach.waiting)) { if (banner) banner.remove(); return; }
+    if (banner) return;
+    var stack = document.getElementById('rpa-teach-stack');
+    if (!stack) {
+      stack = document.createElement('div');
+      stack.id = 'rpa-teach-stack';
+      stack.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);'
+        + 'z-index:9999;display:flex;flex-direction:column;gap:0.6rem;align-items:center';
+      document.body.appendChild(stack);
+    }
+    var account = teach.account_label ? aclEscHtml(teach.account_label) : 'this account';
+    banner = document.createElement('div');
+    banner.id = _teachBannerId();
+    banner.setAttribute('data-job-id', jobId);
+    banner.style.cssText = 'background:#1e3a5f;color:#fff;border:2px solid #3b82f6;'
+      + 'border-radius:10px;padding:1rem 1.5rem;max-width:480px;text-align:center;'
+      + 'box-shadow:0 4px 24px rgba(0,0,0,0.5);font-size:0.92rem;line-height:1.5';
+    banner.innerHTML = '<strong style="font-size:1rem">We need your click — ' + account + '</strong><br>'
+      + 'The RPA could not select <b>Website</b> on its own in <b>' + account + '</b>.<br>'
+      + 'Click <b>Website</b> in the open browser menu of that account, then press the button below.<br><br>'
+      + '<button type="button" data-act="resume" style="padding:0.5rem 1.2rem;'
+      + 'background:#3b82f6;color:#fff;border:none;border-radius:6px;'
+      + 'cursor:pointer;font-weight:700;font-size:0.9rem">I clicked Website — continue</button>'
+      + '<button type="button" data-act="hide" '
+      + 'style="margin-left:0.7rem;padding:0.5rem 0.8rem;background:transparent;'
+      + 'color:#93c5fd;border:1px solid #3b82f6;border-radius:6px;cursor:pointer;font-size:var(--adopy-text-body)">Hide</button>';
+    banner.querySelector('[data-act="resume"]').addEventListener('click', function () { rpaTeachResume(jobId); });
+    banner.querySelector('[data-act="hide"]').addEventListener('click', function () { banner.remove(); });
+    stack.appendChild(banner);
+  }
+
+  window.rpaTeachResume = function(forJobId) {
+    var banner = document.getElementById('rpa-teach-banner-' + forJobId);
     if (banner) {
       banner.innerHTML = '<span style="color:#93c5fd">⏳ Resuming the RPA…</span>';
     }
-    fetch('/rpa-teach/resume', { method: 'POST' })
+    fetch('/rpa-teach/resume?job_id=' + encodeURIComponent(forJobId), { method: 'POST' })
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (banner) banner.remove();
@@ -17756,12 +17770,11 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
           statusPanel.scrollIntoView({behavior: 'smooth', block: 'nearest'});
         }
         if (job.status !== 'done' && job.status !== 'cancelled') {
-          _checkTeachMode();
+          _renderTeachBanner(job.teach);
           // Poll faster while cancelling so Stop feels responsive.
           setTimeout(poll, job.status === 'cancelling' ? 600 : 2000);
         } else {
-          var banner = document.getElementById('rpa-teach-banner');
-          if (banner) banner.remove();
+          _removeTeachBanner();
           if (publishBtn) publishBtn.disabled = false;
           if ((job.errors || []).length > 0 || (job.results || []).some(function(r){return !r.success;})) {
             statusPanel.scrollIntoView({behavior: 'smooth', block: 'center'});

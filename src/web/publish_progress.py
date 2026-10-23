@@ -273,6 +273,9 @@ def job_progress(
         "account_label": job.get("account_label") or "",
         "status": status,
         "active": status in _ACTIVE,
+        # ACL-1142: the dot polls this view, while the account's banner polls
+        # get_job directly. Carry the same job's teach fact to both readers.
+        "teach": dict(job.get("teach") or {}),
         "errors": [str(e) for e in (job.get("errors") or [])],
         # Порог — по этапу кампании, которая собирается сейчас.
         "stall_after_s": stall_after_for(steps_seen.get(current, [])),
