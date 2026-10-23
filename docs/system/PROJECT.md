@@ -48,7 +48,8 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   selected manager (nothing to review); the account map stays available in both.
 - `src/campaign_bridge`, `src/upload_agent`: campaign input/output preparation.
 - `src/fb_ads_rpa`, `src/meta_campaign_agent`: Ads Manager interactions, verified
-  profile identity, draft preparation, queues and browser lifecycle. ACL-1250/#247
+  profile identity, draft preparation, queues and browser lifecycle. See
+  [same-user process ownership and its boundaries](PROFILE_OWNERSHIP.md). ACL-1250/#247
   confirms audience age/country values within their own field and opens the correct
   collapsed Locations/Languages control, preserving adjacent fields. Later hover-only
   controls remain ACL-1251; the deferred real pilot remains ACL-1215.
