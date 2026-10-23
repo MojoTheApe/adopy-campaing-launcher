@@ -32,6 +32,9 @@ from src.fb_api.telemetry import scrub
 TOKEN_CODES = {102, 190}
 RATE_CODES = {4, 17, 32, 613} | set(range(80000, 80015))
 POLICY_CODES = {368}
+#: Meta временно заблокировала действие (1404078, 2859015) или запретила аккаунту рекламу
+#: (1404163): каталог ошибок помечает их неповторяемыми, значит продолжать прогон нельзя (ACL-1805).
+BLOCK_CODES = {1404078, 2859015, 1404163}
 #: Подкоды 190, при которых сессия стоит на checkpoint: перезагрузка Ads
 #: Manager не поможет, только лишний заход в кабинет — стоп сразу (ревью O3).
 CHECKPOINT_SUBCODES = {459, 464}
@@ -72,6 +75,13 @@ def error_details(gerr: dict, reply: dict) -> dict:
         value = gerr.get(key)
         if value not in (None, ""):
             out[key] = scrub(str(value)[:200])
+    # ACL-1891: при неверном смещении загрузки Meta может назвать нужное - только цифры.
+    data = gerr.get("error_data")
+    if isinstance(data, dict):
+        for key in ("start_offset", "end_offset"):
+            value = str(data.get(key) or "")
+            if value.isdigit() and len(value) <= 13:
+                out[key] = value
     endpoint = reply.get("endpoint")
     if isinstance(endpoint, dict):
         for key in ("host", "version", "credentials"):
@@ -198,12 +208,12 @@ _NOT_SENT = {"write_refused", "read_only", "no_file", "bad_option", "no_fetch", 
              "bad_path", "forbidden_param"}
 
 
-def classify(code: int | None) -> str:
+def classify(code: int | None, subcode: int | None = None) -> str:
     if code in TOKEN_CODES:
         return "token"
     if code in RATE_CODES:
         return "rate_limit"
-    if code in POLICY_CODES:
+    if code in POLICY_CODES or code in BLOCK_CODES or subcode in BLOCK_CODES:
         return "policy"
     return "other"
 
@@ -368,9 +378,9 @@ class GraphClient:
             details = error_details(gerr, reply)
             details.update(_read_context(path, params))
             msg = _with_details(msg, details)
-            kind = classify(code)
+            kind = classify(code, sub)
             if kind == "policy":
-                raise self._stop(PolicyBlocked(f"Graph API refused (368): {msg}", code=code, subcode=sub))
+                raise self._stop(PolicyBlocked(f"Graph API refused ({code}): {msg}", code=code, subcode=sub))
             if kind == "rate_limit":
                 raise self._stop(RateLimited(f"Graph API rate limit ({code}): {msg}", code=code,
                                              subcode=sub, retry_after_s=usage["wait_s"] or None))
@@ -522,9 +532,9 @@ class GraphClient:
             sub = _int(gerr.get("error_subcode"))
             details = error_details(gerr, reply)
             msg = _with_details(str(gerr.get("message") or "Graph API error"), details)
-            kind = classify(code)
+            kind = classify(code, sub)
             if kind == "policy":
-                raise self._stop(PolicyBlocked(f"Graph API refused (368): {msg}", code=code, subcode=sub))
+                raise self._stop(PolicyBlocked(f"Graph API refused ({code}): {msg}", code=code, subcode=sub))
             if kind == "rate_limit":
                 raise self._stop(RateLimited(f"Graph API rate limit ({code}): {msg}", code=code, subcode=sub))
             if kind == "token":

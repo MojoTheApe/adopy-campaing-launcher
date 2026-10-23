@@ -336,6 +336,72 @@ def wait_start_settled(profile_id: str, *, answers: Callable[[Any], bool] = debu
     return "settled" if ok else "budget_over"
 
 
+# ───────────────────────── телеметрия остановка → переоткрытие (ACL-2117) ─────────────────────────
+#
+# Гипотеза живых прогонов 22.10: переоткрытие профиля, пока MLX ещё сохраняет его в
+# облако, отдаёт копию без сессии Facebook. Чтобы подтвердить или снять её, на каждый
+# повторный запуск пишется цепочка: время остановки, время ухода процесса
+# (`fb_api_stop_gone` / `fb_api_profile_stop`), чем кончилось ожидание сохранения
+# (`fb_api_profile_sync_wait`: пауза, сколько ждали), время переоткрытия
+# (`fb_api_profile_reopen`) и была ли на странице сессия Graph
+# (`fb_api_reopen_graph_session`). Токенов и адресов здесь нет.
+
+_WAITED: dict[str, dict] = {}
+_REOPENED: dict[str, dict] = {}
+_TRACE_LOCK = threading.Lock()
+
+
+def record_profile_stop(*, account: str, profile_id: str, stop_at: float, exit_at: float | None,
+                        settled: str, gone: bool) -> None:
+    _record({"event": "fb_api_profile_stop", "account": account, "stop_at": round(stop_at, 1),
+             "exit_at": None if exit_at is None else round(exit_at, 1), "process_gone": bool(gone),
+             "stop_to_exit_s": None if exit_at is None else round(exit_at - stop_at, 1),
+             "start_state": settled})
+
+
+def note_waited(profile_id: str, *, stop_at: float | None, waited_s: float) -> None:
+    with _TRACE_LOCK:
+        _WAITED[str(profile_id)] = {"stop_at": stop_at, "waited_s": float(waited_s)}
+
+
+def mark_reopened(profile_id: str, *, wall: Callable[[], float] = time.time) -> None:
+    """Профиль поднят заново после остановки (старт через MLX): пишем переоткрытие."""
+    pid = str(profile_id or "")
+    from src.fb_api import stop_log as _stop_log
+
+    now = wall()
+    try:
+        stop_at = _stop_log.default().last_stop(pid)
+    except Exception:  # noqa: BLE001
+        stop_at = None
+    with _TRACE_LOCK:
+        waited = _WAITED.pop(pid, None) or {}
+        if stop_at is None:
+            stop_at = waited.get("stop_at")
+        if stop_at is None:
+            return                      # профиль не останавливали при нас — нечего сравнивать
+        info = {"reopen_at": now, "stop_at": stop_at, "waited_s": waited.get("waited_s", 0.0),
+                "cooldown_s": _stop_log.restart_cooldown_s()}
+        _REOPENED[pid] = info
+    _record({"event": "fb_api_profile_reopen", "stop_at": round(stop_at, 1), "reopen_at": round(now, 1),
+             "stop_age_s": round(now - stop_at, 1), "waited_s": round(info["waited_s"], 1),
+             "cooldown_s": round(info["cooldown_s"], 1),
+             "sync_status": "cooldown_waited" if info["waited_s"] > 0 else "cooldown_passed"})
+
+
+def note_graph_session(profile_id: str, has_token: bool, *, account: str = "",
+                       wall: Callable[[], float] = time.time) -> None:
+    """Первая страница Ads Manager после переоткрытия: была ли сессия Graph."""
+    with _TRACE_LOCK:
+        info = _REOPENED.pop(str(profile_id or ""), None)
+    if info is None:
+        return
+    _record({"event": "fb_api_reopen_graph_session", "account": account, "has_graph_session": bool(has_token),
+             "stop_age_s": round(info["reopen_at"] - info["stop_at"], 1),
+             "waited_s": round(info["waited_s"], 1),
+             "since_reopen_s": round(wall() - info["reopen_at"], 1)})
+
+
 def _listen_for_stops() -> None:
     try:
         from src.fb_api import stop_log as _stop_log

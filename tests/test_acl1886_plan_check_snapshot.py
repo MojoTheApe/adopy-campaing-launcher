@@ -25,6 +25,9 @@ from tests.test_acl1886_graph_error_context import denied  # noqa: E402
 _DENIED = ("Graph API error 10: (#10) Permission Denied [type=OAuthException, "
            "host=adsmanager-graph.facebook.com, credentials=include, http_status=400, method=GET, ")
 
+_CATALOG_10 = ("Permission was not granted or has been removed. Check that this account has the needed "
+               "permission for the ad account or Page.")
+
 
 class DeniedMeta(FakeMeta):
     """Поддельная Meta, у которой одно чтение (по окончанию пути) отказано."""
@@ -84,7 +87,8 @@ def test_denied_search_reaches_the_public_plan_result(tmp_path, monkeypatch, no_
     out, meta, opened = _check(tmp_path, monkeypatch, "/search")
     res = _assert_read_only(out, meta, opened, no_network)
     assert meta.denied and set(meta.denied) == {"/search"}
-    assert res["error"] == "Meta refused: " + _DENIED + "operation=search, search_type=adgeolocation]"
+    assert res["error"] == "Meta refused: " + _CATALOG_10  # ACL-1805: the catalog text; the raw line stays in problems[].raw
+    assert res["problems"][0]["raw"].endswith("operation=search, search_type=adgeolocation]")
     audit = {row["rule"]: row for row in res["audit"]}
     assert audit["country_resolves"]["status"] == "unknown"
     assert audit["country_resolves"]["detail"] == (
@@ -99,5 +103,6 @@ def test_denied_campaigns_reaches_the_public_plan_result(tmp_path, monkeypatch, 
     out, meta, opened = _check(tmp_path, monkeypatch, "/campaigns")
     res = _assert_read_only(out, meta, opened, no_network)
     assert meta.denied == [f"/{ACT}/campaigns"]
-    assert res["error"] == "Meta refused: " + _DENIED + "operation=campaigns]"
+    assert res["error"] == "Meta refused: " + _CATALOG_10
+    assert res["problems"][0]["raw"].endswith("operation=campaigns]")
     assert "operation=search" not in res["error"]
