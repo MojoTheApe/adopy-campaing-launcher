@@ -11777,7 +11777,7 @@ async function goalSend(body) {
 // ── Account map: placing accounts in countries ───────────────────────
 // Одно хранилище, два экрана. Любое изменение здесь — одна связь, и после
 // перезагрузки её видят и карта на главной, и список аккаунтов внутри страны.
-async function amapSend(body, msgEl) {
+async function amapSend(body, msgEl, errorAnchor) {
   if (msgEl) { msgEl.textContent = 'saving…'; msgEl.className = 'amap-msg'; }
   var r = await fetch('/account-links', {
     method: 'POST',
@@ -11795,7 +11795,7 @@ async function amapSend(body, msgEl) {
   if (data && data.needs_confirm) {
     if (await aclConfirm(data.error, { title: 'Take it out anyway?', okLabel: 'Take it out', danger: true })) {
       body.confirm = true;
-      return amapSend(body, msgEl);
+      return amapSend(body, msgEl, errorAnchor);
     }
     if (msgEl) msgEl.textContent = '';
     return false;
@@ -11803,6 +11803,8 @@ async function amapSend(body, msgEl) {
   if (msgEl) {
     msgEl.textContent = (data && data.error) ? data.error : ('error ' + r.status);
     msgEl.className = 'amap-msg bad';
+  } else if (errorAnchor) {
+    aclInlineError(errorAnchor, (data && data.error) ? data.error : ('HTTP ' + r.status));
   } else {
     aclAlert((data && data.error) ? data.error : ('HTTP ' + r.status), { title: 'Could not save' });
   }
@@ -11980,9 +11982,46 @@ function amapLink(select, kind, value) {
   amapSend({ action: 'link', kind: kind, value: value, account: account }, msg);
 }
 
-function amapUnlink(account, kind, value) {
-  amapSend({ action: 'unlink', kind: kind, value: value, account: account }, null);
+async function amapUnlink(account, kind, value, anchor) {
+  /* ACL-142: «×» убирает аккаунт из ОДНОЙ страны, а выглядит как «удалить».
+     Спрашиваем и говорим, что останется; удаление из ACL — отдельная кнопка. */
+  if (!await aclConfirm('Take ' + account + ' out of ' + value + '?' + String.fromCharCode(10, 10)
+    + 'The ' + kind + ' stays. The account stays in ACL with its Multilogin profile, proxy, '
+    + 'history and campaigns, and moves to Available accounts.', { okLabel: 'Take out', danger: true })) return;
+  if (anchor) anchor.disabled = true;
+  aclInlineError(anchor, '');
+  try {
+    await amapSend({ action: 'unlink', kind: kind, value: value, account: account }, null, anchor);
+  } catch (e) { aclInlineError(anchor, String(e && e.message || e)); }
+  finally {
+    if (anchor) { anchor.disabled = false; if (document.activeElement === document.body) anchor.focus(); }
+  }
 }
+
+/* ACL-142: второе, ОТДЕЛЬНОЕ действие — убрать аккаунт из ACL на этой машине. */
+async function amapRemoveFromAcl(account, anchor) {
+  if (!await aclConfirm('Remove ' + account + ' from ACL on this computer?\n\n'
+    + 'This deletes its row in this computer\'s account map (the Multilogin profile link and '
+    + 'the ad account number) and takes it out of every country.\n\n'
+    + 'Nothing is deleted anywhere else: the shared sheet, the account\'s history, its '
+    + 'campaigns in Meta and its Multilogin profile stay as they are. You can connect it again later.',
+    { okLabel: 'Remove from ACL', danger: true })) return;
+  if (anchor) anchor.disabled = true;
+  aclInlineError(anchor, '');
+  try {
+    var r = await fetch('/account-map-remove', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+    body: JSON.stringify({ account_name: account, also_unlink: true })
+    });
+    var d = null; try { d = await r.json(); } catch (e) {}
+    if (!d || !d.ok) { aclInlineError(anchor, (d && d.error) || 'Could not remove the account'); return; }
+    location.reload();
+  } catch (e) { aclInlineError(anchor, String(e && e.message || e)); }
+  finally {
+    if (anchor) { anchor.disabled = false; if (document.activeElement === document.body) anchor.focus(); }
+  }
+}
+
 
 function amapClose(kind, value, label) {
   aclConfirm('Its accounts move to Available accounts. '
@@ -12600,6 +12639,133 @@ function amapHint(row, d) {
   else hint.textContent = 'never opened here — the ad account will be read from it';
 }
 
+/* ACL-142: «Read from the open account» в окне подключения. Модель без DOM —
+   её проверяет Node. Прочитанное из профиля — ПРЕДЛОЖЕНИЕ: Ads Manager открывает
+   кабинет по умолчанию, а у профиля их может быть несколько. Поэтому значение,
+   пришедшее из чтения и не тронутое рукой, требует явного подтверждения;
+   исправленное вручную подтверждения не требует — его выбрал человек. */
+function amapAccountModel() {
+  var m = { value: '', detected: null, reading: false, error: '', confirmed: false };
+  m.startRead = function () { m.reading = true; m.error = ''; m.confirmed = false; };
+  m.finishRead = function (found) {
+    m.reading = false; m.confirmed = false;
+    if (found && found.ok && found.act) {
+      m.detected = { act: String(found.act), name: found.account_name || '',
+                     needs: found.needs_confirmation !== false };
+      m.value = m.detected.act; m.confirmed = false; m.error = '';
+    } else {
+      m.error = (found && found.error) || 'unknown';
+    }
+  };
+  m.edit = function (v) { m.value = String(v == null ? '' : v); };
+  m.untouchedRead = function () {
+    return !!m.detected && m.detected.needs && m.value.trim() === m.detected.act;
+  };
+  m.canSubmit = function () { return !m.reading && (!m.untouchedRead() || m.confirmed); };
+  m.result = function () { return m.canSubmit() ? m.value.trim() : null; };
+  return m;
+}
+
+function amapReadOpenAccount(profile, instance) {
+  var d = profile._details || {};
+  var probe = new FormData();
+  probe.append('profile_id', profile.profile_id);
+  probe.append('folder_id', profile.folder_id || d.folder_id || '');
+  probe.append('instance', instance);
+  return amapFetchJson('/account-probe/ad-account',
+    { method: 'POST', body: probe, credentials: 'same-origin' }, AMAP_PROBE_WAIT_MS)
+    .catch(function (e) {
+      return { ok: false, error: (e && e.timeout) ? AMAP_OPEN_TIMEOUT_MSG : String(e && e.message || e) };
+    });
+}
+
+/* Окно на странице вместо prompt(): в prompt() нельзя ни кнопки, ни подписи.
+   Резолвится строкой (номер, ссылка или пусто — «подключить без номера») либо
+   null, если человек отказался. */
+function amapAskAccount(read, opened) {
+  if (amapAskAccount.active) return Promise.resolve(null);
+  amapAskAccount.active = true;
+  return new Promise(function (resolve) {
+    var m = amapAccountModel();
+    var before = document.activeElement;
+    var dlg = document.createElement('dialog');
+    dlg.className = 'amap-account-dialog acl-dlg';
+    var h = document.createElement('h3'); h.textContent = 'Ad account';
+    h.className = 'acl-dlg-title'; h.id = 'amap-account-dialog-title';
+    dlg.setAttribute('aria-labelledby', h.id);
+    var info = document.createElement('p'); info.className = 'amap-ad-info';
+    var warn = document.createElement('p'); warn.className = 'amap-ad-warn';
+    var readBtn = document.createElement('button');
+    readBtn.type = 'button'; readBtn.className = 'amap-btn acl-dlg-btn'; readBtn.textContent = 'Read from the open account';
+    var input = document.createElement('input');
+    input.type = 'text'; input.className = 'amap-ad-input acl-dlg-input'; input.size = 34;
+    input.id = 'amap-account-dialog-input';
+    var inputLabel = document.createElement('label'); inputLabel.className = 'acl-dlg-label';
+    inputLabel.htmlFor = input.id; inputLabel.textContent = 'Ads Manager link or account number';
+    input.placeholder = 'act_… or the Ads Manager link';
+    var label = document.createElement('label'); label.className = 'amap-ad-confirm';
+    var tick = document.createElement('input'); tick.type = 'checkbox';
+    var tickText = document.createElement('span');
+    tickText.textContent = ' This is the ad account I want to connect';
+    label.append(tick, tickText);
+    var ok = document.createElement('button'); ok.type = 'button'; ok.className = 'amap-btn acl-dlg-btn acl-dlg-primary'; ok.textContent = 'Connect';
+    var cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'amap-btn acl-dlg-btn acl-dlg-quiet'; cancel.textContent = 'Cancel';
+    var row = document.createElement('p'); row.className = 'acl-dlg-actions'; row.append(cancel, ok);
+    dlg.append(h, info, readBtn, inputLabel, input, warn, label, row);
+
+    function paint() {
+      readBtn.disabled = m.reading;
+      input.disabled = m.reading;
+      tick.disabled = m.reading;
+      readBtn.textContent = m.reading ? 'Reading…' : 'Read from the open account';
+      input.value = m.value;
+      var d = m.detected;
+      if (m.reading) info.textContent = 'Asking the open profile for its ad account…';
+      else if (m.error) info.textContent = 'Could not read it from the profile: ' + m.error
+        + (opened === false ? ' The profile did not open with automation. If its window is open by hand, '
+          + 'close it in Multilogin and press Connect again.' : '')
+        + ' Paste the Ads Manager link or the account number — or leave this empty to connect now '
+        + 'and fill the number in later.';
+      else if (d) info.textContent = 'The open profile says its ad account is: '
+        + (d.name ? d.name + ' · ' : '') + d.act;
+      else info.textContent = 'Press the button to read the ad account from the open profile, or type it.';
+      var show = m.untouchedRead();
+      label.hidden = !show;
+      warn.textContent = show ? 'Ads Manager opens the profile’s default ad account. If this profile can see '
+        + 'several, this may not be the one you want — check it, or type the right number.' : '';
+      ok.disabled = !m.canSubmit();
+      ok.textContent = m.value.trim() ? 'Connect' : 'Connect without a number';
+    }
+    function doRead() {
+      if (done || m.reading) return;
+      m.startRead(); paint();
+      Promise.resolve(read()).then(function (found) { if (done) return; m.finishRead(found); tick.checked = false; paint(); },
+        function (e) { if (done) return; m.finishRead({ ok: false, error: String(e && e.message || e) }); tick.checked = false; paint(); });
+    }
+    readBtn.onclick = doRead;
+    input.oninput = function () { m.edit(input.value); paint(); };
+    tick.onchange = function () { m.confirmed = tick.checked; paint(); };
+    var done = false;
+    function finish(v) {
+      if (done) return; done = true; amapAskAccount.active = false;
+      try { dlg.close(); } catch (e) {} dlg.remove();
+      if (before && typeof before.focus === 'function' && document.contains(before)) before.focus();
+      resolve(v);
+    }
+    ok.onclick = function () { finish(m.result()); };
+    cancel.onclick = function () { finish(null); };
+    dlg.addEventListener('cancel', function (event) { event.preventDefault(); finish(null); });
+    input.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter' && !event.isComposing && m.canSubmit()) { event.preventDefault(); ok.click(); }
+    });
+    document.body.appendChild(dlg);
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+    if (typeof cancel.focus === 'function') cancel.focus();
+    doRead();
+  });
+}
+/* } ACL-142 account dialog */
+
 async function amapConnect(box, profile, instance, btn, opened) {
   var country = box.getAttribute('data-amap-country');
   var msg = box.querySelector('.amap-msg');
@@ -12631,47 +12797,12 @@ async function amapConnect(box, profile, instance, btn, opened) {
        Прочитанное всё равно показываем: у профиля может быть несколько
        кабинетов, открывается тот, что по умолчанию. Подставить молча значит
        время от времени брать не тот, и на экране об этом ничего не скажет. */
-    msg.textContent = 'asking the open profile…';
-    msg.className = 'amap-msg';
-    var probe = new FormData();
-    probe.append('profile_id', profile.profile_id);
-    probe.append('folder_id', profile.folder_id || d.folder_id || '');
-    probe.append('instance', instance);
-    var found = null;
-    try {
-      found = await amapFetchJson('/account-probe/ad-account',
-        { method: 'POST', body: probe, credentials: 'same-origin' }, AMAP_PROBE_WAIT_MS);
-    } catch (e) {
-      found = { ok: false, error: (e && e.timeout) ? AMAP_OPEN_TIMEOUT_MSG : String(e && e.message || e) };
-    }
+    /* ACL-142: окно на странице с кнопкой «Read from the open account».
+       Чтение стартует само при открытии (как и раньше), но результат
+       показывается на подтверждение и правится; пустое — подключить без
+       номера, как и прежде. */
     msg.textContent = '';
-
-    var head, seed, title;
-    if (found && found.ok) {
-      title = 'Is this the right ad account?';
-      head = 'The open profile says its ad account is:'
-        + (found.account_name ? '\n' + found.account_name : '')
-        + '\n\nA profile can have several; the one it opens by default was read. Change the number if it is not this one.';
-      seed = found.act;
-    } else {
-      /* Пустой ответ больше не отменяет подключение. Номер нужен, чтобы
-         читать спенд и заливать кампании, — но не чтобы держать аккаунт в
-         карте: без него аккаунт подключится, а билдер честно покажет
-         «⚠ missing: ad_account_id» и даст вписать позже.
-
-         Прежнее «пусто = отмена» загоняло в тупик ровно там, где человек
-         впервые видит новый профиль: номер знает открытый профиль, а открыть
-         его дешборд соглашался только у подключённого аккаунта. */
-      title = 'Could not read the ad account from the profile';
-      head = ((found && found.error) || 'unknown')
-        + (opened === false ? '\n\nThe profile did not open with automation. If its window '
-            + 'is open by hand, close it in Multilogin and press Connect again.' : '')
-        + '\n\nPaste the Ads Manager link or the account number — or leave this '
-        + 'empty to connect now and fill the number in later.';
-      seed = '';
-    }
-    var typed = await aclPrompt(head, { title: title, value: seed,
-      label: 'Ads Manager link or account number', okLabel: 'Connect' });
+    var typed = await amapAskAccount(function () { return amapReadOpenAccount(profile, instance); }, opened);
     if (typed === null) return;          // Cancel — человек передумал
     act = (typed || '').trim();          // пусто — подключаем без номера
   }
@@ -17758,6 +17889,9 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
       }
       html += '</div>';
       if (r.backend === 'api') html += cbApiReadbackHtml(r);
+      else if (r.page_id && r.page_origin) html += '<div class="cb-status-steps">Facebook Page: '
+        + aclEscHtml(r.page_name || r.page_id) + ' (' + aclEscHtml(r.page_id) + ') · from '
+        + aclEscHtml(r.page_origin) + '</div>';
       if (manual) html += '<div class="cb-status-err" style="color:var(--warn);border-color:var(--warn)">Manual completion required: '
         + r.manual_required.map(aclEscHtml).join(' ') + '</div>';
       if (r.error) {

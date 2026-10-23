@@ -32,6 +32,21 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   visible form/list; saved/linked messages follow the real successful response.
   Missing-creative Publish refusals stay inline beside the visible form/footer
   action, preserving the named rows and refusal before submission.
+  ACL-142: the account map's Connect step asks for the ad account in an in-page
+  dialog instead of a browser prompt. It reads the open profile on opening and
+  again on "Read from the open account"; the result (name and `act_` number) is
+  shown in an editable field and, because Ads Manager opens the profile's
+  default ad account, an unedited read must be ticked as the intended account
+  before Connect is enabled. A typed number needs no tick; an empty one connects
+  without a number as before. In a country row, `x` takes the account out of
+  that country only (confirmed; it stays in ACL and moves to Available
+  accounts), and "Remove from ACL" is a separate confirmed action that deletes
+  this computer's account-map row and the account's country/asset placements
+  (`POST /account-map-remove` with `also_unlink`). The shared sheet, history,
+  Meta campaigns and the Multilogin profile are never touched.
+  Full removal uses the same case-insensitive account identity as local placements;
+  reconnect does not restore old country/asset links. Its confirmations use the
+  shared page dialogs and recoverable errors stay beside the originating action.
   ACL-1651 refreshes the Builder creative list on search/window focus (ten-second
   throttle) and once per missed search streak. A miss during the two-second request
   gap waits in the background for its refresh; typing remains available and the
@@ -313,6 +328,16 @@ The builder reads available Page names and IDs through `/api/account-pages`, usi
 Loading failures and confirmed empty lists are distinct and support Refresh pages. A truncated discovery result is refused. API preflight still validates an explicit Page's membership, and its existing creative readback validates the resulting identity. Instant Form caches are keyed by the resolved Page ID, including in Automatic mode.
 
 RPA resolves the selection before campaign creation and passes the ID and unique display name to the recorded flow. Every ad verifies Identity; failure is non-retryable and not publishable. The existing sanitized `tests/fixtures/ads_manager/simple_create_2026_09_27.html` supplies regression coverage for the captured collapsed Identity summary. Picker interaction has offline native/custom-control tests; a live alternate-Page picker pilot has not been performed. Unrecognized or ambiguous controls fail closed. Other RPA engines are refused for builder Page selections until they implement Identity verification.
+
+ACL-1897 applies the later-created ACL-2105 ordering to campaign-local Automatic:
+the first merged usable Page wins, ad-account Pages before profile Pages, without
+an inherited map overriding it. The option names the resolved Page. RPA carries
+that Page through the existing recorded Identity check, and its result names the
+Page and origin. A profile Page first needs the same constrained account-and-Page
+validate-only proof used by the API; refusal or unknown proof stops before the
+RPA creation flow. Proof is scoped to the current build, never the picker cache.
+A confirmed-empty Automatic Website RPA list keeps its existing Identity behavior;
+API Website shells, Forms refusals and legacy non-builder map fallback remain.
 
 Verification uses synthetic accounts and mocked browser/API transports only. The isolated local dashboard preview is not a production deployment or a stage/main merge.
 # ACL-1880: manual completion when the automatic Page list is empty
