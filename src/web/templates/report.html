@@ -1723,11 +1723,14 @@
        заголовок группы, аккаунты под ней, свободные внизу отдельно. */
     .amap { margin-top: var(--space-lg); }
     .amap-head {
-      display: flex; align-items: baseline; gap: var(--space-md);
+      display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-md); min-width: 0;
       margin-bottom: var(--space-sm);
     }
     .amap-head h3 { margin: 0; }
-    .amap-head .amap-note { font-size: var(--adopy-text-table); color: var(--muted); white-space: nowrap; }
+    .amap-head .amap-note { font-size: var(--adopy-text-table); color: var(--muted); overflow-wrap: anywhere; }
+    .amap-head > .amap-add { min-width: 0; max-width: 100%; }
+    .amap-head > .amap-add > :is(input, select) { min-width: 0; max-width: 100%; box-sizing: border-box; }
+    .amap-head > .amap-add > select { flex: 1 1 12rem; }
     .amap-country {
       border: 1px solid var(--border); border-radius: var(--radius-md);
       background: var(--bg-elev); margin-bottom: var(--space-md);
@@ -1892,11 +1895,27 @@
     /* Одинаковая сетка во всех странах: без table-layout:fixed каждая таблица
        считает ширины по своему содержимому, и колонки соседних стран не
        совпадают — читается как съехавшая вёрстка, потому что она и съехала. */
-    .amap table.amap-grid { table-layout: fixed; }
+    /* Keep the shared Home / Manage account grid readable in narrow panes.
+       Only the data section scrolls; its toolbar, explanation and form stay outside. */
+    .amap-table-scroll {
+      max-width: 100%; min-width: 0; overflow-x: auto;
+      overscroll-behavior-x: contain; scrollbar-gutter: stable;
+      border-bottom: 1px solid var(--border);
+    }
+    .amap-table-scroll:focus-visible {
+      outline: 2px solid var(--accent); outline-offset: -2px;
+    }
+    .amap table.amap-grid { table-layout: fixed; min-width: 1120px; }
     .amap table.amap-grid td, .amap table.amap-grid th {
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    .amap td.amap-acc { white-space: normal; }
+    .amap table.amap-grid td.amap-acc {
+      white-space: normal; overflow-wrap: anywhere;
+      text-overflow: clip;
+    }
+    .amap table.amap-grid th {
+      white-space: normal; overflow-wrap: anywhere; text-overflow: clip;
+    }
     .amap-caret {
       background: none; border: 0; color: var(--muted); cursor: pointer;
       font-size: var(--adopy-text-sm); padding: 0 0.3rem 0 0; line-height: 1;
@@ -2391,7 +2410,8 @@
     .amap-btn.danger:hover { border-color: var(--bad); color: var(--bad); }
     /* Read all (ACL-353): панелька над таблицей страны; сама кнопка — тот же
        amap-btn, ей ничего особенного не нужно. */
-    .amap-toolbar { display: flex; justify-content: flex-end; gap: 0.4rem; padding: 0.35rem 0.85rem 0; }
+    .amap-toolbar { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.4rem; padding: 0.35rem 0.85rem 0; }
+    .amap-toolbar .amap-btn { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
     .amap-x {
       background: none; border: 0; color: var(--border-strong);
       cursor: pointer; font-size: 0.9rem; line-height: 1; padding: 0 0.2rem;
@@ -3651,6 +3671,10 @@
         var(--border) var(--sidebar-w), transparent var(--sidebar-w));
     }
     .main-content { padding-left: var(--adopy-page-padding); padding-right: var(--adopy-page-padding); }
+    /* The closed Builder tab is fixed above the page. Keep actions outside its
+       strip even after focusing the far-right cell of an internally scrolled table.
+       An open non-overlay drawer already reserves its own complete width. */
+    body:not(.cbd-open) .main-content { padding-right: calc(var(--adopy-page-padding) + var(--cbd-handle-w)); }
     @media (max-width: 860px) {
       .dashboard-shell { background: none; }
     }
@@ -7877,7 +7901,7 @@ window.cbTree = (function () {
             ? (q.reason === 'profile' ? 'queued — waiting for its Multilogin profile'
                : q.state === 'waiting_review' ? aclEscHtml(cbReviewWait(q)) + cbReviewRelease(q)
                : q.state === 'waiting_idle' ? aclEscHtml(cbIdleWait(q))
-               : q.state === 'waiting_memory' ? 'queued — waiting for memory'
+               : q.state === 'waiting_memory' ? 'queued — ' + aclEscHtml(cbMemoryWait(q) || 'waiting for memory')
                : 'queued — waiting for a free slot'
                  + (q.ahead === undefined ? '' : ' (' + (q.ahead || 0) + ' ahead)'))
           : 'building the draft';
@@ -8564,22 +8588,15 @@ window.cbBuild = (function () {
       return { state: 'build-wait', sign: '',
                why: 'Waiting for the Multilogin profile — another run is using it' };
     }
-    // ACL-1424: мало памяти — сколько свободно и сколько берёт профиль.
-    var gb = function (mb) { return (Math.max(0, Number(mb) || 0) / 1024).toFixed(1); };
     if (q.hold === 'review_windows') {
       return { state: 'build-wait', sign: '', why: cbReviewWait(q) };
     }
     if (q.hold === 'idle_windows') {
       return { state: 'build-wait', sign: '', why: cbIdleWait(q) };
     }
-    if ((q.hold === 'memory_low' || q.hold === 'below_reserve') && q.available_mb != null && q.profile_mb) {
-      var reserve = Number(q.reserve_mb) || 0;
-      var need = Number(q.need_mb) || (Number(q.profile_mb) + reserve);
-      return { state: 'build-wait', sign: '',
-               why: 'Waiting for memory: ' + gb(q.available_mb) + ' GB free, needs ' + gb(need) + ' GB (profile ~'
-                    + gb(q.profile_mb) + ' GB + ' + String(+gb(reserve)) + ' GB reserve)'
-                    + (ahead ? ' (' + ahead + ' ahead)' : '') };
-    }
+    // ACL-1424 / ACL-1642: мало памяти — сколько свободно, сколько берёт профиль, что поможет.
+    var memory = cbMemoryWait(q);
+    if (memory) return { state: 'build-wait', sign: '', why: memory };
     return { state: 'build-wait', sign: '',
              why: 'Waiting for a free slot' + (q.ahead === undefined ? '' : ' (' + ahead + ' ahead)') };
   }
@@ -8649,7 +8666,8 @@ window.cbBuild = (function () {
       }
       return { state: 'build-run', sign: '', pct: pct,
                why: doing ? 'Building: ' + doing + (c.ok === false ? ' — failed, retrying' : '')
-                          : 'Building: starting' };
+                           : (p.started_ahead ? 'Started ahead: its profile was already open'
+                                              : 'Building: starting') };
     }
     if (p.status === 'cancelling') return { state: 'build-run', sign: '', why: 'Stopping…' };
     if (p.status === 'running') return { state: 'build-run', sign: '', why: 'Waiting for its turn' };
@@ -13244,6 +13262,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   var _cbCreativesMissPending = null;
   var _cbCreativesLastAt = 0;
   var _cbCreativesSig = '';
+  var _cbCreativesLoaded = false;  // ACL-1668: список пришёл — «файла нет» можно утверждать
   window.CB_CREATIVES_REFRESH_COUNT = 0;  // счётчик запросов (для тестов)
 
   // minGapMs — минимальный интервал с прошлого запроса; 0 = без троттлинга.
@@ -13266,7 +13285,9 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
         _cbCreativesSig = sig;
         var prev = CREATIVES;
         CREATIVES = files;
+        _cbCreativesLoaded = true;
         if (changed) cbpRenderChangedSlots(prev, files);
+        cbMarkMissingCreatives();
         return changed;
       })
       .catch(function(){ return false; })
@@ -13295,6 +13316,59 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     });
     return _cbCreativesMissPending;
   }
+
+  // ACL-1668: выбранный в строке файл пропал из папки (удалён или переименован).
+  // Выбранный = скрытое поле creative_file; набранный, но не выбранный текст не в счёт.
+  // Пока список не загружен, ничего не утверждаем.
+  function cbCreativeChosen(row) {
+    var hid = row.querySelector('input[type="hidden"][name$="_creative_file"]');
+    return ((hid && hid.value) || '').trim();
+  }
+  function cbCreativeMissing(v) {
+    return !!v && _cbCreativesLoaded && !CREATIVES.some(function(f) {
+      return f.filename === v || f.rel_path === v;
+    });
+  }
+  // Имя остаётся в поле; рядом появляется надпись цветом ошибки темы.
+  function cbMarkMissingCreatives() {
+    document.querySelectorAll('.cb-ad-row').forEach(function(row) {
+      var wrap = row.querySelector('.cb-creative-sel-wrap');
+      if (!wrap) return;
+      var missing = cbCreativeMissing(cbCreativeChosen(row));
+      row.classList.toggle('cb-file-missing', missing);
+      var note = wrap.querySelector('.cb-file-missing-note');
+      if (missing && !note) {
+        note = document.createElement('div');
+        note.className = 'cb-file-missing-note';
+        note.setAttribute('role', 'alert');
+        note.style.cssText = 'color:var(--bad);font-size:var(--adopy-text-sm)';
+        note.textContent = 'File missing \u2014 pick again';
+        wrap.appendChild(note);
+      } else if (!missing && note) {
+        note.remove();
+      }
+    });
+  }
+  // Строки с пропавшим файлом внутри scope (форма или карточка): [{slot, ad, file}].
+  window.cbMissingCreatives = function(scope) {
+    cbMarkMissingCreatives();
+    var out = [];
+    (scope || document).querySelectorAll('.cb-ad-row.cb-file-missing').forEach(function(row) {
+      var slot = row.closest('.cb-slot');
+      out.push({slot: slot, ad: Array.prototype.indexOf.call(row.parentNode.querySelectorAll('.cb-ad-row'), row) + 1,
+                file: cbCreativeChosen(row)});
+    });
+    return out;
+  };
+  // Блок для подтверждения публикации: красный список; '' если всё на месте.
+  window.cbMissingCreativesHtml = function(missing) {
+    if (!missing.length) return '';
+    var title = window.cbSlotTitle || function() { return 'Campaign'; };
+    return '<div class="cb-warn-block cb-missing-files" style="color:var(--bad)">File missing \u2014 pick again. Nothing was sent:<br>'
+      + missing.map(function(m) {
+          return aclEscHtml((m.slot ? title(m.slot) : 'Campaign') + ' \u2014 Ad ' + m.ad + ': ' + m.file);
+        }).join('<br>') + '</div>';
+  };
 
   function cbCreativeSig(f) {
     return f ? [f.rel_path, f.type, f.size_bytes, f.story_label, f.square_file] : null;
@@ -13421,6 +13495,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
         dropdown.hidden = true;
         var slot = wrap.closest('.cb-slot');
         if (slot) cbUpdateName(slot);
+        cbMarkMissingCreatives();
       });
     });
   };
@@ -13501,6 +13576,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   }
 
   function cbRenderPreviews(slot) {
+    cbMarkMissingCreatives();
     var col = slot.querySelector('[data-preview-col]');
     if (!col) return;
     var cards = [];
@@ -13991,6 +14067,7 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
         dropdown.hidden = true;
         var slot = wrap.closest('.cb-slot');
         if (slot) cbUpdateName(slot);
+        cbMarkMissingCreatives();
       });
     });
   };
@@ -15749,7 +15826,7 @@ window.cbPublishAll = function (onProgress, picked, onlyKeys) {
   // Ключ — страна и аккаунт: один аккаунт бывает привязан к нескольким
   // странам (account_links), и у каждой страны своя форма и свои кампании;
   // отметки — тоже у формы, не у имени аккаунта.
-  var forms = [], running = [], campaigns = 0, listed = [];
+  var forms = [], running = [], campaigns = 0, listed = [], missingFiles = [];
   document.querySelectorAll('form.open-account-form').forEach(function (form) {
     var slots = form.querySelectorAll('.cb-slot');
     if (!slots.length) return;
@@ -15759,6 +15836,10 @@ window.cbPublishAll = function (onProgress, picked, onlyKeys) {
     if (onlyKeys && onlyKeys.indexOf(cbFormKey(form)) < 0) return;
     if (cbAccountBusy(cbFormKey(form))) { running.push(cbFormTitle(form)); return; }
     forms.push(form);
+    // ACL-1668: пропавший выбранный файл — по отмеченным карточкам или по всем.
+    if (window.cbMissingCreatives) window.cbMissingCreatives(form).forEach(function (m) {
+      if (!mine || mine.indexOf(m.slot) !== -1) missingFiles.push(m);
+    });
     campaigns += mine ? mine.length : slots.length;
     // Живые аккаунты: какие именно кампании уйдут, видно до нажатия.
     if (mine) listed.push('<strong>' + aclEscHtml(cbFormTitle(form)) + '</strong>: '
@@ -15807,7 +15888,8 @@ window.cbPublishAll = function (onProgress, picked, onlyKeys) {
       ? '<b>' + aclEscHtml(cbPublishMode().split(' — ')[0]) + '</b> ' + aclEscHtml(cbPublishMode().split(' — ').slice(1).join(' — '))
       // Режим робота — дословно здесь: вопрос обязан сказать «черновик» и «Publish не нажимается».
       : '<b>Draft</b> — the RPA leaves a draft in Ads Manager and never clicks Publish in Facebook',
-    noticesHtml: (pfBlocksHtml ? pfBlocksHtml : '')
+    noticesHtml: (window.cbMissingCreativesHtml ? window.cbMissingCreativesHtml(missingFiles) : '')
+      + (pfBlocksHtml ? pfBlocksHtml : '')
       + (typeof window.cbPreflightWarnHtml === 'function' ? window.cbPreflightWarnHtml() : '')
       + (noteHtml || '')
   });
@@ -15817,6 +15899,7 @@ window.cbPublishAll = function (onProgress, picked, onlyKeys) {
       : (only ? 'Build the selected campaigns as drafts?' : 'Build every campaign as a draft?'),
     parts.body,
     function () {
+      if (missingFiles.length) { window.alert('Not sent: a chosen creative file is missing \u2014 pick it again.'); return; }
       var go = anyway ? forms : forms.filter(function (f) { return badForms.indexOf(f) === -1; });
       if (pf && window.cbPreflightDecision) window.cbPreflightDecision(go.map(cbFormAccount), anyway ? [] : badForms.map(cbFormAccount), anyway ? badForms.map(cbFormAccount) : []);
       if (!go.length) { window.alert('No account is ready to run. Fix the listed accounts or tick "Run anyway".'); return; }
@@ -16143,6 +16226,7 @@ window.cbCheckPlan = function (picked, out, btn) {
 };
 
 /* Имя карточки для подтверждения. */
+window.cbSlotTitle = cbSlotTitle;
 function cbSlotTitle(slot) {
   return ((slot.querySelector('.cb-name-hidden') || {}).value || '').trim() || 'Untitled campaign';
 }
@@ -16197,6 +16281,26 @@ function cbReviewWait(q) {
   if (names.length) return 'waiting: review windows still open for ' + names.join(', ') + ' — close them to continue';
   var n = Math.max(1, parseInt(q && q.kept, 10) || 1);
   return 'waiting: ' + n + ' review window' + (n === 1 ? ' is' : 's are') + ' still open — close them to continue';
+}
+/* ACL-1642: очередь ждёт память — сколько свободно, сколько просит новый профиль
+   и что поможет; задание за такой головой — «ждёт за ней». null — ждёт не память. */
+function cbMemoryWait(q) {
+  q = q || {};
+  var ahead = Math.max(0, parseInt(q.ahead, 10) || 0);
+  var tail = ahead ? ' (' + ahead + ' ahead)' : '';
+  if (q.behind_memory) return 'Waiting behind a job that waits for memory' + tail;
+  if (q.hold !== 'memory_low' && q.hold !== 'below_reserve') return null;
+  var hint = '. Close a Multilogin profile you don\'t need.';
+  if (q.available_mb == null || !q.profile_mb) return 'Waiting for memory' + tail + hint;
+  var gb = function (mb) { return (Math.max(0, Number(mb) || 0) / 1024).toFixed(1); };
+  var reserve = Number(q.reserve_mb) || 0;
+  var need = Number(q.need_mb) || (Number(q.profile_mb) + reserve);
+  /* Разбор складывается в «needs»: остаток — профили, что ещё стартуют или растут. */
+  var extra = Math.max(0, need - Number(q.profile_mb) - reserve);
+  return 'Waiting for memory: ' + gb(q.available_mb) + ' GB free, a new profile needs ' + gb(need)
+    + ' GB (profile ~' + gb(q.profile_mb) + ' GB + '
+    + (extra >= 51 ? gb(extra) + ' GB for profiles still starting or growing + ' : '')
+    + String(+gb(reserve)) + ' GB reserve)' + tail + hint;
 }
 /* ACL-2113: окна, оставленные для удобства, уступают место сами, простояв N минут. */
 function cbIdleWait(q) {
@@ -17073,6 +17177,14 @@ window.cbPublish = function(form) {
       + bodyHtml;
   }
 
+  // ACL-1668: выбранный файл удалён или переименован — собирать нечего.
+  var missingFiles = window.cbMissingCreatives
+    ? window.cbMissingCreatives(onlySlot || form).filter(function(m) {
+        return !ticked.length || ticked.indexOf(m.slot) !== -1;
+      })
+    : [];
+  if (missingFiles.length) bodyHtml = window.cbMissingCreativesHtml(missingFiles) + bodyHtml;
+
   if (lostTargeting.length) {
     var names = lostTargeting.map(aclEscHtml).join(', ');
     bodyHtml = '<div class="cb-warn-block">⚠ Targeting not selected: <b>' + names + '</b>'
@@ -17096,6 +17208,7 @@ window.cbPublish = function(form) {
   _safeConfirm(cbApiMode()
       ? (ticked.length ? 'Create the selected campaigns as PAUSED campaigns?' : 'Create this campaign as a PAUSED campaign?')
       : (ticked.length ? 'Build the selected campaigns as drafts?' : 'Build this campaign as a draft?'), bodyHtml, function() {
+    if (missingFiles.length) { window.alert('Not sent: a chosen creative file is missing \u2014 pick it again.'); return; }
     if (pf && window.cbPreflightDecision) window.cbPreflightDecision(mine && !anyway ? [] : [accLabel], mine && !anyway ? [accLabel] : [], mine && anyway ? [accLabel] : []);
     if (mine && !anyway) { window.alert(accLabel + ' is not ready — fix it, or tick "Run anyway".'); return; }
     if (onlySlot || ticked.length) {
@@ -17369,7 +17482,7 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
           ? 'queued — waiting for the Multilogin profile (another run is using it)'
           : queue.state === 'waiting_review' ? aclEscHtml(cbReviewWait(queue)) + cbReviewRelease(queue)
           : queue.state === 'waiting_idle' ? aclEscHtml(cbIdleWait(queue))
-          : queue.state === 'waiting_memory' ? 'queued — waiting for memory'
+          : queue.state === 'waiting_memory' ? 'queued — ' + aclEscHtml(cbMemoryWait(queue) || 'waiting for memory')
           : 'queued — waiting for a free slot'
             + (queue.ahead === undefined ? '' : ' (' + (queue.ahead || 0) + ' ahead)'))
       : (job.status === 'done'

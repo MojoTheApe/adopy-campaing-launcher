@@ -20,6 +20,16 @@ def fields(request):
             for part in msg.get_payload()}
 
 
+# ACL-1668: the Builder marks a chosen creative whose file is not in the loaded
+# /api/creatives list as missing and refuses to publish it, so offline fixtures
+# that write names straight into the hidden field must list those files too.
+OFFLINE_NAMES = (['offline.png', 'good.png', 'fixed.png']
+                 + ['offline-%d.png' % i for i in range(40)]
+                 + ['offline-ad-%d.png' % i for i in range(40)])
+OFFLINE_FILES = [{'filename': n, 'rel_path': n, 'folder': '', 'type': 'Image', 'size_bytes': 1}
+                 for n in OFFLINE_NAMES]
+
+
 @pytest.fixture(scope='module')
 def browser():
     with sync_playwright() as pw:
@@ -52,7 +62,7 @@ def ui(browser):
         if r.request.resource_type == 'document':
             r.fulfill(content_type='text/html', body=html)
             return
-        data = {'files': [], 'texts': [], 'profiles': [], 'waiting': False}
+        data = {'files': OFFLINE_FILES, 'texts': [], 'profiles': [], 'waiting': False}
         if path == '/preview-publish':
             f = fields(r.request)
             state['previews'].append(f)
