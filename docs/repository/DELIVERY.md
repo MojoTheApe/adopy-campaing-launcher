@@ -33,6 +33,11 @@ a new consumer installer, application deployment or n8n publication. Product and
 explicit publication scope retain the actual target below. Split mixed changes;
 use only the pinned supported proof, never a task label or generic source-only
 waiver. Preserve existing authorized delivery requests and unfinished obligations.
+Where the exact pinned contract supports isolated manual verification tooling,
+use its bounded immutable proof, supplemental independent whole-scope assessment
+and exact successful official workflow attempt/jobs after ordinary main admission.
+Retain original source review/acceptance and pending-receipt history. This does
+not take over another developer or satisfy an actual product-publication request.
 
 Follow [canonical shared-support proof](PROCESS_SUPPORT.md) for a published compatible
 upgrade. The actual independent Reviewer must bind the complete current task scope,
