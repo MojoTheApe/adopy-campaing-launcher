@@ -12836,14 +12836,20 @@ function mlSignin(cid) {
       if (matched.length === 1) {
         var mp = matched[0];
         usedProfileIds[mp.profile_id] = true;
-        _mlSaveIds(accLabel, mp.folder_id, mp.profile_id, instance, null);
-        autoLinked.push((mp.name||'?') + ' → ' + accLabel);
+        autoLinked.push(_mlSaveIds(accLabel, mp.folder_id, mp.profile_id, instance, null, profilesDiv)
+          .then(function(saved) { return saved ? (mp.name||'?') + ' → ' + accLabel : null; }));
       }
     });
 
     if (autoLinked.length) {
-      profilesDiv.innerHTML = '<span style="color:var(--good);font-size:var(--adopy-text-sm)">'
-        + '✓ Linked automatically: ' + autoLinked.map(aclEscHtml).join(', ') + '</span>';
+      profilesDiv.textContent = 'Linking matched profiles…';
+      Promise.all(autoLinked).then(function(results) {
+        var linked = results.filter(function(name) { return name !== null; });
+        profilesDiv.innerHTML = linked.length
+          ? '<span style="color:var(--good);font-size:var(--adopy-text-sm)">'
+            + '✓ Linked automatically: ' + linked.map(aclEscHtml).join(', ') + '</span>'
+          : '';
+      });
       return;
     }
 
@@ -12914,11 +12920,12 @@ function mlManualSave(cid) {
       + '<span style="color:var(--warn);font-size:var(--adopy-text-sm)">⚠ This overwrites the current IDs in ad_account_map.csv</span>';
     _safeConfirm('Save IDs manually?', bodyHtml, function() {
       if (statusEl) statusEl.innerHTML = '<span style="color:var(--muted)">Saving…</span>';
-      _mlSaveIds(accLabel, folderId, profileId, 'A', null);
-      // Show success after short delay
-      setTimeout(function() {
-        if (statusEl) statusEl.innerHTML = '<span style="color:var(--good)">✓ Saved for ' + aclEscHtml(accLabel) + '</span>';
-      }, 800);
+      var errorAnchor = statusEl || document.getElementById('ml-manual-profile-' + cid);
+      _mlSaveIds(accLabel, folderId, profileId, 'A', null, errorAnchor).then(function(saved) {
+        if (statusEl) statusEl.innerHTML = saved
+          ? '<span style="color:var(--good)">✓ Saved for ' + aclEscHtml(accLabel) + '</span>'
+          : '';
+      });
     }, { confirmLabel: 'Save' });
   }
 
@@ -13202,10 +13209,12 @@ function mlUseProfile(folderId, profileId, instance, profileName, btn) {
   }, 50);
 }
 
-function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
-  if (triggerBtn) { aclInlineError(triggerBtn, ''); triggerBtn.disabled = true; triggerBtn.textContent = 'Saving…'; }
+function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn, errorAnchor) {
+  var anchor = errorAnchor || triggerBtn;
+  aclInlineError(anchor, '');
+  if (triggerBtn) { triggerBtn.disabled = true; triggerBtn.textContent = 'Saving…'; }
 
-  fetch('/account-map-patch', {
+  return fetch('/account-map-patch', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
@@ -13219,8 +13228,8 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
   .then(function(data) {
     if (triggerBtn) { triggerBtn.disabled = false; triggerBtn.textContent = 'Use'; }
     if (!data.ok) {
-      aclInlineError(triggerBtn, 'Save failed: ' + (data.error || 'unknown error'));
-      return;
+      aclInlineError(anchor, 'Save failed: ' + (data.error || 'unknown error'));
+      return false;
     }
     // Update all Multilogin status rows for this account
     var accId = accLabel.replace(/[\s.]/g, '_');
@@ -13247,10 +13256,12 @@ function _mlSaveIds(accLabel, folderId, profileId, instance, triggerBtn) {
     document.querySelectorAll('[id^="ml-status-"]').forEach(function(s) {
       s.innerHTML += ' <span style="color:var(--good)">· saved to ' + aclEscHtml(accLabel) + ' ✓</span>';
     });
+    return true;
   })
   .catch(function(e) {
     if (triggerBtn) { triggerBtn.disabled = false; triggerBtn.textContent = 'Use'; }
-    aclInlineError(triggerBtn, 'Network error: ' + e.message);
+    aclInlineError(anchor, 'Network error: ' + e.message);
+    return false;
   });
 }
 
