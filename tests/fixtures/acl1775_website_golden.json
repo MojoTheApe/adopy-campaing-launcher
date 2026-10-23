@@ -935,6 +935,7 @@
  "steps": [
   "preflight: targeting resolved",
   "preflight: creatives read",
+  "preflight: Meta rules registry",
   "campaign: created PAUSED, tag kept",
   "ad set 'MX Leads 1': created ACTIVE (campaign PAUSED), tag kept",
   "ad 1: image uploaded",

@@ -24,16 +24,23 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import time
+import uuid
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable
 
+from src.fb_api import error_catalog as _catalog
 from src.fb_api import form_create as _fc
 from src.fb_api import form_templates as _ft
 from src.fb_api import forms as _forms
+from src.fb_api import write_policy as _wpol
+
 from src.fb_api import pages as _pg
 from src.fb_api.graph import GraphClient, GraphError, GraphStop, WritesBlocked, WriteUnknown, normalize_act
+
+log = logging.getLogger(__name__)
 
 PAUSED = "PAUSED"
 #: ACL-2114: наборы и объявления создаются ACTIVE под кампанией на паузе - показа нет, пока человек
@@ -96,7 +103,30 @@ ZERO_DECIMAL = frozenset({"CLP", "COP", "CRC", "HUF", "ISK", "IDR", "JPY", "KRW"
 IMAGE_EXT = frozenset({".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp"})
 VIDEO_EXT = frozenset({".mp4", ".mov", ".m4v", ".avi", ".wmv", ".mkv", ".webm"})
 IMAGE_MAX_BYTES = 30 * 1024 * 1024
-VIDEO_MAX_BYTES = 200 * 1024 * 1024
+#: Видео до этого размера уходит одним запросом (как раньше); больше - кусками (ACL-1891).
+VIDEO_SINGLE_MAX_BYTES = 200 * 1024 * 1024
+#: Потолок видео на пути кусками: в памяти только кусок. Meta сама принимает до 4 ГБ.
+VIDEO_MAX_BYTES = _wpol.UPLOAD_FILE_MAX
+VIDEO_CHUNK_MAX = _wpol.UPLOAD_CHUNK_MAX
+#: Вызовов на загрузку кусками сверх самих кусков: start, finish, запас на сверку.
+CALLS_UPLOAD_FIXED = 3
+
+#: Запас вызовов на всё остальное в кампании при проверке бюджета кусков (ACL-1891).
+CALLS_RESERVE_OTHER = 40
+
+
+def _disk_size(path: str) -> int:
+    try:
+        return Path(path).stat().st_size
+    except (OSError, ValueError):
+        return 0
+
+
+def upload_calls(size: int) -> int:
+    """Вызовов на загрузку видео кусками (ACL-1891); 0 - файл уходит одним запросом."""
+    if size <= VIDEO_SINGLE_MAX_BYTES:
+        return 0
+    return -(-size // VIDEO_CHUNK_MAX) + CALLS_UPLOAD_FIXED
 
 #: Ожидание обработки видео — с потолком по времени и по числу вызовов.
 VIDEO_WAIT_S = 300.0
@@ -145,6 +175,17 @@ def _wp_form_edge() -> str:
 
 class PlanError(ValueError):
     """Черновик нельзя создать через API; к Meta ничего не писали."""
+
+    #: Список проблем для дашборда (как у RPA, ACL-1437); у обычного отказа плана пуст.
+    problems: tuple = ()
+
+
+class RulesViolation(PlanError):
+    """Задание нарушает реестр правил Meta (ACL-1805): стоп до первой записи."""
+
+    def __init__(self, message: str, problems: list[dict]):
+        super().__init__(message)
+        self.problems = problems
 
 
 class CreationStopped(RuntimeError):
@@ -638,7 +679,72 @@ def _labels(row: dict) -> set[str]:
     return {str(x.get("name") or "") for x in (raw or []) if isinstance(x, dict)}
 
 
-def _md5(data: bytes) -> str:
+class LargeFile:
+    """Большое видео на диске (ACL-1891): в памяти не держится, читаются только куски.
+
+    Ведёт себя как bytes ровно настолько, насколько нужно предпроверке: длина, индекс и срез
+    (заголовки mp4 читаются малыми срезами). Срез больше потолка куска - отказ, чтобы случайный
+    `data[:]` не втянул файл в память.
+    """
+
+    HASH_BLOCK = 1024 * 1024
+
+    def __init__(self, path: str, size: int,
+                 read_range: Callable[[str, int, int], bytes] | None = None):
+        self.path = path
+        self.size = int(size)
+        self._read = read_range or self._read_disk
+        self._md5: str | None = None
+        #: Самый большой единичный кусок, прочитанный с диска (для проверки памяти).
+        self.max_read = 0
+
+    @staticmethod
+    def _read_disk(path: str, offset: int, n: int) -> bytes:
+        with open(path, "rb") as fh:
+            fh.seek(offset)
+            return fh.read(n)
+
+    def __len__(self) -> int:
+        return self.size
+
+    def __bool__(self) -> bool:
+        return self.size > 0
+
+    def read_range(self, offset: int, n: int) -> bytes:
+        if n < 0 or n > max(VIDEO_CHUNK_MAX, self.HASH_BLOCK) or offset < 0:
+            raise ValueError("read is larger than one chunk")
+        out = self._read(self.path, offset, n) if n else b""
+        self.max_read = max(self.max_read, len(out))
+        return out
+
+    def __getitem__(self, key):
+        if isinstance(key, slice):
+            start, stop, step = key.indices(self.size)
+            if step != 1:
+                raise ValueError("only plain slices")
+            return self.read_range(start, max(0, stop - start))
+        index = key + self.size if key < 0 else key
+        if not 0 <= index < self.size:
+            raise IndexError(key)
+        return self.read_range(index, 1)[0]
+
+    def md5(self) -> str:
+        if self._md5 is None:
+            h = hashlib.md5()  # noqa: S324 - только имя/поиск, не защита
+            offset = 0
+            while offset < self.size:
+                block = self.read_range(offset, min(self.HASH_BLOCK, self.size - offset))
+                if not block:
+                    raise OSError("file ended while hashing")
+                h.update(block)
+                offset += len(block)
+            self._md5 = h.hexdigest()
+        return self._md5
+
+
+def _md5(data: "bytes | LargeFile") -> str:
+    if isinstance(data, LargeFile):
+        return data.md5()
     return hashlib.md5(data).hexdigest()  # noqa: S324 — только имя/поиск, не защита
 
 
@@ -674,6 +780,8 @@ class Outcome:
     plan: dict = field(default_factory=dict)
     #: Pre-flight audit (ACL-1819): вердикты серверных правил; пусто, если аудит не шёл.
     audit: list = field(default_factory=list)
+    #: Что показать человеку списком (ACL-1437): title/impact/action/severity/raw.
+    problems: list = field(default_factory=list)
     manual_required: list[str] = field(default_factory=list)
     #: ACL-2114: чтением подтверждено, что кампания PAUSED, - только тогда пишутся ACTIVE дети.
     campaign_confirmed_paused: bool = False
@@ -704,6 +812,8 @@ class CampaignCreator:
     def __init__(self, client: GraphClient, facts: AccountFacts, resolver: TargetingResolver, *,
                  cancelled: Callable[[], bool] = lambda: False,
                  read_file: Callable[[str], bytes] | None = None,
+                 size_of: Callable[[str], int] | None = None,
+                 read_range: Callable[[str, int, int], bytes] | None = None,
                  sleep: Callable[[float], None] = time.sleep,
                  clock: Callable[[], float] = time.monotonic,
                  video_wait_s: float = VIDEO_WAIT_S, video_poll_s: float = VIDEO_POLL_S,
@@ -716,6 +826,9 @@ class CampaignCreator:
         self.resolver = resolver
         self.cancelled = cancelled
         self.read_file = read_file or (lambda p: Path(p).read_bytes())
+        #: ACL-1891: размер файла на диске (None - неизвестен, читаем целиком как раньше) и чтение куска.
+        self.size_of = size_of or (lambda p: _disk_size(p) or None)
+        self.read_range = read_range
         self.sleep = sleep
         self.clock = clock
         self.video_wait_s = video_wait_s
@@ -1062,6 +1175,10 @@ class CampaignCreator:
         vid = find()
         if vid:
             self._step(out, f"ad {ad.index}: video already in the ad account")
+        elif isinstance(data, LargeFile):
+            vid = self._video_chunked(out, plan, data, title, find, f"ad {ad.index}")
+            out.created.setdefault("videos", []).append(vid)
+            self._step(out, f"ad {ad.index}: video uploaded")
         else:
             vid = self._write(out, f"ad {ad.index}: video upload", f"/{plan.act}/advideos",
                               {"name": title, "title": title}, find, files={"source": data},
@@ -1069,6 +1186,103 @@ class CampaignCreator:
             out.created.setdefault("videos", []).append(vid)
             self._step(out, f"ad {ad.index}: video uploaded")
         return vid, self._wait_video(out, ad, vid)
+
+    # -- загрузка большого видео кусками (ACL-1891)
+    @staticmethod
+    def _offsets(body: dict, size: int, floor: int, what: str) -> tuple[int, int]:
+        """Смещения из ответа Meta: цифры, не назад, не за концом файла. Иначе - стоп."""
+        s_raw, e_raw = str(body.get("start_offset", "")), str(body.get("end_offset", ""))
+        if not (s_raw.isdigit() and e_raw.isdigit() and len(s_raw) <= 13 and len(e_raw) <= 13):
+            raise CreationStopped(f"{what}: Meta returned no usable upload offsets", kind="video_error")
+        start, end = int(s_raw), int(e_raw)
+        if start < floor or start > size or end < start or end > size:
+            raise CreationStopped(f"{what}: Meta reported an upload offset outside the file "
+                                  f"({start}-{end} of {size}); stopped before sending more",
+                                  kind="video_error")
+        return start, end
+
+    def _upload_call(self, out: Outcome, what: str, path: str, params: dict, files: dict | None,
+                     *, find: Callable[[], str | None] | None = None) -> dict:
+        """Один вызов фазы загрузки. Неизвестный результат - стоп (кусок повторяет сам цикл)."""
+        self._check_cancel(out)
+        try:
+            return self.client.post(path, params, files=files, filename="chunk" if files else "")
+        except WriteUnknown as exc:
+            self._step(out, f"{what}: result unknown")
+            raise CreationStopped(
+                f"{what}: the write result is unknown ({exc}). Publish again later: a finished video "
+                "is found by its tag and is not uploaded twice.", created=out.created, kind="unknown") from exc
+
+    def _video_chunked(self, out: Outcome, plan: CampaignPlan, big: "LargeFile", title: str,
+                       find: Callable[[], str | None], who: str) -> str:
+        """start -> transfer (куски от смещения Meta) -> finish. В памяти один кусок."""
+        path = f"/{plan.act}/advideos"
+        size = len(big)
+        what = f"{who}: video upload"
+        # Meta требует waterfall_id от токена Ads Manager (подкод 1363049); один на всю загрузку.
+        waterfall = uuid.uuid4().hex
+        started = self._upload_call(out, what, path, {"upload_phase": "start", "file_size": str(size),
+                                                       "waterfall_id": waterfall}, None)
+        sid, vid = str(started.get("upload_session_id") or ""), str(started.get("video_id") or "")
+        if not (sid.isdigit() and vid.isdigit()):
+            raise CreationStopped(f"{what}: Meta returned no upload session", created=out.created,
+                                  kind="video_error")
+        offset, end = self._offsets(started, size, 0, what)
+        self._step(out, f"{who}: chunked upload started ({size // (1024 * 1024)} MB)")
+        # Предохранитель от бесконечного цикла: не больше вдвое сверх числа кусков.
+        guard = 2 * (-(-size // VIDEO_CHUNK_MAX)) + 4
+        failures = 0
+        while offset < size:
+            guard -= 1
+            if guard < 0:
+                raise CreationStopped(f"{what}: upload does not progress", created=out.created, kind="video_error")
+            n = min(max(end - offset, 1), VIDEO_CHUNK_MAX, size - offset)
+            chunk = big.read_range(offset, n)
+            if len(chunk) != n:
+                raise CreationStopped(f"{what}: the file changed while uploading", created=out.created,
+                                      kind="video_error")
+            params = {"upload_phase": "transfer", "upload_session_id": sid, "start_offset": str(offset),
+                      "waterfall_id": waterfall}
+            try:
+                body = self._upload_call(out, what, path, params, {_wpol.UPLOAD_CHUNK_FIELD: chunk})
+            except CreationStopped as exc:
+                if exc.kind != "unknown" or failures >= 2:
+                    raise
+                # Неизвестно, дошёл ли кусок: тот же кусок с тем же смещением - запрос смещения у Meta.
+                failures += 1
+                self.client.reconciled(path)
+                continue
+            except GraphError as exc:
+                # Meta отказала: назвала нужное смещение - продолжаем с него (не с нуля), иначе стоп.
+                d = exc.details or {}
+                if failures >= 2 or not str(d.get("start_offset", "")).isdigit():
+                    raise
+                failures += 1
+                offset, end = self._offsets(d, size, offset, what)
+                self._step(out, f"{who}: resuming the upload from offset {offset}")
+                continue
+            failures = 0
+            offset, end = self._offsets(body, size, offset, what)
+        try:
+            done = self._upload_call(out, what, path, {"upload_phase": "finish", "upload_session_id": sid,
+                                                        "title": title, "name": title,
+                                                        "waterfall_id": waterfall}, None)
+        except CreationStopped as exc:
+            if exc.kind != "unknown":
+                raise
+            # Результат finish неизвестен: сверка чтением по метке названия, второй раз не грузим.
+            if self.reconcile_wait_s > 0:
+                self.sleep(self.reconcile_wait_s)
+            found = find()
+            if not found:
+                raise
+            self.client.reconciled(path)
+            self._step(out, f"{what}: reconciled - found by readback")
+            return str(found)
+        if done.get("success") is False:
+            raise CreationStopped(f"{what}: Meta did not finish the upload", created=out.created,
+                                  kind="video_error")
+        return vid
 
     def _wait_video(self, out: Outcome, ad: AdPlan, vid: str) -> str:
         """Ждать обработку видео — не дольше `video_wait_s` и `video_max_polls` вызовов."""
@@ -1262,15 +1476,26 @@ class CampaignCreator:
             out.error, out.stop_kind = str(exc), exc.kind
         except PlanError as exc:
             out.error, out.stop_kind = str(exc) + " Nothing more was created.", "plan"
+            out.problems = list(exc.problems)
         except WritesBlocked as exc:
             out.error, out.stop_kind = f"Not written: {exc}", "blocked"
         except GraphStop as exc:
-            out.error, out.stop_kind = f"Graph API stopped: {exc}", exc.kind
+            out.error, out.stop_kind = f"Graph API stopped: {_catalog.problem_line(exc)}", exc.kind
+            out.problems = [graph_problem(exc)]
         except GraphError as exc:
-            out.error, out.stop_kind = f"Meta refused: {exc}", "graph_error"
+            out.error, out.stop_kind = f"Meta refused: {_catalog.problem_line(exc)}", "graph_error"
+            out.problems = [graph_problem(exc)]
         except WriteUnknown as exc:
             out.error, out.stop_kind = f"Write result unknown: {exc}", "unknown"
         return out
+
+    def load_media(self, path: str, kind: str) -> "bytes | LargeFile":
+        """Файл объявления: видео больше 200 МБ - `LargeFile` (куски с диска), остальное - bytes."""
+        if kind == "video":
+            size = self.size_of(path)
+            if size and size > VIDEO_SINGLE_MAX_BYTES:
+                return LargeFile(path, size, self.read_range)
+        return self.read_file(path)
 
     def check_profile_page(self, plan: CampaignPlan) -> None:
         """Страница из профиля (не из кабинета) должна пройти проверку пригодности (ACL-2105).
@@ -1315,7 +1540,7 @@ class CampaignCreator:
         for s in plan.ad_sets:
             for ad in s.ads:
                 try:
-                    data = self.read_file(ad.path)
+                    data = self.load_media(ad.path, ad.kind)
                 except OSError as exc:
                     raise PlanError(f"ad {ad.index}: creative file cannot be read ({exc})") from exc
                 limit = VIDEO_MAX_BYTES if ad.kind == "video" else IMAGE_MAX_BYTES
@@ -1324,7 +1549,16 @@ class CampaignCreator:
                                     f"{limit // (1024 * 1024)} MB")
                 files[ad.path] = data
         self._step(out, "preflight: creatives read")
+        # ACL-1891: куски большого видео должны влезть в бюджет вызовов - иначе отказ до записи.
+        budget = getattr(self.client, "max_calls", None)
+        chunk_calls = sum(upload_calls(len(v)) for v in files.values() if isinstance(v, LargeFile))
+        if isinstance(budget, int) and chunk_calls and chunk_calls + CALLS_RESERVE_OTHER > budget:
+            raise PlanError(f"Large videos need about {chunk_calls} Meta calls to upload in chunks, more than "
+                            f"one run allows ({budget}). Use a smaller video or split the campaign. "
+                            "Nothing was created.")
         self._check_planned(plan, targetings)
+        self._check_meta_rules(plan, targetings)
+        self._step(out, "preflight: Meta rules registry")
         return targetings, files
 
     def _check_forms(self, plan: CampaignPlan) -> None:
@@ -1492,6 +1726,52 @@ class CampaignCreator:
                 ok("ads", {"name": ad.name, "adset_id": "0", "creative": {"creative_id": "0"},
                            "status": CHILD_STATUS, "adlabels": [{"name": plan.label}]}, f"ad {ad.index}")
 
+    def meta_rule_jobs(self, plan: CampaignPlan, targetings: list[dict]) -> list[tuple[str, dict]]:
+        """По заданию на объявление - ровно те значения, что уйдут в POST (ACL-1805)."""
+        camp = self.campaign_params(plan)
+        jobs = []
+        for ad_set, targeting in zip(plan.ad_sets, targetings):
+            aset = self.adset_params(plan, ad_set, "0", targeting)
+            for ad in ad_set.ads:
+                media = ({"video_id": "0", "thumb": "x"} if ad.kind == "video" else {"image_hash": "0"})
+                story = self._story(plan, ad, ad_set, media)
+                data = story.get("video_data") or story.get("link_data") or {}
+                cta = data.get("call_to_action") or {}
+                jobs.append((f"ad set {ad_set.name!r}, ad {ad.index}", {
+                    "objective": camp["objective"], "bid_strategy": camp["bid_strategy"],
+                    "optimization_goal": aset["optimization_goal"], "billing_event": aset["billing_event"],
+                    "destination_type": aset["destination_type"], "call_to_action": cta.get("type"),
+                    "ad_title": ad.title, "ad_body": ad.body, "ad_link_description": ad.description or None,
+                    "api_preview": {"campaign": {"special_ad_categories": camp["special_ad_categories"]}}}))
+        return jobs
+
+    def _check_meta_rules(self, plan: CampaignPlan, targetings: list[dict]) -> None:
+        """Реестр правил Meta (ACL-1781) над точными значениями запроса - до первой записи.
+
+        Нарушение - `RulesViolation`, к Meta ничего не ушло. Реестр не загрузился
+        или проверка упала - пропускаем с записью в лог (кампанию это не блокирует).
+        """
+        try:
+            from src.campaign_bridge import meta_rules
+
+            ruleset = meta_rules.load_rules()
+            found: dict[str, Any] = {}
+            for where, job in self.meta_rule_jobs(plan, targetings):
+                for v in meta_rules.check_job(job, ruleset):
+                    found.setdefault(f"{v.rule_id}|{v.message_en}", (where, v))
+        except Exception:
+            log.exception("Meta rules check failed; the campaign is not blocked by it")
+            return
+        if not found:
+            return
+        problems = [{"title": v.message_en, "impact": "Meta would refuse this campaign.",
+                     "action": "Fix the value in the campaign settings and publish again.",
+                     "severity": "blocking", "step": "meta_rules",
+                     "raw": f"{where}; rule {v.rule_id}; source: {v.source_url}"}
+                    for where, v in found.values()]
+        text = " ".join(f"Meta rules: {p['title']}" for p in problems)
+        raise RulesViolation(text, problems)
+
     def plan_only(self, plan: CampaignPlan) -> Outcome:
         """Пробный запуск (ревью M3): предпроверка и план, НИ ОДНОЙ записи.
 
@@ -1543,10 +1823,13 @@ class CampaignCreator:
                 name_error = str(exc)
         except PlanError as exc:
             out.error, out.stop_kind = str(exc), "plan"
+            out.problems = list(exc.problems)
         except GraphStop as exc:
-            out.error, out.stop_kind = f"Graph API stopped: {exc}", exc.kind
+            out.error, out.stop_kind = f"Graph API stopped: {_catalog.problem_line(exc)}", exc.kind
+            out.problems = [graph_problem(exc)]
         except GraphError as exc:
-            out.error, out.stop_kind = f"Meta refused: {exc}", "graph_error"
+            out.error, out.stop_kind = f"Meta refused: {_catalog.problem_line(exc)}", "graph_error"
+            out.problems = [graph_problem(exc)]
         self._audit(plan, out, existing=differences, checked=differences is not None, files=files,
                     renamed=renamed, name_error=name_error)
         return out
@@ -1911,6 +2194,18 @@ _FIELD_TITLES = {"geo": "countries", "age_min": "minimum age", "age_max": "maxim
                  "destination_type": "destination", "daily_budget": "daily budget",
                  "promoted_page": "Page of the ad set",
                  "bid_strategy": "bid strategy"}
+
+
+def graph_problem(exc: BaseException) -> dict:
+    """Отказ Meta записью списка проблем дашборда: каталог ошибок (ACL-1786) или сырой текст."""
+    x = _catalog.explain(getattr(exc, "code", None), getattr(exc, "subcode", None), str(exc))
+    code = f"{x.code}/{x.subcode}" if x.subcode else str(x.code or "")
+    raw = str(exc)
+    if not x.known:
+        return {"title": raw or "Meta refused the request (no details given).", "impact": "", "action": "",
+                "severity": "blocking", "step": "graph_error", "raw": raw}
+    return {"title": x.message_en, "impact": "", "action": x.action_en, "severity": "blocking",
+            "step": "graph_error", "raw": (f"code {code}: " if code else "") + raw}
 
 
 def _advantage_info(camp: dict) -> dict:

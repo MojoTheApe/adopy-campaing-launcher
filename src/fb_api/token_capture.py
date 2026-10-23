@@ -217,6 +217,42 @@ _HELPER_JS = r"""
     return true;
   }
 
+  // ACL-1891: зеркало write_policy._check_upload - фазы загрузки видео кусками.
+  function digitsOf(v) {
+    const U = WRITE.upload;
+    if (typeof v === 'number') return (Number.isSafeInteger(v) && v >= 0) ? v : null;
+    if (typeof v === 'string' && new RegExp(U.number_re).test(v)) return Number(v);
+    return null;
+  }
+  function uploadOk(params, spec) {
+    const U = WRITE.upload;
+    if (!U) return 'upload';
+    const phase = params.upload_phase;
+    if (typeof phase !== 'string' || U.phases.indexOf(phase) < 0) return 'upload_phase';
+    const allowed = U.keys[phase];
+    for (const k of Object.keys(params)) if (allowed.indexOf(k) < 0) return 'upload_key';
+    if ('waterfall_id' in params && !(typeof params.waterfall_id === 'string' && /^[0-9a-f]{32}$/.test(params.waterfall_id))) return 'upload_waterfall';
+    if (phase === 'start') {
+      const n = digitsOf(params.file_size);
+      if (!n || n > U.file_max) return 'upload_size';
+    } else {
+      const sid = params.upload_session_id;
+      if (typeof sid !== 'string' || !new RegExp(U.id_re).test(sid)) return 'upload_session';
+    }
+    if (phase === 'transfer') {
+      const off = digitsOf(params.start_offset);
+      if (off === null || off >= U.file_max) return 'upload_offset';
+    }
+    if (phase === 'finish') {
+      for (const k of ['title', 'name']) {
+        if (k in params && !(typeof params[k] === 'string' && params[k].length > 0 && params[k].length <= 200)) return 'upload_text';
+      }
+    }
+    const fk = Object.keys(spec.files || {});
+    if (phase === 'transfer') { if (fk.length !== 1 || fk[0] !== U.chunk_field) return 'file'; }
+    else if (fk.length) return 'file';
+    return null;
+  }
   // ACL-1775: единственное место, где разрешён lead_gen_form_id (зеркало
   // write_policy._without_lead_form). Возвращает копию без ключа, null — отказ,
   // исходный объект — формы нет. Ключ в другом месте остаётся и ловится statusOk.
@@ -361,6 +397,13 @@ _HELPER_JS = r"""
     const edge = m[2];
     const keys = WRITE.edges[edge];
     if (!keys) return refused('edge');
+    if (edge === 'advideos' && 'upload_phase' in params) {
+      // ACL-1891: своя закрытая схема на каждую фазу; файл только у transfer.
+      const why = uploadOk(params, spec);
+      if (why) return refused(why);
+      files = spec.files || {};
+      want = params.upload_phase === 'transfer' ? WRITE.upload.chunk_field : null;
+    } else {
     for (const k of Object.keys(params)) {
       if (!KEY_RE.test(String(k)) || keys.indexOf(String(k)) < 0) return refused('key');
     }
@@ -410,11 +453,14 @@ _HELPER_JS = r"""
     if (want) { if (fk.length !== 1 || fk[0] !== want) return refused('file'); }
     else if (fk.length) return refused('file');
     }
+    }
     let blob = null;
     if (want) {
       const parts = staged[String(files[want])];
       if (!parts || !parts.length) return { error: 'no_file' };
       blob = new Blob(parts);
+      // ACL-1891: кусок загрузки - не больше потолка и не пустой.
+      if (want === (WRITE.upload || {}).chunk_field && (blob.size < 1 || blob.size > WRITE.upload.chunk_max)) return refused('chunk_size');
       // Ревью M1: ушло бы не то, что положил Python — отказ ДО отправки.
       const expect = spec.expect || {};
       if (typeof expect.bytes !== 'number' || blob.size !== expect.bytes) return refused('file_size');
