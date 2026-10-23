@@ -20,6 +20,7 @@ BASELINE = '.workflow/template-base.json'
 LAYOUT = {'schema_version': 1, 'repository': 'docs/repository/',
           'system': 'docs/system/', 'runtime': 'docs/runtime/', 'tools': '.workflow/tools/'}
 KIND = 'canonical-process-support'
+VERIFICATION = 'isolated-process-verification'
 
 
 def digest(value):
@@ -237,7 +238,7 @@ def classify(request, config, pr):
 
 
 def assessment(proof, scopes):
-    return dict(schema_version=1, kind=KIND, outcome='process-only',
+    return dict(schema_version=1, kind=proof['kind'], outcome='process-only',
                 proof_sha256=proof['proof_sha256'], issue_scopes=scopes)
 
 
@@ -368,6 +369,8 @@ def completion(request, config, state, pr, admission, numbers, review=None):
 
 def preflight(request, config, state, pr):
     proof = classify(request, config, pr)
+    if not proof:
+        proof = verification_proof(request, config, pr)
     result = dict(content='proven' if proof else 'not-proven', product_delivery='unknown', applied=False)
     if not proof:
         return result
@@ -382,6 +385,14 @@ def preflight(request, config, state, pr):
               for n in numbers}
     result.update(proof=proof, review_assessment=assessment(proof, scopes),
                   required_assessments=['report', 'product_isolation.result=isolated', 'product_isolation.evidence'])
+    if proof['kind'] == VERIFICATION:
+        result['next'] = 'Supplemental independent assessment plus exact successful native workflow_dispatch; --evidence-file previews, --apply records only an already admitted merged singleton.'
+        if len(numbers) == 1:
+            receipt = state.get('delivery_workflow', {}).get('tasks', {}).get(str(numbers[0]), {})
+            if (rules.summary(receipt).get('verified') and receipt.get('scope') == scopes[str(numbers[0])]
+                    and receipt.get('verification', {}).get('proof_sha256') == proof['proof_sha256']):
+                result['product_delivery'] = 'not-required'
+        return result
     if len(numbers) != 1:
         return result
     direction = rules.route(config, pr, request)
@@ -395,3 +406,254 @@ def preflight(request, config, state, pr):
           and valid_assessment(review.get('process_support'), assessment(proof, scopes))):
         result['product_delivery'] = 'not-required'
     return result
+
+
+def manual_workflow(text):
+    """Conservative candidate grammar, NOT proof of semantic product isolation.
+
+    This is deliberately not a YAML interpreter. Unsupported syntax is refused.
+    Actual imports, scripts, credentials and indirect effects still require the
+    separate exact-content independent assessment and a real native success.
+    """
+    if ('\t' in text or '\r' in text
+            or re.search(r'^\s*(?:-\s*)?([\"\x27]?)<<\1\s*:', text, re.M)):
+        return None
+    blocks, current = {}, None
+    for line in text.splitlines():
+        if not line.strip() or line.lstrip().startswith('#'):
+            continue
+        if re.search(r'(?:^|\s)[&*!][A-Za-z_]', line) or re.match(r'^\s*-\s*[\[{?]', line):
+            return None
+        if not line.startswith(' '):
+            match = re.fullmatch(r'(name|on|permissions|concurrency|jobs):(.*)', line)
+            if not match or match[1] in blocks:
+                return None
+            current = match[1]
+            blocks[current] = [line]
+        elif current:
+            blocks[current].append(line)
+        else:
+            return None
+    if not {'on', 'permissions', 'jobs'} <= set(blocks):
+        return None
+    if (blocks['on'][0] != 'on:' or len(blocks['on']) < 2
+            or not re.fullmatch(r'  workflow_dispatch:(?:\s*(?:\{\}|null))?', blocks['on'][1])
+            or any(not line.startswith('    ') for line in blocks['on'][2:])
+            or blocks['permissions'] != ['permissions:', '  contents: read']
+            or blocks['jobs'][0] != 'jobs:'):
+        return None
+    jobs, selected, literal_indent = {}, None, None
+    for line in blocks['jobs'][1:]:
+        indent = len(line) - len(line.lstrip())
+        if literal_indent is not None and indent > literal_indent:
+            continue
+        literal_indent = None
+        # No quoted/escaped YAML mapping keys. Code inside an explicit scalar
+        # is opaque, so ordinary Python string/dictionary keys remain code.
+        if re.match(r'^\s*(?:-\s*)?(?:[\"\x27]|[?:](?:\s|$))', line):
+            return None
+        if line.startswith('  ') and not line.startswith('   '):
+            match = re.fullmatch(r'  ([A-Za-z_][A-Za-z0-9_-]*):', line)
+            if not match or match[1] in jobs:
+                return None
+            selected = match[1]; jobs[selected] = {}
+        elif line.startswith('    ') and not line.startswith('     '):
+            match = re.fullmatch(r'    (name|needs|runs-on|timeout-minutes|env|outputs|steps):(.*)', line)
+            if not selected or not match or match[1] in jobs[selected]:
+                return None
+            jobs[selected][match[1]] = match[2].strip()
+        elif not selected or not line.startswith('      '):
+            return None
+        # Permission overrides/merge keys and masked failures never qualify,
+        # even if a successful overall run could hide a skipped/failed check.
+        if re.match(r'^\s*(?:-\s*)?([\"\x27]?)(?:permissions|continue-on-error|environment)\1\s*:', line):
+            return None
+        scalar = re.match(r'^\s*(?:-\s+)?(?P<key>[A-Za-z_][A-Za-z0-9_-]*):\s*[|>][+-]?\s*$', line)
+        if scalar:
+            literal_indent = scalar.start('key')
+    names = []
+    for key, job in jobs.items():
+        if (not {'runs-on', 'steps'} <= set(job) or job['steps']
+                or not re.fullmatch(r'(?:ubuntu|windows|macos)-(?:latest|[0-9]+(?:\.[0-9]+)?)', job['runs-on'])):
+            return None
+        name = job.get('name', key).strip('"\x27')
+        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9 _()./-]{0,127}', name) or name in names:
+            return None
+        names.append(name)
+    return sorted(names) if names else None
+
+
+def verification_proof(request, config, pr):
+    """Complete immutable candidate envelope; never a source-admission shortcut."""
+    root = 'repos/' + config['project']['repository']
+    if pr['base']['ref'] != config['project']['base_branch'] or any(
+            (pr[side].get('repo') or {}).get('full_name', '').lower() != config['project']['repository'].lower()
+            for side in ('base', 'head')):
+        return None
+    base = rules.merge_base(request, root, pr) if pr.get('merged') else pr['base']['sha']
+    before_tree, tree = rules.tree(request, root, base), rules.tree(request, root, pr['head']['sha'])
+    before, after = git_proof.entries(request, root, before_tree), git_proof.entries(request, root, tree)
+    changed = sorted(path for path in set(before) | set(after) if before.get(path) != after.get(path))
+    workflows = [p for p in changed if re.fullmatch(r'\.github/workflows/[A-Za-z0-9_-]+\.ya?ml', p)]
+    if (len(workflows) != 1 or not changed or any(p != workflows[0] and not (
+            git_proof.instruction_path(p) or re.fullmatch(r'tests/(?:[A-Za-z0-9_-]+/)*test_[A-Za-z0-9_-]+\.py', p))
+            for p in changed)):
+        return None
+    # The current selection must already exist unchanged in both immutable
+    # trees. Neither a temporary config nor this candidate selects a new policy.
+    if (before.get('tracker/config.json') != after.get('tracker/config.json')
+            or document(read(request, root, before, 'tracker/config.json')) != config):
+        return None
+    manifest = []
+    for path in changed:
+        for rows in (before, after):
+            if path in rows:
+                read(request, root, rows, path)
+        manifest.append(dict(path=path, before=before.get(path), after=after.get(path)))
+    workflow = workflows[0]
+    if workflow not in after or workflow in before:
+        return None
+    names = manual_workflow(read(request, root, after, workflow))
+    if not names:
+        return None
+    if pr.get('merged') and rules.pr_tree(request, root, pr) != tree:
+        raise ValueError('Actual verification merge contains unreviewed content')
+    content = dict(schema_version=1, kind=VERIFICATION, base_tree_sha=before_tree, tree_sha=tree,
+                   workflow=workflow, workflow_blob=after[workflow]['sha'], jobs=names, files=manifest)
+    return dict(content, proof_sha256=digest(content))
+
+
+def verification_requested(state, numbers, pr, admission):
+    if publication_requested(state, numbers, pr, admission):
+        return True
+    # Completed/frozen history remains authoritative even after the live lane
+    # was released. Never reinterpret a genuine requested publication as process.
+    execution = state.get('execution') or {}
+    rows = [entry.get('batch', {}) for entry in execution.get('history', [])]
+    rows += [execution.get('integration') or {}]
+    rows += list(execution.get('batches', {}).values()) + list(execution.get('completed', {}).values())
+    rows += [state.get('delivery_workflow', {}).get('tasks', {}).get(str(n), {}) for n in numbers]
+    for row in rows:
+        request = row.get('delivery_request') or {}
+        linked = set(row.get('issues', [])) | set(request.get('issues', []))
+        subject = request.get('subject', row.get('subject', {})) or {}
+        if subject.get('kind') == 'task':
+            linked.add(subject['id'])
+        if request and (not linked or linked.intersection(numbers)):
+            return True
+    return False
+
+
+def verified_run(api, proof, source, supplied):
+    if (not isinstance(supplied, dict) or set(supplied) != {'id', 'attempt'}
+            or any(type(supplied[k]) is not int or supplied[k] < 1 for k in supplied)):
+        raise ValueError('Identify the actual native workflow run and attempt')
+    run = api.request(api.root + '/actions/runs/' + str(supplied['id']))
+    workflow = api.request(api.root + '/actions/workflows/' + str(run.get('workflow_id')))
+    if (run.get('id') != supplied['id'] or run.get('run_attempt') != supplied['attempt']
+            or run.get('status') != 'completed' or run.get('conclusion') != 'success'
+            or run.get('event') != 'workflow_dispatch' or run.get('path') != proof['workflow']
+            or workflow.get('path') != proof['workflow'] or workflow.get('id') != run.get('workflow_id')
+            or run.get('repository', {}).get('full_name') != api.repository
+            or run.get('head_repository', {}).get('full_name') != api.repository
+            or run.get('head_sha') != source['merge_sha']
+            or rules.tree(api.request, api.root, run['head_sha']) != proof['tree_sha']):
+        raise ValueError('Process verification requires the exact successful official manual workflow at its admitted main merge')
+    jobs, total = [], None
+    for page in range(1, 11):
+        result = api.request(api.root + f'/actions/runs/{supplied["id"]}/attempts/{supplied["attempt"]}/jobs?per_page=100&page={page}')
+        if (type(result.get('total_count')) is not int or not 1 <= result['total_count'] <= 1000
+                or not isinstance(result.get('jobs'), list) or total is not None and total != result['total_count']):
+            raise ValueError('Incomplete native process job history')
+        total = result['total_count']; jobs.extend(result['jobs'])
+        if len(jobs) >= total:
+            break
+        if not result['jobs']:
+            raise ValueError('Incomplete native process job history')
+    if (any(not isinstance(j, dict) or type(j.get('id')) is not int or j['id'] < 1
+            or not isinstance(j.get('name'), str) for j in jobs)
+            or len(jobs) != total or len({j.get('id') for j in jobs}) != total
+            or sorted(j.get('name', '') for j in jobs) != proof['jobs']
+            or any(j.get('status') != 'completed' or j.get('conclusion') != 'success'
+                   or j.get('head_sha') != source['merge_sha'] for j in jobs)):
+        raise ValueError('Every exact native process verification job must actually succeed')
+    return dict(id=supplied['id'], attempt=supplied['attempt'], path=proof['workflow'],
+                workflow_blob=proof['workflow_blob'], head_sha=source['merge_sha'],
+                jobs=proof['jobs'], result='passed')
+
+
+def record_verification(api, config, store, number, value, apply=False):
+    """Supplemental delivery assessment; does not acquire or rewrite source review."""
+    import copy
+    from . import pr_checks, export_contract
+    from .sync import now
+    # A newer source checkout cannot activate this capability for an older
+    # consumer. Its real current-main selection must identify a published pair
+    # authenticating these exact portable semantics before any state mutation.
+    main = api.request(api.root + '/git/ref/heads/' + quote(config['project']['base_branch'], safe=''))['object']['sha']
+    entries = git_proof.entries(api.request, api.root, rules.tree(api.request, api.root, main))
+    selected = published(api.request, document(read(api.request, api.root, entries, 'delivery.json')))
+    if (selected['contract']['contracts'].get('isolated_verification') != [1]
+            or document(read(api.request, api.root, entries, 'tracker/config.json')) != config
+            or document(read(api.request, api.root, entries, 'tracker/engine.json')) != selected['engine']
+            or read(api.request, api.root, entries, 'tracker/export-contract.json') != selected['contract_text']
+            or export_contract.manifest_bytes(selected['engine']['revision']).decode() != selected['contract_text']):
+        raise ValueError('Adopt the exact published compatible isolated-verification support before recording process completion')
+    state, sha = store.read(optional=True)
+    rules.completion_state(state, config)
+    checked = pr_checks.check(api.request, config, number, allow_transition=True, admission=True)
+    numbers = checked['issues']; pr = api.request(api.root + f'/pulls/{number}')
+    if (not pr.get('merged') or pr['base']['ref'] != config['project']['base_branch'] or len(numbers) != 1):
+        raise ValueError('Process verification records only a genuinely admitted merged singleton')
+    issue_number = numbers[0]; issue = api.issue(issue_number)
+    rules.require_settled_corrections(state, issue_number)
+    rules.pause_module().require_unpaused(state, issue_number)
+    admission = checked['admission']
+    if verification_requested(state, numbers, pr, admission):
+        raise ValueError('A genuine product publication request retains its actual delivery obligation')
+    row = state.get('delivery_workflow', {}).get('tasks', {}).get(str(issue_number), {})
+    source = dict(pr=number, merge_sha=pr.get('merge_commit_sha'), tree_sha=rules.pr_tree(api.request, api.root, pr))
+    if (row.get('policy') != rules.fingerprint(config) or row.get('sources') != [source]
+            or not row.get('scope_provenance') or not rules.scope_matches(issue, row.get('scope'), config)
+            or {x['name'] for x in issue['labels'] if x['name'].startswith('status:')} != {'status:merged'}):
+        raise ValueError('Retain the exact admitted main receipt and unchanged originally accepted task scope')
+    if api.request(api.root + '/compare/' + source['merge_sha'] + '...' + quote(config['project']['base_branch'], safe='')).get('status') not in ('ahead', 'identical'):
+        raise ValueError('Process main merge is no longer included')
+    original = review_for(state, pr, admission)
+    scopes = {str(issue_number): row['scope']}
+    if (original.get('verdict') != 'approved' or original.get('tree_sha') != source['tree_sha']
+            or original.get('issue_scopes') != scopes or not original.get('report')
+            or not original.get('reviewer') or original.get('reviewer') == original.get('implementer')):
+        raise ValueError('Retain the genuine independent source/combined review for this whole outcome')
+    from . import acceptance
+    if acceptance.criteria(issue.get('body')):
+        acceptance.verify(api, config, store, issue, [number])
+    proof = verification_proof(api.request, config, pr)
+    if not proof:
+        raise ValueError('This is not a supported isolated manual verification candidate')
+    authors = {original.get('implementer')}
+    task = (state.get('execution') or {}).get('tasks', {}).get(str(issue_number), {})
+    authors.add(task.get('worker'))
+    authors.update(w.get('actor') for w in task.get('implementers', []))
+    if (not isinstance(value, dict) or set(value) != {'kind', 'reviewer', 'implementer', 'report', 'process_support', 'workflow_run'}
+            or value.get('kind') != 'independent-process-verification'
+            or not isinstance(value.get('reviewer'), str) or not value['reviewer'].strip()
+            or len(value['reviewer']) > 256
+            or value.get('implementer') != original.get('implementer') or value['reviewer'] in authors
+            or not isinstance(value.get('report'), str) or not value['report'].strip() or len(value['report']) > 32768
+            or not valid_assessment(value.get('process_support'), assessment(proof, scopes))):
+        raise ValueError('An actual independent assessor must verify the exact immutable proof and whole original outcome')
+    run = verified_run(api, proof, source, value['workflow_run'])
+    verification = dict(schema_version=1, kind=VERIFICATION, route='process-support', policy=row['policy'],
+        tree_sha=source['tree_sha'], main_sha=rules.merge_base(api.request, api.root, pr), support_proof=proof,
+        proof_sha256=proof['proof_sha256'], review_sha256=digest(value), admission=admission, issue_scopes=scopes,
+        assessment=value['process_support'], supplemental_review=copy.deepcopy(value), workflow_run=run)
+    if row.get('process') and row.get('state') == 'verified' and row.get('verification') == verification:
+        return dict(applied=False, already_recorded=True, issues=numbers, result='process-verified')
+    if row.get('state') != 'pending' or row.get('verification') or row.get('process'):
+        raise ValueError('Only the original pending process outcome can be completed; preserve other delivery results')
+    if apply:
+        row.setdefault('history', []).append({k: copy.deepcopy(v) for k, v in row.items() if k != 'history'})
+        row.update(state='verified', process=True, verification=verification, verified_at=now())
+        store.write(state, sha)
+    return dict(applied=apply, issues=numbers, result='process-verified')

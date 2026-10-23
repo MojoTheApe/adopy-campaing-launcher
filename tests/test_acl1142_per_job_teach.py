@@ -7,6 +7,7 @@ account, and "continue" must release only the job it was pressed for.
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 import threading
 from pathlib import Path
@@ -109,6 +110,111 @@ def test_the_job_snapshot_carries_the_teach_state_and_the_account(monkeypatch):
         _in_job(a, lambda: pacing.begin_teach_wait("website_click"))
         assert pj.get_job(a)["teach"] == {"waiting": True, "step": "website_click", "account_label": "Doc19"}
         assert pj.get_job(b)["teach"] == {"waiting": False, "step": "", "account_label": "Doc20"}
+    finally:
+        with pj._jobs_lock:
+            pj._jobs.clear()
+            pj._jobs.update(before)
+
+
+@pytest.mark.parametrize("manual_pause", [False, True])
+def test_cancelling_a_teach_wait_releases_only_its_own_job(monkeypatch, manual_pause):
+    from src.web import app as app_mod
+
+    _in_job("job-B", lambda: pacing.begin_teach_wait("website_click"))
+    if manual_pause:
+        pacing.request_takeover()
+    cancelled = threading.Event()
+    cancelled.set()
+    monkeypatch.setattr(pacing.time, "sleep", lambda _: None)
+    job_cancel.bind(cancelled, "job-A")
+    try:
+        pacing.begin_teach_wait("website_click")
+        with pytest.raises(job_cancel.JobCancelled):
+            pacing.wait_for_teach_resume()
+    finally:
+        job_cancel.unbind()
+
+    assert pacing.get_teach_state("job-A")["waiting"] is False
+    assert pacing.get_teach_state("job-B")["waiting"] is True
+    assert _call(app_mod.rpa_teach_resume("job-A")).status_code == 400
+    assert _in_job("job-C", pacing.is_takeover_active) is manual_pause
+    pacing.end_teach_wait(job_id="job-B")
+    assert pacing.is_takeover_active() is manual_pause
+
+
+def test_a_teach_wait_exception_clears_its_wait_without_releasing_another(monkeypatch):
+    _in_job("job-B", lambda: pacing.begin_teach_wait("website_click"))
+    monkeypatch.setattr(pacing.time, "sleep", lambda _: None)
+
+    def fail():
+        raise RuntimeError("heartbeat unavailable")
+
+    monkeypatch.setattr(job_cancel, "heartbeat", fail)
+    job_cancel.bind(None, "job-A")
+    try:
+        pacing.begin_teach_wait("website_click")
+        with pytest.raises(RuntimeError, match="heartbeat unavailable"):
+            pacing.wait_for_teach_resume()
+    finally:
+        job_cancel.unbind()
+    assert pacing.get_teach_state("job-A")["waiting"] is False
+    assert pacing.get_teach_state("job-B")["waiting"] is True
+
+
+def test_a_teach_timeout_leaves_the_other_wait_and_manual_pause_intact():
+    _in_job("job-B", lambda: pacing.begin_teach_wait("website_click"))
+    pacing.request_takeover()
+    job_cancel.bind(None, "job-A")
+    try:
+        pacing.begin_teach_wait("website_click")
+        assert pacing.wait_for_teach_resume(0) is False
+    finally:
+        job_cancel.unbind()
+    assert pacing.get_teach_state("job-A")["waiting"] is False
+    assert pacing.get_teach_state("job-B")["waiting"] is True
+    pacing.end_teach_wait(job_id="job-B")
+    assert pacing.is_takeover_active() is True
+
+
+def test_a_successful_resume_preserves_the_captured_answer_and_manual_pause(monkeypatch):
+    _in_job("job-B", lambda: pacing.begin_teach_wait("website_click"))
+    pacing.request_takeover()
+    monkeypatch.setattr(pacing.time, "sleep", lambda _: None)
+    monkeypatch.setattr(job_cancel, "heartbeat", lambda: pacing.end_teach_wait(
+        captured={"selector": "a[href]"}, job_id="job-A"))
+    job_cancel.bind(None, "job-A")
+    try:
+        pacing.begin_teach_wait("website_click")
+        assert pacing.wait_for_teach_resume(5) is True
+    finally:
+        job_cancel.unbind()
+    assert pacing.get_teach_state("job-A")["result"] == {"selector": "a[href]"}
+    assert pacing.get_teach_state("job-B")["waiting"] is True
+    assert _in_job("job-C", pacing.is_takeover_active) is True
+
+
+def test_the_real_progress_endpoint_preserves_each_jobs_teach_snapshot(monkeypatch):
+    from src.web import app as app_mod
+
+    monkeypatch.setattr(pj, "use_rpa_publish", lambda: True)
+    with pj._jobs_lock:
+        before = dict(pj._jobs)
+        pj._jobs.clear()
+    try:
+        a = pj.create_job("Doc19", "US", [{"name": "x"}], campaign_names=["x"])
+        b = pj.create_job("Doc20", "US", [{"name": "y"}], campaign_names=["y"])
+        _in_job(a, lambda: pacing.begin_teach_wait("website_click"))
+        for job_id, account, waiting in [(a, "Doc19", True), (b, "Doc20", False)]:
+            response = _call(app_mod.publish_jobs_progress(job_id))
+            assert response.status_code == 200
+            body = json.loads(response.body)
+            assert body["teach"] == {"waiting": waiting,
+                                     "step": "website_click" if waiting else "",
+                                     "account_label": account}
+            assert body["account_label"] == account
+            assert len(body["campaigns"]) == 1
+            assert body["campaigns"][0]["result"] is None
+            assert body["errors"] == []
     finally:
         with pj._jobs_lock:
             pj._jobs.clear()

@@ -153,9 +153,11 @@ def test_preflight_blocks_with_english_message(monkeypatch):
     assert "Campaign objective 'LINK_CLICKS'" in out["Camp A"][0] and "source:" in out["Camp A"][0]
 
 
-def test_preflight_fails_open_on_infrastructure_error(monkeypatch):
-    monkeypatch.setattr(mr, "load_rules", lambda *a, **k: (_ for _ in ()).throw(mr.MetaRulesError("x")))
-    assert pf.meta_rules_errors([], account_label="A", country="US") == {}
+def test_preflight_fails_open_on_non_registry_error(monkeypatch):
+    import src.campaign_bridge.dashboard_publisher as dp
+
+    monkeypatch.setattr(dp, "slots_to_publish_jobs", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("no book")))
+    assert pf.meta_rules_errors([{"name": "x"}], account_label="A", country="US") == {}
 
 
 # ── Review fixes: registry content, RPA draft path, _run_rpa wiring ──────────
@@ -229,7 +231,7 @@ def _rpa_env(monkeypatch, drafts, meta_impl):
     monkeypatch.setattr(pj, "_write_draft_status", lambda *a, **k: None)
     monkeypatch.setattr(pf, "meta_rules_errors", meta_impl)
     job_id = "acl1781-job"
-    monkeypatch.setitem(pj._jobs, job_id, {"errors": [], "results": [], "status": "running",
+    monkeypatch.setitem(pj._jobs, job_id, {"job_id": job_id, "errors": [], "results": [], "status": "running",
                                            "account_label": "Acc", "total": 0, "done_count": 0})
     return pj, job_id, published
 
@@ -257,10 +259,12 @@ def test_run_rpa_registry_failure_fails_open_and_is_logged(monkeypatch, caplog):
     assert any("Meta rules check could not run" in r.getMessage() and r.exc_info for r in caplog.records)
 
 
-def test_run_rpa_real_hook_with_broken_registry_fails_open(monkeypatch, caplog):
+def test_run_rpa_real_hook_with_broken_registry_fails_closed(monkeypatch, caplog):
     monkeypatch.setattr(mr, "load_rules", lambda *a, **k: (_ for _ in ()).throw(mr.MetaRulesError("gone")))
-    pj, job_id, published = _rpa_env(monkeypatch, [_draft("Good")], pf.meta_rules_errors)
+    draft = _draft("Good")
+    pj, job_id, published = _rpa_env(monkeypatch, [draft], pf.meta_rules_errors)
     with caplog.at_level("ERROR"):
         pj._run_rpa(job_id, [], account_label="Acc", country="US", activate=False)
-    assert published == ["Good"]
-    assert any("Meta rules check failed" in r.getMessage() for r in caplog.records)
+    assert published == []
+    assert draft.errors == ["Meta rules registry is missing — reinstall or update ACL"]
+    assert any("registry could not be loaded" in r.getMessage() for r in caplog.records)

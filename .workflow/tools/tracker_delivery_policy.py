@@ -680,7 +680,7 @@ def summary(receipt):
             except ImportError:
                 import tracker_process_support as support
             valid = (type(proof.get('schema_version')) is int and proof['schema_version'] == 1
-                     and proof.get('kind') == 'canonical-process-support' and proof.get('policy') == receipt.get('policy')
+                     and proof.get('kind') in (support.KIND, support.VERIFICATION) and proof.get('policy') == receipt.get('policy')
                      and all(isinstance(proof.get(k), str) and SHA.fullmatch(proof[k]) for k in ('tree_sha', 'main_sha'))
                      and all(isinstance(proof.get(k), str) and re.fullmatch(r'[a-f0-9]{64}', proof[k])
                              for k in ('proof_sha256', 'review_sha256'))
@@ -693,12 +693,29 @@ def summary(receipt):
                      and type(sources[0].get('pr')) is int and sources[0]['pr'] > 0
                      and isinstance(sources[0].get('merge_sha'), str) and SHA.fullmatch(sources[0]['merge_sha']))
             canonical = proof.get('support_proof')
-            valid = (valid and isinstance(canonical, dict) and canonical.get('kind') == 'canonical-process-support'
+            valid = (valid and isinstance(canonical, dict) and canonical.get('kind') == proof.get('kind')
                      and canonical.get('schema_version') == 1 and canonical.get('tree_sha') == proof.get('tree_sha')
                      and canonical.get('proof_sha256') == proof.get('proof_sha256')
                      and hashlib.sha256(json.dumps({k: v for k, v in canonical.items() if k != 'proof_sha256'},
                          sort_keys=True, allow_nan=False).encode()).hexdigest() == proof.get('proof_sha256')
                      and support.valid_assessment(proof.get('assessment'), support.assessment(canonical, proof['issue_scopes'])))
+            if valid and proof['kind'] == support.VERIFICATION:
+                native = proof.get('workflow_run') or {}
+                supplemental = proof.get('supplemental_review') or {}
+                valid = (isinstance(native, dict) and isinstance(supplemental, dict)
+                         and all(type(native.get(k)) is int and native[k] > 0 for k in ('id', 'attempt'))
+                         and native.get('result') == 'passed' and native.get('head_sha') == sources[0]['merge_sha']
+                         and native.get('path') == canonical.get('workflow')
+                         and native.get('workflow_blob') == canonical.get('workflow_blob')
+                         and isinstance(native.get('jobs'), list) and bool(native['jobs'])
+                         and native['jobs'] == canonical.get('jobs')
+                         and supplemental.get('kind') == 'independent-process-verification'
+                         and isinstance(supplemental.get('reviewer'), str) and bool(supplemental['reviewer'].strip())
+                         and isinstance(supplemental.get('implementer'), str) and bool(supplemental['implementer'].strip())
+                         and supplemental['reviewer'] != supplemental['implementer']
+                         and supplemental.get('workflow_run') == {'id': native['id'], 'attempt': native['attempt']}
+                         and supplemental.get('process_support') == proof.get('assessment')
+                         and support.digest(supplemental) == proof['review_sha256'])
             if valid:
                 result['process_support'] = True
         result['verified'] = result['verified'] and bool(valid)

@@ -119,14 +119,20 @@ def wait_for_teach_resume(max_wait_s: float = 600.0) -> bool:
     import time as _t
     key = _job_key()
     deadline = _t.time() + max_wait_s
-    while _t.time() < deadline:
-        _t.sleep(0.5)
-        job_cancel.check()
-        job_cancel.heartbeat()   # тихое ожидание человека — не зависание
-        if key not in _TEACH_WAITING_JOBS:
-            return True
-    end_teach_wait()
-    return False
+    try:
+        while _t.time() < deadline:
+            _t.sleep(0.5)
+            job_cancel.check()
+            job_cancel.heartbeat()   # тихое ожидание человека — не зависание
+            if key not in _TEACH_WAITING_JOBS:
+                return True
+        end_teach_wait(job_id=key)
+        return False
+    finally:
+        # Cancellation is a BaseException too. Never leave an orphan teach
+        # takeover behind, or release another job / the manual Pause button.
+        # A successful resume's captured answer remains available to the RPA.
+        _TEACH_WAITING_JOBS.pop(key, None)
 
 
 def _get_mouse_pos(page: "Page") -> tuple[float, float] | None:
