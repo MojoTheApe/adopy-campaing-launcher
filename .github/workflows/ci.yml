@@ -181,14 +181,9 @@ jobs:
             sudo rm -rf /var/lib/apt/lists/partial/*
             sudo dpkg --configure -a || true
         run: |
-          # Корень зависаний: azure.archive.ubuntu.com молчит, archive.ubuntu.com отвечает.
-          # Переключаем источники apt до установки (install-deps тоже делает apt-get update).
-          for f in /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list; do
-            [ -f "$f" ] || continue
-            echo "apt sources before ($f):"; grep -E '^(URIs:|deb )' "$f" || true
-            sudo sed -i -E 's#https?://azure\.archive\.ubuntu\.com/ubuntu/?#http://archive.ubuntu.com/ubuntu#g; s#https?://security\.ubuntu\.com/ubuntu/?#http://security.ubuntu.com/ubuntu#g' "$f" || echo "sed failed on $f, continuing"
-            echo "apt sources after ($f):"; grep -E '^(URIs:|deb )' "$f" || true
-          done
+          # ACL-2146: the hosted image also uses mirror+file: indirection.
+          # Resolve its local mirror list before install-deps calls apt-get update.
+          sudo -- "$(command -v python)" scripts/ci_ubuntu_mirror.py
           if [ "${{ steps.pw-cache.outputs.cache-hit }}" = "true" ]; then
             # браузер уже скачан из кэша: нужны только системные библиотеки
             bash scripts/ci_retry.sh 3 300 15 -- python -m playwright install-deps chromium
