@@ -1,5 +1,27 @@
 # System history
 
+## ACL-2050 — API builder verifies Meta kept manual placements — 2026-10-21
+
+After the API builder creates a campaign, the post-create read-back now also reads the campaign's
+`advantage_state_info` and each ad set's `value_rules_applied`/`value_rule_set_id`. If Meta reports
+`advantage_placement_state=ENABLED`, or the ad set lost the manual platforms/positions or holds a different
+list, Check plan stops with a blocking English error (no auto-fix). A missing `advantage_state_info`
+is not blocking and is flagged `placement_state_verified=false` in the diagnostics. `advantage_audience_state` at campaign level and applied value
+rules are reported as warnings and in `readback.diagnostics` only. Read-only: no new write keys, no value
+rules or account-level exclusion writes. Review fix: the placements check compares platforms, positions and devices
+order-insensitively, so Meta returning the same lists in another order no longer stops Check plan; a genuinely
+different set or automatic placements still stop. A missing `advantage_placement_state` is now also shown as a
+warning ("placement mode was not verified"). Tests: `tests/test_acl2050_placement_readback.py`.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1050).
+
+## ACL-1626 — Account notes: damaged notes file is reported — 2026-10-21
+
+When the account notes file is damaged and set aside, the dashboard now logs a
+warning, returns the set-aside notice in the save response and shows a one-line
+banner on the account map. The backup name has millisecond resolution plus a
+collision counter, so two corruptions in the same moment keep both copies.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/626).
+
 ## ACL-1381 — Consistent Builder ad-text wording — 2026-10-18
 
 Complete the older text-label request while preserving ACL-1769's later numbered
@@ -17,6 +39,28 @@ new code head retains candidate verification. Existing aggregate negatives,
 producer names, triggers, policies and runtime behavior stay intact. This records
 project verification behavior; it does not establish a cost saving or delivery.
 [Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/971).
+
+## RPA: the first of two attach attempts is no longer logged as a verdict - ACL-1165
+
+- A failed strict attach attempt now logs "strict attempt found no own CDP port (not final: a lenient attach
+  may be tried next)"; a failed lenient attempt logs a neutral "lenient attempt found no CDP debug port either".
+  Both stay at INFO and no longer contain "attachment unavailable".
+- "attachment unavailable" is logged once, at WARNING, only when every path is exhausted: when DirectCDP
+  refuses to relaunch an open profile that has no CDP port. The message points to opening the profile in
+  the Multilogin Desktop app.
+- Log text only. The relaunch refusal, its error text and the `FB_RPA_ALLOW_UNPROXIED_RELAUNCH` gate are unchanged.
+
+## API publish: no review window when there is nothing to review — ACL-1784 — 2026-10-17
+
+With `fb_backend=api` a finished job keeps the Multilogin profile as a review
+window (holding a queue slot) only when Meta received writes and the readback
+did not confirm them all. A job that wrote nothing (plan or preflight error,
+stop before the first write) or whose every campaign is created and verified
+frees its slot; it stops the profile only if the job started it, never one the
+user opened. The job panel states in English why the window was or was not
+kept. If a profile the job started stays open anyway (Stop, the keep-open
+switch, a dry run, a failed stop), the slot stays taken and the panel says the
+profile is still open. The RPA path is unchanged.
 
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
@@ -245,6 +289,14 @@ a clear refusal.
   changed shard assignment. The pilot tests now restore each handler's pre-test
   filters, so later tests see their own logging behavior. Production redaction and
   the routing-log assertions remain unchanged.
+
+## Countries: a vertical activity line replaces the dot — ACL-1838
+
+- Active country rows show a static 2 px line in the existing accent color at the
+  left, following the owner's selected design option 3. Inactive rows have no marker.
+- The marker occupies no label space and has no separate pointer target. The existing
+  activity predicate, expanded-country highlight, country actions and FTD counts
+  retain their behavior.
 
 ## Media wizard: Crop -> Media loop no longer ends in a false "stuck" stop - ACL-1736
 
@@ -1374,53 +1426,6 @@ stayed there. Window size is part of the browser fingerprint.
   calls neither `screenshot` nor `new_cdp_session` (successful and failed reads, and
   the `country_split` failure shot), that `ACL_STATUS_SHOT=1` brings the
   old behaviour back, and that the last stored shot is kept.
-
-## Copy for group copies a sharp, cropped screenshot without the header band — ACL-1529
-
-Owner feedback on 2026-10-03 (Facebook_9943, Account Disabled): the red band from
-ACL-1520 covered the top of the picture, and the picture was small. The Multilogin
-window is larger than the rendered page, so at scale 1 Ads Manager sat in the top-left
-~1920×1080 of a 3837×2157 shot and the rest was white.
-
-- "Copy for group" copies the screenshot itself. No band and no 960 px canvas; the
-  account name and status stay on the dashboard row, the ad account number is in Ads
-  Manager's account selector inside the picture. `data-head` remains only as the title
-  of the fallback tab.
-- The status shot (`account_spend._status_shot`) is now a plain CDP
-  `Page.captureScreenshot` of the visible area, with no `clip` and no `scale`. The frame
-  (the visible area, cut below the last text of the top campaigns table plus 24 px) is
-  cut out afterwards in Python (Pillow), then empty white columns on the right and rows
-  at the bottom are trimmed, and the result is capped at 2600 px wide. The top (account
-  selector, Meta's banner, table header) is never cut; without a table the whole visible
-  area is kept. Pixels per CSS px are taken from the image itself (image width / visible
-  width): with a DPR override held by the profile, Chromium returns host pixels, not the
-  page's devicePixelRatio.
-- Why no clip (owner decision 2026-10-03, review of PR #530): any `clip` from a new CDP
-  session — with or without `scale` — and the old `page.screenshot(full_page=False)`
-  permanently reset a device-metrics override that another DevTools session holds
-  (measured on Chromium 149: DPR 1.5 → 1, screen 1920×1080 → the real window size). The
-  earlier note here that "Chromium restores the scale itself, no override is set or
-  cleared" was only true when no override exists. A capture without a clip leaves the
-  override, screen size, DPR and resolution media queries unchanged (tested with a
-  foreign override held by a second session). For the same reason a failed capture no
-  longer retries with `page.screenshot`: no shot is better than a reset profile screen.
-  `page.screenshot` is kept only for a page without CDP at all.
-- The capture never hangs a read: a page whose `document.visibilityState` is not
-  `visible` (minimised or occluded window) is not captured, and the frame read plus the
-  capture are bounded by a 10 s deadline. Which path was used (`full`, `fallback`,
-  `none`) is recorded with `run_telemetry.record("status_shot", …)`; a failed capture is
-  reported as a scrubbed Sentry warning, at most once per account every 6 hours.
-- Pillow moves from `requirements-dev.txt` to `requirements.txt`. Without it the shot is
-  saved uncropped and `amapTrimShot` trims it on copy.
-- Not yet proven live: the unclipped capture inside a Multilogin profile has not been
-  measured with the window restored (ACL-1532 found it minimised). Status shots are off
-  by default since ACL-1535 (`ACL_STATUS_SHOT=1`).
-- Shots already stored are trimmed on copy: empty white columns on the right and rows at
-  the bottom are cut (`amapTrimShot`). Measured on the stored 9943 shot: 3837×2157 →
-  1938×1098; 6540: 2561×1331 → 1933×1011; Doc20: 2528×1314 → 1909×999.
-- Unchanged: the disabled button without a shot, the new-tab fallback ("Right-click →
-  Copy image", then the `/view` page), and nothing is sent or stored besides the
-  clipboard.
 
 ## Journal, ad-text and team-library file locks use the shared safe lock — ACL-1512
 
