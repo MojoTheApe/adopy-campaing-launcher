@@ -169,6 +169,9 @@ function boot(spec, opts = {}) {
       cbAddSlot: (form) => form.appendChild(slot('', 1)),
       cbRemoveSlot: (node) => node.closest('.cb-slot').remove(),
       alert: (m) => alerts.push(m),
+      // ACL-141: окна страницы асинхронные; заголовок — часть вопроса.
+      aclConfirm: (m, o) => { confirms.push(((o && o.title) || '') + ' ' + m); return Promise.resolve(opts.confirm !== false); },
+      aclAlert: (m, o) => { alerts.push(((o && o.title) || '') + ' ' + m); return Promise.resolve(); },
       amapSend: (body) => sent.push(body),
     },
     Array, Object, String, JSON, Math, clearTimeout() {},

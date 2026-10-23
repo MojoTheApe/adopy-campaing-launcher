@@ -24,6 +24,14 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
 
 - `src/web`, `serve.py`: local dashboard, account/report views, campaign builder,
   machine configuration and update endpoints.
+  ACL-141 uses queued, labelled page dialogs in place of browser alert/confirm/prompt;
+  Escape/Cancel refuse, destructive actions initially focus Cancel, and focus returns
+  to the initiating control. Recoverable control errors stay inline. Forms deletion
+  also rechecks the row/list after confirmation; existing Page forms remain untouched.
+  Manual profile-ID saves and automatic profile links keep refusals beside their
+  visible form/list; saved/linked messages follow the real successful response.
+  Missing-creative Publish refusals stay inline beside the visible form/footer
+  action, preserving the named rows and refusal before submission.
   ACL-1651 refreshes the Builder creative list on search/window focus (ten-second
   throttle) and once per missed search streak. A miss during the two-second request
   gap waits in the background for its refresh; typing remains available and the
@@ -59,7 +67,26 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   The dashboard tells an empty chosen period apart by owner (ACL-106): no workbook rows for
   anyone (the file may need updating) versus rows for other managers but none for the
   selected manager (nothing to review); the account map stays available in both.
+- `src/web/period_compare.py`: the dashboard can compare the selected workbook
+  period with the previous range of equal length or a custom range (ACL-110).
+  Both use the existing report and metric formulas. Earlier zero is retained;
+  zero or missing denominators give a dash for the change. Country/account/manager,
+  recommendation and breakdown rows present in only one report are marked new/gone.
+  Historical-only evidence is read only and does not restore account assignments
+  or become a Builder/Workbench action. Current Workbench row indices and cached
+  reports are preserved. Home and Workbench metrics retain their existing cohort
+  and weighting semantics; a map-summary refresh keeps the same comparison dates.
+  Measured spend and FTD summaries also compare in volume cards, row You tags,
+  asset chips and sidebar counters; structural counts, goals and draft inputs keep
+  their existing meaning. Historical-only exact versions and CM Net/ROI remain visible.
 - `src/campaign_bridge`, `src/upload_agent`: campaign input/output preparation.
+- `src/fb_ads_rpa/pacing.py` and job progress:
+  ACL-1142 keeps Website teach waits and Continue answers per publish job. The
+  banner names its account, and status/progress both expose that job's wait for
+  the orange attention dot. Cancellation, timeout or an exception clears only
+  that job's wait; the manual Pause button, profile cap and leases remain shared
+  safety controls. Ordinary builds still pulse grey, finished failures stay
+  orange, clean results green, and reduced motion disables only the animation.
 - `src/web/profile_slots.py` (ACL-1642): a publish job whose Multilogin profile is already
   open does not reserve memory for a new profile. The configured concurrency ceiling,
   per-profile ownership and kept-window rules still apply. A read-only background probe

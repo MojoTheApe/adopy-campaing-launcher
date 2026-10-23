@@ -489,6 +489,21 @@ def _is_cancelled(job_id: str) -> bool:
         return bool(job and job.get("cancel_requested"))
 
 
+def _teach_of(job_id: str, account_label: Any) -> dict[str, Any]:
+    """Teach state of one job for the poll answer (ACL-1142)."""
+    try:
+        from src.fb_ads_rpa import pacing
+
+        state = pacing.get_teach_state(job_id)
+    except Exception:
+        state = {"waiting": False, "step": ""}
+    return {
+        "waiting": bool(state.get("waiting")),
+        "step": str(state.get("step") or ""),
+        "account_label": str(account_label or ""),
+    }
+
+
 def get_job(job_id: str) -> dict[str, Any] | None:
     with _jobs_lock:
         job = _jobs.get(job_id)
@@ -502,6 +517,8 @@ def get_job(job_id: str) -> dict[str, Any] | None:
         snap["campaign_names"] = list(job.get("campaign_names", []))
         if isinstance(job.get("queue"), dict):
             snap["queue"] = dict(job["queue"])
+        # ACL-1142: ждёт ли ЭТО задание клика человека (teach) и чей аккаунт.
+        snap["teach"] = _teach_of(job_id, snap.get("account_label"))
         expected = int(snap.get("total") or 0)
         snap["publishable"] = (
             snap.get("status") == "done"
@@ -1019,7 +1036,7 @@ def _run_rpa(
     with _jobs_lock:
         _active_publishers[job_id] = publisher
     # ACL-1614: Stop слышен потоку задания в каждом ожидании (job_cancel.check).
-    job_cancel.bind(getattr(publisher, "cancel_event", None))
+    job_cancel.bind(getattr(publisher, "cancel_event", None), job_id)
     # Stop мог прийти до регистрации публикатора: `cancel_job` его не нашёл.
     if _is_cancelled(job_id):
         publisher.cancel()
