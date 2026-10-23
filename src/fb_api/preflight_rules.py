@@ -64,10 +64,69 @@ _TRACK_RE = r"\?[^#\s]*[^=&#\s]="
 JSON_PATH = Path(__file__).with_name("preflight_rules.json")
 
 
+#: Разделы карточки (ACL-1990): карточка показывает разделы с одним статусом, а не
+#: двадцать строк. Порядок = порядок разделов. «meta» — сама проверка плана с Meta:
+#: в нём одна строка `plan_check`, которую страница добавляет сама (правила в таблице нет).
+TOPICS: list[dict[str, str]] = [
+    {"id": "account", "label": "Account & access"},
+    {"id": "audience", "label": "Audience & targeting"},
+    {"id": "budget", "label": "Budget"},
+    {"id": "destination", "label": "Link & Instant Form"},
+    {"id": "creative", "label": "Creatives & texts"},
+    {"id": "names", "label": "Names & duplicates"},
+    {"id": "meta", "label": "Meta plan check"},
+]
+TOPIC_IDS = [t["id"] for t in TOPICS]
+
+_TOPIC_OF = {
+    "account_active": "account",
+    "page_ok": "account",
+    "pixel_ok": "account",
+    "form_active": "destination",
+    "form_chosen": "destination",
+    "link_https": "destination",
+    "link_tracking": "destination",
+    "country_set": "audience",
+    "country_resolves": "audience",
+    "language_resolves": "audience",
+    "interests_resolve": "audience",
+    "age_range": "audience",
+    "media_chosen": "creative",
+    "media_readable": "creative",
+    "media_limits": "creative",
+    "media_vertical": "creative",
+    "primary_text": "creative",
+    "headline": "creative",
+    "headline_len": "creative",
+    "primary_len": "creative",
+    "cta_allowed": "creative",
+    "budget_set": "budget",
+    "budget_min": "budget",
+    "ad_names_unique": "names",
+    "existing_diffs": "names",
+    # Правила из соседних задач (ACL-1896, 1776, 1771, 1774, 1767, 1768): на TEST9095 они стоят
+    # вместе с этим PR, и без темы `_r()` падал KeyError — Check plan ломался целиком.
+    "instagram_identity": "account",
+    "form_template_privacy": "destination",
+    "form_template_contacts": "destination",
+    "form_terms": "destination",
+    "interests_confirmed": "audience",
+    "vertical_needs_main": "creative",
+    "vertical_ratio": "creative",
+    "texts_limit": "creative",
+    "texts_vertical": "creative",
+    "texts_dynamic": "creative",
+    "devices_consistent": "audience",
+    "start_time_valid": "budget",
+    "adset_names_unique": "names",
+    "adset_has_ads": "names",
+}
+
+
 def _r(rid: str, label: str, severity: str, side: str, hint: str, *, sel: str = "", level: str = "campaign",
        applies: str = "always", unit: str = "campaign") -> dict[str, Any]:
     return {"id": rid, "label": label, "severity": severity, "side": side, "hint": hint,
-            "field": {"sel": sel, "level": level}, "applies": applies, "unit": unit}
+            "field": {"sel": sel, "level": level}, "applies": applies, "unit": unit, "topic": _TOPIC_OF.get(rid, "meta")}
 
 
 #: Порядок = порядок строк в карточке. `applies`: always | website | instant_form.
@@ -158,6 +217,7 @@ def export_rules() -> dict[str, Any]:
     return {
         "version": 1,
         "rules": RULES,
+        "topics": TOPICS,
         "consts": {"max_headline": MAX_HEADLINE, "max_primary_visible": MAX_PRIMARY_VISIBLE,
                    "age_min": AGE_MIN, "age_max": AGE_MAX, "allowed_cta": {k: list(v) for k, v in ALLOWED_CTA.items()},
                    "default_objective": DEFAULT_OBJECTIVE, "link_re": _LINK_RE, "track_re": _TRACK_RE},

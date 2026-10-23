@@ -644,22 +644,34 @@ def check_plan(slots: list[dict[str, Any]], *, account_label: str, country: str)
     try:
         drafts = build_drafts(slots, account_label=account_label, country=country)
     except Exception as exc:  # noqa: BLE001
-        return {"account": account_label, "results": [], "dry_run": True,
+        return {"account": account_label, "results": [], "dry_run": True, "error_kind": "plan",
                 "error": f"Failed to build campaign drafts: {_tm.scrub(str(exc))}"}
     if not drafts:
-        return {"account": account_label, "results": [], "dry_run": True, "error": "No campaigns to check."}
+        return {"account": account_label, "results": [], "dry_run": True, "error_kind": "plan",
+                "error": "No campaigns to check."}
     run = _as.serialized_browser(key=_as._profile_key, reading=True)(_plan_in_read_session)
     account_audit: dict[str, Any] | None = None
+    error_kind = ""
+    except_kind = ""
     try:
         results = run(account_label, drafts)
         error = ""
     except Exception as exc:  # noqa: BLE001 — отказ профиля/страницы: текстом
         results = []
         error = str(exc) if isinstance(exc, ApiPublishError) else _api._failure(account_label, exc)[0]
+        except_kind = type(exc).__name__
         if isinstance(exc, ApiPublishError) and exc.code == "account":
             # ACL-1819: кабинет недоступен/не активен — это вердикт правила account_active.
             account_audit = {"rule": "account_active", "status": "error", "detail": error, "ads": []}
-    _record("api_plan_check", not error, diag={"campaigns": len(drafts), "results": len(results)},
+            error_kind = "account"
+        else:
+            # ACL-1990: сессия чтения упала раньше, чем проверили хоть одну кампанию
+            # (профиль занят, сброс соединения, вход в прокси, CdpTimeout, лимит Meta).
+            # Это «не удалось проверить», а не ошибка кампании: Publish не выключаем.
+            error_kind = "not_checked"
+    _record("api_plan_check", not error,
+            diag={"campaigns": len(drafts), "results": len(results),
+                  **({"error_kind": error_kind, "raised": except_kind} if error_kind else {})},
             duration_s=round(time.monotonic() - started, 1))
     return {"account": account_label, "results": results, "dry_run": True, "error": error,
-            "account_audit": account_audit}
+            "error_kind": error_kind, "account_audit": account_audit}

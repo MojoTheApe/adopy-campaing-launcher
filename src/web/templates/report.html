@@ -3553,7 +3553,7 @@
       background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius-md);
     }
     .cbd-pf[hidden] { display: none; }
-    .cbd-pf-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); margin-bottom: var(--space-sm); }
+    .cbd-pf-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); }
     .cbd-pf-title { margin: 0; font-size: var(--adopy-text-body); font-weight: 700; color: var(--text); }
     .cbd-pf-badge {
       padding: 0.1rem 0.6rem; border-radius: 999px; border: 1px solid currentColor;
@@ -3562,10 +3562,65 @@
     .cbd-pf-badge.cbd-pf-bad { color: var(--bad); background: var(--bad-soft); }
     .cbd-pf-badge.cbd-pf-warn { color: var(--warn); background: var(--warn-soft); }
     .cbd-pf-badge.cbd-pf-ok { color: var(--good); background: var(--good-soft); }
-    .cbd-pf-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.1rem; }
+    /* ACL-1990: разделы вместо длинного списка. Раздел — одна строка со статусом;
+       раскрывается щелчком и сам, когда в нём ошибка или предупреждение. */
+    .cbd-pf-topics { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+    .cbd-pf-topic { border-radius: var(--radius-sm); }
+    .cbd-pf-topic.cbd-pf-open { background: var(--bg-hover); }
+    .cbd-pf-tbtn {
+      display: flex; align-items: center; gap: var(--space-sm); width: 100%;
+      padding: 0.4rem 0.3rem; background: none; border: 0; border-radius: var(--radius-sm);
+      color: var(--text); font: inherit; font-size: var(--adopy-text-body); text-align: left; cursor: pointer;
+    }
+    .cbd-pf-tbtn:hover { background: var(--bg-hover); }
+    .cbd-pf-tbtn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+    .cbd-pf-caret { flex: none; width: 0.8rem; color: var(--muted); display: inline-block; transition: transform 150ms var(--ease-out); }
+    .cbd-pf-open > .cbd-pf-tbtn .cbd-pf-caret { transform: rotate(90deg); }
+    .cbd-pf-tname { flex: 1; min-width: 0; font-weight: 600; line-height: 1.35; }
+    .cbd-pf-tsum { display: block; font-weight: 400; font-size: var(--adopy-text-sm); color: var(--muted); }
+    .cbd-pf-t-error > .cbd-pf-tbtn .cbd-pf-sign { color: var(--bad); }
+    .cbd-pf-t-warning > .cbd-pf-tbtn .cbd-pf-sign { color: var(--warn); }
+    .cbd-pf-t-ok > .cbd-pf-tbtn .cbd-pf-sign { color: var(--good); }
+    .cbd-pf-t-unknown > .cbd-pf-tbtn .cbd-pf-sign { color: var(--muted); border-style: dashed; }
+    .cbd-pf-t-busy > .cbd-pf-tbtn .cbd-pf-sign { color: var(--accent); border-style: dotted; }
+    .cbd-pf-t-error > .cbd-pf-tbtn .cbd-pf-state { color: var(--bad); font-weight: 700; }
+    .cbd-pf-t-warning > .cbd-pf-tbtn .cbd-pf-state { color: var(--warn); font-weight: 700; }
+    .cbd-pf-list { list-style: none; margin: 0; padding: 0 0.3rem 0.35rem 1.7rem; display: flex; flex-direction: column; gap: 0.1rem; }
+    .cbd-pf-list[hidden] { display: none; }
+    .cbd-pf-list > li { display: flex; align-items: flex-start; flex-wrap: wrap; }
+    .cbd-pf-list .cbd-pf-sign { width: 1.05rem; height: 1.05rem; font-size: var(--adopy-text-xs); }
+    .cbd-pf-list .cbd-pf-line:hover { background: var(--bg-elev); }
+    .cbd-pf-retry {
+      margin: 0 0 0.3rem 1.9rem; padding: 0; background: none; border: 0; cursor: pointer;
+      color: var(--accent); font: inherit; font-size: var(--adopy-text-sm); font-weight: 600; text-decoration: underline;
+    }
+    /* Полоса проверки с Meta: что нашла последняя проверка, слева; кнопка — справа. */
+    .cbd-pf-meta {
+      display: flex; align-items: center; gap: var(--space-sm); margin: var(--space-sm) 0;
+      padding: 0.45rem 0.6rem; border-radius: var(--radius-sm); background: var(--bg-hover);
+    }
+    .cbd-pf-meta .cbd-pf-when { flex: 1; min-width: 0; line-height: 1.4; }
+    .cbd-pf-meta .cbd-pf-when strong { color: var(--text); }
+    .cbd-pf-meta-stale, .cbd-pf-meta-failed { background: var(--warn-soft); }
+    .cbd-pf-meta-stale .cbd-pf-when, .cbd-pf-meta-failed .cbd-pf-when { color: var(--text); }
+    .cbd-pf-check {
+      flex: none; padding: 0.3rem 0.7rem; border-radius: var(--radius-sm); white-space: nowrap; cursor: pointer;
+      border: 1px solid var(--accent); color: var(--accent); background: var(--bg-elev);
+      font: inherit; font-size: var(--adopy-text-sm); font-weight: 600;
+    }
+    .cbd-pf-check:hover { background: var(--accent-soft); }
+    .cbd-pf-check:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+    .cbd-pf-check[disabled] { cursor: default; border-color: var(--border); color: var(--muted); background: var(--bg-elev); }
+    .cbd-pf-spin {
+      display: inline-block; width: 0.8em; height: 0.8em; margin-right: 0.35em; vertical-align: -1px;
+      border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+      animation: cbd-pf-spin 0.9s linear infinite;
+    }
+    @keyframes cbd-pf-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .cbd-pf-spin { animation: none; } }
     .cbd-pf-line {
       display: flex; align-items: flex-start; gap: var(--space-sm); width: 100%;
-      padding: 0.3rem 0.25rem; background: none; border: 0; border-radius: var(--radius-sm);
+      padding: 0.25rem 0.2rem; background: none; border: 0; border-radius: var(--radius-sm);
       color: var(--text); font: inherit; font-size: var(--adopy-text-body); text-align: left; cursor: pointer;
     }
     .cbd-pf-line:hover { background: var(--bg-hover); }
@@ -3579,6 +3634,7 @@
     .cbd-pf-warning .cbd-pf-sign { color: var(--warn); }
     .cbd-pf-ok .cbd-pf-sign { color: var(--good); }
     .cbd-pf-unknown .cbd-pf-sign { color: var(--muted); border-style: dashed; }
+    .cbd-pf-busy .cbd-pf-sign { color: var(--accent); border-style: dotted; }
     .cbd-pf-text { flex: 1; min-width: 0; line-height: 1.4; }
     .cbd-pf-hint { color: var(--muted); }
     /* Статус словом: цвет — не единственный носитель (красный и зелёный путают). */
@@ -6729,7 +6785,10 @@ window.cbPreflight = (function () {
 
   /* Строки карточки: клиентские вердикты + серверные, в порядке таблицы.
      opts: backend ('api'|'rpa'), server (вердикты или null), stale (правка после
-     проверки), planError (ошибка плана без вердиктов), accountAudit. */
+     проверки), planError (ошибка плана без вердиктов), planErrorKind ('not_checked' —
+     проверка не дошла до кампании: профиль занят, сеть, таймаут; ACL-1990), accountAudit.
+     Под API последней идёт строка `plan_check` раздела «Meta plan check»: прошла ли
+     сама проверка с Meta. «Не удалось проверить» — unknown, Publish не выключает. */
   function lines(inp, opts, rules) {
     rules = rules || table();
     opts = opts || {};
@@ -6738,6 +6797,7 @@ window.cbPreflight = (function () {
     evaluate(inp, rules).forEach(function (x) { client[x.rule] = x; });
     var serverOn = opts.backend === 'api';
     var fresh = serverOn && opts.server && !opts.stale;
+    var notChecked = fresh && !!opts.planError && opts.planErrorKind === 'not_checked';
     if (fresh) opts.server.forEach(function (x) { server[x.rule] = x; });
     if (fresh && opts.accountAudit) server.account_active = opts.accountAudit;
     rules.forEach(function (rule) {
@@ -6745,20 +6805,44 @@ window.cbPreflight = (function () {
       var got = rule.side === 'client' ? client[rule.id] : server[rule.id];
       if (rule.side === 'server' && !serverOn) return;     // RPA: серверных строк нет
       if (!got) {
-        var why = opts.server && opts.stale ? 'Edited since the last check: press Check'
-          : fresh ? 'Not checked' : 'Not checked yet: press Check';
+        var why = opts.server && opts.stale ? 'Edited since the check'
+          : notChecked ? 'Could not check' : fresh ? 'Not checked' : 'Not checked yet';
         got = v(rule.id, 'unknown', why);
       }
       out.push({ rule: rule.id, label: rule.label, hint: rule.hint, status: got.status, detail: got.detail,
-                 ads: got.ads || [], field: rule.field, side: rule.side, severity: rule.severity });
+                 ads: got.ads || [], field: rule.field, side: rule.side, severity: rule.severity, topic: rule.topic });
     });
-    if (fresh && opts.planError && !out.some(function (x) { return x.status === 'error' && x.side === 'server'; })) {
-      out.push({ rule: 'plan_error', label: 'Plan check', hint: '', status: 'error', detail: opts.planError,
-                 ads: [], field: { sel: '', level: 'campaign' }, side: 'server', severity: 'error' });
-    }
+    if (serverOn) out.push(planLine(opts, fresh, notChecked, out));
     /* ACL-1807: выбор, который Meta не принимает (реестр правил), блокирует как error. */
     if (window.cbMetaCaps) out = out.concat(window.cbMetaCaps.lines(inp));
     return capSeverity(out);
+  }
+
+  /* Строка «Meta plan check» (ACL-1990): итог самой проверки с Meta. */
+  function planLine(opts, fresh, notChecked, out) {
+    var otherError = out.some(function (x) { return x.status === 'error' && x.side === 'server'; });
+    var st = 'ok', detail = '', label = 'Meta accepted the plan';
+    if (!opts.server) { st = 'unknown'; label = 'Not checked yet'; }
+    else if (opts.stale) { st = 'unknown'; label = 'Edited since the check'; }
+    else if (notChecked) { st = 'unknown'; label = 'Could not check'; detail = opts.planError; }
+    else if (opts.planError && !otherError) { st = 'error'; label = 'Meta refused the plan'; detail = opts.planError; }
+    else if (opts.planError) { st = 'unknown'; label = 'Plan not finished'; detail = 'fix the errors above, then check again'; }
+    return { rule: 'plan_check', label: label, hint: '', status: st, detail: detail, ads: [], retry: notChecked,
+             field: { sel: '', level: 'campaign' }, side: 'server', severity: 'error', topic: 'meta' };
+  }
+
+  /* Порядок статусов раздела: худший из его строк. */
+  var RANK = { error: 3, warning: 2, unknown: 1, ok: 0 };
+
+  /* Строки → разделы карточки (ACL-1990), в порядке таблицы разделов. Раздел без
+     строк не показывается (под RPA нет «Meta plan check»). */
+  function topics(ls, list) {
+    list = list || (window.CB_PREFLIGHT_RULES && window.CB_PREFLIGHT_RULES.topics) || [];
+    return list.map(function (t) {
+      var mine = ls.filter(function (x) { return x.topic === t.id; });
+      var status = mine.reduce(function (a, x) { return RANK[x.status] > RANK[a] ? x.status : a; }, 'ok');
+      return { id: t.id, label: t.label, status: status, lines: mine, count: count(mine) };
+    }).filter(function (t) { return t.lines.length; });
   }
 
   /* Имя объявления, как его строит сервер (AdDraft.ad_name): номер креатива из имени
@@ -6816,7 +6900,7 @@ window.cbPreflight = (function () {
   }
 
   return { adName: adName, evaluate: evaluate, lines: lines, count: count, blocks: blocks, capSeverity: capSeverity,
-           lineText: lineText, table: table };
+           lineText: lineText, table: table, topics: topics };
 })();
 </script>
 
@@ -6898,7 +6982,7 @@ window.cbMetaCaps = (function () {
       return { rule: 'meta_rules', label: 'Meta rules', hint: 'Pick a value Meta accepts for this objective',
                status: 'error', detail: r.x.message, ads: r.ad ? [r.ad] : [],
                field: { sel: r.x.field === 'destination_type' ? '.cb-destination' : '', level: r.level },
-               side: 'client', severity: 'error' };
+               side: 'client', severity: 'error', topic: 'meta' };
     });
   }
   /* Можно ли выбрать это «место конверсии» билдера (website / instant_form) по реестру. */
@@ -7184,6 +7268,18 @@ window.cbTree = (function () {
     btn.disabled = uncertain || !count;
   }
 
+  /* ACL-1990: кнопка проверки всего плана говорит, что делает и сколько кампаний;
+     пока идёт — сколько времени (проверка открывает профили Multilogin). */
+  function planLabel(t) {
+    var started = window.CB_PLAN_STARTED;
+    if (started) {
+      var secs = Math.max(0, Math.floor((Date.now() - started) / 1000));
+      return 'Checking with Meta… ' + Math.floor(secs / 60) + ':' + ('0' + (secs % 60)).slice(-2);
+    }
+    var n = t.some ? t.send.length : t.total;
+    return 'Check ' + n + (n === 1 ? ' campaign' : ' campaigns') + ' with Meta';
+  }
+
   /* Отметки, кнопка и «Select all» — на месте, без перерисовки дерева:
      перерисовка сняла бы фокус с чекбокса, по которому ходят Tab/Space. */
   function refreshTicks() {
@@ -7210,6 +7306,8 @@ window.cbTree = (function () {
       bar.querySelector('.cbd-tick-count').textContent = t.on.length ? t.on.length + ' of ' + t.total + ' selected' : '';
     }
     refreshPublication(t);
+    var planBtn = foot.querySelector('.cbd-plan');
+    if (planBtn) { planBtn.textContent = planLabel(t); planBtn.disabled = !!window.CB_PLAN_STARTED; }
     refreshAccountStates();
     refreshAudit();
   }
@@ -7433,8 +7531,10 @@ window.cbTree = (function () {
           // ACL-1761: план без записей — только при ACL_FB_BACKEND=api.
           + (window.ACL_FB_BACKEND === 'api' && t.total
             ? '<button type="button" class="cbd-add cbd-plan" data-act="check-plan"'
-              + ' title="Preflight and plan through the Graph API; nothing is created">'
-              + 'Check plan (no writes)</button><div class="cbd-plan-out" hidden></div>'
+              + (window.CB_PLAN_STARTED ? ' disabled' : '')
+              + ' title="Opens each account\'s Multilogin profile and checks the plan through the Graph API'
+              + ' (30 s – 3 min per account); nothing is created">'
+              + aclEscHtml(planLabel(t)) + '</button><div class="cbd-plan-out" hidden></div>'
             : '')
           + '<div class="cbd-queue" hidden></div>'
         : '')
@@ -7662,6 +7762,7 @@ window.cbTree = (function () {
     if (pfApi() && hit) {
       opts.server = hit.audit || [];
       opts.planError = hit.error || '';
+      opts.planErrorKind = hit.errorKind || '';
       opts.accountAudit = hit.accountAudit || null;
       opts.stale = hit.rev !== pfRev(slot);
     }
@@ -7670,7 +7771,90 @@ window.cbTree = (function () {
 
   function auditCounts(slot) { return window.cbPreflight.count(auditLines(slot)); }
 
-  var PF_SIGN = { error: '✗', warning: '!', ok: '✓', unknown: '?' };
+  var PF_SIGN = { error: '✗', warning: '!', ok: '✓', unknown: '?', busy: '…' };
+  var PF_WORD = { error: 'error', warning: 'warning', ok: 'ok', unknown: 'not checked', busy: 'checking' };
+
+  /* ACL-1990: раскрыт ли раздел. Сам раскрывается, когда в нём ошибка,
+     предупреждение или «Could not check — Retry»; щелчок человека запоминается,
+     пока статус раздела тот же — новая беда раскроет его снова. */
+  var pfOpen = Object.create(null);
+  function topicOpen(t) {
+    var o = pfOpen[t.id];
+    if (o && o.status === t.status) return o.open;
+    return t.status === 'error' || t.status === 'warning' || t.lines.some(function (x) { return x.retry; });
+  }
+
+  /* «0:42» — сколько идёт проверка. */
+  function pfElapsed(form) {
+    var secs = form && form._pfStarted ? Math.max(0, Math.floor((Date.now() - form._pfStarted) / 1000)) : 0;
+    return Math.floor(secs / 60) + ':' + ('0' + (secs % 60)).slice(-2);
+  }
+
+  /* Полоса «Check with Meta»: что нашла последняя проверка и кнопка (ACL-1990).
+     Проверка открывает профиль Multilogin — 30 с … 3 мин; пока идёт, считаем время. */
+  function pfMetaHtml(c, form, busy) {
+    var store = form && form._pfAudit, hit = store && store.byName[slotName(c.slot)];
+    var cls = '', text, label = 'Check with Meta';
+    if (busy) {
+      text = '<strong>Opening the profile and reading the ad account</strong> · usually 30 s – 3 min.'
+        + ' You can keep editing.';
+    } else if (!hit) {
+      text = 'Meta checks read the ad account through its Multilogin profile: 30 s – 3 min. Nothing is created.';
+    } else if (hit.rev !== pfRev(c.slot)) {
+      cls = ' cbd-pf-meta-stale';
+      text = '<strong>Edited since the check</strong> at ' + aclEscHtml(new Date(hit.at).toLocaleTimeString());
+      label = 'Check again';
+    } else if (hit.error && hit.errorKind === 'not_checked') {
+      cls = ' cbd-pf-meta-failed';
+      text = '<strong>Could not check:</strong> ' + aclEscHtml(hit.error);
+      label = 'Retry';
+    } else {
+      text = '<strong>Checked with Meta</strong> at ' + aclEscHtml(new Date(hit.at).toLocaleTimeString());
+      label = 'Check again';
+    }
+    return '<div class="cbd-pf-meta' + cls + '"><span class="cbd-pf-when" aria-live="polite">' + text + '</span>'
+      + '<button type="button" class="cbd-pf-check" data-act="pf-check"' + (busy ? ' disabled' : '')
+      + ' title="Opens the account\'s Multilogin profile and reads the ad account through the Graph API; nothing is created">'
+      + (busy ? '<span class="cbd-pf-spin" aria-hidden="true"></span>Checking… <span class="cbd-pf-elapsed">'
+        + pfElapsed(form) + '</span>' : label)
+      + '</button></div>';
+  }
+
+  function pfLineHtml(x) {
+    var detail = x.detail && !/^(empty|not_https|no_valid_link)$/.test(x.detail) ? x.detail : '';
+    /* Что дописать серым после названия: подсказка, как исправить. У клиентской
+       строки «Ad 2» — какие объявления; у серверной detail — сама причина от Meta/создателя;
+       у непроверенной — только почему не проверено. */
+    var tail = x.status === 'ok' ? ''
+      : x.status === 'unknown' || x.status === 'busy' ? detail
+      : x.side === 'server' && detail ? detail
+      : (detail ? detail + ': ' : '') + x.hint;
+    return '<li><button type="button" class="cbd-pf-line cbd-pf-' + x.status + '" data-act="pf-focus"'
+      + ' data-rule="' + aclEscHtml(x.rule) + '" data-side="' + x.side + '"'
+      + ' title="' + aclEscHtml(x.status === 'ok' ? x.label : (x.hint || x.label)) + '">'
+      + '<span class="cbd-pf-sign" aria-hidden="true">' + PF_SIGN[x.status] + '</span>'
+      + '<span class="cbd-pf-text"><span class="cbd-pf-label">' + aclEscHtml(x.label) + '</span>'
+      + (tail ? ' <span class="cbd-pf-hint">— ' + aclEscHtml(tail) + '</span>' : '')
+      + '</span><span class="cbd-pf-state">' + PF_WORD[x.status] + '</span>'
+      + '</button>'
+      + (x.retry ? '<button type="button" class="cbd-pf-retry" data-act="pf-check">Retry</button>' : '')
+      + '</li>';
+  }
+
+  /* Строка-итог раздела: что в нём не так, или сколько проверок прошло. */
+  function pfTopicSummary(t) {
+    var n = t.lines.length;
+    if (t.status === 'busy') return 'Checking with Meta…';
+    if (t.id === 'meta') return t.lines[0].label;
+    if (t.status === 'ok') return n + (n === 1 ? ' check' : ' checks') + ' ok';
+    if (t.status === 'unknown') {
+      var u = t.lines.filter(function (x) { return x.status === 'unknown'; });
+      var why = u[0].detail || 'Not checked yet';
+      return u.length + ' of ' + n + ': ' + why.charAt(0).toLowerCase() + why.slice(1);
+    }
+    return t.lines.filter(function (x) { return x.status === t.status; })
+      .map(function (x) { return x.label; }).join(', ');
+  }
 
   function auditCardHtml(c) {
     var ls = auditLines(c.slot), n = window.cbPreflight.count(ls);
@@ -7679,36 +7863,39 @@ window.cbTree = (function () {
       ? '<span class="cbd-pf-badge cbd-pf-bad">errors: ' + n.error + '</span>'
       : n.warning ? '<span class="cbd-pf-badge cbd-pf-warn">warnings: ' + n.warning + '</span>'
       : '<span class="cbd-pf-badge cbd-pf-ok">no errors</span>';
-    var items = ls.map(function (x) {
-      var detail = x.detail && !/^(empty|not_https|no_valid_link)$/.test(x.detail) ? x.detail : '';
-      /* Что дописать серым после названия: подсказка, как исправить. У клиентской
-         строки «Ad 2» — какие объявления; у серверной detail — сама причина от Meta/создателя;
-         у непроверенной — только почему не проверено. */
-      var tail = x.status === 'ok' ? ''
-        : x.status === 'unknown' ? detail
-        : x.side === 'server' && detail ? detail
-        : (detail ? detail + ': ' : '') + x.hint;
-      return '<li><button type="button" class="cbd-pf-line cbd-pf-' + x.status + '" data-act="pf-focus"'
-        + ' data-rule="' + aclEscHtml(x.rule) + '" data-side="' + x.side + '"'
-        + ' title="' + aclEscHtml(x.status === 'ok' ? x.label : (x.hint || x.label)) + '">'
-        + '<span class="cbd-pf-sign" aria-hidden="true">' + PF_SIGN[x.status] + '</span>'
-        + '<span class="cbd-pf-text"><span class="cbd-pf-label">' + aclEscHtml(x.label) + '</span>'
-        + (tail ? ' <span class="cbd-pf-hint">— ' + aclEscHtml(tail) + '</span>' : '')
-        + '</span><span class="cbd-pf-state">' + ({ error: 'error', warning: 'warning', ok: 'ok', unknown: 'not checked' }[x.status]) + '</span>'
-        + '</button></li>';
+    /* Пока идёт проверка, серверные строки без вердикта рисуются «checking» —
+       только на экране: гейт Publish считает их как раньше (unknown). */
+    var shown = busy ? ls.map(function (x) {
+      return x.side === 'server' && x.status === 'unknown'
+        ? Object.assign({}, x, { status: 'busy', detail: 'Checking…', retry: false }) : x;
+    }) : ls;
+    var topics = window.cbPreflight.topics(shown).map(function (t) {
+      if (t.status !== 'error' && t.status !== 'warning'
+          && t.lines.some(function (x) { return x.status === 'busy'; })) t.status = 'busy';
+      var open = topicOpen(t);
+      return '<li class="cbd-pf-topic cbd-pf-t-' + t.status + (open ? ' cbd-pf-open' : '') + '"'
+        + ' data-topic="' + t.id + '" data-status="' + t.status + '">'
+        + '<button type="button" class="cbd-pf-tbtn" data-act="pf-topic" data-topic="' + t.id + '" aria-expanded="' + open + '">'
+        + '<span class="cbd-pf-caret" aria-hidden="true">▸</span>'
+        + '<span class="cbd-pf-sign" aria-hidden="true">' + PF_SIGN[t.status] + '</span>'
+        + '<span class="cbd-pf-tname">' + aclEscHtml(t.label)
+        + '<span class="cbd-pf-tsum">' + aclEscHtml(pfTopicSummary(t)) + '</span></span>'
+        + '<span class="cbd-pf-state">' + PF_WORD[t.status] + '</span></button>'
+        + '<ul class="cbd-pf-list"' + (open ? '' : ' hidden') + '>' + t.lines.map(pfLineHtml).join('') + '</ul></li>';
     }).join('');
-    var foot;
-    if (pfApi()) {
-      var store = form && form._pfAudit, hit = store && store.byName[slotName(c.slot)];
-      var when = hit ? (hit.rev !== pfRev(c.slot) ? 'Edited since the last check' : 'Checked ' + new Date(hit.at).toLocaleTimeString()) : 'Account checks have not run yet';
-      foot = '<div class="cbd-pf-foot"><button type="button" class="cbd-add cbd-pf-check" data-act="pf-check"'
-        + (busy ? ' disabled' : '') + ' title="Reads the ad account through the Graph API; nothing is created">'
-        + (busy ? 'Checking…' : 'Check') + '</button><span class="cbd-pf-when" aria-live="polite">' + aclEscHtml(busy ? 'Reading the ad account…' : when) + '</span></div>';
-    } else {
-      foot = '<div class="cbd-pf-foot"><span class="cbd-pf-when cbd-pf-note">Account checks need the API backend</span></div>';
-    }
+    var meta = pfApi() ? pfMetaHtml(c, form, busy)
+      : '<div class="cbd-pf-meta"><span class="cbd-pf-when cbd-pf-note">Account checks need the API backend</span></div>';
     return '<div class="cbd-pf-head"><h3 class="cbd-pf-title">Pre-flight audit</h3>' + badge + '</div>'
-      + '<ul class="cbd-pf-list">' + items + '</ul>' + foot;
+      + meta + '<ul class="cbd-pf-topics">' + topics + '</ul>';
+  }
+
+  /* Счётчик времени идущей проверки — только текст (часы — cbPfTick). */
+  function tickElapsed() {
+    if (edAudit.hidden) return;
+    var el = edAudit.querySelector('.cbd-pf-elapsed');
+    var found = el && openId ? findCampaign(openId) : null;
+    var form = found && found.camp.slot.closest('form');
+    if (el && form && form._pfBusy) el.textContent = pfElapsed(form);
   }
 
   /* Значок «errors: N» у кампании в дереве и состояние Publish. */
@@ -7806,7 +7993,16 @@ window.cbTree = (function () {
     var hit = e.target.closest ? e.target.closest('[data-act]') : null;
     if (!hit) return;
     if (hit.dataset.act === 'pf-focus') focusRule(hit.dataset.rule);
-    else if (hit.dataset.act === 'pf-check') {
+    else if (hit.dataset.act === 'pf-topic') {
+      var li = hit.closest('.cbd-pf-topic'), list = li && li.querySelector('.cbd-pf-list');
+      if (!li || !list) return;
+      var open = list.hidden;
+      list.hidden = !open;
+      li.classList.toggle('cbd-pf-open', open);
+      hit.setAttribute('aria-expanded', String(open));
+      pfOpen[hit.dataset.topic] = { open: open, status: li.dataset.status || '' };
+      lastAudit = '';                        // следующая отрисовка возьмёт новое состояние
+    } else if (hit.dataset.act === 'pf-check') {
       var found = openId ? findCampaign(openId) : null;
       if (found) runCheck(found.camp.slot);
     }
@@ -8327,6 +8523,7 @@ window.cbTree = (function () {
     refresh: refreshOpenRow,
     refreshEditor: paintEditor,
     refreshAudit: refreshAudit,
+    tickElapsed: tickElapsed,
     auditLines: auditLines,
     gateState: gateState,
     setLevel: setLevel,
@@ -16136,15 +16333,32 @@ function cbPfRefresh() {
 
 function cbPfName(slot) { return String((slot.querySelector('.cb-name-hidden') || {}).value || ''); }
 
+/* ACL-1990: часы карточки. Пока хоть одна форма проверяется, раз в секунду
+ * обновляют счётчик «Checking… 0:42» — только текст, в сеть не ходят. */
+var cbPfClock = 0;
+function cbPfTick() {
+  if (cbPfClock || typeof setInterval !== 'function') return;
+  cbPfClock = setInterval(function () {
+    var busy = Array.prototype.some.call(document.querySelectorAll('form'), function (f) { return f._pfBusy; });
+    if (!busy) { clearInterval(cbPfClock); cbPfClock = 0; return; }
+    if (window.cbTree && window.cbTree.tickElapsed) window.cbTree.tickElapsed();
+  }, 1000);
+}
+
 function cbPfStore(form, data, revs) {
   var a = form._pfAudit || (form._pfAudit = { byName: Object.create(null) });
   var byName = Object.create(null), now = Date.now();
   ((data && data.results) || []).forEach(function (r) { byName[String(r.campaign_name || '')] = r; });
   Object.keys(revs).forEach(function (name) {
     var r = byName[name];
+    /* ACL-1990: вид ошибки. 'not_checked' — проверка не дошла до кампании (профиль
+       занят, сеть, таймаут, сервер не ответил): строка «Could not check», Publish не
+       выключается. Ошибка самой кампании (r.error) и отказ кабинета — как раньше. */
+    var kind = r ? '' : (data && data.error ? (data.error_kind || '') : 'not_checked');
     a.byName[name] = {
       audit: r ? (r.audit || []) : [],   // нет ключа — плана не было (ошибка черновика)
       error: r ? (r.error || '') : ((data && data.error) || 'This campaign was not checked'),
+      errorKind: kind,
       accountAudit: (data && data.account_audit) || null,
       rev: revs[name], at: now
     };
@@ -16157,10 +16371,13 @@ window.cbPreflightRun = function (form, slots) {
   list.forEach(function (slot) { revs[cbPfName(slot)] = window.cbPfRev(slot); });
   var fd = cbPlanFormData(form, slots && slots.length ? list : null);
   form._pfBusy = true;
+  form._pfStarted = Date.now();          // ACL-1990: карточка считает, сколько идёт проверка
   cbPfRefresh();
+  cbPfTick();
+  var silent = { error: 'The dashboard did not answer', error_kind: 'not_checked' };
   return fetch('/publish-plan', { method: 'POST', body: fd })
-    .then(function (r) { return r.json().catch(function () { return { error: 'The server did not answer' }; }); })
-    .catch(function () { return { error: 'The server did not answer' }; })
+    .then(function (r) { return r.json().catch(function () { return silent; }); })
+    .catch(function () { return silent; })
     .then(function (data) {
       cbPfStore(form, data || {}, revs);
       form._pfBusy = false;
@@ -16386,7 +16603,14 @@ window.cbCheckPlan = function (picked, out, btn) {
   });
   out.hidden = false;
   if (!forms.length) { out.innerHTML = cbPlanFrame('<div class="cbd-plan-err">Nothing is being assembled yet.</div>'); return; }
-  out.innerHTML = cbPlanFrame('<div class="cbd-plan-head">Checking the plan through the Graph API; nothing is written…</div>');
+  out.innerHTML = cbPlanFrame('<div class="cbd-plan-head">Opening the Multilogin profile and checking the plan'
+    + ' through the Graph API (usually 30 s – 3 min per account); nothing is written…</div>');
+  // ACL-1990: на кнопке — сколько идёт проверка; refreshTicks перерисовывает подпись.
+  window.CB_PLAN_STARTED = Date.now();
+  var tick = setInterval(function () {
+    if (window.cbTree && window.cbTree.refreshTicks) window.cbTree.refreshTicks();
+    else if (btn) btn.disabled = true;
+  }, 1000);
   if (btn) btn.disabled = true;
   var parts = new Array(forms.length);
   var left = forms.length;
@@ -16428,8 +16652,13 @@ window.cbCheckPlan = function (picked, out, btn) {
         parts[i] = cbPlanHtml(data);
         pending[i] = '';
         left -= 1;
-        if (!left) clearInterval(waitTimer);
-        if (!left && btn) btn.disabled = false;
+        if (!left) {
+          clearInterval(waitTimer);
+          clearInterval(tick);
+          window.CB_PLAN_STARTED = 0;
+          if (window.cbTree && window.cbTree.refreshTicks) window.cbTree.refreshTicks();
+          if (btn) btn.disabled = false;
+        }
         render();
       });
   });
