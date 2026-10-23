@@ -17,8 +17,9 @@ from src.fb_api import launch
 from src.fb_api import profile as prof
 from src.fb_api import stop_log
 from src.meta_campaign_agent.multilogin_launcher import StartedProfile
+from tests.profile_lease_fakes import fake_profile
 
-PID = "P1"
+PID = fake_profile("acl2117")  # ACL-1853: the profile lease needs a valid UUID identity
 
 
 class _Clock:

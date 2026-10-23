@@ -77,11 +77,6 @@ def reads(world, monkeypatch, tmp_path):
     return world
 
 
-def _attach(account=ACCOUNT):
-    with sp.reopening_by_hand():
-        return sp._attach_only(sp._entry_for(account), account)
-
-
 # ── hand-opened → переоткрыто сразу и прочитано ───────────────────────────
 
 def test_the_spend_read_asks_for_the_publish_reopen(monkeypatch):
@@ -89,7 +84,7 @@ def test_the_spend_read_asks_for_the_publish_reopen(monkeypatch):
     def attach(entry, label):
         raise sp.ProfileNotAttachable(sp.HAND_OPEN_MESSAGE, code=sp.HAND_OPEN_CODE)
 
-    monkeypatch.setattr(sp, "_entry_for", lambda account: SimpleNamespace(ad_account_id="act_1", profile_id="p"))
+    monkeypatch.setattr(sp, "_entry_for", lambda account: SimpleNamespace(ad_account_id="act_1", profile_id=PROFILE))
     monkeypatch.setattr(sp, "_attach_only", attach)
     out = sp.read_via_rpa(ACCOUNT, "2026-10-01", "2026-10-01")
     assert out.state == "failed" and out.error_code == sp.HAND_OPEN_CODE
@@ -107,7 +102,7 @@ def test_the_country_read_gives_the_same_plain_message(reads):
 def test_without_the_read_flag_nothing_changes(reads):
     """Прочие пользователи `_attach_only` (выключение, проба кабинета) окно не трогают."""
     with pytest.raises(sp.ProfileNotAttachable) as exc:
-        sp._attach_only(sp._entry_for(ACCOUNT), ACCOUNT)
+        _attach_without_reopen()
     assert exc.value.code == sp.HAND_OPEN_CODE
     assert reads.ev == []
 
@@ -338,3 +333,8 @@ def test_the_server_row_keeps_failed_retry_for_other_failures(rendered):
     assert "amap-live-hand" not in cell and 'class="amap-live-bad"' in cell
     assert "countries failed" in cell
     assert "failed · retry" in _cell(html, '<td class="amap-actions">')
+
+
+def _attach_without_reopen():
+    with sp.profile_lock(PROFILE):
+        return sp._attach_only(sp._entry_for(ACCOUNT), ACCOUNT)

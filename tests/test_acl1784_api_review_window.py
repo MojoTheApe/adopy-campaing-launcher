@@ -26,6 +26,7 @@ sys.path.insert(0, str(ROOT))
 from src.web import profile_slots as ps  # noqa: E402
 from src.web import publish_api  # noqa: E402
 from src.web import publish_jobs as pj  # noqa: E402
+from tests.profile_lease_fakes import fake_profile  # noqa: E402
 
 GB = 1024
 
@@ -112,7 +113,7 @@ def api_job(monkeypatch):
     monkeypatch.setattr(pj, "keep_display_awake", lambda *a, **k: contextlib.nullcontext())
     monkeypatch.setattr(pj, "_watch_screen_lock", lambda *a, **k: contextlib.nullcontext())
     monkeypatch.setattr(pj, "_start_stuck_watch", lambda *a, **k: None)
-    monkeypatch.setattr(pj, "profile_key_for", lambda label: label)
+    monkeypatch.setattr(pj, "profile_key_for", lambda label: fake_profile(label))
     monkeypatch.setattr(publish_api, "ApiPublisher", FakePublisher)
 
     def run(scenario, label="KLD_BFL_B96"):
@@ -196,7 +197,7 @@ def test_a_readback_mismatch_keeps_the_review_window(api_job):
                                "started_now": True})
     assert pub.finish_calls == [{"clean": False, "other": False}]
     assert not job.get("profile_closed")
-    assert _kept(slots) == [("KLD_BFL_B96", True)]
+    assert _kept(slots) == [(fake_profile("KLD_BFL_B96"), True)]
     assert job["review_window"] is True
     assert pj.API_REVIEW_NOTICE in job["creative_notices"]
 
@@ -204,7 +205,7 @@ def test_a_readback_mismatch_keeps_the_review_window(api_job):
 def test_an_error_after_a_write_keeps_the_review_window(api_job):
     slots, job, _ = api_job({"drafts": [{"name": "C1"}], "writes": 2, "publish_raises": True,
                              "result": _ok_result, "started_now": True})
-    assert _kept(slots) == [("KLD_BFL_B96", True)]
+    assert _kept(slots) == [(fake_profile("KLD_BFL_B96"), True)]
     assert pj.API_REVIEW_NOTICE in job["creative_notices"]
 
 
@@ -214,7 +215,7 @@ def test_a_job_started_profile_left_open_without_a_write_keeps_the_slot(api_job)
     slots, job, _ = api_job({"drafts": [{"name": "C1"}], "open_raises": True,
                              "started_now": True, "left_open": True})
     assert not job.get("profile_closed")
-    assert _kept(slots) == [("KLD_BFL_B96", True)]
+    assert _kept(slots) == [(fake_profile("KLD_BFL_B96"), True)]
     assert job["review_window"] is True
     assert pj.API_STILL_OPEN_NOTICE in job["creative_notices"]
     assert pj.API_NO_WRITE_NOTICE not in job["creative_notices"]
@@ -223,7 +224,7 @@ def test_a_job_started_profile_left_open_without_a_write_keeps_the_slot(api_job)
 def test_a_clean_job_whose_started_profile_stays_open_keeps_the_slot(api_job):
     slots, job, _ = api_job({"drafts": [{"name": "C1"}], "writes": 5, "result": _ok_result,
                              "started_now": True, "left_open": True})
-    assert _kept(slots) == [("KLD_BFL_B96", True)]
+    assert _kept(slots) == [(fake_profile("KLD_BFL_B96"), True)]
     assert pj.API_STILL_OPEN_NOTICE in job["creative_notices"]
     assert pj.API_CLEAN_NOTICE not in job["creative_notices"]
 

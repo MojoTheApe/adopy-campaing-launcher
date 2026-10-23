@@ -183,6 +183,7 @@ def test_a_missing_account_fails_before_any_browser_opens(monkeypatch):
 def test_an_account_without_an_id_fails_before_any_browser_opens(monkeypatch):
     class Entry:
         ad_account_id = ""
+        profile_id = "550e8400-e29b-41d4-a716-446655440000"
 
     monkeypatch.setattr(sp, "_entry_for", lambda account: Entry())
     out = sp.read_via_rpa("Acc", "2026-09-06", "2026-09-06")
@@ -198,7 +199,7 @@ def test_an_account_without_an_id_fails_before_any_browser_opens(monkeypatch):
 
 class _Entry:
     ad_account_id = "act_1"
-    profile_id = "p-1"
+    profile_id = "550e8400-e29b-41d4-a716-446655440000"
 
 
 def _fake_browser(monkeypatch, *, attach, running, has_dir=True):
@@ -237,7 +238,7 @@ def test_an_entry_without_a_profile_cannot_be_attached():
 def test_an_open_automation_profile_is_reused(monkeypatch):
     marker = object()
     _fake_browser(monkeypatch, attach=marker, running=True)
-    assert sp._attach_only(_Entry(), "Acc") is marker
+    assert _owned_attach(_Entry(), "Acc") is marker
 
 
 from src.fb_ads_rpa import browser as rpa_browser  # noqa: E402
@@ -262,7 +263,7 @@ def test_a_hand_opened_profile_is_reopened_gently_like_publish(monkeypatch):
     provider = _Provider(result=object())
     monkeypatch.setattr(rpa_browser, "get_browser_provider", lambda name: provider)
     with pytest.raises(sp.ProfileNotAttachable) as exc:
-        sp._attach_only(_Entry(), "Acc")
+        _owned_attach(_Entry(), "Acc")
     assert str(exc.value) == sp.HAND_OPEN_MESSAGE and exc.value.code == sp.HAND_OPEN_CODE
     assert provider.calls == [], provider.calls
 
@@ -272,19 +273,19 @@ def test_an_already_attached_profile_is_never_restarted(monkeypatch):
     _fake_browser(monkeypatch, attach=marker, running=True)
     monkeypatch.setattr(rpa_browser, "get_browser_provider",
                         lambda name: pytest.fail("перезапуск не нужен — окно уже с портом"))
-    assert sp._attach_only(_Entry(), "Acc") is marker
+    assert _owned_attach(_Entry(), "Acc") is marker
 
 
 def test_a_closed_profile_says_so(monkeypatch):
     _fake_browser(monkeypatch, attach=None, running=False)
     with pytest.raises(sp.ProfileNotAttachable, match="is not open"):
-        sp._attach_only(_Entry(), "Acc")
+        _owned_attach(_Entry(), "Acc")
 
 
 def test_a_missing_profile_directory_is_named(monkeypatch):
     _fake_browser(monkeypatch, attach=None, running=False, has_dir=False)
     with pytest.raises(sp.ProfileNotAttachable, match="Profile folder"):
-        sp._attach_only(_Entry(), "Acc")
+        _owned_attach(_Entry(), "Acc")
 
 
 def test_the_refusal_becomes_a_readable_failure_not_a_crash(monkeypatch):
@@ -333,7 +334,7 @@ def test_a_profile_that_cannot_be_attached_is_explained(monkeypatch):
 
     monkeypatch.setattr(sp, "_attach_only", refuse)
     monkeypatch.setattr(sp, "_probe_entry", lambda *a, **k: object())
-    out = sp.read_ad_account("p-1")
+    out = sp.read_ad_account("550e8400-e29b-41d4-a716-446655440000")
     assert out == {"ok": False, "act": "", "account_name": "", "error": "профиль не открыт"}
 
 
@@ -356,7 +357,7 @@ def test_attached_but_no_account_says_so(monkeypatch):
     monkeypatch.setattr(sp, "_probe_entry", lambda *a, **k: object())
     monkeypatch.setattr(sp, "_attach_only", lambda entry, label: Conn())
     monkeypatch.setattr(sp, "_act_from_url", lambda page, tries=20: "")
-    out = sp.read_ad_account("p-1")
+    out = sp.read_ad_account("550e8400-e29b-41d4-a716-446655440000")
     assert out["ok"] is False and "no ad account number" in out["error"]
 
 
@@ -375,18 +376,18 @@ def test_a_good_probe_returns_the_number_and_the_name(monkeypatch):
     monkeypatch.setattr(sp, "_attach_only", lambda entry, label: Conn())
     monkeypatch.setattr(sp, "_act_from_url", lambda page, tries=20: "act_777")
     monkeypatch.setattr(sp, "_ads_manager_account_name", lambda page: "KLD BFL X84")
-    out = sp.read_ad_account("p-1", "folder-1", "B")
+    out = sp.read_ad_account("550e8400-e29b-41d4-a716-446655440000", "folder-1", "B")
     assert out["ok"] and out["act"] == "act_777" and out["account_name"] == "KLD BFL X84"
 
 
 def test_the_profile_directory_is_found_by_address_not_by_walking(tmp_path, monkeypatch):
     """Штатный обход дерева стоил ~10 секунд на вызов, и на каждый прогон тоже."""
     monkeypatch.setenv("MLX_HOME", str(tmp_path))
-    wanted = tmp_path / "profiles" / "ws-1" / "folder-1" / "p-1"
+    wanted = tmp_path / "profiles" / "ws-1" / "folder-1" / "550e8400-e29b-41d4-a716-446655440000"
     wanted.mkdir(parents=True)
-    assert sp._mlx_profile_dir("p-1", "folder-1") == wanted
+    assert sp._mlx_profile_dir("550e8400-e29b-41d4-a716-446655440000", "folder-1") == wanted
     # без folder_id тоже находит — на один уровень глубже, всё ещё без rglob
-    assert sp._mlx_profile_dir("p-1") == wanted
+    assert sp._mlx_profile_dir("550e8400-e29b-41d4-a716-446655440000") == wanted
 
 
 def test_the_profile_directory_layout_without_a_folder(tmp_path, monkeypatch):
@@ -404,7 +405,7 @@ def test_a_profile_that_was_never_opened_here_has_no_directory(tmp_path, monkeyp
 
 def test_no_mlx_home_is_not_a_crash(tmp_path, monkeypatch):
     monkeypatch.setenv("MLX_HOME", str(tmp_path / "нет-такого"))
-    assert sp._mlx_profile_dir("p-1") is None
+    assert sp._mlx_profile_dir("550e8400-e29b-41d4-a716-446655440000") is None
 
 
 # ── период приходит с экрана ──────────────────────────────────────────
@@ -526,3 +527,16 @@ def test_the_new_table_without_row_ids_is_read_by_name():
 def test_an_object_without_an_id_is_never_turned_off():
     out = sp._turn_off("Acc", "campaign", "", expected_name="Campaign 1")
     assert "without campaign ids" in out.error
+
+
+@pytest.fixture(autouse=True)
+def mapped_profiles(monkeypatch):
+    from types import SimpleNamespace
+    from tests.profile_lease_fakes import fake_profile
+    monkeypatch.setattr(sp, "_entry_for", lambda label: SimpleNamespace(profile_id=fake_profile(label)))
+
+
+def _owned_attach(entry, label):
+    from src.fb_ads_rpa.operations import profile_lock
+    with profile_lock(entry.profile_id):
+        return sp._attach_only(entry, label)
