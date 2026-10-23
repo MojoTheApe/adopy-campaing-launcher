@@ -66,7 +66,7 @@ def test_rerun_reuses_objects_when_meta_expanded_the_group(tmp_path):
     made = {k for k, o in meta.objects.items() if o["_kind"] in ("campaign", "adset")}
     out2, _ = _run(meta, _draft(tmp_path, ads=2))
     assert out2.error == "", out2.error
-    assert out2.stop_kind != "existing_differs"
+    assert not any("Published as" in w for w in out2.warnings)
     assert {k for k, o in meta.objects.items() if o["_kind"] in ("campaign", "adset")} == made
 
 
@@ -76,8 +76,10 @@ def test_rerun_still_stops_on_a_genuinely_different_language(tmp_path):
     next(o for o in meta.objects.values() if o["_kind"] == "adset")["targeting"]["locales"] = [6]
     before = len(meta.posts)
     out, _ = _run(meta, _draft(tmp_path, ads=2))
-    assert out.stop_kind == "existing_differs" and "languages (builder: 1002, Meta: 6)" in out.error
-    assert len(meta.posts) == before
+    # ACL-1902: a campaign that differs is left as is and the run publishes under a new name.
+    assert out.error == "" and any("Published as" in w and "_2" in w for w in out.warnings)
+    assert any("languages (builder: 1002, Meta: 6)" in w for w in out.warnings)
+    assert len(meta.posts) > before
 
 
 def test_unknown_members_keep_strict_compare_and_say_so(tmp_path):
@@ -85,6 +87,7 @@ def test_unknown_members_keep_strict_compare_and_say_so(tmp_path):
     _run(meta, _draft(tmp_path, ads=1))
     next(o for o in meta.objects.values() if o["_kind"] == "adset")["targeting"]["locales"] = [7, 23]
     out, _ = _run(meta, _draft(tmp_path, ads=2))
-    assert out.stop_kind == "existing_differs"
-    assert "languages (builder: 1002, Meta: 7, 23)" in out.error
-    assert "compared strictly" in out.error and "did not list the locales" in out.error
+    assert out.error == "" and any("Published as" in w and "_2" in w for w in out.warnings)
+    text = " ".join(out.warnings)
+    assert "languages (builder: 1002, Meta: 7, 23)" in text
+    assert "compared strictly" in text and "did not list the locales" in text
