@@ -649,7 +649,8 @@ def test_the_production_queue_reads_the_real_host_memory():
     import inspect
 
     src = inspect.getsource(pj)
-    assert "_slots = ProfileSlots()" in src                      # без своей памяти
+    line = [ln for ln in src.splitlines() if ln.startswith("_slots = ProfileSlots(")][0]
+    assert "memory" not in line                                  # без своей памяти (ACL-2113: только evictor)
     default = inspect.signature(ps.ProfileSlots.__init__).parameters["memory"].default
     # conftest подменяет умолчание на время теста; настоящее — в исходнике модуля.
     assert "memory: Callable[[], MemoryReading | None] = read_memory" in inspect.getsource(ps.ProfileSlots.__init__)

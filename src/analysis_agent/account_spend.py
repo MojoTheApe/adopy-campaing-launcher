@@ -857,7 +857,8 @@ def _start_closed(entry, account_label: str, opened: _ReadOpen, recheck=None):
 
     profile_id = (getattr(entry, "profile_id", "") or "").strip()
     # ACL-1812 (ревью #813, B1-bis): закрыли недавно — не поднимаем (ACL-1811).
-    why = _stop_log.refusal(profile_id)
+    # ACL-2117: пока MLX досохраняет профиль, чтение ждёт (а не отказывает).
+    why = _stop_log.wait_or_refusal(profile_id, on_wait=lambda text: _set_wait_note(account_label, text))
     if why:
         raise ProfileNotAttachable(why, code="restart_cooldown")
     queue = _slot_queue()
@@ -997,14 +998,36 @@ def _close_if_still_pending(opened: _ReadOpen) -> None:
         log.warning("Deferred close of %s skipped: %s", opened.account, exc)
 
 
-def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False) -> None:
-    """После чтения: закрыть то, что чтение запустило (сразу или после паузы)."""
+def _finish_started(opened: _ReadOpen, *, keep_for_next: bool = False,
+                    grace_s: float | None = None, convenience: bool = False) -> None:
+    """После чтения: закрыть то, что чтение запустило (сразу или после паузы).
+
+    `grace_s` (ACL-2117) — свой срок вместо `CLOSE_GRACE_S`: Check plan держит окно, пока
+    человек решает про Publish; если его не взяли, оно закроется по сроку, как и раньше.
+    """
     if not opened.started:
         return
-    if keep_for_next and CLOSE_GRACE_S > 0 and opened.profile_id:
+    if keep_for_next and convenience and opened.slot_id:
+        # ACL-2117 + ACL-2113: keep-open включён — окно Check plan становится «удобным» оставленным
+        # окном: Publish берёт его место (`_reuse_kept`), а простой и вытеснение решает очередь
+        # (LRU, `ACL_KEPT_IDLE_CLOSE_MIN`). Своего таймера нет.
+        try:
+            _slot_queue().keep(opened.slot_id, opened.account, kind="convenience")
+        except Exception:
+            log.exception("Could not mark the kept window of %s", opened.account)
+        return
+    grace = CLOSE_GRACE_S if grace_s is None else float(grace_s)
+    if keep_for_next and grace > 0 and opened.profile_id:
+        if grace_s is not None and opened.slot_id:
+            # ACL-2117: окно, которое держим под Publish, — оставленное (kept): Publish берёт его
+            # место (`_reuse_kept`) и не стоит в очереди за обычным местом чтения.
+            try:
+                _slot_queue().keep(opened.slot_id, opened.account)
+            except Exception:
+                log.exception("Could not mark the kept window of %s", opened.account)
         with _PENDING_LOCK:
             _PENDING_CLOSE[opened.profile_id] = opened
-        timer = threading.Timer(CLOSE_GRACE_S, _close_if_still_pending, args=(opened,))
+        timer = threading.Timer(grace, _close_if_still_pending, args=(opened,))
         timer.daemon = True
         timer.start()
         return
@@ -1028,47 +1051,14 @@ def _logged_out(page, *, deep: bool = False) -> bool:
 
 
 def _mlx_profile_dir(profile_id: str, folder_id: str = "") -> Path | None:
-    """Папка профиля Multilogin — по адресу, а не обходом дерева.
+    """Папка профиля Multilogin — по адресу, без обхода дерева.
 
-    Штатный `_find_mlx_profile_dir` делает `rglob` по всему `~/mlx/profiles`, а
-    там лежат полные каталоги Chrome. Замерено на этой машине: **около десяти
-    секунд на каждый вызов**, и не только на первый. Адресный поиск — 0.001 с,
-    ответ тот же.
-
-    Путь описан в самом слое RPA: `profiles/{ws}/{folder_id}/{profile_id}`.
-    Раскладку проверяем в трёх видах, все — на глубину не больше двух уровней.
-
-    Живёт здесь, а не в `src/fb_ads_rpa`, потому что тот файл принадлежит
-    другому треку. Эти десять секунд платит и каждый прогон публикации —
-    заведено как `acl-144`.
+    Логика живёт в одном месте: `fb_ads_rpa.browser._find_mlx_profile_dir`
+    (ACL-144 — тот же адресный поиск теперь и у прогона публикации).
     """
-    profile_id = (profile_id or "").strip()
-    if not profile_id:
-        return None
-    root = Path(os.environ.get("MLX_HOME", str(Path.home() / "mlx"))) / "profiles"
-    if not root.is_dir():
-        return None
-    folder_id = (folder_id or "").strip()
-    try:
-        for ws in root.iterdir():
-            if not ws.is_dir():
-                continue
-            if folder_id:
-                p = ws / folder_id / profile_id
-                if p.is_dir():
-                    return p
-            p = ws / profile_id
-            if p.is_dir():
-                return p
-            for folder in ws.iterdir():
-                if not folder.is_dir():
-                    continue
-                p = folder / profile_id
-                if p.is_dir():
-                    return p
-    except OSError:
-        return None
-    return None
+    from src.fb_ads_rpa import browser as rpa_browser
+
+    return rpa_browser._find_mlx_profile_dir(profile_id, folder_id)
 
 
 def _dir_spellings(path) -> list[str]:

@@ -48,18 +48,24 @@ def profile_key_for(account_label: str, *, provider: str | None = None) -> str:
     return physical_profile_key(profile, provider=provider or get_browser_provider_name())
 
 
-#: ACL-1444: машинный выключатель — `1` держит открытыми все окна профилей,
-#: как до ACL-1444 (чистое задание профиль не закрывает).
+#: ACL-1444: машинный выключатель окон профилей. ACL-2113: по умолчанию окно
+#: ОСТАЁТСЯ открытым (байер работает в нём дальше); `0`/`false`/`no`/`off`
+#: возвращает прежнее поведение ACL-1444 — чистое задание закрывает профиль.
 ENV_KEEP_PROFILES_OPEN = "FB_RPA_KEEP_PROFILES_OPEN"
+_KEEP_OFF_VALUES = ("0", "false", "no", "off")
 
 #: Строка в панели задания, когда робот закрыл профиль сам.
 PROFILE_CLOSED_NOTICE = "Closed the profile — all campaigns are ready"
 
 
 def keep_profiles_open() -> bool:
-    """Выключатель ACL-1444 из окружения (машинный `.env`), читается при каждом задании."""
-    return str(os.environ.get(ENV_KEEP_PROFILES_OPEN, "") or "").strip().lower() in (
-        "1", "true", "yes", "on")
+    """Оставлять ли окно открытым после чистого задания (ACL-2113: да, если не выключено).
+
+    Читается из окружения (машинный `.env`) при каждом задании. Пусто или любое
+    значение, кроме `0/false/no/off`, — оставлять.
+    """
+    raw = str(os.environ.get(ENV_KEEP_PROFILES_OPEN, "") or "").strip().lower()
+    return raw not in _KEEP_OFF_VALUES
 
 
 def _on_campaign_list(url: str) -> bool:
@@ -154,6 +160,25 @@ class RpaPublisher:
                 preview_mode=preview_mode,
             )
         self._built_at = time.monotonic()
+        if not preview_mode and any(getattr(d, 'page_provided', False) and getattr(d, 'page_id', None) and not d.errors for d in drafts):
+            from src.web.account_pages import read_pages, resolve_selection
+            from src.fb_api.graph import normalize_act
+
+            available = read_pages(account_label, force=True)
+            for draft in drafts:
+                # Automatic (empty) on RPA leaves Identity untouched: no pick, no verification.
+                if not getattr(draft, 'page_provided', False) or not getattr(draft, 'page_id', None) or draft.errors:
+                    continue
+                try:
+                    if not available.get("ok"):
+                        raise ValueError(available.get("message") or "Could not load Facebook Pages. Refresh pages to retry.")
+                    if available.get("act") != normalize_act(draft.ad_account_id or ""):
+                        raise ValueError("The account changed while reading Facebook Pages. Refresh pages and retry.")
+                    chosen = resolve_selection(available["pages"], draft.page_id or "")
+                    draft.page_id, draft.page_name = chosen["id"], chosen["name"]
+                    draft.page_name_unique = sum(p["name"] == chosen["name"] for p in available["pages"]) == 1
+                except ValueError as exc:
+                    draft.errors.append(str(exc))
         return drafts
 
     def _resolve_entry(self, account_label: str):
@@ -340,6 +365,13 @@ class RpaPublisher:
                 # ACL-1320: причина в профиле (вход, сеть, открыт руками) —
                 # её текст и есть сообщение; обходных путей нет.
                 raise
+            down = profile_trouble.launcher_unreachable(exc)
+            if down:
+                # ACL-1401: приложение Multilogin не запущено — лаунчер отказал
+                # в соединении. DirectCDP и простой браузер тут не помогут (и
+                # второй запрещён), повтор запуска тоже: остановка аккаунта с
+                # понятной причиной вместо голого исключения задания.
+                raise profile_trouble.ProfileStop(profile_trouble.MLX_NOT_RUNNING, down) from exc
             if attach_only:
                 # The reason above is the one from the Multilogin automation
                 # API, and it is the whole message worth reading. A profile
@@ -423,9 +455,7 @@ class RpaPublisher:
         entry, conn = self._entry, self._conn
         provider = self._provider
         outcome = ""
-        if keep_profiles_open():
-            outcome = "kept_switch"
-        elif not clean:
+        if not clean:
             outcome = "kept_problem"
         elif self._cancelled:
             outcome = "kept_cancelled"
@@ -440,7 +470,18 @@ class RpaPublisher:
                 saved = False
             if not saved:
                 outcome = "kept_unsaved"
+            elif keep_profiles_open():
+                # ACL-2113: «оставлено для удобства» — только после тех же проверок, что и
+                # закрытие: чистое, не отменено, черновик сохранён, окно — робота.
+                owns = getattr(provider, "robot_owns_profile", None)
+                try:
+                    mine = True if not callable(owns) else bool(owns(entry))
+                except Exception:
+                    mine = False
+                outcome = "kept_switch" if mine else "hand_opened"
         self.close()
+        if outcome == "kept_switch" and self._cancelled:
+            outcome = "kept_cancelled"
         if not outcome and self._cancelled:
             # Stop нажали, пока ждали автосохранения (ревью PR #446, F2).
             outcome = "kept_cancelled"
