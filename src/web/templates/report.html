@@ -1723,11 +1723,14 @@
        заголовок группы, аккаунты под ней, свободные внизу отдельно. */
     .amap { margin-top: var(--space-lg); }
     .amap-head {
-      display: flex; align-items: baseline; gap: var(--space-md);
+      display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-md); min-width: 0;
       margin-bottom: var(--space-sm);
     }
     .amap-head h3 { margin: 0; }
-    .amap-head .amap-note { font-size: var(--adopy-text-table); color: var(--muted); white-space: nowrap; }
+    .amap-head .amap-note { font-size: var(--adopy-text-table); color: var(--muted); overflow-wrap: anywhere; }
+    .amap-head > .amap-add { min-width: 0; max-width: 100%; }
+    .amap-head > .amap-add > :is(input, select) { min-width: 0; max-width: 100%; box-sizing: border-box; }
+    .amap-head > .amap-add > select { flex: 1 1 12rem; }
     .amap-country {
       border: 1px solid var(--border); border-radius: var(--radius-md);
       background: var(--bg-elev); margin-bottom: var(--space-md);
@@ -2407,7 +2410,8 @@
     .amap-btn.danger:hover { border-color: var(--bad); color: var(--bad); }
     /* Read all (ACL-353): панелька над таблицей страны; сама кнопка — тот же
        amap-btn, ей ничего особенного не нужно. */
-    .amap-toolbar { display: flex; justify-content: flex-end; gap: 0.4rem; padding: 0.35rem 0.85rem 0; }
+    .amap-toolbar { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.4rem; padding: 0.35rem 0.85rem 0; }
+    .amap-toolbar .amap-btn { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
     .amap-x {
       background: none; border: 0; color: var(--border-strong);
       cursor: pointer; font-size: 0.9rem; line-height: 1; padding: 0 0.2rem;
@@ -3667,6 +3671,10 @@
         var(--border) var(--sidebar-w), transparent var(--sidebar-w));
     }
     .main-content { padding-left: var(--adopy-page-padding); padding-right: var(--adopy-page-padding); }
+    /* The closed Builder tab is fixed above the page. Keep actions outside its
+       strip even after focusing the far-right cell of an internally scrolled table.
+       An open non-overlay drawer already reserves its own complete width. */
+    body:not(.cbd-open) .main-content { padding-right: calc(var(--adopy-page-padding) + var(--cbd-handle-w)); }
     @media (max-width: 860px) {
       .dashboard-shell { background: none; }
     }
