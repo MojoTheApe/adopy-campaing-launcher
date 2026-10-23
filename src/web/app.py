@@ -2055,8 +2055,23 @@ def _render_report(
             "fb_backend": _fb_backend(),
             # ACL-1819: общая таблица правил pre-flight audit (та же, что у сервера).
             "preflight_rules_json": _preflight_rules(),
+            # ACL-1807: допустимые Meta цели/CTA/destination из реестра (только ga).
+            "meta_caps_json": _meta_capabilities(),
         },
     )
+
+
+def _meta_capabilities() -> dict:
+    """Допустимые значения из реестра правил Meta; сбой реестра форму не ломает."""
+    try:
+        from src.campaign_bridge import meta_rules
+
+        return meta_rules.capabilities()
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("Meta rules capabilities unavailable; builder is not restricted by them")
+        return {}
 
 
 def _preflight_rules() -> dict:
@@ -5820,6 +5835,22 @@ async def api_publish_preflight(accounts: str = "") -> JSONResponse:
         return result
 
     return JSONResponse(await asyncio.to_thread(run))
+
+
+@app.get("/api/meta-rules/capabilities")
+async def api_meta_rules_capabilities() -> JSONResponse:
+    """Допустимые цели, цели оптимизации, billing events, CTA и destination (ACL-1807).
+
+    Только значения со статусом `ga` из `config/meta_rules/`; сети нет. Решение
+    «пускать ли кампанию» остаётся за `check_job` на сервере. Реестр не читается —
+    503, билдер тогда ничего не ограничивает.
+    """
+    from src.campaign_bridge import meta_rules
+
+    try:
+        return JSONResponse(await asyncio.to_thread(meta_rules.capabilities))
+    except Exception as e:  # реестр не прочитался/не соответствует схеме — билдер ничего не режет
+        return JSONResponse({"error": str(e)}, status_code=503)
 
 
 @app.post("/api/publish-preflight/decision")
