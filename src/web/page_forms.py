@@ -19,16 +19,19 @@ READ_MAX_CALLS = 8
 
 
 def page_for(entry_page_id: str, client: Any, act: str) -> str:
-    """Страница аккаунта: из карты; пусто - первая из `promote_pages` кабинета (ACL-1897)."""
+    """Страница аккаунта: из карты; пусто - первая из списка кабинета, затем профиля (ACL-2105)."""
     page_id = (entry_page_id or "").strip()
     if page_id:
         return page_id
-    pages = client.get_all(f"/{act}/promote_pages", {"fields": "id,name", "limit": 100}, max_pages=1)
-    ids = [str(p.get("id")) for p in pages if p.get("id")]
-    return ids[0] if ids else ""
+    from src.fb_api import pages as _pg
+
+    started = time.monotonic()
+    merged = _pg.read_merged(client, act, always_profile=False, account_max_pages=1)
+    _pg.record_counts(merged, where="forms", started=started)
+    return merged.rows[0]["id"] if merged.rows else ""
 
 
-def _read_in_session(account_label: str) -> dict[str, Any]:
+def _read_in_session(account_label: str, selected_page: str | None = None) -> dict[str, Any]:
     from src.analysis_agent import account_spend as _as
     from src.analysis_agent import account_spend_api as _api
 
@@ -39,7 +42,12 @@ def _read_in_session(account_label: str) -> dict[str, Any]:
         if client.allow_writes:
             raise AssertionError("the forms read must not be able to write")
         client.reset_budget(READ_MAX_CALLS)
-        page_id = page_for(entry_page, client, sess.act)
+        if selected_page is None:
+            page_id = page_for(entry_page, client, sess.act)
+        else:
+            from src.web.account_pages import pages_from_client, resolve_selection
+            # Тот же объединённый список (кабинет + профиль), что и в выборе Страницы билдера.
+            page_id = resolve_selection(pages_from_client(client, sess.act), selected_page)["id"]
         if not page_id:
             read = _forms.forms_capability("", [])
         else:
@@ -49,13 +57,14 @@ def _read_in_session(account_label: str) -> dict[str, Any]:
     return read.as_dict()
 
 
-def read_forms(account_label: str) -> dict[str, Any]:
+def read_forms(account_label: str, selected_page: str | None = None) -> dict[str, Any]:
     """Формы Страницы аккаунта. Всегда словарь: `ok`, `forms`, `message`, `state`."""
     from src.analysis_agent import account_spend as _as
     from src.analysis_agent import account_spend_api as _api
 
     started = time.monotonic()
-    run = _as.serialized_browser(key=_as._profile_key, reading=True)(_read_in_session)
+    run = _as.serialized_browser(key=_as._profile_key, reading=True)(
+        lambda account: _read_in_session(account, selected_page))
     try:
         out = run(account_label)
         error = ""

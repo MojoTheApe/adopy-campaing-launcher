@@ -71,7 +71,7 @@ def configuration(request, repo, revision):
 def state(request, repo):
     root = 'repos/' + repo
     row = request(root + '/contents/.tracker-state.json?ref=tracker-state')
-    shared = json.loads(rules.file_bytes(request, root, row),object_pairs_hook=rules.direct_module().unique_object)
+    shared = rules.pause_module().decode(json.loads(rules.file_bytes(request, root, row),object_pairs_hook=rules.direct_module().unique_object))
     rules.state_schema(shared)
     if shared.get('maintenance'):
         raise PendingDelivery('Delivery continuation is paused by owned maintenance; resume after cutover')
@@ -628,7 +628,7 @@ def record(document, receipt, run_id, job_id, *, apply=False, request=github):
         # CAS failure/uncertain response is never retried with a stale body.
         request(root + '/contents/.tracker-state.json', 'PUT', {
             'message': 'Record verified authorized delivery [skip ci]', 'branch': 'tracker-state', 'sha': sha,
-            'content': base64.b64encode(json.dumps(shared, indent=2).encode()).decode()})
+            'content': base64.b64encode(json.dumps(rules.pause_module().encode(shared), indent=2).encode()).decode()})
     return {'applied': apply, 'issues': numbers, 'result': 'passed'}
 
 

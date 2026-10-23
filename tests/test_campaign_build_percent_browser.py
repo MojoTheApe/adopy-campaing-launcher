@@ -388,7 +388,8 @@ def _requests_while_building(browser, html):
     try:
         (a,) = publish(p)
         seen = []
-        p.on('request', lambda r: seen.append(urlparse(r.url).path))
+        # ACL-1681: серверная копия заданий (запись при создании задания) — не опрос.
+        p.on('request', lambda r: seen.append(urlparse(r.url).path) if urlparse(r.url).path != '/api/builder-state' else None)
         show(p, state, progress('running', [camp(a, step='ad_creative_reuse', idle_s=10)], current=a, idle_s=10))
         expect(dot(p, a)).to_have_attribute('title', 'Building: ad creative reuse')
         p.wait_for_timeout(6500)   # два обычных опроса
