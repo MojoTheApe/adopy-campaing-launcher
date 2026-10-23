@@ -35,6 +35,7 @@ from src.fb_api import error_catalog as _catalog
 from src.fb_api import form_create as _fc
 from src.fb_api import form_templates as _ft
 from src.fb_api import forms as _forms
+from src.fb_api import instagram as _ig
 from src.fb_api import write_policy as _wpol
 
 from src.fb_api import pages as _pg
@@ -655,6 +656,17 @@ def targeting_for(plan: CampaignPlan, ad_set: AdSetPlan, resolver: TargetingReso
     return t
 
 
+def plan_has_instagram(targetings: list[dict]) -> bool:
+    """В каком-либо наборе плана есть площадки Instagram (ACL-1896; ACL-1772 сделает их выбираемыми)."""
+    return any("instagram" in (t.get("publisher_platforms") or []) and bool(t.get("instagram_positions"))
+               for t in targetings)
+
+
+def plan_has_instagram_placements(plan: "CampaignPlan") -> bool:
+    """То же без чтения таргетинга: пока площадки зашиты в создателе, они всегда с Instagram."""
+    return "instagram" in PUBLISHER_PLATFORMS and bool(INSTAGRAM_POSITIONS)
+
+
 def placements_text(t: dict) -> str:
     """«manual: Facebook Feed, …» — что увидит человек в «Check plan»."""
     names = [POSITION_LABELS.get(("facebook", p), "Facebook " + p) for p in t.get("facebook_positions") or []]
@@ -839,12 +851,39 @@ class CampaignCreator:
         self._creatives: dict[str, str] | None = None
         #: Формы Страницы плана (читаются раз на кампанию, только у Instant Form).
         self._page_forms: _forms.FormsRead | None = None
+        #: Instagram-идентичность Страницы (ACL-1896): читается раз на Страницу за прогон.
+        self._ig_cache: dict[str, _ig.IgIdentity] = {}
+        #: id аккаунта Instagram, который уходит в креатив; пусто - Instagram-площадок нет.
+        self._ig_id = ""
         #: Шаблоны форм плана -> что с ними будет (ACL-1776); читается в `_check_forms`.
         self._form_steps: dict[str, _fc.FormStep] = {}
         self._form_warnings: list[str] = []
         self.progress = progress
         #: Живой процент загрузки файла (ACL-1899): только на панель задания, без шагов и телеметрии.
         self.live_progress = live_progress
+
+    # -- Instagram-идентичность (ACL-1896)
+    def instagram_identity(self, plan: CampaignPlan) -> _ig.IgIdentity:
+        """Чтение (кэш на Страницу): только чтения; `unknown` не считается «есть»."""
+        got = self._ig_cache.get(plan.page_id)
+        if got is None:
+            got = self._ig_cache[plan.page_id] = _ig.read_identity(self.client, plan.act, plan.page_id)
+        return got
+
+    def _require_instagram(self, plan: CampaignPlan, targetings: list[dict], out: Outcome) -> None:
+        """Instagram-площадки без подтверждённого аккаунта Страницы - отказ ДО записи (Doc120)."""
+        self._ig_id = ""
+        if not plan.page_id or not plan_has_instagram(targetings):
+            return
+        got = self.instagram_identity(plan)
+        if got.status != _ig.FOUND:
+            raise PlanError(got.message)
+        self._ig_id = got.ig_id
+        self._step(out, f"preflight: Instagram account of the Page found ({got.source})")
+
+    def with_instagram(self, story: dict) -> dict:
+        """Креативу добавляется Instagram-идентичность, если она подтверждена (иначе ключа нет)."""
+        return {**story, _ig.IG_KEY: self._ig_id} if self._ig_id else story
 
     # -- служебное
     def _step(self, out: Outcome, text: str) -> None:
@@ -1355,8 +1394,8 @@ class CampaignCreator:
     def _story(self, plan: CampaignPlan, ad: AdPlan, ad_set: AdSetPlan, media: dict) -> dict:
         """Спецификация креатива; `instant` передаётся только Instant Form (сайт - как раньше)."""
         if ad_set.instant:
-            return self.story_spec(plan, ad, media, instant=True)
-        return self.story_spec(plan, ad, media)
+            return self.with_instagram(self.story_spec(plan, ad, media, instant=True))
+        return self.with_instagram(self.story_spec(plan, ad, media))
 
     # -- общие проверки кампании и группы (сверка после записи и предпроверка найденных)
     @staticmethod
@@ -1526,6 +1565,7 @@ class CampaignCreator:
         self.check_profile_page(plan)
         targetings = [targeting_for(plan, s, self.resolver) for s in plan.ad_sets]
         self._step(out, "preflight: targeting resolved")
+        self._require_instagram(plan, targetings, out)
         self._page_forms = None
         self._form_steps = {}
         self._form_warnings = []
@@ -2093,7 +2133,7 @@ class CampaignCreator:
 
             ads = self.client.get_all(f"/{adset_id}/ads", {
                 "fields": "id,name,status,adset_id,adlabels{name},"
-                          "creative{id,adlabels{name},object_story_spec,degrees_of_freedom_spec}",
+                          "creative{id,adlabels{name},instagram_user_id,object_story_spec,degrees_of_freedom_spec}",
                 "effective_status": LIVE_STATES, "limit": 100}, max_pages=2)
             by_name: dict[str, list[dict]] = {}
             for a in ads:
@@ -2126,6 +2166,11 @@ class CampaignCreator:
                           (feats.get(feature) or {}).get("enroll_status"))
                 spec = creative.get("object_story_spec") or {}
                 check(aobj, "page", plan.page_id, str(spec.get("page_id") or ""))
+                if self._ig_id:
+                    # ACL-1896: Instagram-идентичность прочитана обратно; Meta отдаёт её в спецификации
+                    # или полем креатива (живая проверка скажет, где именно).
+                    check(aobj, "instagram_user_id", self._ig_id,
+                          str(spec.get(_ig.IG_KEY) or creative.get(_ig.IG_KEY) or ""))
                 data = files.get(ad.path, b"")
                 if ad.kind == "video":
                     vd = spec.get("video_data") or {}

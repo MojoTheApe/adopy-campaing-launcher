@@ -76,6 +76,9 @@ RULES: list[dict[str, Any]] = [
        "the profile has no access to the ad account, or the account is not active: check the Accounts page"),
     _r("page_ok", "Facebook Page", ERROR, "server",
        "choose a Facebook Page in this campaign or use Automatic; Refresh pages to retry loading"),
+    _r("instagram_identity", "Instagram account of the Page", ERROR, "server",
+       "the ad is set for Instagram placements: connect an Instagram account to the Facebook Page, "
+       "or wait for manual placements (ACL-1772) to publish Facebook-only"),
     _r("pixel_ok", "Pixel for conversions", ERROR, "server",
        "website conversions need exactly one pixel on the ad account; set pixel_id on the Accounts page",
        applies="website"),
@@ -383,6 +386,23 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
     guarded("page_ok", lambda: (cr.resolve_page(plan, facts), creator.check_profile_page(plan),
                                 put("page_ok", WARNING if cr.needs_manual_page(plan) else OK,
                                     cr.MANUAL_PAGE_NOTICE if cr.needs_manual_page(plan) else "")))
+
+    def instagram() -> None:
+        # ACL-1896: Instagram-площадки без аккаунта у Страницы Meta отвергает уже после создания кампании.
+        # Сервер - единственный судья: ему нужны данные Meta. Отказ чтения - не «можно».
+        if not plan.page_id or not cr.plan_has_instagram_placements(plan):
+            put("instagram_identity", OK, "not needed")
+            return
+        got = creator.instagram_identity(plan)
+        if got.status == "found":
+            put("instagram_identity", OK, f"Instagram account {got.ig_id} ({got.source})")
+        else:
+            # «Нет аккаунта» и «Meta не подтвердила» одинаково блокируют: молча пропускать нельзя.
+            put("instagram_identity", ERROR, got.message)
+    if out.get("page_ok", {}).get("status") == OK:
+        guarded("instagram_identity", instagram)
+    else:
+        put("instagram_identity", UNKNOWN, "Not checked: the Facebook Page is not settled")
     if any(not s.instant for s in plan.ad_sets):
         guarded("pixel_ok", lambda: (cr.resolve_pixel(plan, facts), put("pixel_ok", OK)))
 

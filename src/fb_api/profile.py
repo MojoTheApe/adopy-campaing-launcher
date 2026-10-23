@@ -321,6 +321,18 @@ def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
     if not profile_id:
         raise ProfileError("no Multilogin profile id for this account")
 
+    # ACL-1138: профиль без прокси в Multilogin не открываем и не цепляемся —
+    # он вышел бы в Facebook с настоящего IP машины. До процесса и до MLX.
+    from types import SimpleNamespace
+
+    from src.fb_ads_rpa import profile_proxy_gate, profile_trouble
+
+    try:
+        profile_proxy_gate.ensure_profile_has_proxy(
+            SimpleNamespace(profile_id=profile_id, multilogin_instance=instance), profile_id)
+    except profile_trouble.ProfileStop as stop:
+        raise ProfileError(profile_trouble.message(stop.code), code=stop.code) from stop
+
     # 1. Процесс Mimic этого профиля на машине (как attach_existing_only робота).
     if local_probe is None:
         local_probe = probe_local

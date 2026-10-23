@@ -16,7 +16,7 @@ from typing import Any, Callable, Protocol
 from playwright.sync_api import Browser, Page, Playwright, sync_playwright
 
 from src.meta_campaign_agent.ad_account_map import AccountMapEntry
-from src.fb_ads_rpa import hand_window, profile_dir, profile_trouble
+from src.fb_ads_rpa import hand_window, profile_dir, profile_proxy_gate, profile_trouble
 from src.fb_ads_rpa.config import ensure_playwright_browsers_path
 from src.fb_ads_rpa.window_visibility import PerPage
 
@@ -1613,6 +1613,8 @@ class MultiloginBrowserProvider:
 
         if not entry.profile_id:
             raise MultiloginLauncherError(f"{account_label}: profile_id is required")
+        # ACL-1138: профиль без прокси в Multilogin не поднимаем.
+        profile_proxy_gate.ensure_profile_has_proxy(entry, account_label)
 
         ml = get_multilogin_instance(entry.multilogin_instance)
         self._launcher = MultiloginLauncher(ml)
@@ -1771,6 +1773,42 @@ class MultiloginDirectCDPProvider:
                 continue
         return False
 
+    def _log_proxy_flag(self, user_data_dir: str, profile_id: str = "") -> bool | None:
+        """ACL-1138: записать, несёт ли браузер профиля `--proxy-server`.
+
+        Только свидетельство, не гейт: часть типов прокси MLX может применять
+        через агента без флага. Правда — конфигурация в MLX API
+        (`profile_proxy_gate`). `None` — процесс профиля не найден.
+        """
+        import psutil  # type: ignore
+
+        # MLX запускает Mimic с короткими именами 8.3 (…\B18D03~1\…): ни длинного
+        # пути, ни полного uuid там нет — ищем ещё по шести символам без дефисов.
+        short = profile_id.replace("-", "").lower()[:6]
+        needles = [n for n in (user_data_dir.lower().replace("/", "\\").rstrip("\\"),
+                               profile_id.lower(), f"\\{short}~" if short else "") if n]
+        for proc in psutil.process_iter(["name", "exe", "cmdline"]):
+            try:
+                if not (proc.info["name"] and "chrome" in proc.info["name"].lower()):
+                    continue
+                exe = (proc.info["exe"] or "").lower().replace("/", "\\")
+                if "mimic" not in exe and "\\mlx\\" not in exe:
+                    continue
+                args = proc.info["cmdline"] or []
+                if any(a.startswith("--type=") for a in args if isinstance(a, str)):
+                    continue
+                cmd = " ".join(args).lower().replace("/", "\\")
+                if not any(n in cmd for n in needles):
+                    continue
+                flag = profile_proxy_gate.cmdline_has_proxy_flag(args)
+                log.info("Profile %s browser command line %s --proxy-server", profile_id,
+                         "carries" if flag else "has NO")
+                return flag
+            except Exception:
+                continue
+        log.info("Profile %s browser process not found; --proxy-server not checked", profile_id)
+        return None
+
     def _discover_debug_port(self, user_data_dir: str, profile_id: str = "") -> int | None:
         """Find CDP port of an already-running Mimic (DevToolsActivePort or cmdline)."""
         import psutil  # type: ignore
@@ -1899,7 +1937,14 @@ class MultiloginDirectCDPProvider:
         принадлежал именно этому профилю. Свободный поиск годится публикации,
         которая профиль только что подняла сама; чтению он позволил бы
         прицепиться к чужому окну и прочитать чужой кабинет.
+
+        ACL-1138: профиль без прокси в Multilogin — `ProfileStop(profile_no_proxy)`.
         """
+        from types import SimpleNamespace
+
+        profile_proxy_gate.ensure_profile_has_proxy(
+            # Пространство здесь неизвестно — гейт спросит оба (A, затем B).
+            SimpleNamespace(profile_id=profile_id, multilogin_instance=""), profile_id)
         return self._try_attach_existing(
             profile_id, user_data_dir, strict_profile=True, new_page=new_page
         )
@@ -1967,6 +2012,10 @@ class MultiloginDirectCDPProvider:
                 **({"check_responsive": True} if check_responsive else {}),
             )
             log.info("Reusing already-running Mimic profile %s on CDP %s", profile_id, port)
+            try:
+                self._log_proxy_flag(user_data_dir, profile_id)
+            except Exception:
+                pass
             return conn
         except (ProfileUnresponsive, profile_trouble.ProfileStop):
             # Вызывающий просил проверить живость — ему и решать (ACL-1320).
@@ -1980,6 +2029,8 @@ class MultiloginDirectCDPProvider:
         if not profile_id:
             raise RuntimeError(f"{account_label}: profile_id required for DirectCDP provider")
         self._profile_id_cache = profile_id
+        # ACL-1138: профиль без прокси в Multilogin не открываем и не цепляемся.
+        profile_proxy_gate.ensure_profile_has_proxy(entry, account_label)
 
         user_data_dir = self._find_profile_user_data_dir(profile_id)
         if user_data_dir is None:
@@ -2505,6 +2556,8 @@ class MultiloginAttachOnlyProvider:
         profile_id = entry.profile_id
         if not profile_id:
             raise RuntimeError(f"{account_label}: profile_id is required")
+        # ACL-1138: до прицепа и до запуска — у профиля в Multilogin есть прокси.
+        profile_proxy_gate.ensure_profile_has_proxy(entry, account_label)
 
         user_data_dir = _find_mlx_profile_dir(profile_id)
         if user_data_dir is None and not allow_missing_dir:
@@ -2635,6 +2688,10 @@ class MultiloginAttachOnlyProvider:
             profile_id,
             started.port,
         )
+        try:
+            self._direct._log_proxy_flag("", profile_id)
+        except Exception:
+            pass
         # ACL-1403: порт объявил MLX, но Chrome мог ещё не слушать (гонка
         # старта) или уже упал (устаревший порт). Ждём порт коротко и ограниченно;
         # не поднялся — именованная остановка вместо голого RuntimeError.
