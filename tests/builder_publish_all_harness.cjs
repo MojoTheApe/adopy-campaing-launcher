@@ -199,6 +199,9 @@ function runQueue(accounts, opts = {}) {
       return Promise.resolve({ json: () => Promise.resolve({ job_id: 'j' + pending.length }) });
     },
     alert: (m) => { events.push('alert'); said.push(String(m)); },
+    // ACL-141: отказы — окна страницы (заголовок + пояснение) и строка у кнопки.
+    aclAlert: (m, o) => { events.push('alert'); said.push(((o && o.title) || '') + ' ' + m); return Promise.resolve(); },
+    aclInlineError: (anchor, m) => { if (m) { events.push('alert'); said.push(String(m)); } },
   };
   sandbox.window.window = sandbox.window;
   sandbox.window.cbPreview = sandbox.cbPreview;

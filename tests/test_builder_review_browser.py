@@ -368,7 +368,11 @@ def missing_env(browser, tmp_path, monkeypatch):
     pg.goto('http://acl.test/')
     pg.set_content('<form class="open-account-form" id="form" data-country="Mexico"><input name="country" value="Mexico">'
                    '<input name="account_label" value="Demo"><input name="tracking_link" value="">'
-                   '<input name="camp_count" class="cb-count" value="0"><div class="cb-slots"></div></form>')
+                   '<input name="camp_count" class="cb-count" value="0"><div class="cb-slots"></div>'
+                   '<button type="button" class="cb-publish-btn">Publish</button></form>'
+                   '<button type="button" class="cbd-publish-all">Publish all</button>'
+                   '<input aria-label="Inspect page">')
+    pg.add_script_tag(content=(REPORT.parent / '_acl_dialog.js').read_text(encoding='utf-8'))
     pg.add_script_tag(content=esc + '\n' + script + '\n' + helpers + '\n' + confirm_parts + '\n' + pub_all + '\n' + publish)
     pg.evaluate("window._safeConfirm = (t,b,run,o) => { window.confirmation = {body:b, run, opts:o}; };"
                 "window.alerts = []; window.alert = m => window.alerts.push(m);"
@@ -408,13 +412,15 @@ def test_deleted_chosen_creative_is_marked_and_publish_is_refused_with_row_named
     body = pg.evaluate('confirmation.body')
     assert 'File missing' in body and 'Ad 1' in body and '1111_old.jpg' in body
     pg.evaluate('confirmation.run()')
-    assert pg.evaluate('window.sent') is None and pg.evaluate('alerts.length') == 1
+    assert pg.evaluate('window.sent') is None and pg.evaluate('alerts.length') == 0
+    assert 'Not sent' in pg.locator('.acl-inline-err').inner_text()
     # Publish all: то же самое.
     pg.evaluate('window.confirmation = null; cbPublishAll(null)')
     body = pg.evaluate('confirmation.body')
     assert 'File missing' in body and '1111_old.jpg' in body
     pg.evaluate('confirmation.run()')
-    assert pg.evaluate('window.sent') is None and pg.evaluate('alerts.length') == 2
+    assert pg.evaluate('window.sent') is None and pg.evaluate('alerts.length') == 0
+    assert all('Not sent' in text for text in pg.locator('.acl-inline-err').all_inner_texts())
     # Выбрали файл заново — пометка уходит, публикация не отказывает.
     _pick_file(pg, '2222_keep.jpg')
     pg.evaluate("cbCreativesAge(1e12); cbRefreshCreatives(0)")
@@ -423,6 +429,7 @@ def test_deleted_chosen_creative_is_marked_and_publish_is_refused_with_row_named
     assert 'File missing' not in pg.evaluate('confirmation.body')
     pg.evaluate('confirmation.run()')
     assert pg.evaluate('window.sent') is True
+    assert pg.locator('.acl-inline-err').count() == 0
 
 
 def test_unlisted_chosen_file_is_marked_once_the_list_is_loaded(missing_env):
@@ -433,6 +440,36 @@ def test_unlisted_chosen_file_is_marked_once_the_list_is_loaded(missing_env):
     # Выбранного нет в папке, а список загружен: помечено. Без загрузки списка молчим.
     assert pg.locator('.cb-file-missing-note').count() == 1
     assert pg.evaluate('cbMissingCreatives(document).length') == 1
+
+
+@pytest.mark.parametrize('action', ['single', 'all'])
+def test_missing_creative_refusal_stays_by_a_visible_action_without_blocking_inspection(missing_env, action):
+    pg, folder = missing_env
+    _pick_file(pg, '1111_old.jpg')
+    (folder / '1111_old.jpg').unlink()
+    pg.evaluate('cbCreativesAge(1e12); cbRefreshCreatives(0)')
+    pg.wait_for_selector('.cb-file-missing-note')
+    # The drawer can hide the form's own button; its live footer remains visible.
+    pg.locator('.cb-publish-btn').evaluate('el => el.hidden = true')
+    pg.evaluate("""() => {
+      window.decisions = 0;
+      window.cbPreflightDecision = () => { window.decisions += 1; };
+      window.cbPreflightFetch = () => Promise.resolve({accounts:[{account:'Demo',ready:true}]});
+      window.confirmation = null;
+    }""")
+    assert pg.evaluate('cbMissingCreatives(document).length') == 1
+    pg.evaluate('cbPublish(document.querySelector("form"))' if action == 'single' else 'cbPublishAll(null)')
+    pg.wait_for_function('window.confirmation !== null')
+    assert '1111_old.jpg' in pg.evaluate('confirmation.body')
+    pg.evaluate('confirmation.run()')
+    assert pg.evaluate('alerts.length') == 0
+    assert pg.evaluate('window.sent') is None and pg.evaluate('decisions') == 0
+    note = pg.locator('.acl-inline-err')
+    assert note.is_visible() and 'Not sent' in note.inner_text()
+    assert note.evaluate('el => el.previousElementSibling.classList.contains("cbd-publish-all")')
+    assert pg.locator('dialog').count() == 0
+    pg.get_by_label('Inspect page').fill('Still available')
+    assert pg.locator('.cb-creative-search').input_value() == '1111_old.jpg'
 
 
 def test_missing_file_scope_and_hard_refusal_survive_the_current_confirmation(missing_env):

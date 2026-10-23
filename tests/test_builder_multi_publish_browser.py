@@ -21,6 +21,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from acl_dialog_capture import capture_dialogs
 
 import pytest
 from playwright.sync_api import expect, sync_playwright
@@ -111,6 +112,7 @@ def ui(browser, html):
         dialogs.append(d.message)
         d.accept()
     page.on('dialog', on_dialog)
+    capture_dialogs(page, dialogs)
     state = {'posts': [], 'jobs': {}, 'cancels': [], 'dialogs': dialogs}
     page.route('**/*', _route_for(html, state))
     page.goto('http://acl.test/')
@@ -471,6 +473,7 @@ def test_one_account_in_two_countries_publishes_both(browser, two_country_html):
     errors, dialogs = [], []
     page.on('pageerror', lambda e: errors.append(str(e)))
     page.on('dialog', lambda d: (dialogs.append(d.message), d.accept()))
+    capture_dialogs(page, dialogs)
     state = {'posts': [], 'jobs': {}, 'cancels': [], 'dialogs': dialogs}
     page.route('**/*', _route_for(two_country_html, state))
     page.goto('http://acl.test/')
@@ -519,6 +522,7 @@ def _seeded_two_country_page(browser, html, saved):
     errors, dialogs = [], []
     page.on('pageerror', lambda e: errors.append(str(e)))
     page.on('dialog', lambda d: (dialogs.append(d.message), d.accept()))
+    capture_dialogs(page, dialogs)
     state = {'posts': [], 'jobs': {'job-old': {'status': 'running', 'account': 'UL869', 'names': ['X']}},
              'cancels': [], 'dialogs': dialogs}
     page.route('**/*', _route_for(html, state))
