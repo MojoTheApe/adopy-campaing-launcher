@@ -24,7 +24,7 @@ from . import evidence as ev
 from . import model
 
 #: Исполненные состояния действия: только они включают cooldown (предложение - нет).
-EXECUTED_STATES = frozenset({"queued", "submitted", "running", "verifying", "verified", "failed", "unknown"})
+EXECUTED_STATES = frozenset({"queued", "submitted", "running", "verifying", "verified", "undone", "failed", "unknown"})
 
 _DATE_IN_NAME = re.compile(r"(?<!\d)(\d{1,2})\.(\d{1,2})(?!\d)")
 

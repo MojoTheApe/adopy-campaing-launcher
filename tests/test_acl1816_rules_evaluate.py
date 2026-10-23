@@ -507,6 +507,24 @@ def test_proposal_does_not_start_a_cooldown_but_an_executed_action_does(st):
     assert gather.executed_actions(st.actions()) == {"11": st.actions()[-1]["at"]}
 
 
+@pytest.mark.parametrize("held", [False, True])
+def test_confirmed_human_undo_starts_cooldown_and_preserves_existing_hold(st, held):
+    """Undo is a verified human mutation; re-evaluation cannot immediately propose another pause."""
+    make_rule(st)
+    st.append_action({"id": "11", "state": "undone", "kind": "pause", "undo_state": "verified",
+                      "at": (NOW - timedelta(hours=1)).isoformat(), "op_id": "op_original", "undo_op_id": "op_restore"})
+    if held:
+        st.add_hold("11", "Keep the human hold")
+    before_holds = st.active_holds()
+    out = make_engine(st).run_job({"trigger": "manual", "scope": ""})
+    obj = out["evaluations"][0]["objects"][0]
+    assert obj["conditions_matched"] is True
+    assert obj["verdict"] == E.BLOCKED and E.COOLDOWN in obj["reasons"]
+    assert not out["suggestions"]
+    assert st.active_holds() == before_holds
+    assert (E.MANUAL_HOLD in obj["reasons"]) == held
+
+
 def test_not_in_workbook_object_is_blocked_end_to_end(st):
     make_rule(st, objects=[{"account": "Acc", "level": "adset", "id": "11"},
                            {"account": "Acc", "level": "adset", "id": "999"}])
