@@ -74,6 +74,26 @@ def main() -> int:
         except Exception as exc:
             failures.append(f"{name}: {type(exc).__name__}: {exc}")
 
+    # ACL-2138: explicit account-name rules ship as a data file; without it buyers
+    # silently lose the FacebookMKTOBFL<id> = KLD_BFL_<id> style matching.
+    try:
+        from src.analysis_agent import account_names
+
+        status = account_names.rules_status()
+        if not status["ok"]:
+            failures.append(f"Account name rules: {status['error']}")
+    except Exception as exc:
+        failures.append(f"Account name rules: {type(exc).__name__}: {exc}")
+
+    # ACL-2122: the Meta rules registry ships as data files; a build without it
+    # would publish with no Meta rules protection, so it counts as "does not start".
+    try:
+        from src.campaign_bridge import meta_rules
+
+        meta_rules.load_rules()
+    except Exception as exc:
+        failures.append(f"Meta rules registry: {type(exc).__name__}: {exc}")
+
     if failures:
         print("ACL smoke check FAILED - this version does not start:")
         for f in failures:

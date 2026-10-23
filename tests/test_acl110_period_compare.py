@@ -109,7 +109,7 @@ def test_row_states():
     assert pc.row_state(True, True) == "both"
     assert pc.row_state(False, False) == ""
     assert pc.state_for({"spend": 5}, None) == "new"
-    assert pc.state_for({"spend": 0, "leads": 0, "deposits": 0}, {"spend": 5}) == "gone"
+    assert pc.state_for({"spend": 0, "leads": 0, "deposits": 0}, {"spend": 5}) == "both"
     # строка без данных у аккаунта — это «нет строки», а не «ноль»
     assert pc.state_for({"has_data": False, "spend": 0}, {"spend": 5, "has_data": True}) == "gone"
 

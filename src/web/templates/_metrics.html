@@ -36,8 +36,8 @@
 
 {#- Трендовая таблица: в каждой из шести ячеек две строки — последние дни
     жирным, весь период серым снизу (решение владельца 06.10, вариант B). -#}
-{% macro pair_cells(recent, period) -%}
-{%- for r in recent %}{% set p = period[loop.index0] %}<td class="num two"><b>{{ r }}</b><small>{{ p }}</small></td>{% endfor -%}
+{% macro pair_cells(recent, period, recent_compare=none, period_compare=none) -%}
+{%- for r in recent %}{% set p = period[loop.index0] %}<td class="num two"><b>{{ r }}</b>{% if recent_compare %}{{ cmp_cell(recent_compare[loop.index0]) }}{% endif %}<small>{{ p }}</small>{% if period_compare %}{{ cmp_cell(period_compare[loop.index0]) }}{% endif %}</td>{% endfor -%}
 {%- endmacro %}
 
 {#- Те же шесть значений для грид-строк Home (не <td>, а <span>). -#}

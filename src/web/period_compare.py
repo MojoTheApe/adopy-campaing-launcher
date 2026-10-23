@@ -123,11 +123,12 @@ def _tone(key: str, direction: str) -> str:
 
 def _values(spend: Any, leads: Any, ftds: Any) -> dict[str, Optional[float]]:
     r = mc.ratios(spend, leads, ftds)
+    s, l, f = _num(spend), _num(leads), _num(ftds)
     return {
-        "spend": _num(spend) or 0.0,
-        "leads": _num(leads) or 0.0,
-        "ftds": _num(ftds) or 0.0,
-        "cpl": r["cpl"], "cpa": r["cpa"], "cr": r["cr"],
+        "spend": s, "leads": l, "ftds": f,
+        "cpl": r["cpl"] if s is not None and l is not None else None,
+        "cpa": r["cpa"] if s is not None and f is not None else None,
+        "cr": r["cr"] if l is not None and f is not None else None,
     }
 
 
@@ -151,6 +152,15 @@ def metric_compare(cur: Optional[dict], prev: Optional[dict]) -> list[dict]:
     return out
 
 
+def value_compare(cur: Any, prev: Any, kind: str = "money") -> dict:
+    """A supplementary report number uses the same zero/missing delta rule."""
+    p = _num(prev)
+    text, direction = delta_text(cur, p)
+    formatted = (mc.fmt_money(p) if kind == "money" else
+                 (f"{p:.2f}" if p is not None else DASH))
+    return {"prev": formatted, "delta": text, "dir": direction, "tone": ""}
+
+
 def row_state(cur_present: bool, prev_present: bool) -> str:
     """new — есть сейчас, раньше не было; gone — было, сейчас нет; иначе both/''."""
     if cur_present and prev_present:
@@ -163,12 +173,12 @@ def row_state(cur_present: bool, prev_present: bool) -> str:
 
 
 def _present(row: Optional[dict]) -> bool:
-    """В строке есть что показать: хотя бы одно ненулевое число или has_data."""
+    """A recorded zero is data; an explicit no-data account is not."""
     if not row:
         return False
     if "has_data" in row:
         return bool(row.get("has_data"))
-    return any(_num(row.get(k)) for k in ("spend", "leads", "deposits"))
+    return any(_num(row.get(k)) is not None for k in ("spend", "leads", "deposits"))
 
 
 def _norm(name: Any) -> str:
@@ -187,6 +197,7 @@ class PeriodCompare:
         self.mode = info["mode"]
         self.date_from = info["date_from"]
         self.date_to = info["date_to"]
+        self._report = prev_report or {}
         self._countries = {
             _norm(c.get("country")): c for c in (prev_report or {}).get("countries", [])
         }
@@ -200,9 +211,20 @@ class PeriodCompare:
         self._prev_totals = (prev_amap or {}).get("totals")
         for g in (prev_amap or {}).get("cm_section", []):
             self._cm_groups[_norm(g.get("country"))] = g
+        # A retired map assignment is not restored. Keep workbook evidence only,
+        # so a missing account can be displayed separately without any controls.
+        for key, country in self._countries.items():
+            self._book.setdefault(key, country.get("my_totals") or {})
+            rows = self._amap.setdefault(key, {})
+            for account in country.get("account_rows") or []:
+                label = account.get("account_label") or account.get("alias")
+                excel = account.get("account_excel") or {}
+                if label and _present(excel):
+                    rows.setdefault(_norm(label), {**excel, "account": label})
         self.empty = not any(
             _present(r) for rows in self._amap.values() for r in rows.values()
-        ) and not any(self._book.values())
+        ) and not any(self._book.values()) and not any(
+            _present(r) for c in self._countries.values() for r in c.get("cm_comparison") or [])
 
     @property
     def label(self) -> str:
@@ -283,6 +305,227 @@ class PeriodCompare:
                 {str(r.get("targeting") or "?") for r in before
                  if self._rec_key(r) not in now_keys}),
         }
+
+    def countries_gone(self, current: Iterable[dict]) -> list[dict]:
+        have = {_norm(c.get("country")) for c in current}
+        return [dict(c, book=self.country_book(c.get("country")))
+                for key, c in self._countries.items() if key not in have]
+
+    def accounts_gone(self, country: str, current: Iterable[dict]) -> list[dict]:
+        current = list(current)
+        have = {_norm(r.get("account") or r.get("account_label")) for r in current}
+        have.update(_norm(r.get("workbook_alias")) for r in current if r.get("workbook_alias"))
+        return [r for key, r in self._amap.get(_norm(country), {}).items()
+                if key not in have and _present(r)]
+
+    def home_cm_groups(self, current: Iterable[dict]) -> list[dict]:
+        groups = []
+        have = set()
+        for group in current:
+            country = group.get("country", "")
+            have.add(_norm(country))
+            rows = list(group.get("rows") or [])
+            gone = self.cm_gone(country, [r.get("cm") for r in rows])
+            groups.append({**group, "rows": rows + [dict(r, comparison_only=True) for r in gone]})
+        for key, group in self._cm_groups.items():
+            if key not in have:
+                groups.append({**group, "comparison_only": True,
+                               "rows": [dict(r, comparison_only=True) for r in group.get("rows") or []]})
+        return groups
+
+    def close_accounts(self, country: str, current: dict) -> list[str]:
+        before = (self._countries.get(_norm(country)) or {}).get("close_recs") or {}
+        return sorted(label for label in set(current) | set(before)
+                      if current.get(label) or any(_present(r) for r in before.get(label) or []))
+
+    def open_accounts_gone(self, country: str, current: dict) -> list[dict]:
+        before = (self._countries.get(_norm(country)) or {}).get("open_recs") or {}
+        return [{"account": label, "diff": self.open_recs_diff(country, label, [])}
+                for label in sorted(before) if label not in current and before[label]]
+
+    @staticmethod
+    def _section_rows(country: dict, section: str) -> list[dict]:
+        if section == "trend":
+            return [r for key in ("trending_up", "stable", "trending_down")
+                    for r in (country.get("trend") or {}).get(key) or []]
+        return list(country.get(section) or [])
+
+    @staticmethod
+    def _row_key(section: str, row: dict) -> tuple:
+        keys = {"asset_summary": ("offer",), "variants": ("variant",),
+                "asset_variants": ("offer", "variant"),
+                "top_combos": ("offer", "device", "interest", "age", "creative"),
+                "targeting": ("interest",), "creatives": ("creative_id", "text_name"),
+                "trend": ("offer", "device", "interest", "creative")}[section]
+        # Preserve normalized aggregate identity (including text segment) where
+        # the report supplies it; category/rank/date are deliberately not keys.
+        aggregate = row.get("aggregate_key") or {}
+        if section in ("top_combos", "targeting") and aggregate:
+            return tuple((k, _norm(v)) for k, v in sorted(aggregate.items())
+                         if k not in ("section", "country"))
+        return tuple(_norm(row.get(k)) for k in keys)
+
+    def breakdown(self, country: str, section: str, row: dict) -> Optional[dict]:
+        before = self._section_rows(self._countries.get(_norm(country)) or {}, section)
+        key = self._row_key(section, row)
+        return next((r for r in before if self._row_key(section, r) == key), None)
+
+    def breakdown_gone(self, country: str, section: str, current: Iterable[dict]) -> list[dict]:
+        have = {self._row_key(section, r) for r in current}
+        before = self._section_rows(self._countries.get(_norm(country)) or {}, section)
+        return [r for r in before if self._row_key(section, r) not in have]
+
+    @staticmethod
+    def row_label(section: str, row: dict) -> str:
+        keys = {"asset_summary": ("offer",), "variants": ("variant",),
+                "asset_variants": ("offer", "variant"),
+                "top_combos": ("offer", "device", "interest", "age", "creative"),
+                "targeting": ("interest",), "creatives": ("creative_id", "text_name"),
+                "trend": ("offer", "device", "interest", "creative")}[section]
+        return " · ".join(str(row.get(k) or "—") for k in keys)
+
+    def earlier_only_tables(self, country: dict, *, all_rows: bool = False) -> list[dict]:
+        out = []
+        for section, title in (("asset_summary", "Assets"), ("variants", "Landings"),
+                               ("asset_variants", "Asset landing breakdown"),
+                               ("top_combos", "Top combos"), ("targeting", "Targeting"),
+                               ("creatives", "Creative breakdown"), ("trend", "Recent trend")):
+            current = [] if all_rows else self._section_rows(country, section)
+            rows = self.breakdown_gone(country["country"], section, current)
+            if rows:
+                out.append({"title": title, "section": section,
+                            "rows": [{**r, "label": self.row_label(section, r)} for r in rows]})
+        current_creatives = {self._row_key("creatives", r): r for r in country.get("creatives") or []}
+        before = self._countries.get(_norm(country["country"])) or {}
+        for prior in before.get("creatives") or []:
+            row = {} if all_rows else current_creatives.get(self._row_key("creatives", prior)) or {}
+            have = {_norm(v.get("variant")) for v in row.get("variants") or []}
+            gone = [v for v in prior.get("variants") or [] if _norm(v.get("variant")) not in have]
+            if gone:
+                out.append({"title": self.row_label("creatives", prior) + " variants", "section": "creative_variants",
+                            "rows": [{**v, "label": v.get("label") or v.get("variant") or "No variant"} for v in gone]})
+        out.extend(self.earlier_workbench_tables(country, all_rows=all_rows))
+        return out
+
+    def earlier_workbench_tables(self, country: dict, *, all_rows: bool = False) -> list[dict]:
+        if country.get("workbench") and not all_rows:
+            return []
+        before = (self._countries.get(_norm(country["country"])) or {}).get("workbench") or {}
+        tables = []
+        for asset, sl in (before.get("slices") or {}).items():
+            for tab in ("campaigns", "setups", "landings", "targets", "creatives", "buyers"):
+                rows = sl.get(tab) or []
+                if rows:
+                    tables.append({"title": (asset or "All assets") + " · " + tab,
+                                   "section": "workbench", "rows": [dict(r, deposits=r.get("ftds"),
+                                    label=" · ".join(str(x) for x in self._workbench_key(tab, r)) or "—") for r in rows]})
+        return tables
+
+    def creative_variant(self, country: str, creative: dict, variant: dict) -> Optional[dict]:
+        before = self.breakdown(country, "creatives", creative) or {}
+        return next((r for r in before.get("variants") or []
+                     if _norm(r.get("variant")) == _norm(variant.get("variant"))), None)
+
+    def asset_variants(self, country: str, current: list[dict]) -> list[dict]:
+        before = (self._countries.get(_norm(country)) or {}).get("asset_variants") or []
+        key = lambda r: (_norm(r.get("offer")), _norm(r.get("variant")))
+        old = {key(r): r for r in before}
+        out = []
+        for row in current:
+            prior = old.pop(key(row), None)
+            out.append({**row, "_period": metric_compare(row, prior),
+                        "_period_state": BOTH if prior is not None else NEW})
+        out.extend({**r, "_period": metric_compare(None, r), "_period_state": GONE} for r in old.values())
+        for row in out:
+            def total(rows):
+                matching = [r for r in rows if _norm(r.get("offer")) == _norm(row.get("offer"))]
+                return {k: sum(_num(r.get(k)) or 0 for r in matching) for k in ("spend", "leads", "deposits")} if matching else None
+            row["_period_total"] = metric_compare(total(current), total(before))
+        return out
+
+    def trend_metrics(self, country: str, row: dict, suffix: str) -> Optional[dict]:
+        before = self.breakdown(country, "trend", row)
+        return ({k: before.get(k + suffix) for k in ("spend", "leads", "deposits")}
+                if before is not None else None)
+
+    def home_tiles(self, current: dict) -> dict:
+        from src.analysis_agent.country_workbench import home_you_vs_others, home_kpi_tiles
+
+        now = home_you_vs_others(current.get("countries", []), current.get("my_cm", ""))
+        before = home_you_vs_others(self._report.get("countries", []), current.get("my_cm", ""))
+        before_tiles = {t["key"]: t for t in home_kpi_tiles(before)}
+        out = {}
+        for key in ("ftds", "leads", "spend", "cpl", "cpa", "cr"):
+            out[key] = {}
+            for side in ("you", "others"):
+                n = now[side].get(key) if now["countries_used"] else None
+                p = before[side].get(key) if before["countries_used"] else None
+                text, direction = delta_text(n, p)
+                out[key][side] = {"prev": before_tiles[key][side] if p is not None else DASH,
+                                  "delta": text, "dir": direction, "tone": _tone(key, direction)}
+        return out
+
+    @staticmethod
+    def _workbench_key(tab: str, row: dict) -> tuple:
+        keys = {"campaigns": ("account", "name"), "setups": ("device", "age", "target", "pack", "landing"),
+                "landings": ("landing",), "targets": ("target",), "creatives": ("pack",),
+                "buyers": ("cm",), "versions": ("key",)}[tab]
+        return tuple(_norm(row.get(k)) for k in keys)
+
+    @staticmethod
+    def _workbench_metrics(row: Optional[dict]) -> Optional[dict]:
+        return ({"spend": row.get("spend"), "leads": row.get("leads"), "deposits": row.get("ftds")}
+                if row is not None else None)
+
+    @classmethod
+    def _workbench_gone_rows(cls, rows: Iterable[dict], tab: str) -> list[dict]:
+        out = []
+        for row in rows:
+            out.append(dict(row, _period=metric_compare(None, cls._workbench_metrics(row))))
+            if tab == "creatives":
+                for v in row.get("versions") or []:
+                    out.append(dict(v, name=v.get("raw") or v.get("version") or "No version in title",
+                                    _period=metric_compare(None, cls._workbench_metrics(v))))
+        return out
+
+    def workbench(self, country: str, current: dict) -> dict:
+        """Annotate a render-only copy; never insert historical rows into Use indices."""
+        from copy import deepcopy
+
+        out = deepcopy(current)
+        before = (self._countries.get(_norm(country)) or {}).get("workbench") or {}
+        before_slices = {_norm(k): v for k, v in (before.get("slices") or {}).items()}
+        for asset, sl in (out.get("slices") or {}).items():
+            prev = before_slices.get(_norm(asset)) or {}
+            sl["_period_gone"] = {}
+            for tab in ("campaigns", "setups", "landings", "targets", "creatives", "buyers"):
+                rows = sl.get(tab) or []
+                old = {self._workbench_key(tab, r): r for r in prev.get(tab) or []}
+                for row in rows:
+                    prior = old.pop(self._workbench_key(tab, row), None)
+                    row["_period"] = metric_compare(self._workbench_metrics(row), self._workbench_metrics(prior))
+                    row["_period_state"] = NEW if prior is None else BOTH
+                    if tab == "creatives":
+                        versions = {self._workbench_key("versions", v): v for v in (prior or {}).get("versions") or []}
+                        for version in row.get("versions") or []:
+                            pv = versions.pop(self._workbench_key("versions", version), None)
+                            version["_period"] = metric_compare(self._workbench_metrics(version), self._workbench_metrics(pv))
+                        row["_period_gone_versions"] = [dict(v, _period=metric_compare(None, self._workbench_metrics(v)))
+                                                        for v in versions.values()]
+                sl["_period_gone"][tab] = self._workbench_gone_rows(old.values(), tab)
+            sl["_period_compare"] = {}
+            for side in ("you", "others"):
+                sl["_period_compare"][side] = metric_compare(
+                    self._workbench_metrics((sl.get("compare") or {}).get(side)),
+                    self._workbench_metrics((prev.get("compare") or {}).get(side)))
+        out["_period_assets_gone"] = [a for a in before.get("assets") or []
+                                       if _norm(a.get("name")) not in {_norm(k) for k in (out.get("slices") or {})}]
+        out["_period_earlier_slices"] = {
+            k: {tab: self._workbench_gone_rows(v.get(tab) or [], tab)
+                for tab in ("campaigns", "setups", "landings", "targets", "creatives", "buyers")}
+            for k, v in (before.get("slices") or {}).items()
+            if _norm(k) not in {_norm(a) for a in (out.get("slices") or {})}}
+        return out
 
 
 def state_for(cur: Optional[dict], prev: Optional[dict]) -> str:

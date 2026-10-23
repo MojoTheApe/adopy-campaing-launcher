@@ -1,0 +1,25 @@
+{# Historical report evidence: deliberately no forms, account controls or action data attributes. #}
+{% import "_metrics.html" as mx %}
+{% if earlier_country.book %}
+<div class="cmp-table-scroll"><table><thead><tr><th>Country</th>{{ mx.headers() }}</tr></thead><tbody>
+<tr class="cmp-gone-row"><td>{{ earlier_country.country }}{{ mx.flag('gone') }}</td>{{ mx.cells(0, 0, 0, prev=earlier_country.book, gone=true) }}</tr>
+</tbody></table></div>
+{% endif %}
+{% for heading, earlier_rows, name in [('Campaign managers', earlier_country.cm_comparison or [], 'cm'), ('Accounts', compare.accounts_gone(earlier_country.country, []), 'account')] %}
+{% if earlier_rows %}
+<h4>{{ heading }}</h4><div class="cmp-table-scroll"><table><thead><tr><th>{{ heading }}</th>{{ mx.headers() }}</tr></thead><tbody>
+{% for r in earlier_rows %}<tr class="cmp-gone-row"><td>{{ r[name] or '(unknown)' }}{{ mx.flag('gone') }}</td>{{ mx.cells(0, 0, 0, prev=r, gone=true) }}</tr>{% endfor %}
+</tbody></table></div>
+{% endif %}
+{% endfor %}
+{% for label, recs in (earlier_country.close_recs or {}).items() %}{% if recs %}
+<h4>Optimization · {{ label }}</h4><div class="cmp-table-scroll"><table><thead><tr><th>Ad set</th>{{ mx.headers() }}</tr></thead><tbody>
+{% for r in recs %}<tr class="cmp-gone-row"><td>{{ r.adset_name }}{{ mx.flag('gone', 'the earlier close recommendations') }}</td>{{ mx.cells(0, 0, 0, prev=r, gone=true) }}</tr>{% endfor %}
+</tbody></table></div>
+{% endif %}{% endfor %}
+{% for group in compare.open_accounts_gone(earlier_country.country, {}) %}
+<p class="cmp-recs">Open recommendations · {{ group.account }}: {{ group.diff.now }} now, {{ group.diff.before }} earlier · {{ group.diff.gone | join(', ') }} {{ mx.flag('gone', 'the earlier open recommendations') }}</p>
+{% endfor %}
+{% for table in compare.earlier_only_tables(earlier_country, all_rows=true) %}
+{% include "_period_compare_gone_table.html" %}
+{% endfor %}

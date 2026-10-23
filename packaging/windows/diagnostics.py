@@ -174,9 +174,21 @@ def build_summary(config_directory: str | Path, manifest_path: str | Path) -> di
             "safety_backend_ok": env.get("FB_PUBLISH_BACKEND", "rpa") == "rpa",
             "safety_engine_ok": env.get("FB_RPA_ENGINE") == "recorded_flow",
             "account_map": _account_map_summary(config_dir / "ad_account_map.csv"),
+            "account_name_rules": _account_name_rules_summary(),
             "setup": _safe_setup_state(config_dir / "setup-state.json"),
         },
     }
+
+
+def _account_name_rules_summary() -> dict[str, Any]:
+    """ACL-2138: is the bundled account-name rules file present and valid? Never raises."""
+    try:
+        from src.analysis_agent import account_names
+
+        status = account_names.rules_status()
+        return {"ok": status["ok"], "rules": status["rules"], "error": status["error"]}
+    except Exception as exc:
+        return {"ok": False, "rules": 0, "error": f"{type(exc).__name__}: {exc}"}
 
 
 def _sanitize_document(value: Any, local_values: Iterable[str]) -> Any:

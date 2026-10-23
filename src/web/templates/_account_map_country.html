@@ -270,3 +270,9 @@ screenshot: {{ sr.shot }}{% endif %}">{{ sr.error | truncate(40, True, '…') }}
       <div class="amap-empty">No accounts placed in this country yet.</div>
       {% endif %}
       {% with amap_value = mc.key %}{% include "_account_map_add.html" %}{% endwith %}
+
+      {% if compare %}{% set earlier_accounts = compare.accounts_gone(mc.country, mc.rows or []) %}{% if earlier_accounts %}
+      <div class="cmp-table-scroll"><table aria-label="Earlier-only accounts in {{ mc.country | e }}"><thead><tr><th>Account · earlier only</th>{{ mx.headers() }}</tr></thead><tbody>
+      {% for r in earlier_accounts %}<tr class="cmp-gone-row"><td>{{ r.account }}{{ mx.flag('gone') }}</td>{{ mx.cells(0, 0, 0, prev=r, gone=true) }}</tr>{% endfor %}
+      </tbody></table></div>
+      {% endif %}{% endif %}

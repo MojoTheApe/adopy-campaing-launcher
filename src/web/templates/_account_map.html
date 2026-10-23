@@ -6,6 +6,7 @@
      открытая вчера страна ещё без расходов должна быть видна, а закрытая —
      исчезнуть, даже пока в файле лежат прошлонедельные числа. #}
   <div class="amap">
+    {% if compare_fragment_note %}<p class="cmp-note" role="status">{{ compare_fragment_note }}</p>{% endif %}
     <div class="amap-head">
       <h3>Account map</h3>
       <span class="amap-note">{{ amap.countries | length }} countries · numbers from the stats workbook</span>
@@ -131,6 +132,14 @@
     </details>
     {% endfor %}
 
+    {% if compare %}{% for earlier_country in compare.countries_gone(amap.countries) %}
+    <details class="cmp-only-country">
+      <summary>{{ earlier_country.country }} {{ mx.flag('gone') }}</summary>
+      <p class="hint">Results from the earlier period. Read only.</p>
+      {% include "_period_compare_gone_country.html" %}
+    </details>
+    {% endfor %}{% endif %}
+
     {% if not amap.countries %}
     <div class="amap-country"><div class="amap-empty">
       No countries yet. Accounts get placed into countries from a country's Accounts section.
@@ -159,7 +168,8 @@
         сумма всех менеджеров, под ней менеджеры; текущий подсвечен. Строки
         те же, что у CM Comparison в Manage. Раскрытие помнит localStorage
         (`acl.amap.open`, тот же ключ, что у стран на карте). -#}
-    {% if amap.cm_section %}
+    {% set cm_groups = compare.home_cm_groups(amap.cm_section or []) if compare else amap.cm_section %}
+    {% if cm_groups %}
     <details class="amap-cm" data-country="__cm__" id="amap-cm">
       <summary class="amap-cm-title"><h3>Campaign managers</h3>
         <span class="amap-note">every manager in each country · you are highlighted</span></summary>
@@ -168,19 +178,19 @@
         {{ mx.span_headers() }}
         <span></span><span></span>
       </div>
-      {% for g in amap.cm_section %}
+      {% for g in cm_groups %}
       <details class="amap-cm-country" data-country="__cm__:{{ g.country | e }}">
         <summary class="amap-cm-row amap-row">
-          <span class="amap-cell-name">{{ g.country }}</span>
-          {{ mx.spans(g.spend, g.leads, g.deposits, prev=(compare.cm_group(g.country) if compare else false)) }}
+          <span class="amap-cell-name">{{ g.country }}{% if g.comparison_only %}{{ mx.flag('gone') }}{% endif %}</span>
+          {{ mx.spans(g.spend, g.leads, g.deposits, prev=(compare.cm_group(g.country) if compare else false), gone=g.comparison_only or false) }}
           <span></span><span></span>
         </summary>
         {% for r in g.rows %}
         <div class="amap-cm-row amap-row amap-cm-person{% if r.is_me %} me{% endif %}">
           <span></span>
           {%- set cpv2 = compare.cm(g.country, r.cm) if compare else false %}
-          <span class="amap-cell-name">{{ r.cm }}{% if r.is_me %} (you){% endif %}{% if compare %}{{ mx.flag(compare_state(r, cpv2)) }}{% endif %}</span>
-          {{ mx.spans(r.spend, r.leads, r.deposits, prev=cpv2) }}
+          <span class="amap-cell-name">{{ r.cm }}{% if r.is_me %} (you){% endif %}{% if compare %}{{ mx.flag('gone' if r.comparison_only else compare_state(r, cpv2)) }}{% endif %}</span>
+          {{ mx.spans(r.spend, r.leads, r.deposits, prev=cpv2, gone=r.comparison_only or false) }}
           <span></span><span></span>
         </div>
         {% endfor %}
