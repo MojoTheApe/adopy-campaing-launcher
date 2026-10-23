@@ -16714,6 +16714,8 @@ function cbProblemsHtml(r) {
   if (r.steps_completed && r.steps_completed.length) {
     tech.push('<div>steps: ' + r.steps_completed.map(aclEscHtml).join(' → ') + '</div>');
   }
+  // ACL-1805: у API-кампании рядом со списком остаются статус PAUSED, что создано и сверка.
+  if (r.backend === 'api') h += cbApiReadbackHtml(r);
   h += '<details class="cb-problems-tech"><summary>Technical details '
     + '<span>(step codes, run id)</span></summary>'
     + '<div class="cb-problems-tech-body">' + tech.join('') + '</div></details>';

@@ -24,16 +24,20 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable
 
+from src.fb_api import error_catalog as _catalog
 from src.fb_api import form_create as _fc
 from src.fb_api import form_templates as _ft
 from src.fb_api import forms as _forms
 from src.fb_api import pages as _pg
 from src.fb_api.graph import GraphClient, GraphError, GraphStop, WritesBlocked, WriteUnknown, normalize_act
+
+log = logging.getLogger(__name__)
 
 PAUSED = "PAUSED"
 #: ACL-2114: наборы и объявления создаются ACTIVE под кампанией на паузе - показа нет, пока человек
@@ -145,6 +149,17 @@ def _wp_form_edge() -> str:
 
 class PlanError(ValueError):
     """Черновик нельзя создать через API; к Meta ничего не писали."""
+
+    #: Список проблем для дашборда (как у RPA, ACL-1437); у обычного отказа плана пуст.
+    problems: tuple = ()
+
+
+class RulesViolation(PlanError):
+    """Задание нарушает реестр правил Meta (ACL-1805): стоп до первой записи."""
+
+    def __init__(self, message: str, problems: list[dict]):
+        super().__init__(message)
+        self.problems = problems
 
 
 class CreationStopped(RuntimeError):
@@ -674,6 +689,8 @@ class Outcome:
     plan: dict = field(default_factory=dict)
     #: Pre-flight audit (ACL-1819): вердикты серверных правил; пусто, если аудит не шёл.
     audit: list = field(default_factory=list)
+    #: Что показать человеку списком (ACL-1437): title/impact/action/severity/raw.
+    problems: list = field(default_factory=list)
     manual_required: list[str] = field(default_factory=list)
     #: ACL-2114: чтением подтверждено, что кампания PAUSED, - только тогда пишутся ACTIVE дети.
     campaign_confirmed_paused: bool = False
@@ -1262,12 +1279,15 @@ class CampaignCreator:
             out.error, out.stop_kind = str(exc), exc.kind
         except PlanError as exc:
             out.error, out.stop_kind = str(exc) + " Nothing more was created.", "plan"
+            out.problems = list(exc.problems)
         except WritesBlocked as exc:
             out.error, out.stop_kind = f"Not written: {exc}", "blocked"
         except GraphStop as exc:
-            out.error, out.stop_kind = f"Graph API stopped: {exc}", exc.kind
+            out.error, out.stop_kind = f"Graph API stopped: {_catalog.problem_line(exc)}", exc.kind
+            out.problems = [graph_problem(exc)]
         except GraphError as exc:
-            out.error, out.stop_kind = f"Meta refused: {exc}", "graph_error"
+            out.error, out.stop_kind = f"Meta refused: {_catalog.problem_line(exc)}", "graph_error"
+            out.problems = [graph_problem(exc)]
         except WriteUnknown as exc:
             out.error, out.stop_kind = f"Write result unknown: {exc}", "unknown"
         return out
@@ -1325,6 +1345,8 @@ class CampaignCreator:
                 files[ad.path] = data
         self._step(out, "preflight: creatives read")
         self._check_planned(plan, targetings)
+        self._check_meta_rules(plan, targetings)
+        self._step(out, "preflight: Meta rules registry")
         return targetings, files
 
     def _check_forms(self, plan: CampaignPlan) -> None:
@@ -1492,6 +1514,52 @@ class CampaignCreator:
                 ok("ads", {"name": ad.name, "adset_id": "0", "creative": {"creative_id": "0"},
                            "status": CHILD_STATUS, "adlabels": [{"name": plan.label}]}, f"ad {ad.index}")
 
+    def meta_rule_jobs(self, plan: CampaignPlan, targetings: list[dict]) -> list[tuple[str, dict]]:
+        """По заданию на объявление - ровно те значения, что уйдут в POST (ACL-1805)."""
+        camp = self.campaign_params(plan)
+        jobs = []
+        for ad_set, targeting in zip(plan.ad_sets, targetings):
+            aset = self.adset_params(plan, ad_set, "0", targeting)
+            for ad in ad_set.ads:
+                media = ({"video_id": "0", "thumb": "x"} if ad.kind == "video" else {"image_hash": "0"})
+                story = self._story(plan, ad, ad_set, media)
+                data = story.get("video_data") or story.get("link_data") or {}
+                cta = data.get("call_to_action") or {}
+                jobs.append((f"ad set {ad_set.name!r}, ad {ad.index}", {
+                    "objective": camp["objective"], "bid_strategy": camp["bid_strategy"],
+                    "optimization_goal": aset["optimization_goal"], "billing_event": aset["billing_event"],
+                    "destination_type": aset["destination_type"], "call_to_action": cta.get("type"),
+                    "ad_title": ad.title, "ad_body": ad.body, "ad_link_description": ad.description or None,
+                    "api_preview": {"campaign": {"special_ad_categories": camp["special_ad_categories"]}}}))
+        return jobs
+
+    def _check_meta_rules(self, plan: CampaignPlan, targetings: list[dict]) -> None:
+        """Реестр правил Meta (ACL-1781) над точными значениями запроса - до первой записи.
+
+        Нарушение - `RulesViolation`, к Meta ничего не ушло. Реестр не загрузился
+        или проверка упала - пропускаем с записью в лог (кампанию это не блокирует).
+        """
+        try:
+            from src.campaign_bridge import meta_rules
+
+            ruleset = meta_rules.load_rules()
+            found: dict[str, Any] = {}
+            for where, job in self.meta_rule_jobs(plan, targetings):
+                for v in meta_rules.check_job(job, ruleset):
+                    found.setdefault(f"{v.rule_id}|{v.message_en}", (where, v))
+        except Exception:
+            log.exception("Meta rules check failed; the campaign is not blocked by it")
+            return
+        if not found:
+            return
+        problems = [{"title": v.message_en, "impact": "Meta would refuse this campaign.",
+                     "action": "Fix the value in the campaign settings and publish again.",
+                     "severity": "blocking", "step": "meta_rules",
+                     "raw": f"{where}; rule {v.rule_id}; source: {v.source_url}"}
+                    for where, v in found.values()]
+        text = " ".join(f"Meta rules: {p['title']}" for p in problems)
+        raise RulesViolation(text, problems)
+
     def plan_only(self, plan: CampaignPlan) -> Outcome:
         """Пробный запуск (ревью M3): предпроверка и план, НИ ОДНОЙ записи.
 
@@ -1543,10 +1611,13 @@ class CampaignCreator:
                 name_error = str(exc)
         except PlanError as exc:
             out.error, out.stop_kind = str(exc), "plan"
+            out.problems = list(exc.problems)
         except GraphStop as exc:
-            out.error, out.stop_kind = f"Graph API stopped: {exc}", exc.kind
+            out.error, out.stop_kind = f"Graph API stopped: {_catalog.problem_line(exc)}", exc.kind
+            out.problems = [graph_problem(exc)]
         except GraphError as exc:
-            out.error, out.stop_kind = f"Meta refused: {exc}", "graph_error"
+            out.error, out.stop_kind = f"Meta refused: {_catalog.problem_line(exc)}", "graph_error"
+            out.problems = [graph_problem(exc)]
         self._audit(plan, out, existing=differences, checked=differences is not None, files=files,
                     renamed=renamed, name_error=name_error)
         return out
@@ -1911,6 +1982,18 @@ _FIELD_TITLES = {"geo": "countries", "age_min": "minimum age", "age_max": "maxim
                  "destination_type": "destination", "daily_budget": "daily budget",
                  "promoted_page": "Page of the ad set",
                  "bid_strategy": "bid strategy"}
+
+
+def graph_problem(exc: BaseException) -> dict:
+    """Отказ Meta записью списка проблем дашборда: каталог ошибок (ACL-1786) или сырой текст."""
+    x = _catalog.explain(getattr(exc, "code", None), getattr(exc, "subcode", None), str(exc))
+    code = f"{x.code}/{x.subcode}" if x.subcode else str(x.code or "")
+    raw = str(exc)
+    if not x.known:
+        return {"title": raw or "Meta refused the request (no details given).", "impact": "", "action": "",
+                "severity": "blocking", "step": "graph_error", "raw": raw}
+    return {"title": x.message_en, "impact": "", "action": x.action_en, "severity": "blocking",
+            "step": "graph_error", "raw": (f"code {code}: " if code else "") + raw}
 
 
 def _advantage_info(camp: dict) -> dict:
