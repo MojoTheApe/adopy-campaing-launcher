@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import sys
+import uuid
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -32,7 +33,7 @@ from src.fb_ads_rpa import browser as br  # noqa: E402
 from src.fb_ads_rpa import profile_dir  # noqa: E402
 from src.fb_ads_rpa import profile_trouble as pt  # noqa: E402
 
-PID = "3f6c1a84-0b1e-4c1d-9a11-118400000184"
+PID = str(uuid.UUID(int=1184))
 UDD = "C:/mlx/profiles/ws/folder/" + PID
 
 
