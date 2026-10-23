@@ -1,6 +1,7 @@
 """DOM helpers for Meta Ads Manager — label-based fills that survive UI refactors."""
 from __future__ import annotations
 
+import contextlib
 import json
 import math
 import os
@@ -3699,7 +3700,10 @@ def _wait_objective_dialog(page: Page, *, first_s: float = 75.0,
         if _simple_create_ready(page):
             found, outcome = True, "simple_create"
             break
-        frozen = _tab_frozen(page)
+        # ACL-1739: цикл сам требует OBJECTIVE_FROZEN_POLLS промахов подряд, длинная
+        # проверка внутри каждого опроса только растягивала бы сдачу вкладки.
+        with _no_frozen_confirm():
+            frozen = _tab_frozen(page)
         woke = watch.check(frozen=True) if frozen else watch.check()
         now = time.time()
         if woke:
@@ -3942,6 +3946,20 @@ LIVENESS_PROBE_S = 5.0
 FROZEN_CONFIRM_S = 10.0
 
 
+#: ACL-1739: поток, которому длинная проверка `FROZEN_CONFIRM_S` не нужна
+#: (ожидание окна цели само требует нескольких промахов подряд).
+_NO_CONFIRM = threading.local()
+
+
+@contextlib.contextmanager
+def _no_frozen_confirm():
+    _NO_CONFIRM.on = True
+    try:
+        yield
+    finally:
+        _NO_CONFIRM.on = False
+
+
 def _tab_frozen(page: Page) -> bool:
     """Вкладка не ответила за `LIVENESS_PROBE_S` (таймаут соблюдает драйвер).
 
@@ -3965,6 +3983,19 @@ def _tab_frozen(page: Page) -> bool:
             woke = {}
         if woke.get("woke") and _page_responsive(page, LIVENESS_PROBE_S) is True:
             return False
+    if frozen and not getattr(_NO_CONFIRM, "on", False) and _page_responsive(page, FROZEN_CONFIRM_S) is True:
+        # ACL-1739 (Doc124, df8549045b4a и др.): одна неотвеченная 5-секундная
+        # проба — ещё не застой. Окно профиля под 4–7 другими окнами, Chrome
+        # придерживает рендерер; вкладка занята, но живая (через минуту
+        # stall_evidence: responsive=true). Длинная проба ответила — эпизод
+        # не считаем, иначе 5 таких «застоев» останавливали живую кампанию
+        # (tab_frozen_budget_exceeded). Настоящий застой не ответит и на ней.
+        try:
+            _telemetry.record("tab_frozen", None, note="confirm_answered",
+                              diag={"where": "probe"})
+        except Exception:
+            pass
+        return False
     if frozen:
         _flow_budget_note_frozen()
         if not getattr(_flow_budget, "defer", False):
@@ -5353,6 +5384,9 @@ def run_recorded_campaign_flow(
     on_new_page=None,
     ad_body2: str = "",
     expected_act: str = "",
+    page_id: str = "",
+    page_name: str = "",
+    page_name_unique: bool = False,
 ) -> str:
     """Create -> Website -> ... -> Ad level, using the exact locators from a
     verified human Playwright codegen recording (2026-07-21) instead of the
@@ -6536,6 +6570,10 @@ def run_recorded_campaign_flow(
         # С каким именем сверять открытое объявление перед текстом.
         copy_ad_name = ad_name or f"{campaign_name} Ad"
         if reached_ad_level:
+            if page_id:
+                from src.fb_ads_rpa.page_identity import ensure_page_identity
+                if not ensure_page_identity(page, page_id, page_name, page_name_unique):
+                    return "page_identity"
             final_ad_name = ad_name or f"{campaign_name} Ad"
             name_try: dict = {}
             if not _fill(page.get_by_placeholder(_AD_NAME_PLACEHOLDER), final_ad_name, where="ad_name",
@@ -6812,6 +6850,10 @@ def run_recorded_campaign_flow(
                         continue
 
                     extra_name = extra.get("ad_name") or f"{campaign_name} Ad {i}"
+                    if page_id:
+                        from src.fb_ads_rpa.page_identity import ensure_page_identity
+                        if not ensure_page_identity(page, page_id, page_name, page_name_unique):
+                            return "page_identity"
                     extra_copy_name = extra_name
                     name_try = {}
                     name_ok = _fill(page.get_by_placeholder(_AD_NAME_PLACEHOLDER), extra_name,

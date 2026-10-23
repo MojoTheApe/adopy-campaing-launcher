@@ -23,12 +23,14 @@ that same task so earlier requirements and decisions remain visible.
 | Idea | A suggestion that still needs a decision. |
 | Backlog | Recorded work waiting to be selected. |
 | To Do | Selected work that has not started. |
-| In Progress | An implementer has taken the task. Check the latest update to confirm what they are doing now. |
-| Paused | A stop has been explicitly recorded. The card appears with planned work and has no active elapsed timer; it can be resumed through the existing ownership procedure. |
+| In Progress | An implementer has taken the task. Check the activity confirmation for what is happening now. |
+| Needs fixes | A genuine review return is waiting in Backlog for its author. |
+| Fixing | The author has actually taken the returned task in In Progress. Fresh independent Review follows the fix. |
+| Paused | After the separate compatible live activation, an explicit stop keeps the card in its saved category and releases only that executor slot. The earlier stop procedure moves to To Do; installing support alone does not change it. |
 | Needs clarification | The recorded work does not establish a ready review handoff or an active reviewer. Ask the agent to reconcile the saved work and task; it is not proof that review is running. |
 | Ready for Review | A ready handoff is recorded in the review queue, waiting for an independent reviewer. |
 | In Review | An independent reviewer holds the review assignment. |
-| Approved | The source change passed review and is waiting to be combined and delivered. This is not yet a finished application update. |
+| Ready for integration | Genuinely approved work waits in Delivery. Its native Approved status and original review remain recorded; it is not yet complete. |
 | Integrating | Approved work is being combined and checked for main. |
 | Awaiting Release | Required delivery is unfinished and no current release job is confirmed, or its result still needs the delivery confirmation. |
 | Releasing | A current release verification job is confirmed for the accepted source. The task remains unfinished until delivery is verified. |
@@ -49,14 +51,17 @@ an unavailable Windows computer remain uninspected, not lost or declared complet
 A voluntary pause alone is not Blocked; a real dependency or access obstacle stays
 visible with its reason. To resume, ask the agent to continue the same task: it
 first checks the saved work, current requirements and dependencies, then records
-normal ownership. You do not need a new task or a manual Tracker status change.
+normal ownership with actual capacity and fresh authority. You do not need a new
+task or a manual Tracker status change. The phase-preserving Pause commands need
+separate live activation after every writer and the reader are compatible; this
+source upgrade alone does not perform it.
 
 An explicit stop is different from a missing activity record. "Status unconfirmed"
 means the Tracker cannot establish a reliable current state from the available
 record. Ask the agent to check the original task and ownership. Do not restart,
 close or delete the task just to remove that label. Review is the group containing
-Needs clarification, Ready for Review, In Review and Approved; it does not by itself
-prove that a reviewer is working. The agent records changes through the existing
+Needs clarification, Ready for Review and In Review. Approved waiting work is in
+Delivery as Ready for integration. Neither category proves an executor is working. The agent records changes through the existing
 tools; the board does not offer direct status-edit buttons.
 
 ## Read the counters and time
@@ -69,19 +74,31 @@ tools; the board does not offer direct status-edit buttons.
 - **Integration 0/1** means the single slot for combining approved changes is free.
 
 The counters stay visible. A separate "free" suffix is unnecessary because the
-ratio already shows capacity. **Elapsed** adds up recorded intervals in that
-workflow activity, including the current assignment. It does not measure
-continuous agent runtime. Paused work has no active elapsed timer.
+ratio already shows capacity. Work time now uses confirmations from the actual
+executor. Waiting and gaps without confirmation do not add work time. After five
+minutes without confirmation the timer freezes: **Connection lost** means a prior
+confirmation expired, and **Activity unconfirmed** means no confirmation exists;
+the assignment stays reserved until the normal stop or handoff procedure releases
+it. **Waiting for checks or input** and **Executor stopped** explain a confirmed
+wait or stop. Historical time without activity evidence remains incomplete.
 
-**Details** contains supporting operational records. A reservation is recorded
-ownership. "Admission not assessed" means eligibility for the next step has not
-been checked; it is not itself a failure. "Batch selection required" means the
-agent coordinating delivery must select approved work to combine. "Integration
-paused" describes that delivery activity, not every task. "Activity not recorded"
-means no activity evidence was recorded. A waiting approval and a batch size are
-queue/capacity information. These messages alone are not requests for you to act;
-a real blocker should name the obstacle and the specific help needed. A stale or
-unavailable board should be checked against the original GitHub task.
+The task's category stays separate: a task can remain in Review while its reviewer
+waits, stops or has unconfirmed activity. Updating the shared client does not
+restart existing agents or prove that they are running.
+
+Open **Task history** to see status labels added or removed, the task,
+when and the GitHub actor that changed them. A genuine approval moves waiting
+work from Review to Delivery as Ready for integration. Its waiting age starts at
+the current real approval; missing history stays unknown. The history window is bounded;
+an incomplete or unavailable history is marked and earlier records remain linked
+from each GitHub task. A shared GitHub account does not identify an individual agent.
+
+Open the task and its linked GitHub Issue/PR for supporting records. **Batches**
+shows recorded composition and integration. A reservation records ownership; it
+does not prove confirmed execution or eligibility for the next step. Batch size
+and waiting approval describe composition and queue state. These facts alone do
+not ask you to act: a real blocker names its obstacle and the specific help needed.
+Check a stale or unavailable board against the original GitHub task.
 
 ## Find the result or help with a blocker
 
@@ -93,6 +110,12 @@ For instructions, the result is the published document on the main branch. For a
 ACL application change, a merged source change alone is insufficient: look for the
 verified stable release and installation/update evidence in the task. Completion
 does not claim that every employee's machine has already updated.
+
+Process updates are delivered separately from the application. A proven isolated
+update to shared agent or task tooling keeps independent review and the required
+checks, then records its real result on main. **Process updated** means that work
+is complete; it does not claim a new ACL installer. Product changes and an explicit
+request to publish the product still need their actual verified delivery.
 
 If work is blocked, the agent should give you one concrete request, such as
 restoring access to the Windows computer, and continue any independent work.

@@ -197,3 +197,10 @@ def test_an_open_profile_that_connects_is_used_as_is(publisher, monkeypatch):
     got = publisher["pub"]._ensure_browser("FacebookDQ501 - Duan Guyen")
     assert got is opened
     assert publisher["pub"]._conn is opened
+
+
+@pytest.fixture(autouse=True)
+def physical_ownership():
+    from src.fb_ads_rpa.operations import profile_lock
+    with profile_lock(_Entry.profile_id):
+        yield
