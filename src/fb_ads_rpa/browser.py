@@ -2834,10 +2834,14 @@ def stop_profile_on_request(entry: AccountMapEntry, account_label: str) -> str:
     from src.fb_api import profile as _fb_profile
 
     settled = _launch.wait_start_settled(profile_id)
+    stop_at = time.time()
     MultiloginAttachOnlyProvider()._stop_profile(entry, account_label, profile_id, udd, allow_kill=False)
     _ROBOT_PROFILES.pop(profile_id, None)
     # Закрытым профиль считаем, когда его процесс ушёл (статусу MLX Desktop не верим).
     gone = _fb_profile.wait_gone(profile_id)
+    # ACL-2117: время остановки и ухода процесса — для проверки гипотезы «переоткрыли в разгар сохранения».
+    _launch.record_profile_stop(account=account_label, profile_id=profile_id, stop_at=stop_at,
+                                exit_at=time.time() if gone else None, settled=settled, gone=gone)
     if not gone:
         log.warning("%s: profile %s still has a process %.0f s after the MLX stop (start was %s)",
                     account_label, profile_id, _launch.STOP_GONE_WAIT_S, settled)

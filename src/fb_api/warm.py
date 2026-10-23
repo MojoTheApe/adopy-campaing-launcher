@@ -919,6 +919,12 @@ class WarmRegistry:
 
     def _raise_for_state(self, sess: WarmSession, state: dict) -> None:
         kind = state.get("kind")
+        try:
+            from src.fb_api import launch as _launch
+
+            _launch.note_graph_session(sess.profile_id, bool(state.get("has_token")), account=sess.account)
+        except Exception:  # noqa: BLE001 — телеметрия не роняет действие
+            pass
         if kind == "checkpoint":
             self._note_login_stop(sess)
             raise Checkpoint("the profile is on a Facebook checkpoint")
