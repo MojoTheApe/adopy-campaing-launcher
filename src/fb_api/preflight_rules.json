@@ -48,6 +48,19 @@
       "unit": "campaign"
     },
     {
+      "applies": "always",
+      "field": {
+        "level": "campaign",
+        "sel": ""
+      },
+      "hint": "the ad is set for Instagram placements: connect an Instagram account to the Facebook Page, or wait for manual placements (ACL-1772) to publish Facebook-only",
+      "id": "instagram_identity",
+      "label": "Instagram account of the Page",
+      "severity": "error",
+      "side": "server",
+      "unit": "campaign"
+    },
+    {
       "applies": "website",
       "field": {
         "level": "campaign",

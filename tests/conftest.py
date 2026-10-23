@@ -59,6 +59,14 @@ os.environ["ACL_SENTRY_RUN_SUMMARY"] = "0"
 for _name in ("ACL_LIBRARY_REPO", "ACL_LIBRARY_TOKEN", "ACL_LIBRARY_BRANCH"):
     os.environ[_name] = ""
 
+# Тесты не спрашивают MLX API про прокси профиля (ACL-1138).
+#
+# Гейт стоит в начале `open()` обоих провайдеров Multilogin, а десятки тестов
+# открывают профиль через двойников. С токеном из машинного `.env` или
+# синтетическим из monkeypatch каждый такой тест ходил бы в
+# api.multilogin.com. Штатный выключатель; тесты гейта включают его сами.
+os.environ["FB_RPA_PROXY_GATE"] = "0"
+
 
 # Маркер файлов, которым нужен Windows (ACL-1582). Это метка отбора для CI
 # (scripts/acl_test_platform.py), а не пропуск: на Linux такие файлы просто не

@@ -61,7 +61,8 @@ FILE_FIELDS = {"adimages": "filename", "advideos": "source"}
 #: Ключи, которых не должно быть нигде, на любой глубине.
 FORBIDDEN_ANYWHERE = frozenset({"effective_status", "configured_status", "execution_options",
                                 "access_token", "method", "_method", "batch",
-                                "suppress_http_code", "lead_gen_form_id", "tos_accepted"})
+                                "suppress_http_code", "lead_gen_form_id", "tos_accepted",
+                                "instagram_actor_id"})
 PAUSED = "PAUSED"
 
 #: Загрузка большого видео кусками (ACL-1891): `POST /act_X/advideos` с `upload_phase`.
@@ -91,6 +92,11 @@ UPLOAD_NUMBER_RE = re.compile(r"^[0-9]{1,13}$")
 LEAD_FORM_KEY = "lead_gen_form_id"
 #: Форматы креатива, в `call_to_action.value` которых форма может стоять.
 LEAD_FORM_FORMATS = ("link_data", "video_data")
+#: Instagram-идентичность креатива (ACL-1896): ОДНО числовое поле, и только прямым ключом
+#: `object_story_spec`. Справочник Meta: `object_story_spec.instagram_user_id` - строка из цифр.
+#: Старое `instagram_actor_id` не разрешено нигде.
+INSTAGRAM_KEY = "instagram_user_id"
+INSTAGRAM_ID_RE = re.compile(r"^[0-9]{5,25}$")
 #: Id формы — только цифры; всё прочее не форма.
 LEAD_FORM_ID_RE = re.compile(r"^[0-9]{5,25}$")
 #: Ключи, которые Graph читает как JSON. Строку в них Graph разберёт сам —
@@ -131,6 +137,7 @@ def policy_for_page(act: str, page: str = "") -> dict:
         "json_keys": sorted(JSON_KEYS),
         "opt_out_keys": sorted(OPT_OUT_KEYS),
         "dof_features": sorted(DOF_FEATURES),
+        "instagram": {"key": INSTAGRAM_KEY, "id_re": INSTAGRAM_ID_RE.pattern},
         "lead_form": {"key": LEAD_FORM_KEY, "edge": "adcreatives",
                       "formats": list(LEAD_FORM_FORMATS), "id_re": LEAD_FORM_ID_RE.pattern},
         "form_create": policy_for_form_create(page),
@@ -217,6 +224,26 @@ def _without_lead_form(edge: str, checked: dict, on_ad: bool) -> dict:
         return out
     return checked
 
+
+def _count_key(value: Any, key: str) -> int:
+    if isinstance(value, dict):
+        return sum((1 if k == key else 0) + _count_key(v, key) for k, v in value.items())
+    if isinstance(value, (list, tuple)):
+        return sum(_count_key(v, key) for v in value)
+    return 0
+
+
+def _check_instagram(edge: str, checked: dict) -> None:
+    """`instagram_user_id` - ровно один раз, прямым ключом object_story_spec креатива, строка из цифр (ACL-1896)."""
+    seen = _count_key(checked, INSTAGRAM_KEY)
+    if not seen:
+        return
+    story = checked.get("object_story_spec") if edge == "adcreatives" else None
+    value = story.get(INSTAGRAM_KEY) if isinstance(story, dict) else None
+    if seen != 1 or not isinstance(story, dict) or INSTAGRAM_KEY not in story:
+        raise WriteRefused(f"write refused: {INSTAGRAM_KEY} is allowed only in object_story_spec of a creative")
+    if not (isinstance(value, str) and INSTAGRAM_ID_RE.fullmatch(value)):
+        raise WriteRefused(f"write refused: {INSTAGRAM_KEY} must be the numeric id of an Instagram account")
 
 def _digits(value: Any) -> int | None:
     """Целое из int или строки цифр (не bool, не float); иначе None."""
@@ -317,6 +344,7 @@ def check(act: str, method: str, path: str, params: dict | None,
         if not (isinstance(creative, dict) and set(creative) == {"creative_id"}
                 and isinstance(creative["creative_id"], (str, int))):
             raise WriteRefused("write refused: an ad may only reference a creative by creative_id")
+    _check_instagram(edge, checked)
     _walk(_without_lead_form(edge, checked, on_ad), edge)
     files = dict(files or {})
     want = FILE_FIELDS.get(edge)
