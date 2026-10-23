@@ -1,8 +1,8 @@
 """ACL-2138: every config/*.json that src/ reads at runtime ships in the installed build."""
 from __future__ import annotations
 
-import json
 import re
+import subprocess
 from pathlib import Path
 
 from scripts.acl_ci_scope import is_bundled
@@ -10,8 +10,17 @@ from src.analysis_agent import account_names
 
 ROOT = Path(__file__).resolve().parents[1]
 #: Files in config/ that src/ mentions but the installed build does not need (dev/ops tools only).
-DEV_ONLY: set[str] = set()
+DEV_ONLY: set[str] = {
+    "google_credentials.json",  # machine files, never shipped
+    "token_accounts.json",  # machine files, never shipped
+}
 _READ = re.compile(r'"config"\s*/\s*"([\w.-]+\.json)"|config/([\w.-]+\.json)')
+
+
+def _tracked_config_json() -> set[str]:
+    """Only git-tracked files count: gitignored machine files on a dev box are not candidates."""
+    out = subprocess.run(["git", "ls-files", "config/*.json"], cwd=ROOT, capture_output=True, text=True, check=True)
+    return {Path(line).name for line in out.stdout.splitlines() if line.strip()}
 
 
 def _src_mentions() -> set[str]:
@@ -25,8 +34,10 @@ def _src_mentions() -> set[str]:
 def test_every_runtime_config_json_is_packaged_or_dev_only():
     spec = (ROOT / "packaging/windows/acl_windows.spec").read_text(encoding="utf-8")
     missing = []
+    tracked = _tracked_config_json()
+    assert "account_name_rules.json" in tracked
     for name in sorted(_src_mentions()):
-        if not (ROOT / "config" / name).is_file() or name in DEV_ONLY:
+        if name not in tracked or name in DEV_ONLY:
             continue
         if f'"config" / "{name}"' not in spec or not is_bundled(f"config/{name}"):
             missing.append(name)
