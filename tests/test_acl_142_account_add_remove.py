@@ -163,6 +163,37 @@ def test_remove_from_acl_drops_the_same_account_map_row_and_all_links_despite_ca
     assert account_links.values_for("Acc A", "asset") == ["Asset A"]
 
 
+def test_full_removal_then_reconnect_does_not_restore_old_placements(machine, monkeypatch):
+    from starlette.requests import Request
+    from src.web.app import account_map_patch
+
+    account_links.link("Acc B", "country", "Peru")
+    account_links.link("Acc B", "asset", "Asset B")
+    assert _remove({"account_name": "Acc B", "also_unlink": True})["ok"]
+
+    raw = json.dumps({"account_name": "Acc B", "ad_account_id": "act_222222",
+                      "profile_id": "p2", "country": "Bolivia"}).encode()
+
+    async def receive():
+        return {"type": "http.request", "body": raw, "more_body": False}
+
+    request = Request({"type": "http", "method": "POST", "path": "/account-map-patch",
+                       "headers": [(b"content-type", b"application/json")]}, receive=receive)
+    saved = json.loads(asyncio.run(account_map_patch(request)).body)
+    assert saved["ok"], saved
+    monkeypatch.setattr(account_links, "get_ad_account_map_path", lambda: str(machine))
+    assert account_links.seed_from_account_map() == 0
+    assert account_links.values_for("Acc B", "country") == []
+    assert account_links.values_for("Acc B", "asset") == []
+
+    # Connect links only the newly chosen country, never the old placements.
+    account_links.link("Acc B", "country", "Bolivia")
+    assert account_links.values_for("Acc B", "country") == ["Bolivia"]
+    assert account_links.values_for("Acc B", "asset") == []
+    assert account_links.values_for("Acc A", "country") == ["Chile", "Peru"]
+    assert _names(machine) == ["Acc A", "Acc B"]
+
+
 def test_remove_from_acl_works_when_this_machine_has_no_map_file(tmp_path, monkeypatch):
     monkeypatch.setattr(account_links, "links_path", lambda: tmp_path / "account_links.csv")
     account_links.link("Orphan", "country", "Peru")
