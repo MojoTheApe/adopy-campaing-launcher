@@ -432,7 +432,9 @@ class OpenProfileProbe:
     `read` отдаёт последний готовый ответ и никогда его не ждёт, поэтому
     под замком очереди вызывать безопасно. Нет свежего ответа, проверка
     упала или зависла — `None`: профиль считаем закрытым (как до ACL-1642),
-    память спрашиваем как раньше. Готовый ответ будит ожидающих (`on_ready`).
+    память спрашиваем как раньше. `read_result` также сохраняет признак ещё
+    идущей проверки: перед закрытием другого окна ради памяти очередь даёт
+    ей не больше одного окна свежести. Готовый ответ будит ожидающих (`on_ready`).
     `background=False` — проверять прямо в вызывающем потоке (тесты).
     """
 
@@ -493,9 +495,13 @@ class OpenProfileProbe:
                 pass
 
     def read(self, profile: str) -> bool | None:
+        return self.read_result(profile)["open"]
+
+    def read_result(self, profile: str) -> dict[str, Any]:
+        """Один неблокирующий снимок факта и ещё идущей проверки под одним замком."""
         profile = str(profile or "")
         if not profile:
-            return None
+            return {"open": None, "pending": False}
         now = self._clock()
         with self._lock:
             hit = self._cache.get(profile)
@@ -529,8 +535,13 @@ class OpenProfileProbe:
         with self._lock:
             hit = self._cache.get(profile)
             if hit is not None and self._clock() - hit[0] < self._max_age_s:
-                return hit[1]
-            return None
+                return {"open": hit[1], "pending": False}
+            backoff = (self._failed_at is not None
+                       and self._clock() - self._failed_at < self._ttl_s)
+            # Другой пакет мог только что закончиться; запрос этого профиля
+            # всё ещё стоит в очереди на следующий, а не ответил «закрыт».
+            pending = self._inflight_since is not None or (profile in self._want and not backoff)
+            return {"open": None, "pending": pending}
 
 
 def decide(running: int, warming: int, memory: MemoryReading | None,
@@ -904,8 +915,12 @@ class ProfileSlots:
                     if values:
                         # ACL-1603: самый тяжёлый из недавних замеров, не среднее.
                         measured_mb = int(max(values))
-        decision = decide(running, self._warming(), self._memory(), settings, measured_mb, current,
-                          profile_open=self._is_open(profile))
+        memory = self._memory()
+        opened = self._open.read_result(profile)
+        decision = decide(running, self._warming(), memory, settings, measured_mb, current,
+                          profile_open=opened["open"] is True)
+        if opened["pending"]:
+            decision["profile_open_pending"] = True
         if kept_n:
             decision["kept"] = kept_n
             # ACL-2113: `kept_accounts` — окна на проверке (их закрывает человек);
@@ -970,8 +985,18 @@ class ProfileSlots:
                                 "decision": {"allow": True, "reason": "shared_profile"},
                                 "first_hold": first_hold, "shared": True}
                     verdict = self._verdict(job_id)
+                    probe_wait_s = 0.0
+                    if (self._evictor is not None and verdict.get("profile_open_pending")
+                            and verdict.get("reason") in ("memory_low", "below_reserve",
+                                                          "memory_unknown_full")):
+                        # ACL-1642: неизвестный первый ответ ещё может означать ноль
+                        # новой памяти. До закрытия ДРУГОГО окна дайте фоновой проверке
+                        # ответить; замок на ожидании свободен. Бюджет один на задание,
+                        # зависший/перезапущенный замер не продлевает его бесконечно.
+                        since = self._waiting[job_id].setdefault("open_probe_wait_since", self._clock())
+                        probe_wait_s = max(0.0, OPEN_TTL_S - (self._clock() - since))
                     if (not verdict.get("allow") and self._evictor is not None
-                            and verdict.get("reason") in EVICT_REASONS):
+                            and verdict.get("reason") in EVICT_REASONS and probe_wait_s <= 0):
                         # ACL-2113: место или память заняты «удобными» окнами — закрыть
                         # самое давнее простаивающее и проверить заново.
                         done = self._evict_one(job_id, profile)
@@ -1002,7 +1027,8 @@ class ProfileSlots:
                             on_wait(dict(verdict))
                         except Exception:
                             pass   # показ очереди не должен ронять задание
-                    self._cond.wait(timeout=self._tick_s)
+                    self._cond.wait(timeout=min(self._tick_s, probe_wait_s)
+                                    if probe_wait_s > 0 else self._tick_s)
             finally:
                 if job_id in self._waiting:
                     del self._waiting[job_id]

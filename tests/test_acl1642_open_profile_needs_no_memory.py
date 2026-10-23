@@ -391,6 +391,148 @@ def test_open_profile_low_memory_does_not_evict_an_idle_kept_window():
     assert kept["kept"] and kept["kept_kind"] == ps.KEPT_CONVENIENCE
 
 
+def _idle_window_with_pending_target(*, target_open=True, ceiling=2, fail=False):
+    """The real background probe pauses; only the fake evictor can close anything."""
+    m = Machine(open_profiles={"p1", "p2"} if target_open else {"p1"},
+                ceiling=ceiling, kept_idle_close_s=1.0, settle_s=0)
+    started, finish = threading.Event(), threading.Event()
+
+    def check(profiles):
+        if "p2" in profiles:
+            started.set()
+            assert finish.wait(3)
+            if fail:
+                raise OSError("synthetic probe unavailable")
+        return m._check(profiles)
+
+    usage = ps.ProfileUsage(lambda profiles: {p: 4 * GB for p in profiles},
+                            clock=lambda: m.now, background=False)
+    probe = ps.OpenProfileProbe(check, clock=lambda: m.now, background=True)
+    evictions = []
+
+    def evict(*args):
+        evictions.append(args)
+        m.available_gb = 20.0  # model the memory returned by a legitimate idle close
+        return True
+
+    slots = ps.ProfileSlots(memory=lambda: mem(m.available_gb), settings=lambda: m.settings,
+                            clock=lambda: m.now, tick_s=0.01, usage=usage,
+                            open_probe=probe, evictor=evict)
+    slots.acquire("A", "p1")
+    assert _until(lambda: probe.read("p1") is True)
+    slots.keep("A", "synthetic kept", kind=ps.KEPT_CONVENIENCE)
+    m.now += 2
+    m.available_gb = 1.0
+    job = Job(slots, "B", "p2")
+    assert started.wait(1)
+    return m, slots, probe, job, finish, evictions
+
+
+def test_pending_background_open_answer_precedes_memory_only_eviction():
+    m, slots, probe, job, finish, evictions = _idle_window_with_pending_target()
+    try:
+        time.sleep(0.1)  # the independent finding used an actual ~100ms background wait
+        assert evictions == [] and not job.done
+        assert [r["job_id"] for r in slots.snapshot()["running"]] == ["A"]
+        finish.set()
+        assert _until(lambda: job.done)
+        assert job.grant["decision"]["reason"] == "profile_open"
+        assert job.grant["closed_for_room"] == [] and evictions == []
+        assert {r["job_id"] for r in slots.snapshot()["running"]} == {"A", "B"}
+    finally:
+        finish.set()
+        job.cancel(slots)
+
+
+def test_confirmed_closed_background_answer_preserves_idle_memory_eviction():
+    m, slots, probe, job, finish, evictions = _idle_window_with_pending_target(target_open=False)
+    try:
+        time.sleep(0.05)
+        assert evictions == [] and not job.done
+        finish.set()
+        assert _until(lambda: job.done)
+        assert len(evictions) == 1 and evictions[0][0] == "A"
+        assert job.grant["decision"]["reason"] == "memory_ok"
+        assert job.grant["decision"]["profile_open"] is False
+        assert job.grant["closed_for_room"][0]["job_id"] == "A"
+    finally:
+        finish.set()
+        job.cancel(slots)
+
+
+def test_hung_open_probe_only_defers_memory_eviction_for_a_bounded_freshness_window():
+    m, slots, probe, job, finish, evictions = _idle_window_with_pending_target()
+    try:
+        assert _until(lambda: job.holds)
+        assert evictions == []
+        m.now += ps.OPEN_TTL_S + 0.1
+        slots.wake()
+        assert _until(lambda: job.done)
+        assert len(evictions) == 1
+        assert job.grant["decision"]["reason"] == "memory_ok"
+        assert job.grant["decision"]["profile_open"] is False  # a pending result grants no bypass
+    finally:
+        finish.set()
+        job.cancel(slots)
+
+
+def test_pending_open_probe_does_not_defer_an_actual_capacity_eviction():
+    m, slots, probe, job, finish, evictions = _idle_window_with_pending_target(ceiling=1)
+    try:
+        assert _until(lambda: job.done)
+        assert len(evictions) == 1 and job.grant["closed_for_room"][0]["job_id"] == "A"
+        assert job.grant["decision"]["running"] == 0
+        assert probe.read("p2") is None  # no fresh fact was used to evade the ceiling
+    finally:
+        finish.set()
+        job.cancel(slots)
+
+
+def test_failed_background_open_probe_preserves_conservative_idle_eviction():
+    m, slots, probe, job, finish, evictions = _idle_window_with_pending_target(fail=True)
+    try:
+        time.sleep(0.05)
+        assert evictions == [] and not job.done
+        finish.set()
+        assert _until(lambda: job.done)
+        assert len(evictions) == 1
+        assert job.grant["decision"]["profile_open"] is False
+        assert job.grant["decision"]["reason"] == "memory_ok"
+    finally:
+        finish.set()
+        job.cancel(slots)
+
+
+def test_cancelling_during_pending_detection_never_evicts_or_keeps_the_queue_locked():
+    m, slots, probe, job, finish, evictions = _idle_window_with_pending_target()
+    try:
+        assert _until(lambda: job.holds)
+        assert slots.snapshot()["waiting"][0]["job_id"] == "B"
+        job.cancel(slots)
+        assert job.done and job.grant is None
+        assert slots.snapshot()["waiting"] == [] and evictions == []
+    finally:
+        finish.set()
+        job.cancel(slots)
+
+
+def test_open_fact_is_sampled_after_a_slow_memory_read():
+    m = Machine(open_profiles={"p2"})
+    probe = ps.OpenProfileProbe(m._check, clock=lambda: m.now, background=False)
+    assert probe.read("p2") is True
+
+    def slow_memory():
+        m.open.clear()
+        m.now += ps.OPEN_TTL_S + 0.1
+        return mem(1.0)
+
+    slots = ps.ProfileSlots(memory=slow_memory, settings=lambda: m.settings,
+                            clock=lambda: m.now, open_probe=probe)
+    verdict = slots._decide_now("p2")
+    assert not verdict["allow"] and verdict["reason"] == "below_reserve"
+    assert verdict["profile_open"] is False
+
+
 def test_reused_open_review_window_retains_its_current_kind():
     m = Machine(open_profiles={"p1", "p2"})
     usage = ps.ProfileUsage(lambda profiles: {p: 4 * GB for p in profiles},
