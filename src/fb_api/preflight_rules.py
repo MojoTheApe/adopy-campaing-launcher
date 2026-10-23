@@ -115,7 +115,7 @@ RULES: list[dict[str, Any]] = [
        "the file is missing, empty or unreadable: choose another file",
        sel=".cb-creative-search", level="ad", unit="ad"),
     _r("media_limits", "Media within Meta limits", ERROR, "server",
-       "file type, size (image 30 MB, video 200 MB) or video length is over the limit",
+       "file type, size (image 30 MB, video 1536 MB) or video length is over the limit",
        sel=".cb-creative-search", level="ad", unit="ad"),
     _r("media_vertical", "Vertical file for Stories and Reels", WARNING, "server",
        "no 9:16 file: without one Facebook crops the picture itself",
@@ -439,7 +439,7 @@ def server_verdicts(creator: Any, plan: Any, *, existing: list[dict] | None = No
             try:
                 data = (files or {}).get(ad.path)
                 if data is None:
-                    data = creator.read_file(ad.path)
+                    data = creator.load_media(ad.path, ad.kind)
             except OSError as exc:
                 problems["media_readable"].append((ad.index, f"Ad {ad.index}: creative file cannot be read ({exc})"))
                 continue

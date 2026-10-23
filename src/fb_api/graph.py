@@ -75,6 +75,13 @@ def error_details(gerr: dict, reply: dict) -> dict:
         value = gerr.get(key)
         if value not in (None, ""):
             out[key] = scrub(str(value)[:200])
+    # ACL-1891: при неверном смещении загрузки Meta может назвать нужное - только цифры.
+    data = gerr.get("error_data")
+    if isinstance(data, dict):
+        for key in ("start_offset", "end_offset"):
+            value = str(data.get(key) or "")
+            if value.isdigit() and len(value) <= 13:
+                out[key] = value
     endpoint = reply.get("endpoint")
     if isinstance(endpoint, dict):
         for key in ("host", "version", "credentials"):
