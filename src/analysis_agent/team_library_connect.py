@@ -24,6 +24,8 @@ from src.analysis_agent import team_library as tl
 from src.analysis_agent import team_library_seed as seed
 
 TOKEN_KEY = "ACL_LIBRARY_TOKEN"
+# Dashboard connection imports targets and ad texts; the shared CLI also seeds forms.
+_CONNECT_KINDS = ("targets", "ad_texts")
 #: GitHub выдаёт ghp_…, github_pat_… (буквы, цифры, подчёркивание), старые — hex.
 _TOKEN_SHAPE = re.compile(r"[A-Za-z0-9_\-]{20,255}")
 
@@ -52,7 +54,7 @@ def _check_shape(token: str) -> str:
 
 
 def _local_snapshots() -> dict:
-    return {kind: seed.KINDS[kind][0]() for kind in seed.KINDS}
+    return {kind: seed.KINDS[kind][0]() for kind in _CONNECT_KINDS}
 
 
 #: Снимок, не доехавший до библиотеки: повторное «Connect» берёт его, а не копию,
@@ -66,7 +68,7 @@ def _seed_counts(local: dict) -> tuple[dict, str]:
     (сколько добавлено по видам, текст первой ошибки). Вид, который не доехал,
     остаётся в `_pending` до следующей попытки."""
     out, error = {}, ""
-    for kind in list(seed.KINDS):
+    for kind in _CONNECT_KINDS:
         if kind not in local:
             continue
         try:

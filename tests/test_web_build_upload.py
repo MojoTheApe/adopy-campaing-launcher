@@ -103,3 +103,24 @@ def test_build_upload_renders_form_controls() -> None:
     assert 'action="/build-upload"' in html
     for field in ("country", "account_label", "camp_count"):
         assert f'name="{field}"' in html, f"форма не отправляет {field}, а парсер его читает"
+
+
+def _upload(monkeypatch, extra):
+    monkeypatch.setattr("src.web.app.get_cached_report", lambda **kw: (_minimal_report(), None, []))
+    request = MagicMock()
+    request.form = AsyncMock(return_value=FormData(
+        [("country", "Mexico"), ("account_label", "MX-acc-1"), ("camp_count", "1"), ("camp_0_name", "C")] + extra))
+    return asyncio.run(build_upload(request))
+
+
+def test_build_upload_refuses_explicit_page_instead_of_dropping_it(monkeypatch) -> None:
+    """ACL-1880: a Page chosen explicitly must not vanish from the exported xlsx."""
+    resp = _upload(monkeypatch, [("camp_0_page_id", "123456")])
+    assert resp.status_code == 200
+    assert b"cannot be exported to Upload FB" in resp.body
+    assert b"Page" in resp.body
+
+
+def test_build_upload_automatic_page_is_not_refused(monkeypatch) -> None:
+    resp = _upload(monkeypatch, [("camp_0_page_id", "")])
+    assert b"Page chosen for a campaign cannot be exported" not in resp.body

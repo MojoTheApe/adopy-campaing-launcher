@@ -10,12 +10,16 @@ from __future__ import annotations
 from src.analysis_agent import ad_text_registry as ar
 from src.analysis_agent import targeting_registry as tr
 from src.analysis_agent import team_library as tl
+from src.fb_api import form_templates as ft
 
 KINDS = {
     "targets": (tr.snapshot, "targets", tr.normalise_one,
                 lambda r: tr.fingerprint(r.get("interests", ""), r.get("narrow", ""))),
     "ad_texts": (ar.snapshot, "texts", ar.normalise_one,
                  lambda r: ar.fingerprint(r.get("headline", ""), r.get("body", ""), r.get("description", ""))),
+    # Preserve the existing ACL-2054 CLI seed kind when moving shared code to src.
+    "form_templates": (ft.snapshot, "templates", str.lower,
+                       lambda r: str(r.get("name", "")).casefold() + ft.content_hash(ft.validate(r)[0])),
 }
 
 

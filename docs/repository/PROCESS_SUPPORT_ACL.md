@@ -1,0 +1,201 @@
+# ACL canonical support and the product boundary
+
+## ACL-2079: isolated manual verification support
+
+This separate support update selects published Master1.8.0
+`fddcdd0d60db2e14cce0a53e6af23e12356c3bc7` (release420144866) and
+Tracker3.10.0 `e71c9829247e60d79031dbb1bb038896fcedf4cc` (release420140493).
+Actual upstream main checks and clean immutable no-override Python3.9 pair
+39691739580 passed. The canonical skill mirror/catalog is verified at1.0.23.
+The earlier ACL-2026 scope, owners, counts and evidence below remain history;
+they are not silently reused as approval of this new task.
+
+Compare the complete new source against actual main
+`515689dee625bdae3241e2ab4064fd18fa5dac53`. Initial source3b7253f0 against64e73a1e
+and refreshed source2c71d1bd againste8bf31f8 each passed all16 required native
+checks, including Linux and Windows installer checks. The latter received genuine
+independent source approval. After main advanced through PR1083, the original
+Coordinator returned only this stale approval through the supported command;
+the original Worker reclaimed its same branch and incorporated all30 newly
+accepted main paths unchanged. Earlier review/check sets remain history. This
+refreshed source cb1860a9 against3bc8d973 passed all16 required native checks and
+received a genuine recorded independent review. Before approval, main advanced
+through PR1085. The actual Reviewer returned only this task through its owned
+lane; the same original Worker reclaimed its branch and incorporated all22 newly
+accepted paths unchanged. Independent inspection of all22 deltas found no direct
+or indirect support-isolation blocker. Prior checks and reviews retain their
+actual scope; this new immutable head needs fresh current proof, independent
+review and configured native checks. No foreign ownership or product delivery
+request was changed.
+The maintained renderer/merger stopped
+at two genuine local conflicts. Explicit resolution preserves the descriptor
+workflow's master compatibility push, draft validation, permissions, jobs and
+concurrency; only its exact Master Action pin changes. VERIFICATION preserves
+ACL's local navigation, stronger fast/full policy and absent optional-CI selection;
+only its exact standard links change. Both canonical old/new template files differ
+solely in that pin. The maintained writer installs the generated plan and exact
+canonical new baseline after validation; local exceptions remain local exceptions.
+No upstream generator, exported helper or baseline provenance is hand-authored.
+
+Tracker config is byte-identical. The descriptor changes only standard revision,
+standard version and Tracker revision. Preserve the guarded operator wrapper,
+active adoption record, execution3/5/5/5, disabled Stage with permanent stage,
+all targets/checks/authorization, aliases/offset, optional-policy absence and
+incumbent claims, frozen batches, original scopes and delivery requests. No state
+migration, takeover, native retry-policy activation or new controller is selected.
+ACL-2069/PR1070 retains its original developer, source and separate acceptance.
+
+Product, configuration, packaging, dependencies, runtime/update scripts and all
+existing product verification/publication workflows remain unchanged. The
+manifest parser and its linked_numbers helper stay unchanged. Actual reachable
+release-governance policy gains canonical handling for the new process receipt;
+it therefore needs the affected delivery/guard regressions and required native CI,
+not a claim that all release tooling is unreachable. The new logic and all helper
+bytes come from the independently reviewed published pair. Existing product
+requests remain pending until their real configured delivery succeeds.
+
+Canonical process_support1 and instruction schema1 remain unchanged. This support
+upgrade uses normal source approval and a genuine frozen integration batch with
+independent whole-scope product-isolation review; it grants no direct-main route
+and requests no product publication. The shared reader was actually installed at
+`e71c9829247e60d79031dbb1bb038896fcedf4cc` on2026-10-22 at06:36UTC through the
+maintained installer, with backup, all10 fresh healthy project snapshots and
+authentication/service controls verified. New isolated receipt writers remain
+inactive until actual reviewed adoption on main. ACL-2071's original task, main proof,
+reviewers, acceptance and successful official Windows run39684127119 remain
+separate evidence. Only after actual reader deployment and reviewed adoption may
+the supported supplemental command record its independently assessed process
+outcome. A pending old receipt remains in history; no source merge alone is Done.
+
+Worker-V7Q2R8 is the actual new task implementer in its dedicated worktree.
+Current source checks, exact scope/proof, independent review and actual main
+readback will be recorded in ACL-2079; this author report does not supply approval.
+
+## Earlier ACL-2026 evidence
+
+This document records the boundary for [ACL-2026](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1026),
+including its latest owner amendment. It is author evidence for independent review,
+not a local completion algorithm or an approval. The canonical mechanism is
+[PROCESS_SUPPORT.md](PROCESS_SUPPORT.md); actual commands, immutable proof and
+whole-scope review remain authoritative.
+
+## Accepted scope and provenance
+
+Select published Master1.7.2 `4f148cbbbc2c9c65a7fdebba9b37551f91566e04`
+and Tracker3.9.2 `3d32586d72e4621f70d56d35f1e199a19fa13b00`.
+The cumulative task adopts common activity/history, process/product separation,
+Pause support and shared lifecycle/correction guidance. The owner explicitly
+selected one combined update on the original Issue/PR. The genuine source Reviewer
+returned the current source before its original Worker reclaimed the same branch.
+Previous ca9a650 and 8ce4862 scopes, checks and handoffs remain historical; none
+approves this changed cumulative source or proves live Pause activation.
+
+Compare against actual ACL main `259ae7f1283a0a0acab40354b6b97d55162c91b5`.
+Keep every non-pin descriptor field, Tracker config and separated layout unchanged,
+including the descriptor's historical explanatory exception. Preserve execution3,
+5/5/5 capacity, process1, no Stage with permanent stage retained, package target,
+all checks, absent optional policies, 71 aliases, +1000 IDs and existing receipts.
+Updated support explanations belong in repository prose. The maintained upgrade
+retains the genuine upstream pristine baseline and authenticated helper closure.
+
+## Product and frozen bundle inputs
+
+The current-main comparison covers 307 unchanged product/build input blobs across `src`, `config`,
+`knowledge_base`, `assets`, `packaging/windows`, runtime/development requirements,
+`.env.example`, `serve.py`, the runtime/smoke/update-gate helpers, release manifest,
+publication/continuation/CI-reuse scripts, and release/complete-delivery workflows.
+The current main includes unrelated product changes (configuration unification,
+goals/profile search and RPA guards/tests); this candidate includes them unchanged.
+Recheck the final immutable diff rather than inferring isolation from those paths.
+Existing Git attributes check out four PowerShell inputs as CRLF; their normalized
+Git blobs are identical to main. No new line-ending rule is introduced.
+
+`packaging/windows/build.ps1` runs the existing clean-input guard, creates build
+metadata, then invokes PyInstaller with `acl_windows.spec`. The spec's `Analysis`
+starts at `packaging/windows/launcher.py`; its data inputs are explicit product
+configuration, knowledge, web assets/templates, generated build/update metadata
+and Playwright. Hidden imports cover the reviewed product/runtime modules plus
+`scripts.acl_runtime_manager` and `scripts.acl_smoke`. Governance documents,
+delivery descriptor, Tracker config and `.workflow/tools` are not bundled as data.
+No packaging, dependency, launcher or imported product input changes here.
+
+The current-main import scan starts from 233 product Python roots and reaches
+234 local modules; its only extra project helper is `scripts/_console.py`. The
+new `config.config_unify` module imports product configuration and standard-library
+modules, with no Tracker/governance dependency. The scan also checks indirect paths. `src.web.acl_update` imports
+`scripts.acl_update_gate`, which imports `scripts._console` and product configuration;
+none imports the changed shared governance helpers. The runtime manager likewise
+uses product configuration and `_console`. Smoke imports its explicit dependency
+and product-module lists; its dynamic imports do not discover arbitrary process
+helpers. Launcher diagnostics/setup/updater modules retain their existing imports.
+
+This is not a claim of identical newly built installer bytes: generated build
+metadata contains source/version/time. Required native checks may still build and
+test an installer; those checks do not publish a product or establish product
+delivery. No Windows acceptance is claimed from this source comparison. Product
+changes or explicit publication still need their real checks and configured delivery.
+
+## Release manifest's shared parser
+
+`scripts/acl_release_manifest.py:tracker_issues` imports
+`scripts/tracker_pr_check.py`, which forwards to the exact portable PR helper.
+The consumed `linked_numbers` function is unchanged from the actual main pin
+through Tracker3.9.2. Its globals are ordinary parsing dependencies; it never
+references `delivery_policy` or calls completion/projection functions. Legacy
+aliases and the +1000 identity mapping remain unchanged.
+
+The portable PR helper has SHA-256
+`3760865632e2e0cb8e80255320e14a6aeacf5a4010c3e8e676148b522db48a0d`.
+Its canonical engine source is unchanged; the existing separated-layout transform
+only adjusts the CLI default config path. Module-import statements and other
+non-definition top-level AST in the transitively imported `delivery_policy` are
+unchanged. Loading the parser does not execute new completion behavior. Five
+offline cases of the actual candidate manifest parser retain valid IDs/aliases
+and reject missing,
+duplicate or capture linkage. No API, publication or product operation is invoked.
+
+## Reachable release governance
+
+Do not describe all release tooling as independent of shared policy.
+The existing complete-delivery workflow invokes `tracker_delivery_receipt`;
+its resolver/recorder reaches `require_completion_scope`, then
+`completion_assessment` and `summary`. Those policy functions gain handling for
+authenticated process-support receipts.
+The latest shared policy additionally validates pause state and blocks conflicting
+admission; the portable receipt resolver/recorder now decodes/encodes the outer8
+state envelope. Retry/direct helpers retain the same pause-aware guard closure.
+These are reachable release-governance changes, outside the frozen product and
+manifest-parser path. They are exact canonical support, with applicable bridge
+regressions and native checks; they must not be described as unchanged tooling.
+
+Ordinary product receipts retain their existing admission, target, request,
+scope, checks and actual verification path. Existing requests are neither
+cancelled nor satisfied by this update. Inspect the canonical policy diff and
+supported proof plus the applicable regressions; do not claim that the functions
+are unreachable, or that directory names alone establish product isolation.
+
+## Verification and completion boundary
+
+Run the read-only native `process-support 1027` against the final immutable source.
+Its content proof is separate from a genuine independent Reviewer's assessment
+of the complete amended task and product isolation. Scope/head/base changes need
+fresh relevant evidence. Ordinary source approval, frozen batch, combined review,
+all applicable checks and actual admitted main integration remain required.
+
+Select process delivery only through that supported evidence, without creating
+a consumer product-release request. The earlier automatically rejected Windows
+publication is not resumed. Unknown/mixed content cannot receive process-only
+completion; explicit product publication and unfinished product/business outcomes
+keep their real acceptance. This task changes no campaign behavior, employee data,
+live advertising or optional state policy and performs no migration.
+
+## Live Pause is a separate boundary
+
+The new pin and exact 14-helper closure supply actual `pause stop/resume` commands.
+They are usable only after compatible reader/every-writer readiness, recovery and
+genuinely idle owned `pause activate` preview/apply/resume are verified. Existing
+foreign owners/intake and unknown writers are preserved rather than cleared to
+create idleness. Source, actual process completion and live outer8 activation are
+separate facts; the current source establishes no live activation. The previous
+To Do-moving stop procedure remains explicit pre-activation behavior. See
+[the recorded readiness boundary](EARLY_ADOPTION.md#pause-readiness-and-live-boundary).

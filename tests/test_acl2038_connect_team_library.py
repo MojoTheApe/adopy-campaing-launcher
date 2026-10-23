@@ -317,3 +317,34 @@ def test_disconnect_with_a_repository_set_does_not_strand_the_machine(client, fa
     client.post("/api/team-library/connect", json={"token": TOKEN})
     client.post("/api/team-library/disconnect")
     assert not tl.configured()
+
+
+def test_reconnect_replaces_every_existing_machine_token_assignment(fake_lib, machine):
+    from dotenv import dotenv_values
+
+    older = "synthetic_older_library_credential"
+    machine.write_text(
+        f'ACL_LIBRARY_TOKEN="{older}"\nKEEP_SETTING="retain this"\n'
+        f'export ACL_LIBRARY_TOKEN="{older}"\n', encoding="utf-8")
+
+    tlc.connect(TOKEN)
+
+    saved = dotenv_values(machine)
+    assert saved["ACL_LIBRARY_TOKEN"] == TOKEN
+    assert saved["KEEP_SETTING"] == "retain this"
+    assert older not in machine.read_text(encoding="utf-8")
+
+
+def test_disconnect_removes_token_from_duplicate_machine_assignments(fake_lib, machine):
+    from dotenv import dotenv_values
+
+    tlc.connect(TOKEN)
+    with machine.open("a", encoding="utf-8") as out:
+        out.write(f'KEEP_SETTING="retain this"\nexport ACL_LIBRARY_TOKEN="{TOKEN}"\n')
+
+    tlc.disconnect()
+
+    saved = dotenv_values(machine)
+    assert not saved.get("ACL_LIBRARY_TOKEN")
+    assert saved["KEEP_SETTING"] == "retain this"
+    assert TOKEN not in machine.read_text(encoding="utf-8")

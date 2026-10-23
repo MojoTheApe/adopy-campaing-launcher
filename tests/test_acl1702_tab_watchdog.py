@@ -22,6 +22,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import greenlet
 import pytest
@@ -32,6 +33,7 @@ sys.path.insert(0, str(ROOT))
 from src.fb_ads_rpa import page_liveness  # noqa: E402
 from src.fb_ads_rpa import pacing  # noqa: E402
 from src.fb_ads_rpa import tab_watchdog as tw  # noqa: E402
+from tests.profile_lease_fakes import fake_profile
 
 URL = "https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1&token=SECRET"
 
@@ -715,11 +717,13 @@ class _Draft:
         self.account_label = "Doc19"
 
 
-def _publisher():
+def _publisher(monkeypatch):
     from unittest.mock import MagicMock
 
     from src.fb_ads_rpa.rpa_publisher import RpaPublisher
 
+    monkeypatch.setattr("src.fb_ads_rpa.rpa_publisher.load_ad_account_map", lambda _: {
+        "Doc19": SimpleNamespace(profile_id=fake_profile("Doc19"))})
     p = RpaPublisher.__new__(RpaPublisher)
     p._conn = None
     p._entry = None
@@ -739,7 +743,7 @@ def test_a_hang_on_the_campaigns_list_lets_the_next_campaign_reattach_and_run(mo
     from src.fb_ads_rpa import rpa_publisher as rp
     from src.fb_ads_rpa.draft import RpaPublishResult
 
-    p = _publisher()
+    p = _publisher(monkeypatch)
     conns: list = []
 
     def ensure(label):
@@ -778,7 +782,7 @@ def test_an_unblock_outside_a_campaign_does_not_brand_the_next_one(monkeypatch):
 
     from src.fb_ads_rpa.draft import RpaPublishResult
 
-    p = _publisher()
+    p = _publisher(monkeypatch)
     conn = MagicMock(provider="multilogin")
     monkeypatch.setattr(p, "_ensure_browser", lambda label: conn)
     flags: list = []

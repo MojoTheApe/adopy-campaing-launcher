@@ -31,8 +31,8 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     paths.load_env()
     if not tl.configured():
-        print("The team library is not connected: set ACL_LIBRARY_REPO and ACL_LIBRARY_TOKEN "
-              f"in {paths.get_machine_env_path()}.", file=sys.stderr)
+        print("The team library is not connected. Open Targeting or Ad titles in the dashboard "
+              "and choose Connect team library.", file=sys.stderr)
         return 2
     for kind in KINDS:
         try:
