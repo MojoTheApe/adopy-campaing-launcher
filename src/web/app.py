@@ -3329,6 +3329,49 @@ def api_accounts_overview() -> JSONResponse:
     })
 
 
+@app.get("/api/team-library")
+def api_team_library_state() -> JSONResponse:
+    """Подключена ли общая библиотека на этой машине (ACL-2038). Токен не отдаётся."""
+    from src.analysis_agent import team_library_connect as tlc
+
+    return JSONResponse({"ok": True, **tlc.state()})
+
+
+@app.post("/api/team-library/connect")
+async def api_team_library_connect(request: Request) -> JSONResponse:
+    """Проверить токен, сохранить в настройках машины, добавить недостающее (ACL-2038).
+
+    Значение токена нигде не логируется и в ответ не возвращается: ни при успехе,
+    ни при ошибке. Любая неожиданная ошибка отвечает фиксированным текстом.
+    """
+    from src.analysis_agent import team_library_connect as tlc
+
+    try:
+        data = await request.json()
+        token = data.get("token") if isinstance(data, dict) else None
+        if not isinstance(token, str):
+            raise tlc.ConnectError("Paste the library token first.")
+        result = await asyncio.to_thread(tlc.connect, token)
+    except tlc.ConnectError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Could not connect the team library. Try again."},
+                            status_code=500)
+    return JSONResponse({**result, "message": tlc.summary(result.get("added") or {}, bool(result.get("seed_error")))})
+
+
+@app.post("/api/team-library/disconnect")
+async def api_team_library_disconnect() -> JSONResponse:
+    """Убрать токен из настроек машины; локальные цели и тексты остаются."""
+    from src.analysis_agent import team_library_connect as tlc
+
+    try:
+        await asyncio.to_thread(tlc.disconnect)
+    except tlc.ConnectError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+    return JSONResponse({"ok": True})
+
+
 @app.get("/api/targeting-profiles")
 def api_targeting_profiles(force: bool = False) -> JSONResponse:
     """Refresh the read copy from the team library, then answer from it."""
