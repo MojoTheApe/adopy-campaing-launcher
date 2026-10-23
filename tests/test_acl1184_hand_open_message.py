@@ -74,7 +74,7 @@ def world(monkeypatch):
     monkeypatch.setattr(sp, "_set_wait_note", lambda *a: None)
     monkeypatch.setattr(sp, "_record", lambda *a, **k: None)
     from src.fb_api import stop_log
-    monkeypatch.setattr(stop_log, "refusal", lambda pid: "")
+    monkeypatch.setattr(stop_log, "refusal", lambda pid, *a, **k: "")
     monkeypatch.setattr(sp, "_slot_queue", lambda: SimpleNamespace(
         acquire=lambda *a, **k: {}, release=lambda *a, **k: None))
     return w
