@@ -13,9 +13,10 @@ dashboard "Report a problem" ──► Sentry issue (tag kind=report) ──► 
 
 ## What the application already sends (no code change needed)
 
-`acl_sentry.report_problem()` marks every manual report with the tag `kind` = `report` and
-a fingerprint `acl-report` / `manual` / `<report id>` (ACL-1273), so each report is its own
-Sentry issue; the same id is the tag `report_id`.
+`acl_sentry.report_problem()` marks every manual report with the tag `kind` = `report`.
+The per-report fingerprint `acl-report` / `manual` / `<report id>` (and the tag `report_id`)
+arrives with ACL-1273 (PR #948); until that is merged, all manual reports share one fingerprint,
+i.e. one Sentry issue.
 
 **Prerequisite: ACL-1273 must be merged and released first.** Before it the fingerprint was
 constant, all reports from all machines collapsed into one Sentry issue and only the first
