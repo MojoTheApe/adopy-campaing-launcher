@@ -1,0 +1,117 @@
+{
+ "clean": {
+  "button_text": "Visit website",
+  "contact_fields": [
+   "name",
+   "email",
+   "phone"
+  ],
+  "headline": "Get more information",
+  "id": "",
+  "intro": "Hello intro",
+  "locale": "EN_US",
+  "name": "Demo form",
+  "privacy_link_text": "Privacy",
+  "privacy_url": "https://example.com/privacy",
+  "questions": [
+   {
+    "label": "Which product interests you?",
+    "type": "short_answer"
+   },
+   {
+    "label": "Budget",
+    "options": [
+     "Low",
+     "High"
+    ],
+    "type": "multiple_choice"
+   }
+  ],
+  "thank_you_text": "Thank you. We will contact you.",
+  "thank_you_title": "Thank you",
+  "website_url": "https://example.com/x"
+ },
+ "params": {
+  "context_card": {
+   "content": [
+    "Hello intro"
+   ],
+   "style": "PARAGRAPH_STYLE",
+   "title": "Get more information"
+  },
+  "locale": "EN_US",
+  "name": "Demo form · ACL 192c3c",
+  "privacy_policy": {
+   "link_text": "Privacy",
+   "url": "https://example.com/privacy"
+  },
+  "question_page_custom_headline": "Get more information",
+  "questions": [
+   {
+    "type": "FULL_NAME"
+   },
+   {
+    "type": "EMAIL"
+   },
+   {
+    "type": "PHONE"
+   },
+   {
+    "key": "question_1",
+    "label": "Which product interests you?",
+    "type": "CUSTOM"
+   },
+   {
+    "key": "question_2",
+    "label": "Budget",
+    "options": [
+     {
+      "key": "q2_option_1",
+      "value": "Low"
+     },
+     {
+      "key": "q2_option_2",
+      "value": "High"
+     }
+    ],
+    "type": "CUSTOM"
+   }
+  ],
+  "thank_you_page": {
+   "body": "Thank you. We will contact you.",
+   "button_text": "Visit website",
+   "button_type": "VIEW_WEBSITE",
+   "title": "Thank you",
+   "website_url": "https://example.com/x"
+  }
+ },
+ "template": {
+  "contact_fields": [
+   "name",
+   "email",
+   "phone"
+  ],
+  "headline": "Get more information",
+  "intro": "Hello intro",
+  "locale": "EN_US",
+  "name": "Demo form",
+  "privacy_link_text": "Privacy",
+  "privacy_url": "https://example.com/privacy",
+  "questions": [
+   {
+    "label": "Which product interests you?",
+    "type": "short_answer"
+   },
+   {
+    "label": "Budget",
+    "options": [
+     "Low",
+     "High"
+    ],
+    "type": "multiple_choice"
+   }
+  ],
+  "thank_you_text": "Thank you. We will contact you.",
+  "website_url": "https://example.com/x"
+ }
+}

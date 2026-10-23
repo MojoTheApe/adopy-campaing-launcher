@@ -36,6 +36,10 @@ D = "2026-10-08"
 def store(tmp_path, monkeypatch):
     monkeypatch.setattr(ci, "_store_path", lambda: tmp_path / "campaign_inventory.json")
     ci._RUNNING.clear()
+    # ACL-1853: замок профиля берётся по физическому UUID из карты, не по ярлыку.
+    from tests.profile_lease_fakes import fake_profile
+
+    monkeypatch.setattr(sp, "_entry_for", lambda account: SimpleNamespace(profile_id=fake_profile(account)))
     yield tmp_path
 
 

@@ -543,8 +543,11 @@ def protocol(shared):
     """Validate outer7 only and return its actual known underlying wrapper.
 
     Inner completion/context/retry validation remains with their canonical readers.
-    No generic wrapper guessing, fallback, normalization or mutation occurs here.
+    The exact outer8 pause fence is decoded first; no generic wrapper guessing,
+    fallback or mutation occurs here.
     """
+    if shared.get('schema_version') == 8:
+        shared = rules_module().pause_module().decode(shared)
     outer = shared.get('schema_version')
     held = shared.get('maintenance')
     effective = held.get('base_schema_version') if type(outer) is int and outer == 3 and isinstance(held, dict) else outer

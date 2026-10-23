@@ -161,9 +161,9 @@ def test_check_plan_names_the_refused_lookup_when_a_term_needs_it(tmp_path):
 def test_check_plan_still_fails_on_refusal_of_core_searches_with_the_type(tmp_path, typ):
     meta = DeniedMeta(deny=[typ], interests={"Yoga": [{"id": "11", "name": "Yoga"}]})
     out, _ = _audit(meta, tmp_path, "Yoga", _store(tmp_path))
-    assert out.stop_kind == "graph_error" and "Permission Denied" in out.error
-    if typ == "adinterest":
-        assert "search_type=adinterest" in out.error
+    assert out.stop_kind == "graph_error" and "Permission was not granted" in out.error
+    if typ == "adinterest":   # после ACL-1805 текст человеку - из каталога, технические детали в problems[].raw
+        assert "search_type=adinterest" in str(out.problems)
     assert not any("Meta refused the" in w for w in out.warnings)
 
 
