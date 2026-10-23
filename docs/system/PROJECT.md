@@ -329,6 +329,16 @@ Loading failures and confirmed empty lists are distinct and support Refresh page
 
 RPA resolves the selection before campaign creation and passes the ID and unique display name to the recorded flow. Every ad verifies Identity; failure is non-retryable and not publishable. The existing sanitized `tests/fixtures/ads_manager/simple_create_2026_09_27.html` supplies regression coverage for the captured collapsed Identity summary. Picker interaction has offline native/custom-control tests; a live alternate-Page picker pilot has not been performed. Unrecognized or ambiguous controls fail closed. Other RPA engines are refused for builder Page selections until they implement Identity verification.
 
+ACL-1897 applies the later-created ACL-2105 ordering to campaign-local Automatic:
+the first merged usable Page wins, ad-account Pages before profile Pages, without
+an inherited map overriding it. The option names the resolved Page. RPA carries
+that Page through the existing recorded Identity check, and its result names the
+Page and origin. A profile Page first needs the same constrained account-and-Page
+validate-only proof used by the API; refusal or unknown proof stops before the
+RPA creation flow. Proof is scoped to the current build, never the picker cache.
+A confirmed-empty Automatic Website RPA list keeps its existing Identity behavior;
+API Website shells, Forms refusals and legacy non-builder map fallback remain.
+
 Verification uses synthetic accounts and mocked browser/API transports only. The isolated local dashboard preview is not a production deployment or a stage/main merge.
 # ACL-1880: manual completion when the automatic Page list is empty
 

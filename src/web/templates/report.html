@@ -17889,6 +17889,9 @@ function cbPollJob(jobId, statusPanel, publishBtn, done, onTick, quiet) {
       }
       html += '</div>';
       if (r.backend === 'api') html += cbApiReadbackHtml(r);
+      else if (r.page_id && r.page_origin) html += '<div class="cb-status-steps">Facebook Page: '
+        + aclEscHtml(r.page_name || r.page_id) + ' (' + aclEscHtml(r.page_id) + ') · from '
+        + aclEscHtml(r.page_origin) + '</div>';
       if (manual) html += '<div class="cb-status-err" style="color:var(--warn);border-color:var(--warn)">Manual completion required: '
         + r.manual_required.map(aclEscHtml).join(' ') + '</div>';
       if (r.error) {
