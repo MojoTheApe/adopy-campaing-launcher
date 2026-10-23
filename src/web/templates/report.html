@@ -1723,11 +1723,14 @@
        заголовок группы, аккаунты под ней, свободные внизу отдельно. */
     .amap { margin-top: var(--space-lg); }
     .amap-head {
-      display: flex; align-items: baseline; gap: var(--space-md);
+      display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-md); min-width: 0;
       margin-bottom: var(--space-sm);
     }
     .amap-head h3 { margin: 0; }
-    .amap-head .amap-note { font-size: var(--adopy-text-table); color: var(--muted); white-space: nowrap; }
+    .amap-head .amap-note { font-size: var(--adopy-text-table); color: var(--muted); overflow-wrap: anywhere; }
+    .amap-head > .amap-add { min-width: 0; max-width: 100%; }
+    .amap-head > .amap-add > :is(input, select) { min-width: 0; max-width: 100%; box-sizing: border-box; }
+    .amap-head > .amap-add > select { flex: 1 1 12rem; }
     .amap-country {
       border: 1px solid var(--border); border-radius: var(--radius-md);
       background: var(--bg-elev); margin-bottom: var(--space-md);
@@ -1892,11 +1895,27 @@
     /* Одинаковая сетка во всех странах: без table-layout:fixed каждая таблица
        считает ширины по своему содержимому, и колонки соседних стран не
        совпадают — читается как съехавшая вёрстка, потому что она и съехала. */
-    .amap table.amap-grid { table-layout: fixed; }
+    /* Keep the shared Home / Manage account grid readable in narrow panes.
+       Only the data section scrolls; its toolbar, explanation and form stay outside. */
+    .amap-table-scroll {
+      max-width: 100%; min-width: 0; overflow-x: auto;
+      overscroll-behavior-x: contain; scrollbar-gutter: stable;
+      border-bottom: 1px solid var(--border);
+    }
+    .amap-table-scroll:focus-visible {
+      outline: 2px solid var(--accent); outline-offset: -2px;
+    }
+    .amap table.amap-grid { table-layout: fixed; min-width: 1120px; }
     .amap table.amap-grid td, .amap table.amap-grid th {
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    .amap td.amap-acc { white-space: normal; }
+    .amap table.amap-grid td.amap-acc {
+      white-space: normal; overflow-wrap: anywhere;
+      text-overflow: clip;
+    }
+    .amap table.amap-grid th {
+      white-space: normal; overflow-wrap: anywhere; text-overflow: clip;
+    }
     .amap-caret {
       background: none; border: 0; color: var(--muted); cursor: pointer;
       font-size: var(--adopy-text-sm); padding: 0 0.3rem 0 0; line-height: 1;
@@ -2391,7 +2410,8 @@
     .amap-btn.danger:hover { border-color: var(--bad); color: var(--bad); }
     /* Read all (ACL-353): панелька над таблицей страны; сама кнопка — тот же
        amap-btn, ей ничего особенного не нужно. */
-    .amap-toolbar { display: flex; justify-content: flex-end; gap: 0.4rem; padding: 0.35rem 0.85rem 0; }
+    .amap-toolbar { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.4rem; padding: 0.35rem 0.85rem 0; }
+    .amap-toolbar .amap-btn { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
     .amap-x {
       background: none; border: 0; color: var(--border-strong);
       cursor: pointer; font-size: 0.9rem; line-height: 1; padding: 0 0.2rem;
@@ -3651,6 +3671,10 @@
         var(--border) var(--sidebar-w), transparent var(--sidebar-w));
     }
     .main-content { padding-left: var(--adopy-page-padding); padding-right: var(--adopy-page-padding); }
+    /* The closed Builder tab is fixed above the page. Keep actions outside its
+       strip even after focusing the far-right cell of an internally scrolled table.
+       An open non-overlay drawer already reserves its own complete width. */
+    body:not(.cbd-open) .main-content { padding-right: calc(var(--adopy-page-padding) + var(--cbd-handle-w)); }
     @media (max-width: 860px) {
       .dashboard-shell { background: none; }
     }
