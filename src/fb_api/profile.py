@@ -36,8 +36,11 @@ from src.fb_api import launch as _launch
 
 
 #: Сколько ждём, пока закрывающийся профиль отпустит порт, и шаг опроса.
-CLOSING_WAIT_S = 6.0
+#: ACL-2117: столько же, сколько ждёт остановка (ACL-2095 п. 8c), — не 6 с: процесс
+#: остановленного профиля живёт дольше, и действие в это окно раньше падало.
+CLOSING_WAIT_S = _launch.STOP_GONE_WAIT_S
 CLOSING_POLL_S = 2.0
+CLOSING_WAIT_MESSAGE = "Waiting for the profile to finish closing"
 
 
 class ProfileError(RuntimeError):
@@ -278,7 +281,35 @@ def probe_local(profile_id: str) -> tuple[str, int | None]:
     return local_debug_port(profile_id, profile_dir=find_profile_dir(profile_id), stopped_at=stopped_at)
 
 
+def _default_on_wait(text: str) -> None:
+    """Строка ожидания на карте аккаунта (та же, что у «Waiting for a free profile slot»)."""
+    try:
+        from src.analysis_agent import account_spend as _as
+        from src.fb_api import mlx_session as _mlx
+
+        account = _mlx.current_account()
+        if account:
+            _as._set_wait_note(account, text)
+    except Exception:  # noqa: BLE001 — подпись не должна ронять запуск
+        pass
+
+
+def _wait_for_sync(profile_id: str, on_wait: Callable[[str], None] | None, sleep: Callable[[float], None]) -> str:
+    """ACL-2117: не поднимать профиль, пока MLX досохраняет его после остановки. Пусто — можно."""
+    from src.fb_api import stop_log as _stop_log
+
+    return _stop_log.wait_or_refusal(profile_id, on_wait=on_wait or _default_on_wait,
+                                     sleep=None if sleep is time.sleep else sleep)
+
+
+def _sync_error(why: str) -> ProfileError:
+    from src.fb_api import stop_log as _stop_log
+
+    return ProfileError(why, code="cancelled" if why == _stop_log.CANCELLED_TEXT else "restart_cooldown")
+
+
 def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
+                 on_wait: Callable[[str], None] | None = None,
                  launcher_factory: Callable[[str], Any] | None = None,
                  local_probe: Callable[[str], tuple[str, int | None]] | None = None,
                  sleep: Callable[[float], None] = time.sleep,
@@ -290,6 +321,18 @@ def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
     if not profile_id:
         raise ProfileError("no Multilogin profile id for this account")
 
+    # ACL-1138: профиль без прокси в Multilogin не открываем и не цепляемся —
+    # он вышел бы в Facebook с настоящего IP машины. До процесса и до MLX.
+    from types import SimpleNamespace
+
+    from src.fb_ads_rpa import profile_proxy_gate, profile_trouble
+
+    try:
+        profile_proxy_gate.ensure_profile_has_proxy(
+            SimpleNamespace(profile_id=profile_id, multilogin_instance=instance), profile_id)
+    except profile_trouble.ProfileStop as stop:
+        raise ProfileError(profile_trouble.message(stop.code), code=stop.code) from stop
+
     # 1. Процесс Mimic этого профиля на машине (как attach_existing_only робота).
     if local_probe is None:
         local_probe = probe_local
@@ -298,9 +341,12 @@ def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
     # процессом (тогда идём в MLX) или оживёт; потом отказ, ничего не трогаем.
     waited = 0.0
     while kind == "closing" and waited < closing_wait_s:
+        (on_wait or _default_on_wait)(CLOSING_WAIT_MESSAGE)
         sleep(CLOSING_POLL_S)
         waited += CLOSING_POLL_S
         kind, local_port = local_probe(profile_id)
+    if waited:
+        (on_wait or _default_on_wait)("")
     if kind == "closing":
         raise ProfileError(
             "the profile is closing or starting; retry in a minute. Nothing was stopped.",
@@ -321,11 +367,16 @@ def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
     if state == "running":
         from src.fb_api import stop_log as _stop_log
 
-        why = _stop_log.refusal(profile_id)
+        had_pause = _stop_log.default().restart_wait_s(profile_id) > 0
+        why = _wait_for_sync(profile_id, on_wait, sleep)
         if why:
             # Остановили сами и недавно, а процесса на машине нет: MLX помнит
             # старый порт. К нему не цепляемся (TEST9095y, B97: CdpTimeout connect).
-            raise ProfileError(why, code="restart_cooldown")
+            raise _sync_error(why)
+        if had_pause:
+            # Ждали: старый ответ MLX про порт устарел — спрашиваем заново.
+            state, port = running_state(launcher, profile_id)
+    if state == "running":
         if not port:
             raise ProfileError(
                 "the profile is open but has no automation port (opened by hand in MLX Desktop?). "
@@ -338,9 +389,9 @@ def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
     # Закрыли и сразу подняли заново — вероятная причина двух разлогинов (ACL-1811).
     from src.fb_api import stop_log as _stop_log
 
-    why = _stop_log.refusal(profile_id)
+    why = _wait_for_sync(profile_id, on_wait, sleep)
     if why:
-        raise ProfileError(why, code="restart_cooldown")
+        raise _sync_error(why)
 
     # ACL-1826: пачка уже знает, что общая сессия слота потеряна, — не стучимся в MLX зря.
     from src.fb_api import mlx_session as _mlx
@@ -354,6 +405,7 @@ def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
         # Первый старт оборвался, а профиль поднялся (B91, 12:08:40 → закрыт в 12:11:46):
         # он наш — держит место и закрывается нами, как обычный старт.
         _launch.mark_started(adopted_port, profile_id)
+        _launch.mark_reopened(profile_id)
         return OpenedProfile(profile_id, folder_id, instance, str(adopted_port), None,
                              True, launcher, started_now=True)
     if not started.port:
@@ -361,6 +413,7 @@ def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
     started_now = getattr(started, "newly_started", False) is True or retried
     if started_now:
         _launch.mark_started(started.port, profile_id)
+        _launch.mark_reopened(profile_id)
     return OpenedProfile(
         profile_id=profile_id,
         folder_id=started.folder_id or folder_id,

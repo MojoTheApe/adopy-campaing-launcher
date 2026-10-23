@@ -225,8 +225,14 @@ def test_asset_rows_sit_under_their_country_with_you_over_all_counts():
     assert assets == ["", "Alpha", "Beta"]
     assert re.search(r'data-asset="Alpha"[^>]*>\s*<span class="sb-asset-name">Alpha</span><span class="sb-ftd">4 / 19<', colombia)
     assert 'aria-label="Assets in Colombia"' in colombia
-    # прежние ссылки страны лежат в «More country views» и не потеряны
-    assert "More country views" in colombia and colombia.index("More country views") > colombia.index("sb-assets")
+    # ACL-2119: «All assets», затем виды страны (не свёрнуты), затем ассеты по брендам
+    assert "sb-more" not in colombia and "More country views" not in colombia
+    all_at = colombia.index('aria-label="All assets in Colombia"')
+    views_at = colombia.index('class="sb-views"')
+    brands_at = colombia.index('class="sb-assets sb-assets-brands"')
+    assert all_at < views_at < brands_at
+    assert views_at < colombia.index('data-view="country-colombia-workbench"') < brands_at
+    assert colombia.index('data-view="country-colombia-optimization"') < brands_at
 
 
 def test_find_country_search_is_there_and_names_are_searchable():

@@ -19,6 +19,7 @@ from src.fb_ads_rpa.build_draft import slots_to_campaign_drafts
 from src.fb_ads_rpa.config import get_browser_provider as get_browser_provider_name, get_mlx_attach_only
 from src.fb_ads_rpa.draft import CampaignDraft, RpaPublishResult
 from src.fb_ads_rpa.operations import serialized_browser
+from src.fb_ads_rpa.profile_lease import physical_profile_key, require_profile_lease, ProfileLeaseError
 from src.fb_ads_rpa.enrich_draft import enrich_campaign_drafts
 from src.fb_ads_rpa import profile_trouble
 from src.fb_ads_rpa import run_telemetry as _telemetry
@@ -27,14 +28,14 @@ from src.meta_campaign_agent.ad_account_map import load_ad_account_map, resolve_
 log = logging.getLogger(__name__)
 
 
-def profile_key_for(account_label: str) -> str:
+def profile_key_for(account_label: str, *, provider: str | None = None) -> str:
     """Whose browser a publish of this account occupies: the profile, not the label.
 
     The same rule the spend reader applies (`account_spend._profile_key`), so
     a publish and a read of one account queue on one lock. Two labels can map
     to one profile; two queues to one browser is exactly what the lock is
-    against. When the label does not resolve (not in the map, map unreadable)
-    the label itself is the key: holding too much is safer than too little.
+    against. An unresolved label refuses the operation: a label is not a
+    physical identity and cannot protect a browser in another ACM process.
     """
     label = str(account_label or "").strip()
     try:
@@ -42,21 +43,29 @@ def profile_key_for(account_label: str) -> str:
     except Exception:
         entry = None
     profile = (getattr(entry, "profile_id", "") or "").strip() if entry else ""
-    return profile or label
+    if not profile:
+        raise ProfileLeaseError("Cannot resolve a physical profile from the account map; check the account connection.")
+    return physical_profile_key(profile, provider=provider or get_browser_provider_name())
 
 
-#: ACL-1444: машинный выключатель — `1` держит открытыми все окна профилей,
-#: как до ACL-1444 (чистое задание профиль не закрывает).
+#: ACL-1444: машинный выключатель окон профилей. ACL-2113: по умолчанию окно
+#: ОСТАЁТСЯ открытым (байер работает в нём дальше); `0`/`false`/`no`/`off`
+#: возвращает прежнее поведение ACL-1444 — чистое задание закрывает профиль.
 ENV_KEEP_PROFILES_OPEN = "FB_RPA_KEEP_PROFILES_OPEN"
+_KEEP_OFF_VALUES = ("0", "false", "no", "off")
 
 #: Строка в панели задания, когда робот закрыл профиль сам.
 PROFILE_CLOSED_NOTICE = "Closed the profile — all campaigns are ready"
 
 
 def keep_profiles_open() -> bool:
-    """Выключатель ACL-1444 из окружения (машинный `.env`), читается при каждом задании."""
-    return str(os.environ.get(ENV_KEEP_PROFILES_OPEN, "") or "").strip().lower() in (
-        "1", "true", "yes", "on")
+    """Оставлять ли окно открытым после чистого задания (ACL-2113: да, если не выключено).
+
+    Читается из окружения (машинный `.env`) при каждом задании. Пусто или любое
+    значение, кроме `0/false/no/off`, — оставлять.
+    """
+    raw = str(os.environ.get(ENV_KEEP_PROFILES_OPEN, "") or "").strip().lower()
+    return raw not in _KEEP_OFF_VALUES
 
 
 def _on_campaign_list(url: str) -> bool:
@@ -87,6 +96,7 @@ def close_account_profile(account_label: str) -> str:
     entry = _resolve_account(account_label)
     if entry is None or not (getattr(entry, "profile_id", "") or "").strip():
         raise RuntimeError(f"{account_label}: no Multilogin profile in the account map")
+    require_profile_lease(physical_profile_key(entry.profile_id))
     return _browser.stop_profile_on_request(entry, account_label)
 
 
@@ -300,10 +310,13 @@ class RpaPublisher:
 
     def _ensure_browser(self, account_label: str) -> BrowserConnection:
         if self._conn is not None:
+            require_profile_lease(physical_profile_key(
+                getattr(self._entry, "profile_id", ""), provider=self.browser_provider_name))
             return self._conn
         entry = self._resolve_entry(account_label)
         if not entry:
             raise RuntimeError(f"Account {account_label!r} not in ad_account_map.csv")
+        require_profile_lease(physical_profile_key(entry.profile_id, provider=self.browser_provider_name))
         self._entry = entry
         attach_only = get_mlx_attach_only()
         # When handing off / keeping the window, never hard-kill on provider switch.
@@ -331,6 +344,11 @@ class RpaPublisher:
             try:
                 self._conn = self._open_multilogin_direct(entry, account_label)
                 return self._conn
+            except profile_trouble.ProfileStop:
+                # ACL-1138: причина в профиле (например, нет прокси) — обычная
+                # цепочка упрётся в то же, обходить нельзя.
+                self._reset_browser(keep_browser_open=True)
+                raise
             except Exception as direct_exc:
                 log.warning("DirectCDP on running profile failed (%s); trying normal chain.", direct_exc)
                 self._reset_browser(keep_browser_open=True)
@@ -442,9 +460,7 @@ class RpaPublisher:
         entry, conn = self._entry, self._conn
         provider = self._provider
         outcome = ""
-        if keep_profiles_open():
-            outcome = "kept_switch"
-        elif not clean:
+        if not clean:
             outcome = "kept_problem"
         elif self._cancelled:
             outcome = "kept_cancelled"
@@ -459,7 +475,18 @@ class RpaPublisher:
                 saved = False
             if not saved:
                 outcome = "kept_unsaved"
+            elif keep_profiles_open():
+                # ACL-2113: «оставлено для удобства» — только после тех же проверок, что и
+                # закрытие: чистое, не отменено, черновик сохранён, окно — робота.
+                owns = getattr(provider, "robot_owns_profile", None)
+                try:
+                    mine = True if not callable(owns) else bool(owns(entry))
+                except Exception:
+                    mine = False
+                outcome = "kept_switch" if mine else "hand_opened"
         self.close()
+        if outcome == "kept_switch" and self._cancelled:
+            outcome = "kept_cancelled"
         if not outcome and self._cancelled:
             # Stop нажали, пока ждали автосохранения (ревью PR #446, F2).
             outcome = "kept_cancelled"
@@ -635,7 +662,8 @@ class RpaPublisher:
             f"profile_stop:{stop.code}" + (":earlier_campaign" if again else ""))
         return result
 
-    @serialized_browser(key=lambda self, draft: profile_key_for(draft.account_label))
+    @serialized_browser(key=lambda self, draft: profile_key_for(
+        draft.account_label, provider=getattr(self, "browser_provider_name", None)))
     def publish_draft(self, draft: CampaignDraft) -> RpaPublishResult:
         if (draft.status or "").strip().upper() != "DRAFT":
             raise ValueError(
@@ -757,7 +785,8 @@ class RpaPublisher:
             )
         return result
 
-    @serialized_browser(key=lambda self, slots, *, account_label, **kw: profile_key_for(account_label))
+    @serialized_browser(key=lambda self, slots, *, account_label, **kw: profile_key_for(
+        account_label, provider=getattr(self, "browser_provider_name", None)))
     def publish_slots(
         self,
         slots: list[dict[str, Any]],

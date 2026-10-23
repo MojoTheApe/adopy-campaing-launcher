@@ -37,6 +37,9 @@ if str(_PROJ_ROOT) not in sys.path:
 # ради тестов. Ставится на уровне модуля, до импорта тестовых модулей:
 # фикстура успела бы сработать позже первого `init()`.
 os.environ["ACL_SENTRY_DSN"] = ""
+# ACL-2117: действия ждут конца паузы после остановки профиля (до 3 мин). В тестах, которые
+# проверяют прежний отказ, ждать нельзя: 0 = сразу отказ. Тесты ожидания включают его сами.
+os.environ["ACL_PROFILE_RESTART_MAX_WAIT_S"] = "0"
 # ACL-1447: итог кампании — тоже штатным выключателем. Тесты, подменяющие
 # `acl_sentry.init` двойником, иначе ловили бы ещё и итог из фонового потока
 # («чистая кампания — ни одного события»). Тесты итога включают его сами.
@@ -55,6 +58,14 @@ os.environ["ACL_SENTRY_RUN_SUMMARY"] = "0"
 # monkeypatch — позже, и действует его значение.
 for _name in ("ACL_LIBRARY_REPO", "ACL_LIBRARY_TOKEN", "ACL_LIBRARY_BRANCH"):
     os.environ[_name] = ""
+
+# Тесты не спрашивают MLX API про прокси профиля (ACL-1138).
+#
+# Гейт стоит в начале `open()` обоих провайдеров Multilogin, а десятки тестов
+# открывают профиль через двойников. С токеном из машинного `.env` или
+# синтетическим из monkeypatch каждый такой тест ходил бы в
+# api.multilogin.com. Штатный выключатель; тесты гейта включают его сами.
+os.environ["FB_RPA_PROXY_GATE"] = "0"
 
 
 # Маркер файлов, которым нужен Windows (ACL-1582). Это метка отбора для CI
@@ -83,6 +94,14 @@ def pytest_configure(config):
 def _machine_config_off_the_live_folder(tmp_path_factory, monkeypatch):
     monkeypatch.setenv("ACL_CONFIG_DIR", str(tmp_path_factory.mktemp("acl_config")))
     yield
+
+
+@pytest.fixture(autouse=True)
+def _profile_leases_off_the_live_folder(tmp_path_factory, monkeypatch):
+    from src.fb_ads_rpa import profile_lease
+
+    root = tmp_path_factory.mktemp("profile_leases")
+    monkeypatch.setattr(profile_lease, "_lease_root", lambda: root)
 
 
 # Тесты не пишут в живой журнал телеметрии (PR #314, ревью).

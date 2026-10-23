@@ -78,7 +78,6 @@ from src.campaign_bridge.open_rec_mapper import parse_creative_from_ad_title
 from config.paths import (
     get_ad_account_map_path,
     get_creatives_root,
-    get_draft_status_path,
     get_upload_fb_excel_path,
     update_machine_env,
     write_csv_atomic,
@@ -223,16 +222,10 @@ def _write_link_to_excel(account_name: str, link: str) -> str | None:
 
 
 def _load_draft_status() -> dict:
-    """Load the machine's last explicit ready/blocked campaign verdict."""
-    path = Path(get_draft_status_path())
-    if not path.is_file():
-        return {}
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
+    """Load current build verdicts, including interrupted and unverified runs."""
+    from src.web.publish_jobs import load_draft_status
+
+    return load_draft_status()
 
 
 def _get_upload_ref_cached() -> dict:
@@ -2062,8 +2055,23 @@ def _render_report(
             "fb_backend": _fb_backend(),
             # ACL-1819: общая таблица правил pre-flight audit (та же, что у сервера).
             "preflight_rules_json": _preflight_rules(),
+            # ACL-1807: допустимые Meta цели/CTA/destination из реестра (только ga).
+            "meta_caps_json": _meta_capabilities(),
         },
     )
+
+
+def _meta_capabilities() -> dict:
+    """Допустимые значения из реестра правил Meta; сбой реестра форму не ломает."""
+    try:
+        from src.campaign_bridge import meta_rules
+
+        return meta_rules.capabilities()
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception("Meta rules capabilities unavailable; builder is not restricted by them")
+        return {}
 
 
 def _preflight_rules() -> dict:
@@ -4116,6 +4124,12 @@ async def account_spend_turn_off(request: Request) -> JSONResponse:
         return JSONResponse({"ok": False, "error": "account and object_id are required"}, status_code=400)
     if level not in ("campaign", "ad"):
         return JSONResponse({"ok": False, "error": "level must be campaign or ad"}, status_code=400)
+    from src.analysis_agent import account_spend_api
+
+    if account_spend_api.api_enabled():
+        # ACL-1945: под `ACL_FB_BACKEND=api` выключаем по id через Graph API из профиля,
+        # а не кликом по тумблеру; период тут ни к чему — таблицу никто не читает.
+        return await _turn_off_via_api(form, account, level, object_id)
     try:
         date_from, date_to = _spend_period(str(form.get("date_from") or ""), str(form.get("date_to") or ""), str(form.get("span") or ""))
     except ValueError as exc:
@@ -4142,6 +4156,45 @@ async def account_spend_turn_off(request: Request) -> JSONResponse:
     except Exception:
         return JSONResponse({"ok": False, "error": "Could not reach the account. Check the Adopy Campaign Manager window."}, status_code=503)
     return JSONResponse({"ok": True, "result": result.to_dict()})
+
+
+async def _turn_off_via_api(form, account: str, level: str, object_id: str) -> JSONResponse:
+    """Выключение по id через Graph API (ACL-1945). Тот же ответ, что у RPA-пути."""
+    from datetime import datetime, timezone
+    from starlette.concurrency import run_in_threadpool
+
+    from src.analysis_agent import account_spend, account_spend_api
+    from src.web import publish_jobs
+
+    requester = (os.environ.get("MY_CM_NAME") or "").strip()
+    name = str(form.get("name") or "").strip()
+    parent_id = (form.get("parent_id") or "").strip()
+    # Робот строит кампании в этом профиле — отказ сразу, а не очередь за замком профиля.
+    # Под замком `turn_off` спросит ещё раз: `since` помнит и задание, успевшее
+    # закончиться, пока мы ждали.
+    since = datetime.now(timezone.utc).isoformat()
+    try:
+        busy = publish_jobs.profile_in_use(account_spend._profile_key(account))
+    except Exception:
+        busy = True
+    if busy:
+        result = account_spend_api._api_result(account, level, object_id, name, requester)
+        result.error = account_spend_api.PROFILE_BUSY_ERROR
+        account_spend._record_turn_off(result)
+        return JSONResponse({"ok": False, "busy": True, "error": result.error,
+                             "result": result.to_dict()}, status_code=409)
+    try:
+        result = await run_in_threadpool(
+            account_spend_api.turn_off, account, level, object_id,
+            parent_id=parent_id, expected_name=name, requester=requester,
+            profile_busy=lambda key: publish_jobs.profile_in_use(key, since=since),
+        )
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Could not reach the account. Check the launcher window."}, status_code=503)
+    body = {"ok": True, "result": result.to_dict()}
+    if result.error == account_spend_api.PROFILE_BUSY_ERROR:
+        body["busy"] = True
+    return JSONResponse(body)
 
 
 @app.get("/account-spend/turn-off-history")
@@ -5415,12 +5468,54 @@ async def api_page_forms(request: Request) -> JSONResponse:
 
 
 @app.get("/api/form-templates")
-def api_form_templates_list() -> JSONResponse:
-    """ACL-1776: шаблоны Instant Form из локальной библиотеки (в Meta не ходит)."""
+def api_form_templates_list(force: bool = False) -> JSONResponse:
+    """ACL-1776/2054: шаблоны Instant Form из общей библиотеки (в Meta не ходит).
+
+    `templates` - годные к публикации (выбор в билдере); `rows` - все записи для
+    вкладки Forms, в том числе invalid; `deleted`, `library`, `migration` - для неё же.
+    `force` перечитывает библиотеку: вкладка открывается с ним, билдер - без.
+    """
     from src.fb_api import form_templates
 
-    return JSONResponse({"ok": True, "templates": form_templates.load(),
+    try:
+        view = form_templates.listing(force=force)
+    except form_templates.TemplateError as exc:
+        return JSONResponse({"ok": False, "errors": exc.errors}, status_code=503)
+    except OSError:
+        return JSONResponse({"ok": False, "errors": ["The form template library could not be read on this computer. Try again."]},
+                            status_code=503)
+    valid = {r["id"]: r["template"] for r in view["rows"] if not r["invalid"]}
+    return JSONResponse({"ok": True, "templates": sorted(valid.values(), key=lambda t: t["name"].casefold()),
+                         "rows": view["rows"], "deleted": view["deleted"], "library": view["library"],
+                         "migration": view["migration"],
                          "limits": {"questions": form_templates.MAX_QUESTIONS}})
+
+
+def _form_templates_failure(exc) -> JSONResponse:
+    from src.fb_api import form_templates
+
+    code = 503 if isinstance(exc, form_templates.LibraryUnavailable) else (
+        409 if isinstance(exc, form_templates.TemplateConflict) else 400)
+    return JSONResponse({"ok": False, "errors": exc.errors}, status_code=code)
+
+
+async def _form_templates_call(request: Request, fn):
+    """Общий каркас действий над шаблоном: тело -> id -> вызов в потоке -> ответ."""
+    from src.fb_api import form_templates
+
+    try:
+        raw = await request.json()
+    except ValueError:
+        raw = {}
+    tid = str((raw or {}).get("id") or "") if isinstance(raw, dict) else ""
+    try:
+        out = await asyncio.to_thread(fn, tid)
+    except form_templates.TemplateError as exc:
+        return _form_templates_failure(exc)
+    except OSError:
+        return JSONResponse({"ok": False, "errors": ["The template could not be saved on this computer"]},
+                            status_code=500)
+    return JSONResponse({"ok": True, **out})
 
 
 @app.post("/api/form-templates")
@@ -5435,7 +5530,7 @@ async def api_form_templates_save(request: Request) -> JSONResponse:
     try:
         saved = await asyncio.to_thread(form_templates.save, raw)
     except form_templates.TemplateError as exc:
-        return JSONResponse({"ok": False, "errors": exc.errors}, status_code=400)
+        return _form_templates_failure(exc)
     except OSError:
         return JSONResponse({"ok": False, "errors": ["The template could not be saved on this computer"]},
                             status_code=500)
@@ -5444,15 +5539,36 @@ async def api_form_templates_save(request: Request) -> JSONResponse:
 
 @app.post("/api/form-templates/delete")
 async def api_form_templates_delete(request: Request) -> JSONResponse:
-    """ACL-1776: убрать шаблон из библиотеки. Формы на Страницах не трогаются никогда."""
+    """ACL-1776/2054: убрать шаблон в Recently deleted. Формы на Страницах не трогаются никогда."""
     from src.fb_api import form_templates
 
-    try:
-        raw = await request.json()
-    except ValueError:
-        raw = {}
-    removed = await asyncio.to_thread(form_templates.delete, str((raw or {}).get("id") or ""))
-    return JSONResponse({"ok": removed})
+    resp = await _form_templates_call(request, lambda tid: {"removed": form_templates.delete(tid)})
+    body = json.loads(resp.body)
+    if resp.status_code == 200:
+        return JSONResponse({"ok": bool(body.get("removed"))})
+    return resp
+
+
+@app.post("/api/form-templates/restore")
+async def api_form_templates_restore(request: Request) -> JSONResponse:
+    from src.fb_api import form_templates
+
+    return await _form_templates_call(request, lambda tid: {"template": form_templates.restore(tid)})
+
+
+@app.post("/api/form-templates/duplicate")
+async def api_form_templates_duplicate(request: Request) -> JSONResponse:
+    from src.fb_api import form_templates
+
+    return await _form_templates_call(request, lambda tid: {"template": form_templates.duplicate(tid)})
+
+
+@app.post("/api/form-templates/migrate")
+async def api_form_templates_migrate(request: Request) -> JSONResponse:
+    """ACL-2054: загрузить локальные шаблоны машины в общую библиотеку (явное действие)."""
+    from src.fb_api import form_templates
+
+    return await _form_templates_call(request, lambda _tid: form_templates.migrate_local())
 
 
 @app.post("/preview-publish")
@@ -5719,6 +5835,22 @@ async def api_publish_preflight(accounts: str = "") -> JSONResponse:
         return result
 
     return JSONResponse(await asyncio.to_thread(run))
+
+
+@app.get("/api/meta-rules/capabilities")
+async def api_meta_rules_capabilities() -> JSONResponse:
+    """Допустимые цели, цели оптимизации, billing events, CTA и destination (ACL-1807).
+
+    Только значения со статусом `ga` из `config/meta_rules/`; сети нет. Решение
+    «пускать ли кампанию» остаётся за `check_job` на сервере. Реестр не читается —
+    503, билдер тогда ничего не ограничивает.
+    """
+    from src.campaign_bridge import meta_rules
+
+    try:
+        return JSONResponse(await asyncio.to_thread(meta_rules.capabilities))
+    except Exception as e:  # реестр не прочитался/не соответствует схеме — билдер ничего не режет
+        return JSONResponse({"error": str(e)}, status_code=503)
 
 
 @app.post("/api/publish-preflight/decision")

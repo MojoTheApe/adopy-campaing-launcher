@@ -84,7 +84,7 @@ class FormsMeta(FormMeta):
             if mode == "lost":
                 return {"error": "call_unknown"}
             return {"status": 200, "body": {"id": fid}}
-        return super().write(path, params, files, filename, on_ad)
+        return super().write(path, params, files, filename, on_ad, **_k)
 
     def _get(self, path, params):
         parts = path.strip("/").split("/")
@@ -202,7 +202,8 @@ def test_the_name_is_stable_per_content_and_changes_with_content():
 def test_the_library_saves_loads_replaces_and_deletes_locally(tmp_path):
     saved = _saved()
     assert ft.library_path().parent == tmp_path / "acl" and ft.load() == [saved]
-    again = ft.save({**TEMPLATE, "id": saved["id"], "headline": "Changed"})
+    row = ft.listing()["rows"][0]
+    again = ft.save({**TEMPLATE, "id": saved["id"], "headline": "Changed", "_expected_revision": row["revision"]})
     assert again["id"] == saved["id"] and [t["headline"] for t in ft.load()] == ["Changed"]
     with pytest.raises(ft.TemplateError, match="already exists"):
         ft.save(TEMPLATE)
@@ -837,7 +838,7 @@ def test_the_missing_permission_is_only_a_warning_because_the_token_list_may_lie
 
 def test_a_missing_or_invalid_template_and_a_double_choice_stop_the_plan(tmp_path):
     d = _tpl_draft(tmp_path, ["0123456789ab"])
-    with pytest.raises(cr.PlanError, match="not found in the Forms library"):
+    with pytest.raises(cr.PlanError, match="not found in the team Forms library"):
         cr.plan_from_draft(d)
     tid = _saved()["id"]
     d2 = _tpl_draft(tmp_path, [tid])
