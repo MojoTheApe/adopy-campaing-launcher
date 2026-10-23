@@ -3847,6 +3847,7 @@
     .sb-more > summary::before { content: "\25B8"; display: inline-block; margin-right: var(--adopy-space-2);
       font-size: var(--adopy-text-xs); transition: transform 120ms var(--ease-out); }
     .sb-more[open] > summary::before { transform: rotate(90deg); }
+    .sb-assets-brands { margin-top: var(--adopy-space-2); padding-top: var(--adopy-space-2); border-top: 1px solid var(--adopy-border); }
     .sb-more > summary:hover { color: var(--adopy-text); background: var(--adopy-surface-hover); }
     .sb-empty, .sb-note { margin: var(--adopy-space-3) var(--adopy-space-3) 0; font-size: var(--adopy-text-sm);
       color: var(--adopy-text-muted); line-height: var(--adopy-leading-ui); }
@@ -4362,18 +4363,18 @@ async function dashRefresh(ev) {
             {% if s.active %}title="{% if s.spend %}spending{% else %}opened in the account map, nothing spent yet{% endif %}"{% endif %}>{{ c.country }}</button>
     {%- if s.ftds %}<span class="sb-ftd sb-ftd-country" title="FTDs: yours / everyone's in the selected period">{{ s.ftds.you }} / {{ s.ftds.all }}</span>{% endif %}
     <div class="sidebar-sections">
-      {#- ACL-1827: ассеты страны — строками под названием. «Все ассеты» ведёт на
-          тот же Workbench, что и прежняя ссылка; выбор ассета ставит чип. -#}
-      {% if c.workbench and c.workbench.assets %}
-      <div class="sb-assets" role="group" aria-label="Assets in {{ c.country }}">
-        {% for a in c.workbench.assets %}
+      {#- 22.10 (владелец): сверху «All assets», под ним виды страны (Workbench, Manage, 1 Assets…),
+          ниже — ассеты по брендам. Виды интереснее списка брендов, поэтому они выше и не свёрнуты. -#}
+      {% set wb_assets = (c.workbench.assets if c.workbench and c.workbench.assets else []) %}
+      {% if wb_assets %}
+      <div class="sb-assets" role="group" aria-label="All assets in {{ c.country }}">
+        {% for a in wb_assets[:1] %}
         <button type="button" class="sb-asset" data-country="{{ cid }}" data-asset="{{ a.name }}" title="FTDs: yours / everyone's">
           <span class="sb-asset-name">{{ a.label }}</span><span class="sb-ftd">{{ a.you_ftds }} / {{ a.ftds }}</span></button>
         {% endfor %}
       </div>
       {% endif %}
-      <details class="sb-more"{% if not c.workbench %} open{% endif %}>
-      <summary>More country views</summary>
+      <div class="sb-views">
       {#- Одна дверь вместо четырёх. My Goals, CM, Accounts и Campaign Builder
           отвечали на один вопрос — как идёт страна и что с этим делать, — и
           стоили четырёх кликов по экранам, которые никогда не видны рядом. -#}
@@ -4386,7 +4387,15 @@ async function dashRefresh(ev) {
       {% if c.targeting %}<button type="button" class="sidebar-link" data-view="country-{{ cid }}-targeting">{{ n_targeting }} Targeting</button>{% endif %}
       <button type="button" class="sidebar-link" data-view="country-{{ cid }}-creatives">{{ n_creatives }} Creatives</button>
       <button type="button" class="sidebar-link" data-view="country-{{ cid }}-optimization">{{ n_optimization }} Optimization</button>
-      </details>
+      </div>
+      {% if wb_assets | length > 1 %}
+      <div class="sb-assets sb-assets-brands" role="group" aria-label="Assets in {{ c.country }}">
+        {% for a in wb_assets[1:] %}
+        <button type="button" class="sb-asset" data-country="{{ cid }}" data-asset="{{ a.name }}" title="FTDs: yours / everyone's">
+          <span class="sb-asset-name">{{ a.label }}</span><span class="sb-ftd">{{ a.you_ftds }} / {{ a.ftds }}</span></button>
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
   </div>
   {% endfor %}
