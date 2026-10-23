@@ -41,10 +41,11 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   localStorage remains a fast cache; initial reconciliation restores the newer
   copy and backs up displaced data. Atomic writes use the shared ACL config path
   and machine lock, preserving corrupt files before replacement. Each document
-  has one pending save; delayed acknowledgements/refusals cannot replace a newer
+  serializes normal saves; delayed acknowledgements/refusals cannot replace a newer
   local edit or rewind its timestamp. The latest queued snapshot uses the last
   acknowledged server base. Browser-only fallback remains available if the server
-  is unreachable; closing-page flushes retain keepalive for queued saves.
+  is unreachable. A closing-page flush sends the latest keepalive copy immediately,
+  without relying on an earlier response callback; superseded replies are ignored.
 - `src/web/draft_status.py`: current build verdicts in machine-local JSON. Accepted
   jobs invalidate earlier readiness before starting, retain the previous success
   as history and persist their job/plan identity, partial results and stopped or

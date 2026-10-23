@@ -373,7 +373,7 @@ def autosave(browser):
       };
       t.edit = (at, text) => { t.now = at; t.data = { text }; cbSrv.note('keep'); };
       t.tick = () => { const fs = [...t.timers.values()]; t.timers.clear(); fs.forEach(fn => fn()); };
-      t.reply = () => t.pending.shift()();
+      t.reply = (index = 0) => t.pending.splice(index, 1)[0]();
       t.result = () => ({ data: t.data, server: t.server, posts: t.posts,
         applied: t.applied, meta: JSON.parse(localStorage.getItem('acl.builder.sync')) });
     }""")
@@ -399,19 +399,25 @@ def test_delayed_save_acknowledgement_keeps_and_serializes_the_latest_edit(autos
     page.evaluate("draftsTest.edit(3000, 'C')")
     if closing:
         page.evaluate("cbSrv.flush()")
-    assert page.evaluate("draftsTest.posts.length") == 1
-    page.evaluate("draftsTest.reply()")
+        assert page.evaluate("draftsTest.posts.length") == 2, "pagehide waited for an old callback"
+        # The final keepalive response arrives before A; the old A response must
+        # not lower the acknowledged base or make the saved C dirty again.
+        page.evaluate("draftsTest.reply(1); draftsTest.reply()")
+    else:
+        assert page.evaluate("draftsTest.posts.length") == 1
+        page.evaluate("draftsTest.reply()")
     before = page.evaluate("draftsTest.result()")
     assert before["data"] == {"text": "C"}
-    assert before["meta"] == {"at": {"keep": 3000}, "base": {"keep": 1000}}
+    assert before["meta"] == {"at": {"keep": 3000}, "base": {"keep": 3000 if closing else 1000}}
     page.evaluate("draftsTest.tick()")
     sent = page.evaluate("draftsTest.posts")
     assert sent == [
         {"name": "keep", "saved_at": 1000, "base": None, "data": {"text": "A"}},
-        {"name": "keep", "saved_at": 3000, "base": 1000, "data": {"text": "C"}},
+        {"name": "keep", "saved_at": 3000, "base": None if closing else 1000, "data": {"text": "C"}},
     ]
     assert page.evaluate("draftsTest.keepalive") == [False, closing]
-    page.evaluate("draftsTest.reply()")
+    if not closing:
+        page.evaluate("draftsTest.reply()")
     final = page.evaluate("draftsTest.result()")
     assert final["server"] == {"saved_at": 3000, "data": {"text": "C"}}
     assert final["data"] == {"text": "C"} and final["applied"] == []

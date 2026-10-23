@@ -5640,8 +5640,7 @@ window.cbSrv = (function () {
   var dirty = {};         // имя → ждёт отправки
   var timers = {};
   var generations = {};   // имя → поколение локального изменения
-  var inFlight = {};      // один запрос на документ; более новые изменения ждут
-  var flushing = {};      // pagehide: следующая ожидающая запись тоже keepalive
+  var inFlight = {};      // обычные записи последовательны; token отсекает старые ответы
   var ready = false;      // серверные копии получены и сверены
   var docs = {};          // что ответил сервер (модуль может зарегистрироваться позже ответа)
   var pulling = false;
@@ -5664,19 +5663,20 @@ window.cbSrv = (function () {
   function snap(name) { return JSON.stringify(regs[name].snapshot()); }
 
   function post(name, keepalive) {
-    if (keepalive) flushing[name] = true;
-    if (inFlight[name]) return;
+    /* pagehide не ждёт callback старой записи: последняя копия уходит сразу
+       через keepalive. Сервер сравнивает saved_at даже при обратном порядке. */
+    if (inFlight[name] && !keepalive) return;
     var reg = regs[name];
     var at = stamp(name);
     var generation = generations[name] || 0;
     var body = JSON.stringify({ name: name, saved_at: at, base: meta.base[name] || null, data: reg.snapshot() });
-    inFlight[name] = true;
-    keepalive = !!flushing[name];
-    flushing[name] = false;
+    var request = {};
+    inFlight[name] = request;
     dirty[name] = false;
     return fetch(URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body, keepalive: !!keepalive })
       .then(function (r) { return r.json(); })
       .then(function (j) {
+        if (inFlight[name] !== request) return;
         if (!j || j.ok !== true || !j.doc) { dirty[name] = true; return; }
         /* Ответ подтверждает серверную базу именно этой записи. Он не меняет
            метку и содержимое более нового локального поколения. */
@@ -5687,13 +5687,14 @@ window.cbSrv = (function () {
         last[name] = snap(name);
         setStamp(name, j.doc.saved_at, j.doc.saved_at);
       })
-      .catch(function () { dirty[name] = true; })
+      .catch(function () { if (inFlight[name] === request) dirty[name] = true; })
       .then(function () {
+        if (inFlight[name] !== request) return;
         inFlight[name] = false;
         /* Дебаунс мог истечь, пока ждали ответ. Отправляем только последний
            снимок, уже с подтверждённой базой; отказ сети сам себя не повторяет. */
-        if (dirty[name] && (generations[name] || 0) !== generation && (!timers[name] || flushing[name])) {
-          post(name, flushing[name]);
+        if (dirty[name] && (generations[name] || 0) !== generation && !timers[name]) {
+          post(name);
         }
       });
   }
