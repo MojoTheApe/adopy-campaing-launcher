@@ -21,6 +21,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from tests.profile_lease_fakes import fake_profile
 import requests
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -60,6 +61,17 @@ class _FakeProvider:
         pass
 
 
+@pytest.fixture(autouse=True)
+def _held_profile_lease(monkeypatch):
+    """ACL-1853: a browser entry needs the physical profile lease the caller holds."""
+    from src.fb_ads_rpa.operations import profile_lock
+    monkeypatch.setattr(rp, "load_ad_account_map", lambda *_: {})
+    monkeypatch.setattr(rp, "resolve_account_entry",
+                        lambda *_: SimpleNamespace(profile_id=fake_profile("p-1")))
+    with profile_lock(fake_profile("p-1")):
+        yield
+
+
 def _publisher(monkeypatch, exc: BaseException, *, attach_only: bool = True):
     pub = rp.RpaPublisher.__new__(rp.RpaPublisher)
     pub.hand_off = pub.dry_run = False
@@ -69,8 +81,9 @@ def _publisher(monkeypatch, exc: BaseException, *, attach_only: bool = True):
     pub._built_at = None
     pub._account_stop = None
     pub._provider = _FakeProvider(exc)
+    pub.browser_provider_name = "multilogin"
     monkeypatch.setattr(pub, "_resolve_entry", lambda label: SimpleNamespace(
-        profile_id="p-1", folder_id="f-1", multilogin_instance="A"))
+        profile_id=fake_profile("p-1"), folder_id="f-1", multilogin_instance="A"))
     monkeypatch.setattr(pub, "_reset_browser", lambda **kw: None)
     monkeypatch.setattr(pub, "_profile_already_running", lambda entry: False)
     monkeypatch.setattr(rp, "get_mlx_attach_only", lambda: attach_only)

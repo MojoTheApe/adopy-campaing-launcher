@@ -496,7 +496,7 @@ def test_the_attach_path_hands_a_profile_stop_up_without_stopping_the_profile(mo
     monkeypatch.setattr(br, "_connect_playwright", connect)
     monkeypatch.setattr(provider, "_stop_profile", lambda *a: ev.append("stop"))
     monkeypatch.setattr(provider, "_start_via_mlx_api", lambda *a, **kw: ev.append("start"))
-    entry = SimpleNamespace(profile_id="p-1", folder_id="f-1", multilogin_instance="A")
+    entry = SimpleNamespace(profile_id="550e8400-e29b-41d4-a716-446655440000", folder_id="f-1", multilogin_instance="A")
     with pytest.raises(pt.ProfileStop):
         provider.open(entry, "Facebook_1443")
     assert ev == [], "профиль остановили или подняли заново"
@@ -527,15 +527,17 @@ def test_the_publisher_does_not_wrap_a_profile_stop(monkeypatch):
     pub = rp.RpaPublisher.__new__(rp.RpaPublisher)
     pub._conn = None
     pub._entry = None
+    pub.browser_provider_name = "multilogin_attach"
     pub.hand_off = pub.dry_run = False
 
     def open_(entry, label):
         raise pt.ProfileStop(pt.LOGGED_OUT, "login_form")
 
     pub._provider = SimpleNamespace(open=open_, close=lambda entry, **kw: None)
-    monkeypatch.setattr(pub, "_resolve_entry", lambda label: SimpleNamespace(profile_id="p-1"))
+    monkeypatch.setattr(pub, "_resolve_entry", lambda label: SimpleNamespace(profile_id="550e8400-e29b-41d4-a716-446655440000"))
     monkeypatch.setattr(rp, "get_mlx_attach_only", lambda: True)
-    with pytest.raises(pt.ProfileStop):
+    from src.fb_ads_rpa.operations import profile_lock
+    with profile_lock("550e8400-e29b-41d4-a716-446655440000"), pytest.raises(pt.ProfileStop):
         pub._ensure_browser("Facebook_1443")
 
 
@@ -567,3 +569,10 @@ def test_a_slow_navigation_in_a_fresh_tab_keeps_the_tab(monkeypatch):
     answers = iter([True, False])
     monkeypatch.setattr(br, "page_answers", lambda p, t=5.0: next(answers))
     assert br.fresh_tab(old, LIST_URL) is None, "молчащую вкладку после таймаута отдали"
+
+
+@pytest.fixture(autouse=True)
+def publisher_profile_mapping(monkeypatch):
+    from src.fb_ads_rpa import rpa_publisher as rp
+    monkeypatch.setattr(rp, "load_ad_account_map", lambda *_: {})
+    monkeypatch.setattr(rp, "resolve_account_entry", lambda *_: SimpleNamespace(profile_id="550e8400-e29b-41d4-a716-446655440000"))

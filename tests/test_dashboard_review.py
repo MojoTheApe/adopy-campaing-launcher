@@ -169,6 +169,42 @@ def test_short_numeric_suffix_is_not_stripped():
     assert web_app.workbook_alias_for(df, "Peru", "Facebook_5265_12345678") == "Facebook_5265"
 
 
+# ── ACL-1377: книга пишет имя без подчёркиваний (Facebook6540) ───────────
+def test_label_matches_the_workbook_alias_written_without_underscores():
+    df = _id_frame("Facebook6540", "Facebook6545")
+    assert web_app.workbook_alias_for(df, "Peru", "Facebook_6540_61579599532457") == "Facebook6540"
+    assert web_app.workbook_alias_for(df, "Peru", "Facebook_6545_61579599532458") == "Facebook6545"
+
+
+def test_near_names_do_not_collide_without_underscores():
+    df = _id_frame("Facebook6545", "Facebook65400")
+    label = "Facebook_6540_61579599532457"
+    assert web_app.workbook_alias_for(df, "Peru", label) == label
+
+
+def test_alias_with_underscore_wins_over_the_compact_one():
+    df = _id_frame("Facebook_6540", "Facebook6540")
+    assert web_app.workbook_alias_for(df, "Peru", "Facebook_6540_61579599532457") == "Facebook_6540"
+
+
+def test_two_compact_candidates_give_no_match():
+    label = "Facebook_6540_61579599532457"
+    assert web_app._alias_without_id_suffix(label, ["Facebook6540", "FACEBOOK6540"]) == ""
+    assert web_app._alias_without_id_suffix(label, ["Facebook6540", "Face_book6540"]) == ""
+
+
+def test_existing_matches_are_unchanged_by_the_compact_key():
+    df = _id_frame("FacebookDoc19", "Facebook_5265")
+    assert web_app.workbook_alias_for(df, "Peru", "FacebookDoc19 - Eros Andersson") == "FacebookDoc19 - Eros Andersson"
+    assert web_app.workbook_alias_for(df, "Peru", "Facebook_5265_61579362958966") == "Facebook_5265"
+
+
+def test_compact_match_is_scoped_to_the_country():
+    df = _id_frame("Facebook6540", country="Peru")
+    label = "Facebook_6540_61579599532457"
+    assert web_app.workbook_alias_for(df, "Colombia", label) == label
+
+
 def test_id_suffix_rule_is_scoped_to_the_country():
     df = _id_frame("Facebook_5265", country="Peru")
     label = "Facebook_5265_61579362958966"
@@ -183,6 +219,16 @@ def test_account_map_row_shows_numbers_for_suffixed_label(isolated_links):
     assert row["workbook_alias"] == "Facebook_5265"
     assert row["has_data"] and row["leads"] == 6 and row["deposits"] == 1 and row["spend"] == 30.0
     assert view["countries"][0]["leads"] == 6
+
+
+def test_account_map_row_shows_numbers_for_the_compact_workbook_alias(isolated_links):
+    """ACL-1377: Facebook_6540_<id> на карте, Facebook6540 в книге."""
+    df = _id_frame("Facebook6540")
+    account_links.link("Facebook_6540_61579599532457", "country", "Peru")
+    view = web_app._build_account_map_view({}, df, "2026-10-11", "2026-10-11")
+    row = view["countries"][0]["rows"][0]
+    assert row["workbook_alias"] == "Facebook6540"
+    assert row["has_data"] and row["leads"] == 6 and row["spend"] == 30.0
 
 
 def test_suffixed_account_row_shows_elsewhere_for_its_resolved_alias(isolated_links):
@@ -245,3 +291,17 @@ def test_country_totals_count_duplicate_once_and_keep_distinct(isolated_links):
     country = web_app._build_account_map_view({}, df, "2026-10-11", "2026-10-11")["countries"][0]
     assert len(country["rows"]) == 3
     assert country["leads"] == 12 and country["deposits"] == 2 and country["spend"] == 60.0
+
+
+def test_compact_key_ignores_rule_keys():
+    # ACL-1377: ключи по правилу имён не сжимаются — rule1:0x и rule10:x не равны
+    assert web_app._compact_account_key("Facebook_6540") == "facebook6540"
+    from unittest import mock
+    with mock.patch.object(web_app, "_account_key", return_value="rule1:0x"):
+        assert web_app._compact_account_key("anything") == ""
+
+
+def test_only_near_alias_in_workbook_gives_no_match_for_other_account():
+    df = _id_frame("Facebook6545")
+    label = "Facebook_6540_61579599532457"
+    assert web_app.workbook_alias_for(df, "Peru", label) == label

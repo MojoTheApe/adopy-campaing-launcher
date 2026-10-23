@@ -92,7 +92,7 @@ class SetupWizardTests(unittest.TestCase):
             stats_book.save(stats)
 
             configuration = build_manual_setup(campaign_manager_name="Anna Smith", stats_workbook=str(stats))
-            with self.assertRaisesRegex(WizardValidationError, "No accounts"):
+            with self.assertRaisesRegex(WizardValidationError, "is not in the CM column"):
                 build_manual_setup(campaign_manager_name="Nobody Here", stats_workbook=str(stats))
 
         self.assertEqual(configuration.campaign_manager_name, "Anna Smith")

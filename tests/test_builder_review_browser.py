@@ -357,7 +357,8 @@ def missing_env(browser, tmp_path, monkeypatch):
         ref_options_json={'targetings': [], 'os': ['All']}, account_alias_map_json={},
         account_preflight_json={})
     pub_all = src[src.index('window.cbPublishAll = '):src.index('/* ── ACL-1819: серверные проверки')]
-    helpers = src[src.index('function cbSlotTitle'):src.index('/* Все аккаунты уходят на сервер СРАЗУ')]
+    confirm_parts = src[src.index('/* ACL-2118 begin */'):src.index('/* ACL-2118 end */')]
+    helpers = src[src.index('window.cbSlotTitle = cbSlotTitle;'):src.index('/* Все аккаунты уходят на сервер СРАЗУ')]
     publish = src[src.index('window.cbTrackingWarning'):src.index('function _doCbPublish')]
     ctx = browser.new_context()
     ctx.route('**/*', route)
@@ -368,8 +369,8 @@ def missing_env(browser, tmp_path, monkeypatch):
     pg.set_content('<form class="open-account-form" id="form" data-country="Mexico"><input name="country" value="Mexico">'
                    '<input name="account_label" value="Demo"><input name="tracking_link" value="">'
                    '<input name="camp_count" class="cb-count" value="0"><div class="cb-slots"></div></form>')
-    pg.add_script_tag(content=esc + '\n' + script + '\n' + helpers + '\n' + pub_all + '\n' + publish)
-    pg.evaluate("window._safeConfirm = (t,b,run,o) => { window.confirmation = {body:b, run}; };"
+    pg.add_script_tag(content=esc + '\n' + script + '\n' + helpers + '\n' + confirm_parts + '\n' + pub_all + '\n' + publish)
+    pg.evaluate("window._safeConfirm = (t,b,run,o) => { window.confirmation = {body:b, run, opts:o}; };"
                 "window.alerts = []; window.alert = m => window.alerts.push(m);"
                 "window._doCbPublish = () => { window.sent = true; };"
                 "window._runPublishQueue = () => { window.sent = true; return {skipped: []}; };"
@@ -432,3 +433,48 @@ def test_unlisted_chosen_file_is_marked_once_the_list_is_loaded(missing_env):
     # Выбранного нет в папке, а список загружен: помечено. Без загрузки списка молчим.
     assert pg.locator('.cb-file-missing-note').count() == 1
     assert pg.evaluate('cbMissingCreatives(document).length') == 1
+
+
+def test_missing_file_scope_and_hard_refusal_survive_the_current_confirmation(missing_env):
+    pg, folder = missing_env
+    pg.evaluate("""() => {
+      const form = document.querySelector('form'); cbAddSlot(form);
+      const slots = form.querySelectorAll('.cb-slot');
+      ['Safe campaign', 'Missing campaign'].forEach((name, i) => {
+        slots[i].querySelector('.cb-name-hidden').value = name;
+        const file = i ? '1111_old.jpg' : '2222_keep.jpg';
+        slots[i].querySelector('[name$="_creative_file"]').value = file;
+        slots[i].querySelector('.cb-creative-search').value = file;
+      });
+      window.ACL_FB_BACKEND = 'api';
+      window.decisions = 0;
+      window.cbPreflightDecision = () => { window.decisions += 1; };
+      window.cbPreflightFetch = () => Promise.resolve({accounts:[{account:'Demo',ready:true}]});
+    }""")
+    (folder / '1111_old.jpg').unlink()
+    pg.evaluate('cbCreativesAge(1e12); cbRefreshCreatives(0)')
+    pg.wait_for_selector('.cb-file-missing-note')
+    # The missing, unselected campaign must not block the valid selected one.
+    pg.evaluate("window.confirmation = null; cbPublishAll(null, [document.querySelector('.cb-slot')])")
+    pg.wait_for_function('window.confirmation !== null')
+    selected = pg.evaluate('confirmation.body')
+    assert 'Safe campaign' in selected and 'Missing campaign' not in selected
+    assert 'cb-missing-files' not in selected
+    lead = pg.evaluate('confirmation.opts.lead')
+    assert 'campaign PAUSED, ad sets and ads active' in lead
+    assert '<strong>1</strong> campaign' in lead
+    pg.evaluate('confirmation.run()')
+    assert pg.evaluate('window.sent') is True and pg.evaluate('decisions') == 1
+    # Full Publish all uses the current two-column body and names the exact missing row.
+    pg.evaluate('window.sent = false; window.decisions = 0; window.confirmation = null; cbPublishAll(null)')
+    pg.wait_for_function('window.confirmation !== null')
+    body = pg.evaluate('confirmation.body')
+    assert 'pc-cols' in body and 'cb-missing-files' in body
+    assert 'Missing campaign' in body and 'Ad 1' in body and '1111_old.jpg' in body
+    pg.evaluate('confirmation.run()')
+    assert pg.evaluate('window.sent') is False and pg.evaluate('decisions') == 0
+    # The single-account path must also refuse before recording any preflight decision.
+    pg.evaluate('window.confirmation = null; cbPublish(document.querySelector("form"))')
+    pg.wait_for_function('window.confirmation !== null')
+    pg.evaluate('confirmation.run()')
+    assert pg.evaluate('window.sent') is False and pg.evaluate('decisions') == 0
