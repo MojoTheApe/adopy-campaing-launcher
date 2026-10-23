@@ -16,6 +16,7 @@ from __future__ import annotations
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -27,6 +28,7 @@ from src.analysis_agent import team_library  # noqa: E402
 from src.fb_ads_rpa import enrich_draft  # noqa: E402
 from src.fb_ads_rpa import run_telemetry as rt  # noqa: E402
 from src.fb_ads_rpa.rpa_publisher import RpaPublisher  # noqa: E402
+from tests.profile_lease_fakes import fake_profile
 
 
 @pytest.fixture
@@ -165,6 +167,8 @@ def test_the_publisher_measures_the_queue_and_the_attach(rows, monkeypatch):
     from src.fb_ads_rpa import rpa_publisher as rp
     from src.fb_ads_rpa.draft import RpaPublishResult
 
+    monkeypatch.setattr(rp, "load_ad_account_map", lambda _: {
+        "TEST_ACCOUNT": SimpleNamespace(profile_id=fake_profile("TEST_ACCOUNT"))})
     p = _publisher()
     monkeypatch.setattr(rp, "slots_to_campaign_drafts", lambda slots, **kw: [_Draft(), _Draft("B")])
     monkeypatch.setattr(rp, "enrich_campaign_drafts", lambda drafts, **kw: drafts)
