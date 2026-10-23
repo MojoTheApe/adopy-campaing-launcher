@@ -28,6 +28,7 @@
         <div class="hc-mount" data-hc-mount></div>
       </section>
       {%- endif %}
+      <div class="amap-table-scroll" tabindex="0" role="region" aria-label="Accounts in {{ mc.country | e }} — scroll horizontally for more columns">
       <table class="amap-grid" data-country-name="{{ mc.country | e }}">
         {#- Колонок и долей поровну, в сумме ровно 100%. Когда-то доль было на
             одну меньше: ширины сложились без последней, и колонка с кнопками
@@ -259,6 +260,7 @@ screenshot: {{ sr.shot }}{% endif %}">{{ sr.error | truncate(40, True, '…') }}
         {% endfor %}
         </tbody>
       </table>
+      </div>
       {%- if campaign_table_api is defined and campaign_table_api() %}
       <section class="hc hc-after" data-hc-after></section>
       {%- endif %}

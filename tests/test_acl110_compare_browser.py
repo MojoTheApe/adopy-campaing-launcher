@@ -80,6 +80,19 @@ def test_comparison_everywhere_is_readonly_and_both_modes_keep_primary_dates(bro
         ghost.locator('summary').click()
         expect(ghost.locator('.cmp-flag.gone').first).to_be_visible()
         expect(ghost.locator('button, input, select, form, [onclick], [hx-get]')).to_have_count(0)
+        # Compare annotations must compose with the responsive account-map main.
+        # Wide data stays inside its scroller rather than panning the whole pane.
+        bounds = p.evaluate("""() => ({page: document.documentElement.scrollWidth,
+          viewport: innerWidth, mainPan: document.querySelector('.main-content').scrollLeft})""")
+        assert bounds['page'] <= bounds['viewport'] + 1, bounds
+        assert abs(bounds['mainPan']) <= 1, bounds
+        head = p.locator('#view-home .amap-head')
+        assert head.evaluate('e => e.scrollWidth <= e.clientWidth + 1')
+        outer = head.bounding_box()
+        for control in head.locator('button,input,select').all():
+            if control.is_visible():
+                rect = control.bounding_box()
+                assert outer['x'] - 1 <= rect['x'] and rect['x'] + rect['width'] <= outer['x'] + outer['width'] + 1
         expect(p.locator('#amap-cm').get_by_text('Bob', exact=False)).to_have_count(1)
         p.evaluate('() => amapRefreshCountryLines(amapPeriod())')
         assert map_queries[-1]['compare'] == ['prev']
