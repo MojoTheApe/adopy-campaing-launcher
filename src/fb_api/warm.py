@@ -585,6 +585,11 @@ class WarmRegistry:
         instance = (getattr(entry, "multilogin_instance", "") or "A").strip() or "A"
         if not pid:
             return _result(False, "No Multilogin profile is linked to this account.", "no_profile")
+        # ACL-1138: профиль без прокси в Multilogin не берём и не поднимаем — ни
+        # чужой уже открытый (`_adopt`), ни свой запуск.
+        refusal = _proxy_refusal(pid, instance, label)
+        if refusal:
+            return _result(False, refusal, "profile_no_proxy")
         kind, port = self._scan([pid]).get(pid, ("unknown", None))
         if kind == "port" and port:
             return self._adopt(label, pid, int(port))
@@ -815,6 +820,11 @@ class WarmRegistry:
         sess = self.session(profile_id)
         if sess is None:
             raise WarmError("This profile is not kept warm.", "not_warm")
+        # ACL-1138: и сессия, взятая в пул до гейта (старая сборка), — через гейт.
+        # Пространство у сессии не записано: гейт спросит оба; «есть» кэшируется.
+        refusal = _proxy_refusal(profile_id, "", account)
+        if refusal:
+            raise WarmError(refusal, "profile_no_proxy")
         if sess.owner == threading.get_ident():
             raise WarmError("This profile's tab is already in use by this action.", "nested")
         sess.lock.acquire()
@@ -1018,6 +1028,20 @@ def _chip(state: str, text: str, title: str, *, since: str = "", closable: bool 
           busy: bool = False) -> dict:
     return {"state": state, "text": text, "title": title, "since": since,
             "closable": bool(closable), "busy": bool(busy)}
+
+
+def _proxy_refusal(profile_id: str, instance: str, label: str) -> str:
+    """Текст отказа, если у профиля в Multilogin нет прокси (ACL-1138); иначе пусто."""
+    from types import SimpleNamespace
+
+    from src.fb_ads_rpa import profile_proxy_gate, profile_trouble
+
+    try:
+        profile_proxy_gate.ensure_profile_has_proxy(
+            SimpleNamespace(profile_id=profile_id, multilogin_instance=instance), label or profile_id)
+    except profile_trouble.ProfileStop as stop:
+        return profile_trouble.message(stop.code) or str(stop)
+    return ""
 
 
 def _result(ok: bool, message: str, code: str, **extra: Any) -> dict:

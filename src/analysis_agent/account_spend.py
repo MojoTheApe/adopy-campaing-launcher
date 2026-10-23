@@ -894,6 +894,12 @@ def _start_closed(entry, account_label: str, opened: _ReadOpen, recheck=None):
         _record("spend_profile_started", False, time.monotonic() - began,
                 {"account": account_label, "slot_wait_s": round(waited_s, 1),
                  "error": type(exc).__name__})
+        from src.fb_ads_rpa import profile_trouble
+
+        if isinstance(exc, profile_trouble.ProfileStop):
+            # ACL-1138: причина в профиле (нет прокси) — её текст, а не «профиль закрыт».
+            raise ProfileNotAttachable(f"{account_label}: {profile_trouble.message(exc.code) or exc}",
+                                       code=exc.code) from exc
         # ACL-1826: 403 «restricted permission» на слоте B / вход в прокси — понятный текст и код.
         from src.fb_api import mlx_session as _mlx
 
@@ -1110,6 +1116,17 @@ def _short_path(path: str) -> str:
         return ""
 
 
+def _attach_existing(direct, profile_id: str, spelling: str, **kw):
+    """`attach_existing_only`, где отказ профиля (ACL-1138: нет прокси) — `ProfileNotAttachable`."""
+    from src.fb_ads_rpa import profile_trouble
+
+    try:
+        return direct.attach_existing_only(profile_id, spelling, **kw)
+    except profile_trouble.ProfileStop as stop:
+        raise ProfileNotAttachable(profile_trouble.message(stop.code) or str(stop),
+                                   code=stop.code) from stop
+
+
 def _attach_open(direct_cls, entry, profile_id: str):
     """Прицепиться к профилю, если он уже открыт автоматизацией; иначе None."""
     udd = _mlx_profile_dir(profile_id, (getattr(entry, "folder_id", "") or ""))
@@ -1117,7 +1134,7 @@ def _attach_open(direct_cls, entry, profile_id: str):
         return None
     direct = direct_cls()
     for spelling in _dir_spellings(udd):
-        conn = direct.attach_existing_only(profile_id, spelling, new_page=True)
+        conn = _attach_existing(direct, profile_id, spelling, new_page=True)
         if conn is not None:
             return conn
     return None
@@ -1177,7 +1194,7 @@ def _attach_only(entry, account_label: str):
 
     direct = direct_cls()
     for spelling in _dir_spellings(udd):
-        conn = direct.attach_existing_only(profile_id, spelling, new_page=True)
+        conn = _attach_existing(direct, profile_id, spelling, new_page=True)
         if conn is not None:
             # Профиль, который прошлое чтение запустило и ещё не закрыло
             # (`CLOSE_GRACE_S`), закроет теперь это чтение.
@@ -1384,7 +1401,10 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
     if udd is not None:
         direct = direct_cls()
         for spelling in _dir_spellings(udd):
-            attached = direct.attach_existing_only(profile_id, spelling)
+            try:
+                attached = _attach_existing(direct, profile_id, spelling)
+            except ProfileNotAttachable as exc:
+                return False, CodedMessage(str(exc), exc.code)
             if attached is not None:
                 attached.close(keep_browser_open=True)
                 return True, "The profile is already open through automation. You can read it."
@@ -1408,8 +1428,11 @@ def open_profile_for_automation(profile_id: str, folder_id: str = "",
         conn = rpa_browser.get_browser_provider("multilogin_attach").open(
             entry, who, allow_missing_dir=True, allow_restart=False)
     except Exception as exc:  # noqa: BLE001
+        from src.fb_ads_rpa import profile_trouble
         from src.fb_api import mlx_session as _mlx
 
+        if isinstance(exc, profile_trouble.ProfileStop):   # ACL-1138: нет прокси
+            return False, CodedMessage(profile_trouble.message(exc.code) or str(exc), exc.code)
         text, code = _mlx.humanize(exc, instance, who)   # ACL-1826
         if code:
             return False, CodedMessage(text, code)
