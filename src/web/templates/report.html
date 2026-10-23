@@ -5639,6 +5639,9 @@ window.cbSrv = (function () {
   var last = {};          // имя → последний замеченный снимок (строкой)
   var dirty = {};         // имя → ждёт отправки
   var timers = {};
+  var generations = {};   // имя → поколение локального изменения
+  var inFlight = {};      // один запрос на документ; более новые изменения ждут
+  var flushing = {};      // pagehide: следующая ожидающая запись тоже keepalive
   var ready = false;      // серверные копии получены и сверены
   var docs = {};          // что ответил сервер (модуль может зарегистрироваться позже ответа)
   var pulling = false;
@@ -5661,21 +5664,38 @@ window.cbSrv = (function () {
   function snap(name) { return JSON.stringify(regs[name].snapshot()); }
 
   function post(name, keepalive) {
+    if (keepalive) flushing[name] = true;
+    if (inFlight[name]) return;
     var reg = regs[name];
     var at = stamp(name);
+    var generation = generations[name] || 0;
     var body = JSON.stringify({ name: name, saved_at: at, base: meta.base[name] || null, data: reg.snapshot() });
+    inFlight[name] = true;
+    keepalive = !!flushing[name];
+    flushing[name] = false;
     dirty[name] = false;
     return fetch(URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body, keepalive: !!keepalive })
       .then(function (r) { return r.json(); })
       .then(function (j) {
         if (!j || j.ok !== true || !j.doc) { dirty[name] = true; return; }
-        if (j.accepted) { setStamp(name, at, j.doc.saved_at); return; }
+        /* Ответ подтверждает серверную базу именно этой записи. Он не меняет
+           метку и содержимое более нового локального поколения. */
+        meta.base[name] = j.doc.saved_at; persist();
+        if (j.accepted || (generations[name] || 0) !== generation) return;
         /* Сервер новее (писали с другого адреса/вкладки): берём его. */
         reg.apply(j.doc);
         last[name] = snap(name);
         setStamp(name, j.doc.saved_at, j.doc.saved_at);
       })
-      .catch(function () { dirty[name] = true; });
+      .catch(function () { dirty[name] = true; })
+      .then(function () {
+        inFlight[name] = false;
+        /* Дебаунс мог истечь, пока ждали ответ. Отправляем только последний
+           снимок, уже с подтверждённой базой; отказ сети сам себя не повторяет. */
+        if (dirty[name] && (generations[name] || 0) !== generation && (!timers[name] || flushing[name])) {
+          post(name, flushing[name]);
+        }
+      });
   }
 
   function reconcile(name, doc) {
@@ -5734,6 +5754,7 @@ window.cbSrv = (function () {
       var now = snap(name);
       if (now === last[name]) return;
       last[name] = now;
+      generations[name] = (generations[name] || 0) + 1;
       setStamp(name, Math.max(Date.now(), stamp(name) + 1));
       dirty[name] = true;
       if (ready) schedule(name); else pull();

@@ -346,3 +346,95 @@ def test_without_the_server_the_builder_works_on_local_storage_alone(browser):
     assert _asset(p) == "Offline"
     assert not errors, errors
     ctx.close()
+
+
+@pytest.fixture
+def autosave(browser):
+    """Real cbSrv with deterministic clock, debounce and delayed fetch replies."""
+    page = browser.new_page()
+    page.route("**/*", lambda route: route.fulfill(content_type="text/html", body="<html></html>"))
+    page.goto("http://acl.test/")
+    page.evaluate("""() => {
+      localStorage.clear();
+      const t = window.draftsTest = { now: 0, data: {}, server: null, posts: [], keepalive: [], pending: [], applied: [], timers: new Map(), seq: 0 };
+      const copy = x => JSON.parse(JSON.stringify(x));
+      Date.now = () => t.now;
+      window.setTimeout = fn => { const id = ++t.seq; t.timers.set(id, fn); return id; };
+      window.clearTimeout = id => t.timers.delete(id);
+      window.fetch = (url, opts) => {
+        if (!opts || !opts.method) return Promise.resolve({ json: () => Promise.resolve({ ok: true, docs: {} }) });
+        const body = JSON.parse(opts.body);
+        t.posts.push(body);
+        t.keepalive.push(opts.keepalive);
+        const accepted = !t.server || body.saved_at >= t.server.saved_at;
+        if (accepted) t.server = { saved_at: body.saved_at, data: copy(body.data) };
+        const answer = { ok: true, accepted, doc: copy(t.server) };
+        return new Promise(resolve => t.pending.push(() => resolve({ json: () => Promise.resolve(answer) })));
+      };
+      t.edit = (at, text) => { t.now = at; t.data = { text }; cbSrv.note('keep'); };
+      t.tick = () => { const fs = [...t.timers.values()]; t.timers.clear(); fs.forEach(fn => fn()); };
+      t.reply = () => t.pending.shift()();
+      t.result = () => ({ data: t.data, server: t.server, posts: t.posts,
+        applied: t.applied, meta: JSON.parse(localStorage.getItem('acl.builder.sync')) });
+    }""")
+    template = (ROOT / "src/web/templates/report.html").read_text(encoding="utf-8")
+    start = template.index("window.cbSrv = (function () {")
+    page.add_script_tag(content=template[start:template.index("</script>", start)])
+    page.evaluate("""() => cbSrv.register('keep', {
+      snapshot: () => draftsTest.data,
+      legacyAt: () => 0,
+      apply: doc => { draftsTest.applied.push(doc); draftsTest.data = doc.data; }
+    })""")
+    page.wait_for_function("cbSrv.ready()")
+    yield page
+    page.close()
+
+
+@pytest.mark.parametrize("closing", [False, True])
+def test_delayed_save_acknowledgement_keeps_and_serializes_the_latest_edit(autosave, closing):
+    page = autosave
+    page.evaluate("draftsTest.edit(1000, 'A'); draftsTest.tick()")
+    page.evaluate("draftsTest.edit(2000, 'B'); draftsTest.tick()")
+    assert page.evaluate("draftsTest.posts.length") == 1, "same-document writes overlapped"
+    page.evaluate("draftsTest.edit(3000, 'C')")
+    if closing:
+        page.evaluate("cbSrv.flush()")
+    assert page.evaluate("draftsTest.posts.length") == 1
+    page.evaluate("draftsTest.reply()")
+    before = page.evaluate("draftsTest.result()")
+    assert before["data"] == {"text": "C"}
+    assert before["meta"] == {"at": {"keep": 3000}, "base": {"keep": 1000}}
+    page.evaluate("draftsTest.tick()")
+    sent = page.evaluate("draftsTest.posts")
+    assert sent == [
+        {"name": "keep", "saved_at": 1000, "base": None, "data": {"text": "A"}},
+        {"name": "keep", "saved_at": 3000, "base": 1000, "data": {"text": "C"}},
+    ]
+    assert page.evaluate("draftsTest.keepalive") == [False, closing]
+    page.evaluate("draftsTest.reply()")
+    final = page.evaluate("draftsTest.result()")
+    assert final["server"] == {"saved_at": 3000, "data": {"text": "C"}}
+    assert final["data"] == {"text": "C"} and final["applied"] == []
+    assert final["meta"] == {"at": {"keep": 3000}, "base": {"keep": 3000}}
+    page.evaluate("cbSrv.flush()")
+    assert page.evaluate("draftsTest.posts.length") == 2, "acknowledged draft stayed dirty"
+
+
+def test_delayed_refusal_preserves_a_newer_local_edit_and_uses_the_server_base(autosave):
+    page = autosave
+    page.evaluate("draftsTest.server = { saved_at: 2000, data: { text: 'B from another tab' } }")
+    page.evaluate("draftsTest.edit(1000, 'A'); draftsTest.tick()")
+    page.evaluate("draftsTest.edit(3000, 'C'); draftsTest.tick(); draftsTest.reply()")
+    before = page.evaluate("draftsTest.result()")
+    assert before["data"] == {"text": "C"}, "an old refusal replaced a later dirty edit"
+    assert before["applied"] == []
+    assert before["meta"] == {"at": {"keep": 3000}, "base": {"keep": 2000}}
+    assert before["posts"][1] == {
+        "name": "keep", "saved_at": 3000, "base": 2000, "data": {"text": "C"},
+    }
+    page.evaluate("draftsTest.reply()")
+    final = page.evaluate("draftsTest.result()")
+    assert final["server"] == {"saved_at": 3000, "data": {"text": "C"}}
+    assert final["meta"] == {"at": {"keep": 3000}, "base": {"keep": 3000}}
+    page.evaluate("cbSrv.flush()")
+    assert page.evaluate("draftsTest.posts.length") == 2
