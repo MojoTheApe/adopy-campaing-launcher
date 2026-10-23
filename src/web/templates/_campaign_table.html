@@ -219,6 +219,25 @@
   .hc-cmd-txt { font-size: 0.75rem !important; white-space: nowrap; }
   .hc-chip { display: inline-block; padding: 1px 8px; border-radius: var(--adopy-radius-sm); font-size: 0.75rem; font-weight: 500; cursor: help; }
   .hc-chip.alert { background: var(--adopy-warning-bg); color: var(--adopy-warning); }
+  /* Ячейка Rules (ACL-1822): число правил, режим и итог; щелчок открывает инспектор объекта. */
+  .hc-rulecell { display: inline-flex; gap: 0.25rem; align-items: center; padding: 1px 8px; border: 1px solid var(--adopy-border-strong); border-radius: var(--adopy-radius-sm); background: var(--adopy-surface); color: var(--adopy-selected-text); font: inherit; font-size: 0.75rem; font-weight: 600; cursor: pointer; }
+  .hc-rulecell:hover { background: var(--adopy-surface-hover); }
+  .hc-rulecell.act { border-color: var(--adopy-primary); background: var(--adopy-selected-bg); }
+  .hc-rulecell.warn { border-color: var(--adopy-warning); color: var(--adopy-warning); }
+  .hc-rinsp { width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 0; border: 1px solid var(--adopy-border-strong); border-radius: var(--adopy-radius-lg); background: var(--adopy-surface); color: var(--adopy-text); }
+  .hc-rinsp::backdrop { background: rgb(10 16 26 / 55%); }
+  .hc-rinsp-in { display: flex; flex-direction: column; max-height: calc(100vh - 48px); }
+  .hc-rinsp-head, .hc-rinsp-foot { padding: 0.875rem 1.125rem; }
+  .hc-rinsp-head { border-bottom: 1px solid var(--adopy-border); } .hc-rinsp-head h3 { margin: 0; font-size: 1.0625rem; }
+  .hc-rinsp-body { padding: 0.875rem 1.125rem; overflow: auto; min-height: 0; }
+  .hc-rinsp-foot { display: flex; justify-content: flex-end; border-top: 1px solid var(--adopy-border); }
+  .hc-rinsp-rule { padding: 0.75rem; margin-bottom: 0.625rem; border: 1px solid var(--adopy-border); border-radius: var(--adopy-radius-md); background: var(--adopy-surface-subtle); overflow-wrap: anywhere; }
+  .hc-rinsp-rule dl { display: grid; grid-template-columns: 8rem minmax(0, 1fr); gap: 0.25rem 0.75rem; margin: 0.5rem 0 0; }
+  .hc-rinsp-rule dt { color: var(--adopy-text-muted); } .hc-rinsp-rule dd { margin: 0; }
+  .hc-rinsp-act { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.625rem; }
+  .hc-rinsp button.hc-b { padding: 0.3125rem 0.75rem; border: 1px solid var(--adopy-border-strong); border-radius: var(--adopy-radius-md); background: var(--adopy-surface); color: var(--adopy-text); font: inherit; cursor: pointer; }
+  .hc-rinsp button.hc-b.primary { background: var(--adopy-primary); border-color: var(--adopy-primary); color: var(--adopy-on-primary); font-weight: 600; }
+  .hc-rinsp button.hc-b:disabled { opacity: 0.55; cursor: not-allowed; }
   .hc-chip.note { background: var(--adopy-neutral-bg); color: var(--adopy-text-muted); }
   .hc-hint-ok { color: var(--adopy-success); font-weight: 500; } .hc-hint-warn { color: var(--adopy-warning); font-weight: 500; } .hc-hint-neutral { color: var(--adopy-text); }
   .hc-table tr.hc-r-adset > td { background: var(--adopy-surface-subtle); }
@@ -296,6 +315,7 @@
 </template>
 
 <script src="/static/acm_commands.js"></script>
+<script src="/static/rules_ui.js"></script>
 <script>
 (function () {
   'use strict';
@@ -383,6 +403,7 @@
     avail: null,                     // ответ /campaign-commands/availability (null — ещё не знаем)
     notes: {},                       // key -> {text, tone}: итог последней команды по строке
     q: '', delivery: 'all',
+    rulesCells: {},                  // account -> {ключ объекта: ячейка Rules} | null (недоступно); ACL-1822
     ctx: {},                         // account -> {goal_cpa, benchmark_cpa, …} из My Goals и benchmarks
     warm: {available: false, actions: false, accounts: {}},   // ACL-1812: состояние профилей; нет API — чип и кнопка скрыты
     warmBusy: {}, warmMsg: {}
@@ -510,6 +531,19 @@
     }
     return '<td class="hc-gl">' + one('duplicate', 'Duplicate here', '&#10697; Duplicate') + ' ' + one('copy', 'Copy to accounts', 'Copy to… &#8647;') + '</td>';
   }
+  /* Ячейка Rules (ACL-1822): сколько правил назначено объекту, режим и последний итог. Данные - локальный
+     GET /rules/cells по журналу правил, Meta не трогается. Пока данные не загружены или не пришли,
+     ячейка пишет причину, а не «No rules». */
+  var RULE_MODE = {disabled: 'Disabled', observe: 'Observe', suggest: 'Suggest', automatic: 'Automatic'};
+  function rulesCell(r) {
+    var m = S.rulesCells[r.account];
+    if (m === undefined) return '<td class="hc-gl">' + na('Rules are not loaded yet') + '</td>';
+    if (m === null) return '<td class="hc-gl">' + na('Rules could not be loaded for this account') + '</td>';
+    var c = m[r.key];
+    if (!c) return '<td class="hc-gl"><span class="hc-sub2">No rules</span></td>';
+    return '<td class="hc-gl"><button type="button" class="hc-rulecell ' + esc(c.tone) + '" data-rules-open="' + esc(r.key) + '" data-account="' + esc(r.account) +
+      '" title="Open the rules for this object">' + c.count + ' · ' + esc(RULE_MODE[c.mode] || c.mode) + '</button><span class="hc-sub2">' + esc(c.result) + '</span></td>';
+  }
   var COLS = [
     {k: 'delivery', g: 'controls', h: 'Delivery', w: 150, cell: function (r) {
       var d = r.delivery || {};
@@ -551,6 +585,7 @@
       var txt = al ? al + ' alert' + (al === 1 ? '' : 's') : list.length + ' note' + (list.length === 1 ? '' : 's');
       return '<td class="hc-gl"><span class="hc-chip ' + (al ? 'alert' : 'note') + '" title="' + esc(list.map(function (x) { return x.text; }).join('\n')) + '">' + esc(txt) + '</span></td>';
     }},
+    {k: 'rules', g: 'controls', h: 'Rules', w: 190, cell: rulesCell},
     {k: 'goal', g: 'controls', h: 'Goal CPA', w: 112, num: 1, cell: ctxCell('goal_cpa', 'goal_note')},
     {k: 'bench', g: 'controls', h: 'Benchmark CPA', w: 124, num: 1, cell: ctxCell('benchmark_cpa', 'benchmark_note')},
     {k: 'b_spend', g: 'bi', h: 'Spend', w: 104, num: 1, cell: biCell('spend', usd)},
@@ -587,7 +622,7 @@
     {k: 't_hist', g: 'tracker', h: 'History', w: 110, cell: trackerCell('Per-object history is not recorded; see “What was changed here” below')}
   ];
   var GROUPS = {controls: 'MANAGEMENT & DECISIONS', bi: 'BI · business outcomes', meta: 'META · delivery', tracker: 'TRACKER & CONTEXT'};
-  var CTRL = ['delivery', 'dup', 'bid', 'budgetcmd'], BI_ALL = ['b_spend', 'b_leads', 'b_ftds', 'b_dep', 'b_cpl', 'b_cpa', 'b_cr', 'b_match'];
+  var CTRL = ['delivery', 'dup', 'bid', 'budgetcmd', 'rules'], BI_ALL = ['b_spend', 'b_leads', 'b_ftds', 'b_dep', 'b_cpl', 'b_cpa', 'b_cr', 'b_match'];
   var DECIDE = ['hint', 'alerts', 'goal', 'bench'];
   var PRESETS = {
     optimization: CTRL.concat(DECIDE, ['b_spend', 'b_leads', 'b_ftds', 'b_cpa', 'b_cr', 'b_match', 'm_spend', 'm_cpm', 'm_ctr']),
@@ -601,11 +636,16 @@
     if (saved && typeof saved.preset === 'string' && Array.isArray(saved.visible)) {
       var known = COLS.map(function (c) { return c.k; });
       colState = {preset: saved.preset, visible: saved.visible.filter(function (k) { return known.indexOf(k) >= 0; })};
+      /* Раскладка, сохранённая до колонки Rules (ACL-1822), её не знает: добавляем рядом с Alerts один раз. */
+      if (!saved.rules_seen && colState.visible.indexOf('rules') < 0) {
+        var at = colState.visible.indexOf('alerts');
+        colState.visible.splice(at < 0 ? colState.visible.length : at + 1, 0, 'rules');
+      }
     }
   } catch (e) { /* без памяти: хранилище закрыто или повреждено */ }
   /* Раскладка колонок общая: сменили пресет в одной таблице — остальные следуют. */
   function saveCols() {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(colState)); } catch (e) { /* нет хранилища */ }
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({preset: colState.preset, visible: colState.visible, rules_seen: true})); } catch (e) { /* нет хранилища */ }
     instances.forEach(function (i) { if (i !== api) i.setCols(colState); });
   }
   function visibleCols() { return COLS.filter(function (c) { return colState.visible.indexOf(c.k) >= 0; }); }
@@ -938,7 +978,17 @@
       S.ctx[account] = j.context || {};
       S.treeErr[account] = '';
       if (j.summary) { S.summaries[account] = j.summary; S.fetchedAt[account] = Date.now(); }
-    }, function (e) { S.treeErr[account] = String(e && e.message || e); });
+    }, function (e) { S.treeErr[account] = String(e && e.message || e); }).then(function () { return loadRulesCells(account); });
+  }
+  /* Ячейки Rules: локальный GET по журналу правил. Сбой не ломает таблицу: ячейка пишет «could not be loaded». */
+  function ruleOwner() {
+    var h = window.acmCommands && window.acmCommands.home;
+    return (h && h.actor && h.actor()) || '';
+  }
+  function loadRulesCells(account) {
+    return getJson('/rules/cells?account=' + encodeURIComponent(account) + '&owner=' + encodeURIComponent(ruleOwner())).then(function (j) {
+      S.rulesCells[account] = j.cells || {};
+    }, function () { S.rulesCells[account] = null; });
   }
   function loadKids(row) {
     var level = row.level === 'campaign' ? 'adset' : 'ad';
@@ -949,6 +999,77 @@
     }, function (e) {
       S.kids[row.key] = {state: 'error', note: String(e && e.message || e)};
     }).then(render);
+  }
+  /* Инспектор объекта (ACL-1822): какие правила назначены, что они решили и почему. «Apply» - только
+     через `acmCommands.run` (превью → подтверждение → чтение Meta); «Dismiss» - пометка в журнале правил. */
+  function openRulesInspector(account, key) {
+    var c = ((S.rulesCells[account] || {})[key]), R = window.aclRules, row = findRow(key);
+    if (!c || !R) return;
+    var old = root.querySelector('.hc-rinsp'); if (old) old.remove();
+    var dlg = document.createElement('dialog');
+    dlg.className = 'hc-rinsp'; dlg.setAttribute('aria-label', 'Rules for this object');
+    function note(text) { var n = dlg.querySelector('[data-rnote]'); if (n) n.textContent = text; }
+    dlg.innerHTML = '<div class="hc-rinsp-in"><div class="hc-rinsp-head"><h3>' + esc(row ? row.name : key) + '</h3><span class="hc-sub2">' + esc(account) + ' · ' + esc(key) + '</span></div>' +
+      '<div class="hc-rinsp-body">' + c.rules.map(function (x, i) {
+        var p = x.proposal;
+        return '<div class="hc-rinsp-rule"><b>' + esc(x.name) + '</b> <span class="hc-chip note">' + esc(RULE_MODE[x.mode] || x.mode) + '</span>' +
+          '<dl><dt>Result</dt><dd>' + esc(x.result) + '</dd>' +
+          (p ? '<dt>Proposed</dt><dd>' + esc(R.proposalText(p)) + '</dd>' : '') +
+          '<dt>Evidence</dt><dd>' + esc(x.observed && Object.keys(x.observed).length ? R.observedText(x.observed) : 'Not evaluated yet') + '</dd>' +
+          '<dt>Identity</dt><dd>' + esc(R.identityText(x.identity)) + '</dd>' +
+          (x.reasons.length ? '<dt>Why not</dt><dd>' + esc(x.reasons.join(' · ')) + '</dd>' : '') +
+          (x.notes.length ? '<dt>Notes</dt><dd>' + esc(x.notes.join(' · ')) + '</dd>' : '') +
+          (x.evaluated_at ? '<dt>Evaluated</dt><dd>' + esc(x.evaluated_at) + '</dd>' : '') + '</dl>' +
+          '<div class="hc-rinsp-act"><button type="button" class="hc-b" data-ropen="' + i + '">Open rule</button>' +
+          (p ? '<button type="button" class="hc-b primary" data-rapply="' + i + '">Apply…</button><button type="button" class="hc-b" data-rdismiss="' + i + '">Dismiss</button>' : '') +
+          (x.applied ? '<span class="hc-sub2">' + esc(R.undoLabel(x.applied)) + '</span>' +
+            (R.canUndo(x.applied) ? '<button type="button" class="hc-b" data-rundo="' + i + '">Undo…</button>' : '') : '') + '</div></div>';
+      }).join('') + '<p class="hc-sub2" data-rnote role="status"></p></div>' +
+      '<div class="hc-rinsp-foot"><button type="button" class="hc-b" data-rclose>Close</button></div></div>';
+    dlg.addEventListener('click', function (ev) {
+      var b = ev.target.closest ? ev.target.closest('button') : null; if (!b) return;
+      var x = c.rules[Number(b.dataset.ropen || b.dataset.rapply || b.dataset.rdismiss || b.dataset.rundo)];
+      if (b.dataset.rclose != null) { dlg.close(); return; }
+      if (b.dataset.ropen != null) {
+        dlg.close();
+        var link = document.querySelector('.sidebar-link[data-view="rules"]'); if (link) link.click();
+        var pg = window.aclRulesPage; if (pg) { pg.start(); pg.state.selId = x.rule_id; pg.state.draft = null; pg.reload(true); }
+        return;
+      }
+      if (b.dataset.rapply != null) {
+        /* Тот же путь, что у переключателя строки: превью → подтверждение → запись → чтение Meta
+           (`runCommand` → `acmCommands.home.flow`); строка меняется только подтверждённым чтением.
+           Журналу правил после итога отдаём op_id: переход он берёт у сервера команд. */
+        var req = R.proposalRequest(x.proposal), target = findRow(key);
+        if (!req || !target) { note('This suggestion cannot be applied from here. Open the rule.'); return; }
+        b.disabled = true; dlg.close();
+        runCommand([target], req.command, req.value).then(function (res) {
+          if (!res || res.kind === 'cancelled' || res.kind === 'nothing' || !res.op || !res.op.op_id) return;
+          return R.postJson(fetch.bind(window), '/rules/action-result', {action_id: x.proposal.action_id, op_id: res.op.op_id, owner: ruleOwner()}).catch(function () {});
+        }).then(function () { return loadRulesCells(account); }).then(render);
+        return;
+      }
+      if (b.dataset.rundo != null) {
+        var target = findRow(key);
+        if (!target) { note('Open the rule to review this undo.'); return; }
+        b.disabled = true; dlg.close();
+        R.undoProposal(x.applied, ruleOwner(), { acm: { run: function (req) {
+          return runCommand([target], req.command, req.value).then(function (res) {
+            return res && res.op && res.kind !== 'cancelled' && res.kind !== 'nothing' ? res.op : {cancelled: true};
+          });
+        } } }).then(function () { return loadRulesCells(account); }).then(render).catch(function (e) {
+          say([target], 'Undo not completed: ' + (e && e.message || e) + '. Check current values before another change.', 'bad'); render();
+        });
+        return;
+      }
+      if (b.dataset.rdismiss != null) {
+        R.dismissProposal(x.proposal, ruleOwner()).then(function () { return loadRulesCells(account).then(function () { dlg.close(); render(); }); },
+          function (e) { note('Not dismissed: ' + (e && e.message || e)); });
+      }
+    });
+    dlg.addEventListener('close', function () { dlg.remove(); });
+    root.appendChild(dlg);
+    dlg.showModal();
   }
   function findRow(key) {
     var found = null;
@@ -1026,10 +1147,12 @@
     rows = plan.rows;                       // строки с идущей командой в пакет не входят
     el('batch-note').textContent = plan.skippedBusy ? plan.skippedBusy + ' busy row(s) left out' : '';
     setBusy(rows, true); say(rows, 'Previewing…', 'busy'); render();
+    var outcome = null;
     return ACM.home.flow({account: plan.account, actor: ACM.home.actor(), command: command, value: value, targets: plan.targets}, {
       onState: function (text) { say(rows, text, 'busy'); render(); }
     }).then(function (res) {
       /* Строку меняет только `settle`, и только подтверждённым чтением Meta; остальное — пометка. */
+      outcome = res;
       var notes = ACM.home.settle(rows, res);
       rows.forEach(function (r) { if (notes[r.key]) S.notes[r.key] = noteFrom(notes[r.key].text, notes[r.key].tone); else delete S.notes[r.key]; });
       if ((res.kind === 'failed' || res.kind === 'unknown' || res.kind === 'nothing') && res.message) el('batch-note').textContent = noteFrom(res.message, 'warn').text;
@@ -1037,7 +1160,7 @@
       /* Сюда — только когда сервер НЕ принял запись (отказ превью/исполнения): ничего не отправлено. */
       var nf = noteFrom('Not sent: ' + String(e && e.message || e), 'bad', e && e.code);
       rows.forEach(function (r) { S.notes[r.key] = nf; });
-    }).then(function () { setBusy(rows, false); render(); });
+    }).then(function () { setBusy(rows, false); render(); return outcome; });
   }
 
   function currencyOf(rows) { return (rows[0] && rows[0].currency) || ''; }
@@ -1143,6 +1266,8 @@
     var t = ev.target;
     var cb = t.closest ? t.closest('button[data-action]') : null;
     if (cb) { if (!cb.disabled) onCommand(cb); return; }
+    var rb = t.closest ? t.closest('[data-rules-open]') : null;
+    if (rb) { openRulesInspector(rb.dataset.account, rb.dataset.rulesOpen); return; }
     var b = t.closest ? t.closest('[data-exp],[data-retry],[data-details]') : null;
     if (!b) return;
     if (b.dataset.details) { var did = b.dataset.details; if (S.details[did]) delete S.details[did]; else S.details[did] = true; render(); return; }

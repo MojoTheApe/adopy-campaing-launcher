@@ -1,0 +1,749 @@
+{# Страница Rules (ACL-1822): список правил слева и редактор справа - «Decision flow» внутри оболочки Split.
+
+   Живёт в основной области (`#view-rules`) и никогда не заменяет правый билдер. Данные - локальные
+   GET /rules/* (файлы правил и последняя оценка), Meta и профили не трогаются. В кампании пишет только
+   кнопка «Apply» у предложения - через `acmCommands.run` (превью → подтверждение → чтение Meta).
+   Только при ACL_FB_BACKEND=api: под rpa вместо страницы стоит одна строка «Rules need the API backend».
+
+   Макет: `rules-flow` Codex (Decision flow). Переключателя вариантов, демо-данных и «Try a scenario» нет.
+   Токены Adopy объявлены на `.rl`, как у таблицы кампаний (`.hc`). #}
+{% set rl_live = campaign_table_api is defined and campaign_table_api() %}
+<style>
+  .rl {
+    --adopy-bg: #f4f5f7; --adopy-surface: #ffffff; --adopy-surface-subtle: #f7f8fa;
+    --adopy-surface-hover: #eef0f4; --adopy-border: #dfe3ea; --adopy-border-strong: #c6cfdc;
+    --adopy-control-border: #7c899d; --adopy-text: #202a39; --adopy-text-muted: #606c80;
+    --adopy-primary: #2563eb; --adopy-on-primary: #ffffff; --adopy-selected-bg: #edf3ff;
+    --adopy-selected-text: #245ace; --adopy-focus: #2563eb;
+    --adopy-success: #216e4e; --adopy-success-bg: #edf7f1;
+    --adopy-warning: #855812; --adopy-warning-bg: #fcf5e9; --adopy-warning-line: #a7731f;
+    --adopy-danger: #b42318; --adopy-danger-bg: #fff0ed;
+    --adopy-neutral-bg: #eef0f4;
+    --adopy-shadow-sm: 0 1px 3px rgb(24 44 76 / 6%);
+    --adopy-radius-sm: 6px; --adopy-radius-md: 8px; --adopy-radius-lg: 10px; --adopy-radius-pill: 999px;
+    --adopy-font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  }
+  :root[data-theme="dark"] .rl {
+    --adopy-bg: #111720; --adopy-surface: #19222e; --adopy-surface-subtle: #202b39;
+    --adopy-surface-hover: #263446; --adopy-border: #354459; --adopy-border-strong: #4b5e76;
+    --adopy-control-border: #75869d; --adopy-text: #edf2fa; --adopy-text-muted: #a4b3c8;
+    --adopy-primary: #83aaff; --adopy-on-primary: #10233f; --adopy-selected-bg: #223957;
+    --adopy-selected-text: #a9c7ff; --adopy-focus: #83aaff;
+    --adopy-success: #8ad1ad; --adopy-success-bg: #1e3c32;
+    --adopy-warning: #e5bd78; --adopy-warning-bg: #3c3223; --adopy-warning-line: #c99a4a;
+    --adopy-danger: #ffb4aa; --adopy-danger-bg: #462a2e;
+    --adopy-neutral-bg: #263446;
+    --adopy-shadow-sm: 0 1px 3px rgb(0 0 0 / 20%);
+  }
+  .rl { min-width: 0; max-width: 100%; color: var(--adopy-text); font-family: var(--adopy-font-sans); font-size: 0.875rem; line-height: 1.45; }
+  .rl *, .rl *::before, .rl *::after { box-sizing: border-box; }
+  .rl button, .rl input, .rl select { font: inherit; color: inherit; }
+  .rl-kicker { margin: 0; font-size: 0.6875rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--adopy-text-muted); }
+  .rl-top { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .5rem 1rem; margin: 0 0 .75rem; }
+  .rl-top h2 { margin: 0; font-size: 1.5rem; font-weight: 700; }
+  .rl-top .rl-grow { flex: 1 1 240px; min-width: 0; }
+  .rl-sources {
+    display: flex; flex-wrap: wrap; gap: .25rem 1.25rem; align-items: center; padding: .625rem .875rem; margin-bottom: 1rem;
+    background: var(--adopy-surface); border: 1px solid var(--adopy-border); border-radius: var(--adopy-radius-md); font-size: .8125rem;
+  }
+  .rl-sources b { font-weight: 600; }
+  .rl-muted { color: var(--adopy-text-muted); }
+  .rl-btn {
+    display: inline-flex; align-items: center; gap: .375rem; padding: .4375rem .75rem; border: 1px solid var(--adopy-border-strong);
+    border-radius: var(--adopy-radius-md); background: var(--adopy-surface); cursor: pointer; font-weight: 500; line-height: 1.2;
+  }
+  .rl-btn:hover:not(:disabled) { background: var(--adopy-surface-hover); }
+  .rl-btn:disabled { opacity: .55; cursor: not-allowed; }
+  .rl-btn.primary { background: var(--adopy-primary); border-color: var(--adopy-primary); color: var(--adopy-on-primary); font-weight: 600; }
+  .rl-btn.primary:hover:not(:disabled) { filter: brightness(1.08); background: var(--adopy-primary); }
+  .rl-btn.small { padding: .25rem .5rem; font-size: .8125rem; }
+  .rl button:focus-visible, .rl input:focus-visible, .rl select:focus-visible { outline: 2px solid var(--adopy-focus); outline-offset: 2px; }
+  .rl-shell { display: grid; grid-template-columns: 236px minmax(0, 1fr); border: 1px solid var(--adopy-border); border-radius: var(--adopy-radius-lg); background: var(--adopy-surface); overflow: hidden; min-height: 420px; }
+  .rl-list { border-right: 1px solid var(--adopy-border); padding: 1rem .75rem; min-width: 0; background: var(--adopy-surface); }
+  .rl-list h3 { display: flex; justify-content: space-between; margin: 0 0 .625rem; font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; color: var(--adopy-text-muted); font-weight: 600; }
+  .rl-item { display: flex; flex-direction: column; align-items: flex-start; gap: .25rem; width: 100%; text-align: left; padding: .625rem .625rem; margin-bottom: .375rem; border: 1px solid transparent; border-radius: var(--adopy-radius-md); background: transparent; cursor: pointer; }
+  .rl-item:hover { background: var(--adopy-surface-hover); }
+  .rl-item[aria-current="true"] { background: var(--adopy-surface); border-color: var(--adopy-primary); box-shadow: var(--adopy-shadow-sm); }
+  .rl-item b { font-weight: 600; overflow-wrap: anywhere; }
+  .rl-sub { font-size: .75rem; color: var(--adopy-text-muted); overflow-wrap: anywhere; }
+  .rl-h-ok { color: var(--adopy-success); } .rl-h-stale, .rl-h-blocked, .rl-h-never { color: var(--adopy-warning); } .rl-h-error { color: var(--adopy-danger); }
+  .rl-chip { display: inline-block; padding: .0625rem .5rem; border-radius: var(--adopy-radius-sm); font-size: .75rem; font-weight: 600; background: var(--adopy-selected-bg); color: var(--adopy-selected-text); }
+  .rl-chip.m-disabled { background: var(--adopy-neutral-bg); color: var(--adopy-text-muted); }
+  .rl-chip.m-observe { background: var(--adopy-neutral-bg); color: var(--adopy-text); }
+  .rl-chip.ok { background: var(--adopy-success-bg); color: var(--adopy-success); }
+  .rl-chip.warn { background: var(--adopy-warning-bg); color: var(--adopy-warning); }
+  .rl-chip.bad { background: var(--adopy-danger-bg); color: var(--adopy-danger); }
+  .rl-list-actions { display: flex; flex-wrap: wrap; gap: .375rem; margin-top: .75rem; padding-top: .75rem; border-top: 1px solid var(--adopy-border); }
+  .rl-editor { min-width: 0; }
+  .rl-ehead { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: 1.125rem 1.25rem .875rem; border-bottom: 1px solid var(--adopy-border); }
+  .rl-ehead .rl-title { flex: 1 1 260px; min-width: 0; }
+  .rl .rl-name { width: 100%; padding: .125rem .375rem; margin-left: -.375rem; border: 1px solid transparent; border-radius: var(--adopy-radius-sm); background: transparent; font-size: 1.25rem; font-weight: 700; }
+  .rl .rl-name:hover { border-color: var(--adopy-border); } .rl .rl-name:focus { border-color: var(--adopy-focus); background: var(--adopy-surface); }
+  .rl-ehead .rl-acts { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+  .rl-basis { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .625rem 1.25rem; background: var(--adopy-surface-subtle); border-bottom: 1px solid var(--adopy-border); }
+  .rl-basis .rl-right { margin-left: auto; font-size: .75rem; color: var(--adopy-text-muted); }
+  .rl-seg { padding: .25rem .75rem; border: 1px solid var(--adopy-border-strong); border-radius: var(--adopy-radius-sm); background: var(--adopy-surface); font-weight: 500; }
+  .rl-seg[aria-pressed="true"] { border-color: var(--adopy-primary); color: var(--adopy-selected-text); background: var(--adopy-selected-bg); }
+  .rl-seg:disabled { opacity: .55; cursor: not-allowed; }
+  .rl-body { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); gap: 0; }
+  .rl-settings { padding: 1.25rem; border-right: 1px solid var(--adopy-border); min-width: 0; }
+  .rl-why { padding: 1.25rem; min-width: 0; }
+  .rl-settings label, .rl-field-l { display: block; margin: .75rem 0 .25rem; font-size: .8125rem; font-weight: 600; }
+  .rl-in { width: 100%; padding: .4375rem .625rem; border: 1px solid var(--adopy-control-border); border-radius: var(--adopy-radius-md); background: var(--adopy-surface); }
+  .rl-in.sm { width: 6rem; }
+  .rl-hint { margin: .25rem 0 0; font-size: .75rem; color: var(--adopy-text-muted); }
+  .rl-box { padding: .75rem; border: 1px solid var(--adopy-border); border-radius: var(--adopy-radius-md); background: var(--adopy-surface-subtle); }
+  .rl-cond { display: grid; grid-template-columns: minmax(0, 1fr) 3.75rem 5rem; gap: .375rem; align-items: center; margin-top: .5rem; }
+  .rl-cond .rl-unit { grid-column: 1 / -1; margin: -.125rem 0 0; font-size: .6875rem; color: var(--adopy-text-muted); }
+  .rl-cond select { padding: .3125rem .25rem; border: 1px solid var(--adopy-control-border); border-radius: var(--adopy-radius-sm); background: var(--adopy-surface); }
+  .rl-modes { display: grid; gap: .375rem; margin-top: .25rem; }
+  .rl-settings label.rl-mode { margin: 0; font-weight: 500; }
+  .rl-mode { display: flex; gap: .5rem; align-items: flex-start; padding: .5rem .625rem; border: 1px solid var(--adopy-border); border-radius: var(--adopy-radius-md); cursor: pointer; }
+  .rl-mode:has(input:checked) { border-color: var(--adopy-primary); background: var(--adopy-selected-bg); }
+  .rl-mode.off { opacity: .6; cursor: not-allowed; }
+  .rl-mode > span { min-width: 0; }
+  .rl-mode small { display: block; color: var(--adopy-text-muted); font-size: .75rem; font-weight: 400; }
+  .rl-why h3 { margin: 0; font-size: 1rem; }
+  .rl-why-head { display: flex; flex-wrap: wrap; gap: .5rem 1rem; justify-content: space-between; align-items: flex-start; margin-bottom: .75rem; }
+  .rl-count3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .625rem; margin-bottom: .75rem; }
+  .rl-count { padding: .625rem .75rem; border: 1px solid var(--adopy-border); border-radius: var(--adopy-radius-md); background: var(--adopy-surface-subtle); }
+  .rl-count span { display: block; font-size: .75rem; color: var(--adopy-text-muted); }
+  .rl-count b { font-size: 1.375rem; font-variant-numeric: tabular-nums; }
+  .rl-count.hot b { color: var(--adopy-primary); }
+  .rl-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .625rem; margin-bottom: .75rem; }
+  .rl-card { padding: .75rem .875rem; border: 1px solid var(--adopy-border); border-top: 3px solid var(--adopy-border-strong); border-radius: var(--adopy-radius-md); background: var(--adopy-surface); min-width: 0; }
+  .rl-card.ok { border-top-color: var(--adopy-primary); } .rl-card.warn { border-top-color: var(--adopy-warning-line); } .rl-card.bad { border-top-color: var(--adopy-danger); }
+  .rl-card small { display: block; font-size: .6875rem; color: var(--adopy-text-muted); }
+  .rl-card b { display: block; margin: .25rem 0; font-size: 1rem; overflow-wrap: anywhere; }
+  .rl-card span { font-size: .8125rem; color: var(--adopy-text-muted); overflow-wrap: anywhere; }
+  .rl-sentence { padding: .75rem .875rem; margin-bottom: .75rem; border: 1px solid var(--adopy-border); border-radius: var(--adopy-radius-md); background: var(--adopy-surface-subtle); overflow-wrap: anywhere; }
+  .rl-sentence b { display: block; margin-bottom: .25rem; }
+  .rl-banner { padding: .75rem .875rem; margin-bottom: .75rem; border: 1px solid var(--adopy-warning-line); border-left-width: 4px; border-radius: var(--adopy-radius-md); background: var(--adopy-warning-bg); color: var(--adopy-text); }
+  .rl-banner b { display: block; color: var(--adopy-warning); }
+  .rl-banner.bad { border-color: var(--adopy-danger); background: var(--adopy-danger-bg); } .rl-banner.bad b { color: var(--adopy-danger); }
+  .rl-tablewrap { overflow-x: auto; border: 1px solid var(--adopy-border); border-radius: var(--adopy-radius-md); }
+  .rl-table { width: 100%; min-width: 620px; border-collapse: collapse; font-size: .8125rem; }
+  .rl-table th { padding: .5rem .625rem; text-align: left; font-weight: 600; font-size: .75rem; color: var(--adopy-text-muted); background: var(--adopy-surface-subtle); border-bottom: 1px solid var(--adopy-border); }
+  .rl-table td { padding: .625rem; border-bottom: 1px solid var(--adopy-border); vertical-align: top; overflow-wrap: anywhere; }
+  .rl-table tr:last-child td { border-bottom: 0; }
+  .rl-table tr[aria-selected="true"] td { background: var(--adopy-selected-bg); }
+  .rl-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .rl-table .rl-pick { background: none; border: 0; padding: 0; text-align: left; color: var(--adopy-selected-text); font-weight: 600; cursor: pointer; }
+  .rl-table .rl-id { display: block; font-size: .75rem; color: var(--adopy-text-muted); }
+  .rl-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .625rem; margin-bottom: 1rem; }
+  .rl-kpi { padding: .75rem .875rem; background: var(--adopy-surface); border: 1px solid var(--adopy-border); border-radius: var(--adopy-radius-md); }
+  .rl-kpi span { display: block; font-size: .75rem; color: var(--adopy-text-muted); } .rl-kpi b { font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+  .rl-kpi small { display: block; font-size: .75rem; color: var(--adopy-text-muted); }
+  .rl-tabs { display: flex; gap: 1.25rem; margin: 0 0 .75rem; border-bottom: 1px solid var(--adopy-border); }
+  .rl-tab { padding: .5rem 0; background: none; border: 0; border-bottom: 2px solid transparent; font-weight: 600; color: var(--adopy-text-muted); cursor: pointer; }
+  .rl-tab[aria-selected="true"] { color: var(--adopy-selected-text); border-bottom-color: var(--adopy-primary); }
+  .rl-filters { display: grid; gap: .375rem; margin-bottom: .625rem; }
+  .rl-filters select { padding: .3125rem .375rem; font-size: .8125rem; border: 1px solid var(--adopy-control-border); border-radius: var(--adopy-radius-sm); background: var(--adopy-surface); }
+  .rl-panel { padding: 1rem; background: var(--adopy-surface); border: 1px solid var(--adopy-border); border-radius: var(--adopy-radius-lg); }
+  .rl-panel[hidden], .rl-shell[hidden] { display: none; }
+  .rl-resrow { display: flex; flex-wrap: nowrap; align-items: center; gap: .375rem; min-width: 0; }
+  .rl-resrow .t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rl-resrow .rl-btn, .rl-resrow .rl-chip { flex: none; }
+  .rl-applied .rl-resrow { flex-wrap: wrap; margin-top: .5rem; }
+  .rl-applied .t { overflow-wrap: anywhere; white-space: normal; }
+  .rl-table td.rl-resc { min-width: 250px; max-width: 320px; }
+  .rl-res { display: flex; flex-wrap: wrap; gap: .375rem; margin-top: .375rem; }
+  .rl-foot { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: .875rem 1.25rem; border-top: 1px solid var(--adopy-border); }
+  .rl-foot .rl-grow { flex: 1 1 240px; min-width: 0; font-size: .75rem; color: var(--adopy-text-muted); }
+  .rl-state { padding: 1.25rem; margin: 1.25rem; border: 1px solid var(--adopy-border); border-left: 4px solid var(--adopy-border-strong); border-radius: var(--adopy-radius-md); }
+  .rl-state.bad { border-left-color: var(--adopy-danger); } .rl-state.warn { border-left-color: var(--adopy-warning-line); }
+  .rl-state h3 { margin: 0 0 .25rem; font-size: 1.125rem; }
+  .rl-skel { height: 1rem; margin: .625rem 0; border-radius: 4px; background: var(--adopy-neutral-bg); animation: rl-pulse 1.4s ease-in-out infinite; }
+  @keyframes rl-pulse { 50% { opacity: .45; } }
+  @media (prefers-reduced-motion: reduce) { .rl-skel { animation: none; } }
+  .rl-dialog { width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 0; border: 1px solid var(--adopy-border-strong); border-radius: var(--adopy-radius-lg); background: var(--adopy-surface); color: var(--adopy-text); }
+  .rl-dialog::backdrop { background: rgb(10 16 26 / 55%); }
+  .rl-dlg-in { display: flex; flex-direction: column; max-height: calc(100vh - 48px); }
+  .rl-dlg-head { padding: 1rem 1.25rem; border-bottom: 1px solid var(--adopy-border); }
+  .rl-dlg-head h3 { margin: 0; font-size: 1.125rem; }
+  .rl-dlg-body { padding: 1rem 1.25rem; overflow: auto; min-height: 0; }
+  .rl-dlg-foot { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: flex-end; align-items: center; padding: .875rem 1.25rem; border-top: 1px solid var(--adopy-border); }
+  .rl-dlg-foot .rl-grow { flex: 1 1 160px; font-size: .8125rem; color: var(--adopy-text-muted); }
+  .rl-tpls { display: grid; gap: .625rem; }
+  .rl-tpl { text-align: left; padding: .75rem .875rem; border: 1px solid var(--adopy-border); border-radius: var(--adopy-radius-md); background: var(--adopy-surface); cursor: pointer; }
+  .rl-tpl[aria-pressed="true"] { border-color: var(--adopy-primary); background: var(--adopy-selected-bg); }
+  .rl-tpl b { display: block; } .rl-tpl span { font-size: .8125rem; color: var(--adopy-text-muted); }
+  .rl-tree { margin: .5rem 0 0; padding: 0; list-style: none; }
+  .rl-tree li { padding: .25rem 0; } .rl-tree ul { margin: .25rem 0 0 1.5rem; padding: 0; list-style: none; }
+  .rl-tree label { display: flex; gap: .5rem; align-items: baseline; margin: 0; font-weight: 500; }
+  .rl-grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+  .rl-err { margin: .5rem 0 0; color: var(--adopy-danger); font-size: .8125rem; }
+  .rl-saved { font-size: .8125rem; color: var(--adopy-success); }
+  .rl-dirty { font-size: .8125rem; color: var(--adopy-warning); }
+  @media (max-width: 1100px) {
+    .rl-shell { grid-template-columns: minmax(0, 1fr); }
+    .rl-list { border-right: 0; border-bottom: 1px solid var(--adopy-border); }
+    .rl-body { grid-template-columns: minmax(0, 1fr); }
+    .rl-settings { border-right: 0; border-bottom: 1px solid var(--adopy-border); }
+  }
+  @media (max-width: 640px) { .rl-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rl-cards, .rl-count3, .rl-grid2 { grid-template-columns: minmax(0, 1fr); } }
+</style>
+
+<section class="rl" id="rl-root" data-live="{{ '1' if rl_live else '0' }}" aria-label="Rules">
+  <div class="rl-top">
+    <div class="rl-grow">
+      <p class="rl-kicker">Workspace / Automation</p>
+      <h2>Rules <span class="rl-muted" style="font-size:.875rem;font-weight:400">your strategy, checked against the workbook and the saved campaign snapshot</span></h2>
+    </div>
+  </div>
+{% if not rl_live %}
+  <div class="rl-state warn" id="rl-rpa" role="status">
+    <h3>Rules need the API backend</h3>
+    <p class="rl-muted" style="margin:0">This machine uses the RPA backend (ACL_FB_BACKEND is not <code>api</code>), so rules are not evaluated and nothing here can change a campaign.</p>
+  </div>
+{% else %}
+  <script type="application/json" id="rl-seed">{{ (rl_seed | default([])) | tojson }}</script>
+  <div class="rl-sources" id="rl-sources" aria-live="polite">Loading sources…</div>
+  <div id="rl-banner"></div>
+  <div class="rl-kpis" id="rl-kpis" aria-label="Rules at a glance"></div>
+  <div class="rl-tabs" role="tablist" aria-label="Rules sections">
+    <button type="button" class="rl-tab" role="tab" data-tab="rules" aria-selected="true">My rules <span class="rl-muted" id="rl-tab-n"></span></button>
+    <button type="button" class="rl-tab" role="tab" data-tab="templates" aria-selected="false">Templates</button>
+    <button type="button" class="rl-tab" role="tab" data-tab="activity" aria-selected="false">Activity</button>
+  </div>
+  <div class="rl-panel" id="rl-tab-templates" hidden></div>
+  <div class="rl-panel" id="rl-tab-activity" hidden></div>
+  <div class="rl-shell" id="rl-shell">
+    <aside class="rl-list" aria-label="Your rules">
+      <h3><span>Your rules</span><span id="rl-count">–</span></h3>
+      <div class="rl-filters" id="rl-filters" aria-label="Filter rules"></div>
+      <div id="rl-items"><div class="rl-skel"></div><div class="rl-skel"></div><div class="rl-skel"></div></div>
+      <div class="rl-list-actions">
+        <button type="button" class="rl-btn small primary" id="rl-create">+ Create rule</button>
+        <button type="button" class="rl-btn small" id="rl-templates">Templates</button>
+      </div>
+    </aside>
+    <div class="rl-editor" id="rl-editor" aria-live="polite">
+      <div class="rl-state"><div class="rl-skel" style="width:40%"></div><div class="rl-skel"></div><div class="rl-skel" style="width:70%"></div></div>
+    </div>
+  </div>
+
+  <dialog class="rl-dialog" id="rl-dlg-new" aria-labelledby="rl-dlg-new-t">
+    <div class="rl-dlg-in">
+      <div class="rl-dlg-head"><h3 id="rl-dlg-new-t">Create rule</h3><p class="rl-hint">A new rule starts Disabled. Nothing is evaluated until you pick Observe or Suggest and save.</p></div>
+      <div class="rl-dlg-body">
+        <div class="rl-tpls" id="rl-tpls"></div>
+        <label class="rl-field-l" for="rl-new-name">Rule name</label>
+        <input class="rl-in" id="rl-new-name" maxlength="80" autocomplete="off">
+        <p class="rl-err" id="rl-new-err" role="alert"></p>
+      </div>
+      <div class="rl-dlg-foot"><span class="rl-grow"></span>
+        <button type="button" class="rl-btn" id="rl-new-cancel">Cancel</button>
+        <button type="button" class="rl-btn primary" id="rl-new-ok">Create</button></div>
+    </div>
+  </dialog>
+
+  <dialog class="rl-dialog" id="rl-dlg-scope" aria-labelledby="rl-dlg-scope-t">
+    <div class="rl-dlg-in">
+      <div class="rl-dlg-head"><h3 id="rl-dlg-scope-t">Choose campaigns</h3>
+        <p class="rl-hint">Only objects from the last saved snapshot are listed, each by its Meta id. Choosing here changes the draft only; save the rule to keep it.</p></div>
+      <div class="rl-dlg-body">
+        <div class="rl-grid2">
+          <div><label class="rl-field-l" for="rl-sc-country">Country</label><select class="rl-in" id="rl-sc-country"></select></div>
+          <div><label class="rl-field-l" for="rl-sc-account">Account</label><select class="rl-in" id="rl-sc-account"></select></div>
+        </div>
+        <div id="rl-sc-tree" aria-live="polite"></div>
+      </div>
+      <div class="rl-dlg-foot"><span class="rl-grow" id="rl-sc-count"></span>
+        <button type="button" class="rl-btn small" id="rl-sc-clear">Clear all</button>
+        <button type="button" class="rl-btn" id="rl-sc-cancel">Cancel</button>
+        <button type="button" class="rl-btn primary" id="rl-sc-ok">Use selection</button></div>
+    </div>
+  </dialog>
+{% endif %}
+</section>
+{% if rl_live %}
+<script src="/static/acm_commands.js"></script>
+<script src="/static/rules_ui.js"></script>
+<script>
+(function () {
+  'use strict';
+  var R = window.aclRules, root = document.getElementById('rl-root');
+  if (!root || root.dataset.live !== '1' || !R) return;
+  var esc = R.esc;
+  function $(id) { return document.getElementById(id); }
+  var seed = [];
+  try { seed = JSON.parse($('rl-seed').textContent) || []; } catch (e) { seed = []; }
+
+  var S = { tab: 'rules', fq: { country: '', asset: '', mode: '' }, status: 'loading', err: '', data: null, selId: '', selKey: '', draft: null, dirty: false, saved: '', busy: '',
+            evalNote: '', scopeSel: {}, scopeCountry: '', scopeData: {}, tplPick: '' };
+
+  function owner() { var s = document.getElementById('buyer-select'); return (s && s.value) || ''; }
+  function getJson(url) {
+    return fetch(url, { credentials: 'same-origin' }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (!r.ok || j.ok === false) { var e = new Error(j.error || ('HTTP ' + r.status)); e.code = j.code; throw e; }
+        return j;
+      });
+    });
+  }
+  function post(url, body) { return R.postJson(fetch.bind(window), url, body); }
+  function ago(iso) {
+    var t = Date.parse(iso || ''); if (isNaN(t)) return 'never';
+    var m = Math.round((Date.now() - t) / 60000);
+    if (m < 1) return 'just now'; if (m < 60) return m + ' min ago';
+    var h = Math.round(m / 60); return h < 48 ? h + ' h ago' : Math.round(h / 24) + ' d ago';
+  }
+  function rule() { var l = (S.data && S.data.rules) || []; for (var i = 0; i < l.length; i++) if (l[i].id === S.selId) return l[i]; return null; }
+  function modeLabel(m) { return { disabled: 'Disabled', observe: 'Observe', suggest: 'Suggest', automatic: 'Automatic' }[m] || m; }
+  function chip(m) { return '<span class="rl-chip m-' + esc(m) + '">' + esc(modeLabel(m)) + '</span>'; }
+  function plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
+  function objects(r) { return ((r.body.scope || {}).objects) || []; }
+
+  // ── загрузка ──
+  function load(keep) {
+    if (!keep) { S.status = 'loading'; render(); }
+    return getJson('/rules/overview?owner=' + encodeURIComponent(owner())).then(function (j) {
+      S.data = j; S.status = 'ready'; S.err = '';
+      var l = j.rules || [];
+      if (!l.some(function (x) { return x.id === S.selId; })) { S.selId = l.length ? l[0].id : ''; S.draft = null; }
+      if (!S.draft) startDraft();
+      render();
+    }, function (e) {
+      S.status = e.code === 'rpa_backend' ? 'rpa' : 'error'; S.err = String(e.message || e); render();
+    });
+  }
+  function startDraft() {
+    var r = rule(); S.dirty = false; S.saved = '';
+    S.draft = r ? JSON.parse(JSON.stringify({ body: r.body, mode: r.mode })) : null;
+    S.selKey = '';
+  }
+
+  // ── разметка ──
+  function renderSources() {
+    var s = (S.data && S.data.sources) || {}, bits = [];
+    bits.push('<span><b>Workbook</b> ' + (s.bi_through ? 'through ' + esc(s.bi_through) + ' · built ' + esc(ago(s.bi_built_at)) : '<span class="rl-muted">not used yet</span>') + '</span>');
+    bits.push('<span><b>Snapshots</b> ' + (s.snapshot_accounts ? plural(s.snapshot_accounts, 'account') + ', oldest ' + esc(ago(s.snapshot_oldest_at)) : '<span class="rl-muted">none used yet</span>') + '</span>');
+    bits.push('<span><b>Live changes</b> Automatic off</span>');
+    $('rl-sources').innerHTML = bits.join('');
+    var banner = '';
+    var hours = s.bi_built_at ? (Date.now() - Date.parse(s.bi_built_at)) / 3600000 : 0;
+    if (s.bi_built_at && hours > 36) {
+      banner = '<div class="rl-banner" role="status"><b>Stale BI</b>The workbook was built ' + esc(ago(s.bi_built_at)) + '. Rules that depend on it are held until it is refreshed.</div>';
+    }
+    $('rl-banner').innerHTML = banner;
+  }
+  function distinct(l, f) { var o = []; l.forEach(function (r) { var v = f(r); if (v && o.indexOf(v) < 0) o.push(v); }); return o.sort(); }
+  function renderFilters(all) {
+    function sel(id, label, opts, cur) {
+      return '<select data-filter="' + id + '" aria-label="' + label + '"><option value="">All ' + label.toLowerCase() + '</option>' + opts.map(function (v) {
+        return '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(v) + '</option>'; }).join('') + '</select>';
+    }
+    $('rl-filters').innerHTML = sel('country', 'Countries', distinct(all, function (r) { return r.body.scope.country; }), S.fq.country) +
+      sel('asset', 'Assets', distinct(all, function (r) { return r.body.scope.asset; }), S.fq.asset) +
+      sel('mode', 'Modes', ['disabled', 'observe', 'suggest'].filter(function (m) { return all.some(function (r) { return r.mode === m; }); }), S.fq.mode);
+    Array.prototype.forEach.call($('rl-filters').querySelectorAll('select'), function (e) {
+      Array.prototype.forEach.call(e.options, function (o) { if (e.dataset.filter === 'mode' && o.value) o.textContent = modeLabel(o.value); });
+    });
+  }
+  function filtered() {
+    return ((S.data && S.data.rules) || []).filter(function (r) {
+      return (!S.fq.country || r.body.scope.country === S.fq.country) && (!S.fq.asset || r.body.scope.asset === S.fq.asset) &&
+        (!S.fq.mode || r.mode === S.fq.mode);
+    });
+  }
+  function renderKpis() {
+    var k = (S.data && S.data.kpis) || null;
+    $('rl-kpis').innerHTML = !k ? '' : [['Observing', k.observing, 'rules recording only'], ['Suggesting', k.suggesting, 'review before any change'],
+      ['Suggestions awaiting review', k.awaiting_review, 'Apply or dismiss'], ['Blocked evaluations', k.blocked, 'held, stale or failed']].map(function (x) {
+      return '<div class="rl-kpi"><span>' + esc(x[0]) + '</span><b>' + esc(x[1]) + '</b><small>' + esc(x[2]) + '</small></div>'; }).join('');
+    var b = document.getElementById('rl-nav-badge');
+    if (b) { var n = k ? k.awaiting_review : 0; b.hidden = !n; b.textContent = n ? String(n) : ''; b.title = n + ' suggestions awaiting review'; }
+    $('rl-tab-n').textContent = S.data ? String((S.data.rules || []).length) : '';
+  }
+  function renderList() {
+    var all = (S.data && S.data.rules) || [], l = filtered();
+    if (S.status === 'ready') renderFilters(all);
+    $('rl-count').textContent = S.status === 'ready' ? String(l.length) : '–';
+    if (S.status === 'loading') return;
+    if (S.status !== 'ready') { $('rl-items').innerHTML = '<p class="rl-hint">Unavailable.</p>'; return; }
+    if (!l.length) { $('rl-items').innerHTML = '<p class="rl-hint">' + (all.length ? 'No rules match the filters.' : 'No rules yet.') + '</p>'; return; }
+    $('rl-items').innerHTML = l.map(function (r) {
+      var c = r.counts, last = r.last_eval;
+      var ev = last && !last.error ? 'Evaluated ' + ago(last.at) + (r.proposals.length ? ' · ' + plural(r.proposals.length, 'suggestion') : '') : r.health.text;
+      return '<button type="button" class="rl-item" data-rule="' + esc(r.id) + '" aria-current="' + (r.id === S.selId) + '">' +
+        chip(r.mode) + '<b>' + esc(r.name) + '</b>' +
+        '<span class="rl-sub">' + esc(plural(c.campaign, 'campaign') + ' · ' + plural(c.adset, 'ad set')) + '</span>' +
+        '<span class="rl-sub rl-h-' + esc(r.health.state) + '">' + esc(ev) + '</span></button>';
+    }).join('');
+  }
+  function condRows(d, T) {
+    var out = [], conds = d.body.conditions || [];
+    conds.forEach(function (c, i) {
+      var items = c.items ? c.items : [c];
+      items.forEach(function (it, j) {
+        var path = c.items ? i + '.' + j : String(i);
+        var unit = it.unit === 't_multiple' ? '× target CPA' + (T != null ? ' (' + R.usd(T) + ')' : '') : it.unit === 'pct' ? '%' : MONEYU(it.metric);
+        out.push('<div class="rl-cond"><span>' + esc(R.METRIC[it.metric] || it.metric) + '</span>' +
+          '<select data-cmp="' + path + '" aria-label="Comparison">' + ['>=', '>', '<=', '<', '=='].map(function (o) {
+            return '<option value="' + o + '"' + (o === it.cmp ? ' selected' : '') + '>' + ({ '>=': '≥', '<=': '≤', '==': '=' }[o] || o) + '</option>'; }).join('') + '</select>' +
+          '<input class="rl-in" type="number" step="any" data-val="' + path + '" value="' + esc(it.value) + '" aria-label="' + esc((R.METRIC[it.metric] || it.metric) + ' value') + '">' +
+          '<span class="rl-unit">' + esc(unit) + '</span></div>');
+      });
+    });
+    return out.join('') || '<p class="rl-hint">This rule has no conditions.</p>';
+  }
+  function MONEYU(m) { return { spend: 'USD', cpa: 'USD', cpa_block: 'USD' }[m] ? 'USD' : 'count'; }
+
+  function rowsFor(r) {
+    var last = r.last_eval, by = {};
+    ((last && last.objects) || []).forEach(function (o) { by[o.key] = o; });
+    return objects(r).map(function (a) {
+      var key = a.level + ':' + a.id, o = by[key] || null;
+      return { key: key, a: a, o: o, props: (r.proposals || []).filter(function (p) { return String(p.id) === String(a.id); }) };
+    });
+  }
+  function resultCell(r, row) {
+    var o = row.o, h = '';
+    if (!r.last_eval || r.last_eval.error) return '<span class="rl-chip warn">Not evaluated</span>';
+    if (!o) return '<span class="rl-chip warn">Not in the last evaluation</span>';
+    if (row.props.length) {
+      h = row.props.map(function (p) {
+        return '<div class="rl-resrow"><span class="rl-chip ok">Suggested</span><span class="t" title="' + esc(R.proposalText(p)) + '">' + esc(R.proposalText(p)) + '</span>' +
+          '<button type="button" class="rl-btn small primary" data-apply="' + esc(p.action_id) + '">Apply…</button>' +
+          '<button type="button" class="rl-btn small" data-dismiss="' + esc(p.action_id) + '">Dismiss</button></div>';
+      }).join('');
+      return h;
+    }
+    if (o.verdict === 'matched') return '<div class="rl-resrow"><span class="rl-chip">' + (r.mode === 'observe' ? 'Would act' : 'Matched') + '</span><span class="t rl-muted">' + esc(R.KIND[(o.action || {}).kind] || '') + '</span></div>';
+    if (o.verdict === 'blocked') { var why = (o.reasons || []).join(' · '); return '<div class="rl-resrow"><span class="rl-chip warn">Blocked</span><span class="t rl-sub" title="' + esc(why) + '">' + esc(why) + '</span></div>'; }
+    return '<span class="rl-chip m-observe">No match</span>';
+  }
+  function renderEditor() {
+    var box = $('rl-editor'), r = rule(), d = S.draft;
+    if (S.status === 'loading') { box.innerHTML = '<div class="rl-state"><div class="rl-skel" style="width:40%"></div><div class="rl-skel"></div><div class="rl-skel" style="width:70%"></div><p class="rl-hint">Loading rules…</p></div>'; return; }
+    if (S.status === 'rpa') { box.innerHTML = '<div class="rl-state warn" role="status"><h3>Rules need the API backend</h3><p class="rl-muted">This machine does not use ACL_FB_BACKEND=api.</p></div>'; return; }
+    if (S.status === 'error') {
+      box.innerHTML = '<div class="rl-state bad" role="alert"><h3>Rules are unavailable</h3><p>' + esc(S.err) + ' The last known data is not shown as fresh.</p><button type="button" class="rl-btn primary" id="rl-retry">Retry</button></div>';
+      return;
+    }
+    if (!r || !d) {
+      box.innerHTML = '<div class="rl-state"><h3>No rules yet</h3><p class="rl-muted">A rule checks assigned campaigns against your target and suggests an action. Start from a template; it begins Disabled and nothing changes in Meta.</p>' +
+        '<button type="button" class="rl-btn primary" id="rl-empty-create">Create a rule from a template</button></div>';
+      return;
+    }
+    var last = r.last_eval, T = last && last.T ? last.T.value : null;
+    var rows = rowsFor(r);
+    if (!S.selKey || !rows.some(function (x) { return x.key === S.selKey; })) S.selKey = rows.length ? rows[0].key : '';
+    var sel = rows.filter(function (x) { return x.key === S.selKey; })[0] || null;
+    var cards = R.cards(r, sel && sel.o), cnt = R.counters(r), b = d.body;
+    var targetNote = b.target && b.target.override ? 'Override: ' + R.usd(b.target.override.value) + ' CPA (USD)'
+      : last && last.T && last.T.value != null ? 'From My Goals: ' + R.usd(last.T.value) + ' CPA' : 'From My Goals — resolved on the next evaluation';
+    var noTarget = last && (last.reasons || []).indexOf('No target') >= 0;
+    var sentence = R.conditionSentence(b.conditions, T);
+    var dirty = '<span id="rl-dstate" class="' + (S.dirty ? 'rl-dirty' : 'rl-saved') + '">' + (S.dirty ? 'Unsaved changes' : esc(S.saved)) + '</span>';
+    var disabled = d.mode === 'disabled';
+    var html = '<div class="rl-ehead"><div class="rl-title"><input class="rl-name" id="rl-name" value="' + esc(b.name) + '" maxlength="80" aria-label="Rule name">' +
+      '<div class="rl-sub">' + esc(strategyName(b.strategy)) + ' · version ' + esc(r.version) + ' · ' + esc(R.KIND[(b.action || {}).kind] || 'Action') + '</div></div>' +
+      '<div class="rl-acts">' + dirty + chip(d.mode) +
+      '<button type="button" class="rl-btn small" id="rl-dup">Duplicate</button>' +
+      '<button type="button" class="rl-btn small" id="rl-toggle">' + (r.mode === 'disabled' ? 'Enable' : 'Disable') + '</button>' +
+      '<button type="button" class="rl-btn primary" id="rl-save"' + (S.busy ? ' disabled' : '') + '>Save rule</button></div></div>' +
+      '<div class="rl-basis"><span class="rl-muted">Evidence basis</span>' +
+      '<button type="button" class="rl-seg" aria-pressed="true">Report period</button>' +
+      '<button type="button" class="rl-seg" disabled title="BI has no cohort timestamps">Cohort</button>' +
+      '<button type="button" class="rl-seg" disabled title="Lifetime numbers are not read">Lifetime</button>' +
+      '<span class="rl-right">No cohort / lifetime substitution</span></div>';
+    html += '<div class="rl-body"><div class="rl-settings"><p class="rl-kicker">Rule settings</p>' +
+      '<div class="rl-box" style="margin-top:.5rem"><div id="rl-sentence">' + esc(sentence) + '</div></div>' +
+      '<div id="rl-conds">' + condRows(d, T) + '</div>' +
+      '<label for="rl-ovr">Target CPA</label>' +
+      '<div class="rl-modes"><label class="rl-mode"><input type="radio" name="rl-tgt" value="goal"' + (b.target.override ? '' : ' checked') + '><span>Country goal<small>From My Goals for this country</small></span></label>' +
+      '<label class="rl-mode"><input type="radio" name="rl-tgt" value="override"' + (b.target.override ? ' checked' : '') + '><span>Override, USD<small>Only for this rule</small></span></label></div>' +
+      '<input class="rl-in" id="rl-ovr" type="number" step="any" min="0" placeholder="e.g. 60"' + (b.target.override ? ' value="' + esc(b.target.override.value) + '"' : ' disabled') + '>' +
+      '<p class="rl-hint">' + esc(targetNote) + '</p>' +
+      '<div class="rl-field-l">Mode</div><div class="rl-modes" role="radiogroup" aria-label="Mode">' +
+      R.MODES.map(function (m) {
+        return '<label class="rl-mode' + (m.disabled ? ' off' : '') + '"' + (m.disabled ? ' title="' + esc(m.hint) + '"' : '') + '><input type="radio" name="rl-mode" value="' + m.v + '"' +
+          (d.mode === m.v ? ' checked' : '') + (m.disabled ? ' disabled aria-disabled="true"' : '') + '><span>' + esc(m.label) + '<small>' + esc(m.hint) + '</small></span></label>';
+      }).join('') + '</div>' +
+      '<div class="rl-grid2"><div><label for="rl-cool">Cooldown, hours</label><input class="rl-in" id="rl-cool" type="number" min="0" step="1" value="' + esc(b.caps.cooldown_hours) + '"></div>' +
+      '<div><label for="rl-capd">Per account / day</label><input class="rl-in" id="rl-capd" type="number" min="0" step="1" value="' + esc(b.caps.per_account_day) + '"></div></div>' +
+      ((b.action || {}).kind === 'budget_up' ? '<div class="rl-grid2"><div><label for="rl-step">Step, % (max 10)</label><input class="rl-in" id="rl-step" type="number" min="1" max="10" step="1" value="' + esc(b.action.step_pct) + '"></div>' +
+        '<div><label for="rl-capb">Budget ceiling, account currency</label><input class="rl-in" id="rl-capb" type="number" min="0" step="any" value="' + esc(b.caps.max_daily_budget == null ? '' : b.caps.max_daily_budget) + '"></div></div>' : '') +
+      '<div class="rl-grid2"><div><label for="rl-win">Window, days</label><input class="rl-in" id="rl-win" type="number" min="1" step="1" value="' + esc(b.evidence.window_days) + '"></div>' +
+      '<div><label for="rl-mat">Maturity, days</label><input class="rl-in" id="rl-mat" type="number" min="0" step="1" value="' + esc(b.evidence.maturity_days) + '"></div></div>' +
+      '<div style="margin-top:1rem;padding-top:.75rem;border-top:1px solid var(--adopy-border)"><b>' + esc(plural(scopeCount(b, 'campaign'), 'campaign') + ' / ' + plural(scopeCount(b, 'adset'), 'ad set')) + '</b>' +
+      '<div class="rl-hint">' + esc(b.scope.country ? 'Country ' + b.scope.country : 'No country chosen') + '</div>' +
+      '<button type="button" class="rl-btn small" id="rl-choose" style="margin-top:.5rem">Choose campaigns</button></div></div>';
+    html += '<div class="rl-why"><div class="rl-why-head"><div><h3>Why would this rule act?</h3><p class="rl-hint" style="margin:0">Follow the decision for one object.</p></div>' +
+      '<select class="rl-in" id="rl-obj" style="max-width:260px" aria-label="Object"' + (rows.length ? '' : ' disabled') + '>' +
+      (rows.length ? rows.map(function (x) { return '<option value="' + esc(x.key) + '"' + (x.key === S.selKey ? ' selected' : '') + '>' + esc((x.a.name_at_assign || x.a.name || x.a.id)) + '</option>'; }).join('') : '<option>No objects assigned</option>') + '</select></div>' +
+      '<div class="rl-count3"><div class="rl-count"><span>Assigned</span><b>' + cnt.assigned + '</b></div>' +
+      '<div class="rl-count hot"><span>Conditions matched</span><b>' + cnt.matched + '</b></div>' +
+      '<div class="rl-count"><span>Ready to execute</span><b>' + cnt.ready + '</b></div></div>' +
+      '<div class="rl-cards">' + cards.map(function (c) {
+        return '<div class="rl-card ' + esc(c.tone) + '"><small>' + esc(c.n + ' · ' + c.name) + '</small><b>' + esc(c.title) + '</b><span>' + esc(c.sub) + '</span></div>'; }).join('') + '</div>' +
+      '<div class="rl-sentence"><b>Conditions</b>' + esc(sentence) + (sel && sel.o ? '<div class="rl-sub">' + esc(R.observedText(sel.o.observed)) + '</div>' : '') + '</div>' +
+      (noTarget ? '<div class="rl-banner bad" role="alert"><b>No target</b>No CPA goal is set for this country in My Goals. Set one, or override the target for this rule.</div>' : '') +
+      (last && last.error ? '<div class="rl-banner bad" role="alert"><b>Evaluation failed</b>' + esc(last.error) + '</div>' : '') +
+      ((last && (last.reasons || []).indexOf('Ambiguous mapping') >= 0) ? '<div class="rl-banner"><b>Ambiguous mapping</b>Some objects match several workbook rows (duplicate or renamed). They are held, not guessed.</div>' : '') +
+      '<div class="rl-banner"><b>Condition match is not execution permission</b>Campaign ids, outcome maturity and current delivery are verified before anything is suggested. Observe records only; Apply always asks you first.</div>' +
+      '<h3>Review</h3><div class="rl-tablewrap"><table class="rl-table"><thead><tr><th>Object</th><th class="num">Spend (BI)</th><th class="num">FTDs</th><th class="num">Target</th><th>Match</th><th>Rule result</th></tr></thead><tbody>' +
+      (rows.length ? rows.slice(0, 100).map(function (x) {
+        var ob = (x.o && x.o.observed) || {};
+        return '<tr data-key="' + esc(x.key) + '" aria-selected="' + (x.key === S.selKey) + '"><td><button type="button" class="rl-pick" data-pick="' + esc(x.key) + '">' + esc(x.o && x.o.name || x.a.name_at_assign || x.a.id) + '</button>' +
+          '<span class="rl-id">' + esc(R.KIND && ({ campaign: 'Campaign', adset: 'Ad set', ad: 'Ad' }[x.a.level])) + ' · ' + esc(x.a.account) + ' · id ' + esc(x.a.id) + '</span></td>' +
+          '<td class="num">' + esc(ob.spend != null ? R.usd(ob.spend) : '—') + '</td><td class="num">' + esc(ob.ftd != null ? R.num(ob.ftd) : '—') + '</td>' +
+          '<td class="num">' + esc(ob.target != null ? R.usd(ob.target) : '—') + '</td><td>' + esc(x.o ? R.identityText(x.o.identity) : '—') + '</td><td class="rl-resc">' + resultCell(r, x) + '</td></tr>';
+      }).join('') : '<tr><td colspan="6" class="rl-muted">No objects assigned yet. Use Choose campaigns.</td></tr>') + '</tbody></table></div>' +
+      '<p class="rl-hint">Showing ' + Math.min(100, rows.length) + ' of ' + rows.length + ' assigned objects. Results come from the latest evaluation' + (last ? ' (' + esc(ago(last.at)) + ')' : '') + '.</p>' +
+      ((r.recent_actions || []).length ? '<section class="rl-applied" aria-label="Applied actions"><h3>Applied actions</h3><p class="rl-hint">Review the current and previous values before you confirm Undo. An uncertain result needs checking before another change.</p>' +
+        r.recent_actions.map(function (a) {
+          return '<div class="rl-resrow"><span class="rl-chip">' + esc(R.undoLabel(a)) + '</span><span class="t">' + esc(a.account + ' · ' + a.level + ' ' + a.id + ' · ' + R.proposalText(a)) + '</span>' +
+            (R.canUndo(a) ? '<button type="button" class="rl-btn small" data-undo="' + esc(a.action_id) + '">Undo…</button>' : '') + '</div>';
+        }).join('') + '</section>' : '') + '</div></div>';
+    html += '<div class="rl-foot"><span class="rl-grow" id="rl-evnote" role="status">' + esc(S.evalNote || 'Evaluate now only queues the check; it reads the workbook and the saved snapshot, not Meta.') + '</span>' +
+      '<button type="button" class="rl-btn" id="rl-choose2">Choose campaigns</button>' +
+      '<button type="button" class="rl-btn primary" id="rl-eval"' + (disabled || S.dirty ? ' disabled title="' + (S.dirty ? 'Save the rule first' : 'Enable the rule first') + '"' : '') + '>Evaluate now</button></div>';
+    box.innerHTML = html;
+  }
+  function scopeCount(b, level) { return objects({ body: b }).filter(function (o) { return o.level === level; }).length; }
+  function strategyName(s) { return { 1: 'Stop-loss', 2: 'Funnel quality', 3: 'Controlled scaling', 4: 'Deterioration', 5: 'Pacing' }[s] || 'Strategy ' + s; }
+  function render() { renderSources(); renderKpis(); renderList(); renderEditor(); renderTab(); }
+
+  // ── черновик: ввод ──
+  function condAt(path) {
+    var p = path.split('.').map(Number), c = S.draft.body.conditions[p[0]];
+    return p.length > 1 ? c.items[p[1]] : c;
+  }
+  function touch() { S.dirty = true; S.saved = ''; var ds = $('rl-dstate'); if (ds) { ds.className = 'rl-dirty'; ds.textContent = 'Unsaved changes'; } var n = $('rl-sentence'); var r = rule();
+    if (n && r) { var T = r.last_eval && r.last_eval.T ? r.last_eval.T.value : null; n.textContent = R.conditionSentence(S.draft.body.conditions, T); }
+    var ev = $('rl-eval'); if (ev) { ev.disabled = true; ev.title = 'Save the rule first'; }
+  }
+  function numOr(v, d) { var n = Number(v); return v === '' || isNaN(n) ? d : n; }
+  function collect() {
+    var b = S.draft.body, g = function (id) { var e = $(id); return e ? e.value : ''; };
+    b.name = g('rl-name').trim();
+    if ($('rl-cool')) b.caps.cooldown_hours = numOr(g('rl-cool'), 0);
+    if ($('rl-capd')) b.caps.per_account_day = Math.max(0, Math.round(numOr(g('rl-capd'), 0)));
+    if ($('rl-step')) b.action.step_pct = numOr(g('rl-step'), 10);
+    if ($('rl-capb')) b.caps.max_daily_budget = g('rl-capb') === '' ? null : numOr(g('rl-capb'), null);
+    if ($('rl-win')) b.evidence.window_days = Math.max(1, Math.round(numOr(g('rl-win'), 1)));
+    if ($('rl-mat')) b.evidence.maturity_days = Math.max(0, Math.round(numOr(g('rl-mat'), 0)));
+    var ov = document.querySelector('input[name="rl-tgt"]:checked');
+    if (ov && ov.value === 'override') b.target = { use_goal: false, override: { value: numOr(g('rl-ovr'), 0), currency: 'USD' } };
+    else b.target = { use_goal: true, override: null };
+  }
+  $('rl-editor').addEventListener('input', function (ev) {
+    var t = ev.target; if (!S.draft || t.id === 'rl-obj') return;   // выбор объекта - просмотр, не правка
+    if (t.dataset.val != null) condAt(t.dataset.val).value = numOr(t.value, 0);
+    else if (t.dataset.cmp != null) condAt(t.dataset.cmp).cmp = t.value;
+    if (t.id === 'rl-name') S.draft.body.name = t.value;
+    touch();
+  });
+  $('rl-editor').addEventListener('change', function (ev) {
+    var t = ev.target; if (!S.draft) return;
+    if (t.name === 'rl-mode') { S.draft.mode = t.value; touch(); render(); return; }
+    if (t.name === 'rl-tgt') { var o = $('rl-ovr'); o.disabled = t.value !== 'override'; if (!o.disabled) o.focus(); touch(); return; }
+    if (t.id === 'rl-obj') { S.selKey = t.value; renderEditor(); }
+  });
+
+  // ── действия ──
+  function say(msg) { S.evalNote = msg; var n = $('rl-evnote'); if (n) n.textContent = msg; }
+  function save() {
+    var r = rule(); if (!r || S.busy) return;
+    collect();
+    var b = S.draft.body;
+    S.busy = 'save'; renderEditor();
+    return post('/rules/save', { rule_id: r.id, owner: owner(), expected_version: r.version, mode: S.draft.mode,
+      changes: { name: b.name, scope: b.scope, target: b.target, evidence: b.evidence, conditions: b.conditions, action: b.action, caps: b.caps } })
+      .then(function () { S.busy = ''; S.draft = null; return load(true).then(function () { S.saved = 'Saved'; renderEditor(); }); })
+      .catch(function (e) { S.busy = ''; render(); say('Not saved: ' + e.message); });
+  }
+  function evaluateNow() {
+    var r = rule(); if (!r) return;
+    var before = r.last_eval ? r.last_eval.evaluation_id : '';
+    say('Queued…');
+    post('/rules/evaluate-now', { rule_id: r.id }).then(function (j) {
+      if (j.queued === false) say('An evaluation is already queued for this rule.');
+      var tries = 0;
+      (function poll() {
+        setTimeout(function () {
+          load(true).then(function () {
+            var nr = rule(), cur = nr && nr.last_eval ? nr.last_eval.evaluation_id : '';
+            if (cur && cur !== before) { say('Evaluated ' + ago(nr.last_eval.at) + '.'); return; }
+            if (++tries >= 10) { say('Still queued. Nothing is wrong: it runs when the workbook is ready.'); return; }
+            poll();
+          });
+        }, Math.min(800 * (tries + 1), 3000));
+      })();
+    }, function (e) { say('Not queued: ' + e.message); });
+  }
+  function setMode(mode) {
+    var r = rule(); if (!r) return;
+    post('/rules/mode', { rule_id: r.id, owner: owner(), mode: mode }).then(function () { S.draft = null; return load(true); }, function (e) { say(e.message); });
+  }
+  function duplicate() {
+    var r = rule(); if (!r) return;
+    post('/rules/duplicate', { rule_id: r.id, owner: owner() }).then(function (j) { S.selId = j.rule_id; S.draft = null; return load(true); }, function (e) { say(e.message); });
+  }
+  function findProposal(id) { var r = rule(); return r && (r.proposals || []).filter(function (p) { return p.action_id === id; })[0]; }
+  $('rl-editor').addEventListener('click', function (ev) {
+    var t = ev.target.closest ? ev.target.closest('button') : null; if (!t) return;
+    if (t.id === 'rl-retry') { load(); return; }
+    if (t.id === 'rl-empty-create') { openNew(''); return; }
+    if (t.id === 'rl-save') { save(); return; }
+    if (t.id === 'rl-eval') { evaluateNow(); return; }
+    if (t.id === 'rl-dup') { duplicate(); return; }
+    if (t.id === 'rl-toggle') { var r = rule(); setMode(r.mode === 'disabled' ? 'observe' : 'disabled'); return; }
+    if (t.id === 'rl-choose' || t.id === 'rl-choose2') { openScope(); return; }
+    if (t.dataset.pick) { S.selKey = t.dataset.pick; renderEditor(); return; }
+    if (t.dataset.undo) {
+      var r = rule(), a = r && (r.recent_actions || []).filter(function (x) { return x.action_id === t.dataset.undo; })[0];
+      if (!a) return;
+      t.disabled = true;
+      R.undoProposal(a, owner()).then(function (res) { say(res.cancelled ? 'Cancelled. Nothing was changed.' : 'Undo command: ' + (res.op && res.op.state)); return load(true); },
+        function (e) { say('Undo not completed: ' + (e.message || e) + ' Check current values before another change.'); renderEditor(); });
+      return;
+    }
+    if (t.dataset.apply) {
+      var p = findProposal(t.dataset.apply); if (!p) return;
+      t.disabled = true;
+      R.applyProposal(p, owner()).then(function (res) { say(res.cancelled ? 'Cancelled. Nothing was changed.' : 'The command finished: ' + (res.op && res.op.state)); return load(true); },
+        function (e) { say('Not applied: ' + (e.message || e)); renderEditor(); });
+      return;
+    }
+    if (t.dataset.dismiss) {
+      var q = findProposal(t.dataset.dismiss); if (!q) return;
+      R.dismissProposal(q, owner()).then(function () { say('Dismissed.'); return load(true); }, function (e) { say(e.message); });
+    }
+  });
+  $('rl-items').addEventListener('click', function (ev) {
+    var b = ev.target.closest ? ev.target.closest('[data-rule]') : null; if (!b) return;
+    if (S.dirty && !window.confirm('Discard unsaved changes to this rule?')) return;
+    S.selId = b.dataset.rule; startDraft(); render();
+  });
+
+  // ── диалог «Create rule / Templates» ──
+  function openNew(pick) {
+    var tpls = (S.data && S.data.templates) || [];
+    if (typeof pick !== 'string') pick = '';
+    S.tplPick = pick || (tpls.length ? tpls[0].id : '');
+    $('rl-tpls').innerHTML = tpls.map(function (t) {
+      return '<button type="button" class="rl-tpl" data-tpl="' + esc(t.id) + '" data-name="' + esc(t.name) + '" aria-pressed="' + (t.id === S.tplPick) + '"><b>' + esc(t.name) + '</b><span>' + esc(t.text) +
+        ' Suggested start: ' + esc(modeLabel(t.start_mode)) + '.</span></button>';
+    }).join('');
+    var cur = tpls.filter(function (t) { return t.id === S.tplPick; })[0];
+    $('rl-new-name').value = cur ? cur.name : ''; $('rl-new-err').textContent = '';
+    $('rl-dlg-new').showModal();
+  }
+  $('rl-create').addEventListener('click', function () { openNew(''); });
+  $('rl-templates').addEventListener('click', function () { S.tab = 'templates'; renderTab(); });
+  $('rl-tpls').addEventListener('click', function (ev) {
+    var b = ev.target.closest ? ev.target.closest('[data-tpl]') : null; if (!b) return;
+    S.tplPick = b.dataset.tpl; $('rl-new-name').value = b.dataset.name;
+    Array.prototype.forEach.call($('rl-tpls').children, function (c) { c.setAttribute('aria-pressed', String(c === b)); });
+  });
+  $('rl-new-cancel').addEventListener('click', function () { $('rl-dlg-new').close(); });
+  $('rl-new-ok').addEventListener('click', function () {
+    var name = $('rl-new-name').value.trim();
+    post('/rules/save', { owner: owner(), preset: S.tplPick, name: name }).then(function (j) {
+      $('rl-dlg-new').close(); S.selId = j.rule_id; S.draft = null; return load(true);
+    }, function (e) { $('rl-new-err').textContent = e.message; });
+  });
+
+  // ── диалог «Choose campaigns» ──
+  function openScope() {
+    var d = S.draft; if (!d) return;
+    S.scopeSel = {};
+    (d.body.scope.objects || []).forEach(function (o) { S.scopeSel[o.level + ':' + o.id] = o; });
+    S.scopeCountry = d.body.scope.country || (seed[0] && seed[0].country) || '';
+    $('rl-sc-country').innerHTML = seed.map(function (c) { return '<option' + (c.country === S.scopeCountry ? ' selected' : '') + '>' + esc(c.country) + '</option>'; }).join('');
+    fillAccounts(); $('rl-dlg-scope').showModal(); loadTree();
+  }
+  function accountsOf(country) { var c = seed.filter(function (x) { return x.country === country; })[0]; return c ? c.accounts : []; }
+  function fillAccounts() {
+    $('rl-sc-account').innerHTML = accountsOf(S.scopeCountry).map(function (a) { return '<option>' + esc(a) + '</option>'; }).join('');
+  }
+  function selCount() { var k = Object.keys(S.scopeSel); return { campaigns: k.filter(function (x) { return x.indexOf('campaign:') === 0; }).length, adsets: k.filter(function (x) { return x.indexOf('adset:') === 0; }).length }; }
+  function loadTree() {
+    var acct = $('rl-sc-account').value, tree = $('rl-sc-tree');
+    if (!acct) { tree.innerHTML = '<p class="rl-hint">This country has no connected accounts.</p>'; showCount(); return; }
+    tree.innerHTML = '<div class="rl-skel"></div><div class="rl-skel"></div>';
+    getJson('/rules/scope-options?account=' + encodeURIComponent(acct)).then(function (j) {
+      S.scopeData[acct] = j; drawTree(acct);
+    }, function (e) { tree.innerHTML = '<div class="rl-state bad" style="margin:.75rem 0 0">' + esc(e.message) + '</div>'; });
+  }
+  function drawTree(acct) {
+    var j = S.scopeData[acct], tree = $('rl-sc-tree');
+    if (!j || !j.has_snapshot) { tree.innerHTML = '<div class="rl-state warn" style="margin:.75rem 0 0"><b>Read campaigns first</b><p class="rl-muted" style="margin:.25rem 0 0">' + esc((j && j.note) || 'No snapshot.') + ' Use Read campaigns on the account, then come back.</p></div>'; showCount(); return; }
+    var note = '<p class="rl-hint">Snapshot read ' + esc(ago(j.read_at)) + (j.state && j.state !== 'ok' ? ' · ' + esc(j.state) : '') + (j.problems && j.problems.length ? ' · ' + esc(j.problems.join('; ')) : '') + '</p>';
+    tree.innerHTML = note + (j.campaigns.length ? '<ul class="rl-tree">' + j.campaigns.map(function (c) {
+      var ck = 'campaign:' + c.id;
+      return '<li><label><input type="checkbox" data-sel="campaign" data-id="' + esc(c.id) + '" data-name="' + esc(c.name) + '"' + (S.scopeSel[ck] ? ' checked' : '') + '><span>' + esc(c.name) + ' <span class="rl-sub">' + esc(c.status || '') + ' · id ' + esc(c.id) + '</span></span></label>' +
+        (c.adsets.length ? '<ul>' + c.adsets.map(function (a) {
+          return '<li><label><input type="checkbox" data-sel="adset" data-id="' + esc(a.id) + '" data-name="' + esc(a.name) + '"' + (S.scopeSel['adset:' + a.id] ? ' checked' : '') + '><span>' + esc(a.name) + ' <span class="rl-sub">' + esc(a.status || '') + ' · id ' + esc(a.id) + '</span></span></label></li>';
+        }).join('') + '</ul>' : '') + '</li>';
+    }).join('') + '</ul>' : '<p class="rl-hint">No campaigns in the snapshot.</p>');
+    showCount();
+  }
+  function showCount() { var c = selCount(); $('rl-sc-count').textContent = plural(c.campaigns, 'campaign') + ' / ' + plural(c.adsets, 'ad set') + ' selected'; }
+  $('rl-sc-country').addEventListener('change', function () {
+    var n = Object.keys(S.scopeSel).length;
+    if (n && S.scopeCountry && this.value !== S.scopeCountry && !window.confirm('A rule works in one country. Clear the current selection and switch?')) { this.value = S.scopeCountry; return; }
+    if (n && this.value !== S.scopeCountry) S.scopeSel = {};
+    S.scopeCountry = this.value; fillAccounts(); loadTree();
+  });
+  $('rl-sc-account').addEventListener('change', loadTree);
+  $('rl-sc-tree').addEventListener('change', function (ev) {
+    var t = ev.target; if (!t.dataset || !t.dataset.sel) return;
+    var key = t.dataset.sel + ':' + t.dataset.id;
+    if (t.checked) S.scopeSel[key] = { account: $('rl-sc-account').value, level: t.dataset.sel, id: t.dataset.id, name_at_assign: t.dataset.name };
+    else delete S.scopeSel[key];
+    showCount();
+  });
+  $('rl-sc-clear').addEventListener('click', function () { S.scopeSel = {}; drawTree($('rl-sc-account').value); });
+  $('rl-sc-cancel').addEventListener('click', function () { $('rl-dlg-scope').close(); });
+  $('rl-sc-ok').addEventListener('click', function () {
+    var list = Object.keys(S.scopeSel).map(function (k) { return S.scopeSel[k]; });
+    var accts = []; list.forEach(function (o) { if (accts.indexOf(o.account) < 0) accts.push(o.account); });
+    S.draft.body.scope.objects = list; S.draft.body.scope.accounts = accts; S.draft.body.scope.country = S.scopeCountry;
+    $('rl-dlg-scope').close(); touch(); renderEditor();
+  });
+
+  // ── вкладки: My rules / Templates / Activity ──
+  function renderTab() {
+    Array.prototype.forEach.call(document.querySelectorAll('.rl-tab'), function (t) { t.setAttribute('aria-selected', String(t.dataset.tab === S.tab)); });
+    $('rl-shell').hidden = S.tab !== 'rules'; $('rl-tab-templates').hidden = S.tab !== 'templates'; $('rl-tab-activity').hidden = S.tab !== 'activity';
+    if (S.tab === 'templates') {
+      var tpls = (S.data && S.data.templates) || [];
+      $('rl-tab-templates').innerHTML = '<p class="rl-hint" style="margin-top:0">A template creates a Disabled rule. Pick campaigns, then choose Observe or Suggest and save.</p><div class="rl-tpls">' +
+        tpls.map(function (t) { return '<button type="button" class="rl-tpl" data-use="' + esc(t.id) + '"><b>' + esc(t.name) + '</b><span>' + esc(t.text) + ' Suggested start: ' + esc(modeLabel(t.start_mode)) + '.</span></button>'; }).join('') + '</div>';
+    }
+  }
+  function loadActivity() {
+    var box = $('rl-tab-activity'); box.innerHTML = '<div class="rl-skel"></div><div class="rl-skel"></div>';
+    getJson('/rules/activity?owner=' + encodeURIComponent(owner())).then(function (j) {
+      box.innerHTML = j.rows.length ? '<div class="rl-tablewrap"><table class="rl-table"><thead><tr><th>When</th><th>Rule</th><th>What</th><th>State</th><th>By</th></tr></thead><tbody>' +
+        j.rows.map(function (r) { return '<tr><td>' + esc(String(r.at || '').slice(0, 16).replace('T', ' ')) + '</td><td>' + esc(r.rule) + '</td><td>' + esc(r.text) + '</td><td>' + esc(r.state || '') +
+          '</td><td>' + esc(r.actor || '') + (r.op_id ? ' <span class="rl-sub">' + esc(r.op_id) + '</span>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div><p class="rl-hint">Read-only record of evaluations and suggestions.</p>'
+        : '<p class="rl-hint">Nothing has happened yet. Evaluations and suggestions appear here.</p>';
+    }, function (e) { box.innerHTML = '<div class="rl-state bad" style="margin:0">' + esc(e.message) + '</div>'; });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('.rl-tab'), function (t) {
+    t.addEventListener('click', function () { S.tab = t.dataset.tab; renderTab(); if (S.tab === 'activity') loadActivity(); });
+  });
+  $('rl-tab-templates').addEventListener('click', function (ev) {
+    var b = ev.target.closest ? ev.target.closest('[data-use]') : null; if (!b) return;
+    S.tab = 'rules'; renderTab(); openNew(b.dataset.use);
+  });
+  $('rl-filters').addEventListener('change', function (ev) { var t = ev.target; if (t.dataset && t.dataset.filter) { S.fq[t.dataset.filter] = t.value; renderList(); } });
+
+  // ── запуск: при первом показе страницы и при смене байера ──
+  var started = false;
+  function start() { if (started) return; started = true; load(); }
+  document.addEventListener('acl:viewchange', function (e) { if (e.detail && e.detail.view === 'rules') start(); });
+  var bs = document.getElementById('buyer-select');
+  if (bs) bs.addEventListener('change', function () { if (started) { S.draft = null; load(); } });
+  /* Значок в навигации и счётчики нужны до первого захода на страницу: один локальный GET при загрузке. */
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+  window.aclRulesPage = { start: start, state: S, reload: load };
+})();
+</script>
+{% endif %}

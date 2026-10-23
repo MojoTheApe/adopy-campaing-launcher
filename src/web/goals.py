@@ -202,7 +202,15 @@ def upsert(cm: str, goal: dict, countries=None) -> list[dict]:
     стартовые цели вместе с ней, а не одну правленую страну.
     """
     cleaned = _clean(goal)
-    goals = [g for g in for_cm(cm, countries) if (g.get("country") or "").casefold() != cleaned["country"].casefold()]
+    current = for_cm(cm, countries)
+    # Правка страны из формы My Goals не знает про цели по Ad Asset: без ключа `assets`
+    # (или с `None`) сохраняем прежние, иначе первая же правка CPA стирала бы цели Rules.
+    # Пустой словарь `{}` - явная просьба очистить.
+    if goal.get("assets") is None and "assets" not in cleaned:
+        old = next((g for g in current if (g.get("country") or "").casefold() == cleaned["country"].casefold()), None)
+        if old and isinstance(old.get("assets"), dict) and old["assets"]:
+            cleaned["assets"] = old["assets"]
+    goals = [g for g in current if (g.get("country") or "").casefold() != cleaned["country"].casefold()]
     goals.append(cleaned)
     goals.sort(key=lambda g: (g.get("market") or "", g.get("country") or ""))
     return save(cm, goals)

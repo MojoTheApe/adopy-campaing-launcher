@@ -16,6 +16,7 @@ import contextvars
 import functools
 import ipaddress
 import json
+import logging
 import math
 import os
 import re as _re
@@ -1792,6 +1793,14 @@ def _warm_control_paths() -> None:
 @app.on_event("startup")
 async def _warm_on_startup() -> None:
     _warm_control_paths()
+    # ACL-1816: подписки Rules на новую книгу и на чтение описи (только с бэкендом api)
+    try:
+        from src.web import campaign_commands, rules_runtime
+
+        if campaign_commands.api_enabled():
+            rules_runtime.install()
+    except Exception:  # noqa: BLE001 - Rules не должны мешать старту дешборда
+        logging.getLogger(__name__).exception("Rules could not subscribe to triggers")
 
 
 @app.get("/acl/update/check")
@@ -5763,6 +5772,120 @@ async def _campaign_commands_body(request: Request) -> dict:
     except Exception:
         body = {}
     return body if isinstance(body, dict) else {}
+
+
+# ACL-1816: Rules - журнал оценок и «Evaluate now». Только чтение и постановка в очередь.
+@app.get("/rules/evaluations")
+async def rules_evaluations(request: Request) -> JSONResponse:
+    from src.web import rules_api
+
+    q = request.query_params
+    data, code = await asyncio.to_thread(rules_api.list_evaluations, q.get("rule", ""), q.get("limit"))
+    return JSONResponse(data, status_code=code)
+
+
+@app.post("/rules/evaluate-now")
+async def rules_evaluate_now(request: Request) -> JSONResponse:
+    from src.web import rules_api
+
+    body = await _campaign_commands_body(request)
+    data, code = await asyncio.to_thread(rules_api.evaluate_now, body)
+    return JSONResponse(data, status_code=code)
+
+
+# ACL-1822: страница Rules. Локальные чтения и записи в файлы правил; в Meta пишут только
+# человеческие команды (`/campaign-commands/*`).
+@app.get("/rules/overview")
+async def rules_overview(request: Request) -> JSONResponse:
+    from src.web import rules_api, rules_runtime
+
+    def run():
+        return rules_api.overview(request.query_params.get("owner", ""),
+                                  engine_status=lambda: rules_runtime.get_engine().status())
+    data, code = await asyncio.to_thread(run)
+    return JSONResponse(data, status_code=code)
+
+
+@app.get("/rules/activity")
+async def rules_activity(request: Request) -> JSONResponse:
+    from src.web import rules_api
+
+    q = request.query_params
+    data, code = await asyncio.to_thread(rules_api.activity, q.get("owner", ""), q.get("limit"))
+    return JSONResponse(data, status_code=code)
+
+
+@app.get("/rules/scope-options")
+async def rules_scope_options(request: Request) -> JSONResponse:
+    from src.web import rules_api
+
+    data, code = await asyncio.to_thread(rules_api.scope_options, request.query_params.get("account", ""))
+    return JSONResponse(data, status_code=code)
+
+
+@app.get("/rules/cells")
+async def rules_cells(request: Request) -> JSONResponse:
+    from src.web import rules_api
+
+    q = request.query_params
+    data, code = await asyncio.to_thread(rules_api.cells, q.get("account", ""), q.get("owner", ""))
+    return JSONResponse(data, status_code=code)
+
+
+@app.post("/rules/save")
+async def rules_save(request: Request) -> JSONResponse:
+    from src.web import rules_api
+
+    data, code = await asyncio.to_thread(rules_api.save_rule, await _campaign_commands_body(request))
+    return JSONResponse(data, status_code=code)
+
+
+@app.post("/rules/mode")
+async def rules_mode(request: Request) -> JSONResponse:
+    from src.web import rules_api
+
+    data, code = await asyncio.to_thread(rules_api.set_rule_mode, await _campaign_commands_body(request))
+    return JSONResponse(data, status_code=code)
+
+
+@app.post("/rules/duplicate")
+async def rules_duplicate(request: Request) -> JSONResponse:
+    from src.web import rules_api
+
+    data, code = await asyncio.to_thread(rules_api.duplicate_rule, await _campaign_commands_body(request))
+    return JSONResponse(data, status_code=code)
+
+
+@app.post("/rules/dismiss")
+async def rules_dismiss(request: Request) -> JSONResponse:
+    from src.web import rules_api
+
+    data, code = await asyncio.to_thread(rules_api.dismiss_proposal, await _campaign_commands_body(request))
+    return JSONResponse(data, status_code=code)
+
+
+@app.post("/rules/action-result")
+async def rules_action_result(request: Request) -> JSONResponse:
+    from src.web import rules_api
+
+    data, code = await asyncio.to_thread(rules_api.record_action_result, await _campaign_commands_body(request))
+    return JSONResponse(data, status_code=code)
+
+
+@app.post("/rules/undo-request")
+async def rules_undo_request(request: Request) -> JSONResponse:
+    from src.web import rules_api
+
+    data, code = await asyncio.to_thread(rules_api.prepare_undo, await _campaign_commands_body(request))
+    return JSONResponse(data, status_code=code)
+
+
+@app.post("/rules/undo-result")
+async def rules_undo_result(request: Request) -> JSONResponse:
+    from src.web import rules_api
+
+    data, code = await asyncio.to_thread(rules_api.record_undo_result, await _campaign_commands_body(request))
+    return JSONResponse(data, status_code=code)
 
 
 # ACL-1812: тёплые сессии. Состояние строк — только реестр и процессы на машине

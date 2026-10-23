@@ -203,6 +203,8 @@
     .sidebar-country-btn:active {
       transform: scale(0.99);
     }
+    .sidebar-badge { display: inline-block; min-width: 1.25rem; margin-left: .25rem; padding: 0 .375rem; border-radius: 999px; background: var(--accent, #2563eb); color: #fff; font-size: .6875rem; font-weight: 700; text-align: center; }
+    .sidebar-badge[hidden] { display: none; }
     .sidebar-link {
       display: block;
       width: 100%;
@@ -4335,6 +4337,7 @@ async function dashRefresh(ev) {
   <button type="button" class="sidebar-link" data-view="ad-texts"><svg class="sb-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14M12 5v14M9 19h6"/></svg><span>Ad titles</span></button>
   <button type="button" class="sidebar-link" data-view="accounts"><svg class="sb-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3v5M15 3v5M6 8h12v4a6 6 0 01-12 0zM12 18v3"/></svg><span>Accounts</span></button>
   <button type="button" class="sidebar-link" data-view="forms"><svg class="sb-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/></svg><span>Forms</span></button>
+  <button type="button" class="sidebar-link" data-view="rules"><svg class="sb-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5h11M9 12h11M9 19h11M3 5h1M3 12h1M3 19h1"/></svg><span>Rules</span> <span class="sidebar-badge" id="rl-nav-badge" hidden></span></button>
 
   <div class="sidebar-label sb-head"><span>Countries</span><span title="FTDs: yours / everyone's in the selected period">You / all FTDs</span></div>
   <label class="sb-find"><svg class="sb-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M16 16l4 4"/></svg>
@@ -4513,6 +4516,13 @@ async function dashRefresh(ev) {
   </div>
 
   <div id="ac-list">Loading…</div>
+</div>
+
+{# ── Rules view (ACL-1822): страница в основной области, правый билдер не трогает ── #}
+{% set rl_seed = [] %}
+{% for mc in (account_map.countries if account_map else []) %}{% set _ = rl_seed.append({'country': mc.country, 'accounts': (mc.rows or []) | map(attribute='account') | list}) %}{% endfor %}
+<div id="view-rules" class="view-panel">
+{% include "_rules_page.html" %}
 </div>
 
 <div id="view-targets" class="view-panel">
@@ -8523,7 +8533,7 @@ function aclCountryBuilder(country) {
   function parseHash(hash) {
     if (!hash || hash.charAt(0) !== '#') return { view: 'home' };
     if (hash === '#home') return { view: 'home' };
-    if (['targets', 'ad-texts', 'forms', 'accounts'].indexOf(hash.slice(1)) !== -1) return { view: hash.slice(1) };
+    if (['targets', 'ad-texts', 'forms', 'accounts', 'rules'].indexOf(hash.slice(1)) !== -1) return { view: hash.slice(1) };
     var m = hash.match(/^#country-([a-z0-9-]+)-([a-z0-9-]+)$/);
     if (m) return { view: 'country-' + m[1] + '-' + m[2], country: m[1] };
     return { view: 'home' };

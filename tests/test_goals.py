@@ -222,6 +222,26 @@ def test_asset_goals_survive_a_save():
     assert "assets" not in goals.save("Dan", [{"country": "Peru", "cpa": 55}])[0]
 
 
+def test_upsert_keeps_asset_goals_when_the_edit_has_none():
+    """ACL-1816: правка CPA страны из формы не стирает цели по Ad Asset (ревью T1)."""
+    goals.save("Dan", [{"country": "Peru", "cpa": 55, "assets": {"1121": {"cpa": "30"}}}])
+    got = goals.upsert("Dan", {"country": "Peru", "cpa": 60})
+    assert got[0]["cpa"] == 60.0
+    assert got[0]["assets"] == {"1121": {"cpa": 30.0, "cr": None}}
+    assert goals.for_cm("Dan")[0]["assets"] == {"1121": {"cpa": 30.0, "cr": None}}
+    # то же при `assets: None`; новые assets заменяют, пустой словарь очищает явно
+    assert goals.upsert("Dan", {"country": "Peru", "cpa": 61, "assets": None})[0]["assets"]
+    assert goals.upsert("Dan", {"country": "Peru", "assets": {"2": {"cpa": 9}}})[0]["assets"] == {
+        "2": {"cpa": 9.0, "cr": None}}
+    assert "assets" not in goals.upsert("Dan", {"country": "Peru", "assets": {}})[0]
+
+
+def test_upsert_of_a_new_country_does_not_invent_assets():
+    goals.save("Dan", [{"country": "Peru", "cpa": 55, "assets": {"1121": {"cpa": 30}}}])
+    got = {g["country"]: g for g in goals.upsert("Dan", {"country": "Chile", "cpa": 40})}
+    assert "assets" not in got["Chile"] and got["Peru"]["assets"]
+
+
 # ── ACL-602: the lead sees everyone's goals, a buyer only their own ──────
 # Эндпоинты зовутся напрямую: TestClient в этой сборке несовместим с httpx.
 

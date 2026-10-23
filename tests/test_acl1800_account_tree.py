@@ -283,8 +283,8 @@ def test_column_groups_and_order_follow_the_prototype():
     acc = _acc_table()["acc"]
     names = [re.sub(r"<[^>]+>", "", h) for h in re.findall(r"<th[^>]*>(.*?)</th>", acc)]
     at = names.index("Delivery")
-    assert names[at: at + 8] == ["Delivery", "Duplicate", "Bid control", "Budget", "Optimization hint", "Alerts", "Goal CPA", "Benchmark CPA"]
-    assert names[at + 8: at + 11] == ["Spend", "Leads", "FTDs"]
+    assert names[at: at + 9] == ["Delivery", "Duplicate", "Bid control", "Budget", "Optimization hint", "Alerts", "Rules", "Goal CPA", "Benchmark CPA"]
+    assert names[at + 9: at + 12] == ["Spend", "Leads", "FTDs"]
     assert "MANAGEMENT &amp; DECISIONS" in acc or "MANAGEMENT & DECISIONS" in acc
     assert "BI · business outcomes" in acc and "Account / campaign hierarchy" in acc and "Campaign / Ad set / Ad" in acc
     allcols = _node("inst.state.acctOpen = {Acc: true}; els.preset.value = 'all'; els.preset.listeners.change[0].call(els.preset); out.t = H.Acc.table.innerHTML;")["t"]
