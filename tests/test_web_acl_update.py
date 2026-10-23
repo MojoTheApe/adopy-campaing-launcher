@@ -71,7 +71,9 @@ def test_update_is_refused_when_no_launcher_is_watching(monkeypatch, tmp_path):
     response = asyncio.run(_request("POST", "/acl/update/apply"))
 
     assert response.status_code == 409
-    assert "launcher" in response.json()["error"]
+    error = response.json()["error"]
+    assert "desktop shortcut" in error
+    assert "launcher" not in error.lower()  # ACL-1708: no internal wording shown to users
     assert not (tmp_path / acl_update.RESTART_MARKER).exists()
 
 
