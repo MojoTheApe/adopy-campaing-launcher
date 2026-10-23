@@ -1,0 +1,26 @@
+{
+  "backend": "api",
+  "status": "PAUSED",
+  "success": false,
+  "error": "Meta refused: Graph API error 100: Invalid parameter [type=OAuthException, error_subcode=1772103, is_transient=False, error_user_title=Instagram Account Is Missing, error_user_msg=Select an Instagram account or a Facebook Page to represent your business on Instagram., host=adsmanager-graph.facebook.com, version=v22.0, credentials=include, http_status=400]",
+  "steps_completed": [
+    "preflight: targeting resolved",
+    "preflight: creatives read",
+    "campaign: created PAUSED, tag kept",
+    "ad set 'ZZ_test_set_A_25-45': created PAUSED, tag kept",
+    "ad 1: image uploaded",
+    "ad 1 Stories / Reels file: image uploaded",
+    "ad 1: creative created"
+  ],
+  "campaign_id": "120252307200040380",
+  "adset_id": "120252307200900380",
+  "creative_id": null,
+  "ad_id": null,
+  "created": {
+    "campaign": 1,
+    "adsets": 1,
+    "images": 2,
+    "creatives": 1
+  },
+  "note": "Doc120 live publish 2026-10-14 (ACL-1896): Meta refused the ad after campaign, ad set and creative were written; ids are test objects."
+}

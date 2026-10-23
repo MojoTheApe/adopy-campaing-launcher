@@ -80,7 +80,7 @@ def test_ticked_campaigns_only_are_sent_one_job_per_account(ui):
 
     publish_button(p).click()
     modal = p.locator('#safe-confirm-modal')
-    expect(modal).to_contain_text('Campaigns: 2')
+    expect(modal).to_contain_text('Build 2 campaigns on 2 accounts')
     # Живые аккаунты: в подтверждении — какие именно кампании уйдут.
     listed = modal.locator('.cb-selected-list')
     expect(listed).to_contain_text('Demo: ' + demo_b)
@@ -102,7 +102,8 @@ def test_ticked_campaigns_only_are_sent_one_job_per_account(ui):
         expect(box(p, a, s)).to_be_disabled()
     title = box(p, 0, 0).evaluate('b => b.closest("label").title')
     assert 'being built' in title, title
-    expect(publish_button(p)).to_have_text('Publish all → drafts (4)')
+    expect(publish_button(p)).to_have_text('Publish all → drafts (0)')
+    expect(publish_button(p)).to_be_disabled()
     assert p.evaluate("JSON.stringify(cbKeep.all())").count('"picked":true') == 0
 
     finish(p, state, 'Demo')
@@ -250,7 +251,7 @@ def test_one_account_in_two_countries_is_ticked_and_locked_per_country(browser, 
         want = twin_name('Chile', 1)
         page.locator('.cbd-publish-all').click()
         modal = page.locator('#safe-confirm-modal')
-        expect(modal).to_contain_text('Campaigns: 1')
+        expect(modal).to_contain_text('Build 1 campaign on 1 account')
         expect(modal).to_contain_text('UL869 (Chile)')
         expect(modal).not_to_contain_text('UL869 (Peru)')
         page.locator('#sfc-ok').click()
@@ -329,7 +330,7 @@ def test_the_count_is_what_goes_and_a_ticked_card_of_a_running_form_can_be_untic
 
     publish_button(p).click()
     modal = p.locator('#safe-confirm-modal')
-    expect(modal).to_contain_text('Campaigns: 1')
+    expect(modal).to_contain_text('Build 1 campaign on 1 account')
     expect(modal.locator('.cb-selected-list')).to_contain_text('Other: ' + camp_name(p, 1, 0))
     expect(modal.locator('.cb-selected-list')).not_to_contain_text('Demo')
     expect(modal).to_contain_text('Already being built, skipped: Demo')

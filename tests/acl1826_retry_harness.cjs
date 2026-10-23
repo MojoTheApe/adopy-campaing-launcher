@@ -17,6 +17,8 @@ const code = [
   top('cbBusyError'), top('cbPostPublish'), top('cbNewRun'), top('cbPublishRun'),
   top('_runPublishQueue'), top('cbQueueUncertain'), top('cbFormAccount'), top('cbFormKey'),
   top('cbKeyMatches'), top('cbFormTitle'), top('cbAccountBusy'), top('cbSayAlreadyBuilding'),
+  slice('/* ACL-2118 begin */', '/* ACL-2118 end */'),
+  top('cbSlotTitle'), top('cbPickedIn'),
   top('cbSkipByName'), top('cbFormDataSkipping'),
   'var CB_PUBLISH_TIMEOUT_MS = 45000;',
   slice('\nwindow.cbPublishAll = function', '\n};\n'),
@@ -38,7 +40,7 @@ function mkForm(country, account) {
       }
       return null;                     // .cb-status-panel, .cb-publish-btn — нет
     },
-    querySelectorAll(sel) { return sel === '.cb-slot' ? [{ dataset: {} }] : []; },
+    querySelectorAll(sel) { return sel === '.cb-slot' ? [{ dataset: {}, querySelector: () => null }] : []; },
   };
   return f;
 }

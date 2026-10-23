@@ -22,12 +22,16 @@ from config import paths  # noqa: E402
 from src.analysis_agent import ad_text_registry as ar  # noqa: E402
 from src.analysis_agent import targeting_registry as tr  # noqa: E402
 from src.analysis_agent import team_library as tl  # noqa: E402
+from src.fb_api import form_templates as ft  # noqa: E402
 
 KINDS = {
     "targets": (tr.snapshot, "targets", tr.normalise_one,
                 lambda r: tr.fingerprint(r.get("interests", ""), r.get("narrow", ""))),
     "ad_texts": (ar.snapshot, "texts", ar.normalise_one,
                  lambda r: ar.fingerprint(r.get("headline", ""), r.get("body", ""), r.get("description", ""))),
+    # ACL-2054: ключ записи — id шаблона; «отпечаток» — имя и содержание.
+    "form_templates": (ft.snapshot, "templates", str.lower,
+                       lambda r: str(r.get("name", "")).casefold() + ft.content_hash(ft.validate(r)[0])),
 }
 
 

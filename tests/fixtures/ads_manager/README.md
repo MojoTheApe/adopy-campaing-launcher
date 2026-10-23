@@ -345,3 +345,15 @@ Coverage limit: no Meta JS - `tests/test_bench_single_screen_adset_row_hover.py`
 `audience_whatsapp_suggestions_2026_10_06.html` — two fragments, each the whole Audience card (header with `#advantage-state-audience-section-header` down to the Languages row), introduced by a `<!-- fragment: <name> | source: <run>/<step> -->` comment: `whatsapp_suggestion_collapsed` (573ab2cf3646/00_advantage_plus_audience, Age collapsed to "35 - 65+ · Unknown age on WhatsApp: Excluded" with "Your suggestion") and `whatsapp_age_hard_badge_on` (d4f9d5f016c1/03_advantage_plus_audience, Age open with 35 / 65+, "Use as a suggestion" unchecked, badge still "Advantage+ on"). Cut from the capture HTML (truncated at ~3.98 MB, the card is whole) by a text-only scrub: scripts, styles, images and SVG replaced by `<i>`, every attribute except `role`, `aria-*` (not `aria-activedescendant`), `id`, `data-surface`, `placeholder`, `type`, `value`, `tabindex`, `hidden`, `for`, `checked`, `disabled`, `href` (set to `#`) removed, `value` of the search combobox dropped, Meta render ids (`js_*`, `_r_*_`) replaced by `syn_N`, detailed-targeting interests replaced by `Sample interest N`. Countries, languages and campaign names: only country/language names remain, no campaign, account or creative data. UI language: English. Meta build identifier and browser version: not recorded. Coverage limit: no Meta runtime; the collapse/expand and the badge change are emulated by the test.
 
 `classic_editor_tree_hover_only_2026_10_07.html` - fragments `tree` (the `role=grid` of the left tree) and `breadcrumb` (the header trail above it): `page.html` of f2c513f0a22d/07_create_additional_ad (step `create_additional_ad` failed `create_menu_item_not_found`; 08/10/13 are the same layout). Three tree rows (Campaign, Ad set, Ad) with an empty `<div></div>` where the "Action menu" button belongs, and a breadcrumb that repeats the campaign, ad set and ad names. Cut without a browser; ad name replaced with `Sample Ad 01`, campaign with `Sample Campaign 01`. Used by tests/test_bench_classic_adset_row_hover.py.
+
+## ACL-1836 transport incident (2026-10-12)
+
+`fb_api_session_lost_2026_10_12.json` preserves the exact CDP error and the observed
+sequence: campaign and ad set created PAUSED, video upload unknown, reconciliation
+failed with `Runtime.evaluate: Session with given id not found.` It was manually
+reduced from the local incident report; all target/session/account identifiers and
+the URL use synthetic placeholders. No credentials or private captures are included.
+This is a transport trace, so the HTML-only `capture_to_fixture.py` does not apply.
+`tests/test_acl1836_session_recovery.py` executes the real PageTab/InPageGraph/client
+against that trace. The original reason for detachment and the fate of the live
+upload are not established by this offline fixture.

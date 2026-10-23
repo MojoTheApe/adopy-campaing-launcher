@@ -68,6 +68,7 @@ def test_the_linux_job_runs_every_unmarked_file_on_ubuntu_in_shards():
     run = _run("test-linux")
     assert f"scripts/acl_test_shard.py --platform linux ${{{{ matrix.shard }}}} {len(reuse.CI_LINUX_SHARDS)}" in run
     assert "python -m playwright install --with-deps chromium" in run
+    assert "scripts/ci_retry.sh" in run  # ACL-1710: ограниченный запуск с повторами
     assert "-n auto --dist loadfile" in run
 
 
@@ -81,6 +82,7 @@ def test_the_windows_job_runs_the_marked_files_the_smoke_set_and_the_app_smoke_c
     assert "python scripts/acl_smoke.py" in run
     assert "python scripts/acl_scan_secrets.py" in run
     assert "python -m playwright install chromium" in run
+    assert "scripts/ci_retry.sh" in run  # ACL-1710
 
 
 @pytest.mark.parametrize("job", ["test-linux", "test-windows"])
@@ -148,6 +150,16 @@ def test_acl_verification_fails_closed_unless_both_test_jobs_passed():
         assert not _admission(**dict(light, PROCESS_INSTRUCTIONS=bad))
     assert not _admission(**dict(full, WINDOWS=""))
     assert not _admission(**dict(full, LINUX=""))
+
+
+def test_chromium_install_is_bounded_in_both_test_jobs():
+    # ACL-1710: зависший apt-get update не должен жечь job до отмены GitHub
+    assert JOBS["test-linux"]["timeout-minutes"] <= 32
+    assert JOBS["test-windows"]["timeout-minutes"] <= 30
+    for job in ("test-linux", "test-windows"):
+        step = next(s for s in JOBS[job]["steps"] if s.get("name", "").startswith("Install Chromium"))
+        assert 0 < step["timeout-minutes"] <= 16
+        assert "scripts/ci_retry.sh" in step["run"]
 
 
 def test_process_instruction_check_requires_actual_fast_tooling_success():

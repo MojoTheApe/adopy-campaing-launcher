@@ -42,6 +42,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from src.analysis_agent import account_spend as _as
+from src.fb_ads_rpa.operations import browser_operation
 from src.fb_api import profile as _fb_profile
 from src.fb_api import telemetry as _tm
 from src.fb_api.graph import (
@@ -54,6 +55,8 @@ from src.fb_api.graph import (
     PageFailed,
     PolicyBlocked,
     RateLimited,
+    WritesBlocked,
+    WriteUnknown,
     normalize_act,
 )
 
@@ -261,6 +264,16 @@ def _cooldown_left(key: str) -> float:
     return _cooldown_state(key)[0]
 
 
+def _launch_note_session(profile_id: str, state: dict, account: str) -> None:
+    """ACL-2117: телеметрия — была ли сессия Graph на первой странице после переоткрытия."""
+    try:
+        from src.fb_api import launch as _launch
+
+        _launch.note_graph_session(profile_id, bool(state.get("has_token")), account=account)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _start_cooldown(key: str, stop: GraphStop) -> None:
     secs = COOLDOWN_S.get(stop.kind)
     if secs is None:
@@ -289,11 +302,16 @@ class _Session:
     #: Профиль, который это чтение подняло, держится ещё `CLOSE_GRACE_S` после
     #: удачного чтения: за ним придёт чтение стран (ACL-1580).
     keep_next: bool = False
+    #: ACL-2117: сколько секунд держать такое окно (вместо `CLOSE_GRACE_S`); None — обычно.
+    keep_grace_s: float | None = None
+    #: ACL-2117: keep-open включён — окно остаётся «удобным» kept-окном без своего таймера.
+    keep_convenience: bool = False
 
 
 # Точки подмены в тестах: настоящий браузер здесь не нужен.
 def _probe_local(profile_id: str) -> tuple[str, int | None]:
-    return _fb_profile.local_debug_port(profile_id, profile_dir=_fb_profile.find_profile_dir(profile_id))
+    # Браузер, переживший нашу недавнюю остановку, — "closing": к его порту не цепляемся.
+    return _fb_profile.probe_local(profile_id)
 
 
 def _open_profile(profile_id: str, folder_id: str, instance: str):
@@ -338,7 +356,8 @@ def _open_gated(entry, account: str, held: "_as._ReadOpen"):
         # ACL-1812 (ревью #813, B1): закрыли недавно — не поднимаем, и в очередь за местом не встаём.
         from src.fb_api import stop_log as _stop_log
 
-        why = _stop_log.refusal(profile_id)
+        # ACL-2117: ждём, пока MLX досохранит профиль после остановки; отказ — только если ждать слишком долго.
+        why = _stop_log.wait_or_refusal(profile_id, on_wait=lambda text: _as._set_wait_note(account, text))
         if why:
             raise ApiReadError(why, code="restart_cooldown")
         # Профиль не работает: его поднимет MLX — значит, нужно место по памяти
@@ -462,8 +481,28 @@ def _warm_session(account: str, act: str, key: str, profile_id: str, commands: b
         lease.release(stop)
 
 
+def _touch_kept_window(account: str) -> None:
+    """ACL-2113: окно аккаунта использовали — оставленное «для удобства» окно не простаивает."""
+    try:
+        from src.web import publish_jobs
+
+        publish_jobs.touch_kept(account)
+    except Exception:
+        pass
+
+
 @contextmanager
 def _session(account: str, *, commands: bool = False):
+    """Сессия чтения; по её окончании срок простоя оставленного окна идёт с нуля (ACL-2113)."""
+    try:
+        with _open_session(account, commands=commands) as sess:
+            yield sess
+    finally:
+        _touch_kept_window(account)
+
+
+@contextmanager
+def _open_session(account: str, *, commands: bool = False):
     """Профиль → вкладка → клиент. `commands=True` (ACL-1800) — клиент с правом
     ТОЛЬКО на правку существующих объектов (статус/бюджет/ставка)."""
     entry = _as._entry_for(account)
@@ -477,7 +516,9 @@ def _session(account: str, *, commands: bool = False):
     except ValueError as exc:
         raise ApiReadError(str(exc)) from exc
 
-    key = _as._profile_key(account)
+    if not (getattr(entry, "profile_id", "") or "").strip():
+        raise ApiReadError(f"{account} has no profile_id in the account map")
+    key = _as._profile_key(account)   # ACL-1853: физический UUID; ярлык ключом не бывает
     left, why = _cooldown_state(key)
     if left > 0:
         mins = int(left // 60) + 1
@@ -534,6 +575,7 @@ def _session(account: str, *, commands: bool = False):
             _start_cooldown(key, exc)
             raise
         page_stop: GraphStop | None = None
+        _launch_note_session(getattr(opened, "profile_id", ""), state, account)
         if state.get("kind") == "checkpoint":
             page_stop = Checkpoint("the profile is on a Facebook checkpoint")
         elif state.get("kind") == "login":
@@ -567,7 +609,9 @@ def _session(account: str, *, commands: bool = False):
         # ACL-1580: профиль, который поднято этим чтением, закрывается мягкой
         # остановкой (и при отказе тоже) или ждёт `CLOSE_GRACE_S` под страны.
         try:
-            _as._finish_started(held, keep_for_next=bool(sess and sess.keep_next))
+            _as._finish_started(held, keep_for_next=bool(sess and sess.keep_next),
+                                grace_s=(sess.keep_grace_s if sess else None),
+                                convenience=bool(sess and sess.keep_convenience))
         except Exception:
             log.exception("Could not finish the profile the read started (%s)", account)
 
@@ -576,6 +620,10 @@ def _failure(account: str, exc: BaseException) -> tuple[str, str]:
     """Исключение чтения → `(текст человеку, код для экрана)`."""
     if isinstance(exc, ApiReadError):
         return str(exc), exc.code
+    from src.fb_ads_rpa.profile_lease import ProfileLeaseError
+
+    if isinstance(exc, ProfileLeaseError):   # ACL-1853: отказ замка профиля уже написан словами
+        return str(exc), ""
     if isinstance(exc, LoggedOut):
         return _as.logged_out_message(account), _as.LOGGED_OUT_CODE
     if isinstance(exc, Checkpoint):
@@ -830,7 +878,13 @@ def read_via_api(account: str, date_from: str, date_to: str = "") -> "_as.SpendR
 
 # ───────────────────────── разбивка по странам, отдельно ─────────────────────────
 
-@_as.serialized_browser(key=_as._profile_key, reading=True)
+def _split_lease_error(exc, account, date_from, date_to=""):
+    from src.analysis_agent import country_split
+
+    return country_split._lease_error(exc, account, date_from, date_to)  # noqa: SLF001
+
+
+@_as.serialized_browser(key=_as._profile_key, reading=True, on_lease_error=_split_lease_error)
 def read_country_split_via_api(account: str, date_from: str, date_to: str = ""):
     """Разбивка спенда по странам через `insights?breakdowns=country`.
 
@@ -867,3 +921,209 @@ def read_country_split_via_api(account: str, date_from: str, date_to: str = ""):
     _telemetry("countries", account, out.state != "failed", time.monotonic() - started, notes,
                error=out.error, stop=stop)
     return out
+
+
+# ───────────────────────── выключить кампанию по id (ACL-1945) ─────────────────────────
+#
+# Под `ACL_FB_BACKEND=api` выключение идёт не кликом по тумблеру в Ads Manager, а
+# `POST /<id>` со `status=PAUSED` из своей вкладки профиля, потом чтение обратно.
+# id известен всегда (дерево, прочитанное через API, даёт его каждой строке), поэтому
+# одноимённые кампании различимы и разметка страницы Meta ни при чём.
+#
+# **Только выключение** (решение владельца 12.09): ACTIVE отсюда не ставится.
+# Политика записи (`write_policy.check_object_update`) пускает только `/<id>` с одним
+# полем; сам этот путь шлёт ровно `status=PAUSED` и больше ничего.
+
+#: Отказ, пока в этом же профиле идёт сборка кампаний (тот же текст, что у ACL-1379).
+PROFILE_BUSY_ERROR = "The robot is building campaigns in this profile — wait for it to finish."
+
+#: Вызовов на одно выключение: чтение, запись, чтение обратно + запас на пересъёмку токена.
+TURN_OFF_API_CALLS = 8
+#: Пауза перед сверкой записи, на которую Meta не ответила: запрос мог ещё лететь.
+TURN_OFF_RECONCILE_PAUSE_S = 4.0
+#: `effective_status`, при котором PAUSED у самого объекта доставкой не подтверждён.
+_STILL_RUNNING = {"ACTIVE", "WITH_ISSUES"}
+
+
+def _api_result(account: str, level: str, object_id: str, expected_name: str,
+                requester: str) -> "_as.TurnOffResult":
+    return _as.TurnOffResult(account=account, level=level, object_id=str(object_id),
+                             name=expected_name, at=_as._now(), requester=requester,
+                             route="api", matched_by="id")
+
+
+def _delivery_word(effective: str) -> str:
+    return _DELIVERY.get(effective, effective.replace("_", " ").capitalize())
+
+
+def _turn_off_in_session(out: "_as.TurnOffResult", sess: "_Session", parent_id: str,
+                         expected_name: str, wrote: list) -> None:
+    """Прочитать → записать PAUSED → прочитать обратно. Итог — в `out`.
+
+    `wrote[0]` становится True до POST: после этого любой обрыв — `unconfirmed`,
+    а не `failed` (объект мог и выключиться).
+    """
+    from src.fb_api import commands as _cmd
+
+    client, level, oid = sess.client, out.level, out.object_id
+    if not getattr(client, "allow_writes", False):
+        out.error = "This session cannot write; nothing was changed."
+        return
+    client.reset_budget(TURN_OFF_API_CALLS)
+    try:
+        snap = _cmd.read_object(client, sess.act, level, oid)
+    except _cmd.CommandRefused as exc:
+        out.error = f"{exc} Nothing was changed."
+        return
+    except GraphStop:
+        raise
+    except GraphError as exc:
+        out.error = f"Meta could not read this {level} (Graph error {exc.code}); nothing was changed."
+        return
+    if level == "campaign":
+        # Поля чтения кампании есть и у группы объявлений: id группы прошёл бы как
+        # кампания. `objective` бывает только у кампании.
+        try:
+            kind = client.get(f"/{oid}", {"fields": "objective"})
+        except GraphStop:
+            raise
+        except GraphError as exc:
+            out.error = f"Meta could not confirm this is a campaign (Graph error {exc.code}); nothing was changed."
+            return
+        if not str((kind or {}).get("objective") or "").strip():
+            out.error = "Meta does not confirm that this id is a campaign; nothing was touched."
+            return
+    out.name = snap["name"]
+    if expected_name and _as.clean_object_name(expected_name)[:160] != _as.clean_object_name(snap["name"])[:160]:
+        out.error = (f"Meta shows \"{snap['name']}\" under this id, but the dashboard showed "
+                     f"\"{expected_name}\"; nothing was touched. Read the account again.")
+        return
+    if level == "ad":
+        # Объявление — только после того, как кампания-родитель подтверждена самим API.
+        camp = next((p for p in snap["parents"] if p["level"] == "campaign"), None)
+        if camp is None or camp["id"] != parent_id:
+            out.error = ("Meta does not confirm that this ad belongs to the campaign shown; "
+                         "nothing was touched. Read the account again.")
+            return
+    status = snap["status"]
+    if status == "PAUSED":
+        out.state = "already_off"
+        out.delivery = _delivery_word(snap["effective_status"])
+        out.how = "graph api: status is already PAUSED; nothing was sent"
+        return
+    if status != "ACTIVE":
+        out.error = f"Status {status or 'unknown'} cannot be changed here; nothing was touched."
+        return
+
+    path = f"/{oid}"
+    unknown = False
+    wrote[0] = True
+    try:
+        client.post(path, {"status": "PAUSED"})
+    except WriteUnknown:
+        unknown = True
+    except GraphStop:
+        # Не ответила вкладка или Meta остановила нас: запись могла уйти только если
+        # стоп пришёл после отправки, а `post` в этом случае бросает `WriteUnknown`.
+        wrote[0] = False
+        raise
+    except GraphError as exc:
+        wrote[0] = False                 # Meta ответила отказом: записи нет
+        out.error = f"Meta refused: {exc}"[:240]
+        return
+    except (WritesBlocked, ValueError) as exc:
+        wrote[0] = False                 # к Meta ничего не ушло
+        out.error = f"Not sent: {exc}"[:240]
+        return
+    if unknown:
+        time.sleep(TURN_OFF_RECONCILE_PAUSE_S)
+    try:
+        back = _cmd.read_object(client, sess.act, level, oid)
+    except (GraphStop, GraphError, _cmd.CommandRefused) as exc:
+        out.state = "unconfirmed"
+        out.error = f"The change was sent but could not be read back: {exc}"[:300]
+        return
+    effective = back["effective_status"]
+    out.delivery = _delivery_word(effective)
+    if back["status"] == "PAUSED" and effective not in _STILL_RUNNING:
+        if unknown:
+            client.reconciled(path)
+        out.state = "off"
+        out.how = f"graph api: POST status=PAUSED, read back status=PAUSED effective={effective or '?'}"
+    elif back["status"] == "PAUSED":
+        out.state = "unconfirmed"
+        out.error = (f"Meta saved PAUSED but still reports delivery {effective}; "
+                     "read the account again to confirm.")
+    elif unknown:
+        out.state = "unconfirmed"
+        out.error = "No answer from Meta and the read-back still shows it on; it may yet apply. Not retried."
+    else:
+        out.error = f"Meta accepted the change but the read-back shows status {back['status'] or 'unknown'}."
+
+
+def _record_api_turn_off(out: "_as.TurnOffResult") -> "_as.TurnOffResult":
+    if out.state in ("off", "already_off"):
+        try:
+            _as._mark_object_off(out.account, out.object_id, out.delivery)
+        except Exception:
+            pass
+    _as._record_turn_off(out)
+    return out
+
+
+@_as.serialized_browser(key=_as._profile_key)
+def _turn_off_locked(account: str, level: str, object_id: str, *, parent_id: str,
+                     expected_name: str, requester: str, profile_busy=None) -> "_as.TurnOffResult":
+    out = _api_result(account, level, object_id, expected_name, requester)
+    # Под замком профиля спрашиваем ещё раз: публикация могла встать в очередь после
+    # проверки маршрута. Не смогли спросить — считаем занятым.
+    busy = False
+    if profile_busy is not None:
+        try:
+            busy = bool(profile_busy(_as._profile_key(account)))
+        except Exception:
+            busy = True
+    if busy:
+        out.error = PROFILE_BUSY_ERROR
+        return _record_api_turn_off(out)
+    wrote = [False]
+    try:
+        # Читатель браузера: обновление программы видит запись в полёте (как у команд ACL-1800).
+        with browser_operation.reading(), _session(account, commands=True) as sess:
+            _turn_off_in_session(out, sess, parent_id, expected_name, wrote)
+    except Exception as exc:  # noqa: BLE001 — любой исход оставляет след в журнале
+        if out.state not in ("off", "already_off"):
+            out.state = "unconfirmed" if wrote[0] else "failed"
+            known = isinstance(exc, (GraphStop, ApiReadError, GraphError))
+            out.error = (_failure(account, exc)[0] if known
+                         else f"{type(exc).__name__}: {_tm.scrub(str(exc))}")[:300]
+            if wrote[0]:
+                out.error += " The change may have been applied; check Ads Manager. Nothing was retried."
+        if isinstance(exc, GraphStop):
+            _report_stop(exc, account)
+    return _record_api_turn_off(out)
+
+
+def turn_off(account: str, level: str, object_id: str, *, parent_id: str = "",
+             expected_name: str = "", requester: str = "",
+             profile_busy=None) -> "_as.TurnOffResult":
+    """Выключить кампанию (или объявление) через Graph API по id и записать, что вышло.
+
+    Отказы до записи — `failed`, и к Meta в них ничего не ушло. Журнал —
+    `turn_off_log.jsonl`, запись с `route: api`, `matched_by: id`.
+    """
+    from src.fb_api import commands as _cmd
+
+    who = (requester or "").strip()
+    level, oid, parent = (level or "").strip(), str(object_id or "").strip(), str(parent_id or "").strip()
+    out = _api_result(account, level, oid, expected_name, who)
+    if level not in ("campaign", "ad"):
+        out.error = f"only a campaign or an ad can be turned off, not {level!r}"
+    elif not _cmd._ID_RE.fullmatch(oid):
+        out.error = "object id must be a numeric Meta object id"
+    elif level == "ad" and not _cmd._ID_RE.fullmatch(parent):
+        out.error = "turning off an ad requires its campaign"
+    if out.error:
+        return _record_api_turn_off(out)
+    return _turn_off_locked(account, level, oid, parent_id=parent, expected_name=expected_name,
+                            requester=who, profile_busy=profile_busy)

@@ -60,6 +60,7 @@ function world(backend, fetchReply) {
       return w.cbPreflight.lines(slot._input, opts);
     },
   };
+  vm.runInContext(slice('/* ACL-2118 begin */', '/* ACL-2118 end */'), sandbox);   // ACL-2118: группировка замечаний
   vm.runInContext(block, sandbox);
   return { w, log, sandbox };
 }
