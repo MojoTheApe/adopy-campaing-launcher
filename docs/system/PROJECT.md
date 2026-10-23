@@ -48,7 +48,8 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   selected manager (nothing to review); the account map stays available in both.
 - `src/campaign_bridge`, `src/upload_agent`: campaign input/output preparation.
 - `src/fb_ads_rpa`, `src/meta_campaign_agent`: Ads Manager interactions, verified
-  profile identity, draft preparation, queues and browser lifecycle. ACL-1250/#247
+  profile identity, draft preparation, queues and browser lifecycle. See
+  [same-user process ownership and its boundaries](PROFILE_OWNERSHIP.md). ACL-1250/#247
   confirms audience age/country values within their own field and opens the correct
   collapsed Locations/Languages control, preserving adjacent fields. Later hover-only
   controls remain ACL-1251; the deferred real pilot remains ACL-1215.
@@ -96,6 +97,21 @@ Read [distribution boundaries](../DISTRIBUTION.md), [product/design context](../
 [design guidance](../../DESIGN.md) and existing specs for subsystem details.
 `content_machine`, `jira_agent` and legacy `fb_publish_agent` are not automatically
 part of the ACL runtime; preserve the tested distribution boundary.
+
+## In-profile Graph session recovery
+
+- `src/fb_api`: in-profile Graph transport keeps tokens inside an isolated page
+  world. ACL-1836 permits one recovery of a detached CDP session on the same owned
+  target and existing browser connection. Target and main-frame location must
+  match the navigated Ads Manager account; subsequent reads recheck that location.
+  The owned tab retains the successful explicit navigation intent and recovery
+  guard across replacement helpers, including warm read/write mode changes.
+  A helper never learns its expected account from the current page URL.
+  Local helper setup can retry, but a sent Graph request is never replayed.
+  Missing/changed targets, repeat detachment and unavailable transport stop with
+  `GraphStop`, so creator reconciliation can retain already-created object details.
+  Recovery does not open a replacement tab, restart the profile or reload for a
+  missing token. Pending creator source integration and live delivery remain separate.
 
 ## Delivery state at adoption
 

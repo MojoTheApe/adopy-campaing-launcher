@@ -1493,6 +1493,17 @@ def _unminimize_before_attach(browser) -> list[dict]:
     return done
 
 
+#: ACL-1403: паузы между повторами подключения к порту, который MLX объявил
+#: после старта профиля, а он ещё не слушает (всего ~9 с).
+CDP_PORT_WAIT_S = (1.0, 2.0, 3.0, 3.0)
+
+
+def _cdp_refused(exc: BaseException) -> bool:
+    """Подключение к порту CDP отказано (`connect ECONNREFUSED 127.0.0.1:…`)."""
+    text = str(exc).lower()
+    return "econnrefused" in text or "connection refused" in text
+
+
 def _connect_playwright(*, cdp_url: str, provider: str, debug_port: str | None, ws_endpoint: str | None,
                         new_page: bool = False, check_responsive: bool = False) -> BrowserConnection:
     ensure_playwright_browsers_path()
@@ -2599,12 +2610,28 @@ class MultiloginAttachOnlyProvider:
             profile_id,
             started.port,
         )
-        return _connect_playwright(
-            cdp_url=cdp,
-            provider="multilogin_attach",
-            debug_port=started.port,
-            ws_endpoint=started.ws_endpoint,
-        )
+        # ACL-1403: порт объявил MLX, но Chrome мог ещё не слушать (гонка
+        # старта) или уже упал (устаревший порт). Ждём порт коротко и ограниченно;
+        # не поднялся — именованная остановка вместо голого RuntimeError.
+        waited = 0.0
+        for pause in (*CDP_PORT_WAIT_S, None):
+            try:
+                return _connect_playwright(
+                    cdp_url=cdp,
+                    provider="multilogin_attach",
+                    debug_port=started.port,
+                    ws_endpoint=started.ws_endpoint,
+                )
+            except Exception as exc:
+                if not _cdp_refused(exc):
+                    raise
+                if pause is None or self._cancel_requested():
+                    detail = f"port {started.port} refused after {waited:g}s: {_exc_text(exc)}"
+                    raise profile_trouble.ProfileStop(profile_trouble.CDP_REFUSED, detail) from exc
+                log.info("CDP port %s of profile %s refused the connection; retry in %s s",
+                         started.port, profile_id, pause)
+                time.sleep(pause)
+                waited += pause
 
     def _reopen_hand_opened(self, entry: AccountMapEntry, account_label: str, profile_id: str,
                             udd: str, where: str, *,
