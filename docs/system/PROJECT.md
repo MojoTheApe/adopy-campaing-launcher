@@ -32,6 +32,21 @@ Tracker server, even though a legacy Tracker implementation remains in this repo
   visible form/list; saved/linked messages follow the real successful response.
   Missing-creative Publish refusals stay inline beside the visible form/footer
   action, preserving the named rows and refusal before submission.
+  ACL-142: the account map's Connect step asks for the ad account in an in-page
+  dialog instead of a browser prompt. It reads the open profile on opening and
+  again on "Read from the open account"; the result (name and `act_` number) is
+  shown in an editable field and, because Ads Manager opens the profile's
+  default ad account, an unedited read must be ticked as the intended account
+  before Connect is enabled. A typed number needs no tick; an empty one connects
+  without a number as before. In a country row, `x` takes the account out of
+  that country only (confirmed; it stays in ACL and moves to Available
+  accounts), and "Remove from ACL" is a separate confirmed action that deletes
+  this computer's account-map row and the account's country/asset placements
+  (`POST /account-map-remove` with `also_unlink`). The shared sheet, history,
+  Meta campaigns and the Multilogin profile are never touched.
+  Full removal uses the same case-insensitive account identity as local placements;
+  reconnect does not restore old country/asset links. Its confirmations use the
+  shared page dialogs and recoverable errors stay beside the originating action.
   ACL-1651 refreshes the Builder creative list on search/window focus (ten-second
   throttle) and once per missed search streak. A miss during the two-second request
   gap waits in the background for its refresh; typing remains available and the

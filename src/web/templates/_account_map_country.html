@@ -254,7 +254,11 @@ screenshot: {{ sr.shot }}{% endif %}">{{ sr.error | truncate(40, True, '…') }}
               <button type="button" class="amap-x"
                       title="Take {{ r.account }} out of {{ mc.country }}. The country stays; the account keeps its Multilogin profile, its proxy and its history, and moves to Available accounts."
                       aria-label="Take {{ r.account }} out of {{ mc.country }}"
-                      onclick="amapUnlink({{ r.account | tojson | forceescape }},'country',{{ mc.key | tojson | forceescape }})">×</button>
+                      onclick="amapUnlink({{ r.account | tojson | forceescape }},'country',{{ mc.key | tojson | forceescape }},this)">×</button>
+              <button type="button" class="amap-x amap-x-acl"
+                      title="Remove {{ r.account }} from ACL on this computer: its row in this computer's account map goes and it leaves every country. The shared sheet, its history, its campaigns in Meta and its Multilogin profile stay."
+                      aria-label="Remove {{ r.account }} from ACL"
+                      onclick="amapRemoveFromAcl({{ r.account | tojson | forceescape }},this)">Remove from ACL</button>
             </td>
           </tr>
         {% endfor %}
