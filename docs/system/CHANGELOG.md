@@ -1,23 +1,26 @@
 # System history
 
-## Builder: pre-flight audit as topics, Check with Meta, "could not check" - ACL-1990 — 2026-10-18
+## ACL-2050 — API builder verifies Meta kept manual placements — 2026-10-21
 
-- The audit card shows seven topics instead of ~25 rows: Account & access, Audience & targeting,
-  Budget, Link & Instant Form, Creatives & texts, Names & duplicates, Meta plan check. Each rule
-  carries its `topic` in `preflight_rules.py`; the topic list is exported with the rules.
-- Topic status is the worst of its checks (error › warning › not checked › ok). A topic with an
-  error, a warning or a "Retry" opens by itself; a click opens or closes it and is remembered until
-  its status changes. A check inside still jumps to its field.
-- "Check with Meta" sits in a strip at the top of the card with what the last check found
-  ("Checked with Meta at …", "Edited since the check", "Could not check: …"). While it runs it says
-  that the Multilogin profile is being opened (30 s – 3 min) and counts the elapsed time; the
-  drawer-foot "Check plan (no writes)" became "Check N campaigns with Meta" and counts time too.
-- `/publish-plan` returns `error_kind`: `not_checked` when the read session fails before any campaign
-  is checked (profile busy, connection reset, proxy sign-in, CDP timeout, rate limit), `account` for
-  an unavailable ad account, `plan` for a draft that cannot be built. `not_checked` shows as
-  "Could not check" with Retry in Meta plan check and no longer switches Publish off; the publish
-  job meets the same cause and reports it. `account` and `plan` still block.
-[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/990).
+After the API builder creates a campaign, the post-create read-back now also reads the campaign's
+`advantage_state_info` and each ad set's `value_rules_applied`/`value_rule_set_id`. If Meta reports
+`advantage_placement_state=ENABLED`, or the ad set lost the manual platforms/positions or holds a different
+list, Check plan stops with a blocking English error (no auto-fix). A missing `advantage_state_info`
+is not blocking and is flagged `placement_state_verified=false` in the diagnostics. `advantage_audience_state` at campaign level and applied value
+rules are reported as warnings and in `readback.diagnostics` only. Read-only: no new write keys, no value
+rules or account-level exclusion writes. Review fix: the placements check compares platforms, positions and devices
+order-insensitively, so Meta returning the same lists in another order no longer stops Check plan; a genuinely
+different set or automatic placements still stop. A missing `advantage_placement_state` is now also shown as a
+warning ("placement mode was not verified"). Tests: `tests/test_acl2050_placement_readback.py`.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1050).
+
+## ACL-1626 — Account notes: damaged notes file is reported — 2026-10-21
+
+When the account notes file is damaged and set aside, the dashboard now logs a
+warning, returns the set-aside notice in the save response and shows a one-line
+banner on the account map. The backup name has millisecond resolution plus a
+collision counter, so two corruptions in the same moment keep both copies.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/626).
 
 ## ACL-1381 — Consistent Builder ad-text wording — 2026-10-18
 
@@ -36,6 +39,28 @@ new code head retains candidate verification. Existing aggregate negatives,
 producer names, triggers, policies and runtime behavior stay intact. This records
 project verification behavior; it does not establish a cost saving or delivery.
 [Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/971).
+
+## RPA: the first of two attach attempts is no longer logged as a verdict - ACL-1165
+
+- A failed strict attach attempt now logs "strict attempt found no own CDP port (not final: a lenient attach
+  may be tried next)"; a failed lenient attempt logs a neutral "lenient attempt found no CDP debug port either".
+  Both stay at INFO and no longer contain "attachment unavailable".
+- "attachment unavailable" is logged once, at WARNING, only when every path is exhausted: when DirectCDP
+  refuses to relaunch an open profile that has no CDP port. The message points to opening the profile in
+  the Multilogin Desktop app.
+- Log text only. The relaunch refusal, its error text and the `FB_RPA_ALLOW_UNPROXIED_RELAUNCH` gate are unchanged.
+
+## API publish: no review window when there is nothing to review — ACL-1784 — 2026-10-17
+
+With `fb_backend=api` a finished job keeps the Multilogin profile as a review
+window (holding a queue slot) only when Meta received writes and the readback
+did not confirm them all. A job that wrote nothing (plan or preflight error,
+stop before the first write) or whose every campaign is created and verified
+frees its slot; it stops the profile only if the job started it, never one the
+user opened. The job panel states in English why the window was or was not
+kept. If a profile the job started stays open anyway (Stop, the keep-open
+switch, a dry run, a failed stop), the slot stays taken and the panel says the
+profile is still open. The RPA path is unchanged.
 
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
@@ -264,6 +289,14 @@ a clear refusal.
   changed shard assignment. The pilot tests now restore each handler's pre-test
   filters, so later tests see their own logging behavior. Production redaction and
   the routing-log assertions remain unchanged.
+
+## Countries: a vertical activity line replaces the dot — ACL-1838
+
+- Active country rows show a static 2 px line in the existing accent color at the
+  left, following the owner's selected design option 3. Inactive rows have no marker.
+- The marker occupies no label space and has no separate pointer target. The existing
+  activity predicate, expanded-country highlight, country actions and FTD counts
+  retain their behavior.
 
 ## Media wizard: Crop -> Media loop no longer ends in a false "stuck" stop - ACL-1736
 

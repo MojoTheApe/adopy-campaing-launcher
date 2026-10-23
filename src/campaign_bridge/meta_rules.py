@@ -40,7 +40,10 @@ ALLOWED_KINDS: dict[str, str] = {
     "cta_enum": "call_to_action",
     "placements_by_objective": "placements",
 }
-KINDS = tuple(ALLOWED_KINDS) + ("text_limit", "required_field")
+#: `fact` — справочная запись без проверки: факт о Meta, который билдер пока не
+#: умеет проверить (лимиты, снятие с поддержки, живые наблюдения). `check_job`
+#: её не читает; обязательна только пометка `note` с самим фактом.
+KINDS = tuple(ALLOWED_KINDS) + ("text_limit", "required_field", "fact")
 
 #: Как поле называется для человека в сообщении.
 FIELD_LABELS = {
@@ -147,6 +150,9 @@ def validate_rules(rules: Any) -> None:
                 raise MetaRulesError(f"{rid}: text_limit needs a positive int max_len")
             if not isinstance(rule["applies_to"].get("field"), str):
                 raise MetaRulesError(f"{rid}: text_limit needs applies_to.field")
+        elif kind == "fact":
+            if not isinstance(rule.get("note"), str) or not rule["note"].strip():
+                raise MetaRulesError(f"{rid}: kind fact needs a non-empty 'note'")
         elif kind == "required_field":
             req = rule.get("required")
             if not isinstance(req, list) or not req or not all(isinstance(x, str) for x in req):
@@ -164,6 +170,35 @@ def load_rules(directory: str | Path | None = None) -> RuleSet:
     validate_meta(meta)
     validate_rules(rules)
     return RuleSet(meta=meta, rules=tuple(rules))
+
+
+_VERSION_RE = re.compile(r"^v(\d+)\.(\d+)$")
+
+
+def _version_key(version: Any) -> tuple[int, int] | None:
+    m = _VERSION_RE.match(str(version or "").strip().lower())
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def graph_api_version(env_override: str | None = None, directory: str | Path | None = None) -> str:
+    """Graph API version: `api_version_current` from meta.json is the single source (ACL-2123).
+
+    An env override wins only when it is a well-formed version strictly newer than
+    the registry's; an equal, older (e.g. the stale v22.0 pin) or malformed value
+    is ignored.
+    """
+    base = Path(directory) if directory else RULES_DIR
+    try:
+        meta = json.loads((base / "meta.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        raise MetaRulesError(f"cannot read Meta rules registry in {base}: {e}") from None
+    validate_meta(meta)
+    current = str(meta["api_version_current"]).strip()
+    override = (env_override or "").strip().lower()
+    new, cur = _version_key(override), _version_key(current)
+    if new is not None and cur is not None and new > cur:
+        return override
+    return current
 
 
 # ── Чтение значений из задания ──────────────────────────────────────────

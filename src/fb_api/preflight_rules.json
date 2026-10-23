@@ -41,9 +41,23 @@
         "level": "campaign",
         "sel": ""
       },
-      "hint": "choose a Page that belongs to this ad account on the Accounts page (page_id)",
+      "hint": "choose a Facebook Page in this campaign or use Automatic; Refresh pages to retry loading",
       "id": "page_ok",
       "label": "Facebook Page",
+      "severity": "error",
+      "side": "server",
+      "topic": "account",
+      "unit": "campaign"
+    },
+    {
+      "applies": "always",
+      "field": {
+        "level": "campaign",
+        "sel": ""
+      },
+      "hint": "the ad is set for Instagram placements: connect an Instagram account to the Facebook Page, or wait for manual placements (ACL-1772) to publish Facebook-only",
+      "id": "instagram_identity",
+      "label": "Instagram account of the Page",
       "severity": "error",
       "side": "server",
       "topic": "account",
@@ -251,7 +265,7 @@
         "level": "ad",
         "sel": ".cb-creative-search"
       },
-      "hint": "file type, size (image 30 MB, video 200 MB) or video length is over the limit",
+      "hint": "file type, size (image 30 MB, video 1536 MB) or video length is over the limit",
       "id": "media_limits",
       "label": "Media within Meta limits",
       "severity": "error",
