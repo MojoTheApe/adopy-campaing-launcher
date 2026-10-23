@@ -378,6 +378,8 @@ class FakeMeta:
         self.posts: list[tuple[str, dict]] = []
         #: (путь, передан ли on_ad) по каждой записи - ACL-1775.
         self.on_ad_posts: list[tuple[str, bool]] = []
+        #: (путь, передан ли children_active) по каждой записи - ACL-2114.
+        self.children_active_posts: list[tuple[str, bool]] = []
         self.gets: list[tuple[str, dict]] = []
         self.video_states = list(video_states)
         self.next_id = 100
@@ -431,8 +433,10 @@ class FakeMeta:
             p.pop("adlabels", None)
         return self._new(kind, **p)
 
-    def write(self, path, params, files=None, filename="", on_ad=False, **_k):
-        wp.check(ACT, "POST", path, params, files, on_ad=on_ad)       # та же политика, что у страницы
+    def write(self, path, params, files=None, filename="", on_ad=False, children_active=False, **_k):
+        # та же политика, что у страницы (ACL-2114: children_active - кампания подтверждена PAUSED)
+        wp.check(ACT, "POST", path, params, files, on_ad=on_ad, children_active=children_active)
+        self.children_active_posts.append((path, bool(children_active)))
         self.posts.append((path, dict(params)))
         self.on_ad_posts.append((path, bool(on_ad)))
         edge = path.rsplit("/", 1)[1]
@@ -475,6 +479,8 @@ class FakeMeta:
         parts = path.strip("/").split("/")
         if path == "/me/adaccounts":
             return {"data": [{"account_id": ACT[4:], "account_status": 1}]}
+        if path == "/me/accounts":
+            return {"data": []}      # ACL-2105: у профиля своих Страниц нет
         if path == "/search":
             t = params["type"]
             if t == "adgeolocation":
@@ -590,9 +596,13 @@ def test_full_create_is_paused_everywhere_and_the_readback_matches(tmp_path):
     assert edges == ["campaigns", "adsets", "adimages", "adcreatives", "ads", "adimages", "adcreatives",
                      "ads", "advideos", "adcreatives", "ads"]
     for path, params in meta.posts:
-        if path.rsplit("/", 1)[1] in ("campaigns", "adsets", "ads"):
+        edge = path.rsplit("/", 1)[1]
+        # ACL-2114: кампания PAUSED, наборы и объявления ACTIVE под ней.
+        if edge == "campaigns":
             assert params["status"] == "PAUSED"
-        assert "ACTIVE" not in json.dumps(params)
+        if edge in ("adsets", "ads"):
+            assert params["status"] == "ACTIVE"
+        assert json.dumps(params).count("ACTIVE") == (1 if edge in ("adsets", "ads") else 0)
     camp = next(o for o in meta.objects.values() if o["_kind"] == "campaign")
     assert camp["daily_budget"] == "2000" and camp["objective"] == "OUTCOME_LEADS"
     adset = next(o for o in meta.objects.values() if o["_kind"] == "adset")
@@ -661,7 +671,9 @@ def test_readback_flags_a_campaign_somebody_activated(tmp_path):
     meta = FakeMeta()
     meta.mutate_on_read[("campaign", "status")] = "ACTIVE"
     out, _ = _run(meta, _draft(tmp_path, ads=1))
-    assert any(m["object"] == "campaign" and m["field"] == "status" for m in out.mismatches)
+    # ACL-2114: кампания не подтверждена PAUSED - стоп ДО первой записи набора/объявления.
+    assert out.stop_kind == "campaign_not_paused" and "not confirmed PAUSED" in out.error
+    assert [p.rsplit("/", 1)[1] for p, _ in meta.posts] == ["campaigns"]
 
 
 def test_video_processing_wait_is_bounded(tmp_path):
@@ -927,7 +939,7 @@ def test_dry_run_runs_preflight_and_returns_the_plan_with_zero_writes(tmp_path):
     plan = res["plan"]
     assert plan["campaign"]["status"] == "PAUSED" and plan["existing_campaign_id"] == ""
     ads = plan["ad_sets"][0]["ads"]
-    assert [a["format"] for a in ads] == ["image", "video"] and all(a["status"] == "PAUSED" for a in ads)
+    assert [a["format"] for a in ads] == ["image", "video"] and all(a["status"] == "ACTIVE" for a in ads)
     assert plan["ad_sets"][0]["targeting"]["geo_locations"] == {"countries": ["MX"]}
 
 

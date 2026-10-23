@@ -39,13 +39,45 @@ def _mlx_home() -> Path:
     return Path(os.environ.get("MLX_HOME", str(Path.home() / "mlx")))
 
 
-def _find_mlx_profile_dir(profile_id: str) -> Path | None:
-    profiles_root = _mlx_home() / "profiles"
-    if not profiles_root.is_dir():
+def _find_mlx_profile_dir(profile_id: str, folder_id: str = "") -> Path | None:
+    """Папка профиля Multilogin — по адресу `profiles/{ws}/{folder_id}/{profile_id}`.
+
+    Раньше здесь был `rglob` по всему `~/mlx/profiles` (полные каталоги
+    Chrome, ~10 с на каждый вызов, ACL-144). Теперь смотрим только имена на
+    глубине не больше двух уровней под рабочим пространством и никуда не
+    спускаемся глубже. Запасного рекурсивного обхода нет намеренно: профиль,
+    которого нет в известной раскладке, считается не найденным (None), а не
+    ищется «где-нибудь ещё» — так нельзя взять папку чужого профиля.
+    Совпадение только по точному имени каталога; пустой id -> None.
+    """
+    profile_id = (profile_id or "").strip()
+    if not profile_id or profile_id in {".", ".."} or any(c in profile_id for c in "/\\"):
         return None
-    for p in profiles_root.rglob(profile_id):
-        if p.is_dir():
-            return p
+    root = _mlx_home() / "profiles"
+    folder_id = (folder_id or "").strip()
+    try:
+        if not root.is_dir():
+            return None
+        workspaces = [ws for ws in root.iterdir() if ws.is_dir()]
+        # Известный folder_id важнее любого другого совпадения: ищем его по
+        # всем рабочим пространствам раньше, чем смотрим остальные папки.
+        if folder_id:
+            for ws in workspaces:
+                p = ws / folder_id / profile_id
+                if p.is_dir():
+                    return p
+        for ws in workspaces:
+            p = ws / profile_id
+            if p.is_dir():
+                return p
+            for folder in ws.iterdir():
+                if not folder.is_dir():
+                    continue
+                p = folder / profile_id
+                if p.is_dir():
+                    return p
+    except OSError:
+        return None
     return None
 
 
@@ -1927,10 +1959,21 @@ class MultiloginDirectCDPProvider:
             return None
         port = self._discover_owned_debug_port(user_data_dir) if strict_profile else self._discover_debug_port(user_data_dir, profile_id)
         if port is None:
-            log.info(
-                "Profile %s is running but no CDP debug port found — attachment unavailable",
-                profile_id,
-            )
+            # Промежуточный шаг, не итог (ACL-1165): после строгой попытки
+            # вызывающий может попробовать мягкую; итог пишет тот, кто исчерпал
+            # все пути (`open` ниже — отказ от перезапуска).
+            if strict_profile:
+                log.info(
+                    "Profile %s is running; strict attempt found no own CDP port "
+                    "(not final: a lenient attach may be tried next)",
+                    profile_id,
+                )
+            else:
+                log.info(
+                    "Profile %s is running; lenient attempt found no CDP debug port either "
+                    "(the caller decides what happens next)",
+                    profile_id,
+                )
             return None
         try:
             cdp_url = f"http://127.0.0.1:{port}"
@@ -2006,6 +2049,14 @@ class MultiloginDirectCDPProvider:
                 if running
                 else "the profile is not running"
             )
+            if running:
+                # Итог: строгая и мягкая попытки исчерпаны (ACL-1165).
+                log.warning(
+                    "Profile %s is running but no CDP debug port was found by any attach "
+                    "attempt - attachment unavailable; refusing to relaunch without the "
+                    "profile's proxy. Open the profile in the Multilogin Desktop app and retry.",
+                    profile_id,
+                )
             raise RuntimeError(
                 f"{account_label}: refusing to relaunch this Multilogin profile. "
                 f"DirectCDP can only attach to a profile MLX itself started, and {why}. "
@@ -2769,6 +2820,18 @@ class MultiloginAttachOnlyProvider:
         _record_profile_restart(entry, profile_id, ok=True, where="campaign_open")
         return conn
 
+    def robot_owns_profile(self, entry: AccountMapEntry) -> bool:
+        """Профиль поднят роботом (или робот цеплялся к нему по порту) — ему же решать, закрывать ли.
+
+        Те же условия, что у `close_finished_profile`, но без остановки (ACL-2113): окно,
+        открытое руками, не «оставлено для удобства» — оно не наше.
+        """
+        profile_id = (entry.profile_id or "").strip()
+        if not profile_id:
+            return False
+        user_data_dir = _find_mlx_profile_dir(profile_id)
+        return bool(_robot_profile(profile_id, str(user_data_dir) if user_data_dir is not None else ""))
+
     def close_finished_profile(self, entry: AccountMapEntry, account_label: str) -> str:
         """Закрыть профиль, чьи кампании собрались чисто (ACL-1444).
 
@@ -2822,8 +2885,25 @@ def stop_profile_on_request(entry: AccountMapEntry, account_label: str) -> str:
         raise RuntimeError(f"{account_label}: profile_id is required")
     user_data_dir = _find_mlx_profile_dir(profile_id)
     udd = str(user_data_dir) if user_data_dir is not None else ""
+    # ACL-2095 п. 8: stop, посланный, пока старт ещё не устоялся, MLX принимает и не
+    # выполняет — браузер встаёт брошенным. Ждём готовности поднятого нами профиля.
+    from src.fb_api import launch as _launch
+    from src.fb_api import profile as _fb_profile
+
+    settled = _launch.wait_start_settled(profile_id)
+    stop_at = time.time()
     MultiloginAttachOnlyProvider()._stop_profile(entry, account_label, profile_id, udd, allow_kill=False)
     _ROBOT_PROFILES.pop(profile_id, None)
+    # Закрытым профиль считаем, когда его процесс ушёл (статусу MLX Desktop не верим).
+    gone = _fb_profile.wait_gone(profile_id)
+    # ACL-2117: время остановки и ухода процесса — для проверки гипотезы «переоткрыли в разгар сохранения».
+    _launch.record_profile_stop(account=account_label, profile_id=profile_id, stop_at=stop_at,
+                                exit_at=time.time() if gone else None, settled=settled, gone=gone)
+    if not gone:
+        log.warning("%s: profile %s still has a process %.0f s after the MLX stop (start was %s)",
+                    account_label, profile_id, _launch.STOP_GONE_WAIT_S, settled)
+        # ACL-2113: автозакрытие простаивающих окон не считает это успехом.
+        return "still_running"
     return "closed"
 
 

@@ -419,7 +419,7 @@ def test_instant_form_ad_set_and_creative_are_created_paused_and_read_back(tmp_p
     assert out.error == "" and out.readback["ok"] is True, out.mismatches
     camp, = _objs(meta, "campaign")
     adset, = _objs(meta, "adset")
-    assert camp["status"] == "PAUSED" and adset["status"] == "PAUSED"
+    assert camp["status"] == "PAUSED" and adset["status"] == "ACTIVE"
     assert adset["destination_type"] == "ON_AD" and adset["optimization_goal"] == "LEAD_GENERATION"
     assert adset["promoted_object"] == {"page_id": PAGE}, "в promoted_object только Страница, без пикселя"
     assert "pixel" not in json.dumps(adset["promoted_object"]) and "custom_event_type" not in json.dumps(adset)
@@ -433,7 +433,7 @@ def test_instant_form_ad_set_and_creative_are_created_paused_and_read_back(tmp_p
         assert c["object_story_spec"]["page_id"] == PAGE
         assert c["object_story_spec"]["link_data"]["link"] == cr.INSTANT_FORM_LINK
     assert sorted(forms_seen) == [FORM, FORM2]
-    assert all(o["status"] == "PAUSED" for o in _objs(meta, "ad"))
+    assert all(o["status"] == "ACTIVE" for o in _objs(meta, "ad"))
     assert len(out.ad_ids) == 2
 
 

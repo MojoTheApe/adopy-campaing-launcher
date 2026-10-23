@@ -1,23 +1,26 @@
 # System history
 
-## ACL-1138 — Refuse a Multilogin profile that has no proxy — 2026-10-16
+## ACL-2050 — API builder verifies Meta kept manual placements — 2026-10-21
 
-Before the robot attaches to or starts a Multilogin profile (Ads Manager publish through
-every Multilogin provider, `attach_existing_only` spend reads, the "open profile" button,
-Graph-API-in-profile `fb_api.profile.open_profile` (API publish, API spend), and the warm
-pool both when it opens or adopts a profile and at every checkout),
-it reads the profile's proxy configuration from the MLX API (`POST /profile/search` with `profile_ids`; works
-in both workspaces, while `/profile/metas` answers 501 in workspace B). A profile with
-no proxy stops the account with `profile_no_proxy` ("Add the proxy to the profile in
-Multilogin"), before anything touches the profile or Facebook. A failed or unavailable
-check logs a warning, records `proxy_gate_unchecked` telemetry and lets the run continue
-(5 s timeout, held for 60 s); a passing result is cached for ten minutes, a refusal is
-not. Without a known workspace both A and B are asked. `FB_RPA_PROXY_GATE=0` turns it off. The browser command
-line's `--proxy-server` flag is logged after attach/start as evidence only, because
-MLX may apply some proxy types through its agent. Read-only survey on 2026-10-16:
-34 of 1848 profiles in workspace A and 3 of 520 in B have no proxy configured. The gate
-was checked read-only against real http, socks5 and no-proxy profiles in both
-workspaces; an attach on a live run has not been observed yet.
+After the API builder creates a campaign, the post-create read-back now also reads the campaign's
+`advantage_state_info` and each ad set's `value_rules_applied`/`value_rule_set_id`. If Meta reports
+`advantage_placement_state=ENABLED`, or the ad set lost the manual platforms/positions or holds a different
+list, Check plan stops with a blocking English error (no auto-fix). A missing `advantage_state_info`
+is not blocking and is flagged `placement_state_verified=false` in the diagnostics. `advantage_audience_state` at campaign level and applied value
+rules are reported as warnings and in `readback.diagnostics` only. Read-only: no new write keys, no value
+rules or account-level exclusion writes. Review fix: the placements check compares platforms, positions and devices
+order-insensitively, so Meta returning the same lists in another order no longer stops Check plan; a genuinely
+different set or automatic placements still stop. A missing `advantage_placement_state` is now also shown as a
+warning ("placement mode was not verified"). Tests: `tests/test_acl2050_placement_readback.py`.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/1050).
+
+## ACL-1626 — Account notes: damaged notes file is reported — 2026-10-21
+
+When the account notes file is damaged and set aside, the dashboard now logs a
+warning, returns the set-aside notice in the save response and shows a one-line
+banner on the account map. The backup name has millisecond resolution plus a
+collision counter, so two corruptions in the same moment keep both copies.
+[Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/626).
 
 ## ACL-1381 — Consistent Builder ad-text wording — 2026-10-18
 
@@ -36,6 +39,28 @@ new code head retains candidate verification. Existing aggregate negatives,
 producer names, triggers, policies and runtime behavior stay intact. This records
 project verification behavior; it does not establish a cost saving or delivery.
 [Task](https://github.com/MojoTheApe/adopy-campaing-launcher/issues/971).
+
+## RPA: the first of two attach attempts is no longer logged as a verdict - ACL-1165
+
+- A failed strict attach attempt now logs "strict attempt found no own CDP port (not final: a lenient attach
+  may be tried next)"; a failed lenient attempt logs a neutral "lenient attempt found no CDP debug port either".
+  Both stay at INFO and no longer contain "attachment unavailable".
+- "attachment unavailable" is logged once, at WARNING, only when every path is exhausted: when DirectCDP
+  refuses to relaunch an open profile that has no CDP port. The message points to opening the profile in
+  the Multilogin Desktop app.
+- Log text only. The relaunch refusal, its error text and the `FB_RPA_ALLOW_UNPROXIED_RELAUNCH` gate are unchanged.
+
+## API publish: no review window when there is nothing to review — ACL-1784 — 2026-10-17
+
+With `fb_backend=api` a finished job keeps the Multilogin profile as a review
+window (holding a queue slot) only when Meta received writes and the readback
+did not confirm them all. A job that wrote nothing (plan or preflight error,
+stop before the first write) or whose every campaign is created and verified
+frees its slot; it stops the profile only if the job started it, never one the
+user opened. The job panel states in English why the window was or was not
+kept. If a profile the job started stays open anyway (Stop, the keep-open
+switch, a dry run, a failed stop), the slot stays taken and the panel says the
+profile is still open. The RPA path is unchanged.
 
 ## ACL-1924 — Published-package acceptance continuation — 2026-10-15
 
@@ -264,6 +289,14 @@ a clear refusal.
   changed shard assignment. The pilot tests now restore each handler's pre-test
   filters, so later tests see their own logging behavior. Production redaction and
   the routing-log assertions remain unchanged.
+
+## Countries: a vertical activity line replaces the dot — ACL-1838
+
+- Active country rows show a static 2 px line in the existing accent color at the
+  left, following the owner's selected design option 3. Inactive rows have no marker.
+- The marker occupies no label space and has no separate pointer target. The existing
+  activity predicate, expanded-country highlight, country actions and FTD counts
+  retain their behavior.
 
 ## Media wizard: Crop -> Media loop no longer ends in a false "stuck" stop - ACL-1736
 

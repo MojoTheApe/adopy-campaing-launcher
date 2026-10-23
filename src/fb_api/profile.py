@@ -32,10 +32,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
+from src.fb_api import launch as _launch
+
 
 #: Сколько ждём, пока закрывающийся профиль отпустит порт, и шаг опроса.
-CLOSING_WAIT_S = 6.0
+#: ACL-2117: столько же, сколько ждёт остановка (ACL-2095 п. 8c), — не 6 с: процесс
+#: остановленного профиля живёт дольше, и действие в это окно раньше падало.
+CLOSING_WAIT_S = _launch.STOP_GONE_WAIT_S
 CLOSING_POLL_S = 2.0
+CLOSING_WAIT_MESSAGE = "Waiting for the profile to finish closing"
 
 
 class ProfileError(RuntimeError):
@@ -180,7 +185,8 @@ def _arg_value(args: list, flag: str) -> str:
 def local_debug_port(profile_id: str, *, process_iter: Callable[[], Iterable[Any]] | None = None,
                      profile_dir: Path | str | None = None,
                      accepting: Callable[[int], bool] = _accepting,
-                     listens: Callable[[Any, int], bool] | None = None) -> tuple[str, int | None]:
+                     listens: Callable[[Any, int], bool] | None = None,
+                     stopped_at: float | None = None) -> tuple[str, int | None]:
     """Mimic ЭТОГО профиля на машине: ("port", N) / ("closing", N) / ("no_port", None) / ("none", None).
 
     Совпадение только по своему профилю: `--user-data-dir` равен папке профиля
@@ -190,6 +196,12 @@ def local_debug_port(profile_id: str, *, process_iter: Callable[[], Iterable[Any
     порта, и «открыт руками» из них не выводится. Браузерный процесс без порта
     вовсе — открыт руками ("no_port"); порт указан, но не слушается — профиль
     закрывается ("closing"): это не «руками».
+
+    `stopped_at` (время остановки из `stop_log`, только пока идёт пауза после
+    неё): браузерный процесс, созданный РАНЬШЕ остановки, — тот, что мы
+    остановили, он ещё умирает. Порт у него может ещё слушаться, но браузер не
+    отвечает (TEST9095y 12:11:08, B97: `CdpTimeout: connect`) — "closing",
+    к нему не цепляемся.
     """
     pid = (profile_id or "").strip().lower()
     if not pid:
@@ -202,7 +214,7 @@ def local_debug_port(profile_id: str, *, process_iter: Callable[[], Iterable[Any
             return "none", None  # нечем посмотреть — идём через MLX
 
         def process_iter():
-            return psutil.process_iter(["name", "exe", "cmdline"])
+            return psutil.process_iter(["name", "exe", "cmdline", "create_time"])
 
         def listens(proc, port):
             try:
@@ -230,6 +242,9 @@ def local_debug_port(profile_id: str, *, process_iter: Callable[[], Iterable[Any
             if not ((want_dir and nudd == want_dir) or nudd.rsplit("/", 1)[-1] == pid):
                 continue
             found_process = True
+            created = info.get("create_time")
+            survivor = (stopped_at is not None and isinstance(created, (int, float))
+                        and float(created) < float(stopped_at))
             raw = _arg_value(args, "--remote-debugging-port")
             port = int(raw) if raw.isdigit() else 0
             if port == 0:
@@ -241,6 +256,9 @@ def local_debug_port(profile_id: str, *, process_iter: Callable[[], Iterable[Any
                             break
                     except (OSError, IndexError, ValueError):
                         continue
+            if survivor:
+                stale_port = port or -1   # остановленный нами браузер ещё жив: ждём, не цепляемся
+                continue
             if port > 0 and listens(proc, port) and accepting(port):
                 return "port", port
             if port > 0:
@@ -248,11 +266,50 @@ def local_debug_port(profile_id: str, *, process_iter: Callable[[], Iterable[Any
         except Exception:
             continue
     if stale_port:
-        return "closing", stale_port
+        return "closing", (stale_port if stale_port > 0 else None)
     return ("no_port", None) if found_process else ("none", None)
 
 
+def probe_local(profile_id: str) -> tuple[str, int | None]:
+    """`local_debug_port` с папкой профиля и временем недавней остановки (`stop_log`)."""
+    from src.fb_api import stop_log as _stop_log
+
+    try:
+        stopped_at = _stop_log.default().recent_stop_at(profile_id)
+    except Exception:  # noqa: BLE001 — журнал не прочитался: как до правила
+        stopped_at = None
+    return local_debug_port(profile_id, profile_dir=find_profile_dir(profile_id), stopped_at=stopped_at)
+
+
+def _default_on_wait(text: str) -> None:
+    """Строка ожидания на карте аккаунта (та же, что у «Waiting for a free profile slot»)."""
+    try:
+        from src.analysis_agent import account_spend as _as
+        from src.fb_api import mlx_session as _mlx
+
+        account = _mlx.current_account()
+        if account:
+            _as._set_wait_note(account, text)
+    except Exception:  # noqa: BLE001 — подпись не должна ронять запуск
+        pass
+
+
+def _wait_for_sync(profile_id: str, on_wait: Callable[[str], None] | None, sleep: Callable[[float], None]) -> str:
+    """ACL-2117: не поднимать профиль, пока MLX досохраняет его после остановки. Пусто — можно."""
+    from src.fb_api import stop_log as _stop_log
+
+    return _stop_log.wait_or_refusal(profile_id, on_wait=on_wait or _default_on_wait,
+                                     sleep=None if sleep is time.sleep else sleep)
+
+
+def _sync_error(why: str) -> ProfileError:
+    from src.fb_api import stop_log as _stop_log
+
+    return ProfileError(why, code="cancelled" if why == _stop_log.CANCELLED_TEXT else "restart_cooldown")
+
+
 def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
+                 on_wait: Callable[[str], None] | None = None,
                  launcher_factory: Callable[[str], Any] | None = None,
                  local_probe: Callable[[str], tuple[str, int | None]] | None = None,
                  sleep: Callable[[float], None] = time.sleep,
@@ -278,16 +335,18 @@ def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
 
     # 1. Процесс Mimic этого профиля на машине (как attach_existing_only робота).
     if local_probe is None:
-        def local_probe(pid: str) -> tuple[str, int | None]:
-            return local_debug_port(pid, profile_dir=find_profile_dir(pid))
+        local_probe = probe_local
     kind, local_port = local_probe(profile_id)
     # Профиль закрывается: несколько секунд ждём, что порт пропадёт вместе с
     # процессом (тогда идём в MLX) или оживёт; потом отказ, ничего не трогаем.
     waited = 0.0
     while kind == "closing" and waited < closing_wait_s:
+        (on_wait or _default_on_wait)(CLOSING_WAIT_MESSAGE)
         sleep(CLOSING_POLL_S)
         waited += CLOSING_POLL_S
         kind, local_port = local_probe(profile_id)
+    if waited:
+        (on_wait or _default_on_wait)("")
     if kind == "closing":
         raise ProfileError(
             "the profile is closing or starting; retry in a minute. Nothing was stopped.",
@@ -306,6 +365,18 @@ def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
     launcher = (launcher_factory or _default_launcher)(instance)
     state, port = running_state(launcher, profile_id)
     if state == "running":
+        from src.fb_api import stop_log as _stop_log
+
+        had_pause = _stop_log.default().restart_wait_s(profile_id) > 0
+        why = _wait_for_sync(profile_id, on_wait, sleep)
+        if why:
+            # Остановили сами и недавно, а процесса на машине нет: MLX помнит
+            # старый порт. К нему не цепляемся (TEST9095y, B97: CdpTimeout connect).
+            raise _sync_error(why)
+        if had_pause:
+            # Ждали: старый ответ MLX про порт устарел — спрашиваем заново.
+            state, port = running_state(launcher, profile_id)
+    if state == "running":
         if not port:
             raise ProfileError(
                 "the profile is open but has no automation port (opened by hand in MLX Desktop?). "
@@ -318,9 +389,9 @@ def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
     # Закрыли и сразу подняли заново — вероятная причина двух разлогинов (ACL-1811).
     from src.fb_api import stop_log as _stop_log
 
-    why = _stop_log.refusal(profile_id)
+    why = _wait_for_sync(profile_id, on_wait, sleep)
     if why:
-        raise ProfileError(why, code="restart_cooldown")
+        raise _sync_error(why)
 
     # ACL-1826: пачка уже знает, что общая сессия слота потеряна, — не стучимся в MLX зря.
     from src.fb_api import mlx_session as _mlx
@@ -328,15 +399,21 @@ def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
     skip = _mlx.refusal(_mlx.current_batch(), instance, _mlx.current_account())
     if skip:
         raise ProfileError(skip["message"], code=skip["code"])
-    try:
-        started = launcher.start_profile(folder_id or None, profile_id, headless=False)
-    except Exception as exc:  # noqa: BLE001 — MLX/сеть: узнаём 403 потери сессии и вход в прокси
-        text, code = _mlx.humanize(exc, instance, _mlx.current_account())
-        if code:
-            raise ProfileError(text, code=code) from exc
-        raise
+    started, adopted_port, retried = _start_with_one_retry(
+        launcher, profile_id, folder_id, instance, local_probe=local_probe, sleep=sleep)
+    if adopted_port:
+        # Первый старт оборвался, а профиль поднялся (B91, 12:08:40 → закрыт в 12:11:46):
+        # он наш — держит место и закрывается нами, как обычный старт.
+        _launch.mark_started(adopted_port, profile_id)
+        _launch.mark_reopened(profile_id)
+        return OpenedProfile(profile_id, folder_id, instance, str(adopted_port), None,
+                             True, launcher, started_now=True)
     if not started.port:
         raise ProfileError("Multilogin did not return a debug port; nothing was stopped.")
+    started_now = getattr(started, "newly_started", False) is True or retried
+    if started_now:
+        _launch.mark_started(started.port, profile_id)
+        _launch.mark_reopened(profile_id)
     return OpenedProfile(
         profile_id=profile_id,
         folder_id=started.folder_id or folder_id,
@@ -348,8 +425,96 @@ def open_profile(profile_id: str, folder_id: str = "", instance: str = "A", *,
         launcher=launcher,
         # Владелец — только при настоящем старте: ответ «уже запущен» (409) или
         # неизвестный исход остаётся чужим и нами не закрывается (ревью ACL-1760, P1).
-        started_now=getattr(started, "newly_started", False) is True,
+        # Исключение — повтор после обрыва: до первого старта процесса не было,
+        # значит «уже запущен» на повторе — это наш первый старт.
+        started_now=started_now,
     )
+
+
+def wait_gone(profile_id: str, *, timeout_s: float | None = None,
+              probe: Callable[[str], tuple[str, int | None]] | None = None,
+              sleep: Callable[[float], None] = time.sleep,
+              clock: Callable[[], float] = time.monotonic) -> bool:
+    """После stop: дождаться, пока процесс профиля уйдёт (п. 8c, живой B97: ~15 с).
+
+    Статусу MLX Desktop/облака не верим — только процессы на машине. True — ушёл.
+    """
+    budget = _launch.STOP_GONE_WAIT_S if timeout_s is None else float(timeout_s)
+    # Без поиска папки профиля (rglob по ~/mlx долгий): совпадение по id в --user-data-dir.
+    look = probe or (lambda pid: local_debug_port(pid))
+    began = clock()
+    while True:
+        try:
+            kind, _port = look(profile_id)
+        except Exception:  # noqa: BLE001 — нечем посмотреть: не держим остановку
+            return True
+        if kind == "none":
+            _launch._record({"event": "fb_api_stop_gone", "ok": True, "took_s": round(clock() - began, 1)})
+            return True
+        if clock() - began >= budget:
+            _launch._record({"event": "fb_api_stop_gone", "ok": False, "took_s": round(clock() - began, 1),
+                             "left": kind})
+            return False
+        sleep(1.0)
+
+
+def _start_with_one_retry(launcher: Any, profile_id: str, folder_id: str, instance: str, *,
+                          local_probe: Callable[[str], tuple[str, int | None]],
+                          sleep: Callable[[float], None]) -> tuple[Any, int | None, bool]:
+    """MLX `start` в общем темпе (`launch.StartPacer`); обрыв 10053/10054 — один повтор.
+
+    Ответ — `(started, None, повторяли)` или `(None, порт, True)`, если после
+    обрыва профиль поднялся сам (его и берём, второй старт не шлём). Вход в
+    прокси, потеря сессии MLX, таймаут и ответы MLX с кодом не повторяются.
+    """
+    from src.fb_api import mlx_session as _mlx
+
+    for attempt in (1, 2):
+        began = time.monotonic()
+        pace: dict = {}
+        try:
+            with _launch.pacer().slot() as pace:
+                started = launcher.start_profile(folder_id or None, profile_id, headless=False)
+        except Exception as exc:  # noqa: BLE001 — MLX/сеть: узнаём 403 потери сессии и вход в прокси
+            text, code = _mlx.humanize(exc, instance, _mlx.current_account())
+            _launch.record_start(ok=False, took_s=time.monotonic() - began, attempt=attempt,
+                                 pace=pace, error=exc, code=code)
+            if code:
+                raise ProfileError(text, code=code) from exc
+            if attempt == 2 or not _launch.is_launcher_connection_error(exc):
+                raise
+            sleep(_launch.START_RETRY_DELAY_S)
+            port = _adopt_after_abort(profile_id, local_probe, sleep)
+            if port:
+                _launch.record_start(ok=True, took_s=time.monotonic() - began, attempt=attempt,
+                                     pace=pace, adopted=True)
+                return None, port, True
+            continue
+        _launch.record_start(ok=True, took_s=time.monotonic() - began, attempt=attempt, pace=pace)
+        return started, None, attempt == 2
+    raise AssertionError("unreachable")
+
+
+def _adopt_after_abort(profile_id: str, local_probe: Callable[[str], tuple[str, int | None]],
+                       sleep: Callable[[float], None]) -> int | None:
+    """После обрыва старта: поднялся ли профиль сам. Порт — или None (тогда повтор).
+
+    Процесс есть, а порт ещё не слушается, — профиль стартует: ждём, как у
+    закрывающегося (`CLOSING_WAIT_S`); не дождались — отказ, второго старта нет.
+    """
+    kind, port = local_probe(profile_id)
+    waited = 0.0
+    while kind in ("closing", "no_port") and waited < CLOSING_WAIT_S:
+        sleep(CLOSING_POLL_S)
+        waited += CLOSING_POLL_S
+        kind, port = local_probe(profile_id)
+    if kind == "port" and port:
+        return int(port)
+    if kind in ("closing", "no_port"):
+        raise ProfileError(
+            "Multilogin dropped the start request and the profile is still starting; "
+            "retry in a minute. Nothing was stopped.", code="profile_closing")
+    return None
 
 
 def release_profile(opened: OpenedProfile | None) -> str:
