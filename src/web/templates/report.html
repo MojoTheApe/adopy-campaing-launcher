@@ -4901,8 +4901,17 @@ async function dashRefresh(ev) {
         {% elif ds %}
           <span class="cb-draft-badge cb-draft-badge-blocked"
                 title="{{ (ds.blocking_failures or ds.errors or ds.campaign_names) | join(', ') }}">
-            ❌ Draft blocked · do not publish
+            {% if ds.state == 'stopped' %}⚠ Draft stopped · verify partial drafts
+            {% elif ds.state == 'running' %}⏳ Build in progress · not ready
+            {% elif ds.state == 'interrupted' %}⚠ Build interrupted · verify partial drafts
+            {% elif ds.state == 'unverified' %}⚠ Draft unverified · {{ ds.errors | join('; ') }}
+            {% else %}❌ Draft blocked · do not publish{% endif %}
             <span class="cb-draft-ts">{{ ds.ts[:16].replace('T',' ') }} UTC</span>
+          </span>
+        {% endif %}
+        {% if ds.previous_ready %}
+          <span class="cb-draft-ts" title="{{ ds.previous_ready.campaign_names | join(', ') }}">
+            Previous successful build · {{ ds.previous_ready.ts[:16].replace('T',' ') }} UTC (history)
           </span>
         {% endif %}
         <span style="font-size:var(--adopy-text-sm);color:var(--muted)">{{ recs | length }} rec{{ 's' if recs|length != 1 else '' }}</span>

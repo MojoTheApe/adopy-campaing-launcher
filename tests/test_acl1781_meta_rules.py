@@ -231,7 +231,7 @@ def _rpa_env(monkeypatch, drafts, meta_impl):
     monkeypatch.setattr(pj, "_write_draft_status", lambda *a, **k: None)
     monkeypatch.setattr(pf, "meta_rules_errors", meta_impl)
     job_id = "acl1781-job"
-    monkeypatch.setitem(pj._jobs, job_id, {"errors": [], "results": [], "status": "running",
+    monkeypatch.setitem(pj._jobs, job_id, {"job_id": job_id, "errors": [], "results": [], "status": "running",
                                            "account_label": "Acc", "total": 0, "done_count": 0})
     return pj, job_id, published
 
