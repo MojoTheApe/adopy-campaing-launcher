@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from src.fb_api import graph as g  # noqa: E402
+from tests.profile_lease_fakes import fake_profile  # noqa: E402
 from tests.test_acl1761_api_create import ACT, FakeMeta, _draft  # noqa: E402
 
 
@@ -31,7 +32,7 @@ class _FormReq:
     def __init__(self, fields):
         self._fields = dict(fields)
 
-    async def form(self):
+    async def form(self, **_limits):  # read_form передаёт пределы разбора
         return self._fields
 
 
@@ -82,7 +83,7 @@ def _read_session(monkeypatch, meta, *, writes=False):
         yield SimpleNamespace(client=client, act=ACT, account=account, notes={}, keep_next=False)
 
     monkeypatch.setattr(_api, "_session", session)
-    monkeypatch.setattr(_as, "_profile_key", lambda account, *a, **k: "p-" + account)
+    monkeypatch.setattr(_as, "_profile_key", lambda account, *a, **k: fake_profile(account))
     return opened
 
 
@@ -497,8 +498,10 @@ def test_publish_all_confirm_uses_the_mode_and_keeps_the_rpa_promise_literally()
     text = (ROOT / "src" / "web" / "templates" / "report.html").read_text(encoding="utf-8")
     ask = text[text.index("window.cbPublishAll"):]
     ask = ask[:ask.index("function _runPublishQueue")]
-    i = ask.index("cbApiMode() ? aclEscHtml(cbPublishMode())")
-    rpa_branch = ask[i:ask.index("'</span>'", i)]
+    # ACL-2118: режим стоит в итоговой строке окна (modeHtml помощника).
+    i = ask.index("modeHtml: cbApiMode()")
+    assert "cbPublishMode()" in ask[i:i + 300]
+    rpa_branch = ask[i:ask.index("noticesHtml:", i)]
     assert "Draft" in rpa_branch and "never clicks Publish" in rpa_branch
 
 

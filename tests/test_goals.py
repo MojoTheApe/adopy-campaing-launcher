@@ -240,3 +240,47 @@ def test_upsert_of_a_new_country_does_not_invent_assets():
     goals.save("Dan", [{"country": "Peru", "cpa": 55, "assets": {"1121": {"cpa": 30}}}])
     got = {g["country"]: g for g in goals.upsert("Dan", {"country": "Chile", "cpa": 40})}
     assert "assets" not in got["Chile"] and got["Peru"]["assets"]
+
+
+# ── ACL-602: the lead sees everyone's goals, a buyer only their own ──────
+# Эндпоинты зовутся напрямую: TestClient в этой сборке несовместим с httpx.
+
+def _call(monkeypatch, fn, me="Dan", **kw):
+    import asyncio, json
+    from src.web import app as web
+    monkeypatch.setenv("MY_CM_NAME", me)
+    monkeypatch.setattr(web, "_goal_countries_now", lambda who: [])
+    resp = asyncio.run(getattr(web, fn)(**kw))
+    return resp.status_code, json.loads(resp.body)
+
+
+def test_overview_lists_every_stored_manager():
+    goals.save("Dan", [{"country": "Chile", "ftd": 5}, {"country": "Peru", "ftd": 7}])
+    goals.save("Ana", [{"country": "Kuwait", "ftd": 3}])
+    got = goals.overview()
+    assert [m["cm"] for m in got] == ["Ana", "Dan"]
+    assert got[1]["countries"] == 2 and got[1]["ftd_total"] == 12
+
+
+def test_lead_gets_the_overview_endpoint(monkeypatch):
+    goals.save("Ana", [{"country": "Kuwait", "ftd": 3}])
+    monkeypatch.setenv("ACL_TEAM_LEAD", "1")
+    code, body = _call(monkeypatch, "goals_overview")
+    assert code == 200 and [m["cm"] for m in body["managers"]] == ["Ana"]
+
+
+def test_non_lead_cannot_see_other_peoples_goals(monkeypatch):
+    goals.save("Ana", [{"country": "Kuwait", "ftd": 3}])
+    code, body = _call(monkeypatch, "goals_overview")
+    assert code == 403 and "managers" not in body
+    code, body = _call(monkeypatch, "goals_read", cm="Ana")
+    assert code == 403 and "Kuwait" not in str(body)
+    code, _ = _call(monkeypatch, "goals_read", cm="")
+    assert code == 200  # own goals stay readable
+
+
+def test_lead_can_still_read_one_persons_goals(monkeypatch):
+    goals.save("Ana", [{"country": "Kuwait", "ftd": 3}])
+    monkeypatch.setenv("ACL_TEAM_LEAD", "1")
+    code, body = _call(monkeypatch, "goals_read", cm="Ana")
+    assert code == 200 and body["goals"][0]["country"] == "Kuwait"

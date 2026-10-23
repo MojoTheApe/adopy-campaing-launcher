@@ -40,7 +40,10 @@ ALLOWED_KINDS: dict[str, str] = {
     "cta_enum": "call_to_action",
     "placements_by_objective": "placements",
 }
-KINDS = tuple(ALLOWED_KINDS) + ("text_limit", "required_field")
+#: `fact` — справочная запись без проверки: факт о Meta, который билдер пока не
+#: умеет проверить (лимиты, снятие с поддержки, живые наблюдения). `check_job`
+#: её не читает; обязательна только пометка `note` с самим фактом.
+KINDS = tuple(ALLOWED_KINDS) + ("text_limit", "required_field", "fact")
 
 #: Как поле называется для человека в сообщении.
 FIELD_LABELS = {
@@ -147,6 +150,9 @@ def validate_rules(rules: Any) -> None:
                 raise MetaRulesError(f"{rid}: text_limit needs a positive int max_len")
             if not isinstance(rule["applies_to"].get("field"), str):
                 raise MetaRulesError(f"{rid}: text_limit needs applies_to.field")
+        elif kind == "fact":
+            if not isinstance(rule.get("note"), str) or not rule["note"].strip():
+                raise MetaRulesError(f"{rid}: kind fact needs a non-empty 'note'")
         elif kind == "required_field":
             req = rule.get("required")
             if not isinstance(req, list) or not req or not all(isinstance(x, str) for x in req):
@@ -164,6 +170,35 @@ def load_rules(directory: str | Path | None = None) -> RuleSet:
     validate_meta(meta)
     validate_rules(rules)
     return RuleSet(meta=meta, rules=tuple(rules))
+
+
+_VERSION_RE = re.compile(r"^v(\d+)\.(\d+)$")
+
+
+def _version_key(version: Any) -> tuple[int, int] | None:
+    m = _VERSION_RE.match(str(version or "").strip().lower())
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def graph_api_version(env_override: str | None = None, directory: str | Path | None = None) -> str:
+    """Graph API version: `api_version_current` from meta.json is the single source (ACL-2123).
+
+    An env override wins only when it is a well-formed version strictly newer than
+    the registry's; an equal, older (e.g. the stale v22.0 pin) or malformed value
+    is ignored.
+    """
+    base = Path(directory) if directory else RULES_DIR
+    try:
+        meta = json.loads((base / "meta.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        raise MetaRulesError(f"cannot read Meta rules registry in {base}: {e}") from None
+    validate_meta(meta)
+    current = str(meta["api_version_current"]).strip()
+    override = (env_override or "").strip().lower()
+    new, cur = _version_key(override), _version_key(current)
+    if new is not None and cur is not None and new > cur:
+        return override
+    return current
 
 
 # ── Чтение значений из задания ──────────────────────────────────────────
@@ -310,3 +345,78 @@ def check_job(job: Any, ruleset: RuleSet | None = None, *, skip_kinds: tuple[str
 def format_violations(violations: list[Violation]) -> list[str]:
     """Строки для показа человеку: причина и источник."""
     return [f"Meta rules: {v.message_en} (rule {v.rule_id}, source: {v.source_url})" for v in violations]
+
+
+# ── Допустимые значения для формы билдера (ACL-1807) ────────────────────
+
+#: Значения билдера -> код destination_type в реестре (Website / Instant Form).
+BUILDER_DESTINATIONS = {"website": "WEBSITE", "instant_form": "ON_AD"}
+
+
+def _ga_lists(ruleset: RuleSet, kind: str) -> list[tuple[dict[str, Any], list[str]]]:
+    return [(r, list(r["allowed"])) for r in ruleset.rules if r["kind"] == kind and r["status"] == "ga"]
+
+
+def _uniq(items: Any) -> list[str]:
+    seen: dict[str, None] = {}
+    for x in items:
+        seen.setdefault(str(x), None)
+    return list(seen)
+
+
+def has_norm(items: list[str], value: str) -> bool:
+    return _norm(value) in {_norm(i) for i in items}
+
+
+def capabilities(ruleset: RuleSet | None = None) -> dict[str, Any]:
+    """Что реестр разрешает выбрать в билдере: только значения со статусом `ga`.
+
+    {objectives: {OUTCOME_X: {goals: {GOAL: [billing events]}, ctas: [...]}},
+     destination_types: [...], builder_destinations: {website: {...}}, ...}.
+    Если для цели оптимизации/CTA у objective нет своего правила, берётся общий
+    enum; если нет и его — список пуст, а `restricted` = False (форма не режет:
+    чего реестр не знает, того не проверяем — как и `check_job`).
+    """
+    rs = ruleset or load_rules()
+    billing_by_goal: dict[str, list[str]] = {}
+    for r, allowed in _ga_lists(rs, "billing_event_by_goal"):
+        goal = str(r["applies_to"].get("optimization_goal") or "")
+        if goal:
+            billing_by_goal.setdefault(_norm(goal), []).extend(allowed)
+    goal_enum = _uniq(a for _, al in _ga_lists(rs, "optimization_goal_enum") for a in al)
+    billing_enum = _uniq(a for _, al in _ga_lists(rs, "billing_event_enum") for a in al)
+    cta_enum = _uniq(a for _, al in _ga_lists(rs, "cta_enum") for a in al)
+    dest_enum = _uniq(a for _, al in _ga_lists(rs, "destination_type_enum") for a in al)
+    objectives: dict[str, Any] = {}
+    for r, allowed in _ga_lists(rs, "objective"):
+        for code in allowed:
+            objectives.setdefault(code, {"goals": {}, "ctas": [], "restricted_goals": False, "restricted_ctas": False})
+    for code, entry in objectives.items():
+        goals: list[str] = []
+        ctas: list[str] = []
+        for kind, bucket in (("optimization_goal_by_objective", goals), ("cta_by_objective", ctas)):
+            for r, allowed in _ga_lists(rs, kind):
+                if _matches(r, {"objective": code}):
+                    bucket.extend(allowed)
+        entry["restricted_goals"] = bool(goals)
+        entry["restricted_ctas"] = bool(ctas)
+        # Как в check_job: значение должно пройти и правило объекта, и общий enum.
+        goals = [g for g in _uniq(goals) if not goal_enum or has_norm(goal_enum, g)] if goals else goal_enum
+        # Цели без своего правила billing_event_by_goal не режутся: общий enum.
+        entry["goals"] = {
+            g: ([b for b in _uniq(billing_by_goal[_norm(g)]) if not billing_enum or has_norm(billing_enum, b)]
+                if _norm(g) in billing_by_goal else billing_enum)
+            for g in goals
+        }
+        entry["ctas"] = _uniq(ctas) or cta_enum
+    return {
+        "api_version": rs.meta["api_version_current"],
+        "checked_date": rs.meta["checked_date"],
+        "objectives": objectives,
+        "destination_types": dest_enum,
+        "builder_destinations": {
+            key: {"destination_type": code, "allowed": (not dest_enum) or code in dest_enum}
+            for key, code in BUILDER_DESTINATIONS.items()
+        },
+        "billing_events": billing_enum,
+    }

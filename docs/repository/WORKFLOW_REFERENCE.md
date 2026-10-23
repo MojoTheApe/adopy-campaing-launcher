@@ -20,6 +20,9 @@ Full exact local contracts:
 - [PORTABLE_CONTRACT.md](PORTABLE_CONTRACT.md)
 - [CI_RETRY.md](CI_RETRY.md)
 - [DIRECT_WORKFLOW.md](DIRECT_WORKFLOW.md)
+- [EXECUTOR_ACTIVITY.md](EXECUTOR_ACTIVITY.md)
+- [TASK_PAUSE.md](TASK_PAUSE.md)
+- [PROCESS_SUPPORT.md](PROCESS_SUPPORT.md)
 
 ---
 
@@ -50,6 +53,15 @@ python scripts/task_tracker.py queue release TASK_ID
 The legacy `queue order`, `queue begin` and `queue next` commands operate on a
 frozen To Do selection. Later additions wait. Dependencies override manual order,
 priority, entry time and Issue number; `next` never pulls Backlog into that batch.
+A genuine Reviewer first observes actual Review with `timing start --kind reviewing`
+and its actual `--actor`/`--session`. Return its own observed task using
+`return-for-fixes TASK_ID --report-file review.md` with that same identity (and
+actual `--claim` when bound). This verifies the real Review phase and records a
+private retryable return before moving it to native To Do; unrelated work and
+observations remain intact. Resume an uncertain return with the same report,
+identity and unchanged scope. A generic backward label move supplies no correction
+origin. Use the actual supported `work`/`start` claim before author edits and set
+Review after checks for a fresh independent review.
 Read [legacy queue and recovery](WORKFLOW_REFERENCE.md).
 
 Record actual independent source/combined review with `python scripts/task_tracker.py record-review
@@ -93,6 +105,15 @@ python scripts/task_tracker.py queue release TASK_ID
 The legacy `queue order`, `queue begin` and `queue next` commands operate on a
 frozen To Do selection. Later additions wait. Dependencies override manual order,
 priority, entry time and Issue number; `next` never pulls Backlog into that batch.
+A genuine Reviewer first observes actual Review with `timing start --kind reviewing`
+and its actual `--actor`/`--session`. Return its own observed task using
+`return-for-fixes TASK_ID --report-file review.md` with that same identity (and
+actual `--claim` when bound). This verifies the real Review phase and records a
+private retryable return before moving it to native To Do; unrelated work and
+observations remain intact. Resume an uncertain return with the same report,
+identity and unchanged scope. A generic backward label move supplies no correction
+origin. Use the actual supported `work`/`start` claim before author edits and set
+Review after checks for a fresh independent review.
 Read [legacy queue and recovery](WORKFLOW_REFERENCE.md).
 
 Record actual independent source/combined review with `python scripts/task_tracker.py record-review

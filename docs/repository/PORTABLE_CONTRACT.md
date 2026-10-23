@@ -1,5 +1,41 @@
 # Portable export contract 1
 
+## Current correction observations — TT-183
+
+Tracker3.9.2 adds genuine native correction return/claim observations and the
+Needs fixes/Fixing projection. The optional private observations grant no
+ownership, approval or delivery; current native pending returns retain their
+operation until same-owner reconciliation. Legacy origin binds actual work
+history, and execution origin binds the actual current claim. Unsupported old
+observations stay neutral. Compatible current writers execute the new return
+command; installing a shared reader does not update consumer clients.
+The canonical engine and exported admission helper also reject a genuine pending
+legacy return before new approval, main admission or completion. Source-owned
+native fixtures replay this refusal on actual portable Python3.9 in both layouts,
+without importing the engine or exposing the private report.
+Contract1,14raw/28separated helpers and existing task_pause1/outer8 remain intact.
+Master74 refreshes the full exact published61-file closure and clean portable
+pair without selecting policies, migrating live state or adopting ACL.
+
+## Ready delivery correction — TT-181
+
+Compatible3.9.1 retains contract1,14raw/28separated helpers and task_pause1/outer8.
+Its pause projection maps native approved work to Delivery, matching the central
+Ready for integration presentation. The central UI also reads older Review-category
+pause observations by their preserved approved phase. Exact helper hashes change;
+Master72 consumes the actual published source through the maintained full refresh
+and clean actualPython3.9 pair, without new policies or live activation. Native
+public task approval timestamps are safe optional observation data, not new authority.
+
+## Pause-compatible closure — TT-179
+
+Tracker3.9.0 exports14raw/28separated helpers including the canonical
+`tracker_pause_policy.py`, with capability `task_pause:[1]`. The source-owned
+`portable_pause.json` fixture and offline runner replay real native1..4
+paused/resumed histories and contradictory-state refusal on actual Python3.9.
+Outer8 preserves the entire incumbent guard bundle; older readers fail closed.
+Publication/export changes no live state. See [activation](TASK_PAUSE.md).
+
 TT-143 makes Tracker the technical owner of the portable CI frontend, helper
 bytes and structural CI policy. Version3.4.0 is the published9/18-helper baseline;
 the version3.5.0 candidate adds generic accounting and a fixed canonical retry

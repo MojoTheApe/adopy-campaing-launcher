@@ -162,6 +162,23 @@ CLIENT_CASES: dict[str, tuple[dict, str, str, list[int]]] = {
     "form_partly_missing": (_with(destination="instant_form", ads=_ad(0, form_id="7")), "form_chosen", "error", [2]),
     "form_all_ok": (_with(destination="instant_form",
                           ads=[{**a, "form_id": "7"} for a in _ok_input()["ads"]]), "form_chosen", "ok", []),
+    "tpl_counts_as_a_chosen_form": (_with(destination="instant_form", ads=[
+        {**a, "form_id": "", "template": {"privacy_url": "https://x.example.com/p", "contact_fields": ["email"]}}
+        for a in _ok_input()["ads"]]), "form_chosen", "ok", []),
+    "tpl_privacy_ok": (_with(destination="instant_form", ads=[
+        {**a, "template": {"privacy_url": "https://x.example.com/p", "contact_fields": ["email"]}}
+        for a in _ok_input()["ads"]]), "form_template_privacy", "ok", []),
+    "tpl_privacy_http": (_with(destination="instant_form", ads=_ad(
+        0, template={"privacy_url": "http://x.example.com/p", "contact_fields": ["email"]})),
+        "form_template_privacy", "error", [1]),
+    "tpl_privacy_missing": (_with(destination="instant_form", ads=_ad(
+        1, template={"privacy_url": "", "contact_fields": ["email"]})), "form_template_privacy", "error", [2]),
+    "tpl_contacts_ok": (_with(destination="instant_form", ads=[
+        {**a, "template": {"privacy_url": "https://x.example.com/p", "contact_fields": ["phone"]}}
+        for a in _ok_input()["ads"]]), "form_template_contacts", "ok", []),
+    "tpl_contacts_none": (_with(destination="instant_form", ads=_ad(
+        0, template={"privacy_url": "https://x.example.com/p", "contact_fields": []})),
+        "form_template_contacts", "error", [1]),
     "instant_has_no_link_rules": (_with(destination="instant_form", link="",
                                         ads=[{**a, "form_id": "7"} for a in _ok_input()["ads"]]),
                                   "link_https", None, []),
@@ -301,7 +318,7 @@ def test_a_clean_campaign_has_no_server_error(tmp_path):
     out = _audit(AuditMeta(), d)
     assert out.error == "" and not pf.blocks(out.audit)
     assert {v["rule"]: v["status"] for v in out.audit} == {
-        "account_active": "ok", "page_ok": "ok", "pixel_ok": "ok", "country_resolves": "ok",
+        "account_active": "ok", "page_ok": "ok", "instagram_identity": "ok", "pixel_ok": "ok", "country_resolves": "ok",
         "language_resolves": "ok", "interests_resolve": "ok", "media_readable": "ok", "media_limits": "ok",
         "media_vertical": "ok", "budget_min": "ok", "existing_diffs": "ok"}
 
@@ -314,10 +331,11 @@ def test_page_not_on_the_account(tmp_path):
     assert _by(out)["pixel_ok"]["status"] == "ok", "остальные проверки независимы"
 
 
-def test_page_not_chosen_and_ambiguous(tmp_path):
+def test_page_automatic_uses_first_available_and_warns_for_manual_shell(tmp_path):
     d = _draft(tmp_path, ads=1)
     d.page_id = ""
-    assert _by(_audit(AuditMeta(pages=("111", "222")), d))["page_ok"]["status"] == "error"
+    assert _by(_audit(AuditMeta(pages=("111", "222")), d))["page_ok"]["status"] == "ok"
+    assert _by(_audit(AuditMeta(pages=()), d))["page_ok"]["status"] == "warning"
     assert _by(_audit(AuditMeta(pages=("111",)), d))["page_ok"]["status"] == "ok"   # единственная страница
 
 
@@ -410,7 +428,7 @@ def test_the_budget_minimum_by_currency_is_documented_and_unknown_when_unlisted(
     assert not pf.blocks([got]), "неизвестный минимум не блокирует"
 
 
-def test_an_existing_campaign_with_other_settings_is_an_error(tmp_path):
+def test_an_existing_campaign_with_other_settings_is_a_rename_warning(tmp_path):
     from tests.test_acl1761_api_create import _run
 
     meta = AuditMeta()
@@ -424,7 +442,9 @@ def test_an_existing_campaign_with_other_settings_is_an_error(tmp_path):
     d2 = _draft(tmp_path, ads=1)
     d2.ad_sets[0].daily_budget = 35.0
     got = _by(_audit(meta, d2))["existing_diffs"]
-    assert got["status"] == "error" and "campaign" in got["detail"]
+    # ACL-1902: другая кампания с этим именем - не ошибка, а предупреждение: робот возьмёт NAME_2.
+    assert got["status"] == "warning" and "Will be published as" in got["detail"]
+    assert "daily budget" in got["detail"] and not pf.blocks([got])
 
 
 def test_existing_check_is_unknown_when_an_earlier_check_failed(tmp_path):
@@ -581,6 +601,10 @@ NAME_CASES = [
     ("1000_img.png", "Text0"), ("coffee.mp4", "Text C"), ("1080x1080-17.png", "Text D"),
     (r"C:\files\2403_square.JPG", "Text E"), ("", "Only text"), ("2046.png", ""), ("", ""),  # linux-ok: Windows path is only data for the name function, which must take the basename of backslash paths too
     ("12_2403.png", "T"), ("2403x1080_3011.png", "T"),
+    # ACL-2090: вариант в конце имени, размеры и соотношения сторон — не вариант.
+    ("2175_ARM22.png", "T"), ("2175_ADN3.png", "T"), ("2175_ARM07_1080x1920.png", "T"),
+    ("2175_post_9x16.mp4", "T"), ("2175_post_9:16.mp4", "T"), ("2175_post_1080х1920.png", "T"),
+    ("12_2175_ARM22.png", "T"), ("2175_ARM22_Story.png", "T"),
 ]
 
 
@@ -594,7 +618,7 @@ def test_the_client_names_ads_exactly_like_the_server():
 
 def test_a_jpg_and_an_mp4_of_the_same_creative_with_the_same_text_are_duplicates():
     names = _harness("--names", [["2046 1.jpg", "Text A"], ["2046 1.mp4", "Text A"]])["names"]
-    assert names[0] == names[1] == "2046 - Text A"
+    assert names[0] == names[1] == "2046 1 - Text A"  # ACL-2090: «1» в конце — вариант
     ads = [{"name": n, "file": f, "form_id": "", "body": "b", "headline": "h", "cta": "LEARN_MORE"}
            for n, f in zip(names, ["2046 1.jpg", "2046 1.mp4"])]
     inp = _with(ads=ads)

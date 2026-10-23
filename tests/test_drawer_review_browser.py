@@ -173,16 +173,17 @@ def test_cancel_confirmation_and_active_queue_survive_repaint(ui):
     state['status'] = 'running'
     all_confirm(p)
     # Оба аккаунта уходят сразу (acl-1210); повторный «Publish all» поверх
-    # идущей очереди не добавляет ни одной работы. ACL-1355: кнопка при этом
-    # не заперта (в идущую сборку докладывают другие аккаунты), а отказ
-    # говорит, что оба аккаунта уже собираются.
+    # идущей очереди не добавляет ни одной работы. Zero unlocked campaigns
+    # disables the action; the programmatic duplicate guard still explains why.
+    # Other accounts remain enqueueable as soon as one is added.
     p.wait_for_function("CB_QUEUE.progress.stage === 'publishing'")
     _until(p, lambda: len(state['posts']) >= 2)
     assert len(state['posts']) == 2
     said = []
     p.once('dialog', lambda d: (said.append(d.message), d.accept()))
     p.evaluate('cbTree.paint(); cbPublishAll()')
-    expect(p.locator('.cbd-publish-all')).to_be_enabled()
+    expect(p.locator('.cbd-publish-all')).to_be_disabled()
+    expect(p.locator('.cbd-publish-all')).to_have_text('Publish all → drafts (0)')
     expect(p.locator('#sfc-ok')).to_have_count(0)
     assert said and 'Demo, Other are already being built' in said[0], said
     assert len(state['posts']) == 2
