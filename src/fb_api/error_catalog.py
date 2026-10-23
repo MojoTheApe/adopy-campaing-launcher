@@ -215,6 +215,8 @@ def explain(code: int | None, subcode: int | None = None, raw_message: str = "")
                 break
     if entry is None and code is not None and subcode is not None:
         entry = CATALOG.get((code, subcode))
+    if entry is None and subcode is not None:
+        entry = CATALOG.get((subcode, None))  # Meta шлёт 1404078 и т. п. подкодом: он точнее общего кода (ACL-1805)
     if entry is None and code is not None:
         entry = CATALOG.get((code, None))
     if entry is None:

@@ -44,6 +44,7 @@ try:
 except Exception:
     pass
 
+from src import failure_signatures  # noqa: E402
 from src.fb_ads_rpa import telemetry_sync  # noqa: E402
 
 from config import paths  # noqa: E402
@@ -130,6 +131,7 @@ def analyse(rows: list[dict], days: int) -> dict:
         "regressions": regressions,
         "days": days,
         "cutoff": cutoff,
+        "repeated": failure_signatures.find_repeated(rows, days),
     }
 
 
@@ -192,6 +194,9 @@ def render(a: dict, source: str) -> str:
                 f"| `{s['step']}` | {s['runs']} | {s['fail']} | {s['rate']:.0%} | {len(s['machines'])} |"
             )
         lines.append("")
+
+    if a.get("repeated"):
+        lines += failure_signatures.render_markdown(a["repeated"])
 
     lines += ["## Связанные заметки", "", "- [[RPA Publish — Дневник тестов]]", "- [[00 - Индекс]]", ""]
     return "\n".join(lines)
