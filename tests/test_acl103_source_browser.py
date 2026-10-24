@@ -80,6 +80,8 @@ def test_real_period_navigation_keeps_source_and_unknown_metadata_visible(browse
         page.wait_for_url("**date_from=2026-10-18&date_to=2026-10-18*")
         assert "numbers from the BI data" in page.locator(".amap-head").inner_text()
         assert page.evaluate("AMAP_SOURCE") == "the BI data"
+        assert page.evaluate("AMAP_BOOK_SOURCE") is False
+        assert page.evaluate("AMAP_SHARED_TIP").startswith("The source data")
         expected = "EUR 13" if currency else "currency unknown 13"
         assert page.evaluate("acl6Metrics(12.5,5,1)[0]") == expected
         page.locator("#amap-slot details.amap-country > summary").first.click()
@@ -94,6 +96,8 @@ def test_real_period_navigation_keeps_source_and_unknown_metadata_visible(browse
         page.wait_for_url("**date_to=2026-01-05*")
         assert "Stats workbook" in info.inner_text() and "BI +" not in info.inner_text()
         assert page.evaluate("AMAP_SOURCE") == "the Stats workbook"
+        assert page.evaluate("AMAP_BOOK_SOURCE") is True
+        assert page.evaluate("AMAP_SHARED_TIP").startswith("The workbook")
         assert "numbers from the Stats workbook" in page.locator(".amap-head").inner_text()
         assert "2026-01-05" in page.locator(".amap-head").inner_text()
         assert "unknown" in info.inner_text() and "incomplete metadata" in info.inner_text()

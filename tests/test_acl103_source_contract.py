@@ -296,3 +296,23 @@ def test_prebuilt_period_money_uses_earlier_unit_and_only_comparable_change(curr
     assert label in shown and f'>{change}</span>' in shown
     count = template.render(cell=cells[1], **context)
     assert ">10</span>" in count and ">+100%</span>" in count
+
+
+@pytest.mark.parametrize("currency,expected", [("EUR", "EUR 13"), ("", "currency unknown 13")])
+def test_available_account_uses_its_own_activity_window_units(monkeypatch, tmp_path, currency, expected):
+    from src.web import account_links
+    monkeypatch.setenv("BI_CURRENCY", currency)
+    mapped = tmp_path / "synthetic-account-map.csv"
+    mapped.write_text("account_name,ad_account_id,profile_id\nFacebookDoc101,act_1,p-synthetic\n")
+    missing = str(mapped)
+    monkeypatch.setattr(account_links, "get_ad_account_map_path", lambda: missing)
+    monkeypatch.setattr(web, "get_ad_account_map_path", lambda: missing)
+    report, frame = history_frame(monkeypatch, tmp_path)
+    january = web.report_for_period(report, frame, "2026-01-05", "2026-01-05")
+    view = web._build_account_map_view(january, frame, "2026-01-05", "2026-01-05")
+    assert view["source_info"]["currency_code"] == "USD"
+    assert view["activity_window"]["to"] == "2026-10-18"
+    assert view["available"][0]["spend"] == 12.5
+    shown = web.templates.env.get_template("_account_map_available.html").render(amap=view)
+    assert f'{expected} in {view["activity_window"]["days"]}d' in shown
+    assert "$13" not in shown

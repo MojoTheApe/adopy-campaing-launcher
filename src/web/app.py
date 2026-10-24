@@ -885,8 +885,27 @@ def _build_account_map_view(
         hidden=hidden,
     )
 
+    from src.analysis_agent import bi_compare
+
+    activity_sources = {}
+    if activity is not None and df is not None:
+        window = bi_compare.period_rows(df, activity.window_from, activity.window_to)
+        if "Account Alias" in window:
+            activity_sources = {
+                key: bi_compare.provenance(frame=part)
+                for key, part in window.groupby(window["Account Alias"].map(_avail.alias_key))
+            }
+    connected_keys = {account_links.hidden_key(label) for label in known}
+
     def _with_assets(rows: list[dict]) -> list[dict]:
-        return [{**r, "assets": account_links.values_for(r["account"], "asset")} for r in rows]
+        out = []
+        for row in rows:
+            key = (_avail.workbook_key(row["account"], activity,
+                   by_tail=account_links.hidden_key(row["account"]) in connected_keys)
+                   if activity is not None else "")
+            out.append({**row, "assets": account_links.values_for(row["account"], "asset"),
+                        "source_info": activity_sources.get(key, {})})
+        return out
 
     for mc in countries:
         # ACL-1633: заметка страны живёт под каноническим ключом, а не под
@@ -894,7 +913,6 @@ def _build_account_map_view(
         mc["note_key"] = _account_notes.country_key(mc.get("country") or "")
 
     available = _with_assets(buckets["shown"])
-    from src.analysis_agent import bi_compare
     return {
         "countries": countries,
         "source_info": bi_compare.provenance(frame=period if period is not None else df) if df is not None else report.get("source_info"),

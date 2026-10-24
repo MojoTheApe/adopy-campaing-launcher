@@ -31,8 +31,8 @@ def money(value, info):
 
 
 @pass_context
-def source_money(context, value):
-    return money(value, source_info(context))
+def source_money(context, value, info=None):
+    return money(value, source_info(context) if info is None else info)
 
 
 @pass_context

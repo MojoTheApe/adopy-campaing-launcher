@@ -10396,8 +10396,9 @@ function amapTreeName(s) {
   }
 }
 
-var AMAP_SOURCE = (function () { var e = document.getElementById('acl-source-info'); return (e && e.dataset.sourceName) || 'the selected statistics'; })();
-var AMAP_SHARED_TIP = 'The source data cannot tell ads with the same name apart; '
+var AMAP_SOURCE = (function () { var e = document.getElementById('acl-source-info'); return (e && e.dataset.sourceName) || 'the stats workbook'; })();
+var AMAP_BOOK_SOURCE = /workbook/i.test(AMAP_SOURCE);
+var AMAP_SHARED_TIP = (AMAP_BOOK_SOURCE ? 'The workbook' : 'The source data') + ' cannot tell ads with the same name apart; '
                     + 'these are the totals for all of them';
 
 function amapOwn(obj, key) {
@@ -10489,7 +10490,7 @@ function amapFillAttribution(box, objects, data) {
       if (nkind) {
         var tag = document.createElement('small');
         tag.className = 'amap-tree-nowb';
-        tag.textContent = ' · not in source';
+        tag.textContent = AMAP_BOOK_SOURCE ? ' · not in workbook' : ' · not in source';
         tag.title = 'Meta shows this campaign, but the selected source has no rows for it '
                   + 'for these dates (for example a warm-up campaign). The dashes are not an error.';
         nkind.appendChild(tag);
@@ -10807,7 +10808,7 @@ function amapPaintTree(row, s) {
        даты на экране; говорим это прямо, иначе рядом стоят числа за разное. */
     head.textContent += ' · Meta numbers for ' + s.date_from
       + (s.date_to && s.date_to !== s.date_from ? '…' + s.date_to : '')
-      + ', source numbers for the dates on screen';
+      + ', ' + (AMAP_BOOK_SOURCE ? 'workbook' : 'source') + ' numbers for the dates on screen';
     head.classList.add('old');
   }
   if (head) box.appendChild(head);

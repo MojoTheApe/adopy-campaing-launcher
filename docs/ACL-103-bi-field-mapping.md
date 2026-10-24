@@ -70,7 +70,9 @@ metadata remains unknown. This is supported behavior, not evidence those columns
   version receipts; old metadata-less rows stay unknown, rather than inheriting today's settings.
 - Source table/Net/attribution/Workbench and Home amounts use their retained ISO unit (or
   explicit currency unknown); separate account money and Builder USD budgets are unchanged.
-  Monetary period changes require comparable units/day bases; count changes remain available.
+  Available-account amounts retain the source/unit of their own30-day activity window and
+  canonical workbook alias, independently of the dates selected in the dashboard. Monetary
+  period changes require comparable units/day bases; count changes remain available.
 - The header, tooltips and API describe the selected period's actual workbook/BI/mixed rows,
   including during archive failure fallback. Archive is storage, not a new upstream provider.
 
