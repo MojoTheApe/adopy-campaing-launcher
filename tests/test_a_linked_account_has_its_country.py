@@ -196,6 +196,7 @@ def test_linked_local_account_has_country_spend_cell_and_read_control(overview):
     assert country["rows"][0]["account"] == "FacebookReviewA"
     rendered = web.templates.get_template("_account_map_country.html").render(mc=country, amap=view)
     assert "FacebookReviewA" in rendered
-    assert "Account spend" in rendered
-    assert 'onclick="amapReadSpend(this)"' in rendered
-    assert '>Read spend</button>' in rendered
+    assert "Campaign list" in rendered
+    assert 'onclick="amapReadSpend(this)"' not in rendered
+    assert 'class="amap-list"' in rendered
+    assert '>Read spend</button>' not in rendered

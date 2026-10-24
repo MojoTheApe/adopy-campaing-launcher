@@ -36,11 +36,12 @@ INSTALLER_FILES = {
 # всё равно проверяет его целиком), но добавление, удаление или переименование такого файла меняет
 # состав пакета, поэтому на PR в stage оно запускает установщик. Список сверяет тест со spec.
 BUNDLED_FILES = {
-    ".env.example", "config/ad_account_map.example.csv", "config/ads_manager_selectors.yaml",
+    ".env.example", "config/account_name_rules.json", "config/ad_account_map.example.csv", "config/ads_manager_selectors.yaml",
     "config/analysis_reading_rules.json", "config/benchmarks.json", "config/content_plan_week.example.json",
+    "config/bi_cm_map.json",
     "config/knowledge_base.json", "config/rpa_forbidden_zones.yaml",
 }
-BUNDLED_DIRS = ("config/rpa_intents/", "config/rpa_recipes/", "config/rpa_variations/", "knowledge_base/",
+BUNDLED_DIRS = ("config/meta_rules/", "config/rpa_intents/", "config/rpa_recipes/", "config/rpa_variations/", "knowledge_base/",
                 "src/web/static/", "src/web/templates/")
 
 
@@ -222,6 +223,15 @@ def batch_context(root, event_name, event):
 
 
 
+def is_batch_pr(event):
+    """ACL-2107: сводный batch-PR — ветка ``codex/batch-*`` или строка ``Tracker batch:`` в описании."""
+    pr = (event or {}).get("pull_request") or {}
+    head = str((pr.get("head") or {}).get("ref") or "")
+    body = pr.get("body")
+    return head.startswith("codex/batch-") or bool(
+        isinstance(body, str) and re.search(r"^[ \t]*Tracker batch:[ \t]*\S", body, re.M))
+
+
 def process_context(root, event_name, event, *, ref=""):
     """Prove only adopted process sources/main pushes with complete immutable Git data.
 
@@ -293,7 +303,9 @@ def select(root, event_name, event, *, ref="", workflow="ci.yml"):
             return {"windows": False, "linux": False, "reason": "process-instructions-only",
                     "python": list(reuse.FULL_PYTHON_VERSIONS), "process": process}
         context = batch_context(root, event_name, event)
-        if context == "full":
+        # ACL-2107: сводный batch-PR всегда гоняет полную матрицу (3.11 + 3.13 + Windows),
+        # даже при legacy-политике; правило «3.11 только когда нужно» — для source-PR.
+        if context == "full" or event_name == "pull_request" and is_batch_pr(event):
             return {"windows": True, "linux": workflow != "windows-installer.yml",
                     "reason": "batch-integration-promotion-or-unknown-route", "python": list(reuse.FULL_PYTHON_VERSIONS)}
         if event_name == "pull_request":
@@ -323,6 +335,9 @@ def decide(root, event_name, event, *, ref="", workflow="ci.yml", repo="", api=N
     Покрытие складывается из нескольких прогонов (stage: 3.13 + Windows, PR в main: 3.11).
     Теги релизов и ручной запуск всегда идут полностью; любая ошибка — тоже."""
     result = select(root, event_name, event, ref=ref, workflow=workflow)
+    # ACL-2107: прогон batch-PR сам несёт полное доказательство дерева, без дозаимствования.
+    if event_name == "pull_request" and is_batch_pr(event) and result["windows"] and result.get("linux", True):
+        return result
     if not result["windows"] and not result.get("linux"):
         return result
     if event_name not in ("push", "pull_request") or str(ref).startswith("refs/tags/") or api is None:
@@ -382,6 +397,11 @@ def main():
         tested = reuse.tree_of(Path(__file__).resolve().parents[1], "HEAD")
         if tested:
             print(reuse.marker_line(tested))
+    if result.get("reused_runs") and os.environ.get("GITHUB_REPOSITORY"):
+        # ACL-2107: аннотация с id переиспользованных прогонов - релизные ворота берут их напрямую.
+        line = reuse.reuse_marker_line(result["reused_runs"], os.environ["GITHUB_REPOSITORY"])
+        if line:
+            print(line)
     if args.output:
         with args.output.open("a", encoding="utf-8") as f:
             f.write("windows=" + str(result["windows"]).lower() + "\n")

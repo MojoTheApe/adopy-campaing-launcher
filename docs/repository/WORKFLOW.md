@@ -105,7 +105,14 @@ currently reports a plan restriction for branch protection/rulesets. Never prese
 an unenforced agent rule as a server-enforced guarantee. Do not purchase a plan or
 make the repository public as an implicit part of adoption.
 
-## Pause and resume
+## Pause and resume before outer8 activation
+
+The source includes compatible phase-preserving [pause support](TASK_PAUSE.md),
+but a pin update does not activate it. Use `pause stop/resume` only after actual
+owned idle outer8 activation with compatible reader/every-writer evidence. Until
+that boundary is verified, the previously adopted procedure below remains in
+force. Its stop moves to To Do; it does not preserve Review or Delivery phase.
+Keep its historical instructions and evidence distinct from the new mechanism.
 
 Accept the owner's direct confirmation that an agent has stopped; do not demand
 Windows access solely to reconfirm it. Read the actual claim and use the exact
@@ -132,6 +139,15 @@ the existing checks or delivery condition.
 
 ## Stage, main and completion
 
+The global [process/product boundary](DELIVERY.md#process-and-product-delivery)
+applies to every profile. A published canonical shared-support upgrade retains
+ordinary source approval, frozen-batch composition, combined review and required
+checks. Only the exact [native proof](PROCESS_SUPPORT.md) and genuine independent
+whole-scope/product-isolation review can establish process delivery without a
+consumer product-release request. This is not the instruction-only shortcut.
+The package publication clauses below apply to product outcomes and explicit
+product requests; preserve existing requests and unfinished product acceptance.
+
 The sequence below applies to ordinary/application work. Proven adopted
 instruction-only tasks hold their independent source review through direct main
 admission and complete with the normal verified process receipt, as described in
@@ -140,7 +156,7 @@ require an application installer/delivery receipt.
 
 Approved ordinary source branches -> reserved `codex/batch-ID` integration branch ->
 main, after independent combined review and full applicable CI. Ordinary one-task
-sources stay approval-only. Standing owner policy includes package delivery when
+sources stay approval-only. For product outcomes, standing owner policy includes package delivery when
 integration/main merge is approved; the agent automatically records the genuine request through
 `batch begin --deliver` unless the owner explicitly requests source-only/skip-release.
 Main CI then continues publication,
@@ -151,7 +167,7 @@ retries, initial old-policy source admission and re-enabling Stage. Keep origina
 source branches and the permanent stage branch/history.
 
 Merged means all of a ticket's implemented code scope is actually included in main.
-For ordinary/application tasks, package completion additionally requires an immutable published installer and the
+For product/application tasks, package completion additionally requires an immutable published installer and the
 agreed installation/update verification. Record delivery against the exact merged
 content. Do not wait for every employee to update; do not claim all have updated.
 A partial task stays active even after a partial PR. A Blocked ticket cannot pass
@@ -248,6 +264,7 @@ a combined candidate. Release/manual rules stay in force.
 A new push to a PR branch cancels that PR's superseded CI and installer runs;
 stage/main/master pushes and manual runs retain their own run identities.
 The installer build/install job stops at 20 minutes.
+The Chromium install step (Linux and Windows) runs through `scripts/ci_retry.sh`: 3 attempts, each cut at 300 s (Linux) or 180 s (Windows), apt sources switched off the stalling Azure mirror, apt locks cleaned between attempts, the browser download cached by Playwright version, and a hard step limit (16 min Linux, 12 min Windows). The Linux test job stops at 32 minutes (shard 1 normally takes 20-22 min, the longest green run was 29.2), the Windows one at 30 (ACL-1710: an `apt-get update` hang used to burn 35 minutes per job).
 `--dist loadfile` keeps every test file on one worker: more than 80 files start
 their own Chromium in a module fixture, and spreading one file over all workers
 starts that browser once per worker (on the owner's laptop the test-by-test
@@ -278,7 +295,12 @@ closed classification.
 Combined batch, actual stage, promotion/main and manual contexts require complete
 applicable checks. A push or PR may reuse successful applicable jobs of the exact
 same Git tree (ACL-1565/1649, `scripts/acl_ci_reuse.py`); the run summary links
-that evidence. Manual runs and uncertainty run in full. Never treat separate
+that evidence. Combined batch PRs run their own full matrix without borrowing jobs.
+Release validation fetches the reused run IDs recorded by the successful main
+scope job (annotation, or its older classifier JSON log), revalidates their exact
+tree, merged-PR binding and jobs, and combines them with main's successful jobs.
+Complete proof returns without a run-list lookup; partial proof retains bounded
+discovery and fail-closed validation. Manual runs and uncertainty run in full. Never treat separate
 source checks as combined-content proof. The private pinned Master
 Action's access must be verified in a real consumer run. Draft descriptor success
 is structural feedback, not activation or live environment evidence.
@@ -300,3 +322,46 @@ Update docs/system for implemented behavior, docs/repository for process changes
 and docs/runtime for operational procedures. Preserve original specifications.
 Assess Master Repo and Task Tracker impact for process changes; link the owning
 companion change rather than silently modifying another repository.
+
+## Read the task lifecycle
+
+Review contains unfinished review. Actual approved waiting work appears in Delivery
+as Ready for integration, preserving the native approved key and current admission
+rules. Queue size, occupied slots and confirmed activity are different facts.
+Waiting age uses the actual current approval timestamp; missing history stays
+unknown and never counts as active work. Paused ready work retains Delivery.
+Genuine owned author returns wait as Needs fixes in Backlog (native To Do); only
+actual implementation ownership shows Fixing in In Progress. Preserve genuine
+origin through supported stop/takeover/pause/resume, then require fresh independent
+Review. Old missing origin stays neutral; a claim never proves running activity.
+The active Coordinator continues corrections of the owner's already selected set
+within actual capacity/admission. New unselected work, explicit pause resumption
+and materially changed outcomes retain owner decisions. A free slot launches no
+agent. Source approval alone does not authorize integration; already authorized
+integration includes necessary verified delivery. Integration-only findings do not
+return every frozen source; publication-only failure remains Delivery.
+Integrating and required publication remain separate steps; Done follows the
+project's actual whole-scope delivery, without a consumer installer for process-only work.
+
+## Executor activity
+
+Follow the selected pinned Tracker guide for `activity report` and the foreground
+`activity run --exec` wrapper when supported. Only the current owner/session/claim
+reports running, waiting and stopped. Confirm once a minute while running; five
+minutes without a running/waiting report freezes work time and means Connection lost after prior confirmation; never-confirmed work stays Activity unconfirmed. A recorded stop remains while that owner is assigned. Neither
+condition releases ownership. No detached endless reporter or coordinator heartbeat
+for another executor. Existing runs without a producer remain unknown.
+
+## Explicit phase-preserving pause after verified activation
+
+Source support is installed separately from live activation; see the actual
+readiness boundary in [EARLY_ADOPTION.md](EARLY_ADOPTION.md#pause-readiness-and-live-boundary).
+Only after that boundary is verified, follow the compatible selected Tracker guide for owned `pause stop/resume`.
+A confirmed stopped executor displays Paused inside its saved category and
+releases only its own slot. Preserve native phase, saved work, history, frozen
+integration/Stage and genuine blockers. Resume requires current scope/source
+checks, role independence, genuine capacity and fresh authority; otherwise remain
+paused with an explanation. A frozen Coordinator needs a genuinely new session
+before its combined Reviewer. Silence never invokes pause or releases ownership.
+Publish compatible readers/all writers before owned idle `pause activate`; source,
+exports, pin and skill updates never activate live state or publish a product.
