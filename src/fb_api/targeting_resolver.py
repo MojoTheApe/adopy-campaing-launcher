@@ -8,7 +8,7 @@
 2. точное имя через `adinterestvalid`;
 3. `/search type=adinterest q=…`, постранично;
 4. список поведений `adTargetingCategory class=behaviors` (один раз на задание), затем
-   `adworkposition`, `adworkemployer`, а если уже есть близкие кандидаты — `adeducationschool`,
+   `adworkposition`, `adworkemployer`, `adeducationschool`,
    `adeducationmajor` (документированные типы поиска);
 5. если вся строка не нашлась — делим по « or » / «/» и ищем каждую часть отдельно. Даже когда все
    части найдены точно, разбиение — это ДРУГОЙ таргетинг (OR вместо одного термина), поэтому оно
@@ -217,12 +217,14 @@ def register_candidates(items: list[dict]) -> None:
     fresh: dict[str, dict[tuple[str, str], dict]] = {}
     for item in items or []:
         for it in (item.get("bad_parts") or []) + [item]:
+            # A fresh result without candidates must also revoke its old choices.
+            choices = fresh.setdefault(norm(it["term"]), {})
             rows = list(it.get("candidates") or [])
             if it.get("suggested"):
                 rows.append(it["suggested"])
             for c in rows:
                 if c.get("id") and c.get("type"):
-                    fresh.setdefault(norm(it["term"]), {})[(str(c["id"]), str(c["type"]))] = dict(c)
+                    choices[(str(c["id"]), str(c["type"]))] = dict(c)
     with _CAND_LOCK:
         _CANDIDATES.update(fresh)
 
@@ -333,7 +335,7 @@ class TermResolver:
             return None
         return {"id": str(r["id"]), "type": bucket, "name": str(r["name"])}
 
-    def _stages(self, term: str, near):
+    def _stages(self, term: str):
         """Ленивый перебор групп строк (bucket, rows) в порядке резолва."""
         yield "interests", self._get_all({"type": "adinterest", "q": term, "limit": SEARCH_LIMIT}, SEARCH_PAGES)
         if self._behaviors is None:
@@ -344,9 +346,8 @@ class TermResolver:
         yield "behaviors", self._behaviors
         for bucket, typ in WORK_SEARCHES:
             yield bucket, self._get_all({"type": typ, "q": term, "limit": SEARCH_LIMIT}, 1)
-        if near():       # учебные заведения и специальности - только когда есть хоть что-то близкое
-            for bucket, typ in EDU_SEARCHES:
-                yield bucket, self._get_all({"type": typ, "q": term, "limit": SEARCH_LIMIT}, 1)
+        for bucket, typ in EDU_SEARCHES:
+            yield bucket, self._get_all({"type": typ, "q": term, "limit": SEARCH_LIMIT}, 1)
 
     def _find(self, term: str) -> dict:
         """Одна строка целиком: подтверждённый -> точный -> кандидаты."""
@@ -367,10 +368,7 @@ class TermResolver:
             if hit:
                 return {"term": term, "state": "exact", "picks": [hit], "candidates": [], "reason": ""}
 
-            def near() -> bool:
-                return bool(cands)
-
-            for bucket, rows in self._stages(term, near):
+            for bucket, rows in self._stages(term):
                 for r in rows:
                     c = self._row(r, bucket)
                     if not c:

@@ -3,7 +3,7 @@
 Только фейки, ни одного живого вызова Meta. Проверяется:
 * точное имя без учёта регистра/разделителей, но НЕ слитые символы и диакритика (C++ != C);
 * запасной поиск adinterest, список поведений постранично, adworkposition/adworkemployer,
-  учебные типы только при близком кандидате;
+  учебные типы без обязательного близкого интереса;
 * «A or B» - кандидат с разовым подтверждением, а не автоматический выбор;
 * близкое совпадение никогда не берётся само;
 * подтверждение -> кэш (ключ: тип + термин) -> повторное использование; перепроверка id;
@@ -150,14 +150,16 @@ def test_behaviors_paged_and_work_lookups_use_documented_search_types(tmp_path):
     assert "adTargetingCategory" not in [t for t, _, p in c.log if p.get("class") != "behaviors"]
 
 
-def test_education_searches_run_only_when_something_is_near(tmp_path):
-    c = FakeSearch(typed={("adeducationmajor", "Computer Science"): [{"id": "81", "name": "Computer Science"}]})
-    res = _one(_resolver(c, tmp_path), "Computer Science")
-    assert res["state"] != "exact" and "adeducationschool" not in c.types(), "нет близкого - учебные типы пропущены"
-    near = FakeSearch(interests={"Computer Science": [{"id": "1", "name": "Computer Sciences"}]},
-                      typed={("adeducationmajor", "Computer Science"): [{"id": "81", "name": "Computer Science"}]})
-    res = _one(_resolver(near, tmp_path), "Computer Science")
-    assert res["state"] == "exact" and res["picks"][0]["type"] == "education_majors"
+@pytest.mark.parametrize("bucket,search_type,term", [
+    ("education_schools", "adeducationschool", "Example University"),
+    ("education_majors", "adeducationmajor", "Computer Science"),
+])
+def test_education_target_resolves_without_an_unrelated_near_interest(tmp_path, bucket, search_type, term):
+    client = FakeSearch(typed={(search_type, term): [{"id": "81", "name": term}]})
+    result = _one(_resolver(client, tmp_path), term)
+    assert result["state"] == "exact"
+    assert result["picks"] == [{"id": "81", "type": bucket, "name": term}]
+    assert search_type in client.types()
 
 
 def test_interests_builds_flexible_spec_with_all_buckets(tmp_path):
@@ -520,3 +522,39 @@ def test_split_candidate_is_confirmable_and_clear_works(web):
     assert _call(web.targeting_resolver_clear, {})[0] == 400, "без термина и без all - отказ"
     assert _call(web.targeting_resolver_clear, {"term": "alpari group or plus500"})[1]["removed"] == 1
     assert _call(web.targeting_resolver_cache)[1]["entries"] == []
+
+
+@pytest.mark.parametrize("state", ["exact", "confirmed", "unresolved", "unknown"])
+def test_a_new_check_plan_without_candidates_invalidates_the_old_pick(web, state):
+    tr.register_candidates([{"term": "T", "state": "pending",
+                             "candidates": [{"id": "1", "type": "interests", "name": "Old"}]}])
+    tr.register_candidates([{"term": "T", "state": state, "candidates": [], "picks": []}])
+    code, body = _call(web.targeting_resolver_confirm, {"term": "T", "id": "1", "type": "interests"})
+    assert code == 400
+    assert _call(web.targeting_resolver_cache)[1]["entries"] == []
+
+
+def test_check_plan_renders_candidates_and_saved_choices_without_substitution():
+    from copy import deepcopy
+    from html import unescape
+    from tests.test_acl1761_plan_check import _PLAN_DATA, _run_plan_node
+
+    data = deepcopy(_PLAN_DATA)
+    data['results'][0]['targeting'] = [
+        {'term': '<term>&"', 'state': 'pending',
+         'suggested': {'id': '81', 'type': 'education_majors', 'name': '<Major>'},
+         'candidates': [{'id': '81', 'type': 'education_majors', 'name': '<Major>'}]},
+        {'term': 'Saved', 'state': 'confirmed',
+         'picks': [{'id': '82', 'type': 'work_positions', 'name': 'Role'}]},
+        {'term': 'Unknown', 'state': 'unknown', 'reason': tr.UNKNOWN_MESSAGE},
+    ]
+    out = _run_plan_node(data)
+    html = out['html']
+    assert 'Picked <strong>&lt;Major&gt;</strong>' in html
+    assert 'Publish is blocked until you confirm or pick another.' in html
+    assert 'data-act="confirm-target"' in html and 'data-id="81"' in html
+    assert 'data-term="&lt;term&gt;&amp;&quot;"' in html
+    assert '<Major>' not in html and '<term>' not in html
+    assert 'Role [work_positions]' in html and 'data-act="clear-target"' in html
+    assert tr.UNKNOWN_MESSAGE in unescape(html)
+    assert out['fetched'] == [{'url': '/publish-plan', 'dry_run': '1', 'activate': '0'}]
