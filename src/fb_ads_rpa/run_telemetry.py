@@ -161,6 +161,46 @@ _BARE_VALUE = r'("(?:[^"\\\n]|\\.)*"?|\'(?:[^\'\\\n]|\\.)*\'?|[^\s,;&"\'<>\)\]\}
 #: всё до конца строки/текста.
 _QUOTED_VALUE = r'((?:\\.|(?!\4)[^\\\n])*)(\4)?'
 
+
+_PROXY_USER = re.compile(r"(?<![^\s/=,;(\[{<>\"'])([^\s:@/\\\"'<>=,;(\[{]+):")
+_URI_SCHEME = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*")
+_RATIO_SCALE = re.compile(r"\d+:\d+@\d+(?:\.\d+)?x[,;)\]}]*", re.I)
+
+
+def _scrub_proxy(match: re.Match) -> str:
+    """Inspect each word once, without a credential-length escape hatch."""
+    word = match[0]
+    at = word.rfind("@")
+    if at < 0 or at == len(word) - 1:
+        return word
+    if not (word[at + 1].isalnum() or word[at + 1] == "["):
+        return word
+    authority_start = None
+    for user in _PROXY_USER.finditer(word, 0, at):
+        name = user[1]
+        password_start = user.end()
+        if password_start == at:
+            continue
+        userinfo = user.start() == authority_start
+        if not userinfo and word.startswith("//", password_start) and _URI_SCHEME.fullmatch(name):
+            authority_start = password_start + 2
+            continue
+        # Once an outer URI introduced userinfo, its login/password cannot
+        # become an ordinary mail label, Windows drive, nested scheme or ratio.
+        if not userinfo:
+            if name.lower() in {"mailto", "email", "e-mail"}:
+                continue
+            if len(name) == 1 and name.isalpha() and word.startswith("/", password_start):
+                continue  # C:/Users/a@host is a Windows path.
+            if _RATIO_SCALE.fullmatch(word, user.start()):
+                return word
+        if (word[max(0, user.start() - 3):user.start()] == "://"
+                and re.match(r"\d{1,5}/", word[password_start:at])):
+            return word  # A URL host:port/path@example.com, not userinfo.
+        return word[:user.start()] + "<user>:<hidden>@" + word[at + 1:]
+    return word
+
+
 _SCRUB = (
     # JSON / python-repr словарь: "key":"value" или 'key': 'value' — с любыми
     # пробелами вокруг двоеточия, кавычки ключа и значения не обязаны
@@ -175,6 +215,21 @@ _SCRUB = (
     (re.compile(rf'{_BARE_KEY_START}(authorization)(\s*=\s*){_BARE_VALUE}', re.I),
      lambda m: f"{m.group(1)}{m.group(2)}<hidden>"),
     (re.compile(r"\bBearer [A-Za-z0-9._~+/-]{1,16384}", re.I), "Bearer <hidden>"),
+    # ACL-1558: голый токен Graph API (`EAAB…`/`EAAG…`) без имени ключа и
+    # без `Bearer` рядом. Ключевые формы выше уже заменили его на `<hidden>`,
+    # сюда доходит только то, что они пропустили. Токен, приклеенный к
+    # букве (`tokenEAAB…`), не ловится — иначе резались бы обычные слова с
+    # `EAA` внутри; приклеенный к `_`, `=`, `/`, кавычке — ловится.
+    (re.compile(r"(?<![A-Za-z0-9])EAA[A-Za-z0-9]{20,16384}"), "<token>"),
+    # ACL-1558: учётка прокси `user:pass@host[:port]` (в т.ч. после `http://`).
+    # Хост и порт остаются — по ним видно, какой прокси отказал; логин и
+    # пароль прячутся всегда оба. Начало — только в начале «слова» (после
+    # пробела, `/`, `=`, кавычки, скобки…), иначе каждая позиция длинной
+    # строки начинала бы свой перебор. Каждый отдельный фрагмент без
+    # пробела/кавычки проверяется один раз: последняя @, затем непересекающиеся
+    # имена перед двоеточием. Длинный пароль не остаётся открытым из-за лимита.
+    # `/`, `:` и `@` в пароле допустимы; схемы, пути и ratio отличаем отдельно.
+    (re.compile(r"[^\s\\\"'<>]+"), _scrub_proxy),
     (re.compile(r"(act=)(?:act_)?\d{6,}"), r"\1<hidden>"),
     (re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b"), "<uuid>"),
     (re.compile(r"\b\d{10,}\b"), "<digits>"),
@@ -229,11 +284,55 @@ def _hides_dict_value(key: object, item: object) -> bool:
     return any(norm.endswith(name) for name in _SECRET_DICT_KEYS_NORM)
 
 
+#: ACL-1558: ключ словаря тоже бывает идентификатором — диагностика вида
+#: «номер кабинета → состояние» или «почта → профиль». `scrub()` в ключе
+#: ловит только ≥10 цифр подряд; короткие `act_<номер>`, номер кабинета
+#: из 6–9 цифр и почта проходили в контексты Sentry как есть (ACL-1554
+#: закрыл это только для вложения итога, `run_summary._scrub_strings`).
+_KEY_EMAIL = re.compile(r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]{1,63}(?:\.[A-Za-z0-9-]{1,63}){0,8}\.[A-Za-z]{2,24}\b")
+_KEY_ACT = re.compile(r"(?<![A-Za-z0-9])act_\d+", re.I)
+_KEY_DIGITS = re.compile(r"(?<![A-Za-z0-9])\d{6,}(?![A-Za-z0-9])")
+
+
+def scrub_key(key: str) -> str:
+    """Ключ словаря без номеров кабинетов, `act_`-номеров и почты."""
+    out = scrub(key)
+    out = _KEY_EMAIL.sub("<email>", out)
+    out = _KEY_ACT.sub("act_<hidden>", out)
+    return _KEY_DIGITS.sub("<id>", out)
+
+
+def clean_key(key):
+    """Строковый ключ — через `scrub_key`; целый (номер кабинета числом) —
+    тоже, но остаётся числом, если прятать нечего."""
+    if isinstance(key, str):
+        return scrub_key(key)
+    if isinstance(key, int) and not isinstance(key, bool):
+        clean = scrub_key(str(key))
+        return key if clean == str(key) else clean
+    return key
+
+
+def put_unique(out: dict, key, item, *, suffixes: dict) -> None:
+    """Append without loss; suffix progress belongs to this output dictionary."""
+    if key in out:
+        n = suffixes.get(key, 2)
+        while f"{key}#{n}" in out:
+            n += 1
+        suffixes[key] = n + 1
+        key = f"{key}#{n}"
+    out[key] = item
+
+
 def scrub_diag(value):
     """Explicit step diagnostics share the same export boundary as page context."""
     if isinstance(value, dict):
-        return {key: ("<hidden>" if _hides_dict_value(key, item) else scrub_diag(item))
-                for key, item in value.items()}
+        out: dict = {}
+        suffixes: dict = {}
+        for key, item in value.items():
+            clean = "<hidden>" if _hides_dict_value(key, item) else scrub_diag(item)
+            put_unique(out, clean_key(key), clean, suffixes=suffixes)
+        return out
     if isinstance(value, (list, tuple)):
         return [scrub_diag(item) for item in value]
     return scrub(value) if isinstance(value, str) else value
