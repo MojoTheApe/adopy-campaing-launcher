@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures as cf
+from datetime import datetime, timezone
 import json
 import sys
 from pathlib import Path
@@ -300,13 +301,27 @@ def test_column_preset_and_visibility_persist(page):
     assert page.input_value("[data-hc=preset]") == "custom"
 
 
-def test_unread_account_says_so_and_has_its_own_read_button_on_its_row(page):
+def test_unread_account_queues_attention_once_without_a_manual_read_button(page, site):
+    # Before attention there is genuinely no cached list. Expanding admits a
+    # local queue request; the explicit fixture boundary leaves its worker off.
+    assert ci.get_snapshot('Fresh') is None
+    assert 'list not read' in page.inner_text(f'{row_of("Fresh")} .hc-snap')
+    assert not [q for q in site.q.state()['queued'] if q['account'] == 'Fresh']
     open_acc(page, "Fresh")
+    page.wait_for_function("document.querySelector('.amap-campaigns')._hc.state.running.Fresh === true")
     text = page.inner_text(f'{row_of("Fresh")} + tr.hc-acct-child')
-    assert "No saved list yet" in text and "Expand this account" in text             # снимка нет, прежний список не рисуется
+    assert 'Reading campaigns for Fresh' in text and 'one profile at a time' in text
     assert "IN THE ACCOUNT" not in text.upper()
-    assert page.locator(f'{row_of("Fresh")} button.hc-rc').count() == 1 and page.locator(f'{row_of("Acc")} button.hc-rc').count() == 1
-    assert "list not read" in page.inner_text(f'{row_of("Fresh")} .hc-snap')
+    assert page.inner_text(f'{row_of("Fresh")} .hc-snap') == 'updating'
+    assert page.locator(f'{row_of("Fresh")} button.hc-rc').is_hidden()
+    assert page.locator(f'{row_of("Acc")} button.hc-rc').is_hidden()
+    page.click(f'{row_of("Fresh")} td.amap-acc', position={'x': 8, 'y': 8})
+    open_acc(page, 'Fresh')
+    page.evaluate("() => window.aclAccountRefresh.request('Fresh', 'attention')")
+    assert [q for q in site.q.state()['queued'] if q['account'] == 'Fresh'] == [
+        {'account': 'Fresh', 'trigger': 'attention'}]
+    assert ci.get_snapshot('Fresh') is None and site.reads == [] and site.warm_posts == []
+    assert not [r for r in site.requests if r[1] == '/campaign-inventory/read']
     assert page.locator("[data-read-country]").count() == 0
 
 
@@ -456,12 +471,11 @@ def _inject_error(page):
       const inst = document.querySelector('.amap-campaigns')._hc;
       inst.state.notes['campaign:1'] = window.acmCommands
         ? window.acmCommands.explain(raw, 'bad', '') : {text: raw, raw: null, tone: 'bad'};
-      inst.state.summaries.Fresh = Object.assign({}, inst.state.summaries.Fresh, {attempt: {state: 'failed', at: '2026-10-12 08:54:22', error: raw.replace('Not sent: ', ''), code: ''}});
       inst.render();
     }""", RAW_ERROR)
 
 
-def test_a_failed_command_is_one_compact_sub_row_and_never_blows_the_row_up(page):
+def test_a_failed_command_is_one_compact_sub_row_and_never_blows_the_row_up(page, site):
     import os
     from pathlib import Path
 
@@ -469,7 +483,17 @@ def test_a_failed_command_is_one_compact_sub_row_and_never_blows_the_row_up(page
     page.evaluate("document.querySelector('[data-hc=preset]').value = 'all'")
     page.add_script_tag(url="http://acl.test/static/acm_commands.js")
     page.wait_for_function("!!window.acmCommands")
+    # Persist a real terminal attempt before attention. A recent failure must
+    # stay failed until Retry; it cannot coexist with queued work for Fresh.
+    stamp = datetime.now(timezone.utc)
+    failed_at = stamp.astimezone().strftime('%Y-%m-%d %H:%M:%S')
+    ci.put_result(ci.Snapshot(account='Fresh', state='failed', finished_at=failed_at,
+        finished_at_utc=stamp.isoformat(), error=RAW_ERROR.replace('Not sent: ', '')))
+    page.evaluate('() => window.aclAccountRefresh.load()')
     open_acc(page, "Fresh")
+    page.wait_for_selector('tr[data-msg="acct:Fresh:read"]')
+    assert not [q for q in site.q.state()['queued'] if q['account'] == 'Fresh']
+    assert site.q.state()['running'] != 'Fresh'
     _inject_error(page)
     row = page.locator('tr[data-key="campaign:1"]')
     sub = page.locator('tr[data-msg="row:campaign:1"]')
@@ -504,10 +528,15 @@ def test_a_failed_command_is_one_compact_sub_row_and_never_blows_the_row_up(page
     assert page.locator(".hc-rm-raw").count() == 0
     # сбой чтения аккаунта: одна строка в полосе и Details
     band = page.locator('tr[data-msg="acct:Fresh:read"]')
-    assert "The last read failed (2026-10-12 08:54:22)" in band.inner_text() and band.bounding_box()["height"] <= 40
+    assert f'The last read failed ({failed_at})' in band.inner_text() and band.bounding_box()["height"] <= 40
     assert "WinError" not in band.inner_text()
     band.locator(".hc-rm-btn").click()
     assert "WinError 10061" in page.locator('tr[data-msg="acct:Fresh:read"] .hc-rm-raw').inner_text()
+    retry = page.locator(f'{row_of("Fresh")} button.hc-rc')
+    assert retry.is_visible() and retry.is_enabled() and retry.inner_text() == 'Retry'
+    assert page.locator(f'{row_of("Fresh")} button.hc-rc:visible').count() == 1
+    assert ci.get_attempt('Fresh')['error'] == RAW_ERROR.replace('Not sent: ', '')
+    assert site.reads == [] and site.warm_posts == []
     page.evaluate("t => document.documentElement.setAttribute('data-theme', t)", "light")
     assert page.errors == []
 
