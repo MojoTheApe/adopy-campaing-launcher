@@ -85,8 +85,14 @@ python scripts/acl_batch.py --actor Coordinator-XXXX \
 ownership, matching policy, frozen membership, current main and unchanged open source
 PR heads. It requires the official ACL origin and a clean checkout, fetches exact tips,
 rechecks ownership and creates a dedicated linked worktree on `codex/batch-BATCH_ID`.
-Merge commits preserve every source tip. It prints the combined PR title/body and
-candidate head/tree; it never pushes, merges into stage/main, publishes or deploys.
+Merge commits preserve every source tip. After all frozen tips merge, the helper
+runs its own reviewed `scripts/fold_changelog.py` once against the new worktree.
+For an ordinary batch, all immediate changelog fragments are folded into
+`docs/system/CHANGELOG.md` and deleted in one separate terminal commit, before
+the combined PR is created. Its message includes `Tracker changelog fold: 1`.
+With no fragments it creates no empty commit. It prints the combined PR title/body,
+candidate head/tree and exact fold commit; it never pushes, merges into stage/main,
+publishes or deploys.
 An existing unrelated directory/branch is preserved. Immediately before every new
 source merge, including a detached rebuild, the helper runs ordinary
 `git update-index --refresh` in its new worktree. This refresh re-matches cached stat
@@ -106,7 +112,13 @@ than discarding evidence or claiming cleanup succeeded.
 The helper accepts matching v2/v3 batch policy. In v3 unrelated source-review
 owners may continue during assembly; an existing integration review still blocks
 reassembly. Exact composition, frozen membership and guarded rebuild proof remain
-required.
+required. The local object reader supplies complete immutable trees and authenticated
+blobs to the selected native composition proof. The marker alone grants nothing:
+only the exact deterministic history update and complete fragment deletion can
+qualify. Extra edits, a second fold or any other integration implementation commit
+stop assembly. The producer comes from the reviewed tool checkout, never from an
+unreviewed source script in the assembled candidate. Missing/untracked fragments,
+symlink paths, dirty content or invalid fragments stop without a reset or retry.
 
 Push the reviewed candidate branch and create its PR into stage with all member IDs
 in the title, one `Tracker issues: ID, ID` line and one `Tracker batch: BATCH_ID` line.
@@ -117,6 +129,11 @@ Record the exact report using `record-review`, with execution_lane, review_sessi
 batch_id and ordered source_heads from the frozen manifest. Preserve actual member
 Workers and source Reviewers; the combined report names the actual Coordinator as
 the integration implementer.
+For a terminal fold, that independent report must also contain the exact line
+`Changelog fold: FULL_FOLD_COMMIT_SHA` printed by the helper. The native review and
+admission gates verify this binding; naming a source commit or only the final tree
+does not replace it. Review the fold's parent after all approved merges, exact
+generated history, complete consumed set and absence of unrelated changes.
 
 Complete applicable combined CI is mandatory: Linux Python 3.11/3.13 shards, Windows
 3.13 tests, descriptor, linkage and installer/build/install/repair/uninstall plus the
@@ -138,13 +155,23 @@ Reconcile stage/main and revalidate the next intake members against current main
 
 CHANGELOG fragments (ACL-2037, owner decision 2026-10-20): task PRs add
 `docs/system/changelog.d/ACL-NNNN.md` and do not touch `docs/system/CHANGELOG.md`.
-Fold them once per batch, AFTER the batch has landed in main: from current main run
-`python scripts/fold_changelog.py` and open one small docs-only PR with the result (one
-commit, title `[ACL-NNNN] Fold CHANGELOG fragments for batch BATCH_ID`). Do not fold on
-the batch branch: composition admission accepts only the baseline, approved source tips
-and merge commits, so an extra fold commit would be rejected. The fold PR only deletes
-fragments and edits the top of the CHANGELOG, so it conflicts with source PRs not at all
-and with other fold PRs only if two are open together; keep one open at a time.
+ACL-2046 completes the original requirement with the one pre-PR terminal fold above;
+a later separate history PR does not satisfy it. Use the actual published provider
+selected by the delivered ACL-2156 foundation. Master Repo remains a reference.
+
+The sole typed distinction preserves the newer ACL-2099 selection contract, following
+the owner's explicit preference for the newer requirement when scopes conflict.
+A genuine one-policy singleton must pass the unchanged native `selection_tree`
+proof over full immutable prior Main/config and the actual frozen Issue. Its raw
+assembled tree must equal the approved source tree, with exactly five governance
+changes and its own authentic new fragment, unchanged pins/targets/checks and exact
+pristine consequences. Only then does the helper run the producer with `--check`
+and retain that exact tree without a fold commit. The independent combined review
+records this proof and check-only result. A malformed/partial/multiple selection,
+mixed batch, missing fragment or extra delta stops; there is no generic skip option,
+edited-key operative config, receipt relaxation or task-context activation.
+Deliver ACL-2046 itself as an ordinary folded batch and verify its required release
+before delivering the later ACL-2099 selection. Activation stays pending.
 After admitted instruction-only main merges, the engine's read-only
 `stage_base_compatible` verifies actual process receipts and a bounded current
 first-parent/scope/policy/tree chain before permitting the next batch. This proof
@@ -172,6 +199,14 @@ Later ACL-1994 integration requires legitimate current-base author/review
 reconciliation after this supporting main; its selection, package and owned idle
 activation remain separate. Preserve Worker990, all queued handoffs and archives.
 
+ACL-2046 follows this same reviewed-tool boundary only after the actual ACL-2156
+foundation is delivered: a clean checkout at ACL-2046's exact independently approved
+and CI-verified source head may run this assembler for its ordinary frozen batch.
+Record that source/tool/producer identity and the complete unchanged operative
+provider/config; no dirty overlay, canonical export edit or policy activation is
+part of this task. Its own real terminal fold and exact independent combined review
+remain mandatory, followed by the full required delivery.
+
 ## Fixes and recovery
 
 Before approval, Reviewer returns review and the author takes a fresh implementation
@@ -193,7 +228,10 @@ worktree and index stay intact. Appending new tips to the old graph retains supe
 tips and fails the pinned composition gate; it is not a recovery method.
 If a detached rebuild failed without publication, the remote still holds an earlier
 candidate: the helper must find a retained same-member manifest whose exact composition
-matches that head. The latest refreshed manifest alone does not establish its history.
+matches that head, including its one native-verified terminal fold if present.
+The new detached candidate merges the refreshed tips from its frozen baseline and
+folds once again; the old fold stays in the archived history, never stacked onto the
+new candidate. The latest refreshed manifest alone does not establish its history.
 An unknown old implementation commit is rejected; keep the failed worktree as evidence.
 
 Inspect the printed `replacement.push_argv`, recheck the actual held claim/current

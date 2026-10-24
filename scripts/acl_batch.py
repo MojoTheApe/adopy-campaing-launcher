@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -11,8 +13,10 @@ import sys
 
 try:
     from scripts import tracker_batch_policy as proof
+    from scripts import tracker_delivery_receipt as receipt
 except ModuleNotFoundError:
     import tracker_batch_policy as proof
+    import tracker_delivery_receipt as receipt
 
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = "MojoTheApe/adopy-campaing-launcher"
@@ -115,12 +119,202 @@ def validate_remote(batch, request):
             raise ValueError("Source PR changed; retain the claim and return the affected author")
 
 
-def composition(root, head, baseline, sources):
-    def commit(path):
-        sha = path.rsplit("/", 1)[1]
-        return {"parents": [{"sha": p} for p in git(root, "show", "-s", "--format=%P", sha).split()],
-                "message": git(root, "show", "-s", "--format=%B", sha)}
-    proof.composition(commit, "local", head, baseline, sources)
+def local_objects(root):
+    """Supply complete immutable Git objects to the unchanged native proofs."""
+    cache = {}
+
+    def raw(*args):
+        return subprocess.check_output(["git", "--no-replace-objects", "-C", str(root), *args])
+
+    def request(path):
+        if path in cache:
+            return cache[path]
+        prefix, separator, suffix = path.partition("/git/")
+        if not separator or prefix not in ("local", "repos/" + REPOSITORY):
+            raise ValueError("Unsupported local Git proof request")
+        kind, separator, revision = suffix.partition("/")
+        recursive = revision.endswith("?recursive=1")
+        sha = revision.removesuffix("?recursive=1")
+        if (not separator or not SHA.fullmatch(sha)
+                or recursive != (kind == "trees")):
+            raise ValueError("Local Git proof needs exact immutable object IDs")
+        if kind == "commits":
+            headers, _, message = raw("cat-file", "commit", sha).partition(b"\n\n")
+            rows = headers.splitlines()
+            trees = [row[5:].decode("ascii") for row in rows if row.startswith(b"tree ")]
+            if len(trees) != 1 or not SHA.fullmatch(trees[0]):
+                raise ValueError("Incomplete local Git commit")
+            value = {"sha": sha, "tree": {"sha": trees[0]},
+                     "parents": [{"sha": row[7:].decode("ascii")} for row in rows if row.startswith(b"parent ")],
+                     "message": message.decode("utf-8")}
+        elif kind == "trees":
+            if raw("cat-file", "-t", sha) != b"tree\n":
+                raise ValueError("Local tree proof needs an actual Git tree")
+            rows = raw("ls-tree", "-r", "-z", "--full-tree", sha).split(b"\0")
+            if len(rows) > 20001:
+                raise ValueError("Local Git tree exceeds the bounded batch proof")
+            entries = []
+            for row in rows:
+                if not row:
+                    continue
+                metadata, path = row.split(b"\t", 1)
+                mode, entry_type, object_sha = metadata.decode("ascii").split()
+                entries.append({"path": path.decode("utf-8"), "mode": mode,
+                                "type": entry_type, "sha": object_sha})
+            value = {"sha": sha, "truncated": False, "tree": entries}
+        elif kind == "blobs":
+            size = int(raw("cat-file", "-s", sha))
+            if size > 1024 * 1024:
+                raise ValueError("Local Git blob exceeds the native content bound")
+            data = raw("cat-file", "blob", sha)
+            value = {"sha": sha, "encoding": "base64", "size": size,
+                     "content": base64.b64encode(data).decode("ascii")}
+        else:
+            raise ValueError("Unsupported local Git object type")
+        cache[path] = value
+        return value
+    return request
+
+
+def composition(root, head, baseline, sources, *, prefix=None):
+    if prefix is None:
+        prefix = json.loads((Path(root) / "tracker/config.json").read_text())["project"]["id_prefix"]
+    return proof.composition(local_objects(root), "local", head, baseline, sources, prefix=prefix)
+
+
+def selection_package(request, batch, config, head, before, after):
+    """Recognize only the native singleton selection; suspected invalid ones stop."""
+    process = proof.rules.process_module()
+
+    def document(files, path, *, optional=False):
+        row = files.get(path)
+        if row is None and optional:
+            return {}
+        if not row or row["mode"] != "100644" or row["type"] != "blob":
+            raise ValueError("Selection inspection requires existing regular governance files")
+        value = json.loads(process.blob(request, "local", row["sha"]),
+                           object_pairs_hook=proof.rules.direct_module().unique_object)
+        if not isinstance(value, dict):
+            raise ValueError("Selection inspection requires unambiguous JSON objects")
+        return value
+
+    prior, selected = [document(files, "tracker/config.json") for files in (before, after)]
+    descriptors = [document(files, "delivery.json", optional=True) for files in (before, after)]
+    templates = [document(files, ".workflow/template-base.json", optional=True) for files in (before, after)]
+
+    def pristine(template, path):
+        files = template.get("files", {})
+        if not isinstance(files, dict):
+            raise ValueError("Invalid retained pristine file mapping")
+        if path not in files:
+            return {}
+        value = json.loads(files[path], object_pairs_hook=proof.rules.direct_module().unique_object)
+        if not isinstance(value, dict):
+            raise ValueError("Pristine selection JSON must be an unambiguous object")
+        return value
+
+    pristine_configs = [pristine(template, "tracker/config.json") for template in templates]
+    pristine_descriptors = [pristine(template, "delivery.json") for template in templates]
+    suspected = set()
+    for key, (_, mirror, _) in receipt.SELECTIONS.items():
+        for old, new, field in ((prior, selected, key),
+                                (descriptors[0].get("workflow", {}), descriptors[1].get("workflow", {}), mirror),
+                                (templates[0].get("inputs", {}), templates[1].get("inputs", {}), mirror),
+                                (pristine_configs[0], pristine_configs[1], key),
+                                (pristine_descriptors[0].get("workflow", {}), pristine_descriptors[1].get("workflow", {}), mirror)):
+            if not isinstance(old, dict) or not isinstance(new, dict):
+                raise ValueError("Invalid governance selection mapping")
+            if receipt.digest([field in old, old.get(field)]) != receipt.digest([field in new, new.get(field)]):
+                suspected.add(key)
+    if not suspected:
+        return None
+    if len(suspected) != 1 or len(batch["members"]) != 1:
+        raise ValueError("A policy selection must be one complete singleton; mixed/multiple selections stop")
+    key = next(iter(suspected))
+    receipt.selection_config(prior)
+    receipt.selection_config(selected)
+    receipt.selection_delta(prior, selected, key)
+    if receipt.digest(prior) != receipt.digest(config):
+        raise ValueError("Selection must use the full actual prior Main config")
+    member = batch["members"][0]
+    if proof.rules.tree(request, "local", head) != proof.rules.tree(request, "local", member["head_sha"]):
+        raise ValueError("Selection assembly must retain the exact approved source tree")
+    receipt.selection_tree(request, REPOSITORY, batch["main_sha"], head,
+                           prior, selected, key, issue=member["issue"])
+    changed = {path for path in before.keys() | after.keys() if before.get(path) != after.get(path)}
+    if len(changed) != 6:
+        raise ValueError("Selection needs its exact five governance files and its own new fragment")
+    return {"mode": "selection-check", "policy": key, "issue": member["issue"],
+            "source_head": member["head_sha"], "tree_sha": proof.rules.tree(request, "local", head)}
+
+
+def fold_batch(destination, batch, config):
+    """Fold once after all sources, or validate a proven strict selection only."""
+    head = git(destination, "rev-parse", "HEAD")
+    request = local_objects(destination)
+    # The pre-fold graph must contain every frozen tip and no extra commit.
+    proof.composition(request, "local", head, batch["main_sha"],
+                      [member["head_sha"] for member in batch["members"]])
+    process = proof.rules.process_module()
+    before, current = [process.entries(request, "local", proof.rules.tree(request, "local", sha))
+                       for sha in (batch["main_sha"], head)]
+    selection = selection_package(request, batch, config, head, before, current)
+    directory, history = "docs/system/changelog.d/", "docs/system/CHANGELOG.md"
+    fragments = sorted(path for path in current if path.startswith(directory)
+                       and "/" not in path[len(directory):] and path.endswith(".md")
+                       and path[len(directory):].lower() != "readme.md")
+    if len(fragments) > 512:
+        raise ValueError("Changelog fold exceeds the bounded complete fragment set")
+    if git(destination, "status", "--porcelain", "--untracked-files=all"):
+        raise ValueError("Fold needs a clean assembled worktree; existing changes are preserved")
+    for name in ("docs", "docs/system", directory.rstrip("/")):
+        path = destination / name
+        if path.is_symlink() or path.exists() and not path.is_dir():
+            raise ValueError("Changelog paths must remain real directories")
+    folder = destination / directory
+    actual = {p.relative_to(destination).as_posix() for p in folder.glob("*.md")
+              if p.name.lower() != "readme.md"}
+    if actual != set(fragments):
+        raise ValueError("Fold cannot consume untracked or missing fragments")
+    total = 0
+    for name in fragments + ([history] if fragments else []):
+        row, path = current.get(name), destination / name
+        if (not row or row["mode"] != "100644" or row["type"] != "blob"
+                or path.is_symlink() or not path.is_file()):
+            raise ValueError("Changelog fold requires normal tracked regular files")
+        data = process.blob(request, "local", row["sha"]).encode("utf-8")
+        total += len(data)
+        if total > 8 * 1024 * 1024 or path.read_bytes() != data:
+            raise ValueError("Fold source differs from its bounded immutable tree")
+    # Run this reviewed tool checkout's producer, never a source-supplied script.
+    program = Path(__file__).with_name("fold_changelog.py")
+    command = [sys.executable, str(program), "--root", str(destination)]
+    if selection:
+        command.append("--check")
+    try:
+        subprocess.run(command, text=True, capture_output=True, check=True)
+    except subprocess.CalledProcessError as error:
+        raise ValueError("Changelog generation failed; worktree and prior graph retained. "
+                         f"command={error.cmd!r}; exit={error.returncode}; "
+                         f"stdout={error.stdout!r}; stderr={error.stderr!r}") from error
+    if selection:
+        if (git(destination, "rev-parse", "HEAD") != head
+                or git(destination, "rev-parse", "HEAD^{tree}") != selection["tree_sha"]
+                or git(destination, "status", "--porcelain", "--untracked-files=all")):
+            raise ValueError("Selection validation changed the exact approved tree; preserve evidence")
+        return selection
+    if not fragments:
+        return None
+    git(destination, "add", "--", history, *fragments)
+    git(destination, "-c", "commit.gpgsign=false", "commit", "-m",
+        "Fold batch changelog fragments\n\nTracker changelog fold: 1")
+    folded = composition(destination, git(destination, "rev-parse", "HEAD"), batch["main_sha"],
+                         [member["head_sha"] for member in batch["members"]],
+                         prefix=config["project"]["id_prefix"])
+    if not folded or folded["parent_sha"] != head or git(destination, "status", "--porcelain", "--untracked-files=all"):
+        raise ValueError("Fold is not the sole clean terminal generated commit; preserve the worktree")
+    return {"mode": "terminal-fold", **folded,
+            "producer_sha256": hashlib.sha256(program.read_bytes()).hexdigest()}
 
 
 def remote_head(root, branch):
@@ -130,7 +324,7 @@ def remote_head(root, branch):
     return rows[0].split()[0] if rows else None
 
 
-def previous_candidate(root, batch, previous_head, published):
+def previous_candidate(root, batch, previous_head, published, *, prefix=None):
     if remote_head(root, batch["branch"]) != (previous_head if published else None):
         raise ValueError("Previous integration head changed; inspect it before rebuilding")
     snapshots = [row for row in batch.get("history", []) if "members" in row and "main_sha" in row]
@@ -147,7 +341,7 @@ def previous_candidate(root, batch, previous_head, published):
             ["git", "-C", str(root), "merge-base", "--is-ancestor", m["head_sha"], previous_head],
             check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0]
         try:
-            composition(root, previous_head, old["main_sha"], included)
+            composition(root, previous_head, old["main_sha"], included, prefix=prefix)
         except ValueError:
             continue
         break
@@ -209,7 +403,7 @@ def prepare(root, destination, actor, session, claim, *, apply=False, rebuild=Fa
             git(root, "fetch", "origin", batch["branch"])
             if git(root, "rev-parse", "FETCH_HEAD") != previous_head:
                 raise ValueError("Previous integration head changed while fetching")
-        previous_candidate(root, batch, previous_head, published)
+        previous_candidate(root, batch, previous_head, published, prefix=config["project"]["id_prefix"])
         evidence = "refs/batch-evidence/" + claim + "/" + previous_head
         existing = subprocess.run(["git", "-C", str(root), "show-ref", "--verify", "--hash", evidence],
                                   text=True, capture_output=True)
@@ -237,9 +431,18 @@ def prepare(root, destination, actor, session, claim, *, apply=False, rebuild=Fa
         raise ValueError("Batch changed during assembly; preserve the local worktree and inspect")
     validate_remote(batch, request)
     if rebuild:
-        previous_candidate(root, batch, previous_head, published)
+        previous_candidate(root, batch, previous_head, published, prefix=config["project"]["id_prefix"])
+    fold = fold_batch(destination, batch, config)
+    if owned_batch(read(root), config, actor, session, claim) != batch:
+        raise ValueError("Batch changed during folding; preserve the worktree and inspect")
+    validate_remote(batch, request)
     composition(destination, git(destination, "rev-parse", "HEAD"), batch["main_sha"],
-                [m["head_sha"] for m in batch["members"]])
+                [m["head_sha"] for m in batch["members"]], prefix=config["project"]["id_prefix"])
+    result["changelog"] = fold
+    if fold and fold["mode"] == "terminal-fold":
+        result["body"] += "\nChangelog fold: " + fold["head_sha"] + "\nIndependent combined review must include this exact line.\n"
+    elif fold:
+        result["body"] += "\nCanonical singleton policy selection: check-only changelog validation; exact source tree retained.\n"
     result.update(applied=True, head_sha=git(destination, "rev-parse", "HEAD"),
                   tree=git(destination, "rev-parse", "HEAD^{tree}"), worktree=str(destination))
     return result
