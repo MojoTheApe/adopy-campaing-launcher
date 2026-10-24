@@ -494,9 +494,14 @@ def _touch_kept_window(account: str) -> None:
 @contextmanager
 def _session(account: str, *, commands: bool = False):
     """Сессия чтения; по её окончании срок простоя оставленного окна идёт с нуля (ACL-2113)."""
+    from src.analysis_agent.account_refresh_state import read_session
+
     try:
-        with _open_session(account, commands=commands) as sess:
-            yield sess
+        # Вызывающий уже держит физическую аренду профиля. Порядок тот же
+        # у чтения после команды/публикации: профиль, затем одна общая читалка.
+        with read_session(priority=commands):
+            with _open_session(account, commands=commands) as sess:
+                yield sess
     finally:
         _touch_kept_window(account)
 
@@ -655,10 +660,23 @@ def _telemetry(kind: str, account: str, ok: bool, took_s: float, sess_notes: dic
         event["error"] = error[:200]
     if stop:
         event["stop"] = stop
+    trigger = sess_notes.get("trigger")
+    if trigger:
+        event["trigger"] = trigger  # ACL-2063: чем вызвано чтение (schedule/attention/...)
     _tm.record(event)
     _as._record("api_read", ok, took_s,
                 {"account": account, "kind": kind, "source": "api",
-                 "calls": sess_notes.get("calls", 0), **({"stop": stop} if stop else {})})
+                 "calls": sess_notes.get("calls", 0), **({"stop": stop} if stop else {}),
+                 **({"trigger": trigger} if trigger else {})})
+
+
+def _telemetry_skip(account: str, trigger: str, reason: str = "skipped_fresh") -> None:
+    """ACL-2063: чтение пропущено (свежо) — отдельное событие, не шаг `api_read`.
+
+    Счёт `api_read` остаётся числом настоящих открытий профиля.
+    """
+    _tm.record({"event": "fb_api_skip", "kind": reason, "source": "api", "trigger": trigger})
+    _as._record("api_read_skip", True, 0.0, {"account": account, "reason": reason, "trigger": trigger})
 
 
 def _report_stop(exc: BaseException, account: str) -> None:

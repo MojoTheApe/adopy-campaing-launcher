@@ -212,7 +212,7 @@ def test_unknown_outcome_says_to_press_read_campaigns_and_does_not_flip_the_swit
     sw(page, CAMP_A).click()
     page.wait_for_selector("dialog.acm-confirm[open]")
     page.click('dialog.acm-confirm [data-acm="confirm"]')
-    page.wait_for_selector("text=Outcome unknown — press Read campaigns to check", timeout=15000)
+    page.wait_for_selector("text=Outcome unknown — use the account Retry to check", timeout=15000)
     assert sw(page, CAMP_A).get_attribute("aria-checked") == "false"
     assert len(world.meta.posts) == 1                                   # без повторов
     shot(page, "05-outcome-unknown")

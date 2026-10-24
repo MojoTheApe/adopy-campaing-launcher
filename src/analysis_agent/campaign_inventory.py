@@ -27,6 +27,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import os
 import tempfile
@@ -65,6 +66,8 @@ INSIGHT_METRICS = "spend,reach,impressions,frequency,clicks"
 
 #: Какие шаги чтения бывают (ключи `Snapshot.steps`).
 STEPS = ("campaigns", "adsets", "ads", "insights_campaign", "insights_adset", "insights_ad")
+#: ACL-2063: чтение по расписанию берёт только структуру (без Insights и без периода).
+STRUCTURE_STEPS = ("campaigns", "adsets", "ads")
 
 #: Бюджет в Graph приходит в минимальных единицах валюты. Делитель берём из
 #: таблицы, а не «всегда 100»: у иены и воны копеек нет. Валюты вне таблицы
@@ -121,6 +124,9 @@ class Snapshot:
     currency: str = ""
     error: str = ""
     error_code: str = ""
+    #: Вид остановки Meta/клиента (`checkpoint`, `rate_limited`, `call_budget`…), если чтение
+    #: оборвалось на ней — даже когда снимок «partial» и `error` пуст (ACL-2063).
+    stop: str = ""
     #: Человеческие причины «неполно»: страницы упёрлись в лимит, шаг не прочитан…
     problems: list[str] = field(default_factory=list)
     #: шаг → ok | truncated | failed | skipped
@@ -139,6 +145,12 @@ class Snapshot:
 def _snapshot_from(raw: dict) -> Snapshot:
     known = set(Snapshot.__dataclass_fields__)  # noqa: SLF001 — поля датакласса
     return Snapshot(**{k: v for k, v in (raw or {}).items() if k in known})
+
+
+def read_succeeded(snap: Snapshot) -> bool:
+    """Чтение удалось: обрезка по лимиту допустима, ошибка/остановка — нет."""
+    return (snap.state in {"ok", "partial", "empty"} and not snap.stop and not snap.error
+            and not snap.error_code and "failed" not in snap.steps.values())
 
 
 # ───────────────────────── разбор ответов Graph ─────────────────────────
@@ -562,6 +574,33 @@ def get_attempt(account: str) -> dict | None:
     return attempt if isinstance(attempt, dict) else None
 
 
+def _saved_stop(rec: dict) -> tuple[str, str]:
+    active = rec.get("active_stop")
+    if isinstance(active, dict) and active.get("kind"):
+        return str(active["kind"]), str(active.get("at_utc") or "")
+    attempt = rec.get("attempt")
+    source = attempt if isinstance(attempt, dict) else rec.get("snapshot")
+    source = source if isinstance(source, dict) else {}
+    return str(source.get("stop") or ""), str(source.get("at_utc") or source.get("finished_at_utc") or "")
+
+
+def latest_stops() -> dict[str, tuple[str, str]]:
+    """Аккаунт → (вид остановки Meta, ISO UTC времени) по последней записи: попытке или снимку.
+
+    Только непустые остановки. Новая удача перезаписывает запись и снимает остановку.
+    """
+    with _LOCK:
+        data = _load_all()
+    out: dict[str, tuple[str, str]] = {}
+    for account, rec in data.items():
+        if not isinstance(rec, dict):
+            continue
+        kind, at = _saved_stop(rec)
+        if kind:
+            out[account] = (kind, at)
+    return out
+
+
 def put_result(done: Snapshot) -> None:
     """Принять результат чтения.
 
@@ -571,9 +610,24 @@ def put_result(done: Snapshot) -> None:
     with _LOCK:
         data = _load_all()
         rec = data.get(done.account) if isinstance(data.get(done.account), dict) else {}
+        old_stop, old_at = _saved_stop(rec)
+        clean_success = read_succeeded(done)
+        if clean_success:
+            active_stop = None
+        elif done.stop and not (old_stop == "checkpoint" and done.stop != "checkpoint"):
+            active_stop = {"kind": done.stop, "at_utc": done.finished_at_utc}
+        else:
+            active_stop = {"kind": old_stop, "at_utc": old_at} if old_stop else None
+        if active_stop is not None or "active_stop" in rec:
+            # Локальная ошибка/неполная попытка не доказывает снятый checkpoint
+            # и не начинает заново старое остывание. Новая удача снимает запись.
+            rec["active_stop"] = active_stop
         if done.state == "failed":
-            rec["attempt"] = {"state": "failed", "at": done.finished_at, "error": done.error,
-                              "code": done.error_code, "date_from": done.date_from, "date_to": done.date_to}
+            # `stop` и `at_utc` нужны очереди обновления: пауза по чекпоинту переживает рестарт
+            # и видна второму процессу дешборда (ACL-2063).
+            rec["attempt"] = {"state": "failed", "at": done.finished_at, "at_utc": done.finished_at_utc,
+                              "error": done.error, "code": done.error_code, "stop": done.stop,
+                              "date_from": done.date_from, "date_to": done.date_to}
         else:
             rec["snapshot"] = done.to_dict()
             rec["attempt"] = None
@@ -588,6 +642,7 @@ def summary(snap: Snapshot | None, attempt: dict | None = None, *, now: float | 
         return out
     out.update({
         "state": snap.state, "finished_at": snap.finished_at, "age_s": _age_s(snap.finished_at, now),
+        "revision": hashlib.sha256(json.dumps(snap.to_dict(), sort_keys=True).encode()).hexdigest(),
         "date_from": snap.date_from, "date_to": snap.date_to, "currency": snap.currency,
         "problems": list(snap.problems), "steps": dict(snap.steps), "error": snap.error,
         "counts": {"campaigns": len(snap.campaigns), "adsets": len(snap.adsets), "ads": len(snap.ads)},
@@ -624,8 +679,11 @@ def _truncated_since(client: Any, before: int) -> bool:
     return len(getattr(client, "truncated", []) or []) > before
 
 
-def read_into(snap: Snapshot, client: Any, act: str) -> None:
+def read_into(snap: Snapshot, client: Any, act: str, *, structure_only: bool = False) -> None:
     """Чтение описи и Insights в `snap` через уже открытого клиента (только GET).
+
+    `structure_only` (ACL-2063): только кампании, ad set и объявления — ни одного
+    запроса Insights, в `snap.steps` лишь три шага.
 
     Исключения `GraphStop` (лимит, checkpoint, потолок вызовов…) шаг помечают
     `failed`, остальные шаги — `skipped`, и дальше клиент не зовётся: решение за
@@ -648,6 +706,7 @@ def read_into(snap: Snapshot, client: Any, act: str) -> None:
                                                     "limit": 200}, max_pages=5)
         except GraphStop as exc:
             snap.steps[step] = "failed"
+            snap.stop = snap.stop or exc.kind
             snap.problems.append(f"{step} were not read: {_api._failure(snap.account, exc)[0]}")  # noqa: SLF001
             raise
         except GraphError as exc:
@@ -674,6 +733,7 @@ def read_into(snap: Snapshot, client: Any, act: str) -> None:
                                          max_pages=3)
         except GraphStop as exc:
             snap.steps[step] = "failed"
+            snap.stop = snap.stop or exc.kind
             snap.problems.append(f"{level} insights were not read: {_api._failure(snap.account, exc)[0]}")  # noqa: SLF001
             raise
         except GraphError as exc:
@@ -690,7 +750,7 @@ def read_into(snap: Snapshot, client: Any, act: str) -> None:
         if not snap.currency:
             snap.currency = next((m["currency"] for m in got.values() if m.get("currency")), "")
 
-    for step in STEPS:
+    for step in (STRUCTURE_STEPS if structure_only else STEPS):
         snap.steps[step] = "skipped"
 
     campaigns = fetch("campaigns", "campaigns", CAMPAIGN_FIELDS, "campaign")
@@ -707,9 +767,10 @@ def read_into(snap: Snapshot, client: Any, act: str) -> None:
         ads = fetch("ads", "ads", AD_FIELDS, "ad")
         if ads is not None:
             snap.ads = ads
-        insights("campaign", snap.campaigns)
-        insights("adset", snap.adsets)
-        insights("ad", snap.ads)
+        if not structure_only:
+            insights("campaign", snap.campaigns)
+            insights("adset", snap.adsets)
+            insights("ad", snap.ads)
     except GraphStop:
         # Стоп Meta (лимит, checkpoint…) не бросаем: прочитанное остаётся, снимок
         # «неполный»; причина уже в `snap.problems`, клиент больше не зовётся.
@@ -730,16 +791,22 @@ def finalize(snap: Snapshot) -> None:
         snap.problems.append(f"{len(tree['orphan_adsets'])} ad sets belong to campaigns that were not returned")
     if tree["orphan_ads"]:
         snap.problems.append(f"{len(tree['orphan_ads'])} ads belong to ad sets that were not returned")
-    clean = all(snap.steps.get(s) == "ok" for s in STEPS) and not snap.problems
+    # Структурный снимок (ACL-2063) не знает шагов Insights: «ok» — когда ok три шага.
+    needed = STEPS if "insights_campaign" in snap.steps else STRUCTURE_STEPS
+    clean = all(snap.steps.get(s) == "ok" for s in needed) and not snap.problems
     snap.state = "ok" if clean else "partial"
 
 
-def read_via_api(account: str, date_from: str, date_to: str = "") -> Snapshot:
+def read_via_api(account: str, date_from: str = "", date_to: str = "", *,
+                 structure_only: bool = False, trigger: str = "") -> Snapshot:
     """Опись аккаунта через Graph API в профиле. Тот же `_session`, что у Read spend."""
     from src.analysis_agent import account_spend_api as _api
     from src.fb_api.graph import GraphStop
 
-    date_to = date_to or date_from
+    if structure_only:
+        date_from = date_to = ""
+    else:
+        date_to = date_to or date_from
     snap = Snapshot(account=account, state="failed", date_from=date_from, date_to=date_to)
     started = time.monotonic()
     notes: dict = {}
@@ -748,7 +815,7 @@ def read_via_api(account: str, date_from: str, date_to: str = "") -> Snapshot:
         with _api._session(account) as sess:  # noqa: SLF001
             try:
                 try:
-                    read_into(snap, sess.client, sess.act)
+                    read_into(snap, sess.client, sess.act, structure_only=structure_only)
                 finally:
                     snap.calls = int(getattr(sess.client, "calls", 0) or 0)
                 if sess.client.stopped is not None:
@@ -758,19 +825,115 @@ def read_via_api(account: str, date_from: str, date_to: str = "") -> Snapshot:
                 notes = sess.notes
         finalize(snap)
     except Exception as exc:  # noqa: BLE001 — чтение не должно ронять сервер
+        snap.error, snap.error_code = _api._failure(account, exc)  # noqa: SLF001
         if snap.steps.get("campaigns") in ("ok", "truncated"):
             # Список кампаний уже прочитан: остаток — «неполно», а не «ничего».
-            snap.problems.append(_api._failure(account, exc)[0])  # noqa: SLF001
+            snap.problems.append(snap.error)
             finalize(snap)
         else:
             snap.state = "failed"
-            snap.error, snap.error_code = _api._failure(account, exc)  # noqa: SLF001
         if isinstance(exc, GraphStop):
             stop = exc.kind
             _api._report_stop(exc, account)  # noqa: SLF001
-    _api._telemetry("campaigns", account, snap.state != "failed", time.monotonic() - started, notes,  # noqa: SLF001
+    if stop:
+        snap.stop = snap.stop or stop
+    if trigger:
+        notes = {**notes, "trigger": trigger}
+    _api._telemetry("campaigns", account, read_succeeded(snap), time.monotonic() - started, notes,  # noqa: SLF001
                     error=snap.error, stop=stop)
     return snap
+
+
+def read_in_session(account: str, sess: Any, *, trigger: str) -> Snapshot:
+    """Обновить структуру уже открытой сессией после команды/публикации (ACL-2063).
+
+    Ни открытия профиля, ни нового клиента, ни сброса бюджета. Вызывающий
+    сохраняет физическую аренду профиля на весь вызов.
+    """
+    from src.analysis_agent import account_spend_api as _api
+    from src.analysis_agent.account_refresh_state import read_session
+    from src.fb_ads_rpa.profile_lease import require_profile_lease
+    from src.fb_api.graph import GraphStop
+
+    snap = Snapshot(account=account, state="failed", started_at=_as._now())  # noqa: SLF001
+    entry = _as._entry_for(account)  # noqa: SLF001
+    if entry is None:
+        # Удаление привязки не должно ни читать старый профиль, ни стирать его
+        # прежнюю остановку/историю новой фиктивной попыткой.
+        snap.error, snap.error_code = "This account was removed from the dashboard.", "account_removed"
+        return snap
+    started = time.monotonic()
+    before = int(getattr(sess.client, "calls", 0) or 0)
+    stop = ""
+    try:
+        if not backend_ready():
+            raise NeedsApiBackend(NEEDS_API_MESSAGE)
+        if _api.normalize_act(str(getattr(entry, "ad_account_id", "") or "")) != sess.act:
+            raise ValueError("The account map changed. Its list was not read with the previous session.")
+        require_profile_lease(_as._profile_key(account))  # noqa: SLF001
+        with read_session(priority=trigger in {"action", "retry"}):
+            read_into(snap, sess.client, sess.act, structure_only=True)
+            if getattr(sess.client, "stopped", None) is not None:
+                stop = sess.client.stopped.kind
+                _api._report_stop(sess.client.stopped, account)  # noqa: SLF001
+            finalize(snap)
+    except Exception as exc:  # noqa: BLE001 — исход команды не меняется
+        snap.error, snap.error_code = _api._failure(account, exc)  # noqa: SLF001
+        if snap.steps.get("campaigns") in ("ok", "truncated"):
+            snap.problems.append(snap.error)
+            finalize(snap)
+        if isinstance(exc, GraphStop):
+            stop = exc.kind
+            _api._report_stop(exc, account)  # noqa: SLF001
+    snap.stop = snap.stop or stop
+    snap.calls = max(0, int(getattr(sess.client, "calls", 0) or 0) - before)
+    snap.finished_at = _as._now()  # noqa: SLF001
+    snap.finished_at_utc = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    snap.took_s = round(time.monotonic() - started, 1)
+    put_result(snap)
+    notes = {**getattr(sess, "notes", {}), "trigger": trigger, "calls": snap.calls, "same_session": True}
+    _api._telemetry("campaigns", account, read_succeeded(snap), snap.took_s, notes,  # noqa: SLF001
+                    error=snap.error, stop=snap.stop)
+    return snap
+
+
+def run_read(account: str, *, trigger: str) -> Snapshot:
+    """Синхронное чтение только структуры (ACL-2063): без Insights, без периода.
+
+    Очередь та же, что у `start_read`: `browser_operation.reading()` и замок
+    профиля аккаунта. Результат кладётся в хранилище через `put_result`.
+    """
+    began = time.time()
+    started_at = _as._now()  # noqa: SLF001
+    baseline = summary(get_snapshot(account)).get("revision")
+    try:
+        if not backend_ready():
+            # Как `start_read`: без бэкенда API профиль не открываем вовсе.
+            done = Snapshot(account=account, state="failed", error=NEEDS_API_MESSAGE, error_code=NEEDS_API_CODE)
+        else:
+            with browser_operation.reading(), _as._lock_for(account):  # noqa: SLF001
+                # A publishing/command session can refresh while this request
+                # waits for its physical profile. Join that newer result rather
+                # than opening the same profile again after it is released.
+                from src.analysis_agent import account_refresh, account_spend_api
+                cached = get_snapshot(account)
+                if (account_refresh.is_fresh(account)
+                        and (trigger.split(":")[0] in {"schedule", "attention"}
+                             or summary(cached).get("revision") != baseline)):
+                    account_spend_api._telemetry_skip(account, trigger)  # noqa: SLF001
+                    return cached
+                done = read_via_api(account, structure_only=True, trigger=trigger)
+    except Exception as exc:  # noqa: BLE001
+        done = Snapshot(account=account, state="failed", error=f"{type(exc).__name__}: {exc}")
+    done.started_at = started_at
+    done.finished_at = _as._now()  # noqa: SLF001
+    done.finished_at_utc = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    done.took_s = round(time.time() - began, 1)
+    try:
+        put_result(done)
+    except Exception:  # noqa: BLE001
+        log.exception("Could not persist the campaign inventory of %s", account)
+    return done
 
 
 def default_reader() -> Callable[[str, str, str], Snapshot]:
