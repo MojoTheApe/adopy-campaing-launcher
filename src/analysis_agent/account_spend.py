@@ -193,6 +193,10 @@ class SpendReading:
     source: str = "rpa"           # rpa | token
     spend: float | None = None
     currency: str = ""
+    # Канонические единицы отдельно от знака валюты, который уже читает экран.
+    currency_code: str = ""
+    timezone: str = ""
+    day_boundary: str = ""
     state: str = "idle"           # idle | running | ok | failed
     how: str = ""                 # каким приёмом прочитано — чтобы знать, что сломалось
     error: str = ""
@@ -386,6 +390,10 @@ def _restore_reading(key: str, raw: dict) -> SpendReading:
     known = SpendReading.__dataclass_fields__
     reading = SpendReading(**{k: v for k, v in raw.items() if k in known})
     if reading.source == "api":
+        if not reading.currency_code:
+            from src.analysis_agent.bi_compare import currency_code
+
+            reading.currency_code = currency_code(reading.currency)
         # API-чтения до 10.10 сохраняли ISO-код («USD 179.47» не влезал в ячейку);
         # показываем знаком, как новые чтения (`account_spend_api.display_currency`).
         reading.currency = _API_SIGNS.get(str(reading.currency or "").strip().upper(), reading.currency)

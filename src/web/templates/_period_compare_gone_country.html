@@ -1,5 +1,5 @@
 {# Historical report evidence: deliberately no forms, account controls or action data attributes. #}
-{% import "_metrics.html" as mx %}
+{% import "_metrics.html" as mx with context %}
 {% if earlier_country.book %}
 <div class="cmp-table-scroll"><table><thead><tr><th>Country</th>{{ mx.headers() }}</tr></thead><tbody>
 <tr class="cmp-gone-row"><td>{{ earlier_country.country }}{{ mx.flag('gone') }}</td>{{ mx.cells(0, 0, 0, prev=earlier_country.book, gone=true) }}</tr>

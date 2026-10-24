@@ -9,7 +9,7 @@
     {% if compare_fragment_note %}<p class="cmp-note" role="status">{{ compare_fragment_note }}</p>{% endif %}
     <div class="amap-head">
       <h3>Account map</h3>
-      <span class="amap-note">{{ amap.countries | length }} countries · numbers from the stats workbook</span>
+      <span class="amap-note">{{ amap.countries | length }} countries · numbers from {{ (amap.source_info or {}).get("description", "the selected statistics") }}</span>
       {#- Выбор периода переехал в шапку: он меняет всю страницу, а не эту
           секцию. Здесь остаётся только то, за какие дни показаны числа. -#}
       <span class="amap-note">{% if amap.span == 'all' %}all dates{% elif amap.date_from and amap.date_from == amap.date_to %}{{ amap.date_from }}{% elif amap.date_from or amap.date_to %}{{ amap.date_from or '…' }} → {{ amap.date_to or '…' }}{% else %}all dates{% endif %}</span>
@@ -24,6 +24,8 @@
       </span>
     </div>
 
+    {% if amap.saved_source_check and amap.saved_source_check.rows %}{% include "_saved_source_comparison.html" %}{% endif %}
+
     {#- ACL-356, вторая итерация (решение владельца 10.09): одна таблица
         вместо двух. Countries overview слился сюда — каждая строка несёт
         книжные тоталы страны (те же my_totals, что показывал overview),
@@ -31,7 +33,7 @@
         подсветка: деньги в книге идут, а картой они не покрыты. -#}
     {#- ACL-1652: шесть метрик (Spend · Leads · FTDs · CPL · CPA · CR) из
         `_metrics.html`, как и во всех таблицах атрибуции. -#}
-    {% import "_metrics.html" as mx %}
+    {% import "_metrics.html" as mx with context %}
     <div class="amap-grid-head" aria-hidden="true">
       <span></span>
       <span>Country</span>
@@ -83,7 +85,7 @@
         attributed spend here for these dates. Connect an account below, or
         leave it: the money is shown either way.
         {%- else %}
-        {{ mc.country }} has workbook money for this period but no accounts
+        {{ mc.country }} has source money for this period but no accounts
         placed here — the spend is not covered by the map. Connect one below.
         {%- endif %}
       </div>

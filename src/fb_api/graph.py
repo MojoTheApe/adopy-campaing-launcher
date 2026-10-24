@@ -633,7 +633,7 @@ class GraphClient:
     def account(self, act_id: str) -> dict:
         """Сам кабинет: состояние, причина отключения, валюта."""
         return self.get(f"/{normalize_act(act_id)}", {
-            "fields": "account_id,name,account_status,disable_reason,currency",
+            "fields": "account_id,name,account_status,disable_reason,currency,timezone_name",
         })
 
     def insights_range(self, act_id: str, date_from: str, date_to: str, *, level: str = "account",
