@@ -237,13 +237,14 @@ def test_the_nested_drill_uses_the_parent_column_count():
 
 # ── Home: страны, Totals, Campaign managers ───────────────────────────────
 
-def _home(countries, live=None, cm=None):
+def _home(countries, live=None, cm=None, source_info=None):
     from src.web.app import _amap_cm_section, _amap_totals
 
     amap = {
         "countries": countries, "all_accounts": [], "available": [], "available_inactive": [],
         "available_hidden": [], "dates": [], "live": live or {}, "splits": {}, "notes": {},
         "fallback": {}, "span": "all", "date_from": "", "date_to": "", "activity_window": None,
+        "source_info": source_info,
     }
     amap["totals"] = _amap_totals(countries, live or {})
     amap["cm_section"] = _amap_cm_section({"countries": cm or []})
@@ -371,15 +372,21 @@ console.log(JSON.stringify(out));
 
 
 def test_totals_account_read_says_how_many_accounts_were_read():
+    import pandas as pd
+    from src.analysis_agent import bi_compare
     from src.web.app import _amap_totals
 
     countries = [_country("A", 1, 1, 1, rows=[_acc("X", 1, 1, 1), _acc("Y", 1, 1, 1), _acc("Z", 1, 1, 1)])]
     live = {"X": {"state": "ok", "spend": 1, "currency": "USD"}, "Y": {"state": "ok", "spend": 2, "currency": "KWD"}}
     t = _amap_totals(countries, live)
     assert (t["read_count"], t["accounts"], t["mixed"], t["read"]) == (2, 3, True, None)
-    html = _home(countries, live=live)
-    assert 'mixed currencies' not in html and 'accounts read' not in html
-    assert 'numbers from the stats workbook' in html
+    for sources, description in [(None, "the selected statistics"),
+            (["workbook"], "the Stats workbook"), (["bi"], "the BI data"),
+            (["bi", "workbook"], "the selected source data")]:
+        info = bi_compare.provenance(frame=pd.DataFrame({"_stats_source": sources})) if sources else None
+        html = _home(countries, live=live, source_info=info)
+        assert 'mixed currencies' not in html and 'accounts read' not in html
+        assert f'numbers from {description}' in html
 
 
 def test_the_campaign_managers_header_names_both_levels_and_the_section_is_last():
