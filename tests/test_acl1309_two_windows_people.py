@@ -28,6 +28,9 @@ from types import SimpleNamespace
 
 import pytest
 
+from tests.acl1309_windows_person import write
+from tests.synthetic_json_ipc import read_json
+
 pytestmark = pytest.mark.windows_only(
     reason="two real Windows local accounts, native logon/profile/mutex and ProgramData file permissions")
 
@@ -277,7 +280,7 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
         while time.monotonic() < deadline:
             path = ipc / f"{person}.json"
             if path.exists():
-                value = json.loads(path.read_text(encoding="utf-8"))
+                value = read_json(path)
                 assert value.get("phase") != "error", json.dumps(value, indent=2)
                 if predicate(value):
                     return value
@@ -286,7 +289,7 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
                 # Exit is observed after the earlier status read: collect the
                 # producer's final atomic error, not a stale prepared snapshot.
                 if path.exists():
-                    final = json.loads(path.read_text(encoding="utf-8"))
+                    final = read_json(path)
                     assert final.get("phase") != "error", json.dumps(final, indent=2)
                 code = wintypes.DWORD()
                 assert kernel.GetExitCodeProcess(process.process, ctypes.byref(code))
@@ -302,9 +305,7 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
         nonlocal sequence
         sequence += 1
         target = ipc / f"{person}.command.json"
-        temp = target.with_suffix(".tmp")
-        temp.write_text(json.dumps({"sequence": sequence, "action": action}), encoding="utf-8")
-        os.replace(temp, target)
+        write(target, {"sequence": sequence, "action": action})
         return read(person, lambda v: v.get("sequence") == sequence)
 
     def installer_still_sees_a_running_dashboard():
@@ -370,9 +371,7 @@ def test_two_real_people_keep_their_dashboard_setup_state_and_stable_ports():
             assert answer.read() == b"unrelated-test-listener"
         for user, process in zip(users, processes):
             target = ipc / f"{user}.command.json"
-            temp = target.with_suffix(".tmp")
-            temp.write_text(json.dumps({"sequence": sequence + 1, "action": "exit"}), encoding="utf-8")
-            os.replace(temp, target)
+            write(target, {"sequence": sequence + 1, "action": "exit"})
             assert kernel.WaitForSingleObject(process.process, 30000) == 0
             code = wintypes.DWORD()
             assert kernel.GetExitCodeProcess(process.process, ctypes.byref(code))
